@@ -27,7 +27,6 @@ export const authOptions = {
           prompt: "select_account",
           access_type: "offline",
           response_type: "code",
-          hd: "ltpd.xyz",
         },
       },
     }),
