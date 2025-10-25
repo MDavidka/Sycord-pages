@@ -9,6 +9,10 @@ if (!process.env.GOOGLE_CLIENT_SECRET) {
   throw new Error("Missing GOOGLE_CLIENT_SECRET environment variable")
 }
 
+if (!process.env.AUTH_SECRET) {
+  throw new Error("Missing AUTH_SECRET environment variable")
+}
+
 export const authOptions = {
   providers: [
     GoogleProvider({
