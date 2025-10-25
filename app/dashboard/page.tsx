@@ -47,7 +47,16 @@ export default function DashboardPage() {
             <Button variant="ghost" size="icon" className="text-foreground">
               <Settings className="h-5 w-5" />
             </Button>
-            <Button onClick={() => signOut()}>Sign Out</Button>
+            {session?.user?.image && (
+              <Image
+                src={session.user.image}
+                alt="User Profile"
+                width={32}
+                height={32}
+                className="rounded-full cursor-pointer"
+                onClick={() => signOut()}
+              />
+            )}
           </div>
         </div>
       </header>
@@ -56,7 +65,9 @@ export default function DashboardPage() {
       <main className="container mx-auto px-4 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Welcome back</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Welcome back, {session?.user?.name || "User"}
+          </h1>
           <p className="text-muted-foreground">Here's what's happening with your projects today.</p>
         </div>
       </main>
