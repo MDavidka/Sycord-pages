@@ -13,6 +13,10 @@ if (!process.env.AUTH_SECRET) {
   throw new Error("Missing AUTH_SECRET environment variable")
 }
 
+if (process.env.NODE_ENV === "production" && !process.env.NEXTAUTH_URL) {
+  throw new Error("Missing NEXTAUTH_URL environment variable in production")
+}
+
 export const authOptions = {
   providers: [
     GoogleProvider({
@@ -32,7 +36,7 @@ export const authOptions = {
   debug: process.env.NODE_ENV === "development",
   logger: {
     error(code, metadata) {
-      console.error(`NextAuth Error - Code: ${code}`, metadata)
+      console.error(`NextAuth Error - Code: ${code}`, JSON.stringify(metadata, null, 2))
     },
   },
 }
