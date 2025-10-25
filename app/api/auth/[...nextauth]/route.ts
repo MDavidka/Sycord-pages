@@ -25,6 +25,12 @@ export const authOptions = {
     }),
   ],
   secret: process.env.AUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
+  logger: {
+    error(code, metadata) {
+      console.error(`NextAuth Error - Code: ${code}`, metadata)
+    },
+  },
 }
 
 const handler = NextAuth(authOptions)
