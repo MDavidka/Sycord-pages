@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,9 +35,7 @@ export default function LoginPage() {
 
         <div className="border border-border rounded-lg p-8 bg-card">
           <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 bg-white rounded-md flex items-center justify-center">
-              <span className="text-black font-bold text-xl">S</span>
-            </div>
+            <Image src="/logo.png" alt="Logo" width={40} height={40} />
             <span className="text-2xl font-semibold text-foreground">Sycord</span>
           </div>
 

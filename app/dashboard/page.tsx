@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Globe, Settings, BarChart3, FileText, Users } from "lucide-react"
@@ -11,9 +12,7 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-white rounded-md flex items-center justify-center">
-                <span className="text-black font-bold text-lg">S</span>
-              </div>
+              <Image src="/logo.png" alt="Logo" width={32} height={32} />
               <span className="text-xl font-semibold text-foreground">Sycord</span>
             </Link>
             <nav className="hidden md:flex items-center gap-6">
