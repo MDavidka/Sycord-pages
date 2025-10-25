@@ -2,17 +2,16 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useTranslations } from "next-intl"
 import Link from "next/link"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
+  const t = useTranslations("LoginPage")
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -21,7 +20,7 @@ export default function LoginPage() {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to home
+          {t("backToHome")}
         </Link>
 
         <div className="border border-border rounded-lg p-8 bg-card">
@@ -30,14 +29,14 @@ export default function LoginPage() {
             <span className="text-2xl font-semibold text-foreground">Sycord</span>
           </div>
 
-          <h1 className="text-2xl font-bold text-foreground mb-2">Welcome back</h1>
-          <p className="text-muted-foreground mb-8">Sign in to your account to continue</p>
+          <h1 className="text-2xl font-bold text-foreground mb-2">{t("welcomeBack")}</h1>
+          <p className="text-muted-foreground mb-8">{t("signInToContinue")}</p>
 
           <Button
             onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
             className="w-full bg-white text-black hover:bg-white/90"
           >
-            Continue with Google
+            {t("continueWithGoogle")}
           </Button>
         </div>
       </div>
