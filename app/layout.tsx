@@ -6,11 +6,6 @@ import "./globals.css"
 
 const rubik = Rubik({ subsets: ["latin"] })
 
-export const metadata: Metadata = {
-  title: "Sycord - Build Your Web Presence",
-  description: "Create webpages for your mobile store, hosting, and services with ease",
-  generator: "v0.app",
-}
 
 export default function RootLayout({
   children,
