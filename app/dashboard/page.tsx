@@ -1,10 +1,26 @@
+"use client"
+
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Globe, Settings, BarChart3, FileText, Users } from "lucide-react"
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+
+  if (status === "loading") {
+    return <div>Loading...</div>
+  }
+
+  if (status === "unauthenticated") {
+    router.push("/login")
+    return null
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -31,9 +47,7 @@ export default function DashboardPage() {
             <Button variant="ghost" size="icon" className="text-foreground">
               <Settings className="h-5 w-5" />
             </Button>
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-              <span className="text-sm font-medium text-foreground">JD</span>
-            </div>
+            <Button onClick={() => signOut()}>Sign Out</Button>
           </div>
         </div>
       </header>
