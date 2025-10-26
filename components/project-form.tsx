@@ -75,7 +75,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         )
       case 2:
         return (
-          <div>
+          <div className="flex flex-col h-full">
             <h2 className="text-2xl font-bold mb-4 text-center">Van már megvásárolt domain-je?</h2>
             <div className="w-full p-2 border rounded-md bg-transparent mb-4 text-center text-muted-foreground">
               {formData.hasDomain === true ? 'Pelda.com' : formData.hasDomain === false ? 'weboldalad.sycord.com' : 'Valasszon opciot'}
@@ -100,7 +100,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         )
       case 3:
         return (
-          <div>
+          <div className="flex flex-col h-full">
             <h2 className="text-2xl font-bold mb-2 text-center">Tervezd meg az online weboldalad!</h2>
             <div className="text-center mb-6">
                 <p>A vállalkozásod neve?</p>
