@@ -1,0 +1,22 @@
+{
+  "LoginPage": {
+    "title": "Bejelentkezés",
+    "backToHome": "Vissza a főoldalra",
+    "welcome": "Üdvözöljük újra",
+    "signInMessage": "Jelentkezzen be a fiókjába való belépéshez.",
+    "continueWithGoogle": "Folytatás a Google-lal"
+  },
+  "DashboardPage": {
+    "title": "Irányítópult",
+    "welcome": "Üdvözöljük újra",
+    "welcomeSubtitle": "A mai napon ez történik a projektjeivel.",
+    "overview": "Áttekintés",
+    "projects": "Projektek",
+    "analytics": "Analitika"
+  },
+  "LanguageSwitcher": {
+    "en": "Angol",
+    "hu": "Magyar",
+    "ro": "Román"
+  }
+}

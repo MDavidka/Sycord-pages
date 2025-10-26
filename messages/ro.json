@@ -1,0 +1,22 @@
+{
+  "LoginPage": {
+    "title": "Autentificare",
+    "backToHome": "Înapoi la pagina principală",
+    "welcome": "Bine ați revenit",
+    "signInMessage": "Autentificați-vă pentru a continua la contul dvs.",
+    "continueWithGoogle": "Continuați cu Google"
+  },
+  "DashboardPage": {
+    "title": "Panou de control",
+    "welcome": "Bine ați revenit",
+    "welcomeSubtitle": "Iată ce se întâmplă astăzi cu proiectele dumneavoastră.",
+    "overview": "Prezentare generală",
+    "projects": "Proiecte",
+    "analytics": "Analize"
+  },
+  "LanguageSwitcher": {
+    "en": "Engleză",
+    "hu": "Maghiară",
+    "ro": "Română"
+  }
+}

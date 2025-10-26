@@ -1,0 +1,22 @@
+{
+  "LoginPage": {
+    "title": "Login",
+    "backToHome": "Back to Home",
+    "welcome": "Welcome back",
+    "signInMessage": "Sign in to continue to your account.",
+    "continueWithGoogle": "Continue with Google"
+  },
+  "DashboardPage": {
+    "title": "Dashboard",
+    "welcome": "Welcome back",
+    "welcomeSubtitle": "Here's what's happening with your projects today.",
+    "overview": "Overview",
+    "projects": "Projects",
+    "analytics": "Analytics"
+  },
+  "LanguageSwitcher": {
+    "en": "English",
+    "hu": "Hungarian",
+    "ro": "Romanian"
+  }
+}

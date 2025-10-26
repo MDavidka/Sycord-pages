@@ -4,10 +4,13 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Settings } from "lucide-react"
+import LanguageSwitcher from "@/components/language-switcher"
 
 export default function DashboardPage() {
+  const t = useTranslations("DashboardPage")
   const { data: session, status } = useSession()
   const router = useRouter()
 
@@ -32,17 +35,18 @@ export default function DashboardPage() {
             </Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/dashboard" className="text-sm text-foreground font-medium">
-                Overview
+                {t("overview")}
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Projects
+                {t("projects")}
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Analytics
+                {t("analytics")}
               </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             <Button variant="ghost" size="icon" className="text-foreground">
               <Settings className="h-5 w-5" />
             </Button>
@@ -65,9 +69,9 @@ export default function DashboardPage() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Welcome back, {session?.user?.name || "User"}
+            {t("welcome")}, {session?.user?.name || "User"}
           </h1>
-          <p className="text-muted-foreground">Here's what's happening with your projects today.</p>
+          <p className="text-muted-foreground">{t("welcomeSubtitle")}</p>
         </div>
       </main>
     </div>
