@@ -4,6 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { useTranslation } from "@/hooks/use-translation"
+import LanguageSwitcher from "@/components/language-switcher"
 import { ArrowRight, Zap, Globe, Shield } from "lucide-react"
 
 export default function LandingPage() {
@@ -30,6 +31,7 @@ export default function LandingPage() {
             </Link>
           </nav>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             <Link href="/login">
               <Button variant="ghost" className="text-foreground">
                 {t("LandingPage.signIn")}

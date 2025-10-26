@@ -1,28 +1,36 @@
 "use client"
 
-import { useLocale } from "next-intl"
-import { useRouter, usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Globe } from "lucide-react"
 
 export default function LanguageSwitcher() {
   const router = useRouter()
   const pathname = usePathname()
-  const locale = useLocale()
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newLocale = e.target.value
-    const newPath = pathname.replace(`/${locale}`, `/${newLocale}`)
-    router.replace(newPath)
+  const handleLanguageChange = (newLang: string) => {
+    const newPath = pathname.replace(/\/(en|hu|ro)/, `/${newLang}`)
+    router.push(newPath)
   }
 
   return (
-    <select
-      value={locale}
-      onChange={handleChange}
-      className="bg-background border border-border rounded-md px-2 py-1 text-sm text-foreground"
-    >
-      <option value="en">English</option>
-      <option value="hu">Magyar</option>
-      <option value="ro">Română</option>
-    </select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon">
+          <Globe className="h-5 w-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem onClick={() => handleLanguageChange("en")}>English</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleLanguageChange("hu")}>Magyar</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleLanguageChange("ro")}>Română</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
