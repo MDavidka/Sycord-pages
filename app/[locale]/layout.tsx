@@ -10,11 +10,13 @@ const rubik = Rubik({ subsets: ["latin"] })
 
 export default function RootLayout({
   children,
+  params: { locale },
 }: Readonly<{
   children: React.ReactNode
+  params: { locale: string }
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang={locale} className="dark">
       <body className={`${rubik.className} font-sans antialiased`}>
         <AuthProvider>
           {children}
