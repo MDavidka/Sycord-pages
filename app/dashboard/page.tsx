@@ -5,11 +5,15 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings } from "lucide-react"
+import { Settings, Plus } from "lucide-react"
+import { Modal } from "@/components/ui/modal"
+import { ProjectForm } from "@/components/project-form"
+import { useState } from "react"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   if (status === "loading") {
     return <div>Betöltés...</div>
@@ -63,13 +67,22 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Üdvözöljük újra, {session?.user?.name || "Felhasználó"}
-          </h1>
-          <p className="text-muted-foreground">Itt láthatja, mi történik ma a projektjeivel.</p>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground mb-2">
+              Üdvözöljük újra, {session?.user?.name || "Felhasználó"}
+            </h1>
+            <p className="text-muted-foreground">Itt láthatja, mi történik ma a projektjeivel.</p>
+          </div>
+          <Button className="mt-4 md:mt-0" onClick={() => setIsModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Új projekt létrehozása
+          </Button>
         </div>
       </main>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
+        <ProjectForm onSubmit={(data) => console.log(data)} />
+      </Modal>
     </div>
   )
 }
