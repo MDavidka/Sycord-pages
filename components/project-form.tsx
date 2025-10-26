@@ -77,6 +77,9 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         return (
           <div>
             <h2 className="text-2xl font-bold mb-4 text-center">Van már megvásárolt domain-je?</h2>
+            <div className="w-full p-2 border rounded-md bg-transparent mb-4 text-center text-muted-foreground">
+              {formData.hasDomain === true ? 'Pelda.com' : formData.hasDomain === false ? 'weboldalad.sycord.com' : 'Valasszon opciot'}
+            </div>
             <div className="flex justify-center gap-4">
               <Button
                 variant={formData.hasDomain === true ? "default" : "outline"}
@@ -92,10 +95,6 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                 <X className="mr-2 h-4 w-4" />
                 Nem
               </Button>
-            </div>
-            <div className={`text-center mt-4 text-sm text-muted-foreground transition-opacity duration-300 ${formData.hasDomain !== null ? 'opacity-100' : 'opacity-0'}`}>
-              {formData.hasDomain === true && <p>Pelda.com</p>}
-              {formData.hasDomain === false && <p>weboldalad.sycord.com</p>}
             </div>
           </div>
         )

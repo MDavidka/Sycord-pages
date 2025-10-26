@@ -74,10 +74,16 @@ export default function DashboardPage() {
             </h1>
             <p className="text-muted-foreground">Itt láthatja, mi történik ma a projektjeivel.</p>
           </div>
-          <Button className="mt-4 md:mt-0" onClick={() => setIsModalOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Új projekt létrehozása
-          </Button>
+          <div className="relative mt-4 md:mt-0">
+            <input
+              type="text"
+              placeholder="Keresés a webhelyek között..."
+              className="w-full md:w-64 p-2 border rounded-md bg-transparent pr-10"
+            />
+            <Button className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8" size="icon" onClick={() => setIsModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </main>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
