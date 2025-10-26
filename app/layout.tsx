@@ -1,13 +1,18 @@
+import type React from "react"
+import "./globals.css"
+
 export default function RootLayout({
   children,
-  params
 }: {
-  children: React.ReactNode;
-  params: {locale: string};
+  children: React.ReactNode
 }) {
   return (
-    <html lang={params.locale}>
+    <html>
       <body>{children}</body>
     </html>
-  );
+  )
 }
+
+export const metadata = {
+      generator: 'v0.app'
+    };
