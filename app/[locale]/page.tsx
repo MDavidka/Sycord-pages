@@ -1,9 +1,13 @@
+"use client";
+
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Zap, Globe, Shield } from "lucide-react"
+import {useTranslations} from 'next-intl';
 
 export default function LandingPage() {
+  const t = useTranslations('LandingPage');
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -40,14 +44,15 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-24 md:py-32">
         <div className="max-w-4xl mx-auto text-center">
+        <h1>{t('HelloWorld')}</h1>
           <div className="inline-block mb-4 px-3 py-1 rounded-full border border-border text-xs text-muted-foreground">
             Now in Beta
           </div>
           <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 text-balance leading-tight">
-            Build your modern application with Sycord
+            {t('HeroTitle')}
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-balance leading-relaxed">
-            The ultimate platform for building secure, scalable, and user-friendly applications. Get started today and experience the future of development.
+            {t('HeroSubtitle')}
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/login">
