@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "./ui/button"
-import { User, Briefcase, ShoppingCart, Check } from "lucide-react"
+import { User, Briefcase, ShoppingCart, Check, X } from "lucide-react"
 
 interface ProjectFormProps {
   onSubmit: (data: any) => void
@@ -82,14 +82,20 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                 variant={formData.hasDomain === true ? "default" : "outline"}
                 onClick={() => setFormData({ ...formData, hasDomain: true })}
               >
+                <Check className="mr-2 h-4 w-4" />
                 Igen
               </Button>
               <Button
                 variant={formData.hasDomain === false ? "default" : "outline"}
                 onClick={() => setFormData({ ...formData, hasDomain: false })}
               >
+                <X className="mr-2 h-4 w-4" />
                 Nem
               </Button>
+            </div>
+            <div className={`text-center mt-4 text-sm text-muted-foreground transition-opacity duration-300 ${formData.hasDomain !== null ? 'opacity-100' : 'opacity-0'}`}>
+              {formData.hasDomain === true && <p>Pelda.com</p>}
+              {formData.hasDomain === false && <p>weboldalad.sycord.com</p>}
             </div>
           </div>
         )
