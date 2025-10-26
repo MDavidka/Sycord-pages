@@ -42,7 +42,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         return (
           <div>
             <h2 className="text-2xl font-bold mb-4 text-center">Milyen fajta vállalkozásnak szeretne weboldalt?</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button
                 className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg ${
                   formData.websiteType === "personal" ? "border-primary" : "border-border"
