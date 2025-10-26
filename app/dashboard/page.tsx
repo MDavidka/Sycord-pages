@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { useTranslations } from "next-intl"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
@@ -11,10 +10,9 @@ import { Settings } from "lucide-react"
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const t = useTranslations("DashboardPage")
 
   if (status === "loading") {
-    return <div>{t("loading")}</div>
+    return <div>Loading...</div>
   }
 
   if (status === "unauthenticated") {
@@ -34,13 +32,13 @@ export default function DashboardPage() {
             </Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/dashboard" className="text-sm text-foreground font-medium">
-                {t("overview")}
+                Overview
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                {t("projects")}
+                Projects
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                {t("analytics")}
+                Analytics
               </Link>
             </nav>
           </div>
@@ -51,7 +49,7 @@ export default function DashboardPage() {
             {session?.user?.image && (
               <Image
                 src={session.user.image}
-                alt={t("userProfileAlt")}
+                alt="User profile"
                 width={32}
                 height={32}
                 className="rounded-full cursor-pointer"
@@ -67,9 +65,9 @@ export default function DashboardPage() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            {t("welcomeBack", { name: session?.user?.name || t("user") })}
+            Welcome back, {session?.user?.name || "User"}
           </h1>
-          <p className="text-muted-foreground">{t("dashboardSubtitle")}</p>
+          <p className="text-muted-foreground">Here's what's happening with your projects today.</p>
         </div>
       </main>
     </div>
