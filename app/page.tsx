@@ -45,7 +45,7 @@ export default function LandingPage() {
           <div className="inline-block mb-4 px-3 py-1 rounded-full border border-border text-xs text-muted-foreground">
             Most Bétában
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 text-balance leading-tight">
+          <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 text-balance leading-tight text-gradient">
             Építse modern alkalmazását a Sycorddal
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-balance leading-relaxed">
