@@ -1,8 +1,16 @@
 "use client"
 
-import React, { createContext, ReactNode } from "react"
+import React, { createContext, useContext, ReactNode } from "react"
 
 export const I18nContext = createContext<any>(null)
+
+export const useI18n = () => {
+  const context = useContext(I18nContext)
+  if (!context) {
+    throw new Error("useI18n must be used within an I18nProvider")
+  }
+  return context
+}
 
 interface I18nProviderProps {
   translations: any

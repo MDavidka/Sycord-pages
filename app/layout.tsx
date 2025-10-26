@@ -8,7 +8,7 @@ import "./globals.css"
 
 const rubik = Rubik({ subsets: ["latin"] })
 
-async function getTranslations(lang: string) {
+async function getTranslations(lang: string = "en") {
   try {
     return (await import(`@/locales/${lang}.json`)).default
   } catch (error) {
@@ -18,15 +18,15 @@ async function getTranslations(lang: string) {
 
 export default async function RootLayout({
   children,
-  params: { lang },
+  params,
 }: Readonly<{
   children: React.ReactNode
   params: { lang: string }
 }>) {
-  const translations = await getTranslations(lang)
+  const translations = await getTranslations(params.lang)
 
   return (
-    <html lang={lang} className="dark">
+    <html lang={params.lang || 'en'} className="dark">
       <body className={`${rubik.className} font-sans antialiased`}>
         <I18nProvider translations={translations}>
           <AuthProvider>
