@@ -4,18 +4,15 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
-import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Settings } from "lucide-react"
-import LanguageSwitcher from "@/components/language-switcher"
 
 export default function DashboardPage() {
-  const t = useTranslations("DashboardPage")
   const { data: session, status } = useSession()
   const router = useRouter()
 
   if (status === "loading") {
-    return <div>Loading...</div>
+    return <div>Betöltés...</div>
   }
 
   if (status === "unauthenticated") {
@@ -35,25 +32,24 @@ export default function DashboardPage() {
             </Link>
             <nav className="hidden md:flex items-center gap-6">
               <Link href="/dashboard" className="text-sm text-foreground font-medium">
-                {t("overview")}
+                Áttekintés
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                {t("projects")}
+                Projektek
               </Link>
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                {t("analytics")}
+                Analitika
               </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">
-            <LanguageSwitcher />
             <Button variant="ghost" size="icon" className="text-foreground">
               <Settings className="h-5 w-5" />
             </Button>
             {session?.user?.image && (
               <Image
                 src={session.user.image}
-                alt="User profile"
+                alt="Felhasználói profil"
                 width={32}
                 height={32}
                 className="rounded-full cursor-pointer"
@@ -69,9 +65,9 @@ export default function DashboardPage() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            {t("welcome")}, {session?.user?.name || "User"}
+            Üdvözöljük újra, {session?.user?.name || "Felhasználó"}
           </h1>
-          <p className="text-muted-foreground">{t("welcomeSubtitle")}</p>
+          <p className="text-muted-foreground">Itt láthatja, mi történik ma a projektjeivel.</p>
         </div>
       </main>
     </div>
