@@ -1,9 +1,13 @@
 import createMiddleware from 'next-intl/middleware';
 
 export default createMiddleware({
-  locales: ['en', 'hu', 'ro'],
-  defaultLocale: 'en'
-});
+  locales: ["en", "hu", "ro"],
+  defaultLocale: "en",
+  pathnames: {
+    "/": "/",
+    "/dashboard": "/dashboard",
+  },
+})
 
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)']
