@@ -1,6 +1,6 @@
 "use client"
 
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -11,11 +11,11 @@ import {
 import { Globe } from "lucide-react"
 
 export default function LanguageSwitcher() {
-  const router = useRouter()
   const pathname = usePathname()
 
   const handleLanguageChange = (newLang: string) => {
-    router.push(`${pathname}?lang=${newLang}`)
+    const newPath = pathname.replace(/\/(en|hu|ro)/, `/${newLang}`)
+    window.location.href = newPath
   }
 
   return (
