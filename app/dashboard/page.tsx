@@ -4,12 +4,17 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Settings } from "lucide-react"
+import { Modal } from "@/components/ui/modal"
+import { ProjectForm } from "@/components/project-form"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [project, setProject] = useState<any>(null)
 
   if (status === "loading") {
     return <div>Betöltés...</div>
@@ -18,6 +23,11 @@ export default function DashboardPage() {
   if (status === "unauthenticated") {
     router.push("/login")
     return null
+  }
+
+  const handleFormSubmit = (data: any) => {
+    setProject(data)
+    setIsModalOpen(false)
   }
 
   return (
