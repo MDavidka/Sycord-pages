@@ -44,30 +44,30 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
             <h2 className="text-2xl font-bold mb-4 text-center">Milyen fajta vállalkozásnak szeretne weboldalt?</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <button
-                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg ${
+                className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg ${
                   formData.websiteType === "personal" ? "border-primary" : "border-border"
                 }`}
                 onClick={() => setFormData({ ...formData, websiteType: "personal" })}
               >
-                <User className="h-10 w-10 mb-2" />
+                <User className="h-8 w-8 mb-2" />
                 <span className="font-semibold">Személyes</span>
               </button>
               <button
-                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg ${
+                className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg ${
                   formData.websiteType === "service" ? "border-primary" : "border-border"
                 }`}
                 onClick={() => setFormData({ ...formData, websiteType: "service" })}
               >
-                <Briefcase className="h-10 w-10 mb-2" />
+                <Briefcase className="h-8 w-8 mb-2" />
                 <span className="font-semibold">Szolgáltatás</span>
               </button>
               <button
-                className={`flex flex-col items-center justify-center p-6 border-2 rounded-lg ${
+                className={`flex flex-col items-center justify-center p-4 border-2 rounded-lg ${
                   formData.websiteType === "shop" ? "border-primary" : "border-border"
                 }`}
                 onClick={() => setFormData({ ...formData, websiteType: "shop" })}
               >
-                <ShoppingCart className="h-10 w-10 mb-2" />
+                <ShoppingCart className="h-8 w-8 mb-2" />
                 <span className="font-semibold">Webáruház</span>
               </button>
             </div>

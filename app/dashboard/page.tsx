@@ -4,17 +4,12 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Settings } from "lucide-react"
-import { Modal } from "@/components/ui/modal"
-import { ProjectForm } from "@/components/project-form"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [project, setProject] = useState<any>(null)
 
   if (status === "loading") {
     return <div>Betöltés...</div>
@@ -23,11 +18,6 @@ export default function DashboardPage() {
   if (status === "unauthenticated") {
     router.push("/login")
     return null
-  }
-
-  const handleFormSubmit = (data: any) => {
-    setProject(data)
-    setIsModalOpen(false)
   }
 
   return (
@@ -74,28 +64,12 @@ export default function DashboardPage() {
       <main className="container mx-auto px-4 py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                Üdvözöljük újra, {session?.user?.name || "Felhasználó"}
-              </h1>
-              <p className="text-muted-foreground">Itt láthatja, mi történik ma a projektjeivel.</p>
-            </div>
-            <Button onClick={() => setIsModalOpen(true)}>Kezdj el egy projektet</Button>
-          </div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Üdvözöljük újra, {session?.user?.name || "Felhasználó"}
+          </h1>
+          <p className="text-muted-foreground">Itt láthatja, mi történik ma a projektjeivel.</p>
         </div>
-
-        {project && (
-          <div className="border border-border rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-2">{project.businessName}</h2>
-            <p className="text-muted-foreground">{project.websiteType}</p>
-          </div>
-        )}
       </main>
-
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <ProjectForm onSubmit={handleFormSubmit} />
-      </Modal>
     </div>
   )
 }
