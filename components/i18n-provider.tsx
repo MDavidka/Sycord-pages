@@ -1,33 +1,15 @@
 "use client"
 
-import React, { createContext, useState, useEffect, ReactNode } from "react"
+import React, { createContext, ReactNode } from "react"
 
 export const I18nContext = createContext<any>(null)
 
 interface I18nProviderProps {
-  lang: string
+  translations: any
   children: ReactNode
 }
 
-export function I18nProvider({ lang, children }: I18nProviderProps) {
-  const [translations, setTranslations] = useState({})
-
-  useEffect(() => {
-    async function loadTranslations() {
-      try {
-        const module = await import(`@/locales/${lang}.json`)
-        setTranslations(module.default)
-      } catch (error) {
-        console.error("Failed to load translations:", error)
-        // Fallback to English if the selected language fails to load
-        const module = await import("@/locales/en.json")
-        setTranslations(module.default)
-      }
-    }
-
-    loadTranslations()
-  }, [lang])
-
+export function I18nProvider({ translations, children }: I18nProviderProps) {
   const t = (key: string) => {
     const keys = key.split(".")
     let value: any = translations
