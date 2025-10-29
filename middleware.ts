@@ -3,10 +3,22 @@ import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get('host')
-  const subdomain = host?.split('.')[0]
 
-  if (subdomain && host !== 'localhost:3000' && host.endsWith('ltpd.xyz')) {
-    return NextResponse.rewrite(new URL('/dashboard/webshop-demo', request.url))
+  // Prevent redirect loops and issues with local development
+  if (!host || host === 'localhost:3000') {
+    return NextResponse.next()
+  }
+
+  // Define the main domain to exclude from rewrites
+  const mainDomain = 'ltpd.xyz'
+
+  // Check if the host is a subdomain and not the main domain
+  if (host.endsWith(`.${mainDomain}`) || (host.endsWith(mainDomain) && host !== mainDomain)) {
+    const subdomain = host.replace(`.${mainDomain}`, '').split('.')[0];
+    if (subdomain) {
+      console.log(`Rewriting subdomain "${subdomain}" to /dashboard/webshop-demo`);
+      return NextResponse.rewrite(new URL('/dashboard/webshop-demo', request.url))
+    }
   }
 
   return NextResponse.next()
