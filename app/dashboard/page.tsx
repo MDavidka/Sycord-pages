@@ -8,12 +8,24 @@ import { Button } from "@/components/ui/button"
 import { Settings, Plus } from "lucide-react"
 import { Modal } from "@/components/ui/modal"
 import { ProjectForm } from "@/components/project-form"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [projects, setProjects] = useState([])
+
+  useEffect(() => {
+    async function fetchProjects() {
+      const response = await fetch("/api/projects");
+      if (response.ok) {
+        const data = await response.json();
+        setProjects(data);
+      }
+    }
+    fetchProjects();
+  }, []);
 
   if (status === "loading") {
     return <div>Betöltés...</div>
@@ -88,9 +100,41 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
+
+        {/* Project List */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          {projects.map((project, index) => (
+            <div key={index} className="border border-border rounded-lg p-4">
+              <h3 className="font-semibold">{project.businessName}</h3>
+              <a
+                href={`http://${project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline"
+              >
+                {project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com
+              </a>
+            </div>
+          ))}
+        </div>
       </main>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
-        <ProjectForm onSubmit={(data) => console.log(data)} />
+        <ProjectForm
+          onSubmit={async (data) => {
+            const response = await fetch("/api/projects", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(data),
+            });
+            if (response.ok) {
+              const newProject = await response.json();
+              setProjects([...projects, newProject]);
+              setIsModalOpen(false);
+            }
+          }}
+        />
       </Modal>
     </div>
   )

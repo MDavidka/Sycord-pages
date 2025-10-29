@@ -31,6 +31,14 @@ export const authOptions = {
       },
     }),
   ],
+  callbacks: {
+    async session({ session, token }) {
+      if (token && session.user) {
+        session.user.image = token.picture;
+      }
+      return session;
+    },
+  },
   secret: process.env.AUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
   logger: {
