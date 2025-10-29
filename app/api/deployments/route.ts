@@ -31,9 +31,9 @@ export async function POST(request: Request) {
     });
     return NextResponse.json(result);
   } catch (error) {
-    console.error(error);
+    console.error("Error creating deployment:", JSON.stringify(error, null, 2));
     return NextResponse.json(
-      { message: "Failed to create deployment" },
+      { message: "Failed to create deployment", error: error.message },
       { status: 500 }
     );
   }
