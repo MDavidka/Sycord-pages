@@ -44,6 +44,9 @@ export default function DashboardPage() {
               <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                 Analitika
               </Link>
+              <Link href="/dashboard/webshop-demo" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Webshop Demo
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-3">
