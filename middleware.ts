@@ -1,38 +1,27 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from "next/server";
+import createMiddleware from "next-intl/middleware";
 
-export function middleware(request: NextRequest) {
-  const host = request.headers.get('host')
+const locales = ["en", "hu", "ro"];
+const defaultLocale = "en";
 
-  // Prevent redirect loops and issues with local development
-  if (!host || host === 'localhost:3000') {
-    return NextResponse.next()
+const i18nMiddleware = createMiddleware({
+  locales,
+  defaultLocale,
+});
+
+export default function middleware(request: NextRequest) {
+  const host = request.headers.get("host");
+  const mainDomain = "ltpd.xyz";
+
+  if (host && host !== `www.${mainDomain}` && host.endsWith(mainDomain) && host !== mainDomain) {
+    const subdomain = host.split(".")[0];
+    console.log(`Rewriting subdomain "${subdomain}" to /en/dashboard/webshop-demo`);
+    return NextResponse.rewrite(new URL(`/en/dashboard/webshop-demo`, request.url));
   }
 
-  // Define the main domain to exclude from rewrites
-  const mainDomain = 'ltpd.xyz'
-
-  // Check if the host is a subdomain and not the main domain
-  if (host.endsWith(`.${mainDomain}`) || (host.endsWith(mainDomain) && host !== mainDomain)) {
-    const subdomain = host.replace(`.${mainDomain}`, '').split('.')[0];
-    if (subdomain) {
-      console.log(`Rewriting subdomain "${subdomain}" to /dashboard/webshop-demo`);
-      return NextResponse.rewrite(new URL('/dashboard/webshop-demo', request.url))
-    }
-  }
-
-  return NextResponse.next()
+  return i18nMiddleware(request);
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
-}
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
