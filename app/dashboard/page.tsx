@@ -108,18 +108,20 @@ export default function DashboardPage() {
               <div>
                 <h3 className="font-semibold">{project.businessName}</h3>
                 <a
-                  href={`http://${project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com`}
+                href={`http://${project.businessName.toLowerCase().replace(/\s+/g, "-")}.ltpd.xyz`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-primary hover:underline"
                 >
-                  {project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com
+                {project.businessName.toLowerCase().replace(/\s+/g, "-")}.ltpd.xyz
                 </a>
               </div>
               <div className="flex justify-end mt-4">
-                <Button variant="ghost" size="icon" onClick={() => { /* Placeholder */ }}>
-                  <Settings className="h-5 w-5" />
-                </Button>
+                <Link href={`/dashboard/sites/${project._id}`}>
+                  <Button variant="ghost" size="icon">
+                    <Settings className="h-5 w-5" />
+                  </Button>
+                </Link>
               </div>
             </div>
           ))}
@@ -128,16 +130,25 @@ export default function DashboardPage() {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <ProjectForm
           onSubmit={async (data) => {
-            const response = await fetch("/api/projects", {
+            // 1. Create the project in the database
+            const projectResponse = await fetch("/api/projects", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify(data),
             });
-            if (response.ok) {
-              const newProject = await response.json();
+
+            if (projectResponse.ok) {
+              const newProject = await projectResponse.json();
               setProjects([...projects, newProject]);
+
+              // 2. Trigger the live deployment
+              const subdomain = `${data.businessName.toLowerCase().replace(/\s+/g, "-")}.ltpd.xyz`;
+              await fetch("/api/deployments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ subdomain }),
+              });
+
               setIsModalOpen(false);
             }
           }}
