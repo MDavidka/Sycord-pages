@@ -104,16 +104,23 @@ export default function DashboardPage() {
         {/* Project List */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {projects.map((project, index) => (
-            <div key={index} className="border border-border rounded-lg p-4">
-              <h3 className="font-semibold">{project.businessName}</h3>
-              <a
-                href={`http://${project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-primary hover:underline"
-              >
-                {project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com
-              </a>
+            <div key={index} className="border border-border rounded-lg p-4 flex flex-col justify-between">
+              <div>
+                <h3 className="font-semibold">{project.businessName}</h3>
+                <a
+                  href={`http://${project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary hover:underline"
+                >
+                  {project.businessName.toLowerCase().replace(/\s+/g, "-")}.sycord.com
+                </a>
+              </div>
+              <div className="flex justify-end mt-4">
+                <Button variant="ghost" size="icon" onClick={() => { /* Placeholder */ }}>
+                  <Settings className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
