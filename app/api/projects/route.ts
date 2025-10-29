@@ -19,8 +19,8 @@ export async function POST(request: Request) {
     createdAt: new Date(),
   };
 
-  const result = await db.collection("projects").insertOne(newProject);
-  return NextResponse.json(result.ops[0], { status: 201 });
+  await db.collection("projects").insertOne(newProject);
+  return NextResponse.json(newProject, { status: 201 });
 }
 
 export async function GET() {
