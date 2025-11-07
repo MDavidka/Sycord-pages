@@ -26,14 +26,14 @@ export default function LandingPage() {
               Dokumentáció
             </Link>
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <Link href="/login">
-              <Button variant="ghost" className="text-foreground">
+              <Button variant="ghost" className="text-foreground text-sm md:text-base">
                 Bejelentkezés
               </Button>
             </Link>
             <Link href="/login">
-              <Button className="bg-white text-black hover:bg-white/90">Kezdés</Button>
+              <Button className="bg-white text-black hover:bg-white/90 text-sm md:text-base">Kezdés</Button>
             </Link>
           </div>
         </div>
@@ -49,7 +49,8 @@ export default function LandingPage() {
             Építse modern alkalmazását a Sycorddal
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-balance leading-relaxed">
-            A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és tapasztalja meg a fejlesztés jövőjét.
+            A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és
+            tapasztalja meg a fejlesztés jövőjét.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/login">
@@ -103,8 +104,12 @@ export default function LandingPage() {
       <section id="features" className="container mx-auto px-4 py-24">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">Erőteljes Funkciók Modern Alkalmazásokhoz</h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">A Sycord mindent biztosít, amire szüksége van az alkalmazás egyszerű létrehozásához és skálázásához.</p>
+            <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
+              Erőteljes Funkciók Modern Alkalmazásokhoz
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              A Sycord mindent biztosít, amire szüksége van az alkalmazás egyszerű létrehozásához és skálázásához.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -113,21 +118,27 @@ export default function LandingPage() {
                 <Zap className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-2">Villámgyors Teljesítmény</h3>
-              <p className="text-muted-foreground leading-relaxed">Platformunk a sebességre van optimalizálva, biztosítva a zökkenőmentes felhasználói élményt.</p>
+              <p className="text-muted-foreground leading-relaxed">
+                Platformunk a sebességre van optimalizálva, biztosítva a zökkenőmentes felhasználói élményt.
+              </p>
             </div>
             <div className="border border-border rounded-lg p-8 bg-card hover:bg-accent transition-colors">
               <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center mb-4 text-white">
                 <Globe className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-2">Globális Skálázhatóság</h3>
-              <p className="text-muted-foreground leading-relaxed">Telepítse alkalmazását világszerte a robusztus infrastruktúránkkal.</p>
+              <p className="text-muted-foreground leading-relaxed">
+                Telepítse alkalmazását világszerte a robusztus infrastruktúránkkal.
+              </p>
             </div>
             <div className="border border-border rounded-lg p-8 bg-card hover:bg-accent transition-colors">
               <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center mb-4 text-white">
                 <Shield className="h-6 w-6" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-2">Csúcskategóriás Biztonság</h3>
-              <p className="text-muted-foreground leading-relaxed">A biztonságot helyezzük előtérbe az adatai és a felhasználói védelme érdekében.</p>
+              <p className="text-muted-foreground leading-relaxed">
+                A biztonságot helyezzük előtérbe az adatai és a felhasználói védelme érdekében.
+              </p>
             </div>
           </div>
         </div>
@@ -137,7 +148,9 @@ export default function LandingPage() {
       <section className="container mx-auto px-4 py-24">
         <div className="max-w-4xl mx-auto text-center border border-border rounded-2xl p-12 bg-card">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">Készen áll a kezdésre?</h2>
-          <p className="text-lg text-muted-foreground mb-8">Hozzon létre egy fiókot és kezdje el ma az alkalmazás építését.</p>
+          <p className="text-lg text-muted-foreground mb-8">
+            Hozzon létre egy fiókot és kezdje el ma az alkalmazás építését.
+          </p>
           <Link href="/login">
             <Button size="lg" className="bg-white text-black hover:bg-white/90 text-base px-8">
               Fiók létrehozása
