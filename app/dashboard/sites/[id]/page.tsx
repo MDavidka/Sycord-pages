@@ -5,13 +5,24 @@ import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Trash2, Plus, ExternalLink, AlertCircle, CheckCircle, Loader2 } from "lucide-react"
+import {
+  Trash2,
+  Plus,
+  ExternalLink,
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  ArrowLeft,
+  Palette,
+  ShoppingCart,
+  Copy,
+  Check,
+} from "lucide-react"
 import { themes, currencySymbols } from "@/lib/webshop-types"
-import { DeploymentsStatus } from "./deployments-status"
+import { WebsitePreviewCard } from "@/components/website-preview-card"
 
 export default function SiteSettingsPage() {
   const params = useParams()
@@ -21,13 +32,18 @@ export default function SiteSettingsPage() {
   const [project, setProject] = useState<any>(null)
   const [settings, setSettings] = useState<any>(null)
   const [products, setProducts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   const [deployment, setDeployment] = useState<any>(null)
+
+  const [projectLoading, setProjectLoading] = useState(true)
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [productsLoading, setProductsLoading] = useState(true)
   const [deploymentLoading, setDeploymentLoading] = useState(true)
 
-  const [redeploySubdomain, setRedeploySubdomain] = useState("")
-  const [isRedeploying, setIsRedeploying] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
 
   // New product form
   const [newProduct, setNewProduct] = useState({
@@ -38,69 +54,232 @@ export default function SiteSettingsPage() {
     category: "",
     inStock: true,
   })
+  const [isAddingProduct, setIsAddingProduct] = useState(false)
+  const [productError, setProductError] = useState<string | null>(null)
+
+  const [redeploySubdomain, setRedeploySubdomain] = useState("")
+  const [isRedeploying, setIsRedeploying] = useState(false)
+  const [redeployError, setRedeployError] = useState<string | null>(null)
+
+  // New state for tab navigation and style selection
+  const [activeTab, setActiveTab] = useState<"styles" | "products">("styles")
+  const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
+
+  const previewStyles = [
+    {
+      id: "minimal",
+      name: "Minimal",
+      description: "Clean and simple design",
+      theme: "minimalist",
+      colors: { bg: "#ffffff", primary: "#000000", secondary: "#f3f4f6" },
+    },
+    {
+      id: "vibrant",
+      name: "Vibrant",
+      description: "Bold and colorful",
+      theme: "vibrant",
+      colors: { bg: "#fafafa", primary: "#ec4899", secondary: "#3b82f6" },
+    },
+    {
+      id: "premium",
+      name: "Premium",
+      description: "Elegant luxury theme",
+      theme: "premium",
+      colors: { bg: "#1f2937", primary: "#d4af37", secondary: "#ffffff" },
+    },
+    {
+      id: "glassmorphic",
+      name: "Glassmorphic",
+      description: "Modern glass effect",
+      theme: "glassmorphic",
+      colors: { bg: "#f8fafc", primary: "#6366f1", secondary: "#8b5cf6" },
+    },
+  ]
 
   useEffect(() => {
-    if (id) {
-      Promise.all([
-        fetch(`/api/projects/${id}`).then((r) => r.json()),
-        fetch(`/api/projects/${id}/settings`).then((r) => r.json()),
-        fetch(`/api/projects/${id}/products`).then((r) => r.json()),
+    if (!id) return
+
+    const fetchAllData = async () => {
+      try {
+        // Fetch project
+        fetch(`/api/projects/${id}`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.message) throw new Error(data.message)
+            setProject(data)
+            setProjectLoading(false)
+          })
+          .catch((err) => {
+            console.error("[v0] Error fetching project:", err)
+            setProjectLoading(false)
+          })
+
+        // Fetch settings
+        fetch(`/api/projects/${id}/settings`)
+          .then((r) => r.json())
+          .then((data) => {
+            setSettings(data)
+            setSettingsLoading(false)
+          })
+          .catch((err) => {
+            console.error("[v0] Error fetching settings:", err)
+            setSettingsLoading(false)
+          })
+
+        // Fetch products
+        fetch(`/api/projects/${id}/products`)
+          .then((r) => r.json())
+          .then((data) => {
+            setProducts(Array.isArray(data) ? data : [])
+            setProductsLoading(false)
+          })
+          .catch((err) => {
+            console.error("[v0] Error fetching products:", err)
+            setProductsLoading(false)
+          })
+
+        // Fetch deployment
         fetch(`/api/projects/${id}/deployments`)
           .then((r) => r.json())
-          .catch(() => ({ deployment: null })),
-      ]).then(([projectData, settingsData, productsData, deploymentData]) => {
-        setProject(projectData)
-        setSettings(settingsData)
-        setProducts(productsData)
-        setDeployment(deploymentData.deployment)
-        setDeploymentLoading(false)
-      })
+          .then((data) => {
+            setDeployment(data.deployment || null)
+            setDeploymentLoading(false)
+          })
+          .catch((err) => {
+            console.error("[v0] Error fetching deployment:", err)
+            setDeploymentLoading(false)
+          })
+      } finally {
+        setIsInitialLoading(false)
+      }
     }
+
+    fetchAllData()
   }, [id])
 
+  const handleStyleSelect = async (styleId: string) => {
+    setSelectedStyle(styleId)
+    const selectedTheme = previewStyles.find((s) => s.id === styleId)
+    if (selectedTheme) {
+      setSettings((prev: any) => ({
+        ...prev,
+        theme: selectedTheme.theme,
+        primaryColor: selectedTheme.colors.primary,
+        secondaryColor: selectedTheme.colors.primary,
+        backgroundColor: selectedTheme.colors.bg,
+      }))
+    }
+  }
+
   const handleSettingsUpdate = async () => {
-    setSaving(true)
-    await fetch(`/api/projects/${id}/settings`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings),
-    })
-    setSaving(false)
+    setSaveError(null)
+    setSaveSuccess(false)
+    setIsSaving(true)
+
+    try {
+      console.log("[v0] Sending settings to API:", settings)
+      const response = await fetch(`/api/projects/${id}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      })
+
+      const responseData = await response.json()
+      console.log("[v0] API response:", responseData)
+
+      if (!response.ok) {
+        throw new Error(responseData.message || "Failed to save settings")
+      }
+
+      setSaveSuccess(true)
+      await fetch(`/api/projects/${id}/settings`)
+        .then((r) => r.json())
+        .then(setSettings)
+
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (error: any) {
+      setSaveError(error.message || "An error occurred while saving")
+      console.error("[v0] Settings save error:", error)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleAddProduct = async () => {
-    if (!newProduct.name || !newProduct.price) return
+    setProductError(null)
 
-    const response = await fetch(`/api/projects/${id}/products`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newProduct),
-    })
+    if (!newProduct.name || !newProduct.name.trim()) {
+      setProductError("Product name is required")
+      return
+    }
 
-    const addedProduct = await response.json()
-    setProducts([...products, addedProduct])
-    setNewProduct({
-      name: "",
-      description: "",
-      price: 0,
-      image: "",
-      category: "",
-      inStock: true,
-    })
+    if (newProduct.price < 0) {
+      setProductError("Price cannot be negative")
+      return
+    }
+
+    setIsAddingProduct(true)
+
+    try {
+      const response = await fetch(`/api/projects/${id}/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newProduct),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || "Failed to add product")
+      }
+
+      const addedProduct = await response.json()
+      setProducts([...products, addedProduct])
+      setNewProduct({
+        name: "",
+        description: "",
+        price: 0,
+        image: "",
+        category: "",
+        inStock: true,
+      })
+    } catch (error: any) {
+      setProductError(error.message || "An error occurred while adding the product")
+      console.error("[v0] Add product error:", error)
+    } finally {
+      setIsAddingProduct(false)
+    }
   }
 
-  const handleDeleteProduct = async (productId: string) => {
-    await fetch(`/api/projects/${id}/products?productId=${productId}`, {
-      method: "DELETE",
-    })
-    setProducts(products.filter((p) => p._id !== productId))
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!confirm(`Are you sure you want to delete "${productName}"?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${id}/products?productId=${productId}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete product")
+      }
+
+      setProducts(products.filter((p) => p._id !== productId))
+    } catch (error: any) {
+      console.error("[v0] Delete product error:", error)
+      alert("Failed to delete product. Please try again.")
+    }
   }
 
   const handleRedeploy = async () => {
-    if (!redeploySubdomain) return
+    setRedeployError(null)
+
+    if (!redeploySubdomain || !redeploySubdomain.trim()) {
+      setRedeployError("Subdomain is required")
+      return
+    }
 
     setIsRedeploying(true)
-    console.log("[v0] Attempting redeploy to subdomain:", redeploySubdomain)
 
     try {
       const response = await fetch(`/api/projects/${id}/deployments`, {
@@ -111,536 +290,721 @@ export default function SiteSettingsPage() {
         }),
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        console.log("[v0] Redeploy successful:", result)
-        setDeployment(result.deployment)
-        setRedeploySubdomain("")
-      } else {
+      if (!response.ok) {
         const error = await response.json()
-        console.error("[v0] Redeploy failed:", error)
-        alert(`Redeploy failed: ${error.message}`)
+        throw new Error(error.message || "Deployment failed")
       }
-    } catch (error) {
+
+      const result = await response.json()
+      setDeployment(result.deployment)
+      setRedeploySubdomain("")
+    } catch (error: any) {
+      setRedeployError(error.message || "An error occurred during deployment")
       console.error("[v0] Redeploy error:", error)
-      alert("An error occurred during redeploy")
     } finally {
       setIsRedeploying(false)
     }
   }
 
-  if (loading) {
+  const copyDeploymentUrl = async () => {
+    if (deployment?.domain) {
+      const url = `https://${deployment.domain}`
+      await navigator.clipboard.writeText(url)
+      setCopiedUrl(true)
+      setTimeout(() => setCopiedUrl(false), 2000)
+    }
+  }
+
+  if (isInitialLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Loading...</div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">Loading site settings...</p>
+        </div>
       </div>
     )
   }
 
   if (!project) {
-    return <div className="container mx-auto px-4 py-8">Project not found.</div>
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center gap-2 mb-4">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="text-center py-12">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Project not found</h2>
+          <p className="text-muted-foreground mb-4">This project no longer exists or you don't have access to it.</p>
+          <Button onClick={() => router.push("/dashboard")}>Return to Dashboard</Button>
+        </div>
+      </div>
+    )
   }
 
   const subdomain = project.businessName?.toLowerCase().replace(/\s+/g, "-")
   const siteUrl = `https://${subdomain}.ltpd.xyz`
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-6xl">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">{project.businessName}</h1>
-          <p className="text-muted-foreground mt-1">Manage your webshop settings and products</p>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b bg-card sticky top-0 z-40">
+        <div className="container mx-auto px-4 py-4 max-w-7xl">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Button variant="ghost" size="icon" onClick={() => router.back()}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h1 className="text-2xl font-bold">{project.businessName}</h1>
+              </div>
+              <p className="text-sm text-muted-foreground">Customize your webshop appearance and manage products</p>
+            </div>
+            {/* Removed the redundant ExternalLink Button here as it's duplicated below */}
+          </div>
         </div>
-        <Button asChild variant="outline" className="w-full md:w-auto bg-transparent">
-          <a href={siteUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="mr-2 h-4 w-4" />
-            View Site
-          </a>
-        </Button>
       </div>
 
-      {!deploymentLoading && (
-        <div className="mb-6">
-          <DeploymentsStatus projectId={id} projectName={project.businessName} />
-        </div>
-      )}
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {/* Real-time Preview Section */}
+        {!deploymentLoading && deployment && (
+          <div className="mb-8 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Live Preview</CardTitle>
+                <CardDescription>Real-time preview of your webshop</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <WebsitePreviewCard domain={deployment.domain} isLive={true} />
+              </CardContent>
+            </Card>
 
-      <Tabs defaultValue="appearance" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="products">Products</TabsTrigger>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="deployment">Deployment</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="appearance" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Theme & Colors</CardTitle>
-              <CardDescription>Customize the look and feel of your webshop</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Theme</Label>
-                <Select
-                  value={settings?.theme || "modern"}
-                  onValueChange={(value) => setSettings({ ...settings, theme: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(themes).map(([key, theme]) => (
-                      <SelectItem key={key} value={key}>
-                        {theme.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
-                  {settings?.theme === "premium" && "Elegant luxury theme with gold accents"}
-                  {settings?.theme === "minimalist" && "Clean, minimal design with focus on products"}
-                  {settings?.theme === "vibrant" && "Energetic colors for modern brands"}
-                  {settings?.theme === "glassmorphic" && "Contemporary glassmorphism with blur effects"}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Primary Color</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={settings?.primaryColor || "#3b82f6"}
-                      onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
-                      className="w-20 h-10"
-                    />
-                    <Input
-                      type="text"
-                      value={settings?.primaryColor || "#3b82f6"}
-                      onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Secondary Color</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="color"
-                      value={settings?.secondaryColor || "#8b5cf6"}
-                      onChange={(e) => setSettings({ ...settings, secondaryColor: e.target.value })}
-                      className="w-20 h-10"
-                    />
-                    <Input
-                      type="text"
-                      value={settings?.secondaryColor || "#8b5cf6"}
-                      onChange={(e) => setSettings({ ...settings, secondaryColor: e.target.value })}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Header Style</Label>
-                <Select
-                  value={settings?.headerStyle || "simple"}
-                  onValueChange={(value) => setSettings({ ...settings, headerStyle: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="simple">Simple</SelectItem>
-                    <SelectItem value="centered">Centered</SelectItem>
-                    <SelectItem value="split">Split</SelectItem>
-                    <SelectItem value="luxe">Luxe</SelectItem>
-                    <SelectItem value="hero">Hero</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Product Layout</Label>
-                <Select
-                  value={settings?.layout || "grid"}
-                  onValueChange={(value) => setSettings({ ...settings, layout: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="grid">Grid</SelectItem>
-                    <SelectItem value="list">List</SelectItem>
-                    <SelectItem value="masonry">Masonry</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Display Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Show Prices</Label>
-                  <p className="text-sm text-muted-foreground">Display product prices on your site</p>
-                </div>
-                <Switch
-                  checked={settings?.showPrices ?? true}
-                  onCheckedChange={(checked) => setSettings({ ...settings, showPrices: checked })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Currency</Label>
-                <Select
-                  value={settings?.currency || "USD"}
-                  onValueChange={(value) => setSettings({ ...settings, currency: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(currencySymbols).map(([code, symbol]) => (
-                      <SelectItem key={code} value={code}>
-                        {code} ({symbol})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Products Per Page</Label>
-                <Input
-                  type="number"
-                  min="4"
-                  max="24"
-                  value={settings?.productsPerPage || 12}
-                  onChange={(e) => setSettings({ ...settings, productsPerPage: Number.parseInt(e.target.value) })}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Button onClick={handleSettingsUpdate} disabled={saving} className="w-full md:w-auto">
-            {saving ? "Saving..." : "Save Appearance Settings"}
-          </Button>
-        </TabsContent>
-
-        <TabsContent value="products" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add New Product</CardTitle>
-              <CardDescription>Add products to your webshop</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Product Name*</Label>
-                  <Input
-                    value={newProduct.name}
-                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                    placeholder="Enter product name"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Price*</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={newProduct.price}
-                    onChange={(e) => setNewProduct({ ...newProduct, price: Number.parseFloat(e.target.value) })}
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Category</Label>
-                  <Input
-                    value={newProduct.category}
-                    onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                    placeholder="e.g., Clothing, Electronics"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Image URL</Label>
-                  <Input
-                    value={newProduct.image}
-                    onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
-                    placeholder="https://..."
-                  />
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Description</Label>
-                  <Input
-                    value={newProduct.description}
-                    onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                    placeholder="Product description"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={newProduct.inStock}
-                  onCheckedChange={(checked) => setNewProduct({ ...newProduct, inStock: checked })}
-                />
-                <Label>In Stock</Label>
-              </div>
-
-              <Button onClick={handleAddProduct} className="w-full">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Product
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Button asChild variant="default" className="w-full">
+                <a href={siteUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Visit Live Site
+                </a>
               </Button>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Products ({products.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {products.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No products yet. Add your first product above.</p>
-              ) : (
-                <div className="space-y-4">
-                  {products.map((product) => (
-                    <div
-                      key={product._id}
-                      className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg"
-                    >
-                      <div className="flex items-start gap-4 flex-1">
-                        {product.image && (
-                          <img
-                            src={product.image || "/placeholder.svg"}
-                            alt={product.name}
-                            className="w-16 h-16 object-cover rounded"
-                          />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold truncate">{product.name}</h3>
-                          <p className="text-sm text-muted-foreground truncate">{product.description}</p>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            <span className="text-sm font-medium">
-                              {currencySymbols[settings?.currency || "USD"]}
-                              {product.price}
-                            </span>
-                            {product.category && (
-                              <span className="text-sm text-muted-foreground">• {product.category}</span>
-                            )}
-                            <span className={`text-sm ${product.inStock ? "text-green-600" : "text-red-600"}`}>
-                              • {product.inStock ? "In Stock" : "Out of Stock"}
-                            </span>
+              <Button variant="outline" className="w-full bg-transparent" onClick={copyDeploymentUrl}>
+                {copiedUrl ? (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy URL
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Deployment Status Card */}
+            <Card className="bg-muted/50">
+              <CardHeader>
+                <CardTitle className="text-base">Deployment Status</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Status</p>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
+                      <p className="font-semibold text-sm">{deployment.status}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Domain</p>
+                    <code className="text-sm font-mono">{deployment.domain}</code>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Created</p>
+                    <p className="text-sm">{new Date(deployment.createdAt).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Tab Navigation */}
+        <div className="mb-8 border-b bg-card rounded-t-lg">
+          <div className="flex gap-0">
+            <button
+              onClick={() => {
+                setActiveTab("styles")
+                setSelectedStyle(null)
+              }}
+              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
+                activeTab === "styles"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Palette className="h-4 w-4" />
+              <span>Style</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("products")
+                setSelectedStyle(null)
+              }}
+              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
+                activeTab === "products"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              <span>Products</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Styles Tab */}
+        {activeTab === "styles" && (
+          <div className="space-y-8">
+            {!selectedStyle ? (
+              <>
+                {/* Style Selection Grid */}
+                <div>
+                  <h2 className="text-xl font-bold mb-2">Choose Your Style</h2>
+                  <p className="text-muted-foreground mb-6">Select from 4 professionally designed templates</p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {previewStyles.map((style) => (
+                      <Card
+                        key={style.id}
+                        className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
+                        onClick={() => handleStyleSelect(style.id)}
+                      >
+                        <div
+                          className="h-40 flex flex-col items-center justify-center gap-3"
+                          style={{ backgroundColor: style.colors.bg }}
+                        >
+                          <div
+                            className="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold"
+                            style={{ backgroundColor: style.colors.primary }}
+                          >
+                            {style.colors.primary === "#000000" ? "A" : "S"}
+                          </div>
+                          <div className="text-center">
+                            <h3 className="font-bold" style={{ color: style.colors.primary }}>
+                              {style.name}
+                            </h3>
+                            <p className="text-xs" style={{ color: style.colors.secondary }}>
+                              {style.description}
+                            </p>
+                          </div>
+                        </div>
+                        <CardContent className="p-4">
+                          <Button
+                            className="w-full bg-transparent"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleStyleSelect(style.id)
+                            }}
+                          >
+                            Customize
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Theme Settings */}
+                {settingsLoading ? (
+                  <Card>
+                    <CardContent className="py-12">
+                      <div className="flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Loading settings...</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Theme Settings</CardTitle>
+                      <CardDescription>Adjust colors and layout</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Theme</Label>
+                          <Select
+                            value={settings?.theme || "modern"}
+                            onValueChange={(value) => {
+                              const newSettings = { ...settings, theme: value }
+                              setSettings(newSettings)
+                              console.log("[v0] Theme changed to:", value)
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(themes).map(([key, theme]) => (
+                                <SelectItem key={key} value={key}>
+                                  {theme.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Header Style</Label>
+                          <Select
+                            value={settings?.headerStyle || "simple"}
+                            onValueChange={(value) => {
+                              const newSettings = { ...settings, headerStyle: value }
+                              setSettings(newSettings)
+                              console.log("[v0] Header style changed to:", value)
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="simple">Simple</SelectItem>
+                              <SelectItem value="centered">Centered</SelectItem>
+                              <SelectItem value="split">Split</SelectItem>
+                              <SelectItem value="luxe">Luxe</SelectItem>
+                              <SelectItem value="hero">Hero</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Primary Color</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              type="color"
+                              value={settings?.primaryColor || "#3b82f6"}
+                              onChange={(e) => {
+                                const newSettings = { ...settings, primaryColor: e.target.value }
+                                setSettings(newSettings)
+                              }}
+                              className="w-20 h-10"
+                            />
+                            <Input
+                              type="text"
+                              value={settings?.primaryColor || "#3b82f6"}
+                              onChange={(e) => {
+                                const newSettings = { ...settings, primaryColor: e.target.value }
+                                setSettings(newSettings)
+                              }}
+                              className="flex-1"
+                              placeholder="#3b82f6"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Secondary Color</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              type="color"
+                              value={settings?.secondaryColor || "#8b5cf6"}
+                              onChange={(e) => {
+                                const newSettings = { ...settings, secondaryColor: e.target.value }
+                                setSettings(newSettings)
+                              }}
+                              className="w-20 h-10"
+                            />
+                            <Input
+                              type="text"
+                              value={settings?.secondaryColor || "#8b5cf6"}
+                              onChange={(e) => {
+                                const newSettings = { ...settings, secondaryColor: e.target.value }
+                                setSettings(newSettings)
+                              }}
+                              className="flex-1"
+                              placeholder="#8b5cf6"
+                            />
                           </div>
                         </div>
                       </div>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product._id)}>
-                        <Trash2 className="h-4 w-4" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Product Layout</Label>
+                          <Select
+                            value={settings?.layout || "grid"}
+                            onValueChange={(value) => setSettings({ ...settings, layout: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="grid">Grid</SelectItem>
+                              <SelectItem value="list">List</SelectItem>
+                              <SelectItem value="masonry">Masonry</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Currency</Label>
+                          <Select
+                            value={settings?.currency || "USD"}
+                            onValueChange={(value) => setSettings({ ...settings, currency: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(currencySymbols).map(([code, symbol]) => (
+                                <SelectItem key={code} value={code}>
+                                  {code} ({symbol})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label>Show Prices</Label>
+                          <p className="text-sm text-muted-foreground">Display prices on your site</p>
+                        </div>
+                        <Switch
+                          checked={settings?.showPrices ?? true}
+                          onCheckedChange={(checked) => setSettings({ ...settings, showPrices: checked })}
+                        />
+                      </div>
+
+                      <Button onClick={handleSettingsUpdate} disabled={isSaving || settingsLoading} className="w-full">
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save Style Settings"
+                        )}
                       </Button>
+
+                      {saveError && (
+                        <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
+                          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                          <p className="text-sm">{saveError}</p>
+                        </div>
+                      )}
+
+                      {saveSuccess && (
+                        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+                          <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                          <p className="text-sm">Style settings saved successfully!</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            ) : (
+              <div className="space-y-6">
+                <Button variant="outline" onClick={() => setSelectedStyle(null)} className="mb-4">
+                  ← Back to Styles
+                </Button>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Customize {previewStyles.find((s) => s.id === selectedStyle)?.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Background Color */}
+                      <div className="space-y-2">
+                        <Label>Background Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={settings?.backgroundColor || "#ffffff"}
+                            onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
+                            className="w-20 h-10"
+                          />
+                          <Input
+                            type="text"
+                            value={settings?.backgroundColor || "#ffffff"}
+                            onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Header Style */}
+                      <div className="space-y-2">
+                        <Label>Header Style</Label>
+                        <Select
+                          value={settings?.headerStyle || "simple"}
+                          onValueChange={(value) => setSettings({ ...settings, headerStyle: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="simple">Simple</SelectItem>
+                            <SelectItem value="centered">Centered</SelectItem>
+                            <SelectItem value="split">Split</SelectItem>
+                            <SelectItem value="luxe">Luxe</SelectItem>
+                            <SelectItem value="hero">Hero</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Primary Color */}
+                      <div className="space-y-2">
+                        <Label>Primary Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            value={settings?.primaryColor || "#3b82f6"}
+                            onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
+                            className="w-20 h-10"
+                          />
+                          <Input
+                            type="text"
+                            value={settings?.primaryColor || "#3b82f6"}
+                            onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Logo URL */}
+                      <div className="space-y-2">
+                        <Label>Logo URL</Label>
+                        <Input
+                          type="url"
+                          value={settings?.logoUrl || ""}
+                          onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
+                          placeholder="https://example.com/logo.png"
+                        />
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="general" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Contact Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Contact Email</Label>
-                <Input
-                  type="email"
-                  value={settings?.contactEmail || ""}
-                  onChange={(e) => setSettings({ ...settings, contactEmail: e.target.value })}
-                  placeholder="contact@example.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Footer Text</Label>
-                <Input
-                  value={settings?.footerText || ""}
-                  onChange={(e) => setSettings({ ...settings, footerText: e.target.value })}
-                  placeholder="© 2025 All rights reserved."
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Social Media Links</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Facebook</Label>
-                <Input
-                  value={settings?.socialLinks?.facebook || ""}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      socialLinks: { ...settings?.socialLinks, facebook: e.target.value },
-                    })
-                  }
-                  placeholder="https://facebook.com/yourpage"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Instagram</Label>
-                <Input
-                  value={settings?.socialLinks?.instagram || ""}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      socialLinks: { ...settings?.socialLinks, instagram: e.target.value },
-                    })
-                  }
-                  placeholder="https://instagram.com/yourpage"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Twitter</Label>
-                <Input
-                  value={settings?.socialLinks?.twitter || ""}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      socialLinks: { ...settings?.socialLinks, twitter: e.target.value },
-                    })
-                  }
-                  placeholder="https://twitter.com/yourpage"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Button onClick={handleSettingsUpdate} disabled={saving} className="w-full md:w-auto">
-            {saving ? "Saving..." : "Save General Settings"}
-          </Button>
-        </TabsContent>
-
-        <TabsContent value="deployment" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Deployment Management</CardTitle>
-              <CardDescription>Manage your subdomain deployment and DNS configuration</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {deployment ? (
-                <div className="p-4 border border-green-200 bg-green-50 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm mb-1">Current Deployment</h4>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Deployed to:{" "}
-                        <code className="bg-white px-2 py-1 rounded text-xs font-mono">{deployment.domain}</code>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Status: <span className="font-mono text-green-700 font-semibold">{deployment.status}</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <h4 className="font-semibold text-sm">No Active Deployment</h4>
-                      <p className="text-sm text-muted-foreground">This project has not been deployed yet.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="border-t pt-4 space-y-3">
-                <div>
-                  <Label className="mb-2 block">Deploy to Subdomain</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="e.g., myshop, business-name"
-                      value={redeploySubdomain}
-                      onChange={(e) => setRedeploySubdomain(e.target.value)}
-                      disabled={isRedeploying}
-                    />
-                    <Button onClick={handleRedeploy} disabled={isRedeploying || !redeploySubdomain}>
-                      {isRedeploying ? (
+                    <Button onClick={handleSettingsUpdate} disabled={isSaving} className="w-full">
+                      {isSaving ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Deploying...
+                          Saving...
                         </>
                       ) : (
-                        "Deploy"
+                        "Save Customization"
                       )}
                     </Button>
+
+                    {saveError && (
+                      <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
+                        <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                        <p className="text-sm">{saveError}</p>
+                      </div>
+                    )}
+
+                    {saveSuccess && (
+                      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+                        <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                        <p className="text-sm">Customization saved successfully!</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Products Tab */}
+        {activeTab === "products" && (
+          <div className="space-y-6">
+            {productsLoading ? (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="flex items-center justify-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading products...</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Enter a subdomain name. It will be available at: subdomain.ltpd.xyz
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {productError && (
+                  <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                    <p>{productError}</p>
+                  </div>
+                )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>DNS Configuration Required</CardTitle>
-              <CardDescription>Your DNS provider must be configured for this to work</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-semibold text-sm mb-2">Wildcard DNS Record Needed</h4>
-                <code className="bg-white px-2 py-1 rounded text-xs font-mono block mb-2">
-                  Type: CNAME | Name: *.ltpd.xyz | Value: cname.vercel-dns.com
-                </code>
-                <p className="text-xs text-muted-foreground">
-                  Contact your DNS provider and add this record. Changes may take 5-15 minutes to propagate.
-                </p>
-              </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Add New Product</CardTitle>
+                    <CardDescription>Add products with price, description, and image</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Product Name*</Label>
+                        <Input
+                          value={newProduct.name}
+                          onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                          placeholder="Enter product name"
+                          disabled={isAddingProduct}
+                        />
+                      </div>
 
-              <div className="text-sm space-y-2">
-                <p className="font-semibold">Common DNS Providers:</p>
-                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                  <li>Vercel Domains - Add domain in project settings</li>
-                  <li>Cloudflare - DNS management → Add CNAME record</li>
-                  <li>Namecheap - Advanced DNS → Add record</li>
-                  <li>GoDaddy - DNS Settings → Add CNAME</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
+                      <div className="space-y-2">
+                        <Label>Price*</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={newProduct.price}
+                          onChange={(e) => setNewProduct({ ...newProduct, price: Number.parseFloat(e.target.value) })}
+                          placeholder="0.00"
+                          disabled={isAddingProduct}
+                        />
+                      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Debug Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <code className="text-xs bg-muted p-3 rounded block overflow-auto max-h-40">
-                <pre>{JSON.stringify({ deployment, projectId: id }, null, 2)}</pre>
-              </code>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                      <div className="space-y-2">
+                        <Label>Category</Label>
+                        <Input
+                          value={newProduct.category}
+                          onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                          placeholder="e.g., Clothing, Electronics"
+                          disabled={isAddingProduct}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Image URL</Label>
+                        <Input
+                          value={newProduct.image}
+                          onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
+                          placeholder="https://..."
+                          disabled={isAddingProduct}
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label>Description</Label>
+                        <Input
+                          value={newProduct.description}
+                          onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                          placeholder="Product description"
+                          disabled={isAddingProduct}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={newProduct.inStock}
+                        onCheckedChange={(checked) => setNewProduct({ ...newProduct, inStock: checked })}
+                        disabled={isAddingProduct}
+                      />
+                      <Label>In Stock</Label>
+                    </div>
+
+                    <Button onClick={handleAddProduct} disabled={isAddingProduct} className="w-full">
+                      {isAddingProduct ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Product
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Your Products ({products.length})</CardTitle>
+                    <CardDescription>Manage all your products</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {products.length === 0 ? (
+                      <div className="text-center py-12">
+                        <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                        <p className="text-muted-foreground">No products yet. Add your first product above.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {products.map((product) => (
+                          <div
+                            key={product._id}
+                            className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-start gap-4 flex-1">
+                              {product.image && (
+                                <img
+                                  src={product.image || "/placeholder.svg"}
+                                  alt={product.name}
+                                  className="w-16 h-16 object-cover rounded"
+                                  onError={(e) => {
+                                    ;(e.target as any).style.display = "none"
+                                  }}
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold truncate">{product.name}</h3>
+                                <p className="text-sm text-muted-foreground truncate">{product.description}</p>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                  <span className="text-sm font-medium bg-primary/10 px-2 py-1 rounded">
+                                    {currencySymbols[settings?.currency || "USD"]}
+                                    {product.price}
+                                  </span>
+                                  {product.category && (
+                                    <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-muted">
+                                      {product.category}
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`text-xs px-2 py-1 rounded font-medium ${
+                                      product.inStock ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                    }`}
+                                  >
+                                    {product.inStock ? "In Stock" : "Out of Stock"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteProduct(product._id, product.name)}
+                              className="w-full md:w-auto"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
