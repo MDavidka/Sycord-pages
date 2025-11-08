@@ -52,6 +52,7 @@ export const authOptions = {
         token.picture = profile.picture
         token.email = profile.email
         token.name = profile.name
+        token.isPremium = false
       }
       return token
     },
@@ -61,6 +62,7 @@ export const authOptions = {
         session.user.image = token.picture as string
         session.user.email = token.email as string
         session.user.name = token.name as string
+        session.user.isPremium = (token.isPremium as boolean) || false
       }
       return session
     },

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import clientPromise from "@/lib/mongodb"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Facebook, Instagram, Twitter, ShoppingCart } from "lucide-react"
+import { ObjectId } from "mongodb"
 
 interface PageProps {
   params: Promise<{
@@ -16,13 +17,21 @@ export default async function SubdomainPage({ params }: PageProps) {
     const client = await clientPromise
     const db = client.db()
 
-    const businessName = subdomain.replace(/-/g, " ")
+    const deployment = await db.collection("deployments").findOne({
+      subdomain: subdomain.toLowerCase(),
+    })
+
+    if (!deployment) {
+      console.error("[v0] Deployment not found for subdomain:", subdomain)
+      return notFound()
+    }
 
     const project = await db.collection("projects").findOne({
-      businessName: { $regex: new RegExp(`^${businessName}$`, "i") },
+      _id: new ObjectId(deployment.projectId),
     })
 
     if (!project) {
+      console.error("[v0] Project not found for deployment")
       return notFound()
     }
 
@@ -31,7 +40,6 @@ export default async function SubdomainPage({ params }: PageProps) {
     const settings = await db.collection("webshop_settings").findOne({ projectId })
     const products = await db.collection("products").find({ projectId }).toArray()
 
-    // Default settings if none exist
     const shopSettings = settings || {
       theme: "modern",
       currency: "USD",
@@ -47,7 +55,6 @@ export default async function SubdomainPage({ params }: PageProps) {
 
     const currencySymbol = currencySymbols[shopSettings.currency as keyof typeof currencySymbols] || "$"
 
-    // Theme-based styles
     const themeStyles = {
       modern: "bg-gradient-to-br from-blue-50 to-purple-50",
       minimal: "bg-white",

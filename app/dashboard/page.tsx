@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { DeploymentStatusCard } from "@/components/deployment-status-card"
+import { DeploymentWarningCard } from "@/components/deployment-warning-card"
+import { WebsitePreviewCard } from "@/components/website-preview-card"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
@@ -26,6 +29,8 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [projects, setProjects] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [deletingDeployments, setDeletingDeployments] = useState<Set<string>>(new Set())
+  const [flaggedDeployments, setFlaggedDeployments] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     async function fetchProjects() {
@@ -104,6 +109,73 @@ export default function DashboardPage() {
       </SheetContent>
     </Sheet>
   )
+
+  const handleDeleteDeployment = async (deploymentId: string, projectId: string) => {
+    if (!confirm("Are you sure you want to delete this deployment?")) return
+
+    setDeletingDeployments((prev) => new Set([...prev, deploymentId]))
+
+    try {
+      const response = await fetch(`/api/deployments?id=${deploymentId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        setFlaggedDeployments((prev) => {
+          const next = new Set(prev)
+          next.delete(deploymentId)
+          return next
+        })
+
+        setProjects((prevProjects) =>
+          prevProjects.map((p) =>
+            p._id === projectId
+              ? {
+                  ...p,
+                  domain: null,
+                  subdomain: null,
+                  deploymentId: null,
+                }
+              : p,
+          ),
+        )
+      } else {
+        alert("Failed to delete deployment")
+      }
+    } catch (error) {
+      console.error("[v0] Error deleting deployment:", error)
+      alert("Error deleting deployment")
+    } finally {
+      setDeletingDeployments((prev) => {
+        const next = new Set(prev)
+        next.delete(deploymentId)
+        return next
+      })
+    }
+  }
+
+  const handleDeleteProject = async (projectId: string) => {
+    const confirmed = confirm(
+      "Are you sure you want to delete this entire website? This action cannot be undone. All deployments and data will be permanently removed.",
+    )
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        console.log("[v0] Project deleted successfully")
+        setProjects((prevProjects) => prevProjects.filter((p) => p._id !== projectId))
+      } else {
+        alert("Failed to delete project")
+      }
+    } catch (error) {
+      console.error("[v0] Error deleting project:", error)
+      alert("Error deleting project")
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -202,7 +274,7 @@ export default function DashboardPage() {
             <div className="max-w-md mx-auto">
               <h3 className="text-lg font-semibold text-foreground mb-2">Még nincsenek projektek</h3>
               <p className="text-sm text-muted-foreground mb-6">
-                Kezdje el első projektjét, és indítsa el weboldalát {"{"}név{"}"}.ltpd.xyz címen
+                Kezdje el első projektjét, és indítsa el weboldalát {"{"}name{"}"}.ltpd.xyz címen
               </p>
               <Button onClick={() => setIsModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -215,28 +287,89 @@ export default function DashboardPage() {
             {projects.map((project: any) => (
               <div
                 key={project._id}
-                className="border border-border rounded-lg p-4 md:p-6 flex flex-col justify-between hover:border-foreground/20 transition-colors"
+                className="border border-border rounded-lg overflow-hidden flex flex-col hover:border-foreground/20 transition-colors"
               >
-                <div>
-                  <h3 className="font-semibold text-base md:text-lg mb-2">{project.businessName}</h3>
-                  <a
-                    href={`https://${project.businessName.toLowerCase().replace(/\s+/g, "-")}.ltpd.xyz`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs md:text-sm text-primary hover:underline break-all"
-                  >
-                    {project.businessName.toLowerCase().replace(/\s+/g, "-")}.ltpd.xyz
-                  </a>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Létrehozva: {new Date(project.createdAt).toLocaleDateString("hu-HU")}
-                  </p>
-                </div>
-                <div className="flex justify-end mt-4">
-                  <Link href={`/dashboard/sites/${project._id}`}>
-                    <Button variant="ghost" size="icon">
-                      <Settings className="h-5 w-5" />
+                {project.domain && project.deploymentId ? (
+                  <WebsitePreviewCard
+                    domain={project.domain}
+                    isLive={!flaggedDeployments.has(project.deploymentId)}
+                    deploymentId={project.deploymentId}
+                    projectId={project._id}
+                    onDelete={(deploymentId) => handleDeleteDeployment(deploymentId, project._id)}
+                  />
+                ) : (
+                  <div className="w-full aspect-video bg-gray-100 rounded-t-lg flex items-center justify-center border-b border-border">
+                    <p className="text-xs text-muted-foreground">No preview</p>
+                  </div>
+                )}
+
+                <div className="p-4 md:p-6 flex flex-col justify-between flex-1">
+                  <div>
+                    <h3 className="font-semibold text-base md:text-lg mb-2">{project.businessName}</h3>
+                    {flaggedDeployments.has(project.deploymentId) ? (
+                      <DeploymentWarningCard
+                        subdomain={project.subdomain}
+                        reason="curse_words"
+                        deploymentId={project.deploymentId}
+                        projectId={project._id}
+                        onDelete={(deploymentId) => {
+                          setFlaggedDeployments((prev) => {
+                            const next = new Set(prev)
+                            next.delete(deploymentId)
+                            return next
+                          })
+                          handleDeleteDeployment(deploymentId, project._id)
+                        }}
+                      />
+                    ) : project.domain ? (
+                      <div className="space-y-2">
+                        <DeploymentStatusCard
+                          domain={project.domain}
+                          subdomain={project.subdomain}
+                          deploymentId={project.deploymentId}
+                          projectId={project._id}
+                          onDelete={(deploymentId) => handleDeleteDeployment(deploymentId, project._id)}
+                          isDeleting={deletingDeployments.has(project.deploymentId)}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-xs md:text-sm text-muted-foreground italic">Nincs még üzemeltetve</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Létrehozva: {new Date(project.createdAt).toLocaleDateString("hu-HU")}
+                    </p>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Link href={`/dashboard/sites/${project._id}`}>
+                      <Button variant="ghost" size="icon">
+                        <Settings className="h-5 w-5" />
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteProject(project._id)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      title="Delete entire website"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                      </svg>
                     </Button>
-                  </Link>
+                  </div>
                 </div>
               </div>
             ))}
@@ -259,23 +392,45 @@ export default function DashboardPage() {
                 const newProject = await projectResponse.json()
                 setProjects([...projects, newProject])
 
-                // 2. Trigger the live deployment to subdomain
-                const subdomain = `${data.businessName.toLowerCase().replace(/\s+/g, "-")}.ltpd.xyz`
+                // Use subdomain from form instead of auto-generating
+                const subdomain = data.subdomain
 
+                // 2. Deploy to subdomain
                 const deployResponse = await fetch("/api/deployments", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ subdomain, projectId: newProject._id }),
+                  body: JSON.stringify({
+                    subdomain,
+                    projectId: newProject._id,
+                  }),
                 })
 
-                if (!deployResponse.ok) {
-                  console.error("Deployment failed:", await deployResponse.text())
+                if (deployResponse.ok) {
+                  const deploymentResult = await deployResponse.json()
+                  console.log("[v0] Deployment successful:", deploymentResult)
+
+                  setProjects((prevProjects) =>
+                    prevProjects.map((p) =>
+                      p._id === newProject._id
+                        ? {
+                            ...p,
+                            domain: deploymentResult.deployment.domain,
+                            subdomain: deploymentResult.deployment.subdomain,
+                            deploymentId: deploymentResult.deployment._id,
+                          }
+                        : p,
+                    ),
+                  )
+                } else {
+                  const errorText = await deployResponse.text()
+                  console.error("[v0] Deployment failed:", errorText)
+                  // User can retry deployment from project settings
                 }
 
                 setIsModalOpen(false)
               }
             } catch (error) {
-              console.error("Error creating project:", error)
+              console.error("[v0] Error creating project:", error)
             }
           }}
         />

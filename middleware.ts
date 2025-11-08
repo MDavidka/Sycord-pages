@@ -8,18 +8,38 @@ export async function middleware(request: NextRequest) {
     secret: process.env.AUTH_SECRET,
   })
 
-  // Check if user is accessing dashboard routes
+  const host = request.headers.get("host") || ""
+  const url = request.nextUrl.clone()
+
+  console.log("[v0] Middleware processing:", { host, pathname: url.pathname })
+
+  const parts = host.split(".")
+  let subdomain: string | null = null
+
+  if (parts.length >= 3) {
+    subdomain = parts[0]
+    console.log("[v0] Subdomain detected:", subdomain)
+
+    if (subdomain === "www" || subdomain === "admin") {
+      console.log("[v0] Skipping reserved subdomain:", subdomain)
+      subdomain = null
+    }
+  }
+
+  if (subdomain && !url.pathname.startsWith("/api")) {
+    console.log("[v0] Rewriting to sites page:", { subdomain, originalPath: url.pathname })
+    url.pathname = `/sites/${subdomain}${url.pathname === "/" ? "" : url.pathname}`
+    return NextResponse.rewrite(url)
+  }
+
   if (request.nextUrl.pathname.startsWith("/dashboard")) {
     if (!token) {
-      // Redirect to login if not authenticated
       return NextResponse.redirect(new URL("/login", request.url))
     }
   }
 
-  // Check if user is accessing login page
   if (request.nextUrl.pathname === "/login") {
     if (token) {
-      // Redirect to dashboard if already authenticated
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
   }
@@ -28,5 +48,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login"],
+  matcher: ["/dashboard/:path*", "/login", "/((?!_next/static|_next/image|favicon.ico|logo.png).*)"],
 }

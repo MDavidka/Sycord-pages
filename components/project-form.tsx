@@ -12,6 +12,7 @@ const steps = [
   { id: 1, name: "Válassz típust" },
   { id: 2, name: "Domain" },
   { id: 3, name: "Név" },
+  { id: 4, name: "Subdomain" },
 ]
 
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
@@ -20,10 +21,33 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
     websiteType: "",
     hasDomain: null,
     businessName: "",
+    subdomain: "",
   })
+  const [subdomainError, setSubdomainError] = useState("")
+
+  const validateSubdomain = (value: string) => {
+    if (!value) {
+      setSubdomainError("Subdomain kötelező")
+      return false
+    }
+    if (value.length < 3) {
+      setSubdomainError("Legalább 3 karakter")
+      return false
+    }
+    if (!/^[a-z0-9-]+$/.test(value)) {
+      setSubdomainError("Csak kisbetűk, számok és kötőjelek")
+      return false
+    }
+    if (value.startsWith("-") || value.endsWith("-")) {
+      setSubdomainError("Nem kezdődhet vagy végződhet kötőjellel")
+      return false
+    }
+    setSubdomainError("")
+    return true
+  }
 
   const handleNext = () => {
-    if (currentStep < 3) {
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1)
     } else {
       onSubmit(formData)
@@ -78,7 +102,11 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
           <div className="flex flex-col h-full">
             <h2 className="text-2xl font-bold mb-4 text-center">Van már megvásárolt domain-je?</h2>
             <div className="w-full p-2 border rounded-md bg-transparent mb-4 text-center text-muted-foreground">
-              {formData.hasDomain === true ? 'Pelda.com' : formData.hasDomain === false ? 'weboldalad.sycord.com' : 'Valasszon opciot'}
+              {formData.hasDomain === true
+                ? "Pelda.com"
+                : formData.hasDomain === false
+                  ? "weboldalad.ltpd.xyz"
+                  : "Valasszon opciot"}
             </div>
             <div className="flex justify-center gap-4">
               <Button
@@ -103,7 +131,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
           <div className="flex flex-col h-full">
             <h2 className="text-2xl font-bold mb-2 text-center">Tervezd meg az online weboldalad!</h2>
             <div className="text-center mb-6">
-                <p>A vállalkozásod neve?</p>
+              <p>A vállalkozásod neve?</p>
             </div>
             <input
               type="text"
@@ -113,8 +141,47 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
             />
           </div>
         )
+      case 4:
+        return (
+          <div className="flex flex-col h-full">
+            <h2 className="text-2xl font-bold mb-2 text-center">Válassz egy subdomain-t</h2>
+            <div className="text-center mb-6">
+              <p className="text-muted-foreground">A weboldalad URL-je:</p>
+              <p className="text-lg font-semibold mt-2">{formData.subdomain || "weboldalad"}.ltpd.xyz</p>
+            </div>
+            <div className="space-y-2">
+              <input
+                type="text"
+                className={`w-full p-2 border rounded-md bg-transparent ${subdomainError ? "border-red-500" : ""}`}
+                placeholder="pl. mytestsite"
+                value={formData.subdomain}
+                onChange={(e) => {
+                  const value = e.target.value.toLowerCase().trim()
+                  setFormData({ ...formData, subdomain: value })
+                  validateSubdomain(value)
+                }}
+              />
+              {subdomainError && <p className="text-sm text-red-500">{subdomainError}</p>}
+            </div>
+          </div>
+        )
       default:
         return null
+    }
+  }
+
+  const isStepValid = () => {
+    switch (currentStep) {
+      case 1:
+        return !!formData.websiteType
+      case 2:
+        return formData.hasDomain !== null
+      case 3:
+        return !!formData.businessName
+      case 4:
+        return !!formData.subdomain && !subdomainError
+      default:
+        return false
     }
   }
 
@@ -123,7 +190,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
       {/* Status Bar */}
       <div className="flex items-center justify-between mb-8">
         {steps.map((step, index) => (
-          <>
+          <div key={step.id}>
             <div
               className={`flex flex-col items-center ${
                 currentStep >= step.id ? "text-primary" : "text-muted-foreground"
@@ -131,8 +198,11 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
             >
               <div
                 className={`h-8 w-8 rounded-full border-2 flex items-center justify-center ${
-                  currentStep > step.id ? "bg-primary border-primary text-primary-foreground" :
-                  currentStep === step.id ? "border-primary" : "border-border"
+                  currentStep > step.id
+                    ? "bg-primary border-primary text-primary-foreground"
+                    : currentStep === step.id
+                      ? "border-primary"
+                      : "border-border"
                 }`}
               >
                 {currentStep > step.id ? <Check className="h-5 w-5" /> : step.id}
@@ -140,9 +210,9 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
               <p className="text-sm mt-1">{step.name}</p>
             </div>
             {index < steps.length - 1 && (
-                <div className={`flex-1 h-0.5 mx-2 ${currentStep > step.id ? 'bg-primary' : 'bg-border'}`} />
+              <div className={`flex-1 h-0.5 mx-2 ${currentStep > step.id ? "bg-primary" : "bg-border"}`} />
             )}
-          </>
+          </div>
         ))}
       </div>
 
@@ -154,12 +224,8 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         <Button variant="outline" onClick={handleBack} disabled={currentStep === 1}>
           Vissza
         </Button>
-        <Button onClick={handleNext} disabled={
-            (currentStep === 1 && !formData.websiteType) ||
-            (currentStep === 2 && formData.hasDomain === null) ||
-            (currentStep === 3 && !formData.businessName)
-        }>
-          {currentStep === 3 ? "Befejezés" : "Következő"}
+        <Button onClick={handleNext} disabled={!isStepValid()}>
+          {currentStep === 4 ? "Befejezés" : "Következő"}
         </Button>
       </div>
     </div>

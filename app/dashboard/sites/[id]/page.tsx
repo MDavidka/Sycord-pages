@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Trash2, Plus, ExternalLink } from "lucide-react"
+import { Trash2, Plus, ExternalLink, AlertCircle, CheckCircle, Loader2 } from "lucide-react"
 import { themes, currencySymbols } from "@/lib/webshop-types"
+import { DeploymentsStatus } from "./deployments-status"
 
 export default function SiteSettingsPage() {
   const params = useParams()
@@ -22,6 +23,11 @@ export default function SiteSettingsPage() {
   const [products, setProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [deployment, setDeployment] = useState<any>(null)
+  const [deploymentLoading, setDeploymentLoading] = useState(true)
+
+  const [redeploySubdomain, setRedeploySubdomain] = useState("")
+  const [isRedeploying, setIsRedeploying] = useState(false)
 
   // New product form
   const [newProduct, setNewProduct] = useState({
@@ -39,11 +45,15 @@ export default function SiteSettingsPage() {
         fetch(`/api/projects/${id}`).then((r) => r.json()),
         fetch(`/api/projects/${id}/settings`).then((r) => r.json()),
         fetch(`/api/projects/${id}/products`).then((r) => r.json()),
-      ]).then(([projectData, settingsData, productsData]) => {
+        fetch(`/api/projects/${id}/deployments`)
+          .then((r) => r.json())
+          .catch(() => ({ deployment: null })),
+      ]).then(([projectData, settingsData, productsData, deploymentData]) => {
         setProject(projectData)
         setSettings(settingsData)
         setProducts(productsData)
-        setLoading(false)
+        setDeployment(deploymentData.deployment)
+        setDeploymentLoading(false)
       })
     }
   }, [id])
@@ -86,6 +96,39 @@ export default function SiteSettingsPage() {
     setProducts(products.filter((p) => p._id !== productId))
   }
 
+  const handleRedeploy = async () => {
+    if (!redeploySubdomain) return
+
+    setIsRedeploying(true)
+    console.log("[v0] Attempting redeploy to subdomain:", redeploySubdomain)
+
+    try {
+      const response = await fetch(`/api/projects/${id}/deployments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subdomain: redeploySubdomain,
+        }),
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        console.log("[v0] Redeploy successful:", result)
+        setDeployment(result.deployment)
+        setRedeploySubdomain("")
+      } else {
+        const error = await response.json()
+        console.error("[v0] Redeploy failed:", error)
+        alert(`Redeploy failed: ${error.message}`)
+      }
+    } catch (error) {
+      console.error("[v0] Redeploy error:", error)
+      alert("An error occurred during redeploy")
+    } finally {
+      setIsRedeploying(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -116,11 +159,18 @@ export default function SiteSettingsPage() {
         </Button>
       </div>
 
+      {!deploymentLoading && (
+        <div className="mb-6">
+          <DeploymentsStatus projectId={id} projectName={project.businessName} />
+        </div>
+      )}
+
       <Tabs defaultValue="appearance" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="deployment">Deployment</TabsTrigger>
         </TabsList>
 
         <TabsContent value="appearance" className="space-y-6">
@@ -477,6 +527,110 @@ export default function SiteSettingsPage() {
           <Button onClick={handleSettingsUpdate} disabled={saving} className="w-full md:w-auto">
             {saving ? "Saving..." : "Save General Settings"}
           </Button>
+        </TabsContent>
+
+        <TabsContent value="deployment" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Deployment Management</CardTitle>
+              <CardDescription>Manage your subdomain deployment and DNS configuration</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {deployment ? (
+                <div className="p-4 border border-green-200 bg-green-50 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-sm mb-1">Current Deployment</h4>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Deployed to:{" "}
+                        <code className="bg-white px-2 py-1 rounded text-xs font-mono">{deployment.domain}</code>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Status: <span className="font-mono text-green-700 font-semibold">{deployment.status}</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold text-sm">No Active Deployment</h4>
+                      <p className="text-sm text-muted-foreground">This project has not been deployed yet.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t pt-4 space-y-3">
+                <div>
+                  <Label className="mb-2 block">Deploy to Subdomain</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g., myshop, business-name"
+                      value={redeploySubdomain}
+                      onChange={(e) => setRedeploySubdomain(e.target.value)}
+                      disabled={isRedeploying}
+                    />
+                    <Button onClick={handleRedeploy} disabled={isRedeploying || !redeploySubdomain}>
+                      {isRedeploying ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Deploying...
+                        </>
+                      ) : (
+                        "Deploy"
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Enter a subdomain name. It will be available at: subdomain.ltpd.xyz
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>DNS Configuration Required</CardTitle>
+              <CardDescription>Your DNS provider must be configured for this to work</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-sm mb-2">Wildcard DNS Record Needed</h4>
+                <code className="bg-white px-2 py-1 rounded text-xs font-mono block mb-2">
+                  Type: CNAME | Name: *.ltpd.xyz | Value: cname.vercel-dns.com
+                </code>
+                <p className="text-xs text-muted-foreground">
+                  Contact your DNS provider and add this record. Changes may take 5-15 minutes to propagate.
+                </p>
+              </div>
+
+              <div className="text-sm space-y-2">
+                <p className="font-semibold">Common DNS Providers:</p>
+                <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Vercel Domains - Add domain in project settings</li>
+                  <li>Cloudflare - DNS management → Add CNAME record</li>
+                  <li>Namecheap - Advanced DNS → Add record</li>
+                  <li>GoDaddy - DNS Settings → Add CNAME</li>
+                </ul>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Debug Information</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <code className="text-xs bg-muted p-3 rounded block overflow-auto max-h-40">
+                <pre>{JSON.stringify({ deployment, projectId: id }, null, 2)}</pre>
+              </code>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
