@@ -197,6 +197,12 @@ export default function SiteSettingsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
+                  {settings?.theme === "premium" && "Elegant luxury theme with gold accents"}
+                  {settings?.theme === "minimalist" && "Clean, minimal design with focus on products"}
+                  {settings?.theme === "vibrant" && "Energetic colors for modern brands"}
+                  {settings?.theme === "glassmorphic" && "Contemporary glassmorphism with blur effects"}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -250,6 +256,8 @@ export default function SiteSettingsPage() {
                     <SelectItem value="simple">Simple</SelectItem>
                     <SelectItem value="centered">Centered</SelectItem>
                     <SelectItem value="split">Split</SelectItem>
+                    <SelectItem value="luxe">Luxe</SelectItem>
+                    <SelectItem value="hero">Hero</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

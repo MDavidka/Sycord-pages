@@ -10,14 +10,14 @@ export interface Product {
 
 export interface WebshopSettings {
   projectId: string
-  theme: "modern" | "minimal" | "bold" | "elegant" | "dark"
+  theme: "modern" | "minimal" | "bold" | "elegant" | "dark" | "premium" | "minimalist" | "vibrant" | "glassmorphic"
   currency: "USD" | "EUR" | "GBP" | "HUF"
   layout: "grid" | "list" | "masonry"
   productsPerPage: number
   showPrices: boolean
   primaryColor: string
   secondaryColor: string
-  headerStyle: "simple" | "centered" | "split"
+  headerStyle: "simple" | "centered" | "split" | "luxe" | "hero"
   footerText: string
   contactEmail: string
   socialLinks: {
@@ -59,5 +59,26 @@ export const themes = {
     name: "Dark",
     primary: "#10b981",
     secondary: "#06b6d4",
+  },
+  // New modern themes with contemporary design patterns
+  premium: {
+    name: "Premium",
+    primary: "#1f2937",
+    secondary: "#d4af37",
+  },
+  minimalist: {
+    name: "Minimalist",
+    primary: "#ffffff",
+    secondary: "#f3f4f6",
+  },
+  vibrant: {
+    name: "Vibrant",
+    primary: "#ec4899",
+    secondary: "#3b82f6",
+  },
+  glassmorphic: {
+    name: "Glassmorphic",
+    primary: "#6366f1",
+    secondary: "#8b5cf6",
   },
 }
