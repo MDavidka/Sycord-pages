@@ -13,6 +13,8 @@ interface PageProps {
 export default async function SubdomainPage({ params }: PageProps) {
   const { subdomain } = await params
 
+  console.log("[v0] Loading subdomain:", subdomain)
+
   try {
     const client = await clientPromise
     const db = client.db()
@@ -22,23 +24,71 @@ export default async function SubdomainPage({ params }: PageProps) {
     })
 
     if (!deployment) {
-      console.error("[v0] Deployment not found for subdomain:", subdomain)
-      return notFound()
+      console.log("[v0] Deployment not found for subdomain:", subdomain)
+      return (
+        <div className="p-8 bg-red-50">
+          <h1 className="text-2xl font-bold text-red-900">Debug: Deployment Not Found</h1>
+          <p className="mt-4 text-red-800">Subdomain: {subdomain}</p>
+          <p className="mt-2 text-red-800">Make sure the website is deployed first.</p>
+          <pre className="mt-4 bg-red-100 p-4 rounded overflow-auto">
+            Searched for: {JSON.stringify({ subdomain: subdomain.toLowerCase() }, null, 2)}
+          </pre>
+        </div>
+      )
     }
 
+    console.log("[v0] Deployment found:", JSON.stringify(deployment, null, 2))
+    console.log("[v0] Deployment projectId:", deployment.projectId, "Type:", typeof deployment.projectId)
+
+    const projectId = deployment.projectId
+
+    if (!projectId) {
+      return (
+        <div className="p-8 bg-yellow-50">
+          <h1 className="text-2xl font-bold text-yellow-900">Debug: Missing ProjectId</h1>
+          <p className="mt-4 text-yellow-800">Deployment found but has no projectId field</p>
+          <pre className="mt-4 bg-yellow-100 p-4 rounded overflow-auto">{JSON.stringify(deployment, null, 2)}</pre>
+        </div>
+      )
+    }
+
+    const projectObjectId = projectId instanceof ObjectId ? projectId : new ObjectId(projectId.toString())
+
+    console.log("[v0] Querying project with ObjectId:", projectObjectId.toString())
+
     const project = await db.collection("projects").findOne({
-      _id: new ObjectId(deployment.projectId),
+      _id: projectObjectId,
     })
 
     if (!project) {
-      console.error("[v0] Project not found for deployment")
-      return notFound()
+      return (
+        <div className="p-8 bg-orange-50">
+          <h1 className="text-2xl font-bold text-orange-900">Debug: Project Not Found</h1>
+          <p className="mt-4 text-orange-800">ProjectId: {projectObjectId.toString()}</p>
+          <pre className="mt-4 bg-orange-100 p-4 rounded overflow-auto">{JSON.stringify(deployment, null, 2)}</pre>
+        </div>
+      )
     }
 
-    const projectId = project._id.toString()
+    console.log("[v0] Project found:", project.businessName)
 
-    const settings = await db.collection("webshop_settings").findOne({ projectId })
-    const products = await db.collection("products").find({ projectId }).toArray()
+    const settings = await db.collection("webshop_settings").findOne({ projectId: projectObjectId })
+    const products = await db.collection("products").find({ projectId: projectObjectId }).toArray()
+
+    const aiGeneratedCode = project.aiGeneratedCode || null
+
+    if (aiGeneratedCode) {
+      return (
+        <div className="min-h-screen bg-background">
+          <iframe
+            srcDoc={aiGeneratedCode}
+            title="AI Generated Website"
+            className="w-full min-h-screen border-0"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+          />
+        </div>
+      )
+    }
 
     const shopSettings = settings || {
       theme: "tech",

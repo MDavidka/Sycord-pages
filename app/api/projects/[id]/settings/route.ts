@@ -12,21 +12,20 @@ const isValidHexColor = (color: string): boolean => {
 const sanitizeSettings = (body: any) => {
   const sanitized: any = {}
 
-  // Whitelist allowed fields
+  // Whitelist allowed fields for modular component system
   const allowedFields = [
-    "theme",
+    "headerComponent",
+    "heroComponent",
+    "productComponent",
+    "extraSegments",
     "currency",
     "layout",
     "productsPerPage",
     "showPrices",
     "primaryColor",
     "secondaryColor",
-    "headerStyle",
-    "footerText",
     "contactEmail",
     "socialLinks",
-    "backgroundColor",
-    "logoUrl",
   ]
 
   for (const field of allowedFields) {
@@ -41,9 +40,6 @@ const sanitizeSettings = (body: any) => {
   }
   if (sanitized.secondaryColor && !isValidHexColor(sanitized.secondaryColor)) {
     throw new Error("Invalid secondary color format. Use hex color (e.g., #8b5cf6)")
-  }
-  if (sanitized.backgroundColor && !isValidHexColor(sanitized.backgroundColor)) {
-    throw new Error("Invalid background color format. Use hex color (e.g., #ffffff)")
   }
 
   return sanitized
@@ -69,19 +65,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       projectId: id,
     })
 
-    // Return default settings if none exist
     if (!settings) {
       return NextResponse.json({
         projectId: id,
-        theme: "modern",
+        headerComponent: "simple",
+        heroComponent: "basic",
+        productComponent: "grid",
+        extraSegments: {
+          announcement: { enabled: false, message: "", bgColor: "#ff6b6b" },
+          giveaway: { enabled: false, title: "", description: "", buttonText: "" },
+          newsletter: { enabled: false, placeholder: "" },
+        },
         currency: "USD",
         layout: "grid",
         productsPerPage: 12,
         showPrices: true,
         primaryColor: "#3b82f6",
         secondaryColor: "#8b5cf6",
-        headerStyle: "simple",
-        footerText: "All rights reserved.",
         contactEmail: "",
         socialLinks: {},
       })
@@ -126,6 +126,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const sanitizedSettings = sanitizeSettings(body)
     console.log("[v0] Sanitized settings:", sanitizedSettings)
+
+    if (!sanitizedSettings.headerComponent) {
+      throw new Error("Header component is required")
+    }
+    if (!sanitizedSettings.heroComponent) {
+      throw new Error("Hero component is required")
+    }
+    if (!sanitizedSettings.productComponent) {
+      throw new Error("Product component is required")
+    }
 
     const result = await db.collection("webshop_settings").updateOne(
       { projectId: id },

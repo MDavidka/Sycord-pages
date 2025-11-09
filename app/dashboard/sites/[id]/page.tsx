@@ -6,23 +6,95 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import AIWebsiteBuilder from "@/components/ai-website-builder"
 import {
   Trash2,
   Plus,
   ExternalLink,
   AlertCircle,
-  CheckCircle,
   Loader2,
   ArrowLeft,
   Palette,
   ShoppingCart,
-  Copy,
-  Check,
+  MessageCircle,
 } from "lucide-react"
-import { themes, currencySymbols } from "@/lib/webshop-types"
-import { WebsitePreviewCard } from "@/components/website-preview-card"
+import { currencySymbols } from "@/lib/webshop-types"
+
+const StyleOptionsComponent = ({
+  onSelectStyle,
+  isLoading,
+}: {
+  onSelectStyle: (style: string) => void
+  isLoading: boolean
+}) => {
+  const options = [
+    {
+      id: "default",
+      name: "Default",
+      description: "Clean, minimal starting template",
+      icon: "✨",
+    },
+    {
+      id: "browse",
+      name: "Browse",
+      description: "Coming soon - Choose from templates",
+      icon: "🎨",
+      disabled: true,
+    },
+    {
+      id: "ai",
+      name: "AI Builder",
+      description: "Create with Google AI assistance",
+      icon: "🤖",
+    },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          onClick={() => !option.disabled && onSelectStyle(option.id)}
+          disabled={option.disabled || isLoading}
+          className={`relative p-8 rounded-xl border-2 transition-all duration-300 transform ${
+            option.disabled
+              ? "opacity-50 cursor-not-allowed border-gray-200 bg-gray-50"
+              : "border-gray-300 hover:border-primary hover:shadow-lg cursor-pointer hover:scale-105"
+          }`}
+        >
+          <div className="text-4xl mb-4">{option.icon}</div>
+          <h3 className="font-bold text-lg mb-2">{option.name}</h3>
+          <p className="text-sm text-muted-foreground">{option.description}</p>
+          {option.disabled && <div className="text-xs text-muted-foreground mt-3">🔄 Coming Soon</div>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const headerComponents = {
+  simple: { name: "Simple", description: "A clean, minimalist header" },
+  centered: { name: "Centered", description: "Logo and navigation centered" },
+  hero: { name: "Hero", description: "Large header with a call to action" },
+  luxe: { name: "Luxe", description: "Elegant header with premium feel" },
+  split: { name: "Split", description: "Header split into two sections" },
+}
+
+const heroComponents = {
+  none: { name: "None", description: "No hero section" },
+  basic: { name: "Basic", description: "Simple title and subtitle" },
+  image: { name: "Image", description: "Hero with background image" },
+  carousel: { name: "Carousel", description: "Rotating hero images" },
+  video: { name: "Video", description: "Hero with background video" },
+}
+
+const productComponents = {
+  grid: { name: "Grid", description: "Products in a grid layout" },
+  list: { name: "List", description: "Products in a vertical list" },
+  masonry: { name: "Masonry", description: "Masonry grid for products" },
+  carousel: { name: "Carousel", description: "Scrollable product carousel" },
+}
 
 export default function SiteSettingsPage() {
   const params = useParams()
@@ -43,9 +115,6 @@ export default function SiteSettingsPage() {
   const [productsLoading, setProductsLoading] = useState(true)
   const [deploymentLoading, setDeploymentLoading] = useState(true)
 
-  const [copiedUrl, setCopiedUrl] = useState(false)
-
-  // New product form
   const [newProduct, setNewProduct] = useState({
     name: "",
     description: "",
@@ -57,51 +126,14 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [redeploySubdomain, setRedeploySubdomain] = useState("")
-  const [isRedeploying, setIsRedeploying] = useState(false)
-  const [redeployError, setRedeployError] = useState<string | null>(null)
-
-  // New state for tab navigation and style selection
   const [activeTab, setActiveTab] = useState<"styles" | "products">("styles")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
-
-  const previewStyles = [
-    {
-      id: "minimal",
-      name: "Minimal",
-      description: "Clean and simple design",
-      theme: "minimalist",
-      colors: { bg: "#ffffff", primary: "#000000", secondary: "#f3f4f6" },
-    },
-    {
-      id: "vibrant",
-      name: "Vibrant",
-      description: "Bold and colorful",
-      theme: "vibrant",
-      colors: { bg: "#fafafa", primary: "#ec4899", secondary: "#3b82f6" },
-    },
-    {
-      id: "premium",
-      name: "Premium",
-      description: "Elegant luxury theme",
-      theme: "premium",
-      colors: { bg: "#1f2937", primary: "#d4af37", secondary: "#ffffff" },
-    },
-    {
-      id: "glassmorphic",
-      name: "Glassmorphic",
-      description: "Modern glass effect",
-      theme: "glassmorphic",
-      colors: { bg: "#f8fafc", primary: "#6366f1", secondary: "#8b5cf6" },
-    },
-  ]
 
   useEffect(() => {
     if (!id) return
 
     const fetchAllData = async () => {
       try {
-        // Fetch project
         fetch(`/api/projects/${id}`)
           .then((r) => r.json())
           .then((data) => {
@@ -114,7 +146,6 @@ export default function SiteSettingsPage() {
             setProjectLoading(false)
           })
 
-        // Fetch settings
         fetch(`/api/projects/${id}/settings`)
           .then((r) => r.json())
           .then((data) => {
@@ -126,7 +157,6 @@ export default function SiteSettingsPage() {
             setSettingsLoading(false)
           })
 
-        // Fetch products
         fetch(`/api/projects/${id}/products`)
           .then((r) => r.json())
           .then((data) => {
@@ -138,7 +168,6 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
 
-        // Fetch deployment
         fetch(`/api/projects/${id}/deployments`)
           .then((r) => r.json())
           .then((data) => {
@@ -157,18 +186,17 @@ export default function SiteSettingsPage() {
     fetchAllData()
   }, [id])
 
-  const handleStyleSelect = async (styleId: string) => {
-    setSelectedStyle(styleId)
-    const selectedTheme = previewStyles.find((s) => s.id === styleId)
-    if (selectedTheme) {
-      setSettings((prev: any) => ({
-        ...prev,
-        theme: selectedTheme.theme,
-        primaryColor: selectedTheme.colors.primary,
-        secondaryColor: selectedTheme.colors.primary,
-        backgroundColor: selectedTheme.colors.bg,
-      }))
-    }
+  const handleStyleSelect = (style: string) => {
+    console.log("[v0] Selected style:", style)
+    setSelectedStyle(style)
+  }
+
+  const handleComponentSelect = async (componentType: string, componentValue: string) => {
+    console.log(`[v0] Selecting ${componentType}: ${componentValue}`)
+    setSettings((prev: any) => ({
+      ...prev,
+      [componentType]: componentValue,
+    }))
   }
 
   const handleSettingsUpdate = async () => {
@@ -178,6 +206,17 @@ export default function SiteSettingsPage() {
 
     try {
       console.log("[v0] Sending settings to API:", settings)
+
+      if (!settings.headerComponent) {
+        throw new Error("Please select a header style")
+      }
+      if (!settings.heroComponent) {
+        throw new Error("Please select a hero section")
+      }
+      if (!settings.productComponent) {
+        throw new Error("Please select a product layout")
+      }
+
       const response = await fetch(`/api/projects/${id}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -271,50 +310,6 @@ export default function SiteSettingsPage() {
     }
   }
 
-  const handleRedeploy = async () => {
-    setRedeployError(null)
-
-    if (!redeploySubdomain || !redeploySubdomain.trim()) {
-      setRedeployError("Subdomain is required")
-      return
-    }
-
-    setIsRedeploying(true)
-
-    try {
-      const response = await fetch(`/api/projects/${id}/deployments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subdomain: redeploySubdomain,
-        }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Deployment failed")
-      }
-
-      const result = await response.json()
-      setDeployment(result.deployment)
-      setRedeploySubdomain("")
-    } catch (error: any) {
-      setRedeployError(error.message || "An error occurred during deployment")
-      console.error("[v0] Redeploy error:", error)
-    } finally {
-      setIsRedeploying(false)
-    }
-  }
-
-  const copyDeploymentUrl = async () => {
-    if (deployment?.domain) {
-      const url = `https://${deployment.domain}`
-      await navigator.clipboard.writeText(url)
-      setCopiedUrl(true)
-      setTimeout(() => setCopiedUrl(false), 2000)
-    }
-  }
-
   if (isInitialLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -349,98 +344,77 @@ export default function SiteSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4 max-w-7xl">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Button variant="ghost" size="icon" onClick={() => router.back()}>
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <h1 className="text-2xl font-bold">{project.businessName}</h1>
-              </div>
-              <p className="text-sm text-muted-foreground">Customize your webshop appearance and manage products</p>
-            </div>
-            {/* Removed the redundant ExternalLink Button here as it's duplicated below */}
-          </div>
+      <div className="relative w-full h-64 sm:h-80 md:h-screen bg-black overflow-hidden">
+        {/* Back button - positioned absolutely over preview */}
+        <div className="absolute top-4 left-4 z-50">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="bg-black/30 hover:bg-black/50">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Real-time Preview Section */}
+        {/* Preview iframe */}
         {!deploymentLoading && deployment && (
-          <div className="mb-8 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Live Preview</CardTitle>
-                <CardDescription>Real-time preview of your webshop</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <WebsitePreviewCard domain={deployment.domain} isLive={true} />
-              </CardContent>
-            </Card>
+          <>
+            <iframe
+              src={`https://${deployment.domain}`}
+              className="w-full h-full border-0"
+              title="Live Preview"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+              onLoad={(e) => {
+                console.log("[v0] Preview iframe loaded successfully")
+              }}
+              onError={(e) => {
+                console.error("[v0] Preview iframe failed to load:", e)
+              }}
+            />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Button asChild variant="default" className="w-full">
-                <a href={siteUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Visit Live Site
-                </a>
-              </Button>
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black via-black/60 to-transparent z-10 pointer-events-none" />
 
-              <Button variant="outline" className="w-full bg-transparent" onClick={copyDeploymentUrl}>
-                {copiedUrl ? (
-                  <>
-                    <Check className="mr-2 h-4 w-4" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy URL
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {/* Deployment Status Card */}
-            <Card className="bg-muted/50">
-              <CardHeader>
-                <CardTitle className="text-base">Deployment Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Status</p>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full" />
-                      <p className="font-semibold text-sm">{deployment.status}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Domain</p>
-                    <code className="text-sm font-mono">{deployment.domain}</code>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Created</p>
-                    <p className="text-sm">{new Date(deployment.createdAt).toLocaleDateString()}</p>
-                  </div>
+            <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between">
+              <div className="flex flex-col gap-2">
+                <code className="text-sm font-mono text-white/80">{deployment.domain}</code>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="text-xs text-white/60 uppercase tracking-wider">Live</span>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+          </>
+        )}
+
+        {deploymentLoading && (
+          <div className="flex items-center justify-center w-full h-full">
+            <div className="text-center">
+              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-white" />
+              <p className="text-white/60">Loading preview...</p>
+            </div>
           </div>
         )}
 
-        {/* Tab Navigation */}
-        <div className="mb-8 border-b bg-card rounded-t-lg">
+        {!deployment && !deploymentLoading && (
+          <div className="flex items-center justify-center w-full h-full">
+            <div className="text-center">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-white/60" />
+              <p className="text-white/60">Preview not available yet. Please deploy your website first.</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-center py-8 px-4 bg-background border-b">
+        <Button asChild size="lg" className="px-8">
+          <a href={`https://${deployment?.domain}`} target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Visit Website
+          </a>
+        </Button>
+      </div>
+
+      <div className="border-b bg-card sticky top-0 z-40">
+        <div className="container mx-auto px-4 max-w-7xl">
           <div className="flex gap-0">
             <button
-              onClick={() => {
-                setActiveTab("styles")
-                setSelectedStyle(null)
-              }}
+              onClick={() => setActiveTab("styles")}
               className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
                 activeTab === "styles"
                   ? "border-primary text-primary"
@@ -448,13 +422,10 @@ export default function SiteSettingsPage() {
               }`}
             >
               <Palette className="h-4 w-4" />
-              <span>Style</span>
+              <span>Styles</span>
             </button>
             <button
-              onClick={() => {
-                setActiveTab("products")
-                setSelectedStyle(null)
-              }}
+              onClick={() => setActiveTab("products")}
               className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
                 activeTab === "products"
                   ? "border-primary text-primary"
@@ -466,363 +437,55 @@ export default function SiteSettingsPage() {
             </button>
           </div>
         </div>
+      </div>
 
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Styles Tab */}
         {activeTab === "styles" && (
           <div className="space-y-8">
-            {!selectedStyle ? (
-              <>
-                {/* Style Selection Grid */}
-                <div>
-                  <h2 className="text-xl font-bold mb-2">Choose Your Style</h2>
-                  <p className="text-muted-foreground mb-6">Select from 4 professionally designed templates</p>
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Choose Your Style</h2>
+              <p className="text-muted-foreground mb-6">Select how you'd like to design your website</p>
+            </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {previewStyles.map((style) => (
-                      <Card
-                        key={style.id}
-                        className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
-                        onClick={() => handleStyleSelect(style.id)}
-                      >
-                        <div
-                          className="h-40 flex flex-col items-center justify-center gap-3"
-                          style={{ backgroundColor: style.colors.bg }}
-                        >
-                          <div
-                            className="h-12 w-12 rounded-full flex items-center justify-center text-white font-bold"
-                            style={{ backgroundColor: style.colors.primary }}
-                          >
-                            {style.colors.primary === "#000000" ? "A" : "S"}
-                          </div>
-                          <div className="text-center">
-                            <h3 className="font-bold" style={{ color: style.colors.primary }}>
-                              {style.name}
-                            </h3>
-                            <p className="text-xs" style={{ color: style.colors.secondary }}>
-                              {style.description}
-                            </p>
-                          </div>
-                        </div>
-                        <CardContent className="p-4">
-                          <Button
-                            className="w-full bg-transparent"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleStyleSelect(style.id)
-                            }}
-                          >
-                            Customize
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
+            <StyleOptionsComponent onSelectStyle={handleStyleSelect} isLoading={false} />
 
-                {/* Theme Settings */}
-                {settingsLoading ? (
-                  <Card>
-                    <CardContent className="py-12">
-                      <div className="flex items-center justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                        <span className="ml-2 text-muted-foreground">Loading settings...</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Theme Settings</CardTitle>
-                      <CardDescription>Adjust colors and layout</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Theme</Label>
-                          <Select
-                            value={settings?.theme || "modern"}
-                            onValueChange={(value) => {
-                              const newSettings = { ...settings, theme: value }
-                              setSettings(newSettings)
-                              console.log("[v0] Theme changed to:", value)
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(themes).map(([key, theme]) => (
-                                <SelectItem key={key} value={key}>
-                                  {theme.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+            {selectedStyle === "default" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Default Template</CardTitle>
+                  <CardDescription>Start with our clean, minimal template</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    The default template includes a professional header, hero section, product grid, and footer. You can
+                    customize colors and add products from the Products tab.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      setSettings((prev: any) => ({ ...prev, template: "default" }))
+                      handleSettingsUpdate()
+                    }}
+                  >
+                    Apply Default Template
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
-                        <div className="space-y-2">
-                          <Label>Header Style</Label>
-                          <Select
-                            value={settings?.headerStyle || "simple"}
-                            onValueChange={(value) => {
-                              const newSettings = { ...settings, headerStyle: value }
-                              setSettings(newSettings)
-                              console.log("[v0] Header style changed to:", value)
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="simple">Simple</SelectItem>
-                              <SelectItem value="centered">Centered</SelectItem>
-                              <SelectItem value="split">Split</SelectItem>
-                              <SelectItem value="luxe">Luxe</SelectItem>
-                              <SelectItem value="hero">Hero</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Primary Color</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              type="color"
-                              value={settings?.primaryColor || "#3b82f6"}
-                              onChange={(e) => {
-                                const newSettings = { ...settings, primaryColor: e.target.value }
-                                setSettings(newSettings)
-                              }}
-                              className="w-20 h-10"
-                            />
-                            <Input
-                              type="text"
-                              value={settings?.primaryColor || "#3b82f6"}
-                              onChange={(e) => {
-                                const newSettings = { ...settings, primaryColor: e.target.value }
-                                setSettings(newSettings)
-                              }}
-                              className="flex-1"
-                              placeholder="#3b82f6"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Secondary Color</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              type="color"
-                              value={settings?.secondaryColor || "#8b5cf6"}
-                              onChange={(e) => {
-                                const newSettings = { ...settings, secondaryColor: e.target.value }
-                                setSettings(newSettings)
-                              }}
-                              className="w-20 h-10"
-                            />
-                            <Input
-                              type="text"
-                              value={settings?.secondaryColor || "#8b5cf6"}
-                              onChange={(e) => {
-                                const newSettings = { ...settings, secondaryColor: e.target.value }
-                                setSettings(newSettings)
-                              }}
-                              className="flex-1"
-                              placeholder="#8b5cf6"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Product Layout</Label>
-                          <Select
-                            value={settings?.layout || "grid"}
-                            onValueChange={(value) => setSettings({ ...settings, layout: value })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="grid">Grid</SelectItem>
-                              <SelectItem value="list">List</SelectItem>
-                              <SelectItem value="masonry">Masonry</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label>Currency</Label>
-                          <Select
-                            value={settings?.currency || "USD"}
-                            onValueChange={(value) => setSettings({ ...settings, currency: value })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(currencySymbols).map(([code, symbol]) => (
-                                <SelectItem key={code} value={code}>
-                                  {code} ({symbol})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label>Show Prices</Label>
-                          <p className="text-sm text-muted-foreground">Display prices on your site</p>
-                        </div>
-                        <Switch
-                          checked={settings?.showPrices ?? true}
-                          onCheckedChange={(checked) => setSettings({ ...settings, showPrices: checked })}
-                        />
-                      </div>
-
-                      <Button onClick={handleSettingsUpdate} disabled={isSaving || settingsLoading} className="w-full">
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          "Save Style Settings"
-                        )}
-                      </Button>
-
-                      {saveError && (
-                        <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
-                          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                          <p className="text-sm">{saveError}</p>
-                        </div>
-                      )}
-
-                      {saveSuccess && (
-                        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
-                          <CheckCircle className="h-5 w-5 flex-shrink-0" />
-                          <p className="text-sm">Style settings saved successfully!</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            ) : (
-              <div className="space-y-6">
-                <Button variant="outline" onClick={() => setSelectedStyle(null)} className="mb-4">
-                  ← Back to Styles
-                </Button>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Customize {previewStyles.find((s) => s.id === selectedStyle)?.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Background Color */}
-                      <div className="space-y-2">
-                        <Label>Background Color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            type="color"
-                            value={settings?.backgroundColor || "#ffffff"}
-                            onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
-                            className="w-20 h-10"
-                          />
-                          <Input
-                            type="text"
-                            value={settings?.backgroundColor || "#ffffff"}
-                            onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
-                            className="flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Header Style */}
-                      <div className="space-y-2">
-                        <Label>Header Style</Label>
-                        <Select
-                          value={settings?.headerStyle || "simple"}
-                          onValueChange={(value) => setSettings({ ...settings, headerStyle: value })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="simple">Simple</SelectItem>
-                            <SelectItem value="centered">Centered</SelectItem>
-                            <SelectItem value="split">Split</SelectItem>
-                            <SelectItem value="luxe">Luxe</SelectItem>
-                            <SelectItem value="hero">Hero</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Primary Color */}
-                      <div className="space-y-2">
-                        <Label>Primary Color</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            type="color"
-                            value={settings?.primaryColor || "#3b82f6"}
-                            onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
-                            className="w-20 h-10"
-                          />
-                          <Input
-                            type="text"
-                            value={settings?.primaryColor || "#3b82f6"}
-                            onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
-                            className="flex-1"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Logo URL */}
-                      <div className="space-y-2">
-                        <Label>Logo URL</Label>
-                        <Input
-                          type="url"
-                          value={settings?.logoUrl || ""}
-                          onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
-                          placeholder="https://example.com/logo.png"
-                        />
-                      </div>
-                    </div>
-
-                    <Button onClick={handleSettingsUpdate} disabled={isSaving} className="w-full">
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save Customization"
-                      )}
-                    </Button>
-
-                    {saveError && (
-                      <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
-                        <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                        <p className="text-sm">{saveError}</p>
-                      </div>
-                    )}
-
-                    {saveSuccess && (
-                      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
-                        <CheckCircle className="h-5 w-5 flex-shrink-0" />
-                        <p className="text-sm">Customization saved successfully!</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+            {selectedStyle === "ai" && (
+              <Card className="h-[600px]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5" />
+                    AI Website Builder
+                  </CardTitle>
+                  <CardDescription>Describe your vision, and AI will generate the code</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[calc(100%-80px)]">
+                  <AIWebsiteBuilder projectId={id} />
+                </CardContent>
+              </Card>
             )}
           </div>
         )}

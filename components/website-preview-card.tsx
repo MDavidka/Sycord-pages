@@ -1,18 +1,29 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2, AlertCircle, Trash2 } from "lucide-react"
+import { AlertCircle, Trash2, Edit2, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import Link from "next/link"
 
 interface WebsitePreviewCardProps {
   domain: string
   isLive: boolean
   deploymentId?: string
   projectId?: string
+  businessName?: string
+  createdAt?: string
   onDelete?: (deploymentId: string) => void
 }
 
-export function WebsitePreviewCard({ domain, isLive, deploymentId, projectId, onDelete }: WebsitePreviewCardProps) {
+export function WebsitePreviewCard({
+  domain,
+  isLive,
+  deploymentId,
+  projectId,
+  businessName = "Website",
+  createdAt = new Date().toISOString(),
+  onDelete,
+}: WebsitePreviewCardProps) {
   const [imageLoading, setImageLoading] = useState(true)
   const [imageError, setImageError] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -41,70 +52,92 @@ export function WebsitePreviewCard({ domain, isLive, deploymentId, projectId, on
     }
   }
 
-  if (!isLive) {
-    return (
-      <div className="w-full aspect-video bg-gray-100 rounded-lg flex items-center justify-center border border-dashed border-gray-300 relative group">
-        <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-xs text-muted-foreground">Website pending</p>
-        </div>
-        {deploymentId && (
-          <Button
-            variant="destructive"
-            size="sm"
-            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={handleDelete}
-            disabled={isDeleting}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        )}
-      </div>
-    )
-  }
+  const formattedDate = new Date(createdAt).toLocaleDateString("hu-HU")
 
   return (
-    <div className="w-full aspect-video bg-gray-100 rounded-lg overflow-hidden border border-border relative group">
-      {imageLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
-          <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
-        </div>
-      )}
-
-      {imageError ? (
-        <div className="w-full h-full flex items-center justify-center bg-gray-100">
+    <div className="border border-border rounded-lg overflow-hidden flex flex-col">
+      {!isLive ? (
+        <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-gray-100 to-gray-200 rounded-t-lg flex flex-col items-center justify-center border-b border-border relative group">
           <div className="text-center">
-            <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-xs text-muted-foreground">Preview unavailable</p>
+            <div className="mb-3 flex justify-center">
+              <div className="relative">
+                <div className="absolute inset-0 bg-yellow-400 rounded-full blur-lg opacity-30 animate-pulse" />
+                <AlertCircle className="h-12 w-12 text-yellow-600 relative z-10" />
+              </div>
+            </div>
+            <p className="text-sm font-semibold text-gray-900 mb-1">Weboldal mögött létrehozva</p>
+            <p className="text-xs text-gray-500">Az üzembe helyezésre vár...</p>
           </div>
         </div>
       ) : (
-        <iframe
-          src={`https://${domain}`}
-          className="w-full h-full border-none"
-          onLoad={() => setImageLoading(false)}
-          onError={() => {
-            setImageError(true)
-            setImageLoading(false)
-          }}
-          title={`Preview of ${domain}`}
-          sandbox="allow-same-origin"
-        />
+        <div className="relative w-full h-64 sm:h-80 md:h-96 bg-gray-100 overflow-hidden group">
+          {imageLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground"></div>
+            </div>
+          )}
+
+          {imageError ? (
+            <div className="w-full h-full flex items-center justify-center bg-gray-100">
+              <div className="text-center">
+                <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Preview unavailable</p>
+              </div>
+            </div>
+          ) : (
+            <iframe
+              src={`https://${domain}`}
+              className="w-full h-full border-none"
+              onLoad={() => setImageLoading(false)}
+              onError={() => {
+                setImageError(true)
+                setImageLoading(false)
+              }}
+              title={`Preview of ${domain}`}
+              sandbox="allow-same-origin"
+            />
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60 pointer-events-none" />
+
+          {/* Domain and Live Badge */}
+          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between z-20">
+            <div>
+              <p className="text-white text-sm font-medium truncate">{domain}</p>
+            </div>
+            {isLive && (
+              <div className="flex items-center gap-1 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/30 backdrop-blur-sm">
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                <span className="text-xs font-medium text-green-300">Live</span>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
-      <div className="absolute inset-0 bg-transparent group-hover:bg-black/5 transition-colors pointer-events-none" />
-
-      {deploymentId && (
-        <Button
-          variant="destructive"
-          size="sm"
-          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={handleDelete}
-          disabled={isDeleting}
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      )}
+      <div className="p-4 md:p-6 flex flex-col justify-between flex-1">
+        <div className="flex-1">
+          <h3 className="font-semibold text-base md:text-lg mb-2">{businessName}</h3>
+          <p className="text-xs text-muted-foreground">Létrehozva: {formattedDate}</p>
+        </div>
+        <div className="flex gap-2 mt-4 justify-between">
+          <Link href={`/dashboard/sites/${projectId}`} className="flex-1">
+            <Button variant="outline" className="w-full bg-transparent" size="sm">
+              <Edit2 className="h-4 w-4 mr-2" />
+              Szerkesztés
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-600 border-none"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
