@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import Image from "next/image"
+import { useTheme } from "next-themes"
 
 interface WelcomeOverlayProps {
   userName: string
@@ -11,6 +12,8 @@ interface WelcomeOverlayProps {
 }
 
 export function WelcomeOverlay({ userName, userImage, isVisible, onComplete }: WelcomeOverlayProps) {
+  const { theme } = useTheme()
+
   useEffect(() => {
     if (!isVisible) return
 
@@ -30,9 +33,17 @@ export function WelcomeOverlay({ userName, userImage, isVisible, onComplete }: W
       .join("")
       .toUpperCase() || "U"
 
+  const bgGradient =
+    theme === "light"
+      ? "bg-gradient-to-b from-background via-background to-card"
+      : "bg-gradient-to-b from-black via-slate-950 to-slate-900"
+
+  const textColor = theme === "light" ? "text-foreground" : "text-white"
+  const subtextColor = theme === "light" ? "text-muted-foreground" : "text-gray-300"
+
   return (
     <>
-      <div className="fixed inset-0 bg-black z-40 pointer-events-none animate-in fade-in duration-300" />
+      <div className={`fixed inset-0 z-40 pointer-events-none animate-in fade-in duration-300 ${bgGradient}`} />
 
       <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
         <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
@@ -55,8 +66,8 @@ export function WelcomeOverlay({ userName, userImage, isVisible, onComplete }: W
 
           {/* Welcome Text */}
           <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-            <h2 className="text-2xl md:text-3xl font-bold text-white">Welcome back, {userName}</h2>
-            <p className="text-sm text-gray-300 mt-2">Ready to manage your websites</p>
+            <h2 className={`text-2xl md:text-3xl font-bold ${textColor}`}>Welcome back, {userName}</h2>
+            <p className={`text-sm ${subtextColor} mt-2`}>Ready to manage your websites</p>
           </div>
         </div>
       </div>

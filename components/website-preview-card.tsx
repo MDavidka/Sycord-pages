@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertCircle, Trash2, Edit2, CheckCircle2 } from "lucide-react"
+import { AlertCircle, Trash2, Edit2, CheckCircle2, Package, Sparkles, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
@@ -13,6 +13,7 @@ interface WebsitePreviewCardProps {
   businessName?: string
   createdAt?: string
   onDelete?: (deploymentId: string) => void
+  style?: string
 }
 
 export function WebsitePreviewCard({
@@ -23,6 +24,7 @@ export function WebsitePreviewCard({
   businessName = "Website",
   createdAt = new Date().toISOString(),
   onDelete,
+  style = "default",
 }: WebsitePreviewCardProps) {
   const [imageLoading, setImageLoading] = useState(true)
   const [imageError, setImageError] = useState(false)
@@ -54,10 +56,25 @@ export function WebsitePreviewCard({
 
   const formattedDate = new Date(createdAt).toLocaleDateString("hu-HU")
 
+  const getWebsiteIcon = () => {
+    switch (style) {
+      case "default":
+        return Package
+      case "browse":
+        return Sparkles
+      case "ai":
+        return Zap
+      default:
+        return Package
+    }
+  }
+
+  const WebsiteIcon = getWebsiteIcon()
+
   return (
     <div className="border border-border rounded-lg overflow-hidden flex flex-col">
       {!isLive ? (
-        <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-gray-100 to-gray-200 rounded-t-lg flex flex-col items-center justify-center border-b border-border relative group">
+        <div className="w-full h-40 sm:h-56 md:h-72 bg-gradient-to-br from-gray-100 to-gray-200 rounded-t-lg flex flex-col items-center justify-center border-b border-border relative group">
           <div className="text-center">
             <div className="mb-3 flex justify-center">
               <div className="relative">
@@ -70,7 +87,7 @@ export function WebsitePreviewCard({
           </div>
         </div>
       ) : (
-        <div className="relative w-full h-64 sm:h-80 md:h-96 bg-gray-100 overflow-hidden group">
+        <div className="relative w-full h-48 sm:h-72 md:h-[28rem] bg-gray-100 overflow-hidden group">
           {imageLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground"></div>
@@ -85,24 +102,27 @@ export function WebsitePreviewCard({
               </div>
             </div>
           ) : (
-            <iframe
-              src={`https://${domain}`}
-              className="w-full h-full border-none"
-              onLoad={() => setImageLoading(false)}
-              onError={() => {
-                setImageError(true)
-                setImageLoading(false)
-              }}
-              title={`Preview of ${domain}`}
-              sandbox="allow-same-origin"
-            />
+            <div className="w-full h-full overflow-hidden flex items-start justify-start">
+              <iframe
+                src={`https://${domain}`}
+                className="w-[1440px] h-[1440px] border-none origin-top-left scale-[0.85] sm:scale-[0.95] md:scale-[1.05] lg:scale-[1.1]"
+                onLoad={() => setImageLoading(false)}
+                onError={() => {
+                  setImageError(true)
+                  setImageLoading(false)
+                }}
+                title={`Preview of ${domain}`}
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
+              />
+            </div>
           )}
 
           <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60 pointer-events-none" />
 
           {/* Domain and Live Badge */}
           <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between z-20">
-            <div>
+            <div className="flex items-center gap-2">
+              <WebsiteIcon className="h-4 w-4 text-white" />
               <p className="text-white text-sm font-medium truncate">{domain}</p>
             </div>
             {isLive && (

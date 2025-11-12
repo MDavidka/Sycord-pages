@@ -4,6 +4,7 @@ import { authOptions } from "../auth/[...nextauth]/route"
 import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
+import { generateWebpageId } from "@/lib/generate-webpage-id"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -31,8 +32,11 @@ export async function POST(request: Request) {
 
   const userIP = getClientIP(request)
 
+  const webpageId = generateWebpageId()
+
   const newProject = {
     ...body,
+    webpageId, // 9-digit ID for frontend display
     userId: session.user.id,
     userEmail: session.user.email,
     userName: session.user.name,
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
         .replace(/[^a-z0-9-]/g, "-")
         .replace(/^-+|-+$/g, "")
 
-      console.log("[v0] Sanitized subdomain:", sanitizedSubdomain, "from original:", body.subdomain) // Debug subdomain sanitization
+      console.log("[v0] Sanitized subdomain:", sanitizedSubdomain, "from original:", body.subdomain)
 
       if (sanitizedSubdomain.length >= 3 && !containsCurseWords(sanitizedSubdomain)) {
         try {
@@ -72,9 +76,8 @@ export async function POST(request: Request) {
           }
 
           const deploymentResult = await db.collection("deployments").insertOne(deployment)
-          console.log("[v0] Deployment created:", deploymentResult.insertedId, "subdomain:", sanitizedSubdomain) // Debug deployment creation
+          console.log("[v0] Deployment created:", deploymentResult.insertedId, "subdomain:", sanitizedSubdomain)
 
-          // Update project with deployment info
           await db.collection("projects").updateOne(
             { _id: projectResult.insertedId },
             {
@@ -90,7 +93,7 @@ export async function POST(request: Request) {
           console.error("[v0] Error creating deployment during project creation:", deploymentError.message)
         }
       } else {
-        console.log("[v0] Subdomain rejected - too short or contains curse words:", sanitizedSubdomain) // Debug rejection
+        console.log("[v0] Subdomain rejected - too short or contains curse words:", sanitizedSubdomain)
       }
     }
 

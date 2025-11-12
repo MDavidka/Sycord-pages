@@ -40,22 +40,24 @@ export async function POST(request: Request) {
 
     const codeMarkerRegex = /\[1\]([\s\S]*?)\[1\]/
     const codeMarkerMatch = responseText.match(codeMarkerRegex)
-    const extractedCode = codeMarkerMatch ? codeMarkerMatch[1].trim() : undefined
+    let extractedCode = codeMarkerMatch ? codeMarkerMatch[1].trim() : null
 
     if (extractedCode) {
-      console.log("[v0] Code extracted successfully, length:", extractedCode.length)
+      console.log("[v0] Code extracted with markers, length:", extractedCode.length)
       console.log("[v0] Code preview:", extractedCode.substring(0, 150))
-
-      // Validate that extracted code is HTML
-      if (
-        !extractedCode.toLowerCase().includes("<!doctype") &&
-        !extractedCode.toLowerCase().includes("<html") &&
-        !extractedCode.includes("<div")
-      ) {
-        console.warn("[v0] Extracted code may not be valid HTML")
-      }
     } else {
-      console.warn("[v0] No code markers found in response")
+      console.warn("[v0] No code markers found, checking for HTML in response")
+      const htmlRegex = /<html[\s\S]*<\/html>/i
+      const htmlMatch = responseText.match(htmlRegex)
+      if (htmlMatch) {
+        extractedCode = htmlMatch[0].trim()
+        console.log("[v0] Code extracted from HTML fallback, length:", extractedCode.length)
+      }
+    }
+
+    if (extractedCode && !extractedCode.toLowerCase().includes("<!doctype")) {
+      console.warn("[v0] Code missing DOCTYPE, adding it")
+      extractedCode = "<!DOCTYPE html>\n" + extractedCode
     }
 
     return NextResponse.json({

@@ -19,69 +19,76 @@ export default async function SubdomainPage({ params }: PageProps) {
     const client = await clientPromise
     const db = client.db()
 
-    const deployment = await db.collection("deployments").findOne({
+    console.log("[v0] Webshop: Looking up deployment for subdomain:", subdomain)
+
+    let deployment = await db.collection("deployments").findOne({
       subdomain: subdomain.toLowerCase(),
     })
 
     if (!deployment) {
-      console.log("[v0] Deployment not found for subdomain:", subdomain)
-      return (
-        <div className="p-8 bg-red-50">
-          <h1 className="text-2xl font-bold text-red-900">Debug: Deployment Not Found</h1>
-          <p className="mt-4 text-red-800">Subdomain: {subdomain}</p>
-          <p className="mt-2 text-red-800">Make sure the website is deployed first.</p>
-          <pre className="mt-4 bg-red-100 p-4 rounded overflow-auto">
-            Searched for: {JSON.stringify({ subdomain: subdomain.toLowerCase() }, null, 2)}
-          </pre>
-        </div>
-      )
+      console.log("[v0] Webshop: Deployment not found by subdomain, trying project lookup")
+      // Fallback: try to find a project directly by subdomain
+      const project = await db.collection("projects").findOne({
+        subdomain: subdomain.toLowerCase(),
+      })
+
+      if (project) {
+        console.log("[v0] Webshop: Found project by subdomain, creating virtual deployment reference")
+        deployment = {
+          _id: new ObjectId(),
+          projectId: project._id,
+          subdomain: subdomain.toLowerCase(),
+          status: "active",
+        }
+      }
     }
 
-    console.log("[v0] Deployment found:", JSON.stringify(deployment, null, 2))
-    console.log("[v0] Deployment projectId:", deployment.projectId, "Type:", typeof deployment.projectId)
+    if (!deployment) {
+      console.log("[v0] Webshop: No deployment or project found for subdomain:", subdomain)
+      notFound()
+    }
+
+    console.log("[v0] Webshop: Deployment found. ID:", deployment._id, "ProjectID:", deployment.projectId) // Add projectId logging
 
     const projectId = deployment.projectId
-
     if (!projectId) {
-      return (
-        <div className="p-8 bg-yellow-50">
-          <h1 className="text-2xl font-bold text-yellow-900">Debug: Missing ProjectId</h1>
-          <p className="mt-4 text-yellow-800">Deployment found but has no projectId field</p>
-          <pre className="mt-4 bg-yellow-100 p-4 rounded overflow-auto">{JSON.stringify(deployment, null, 2)}</pre>
-        </div>
-      )
+      console.error("[v0] Webshop: Deployment has no projectId field")
+      notFound()
     }
 
-    const projectObjectId = projectId instanceof ObjectId ? projectId : new ObjectId(projectId.toString())
+    let projectObjectId: ObjectId
+    try {
+      if (projectId instanceof ObjectId) {
+        projectObjectId = projectId
+      } else if (typeof projectId === "string") {
+        projectObjectId = new ObjectId(projectId)
+      } else {
+        throw new Error("Invalid projectId type")
+      }
+    } catch (err: any) {
+      console.error("[v0] Webshop: Failed to convert projectId to ObjectId:", err.message)
+      notFound()
+    }
 
-    console.log("[v0] Querying project with ObjectId:", projectObjectId.toString())
+    console.log("[v0] Webshop: Querying project with ObjectId:", projectObjectId.toString())
 
     const project = await db.collection("projects").findOne({
       _id: projectObjectId,
     })
 
     if (!project) {
-      return (
-        <div className="p-8 bg-orange-50">
-          <h1 className="text-2xl font-bold text-orange-900">Debug: Project Not Found</h1>
-          <p className="mt-4 text-orange-800">ProjectId: {projectObjectId.toString()}</p>
-          <pre className="mt-4 bg-orange-100 p-4 rounded overflow-auto">{JSON.stringify(deployment, null, 2)}</pre>
-        </div>
-      )
+      console.error("[v0] Webshop: Project not found for ObjectId:", projectObjectId.toString())
+      notFound()
     }
 
-    console.log("[v0] Project found:", project.businessName)
+    console.log("[v0] Webshop: Project found. Name:", project.businessName, "Has AI code:", !!project.aiGeneratedCode)
 
-    const settings = await db.collection("webshop_settings").findOne({ projectId: projectObjectId })
-    const products = await db.collection("products").find({ projectId: projectObjectId }).toArray()
-
-    const aiGeneratedCode = project.aiGeneratedCode || null
-
-    if (aiGeneratedCode) {
+    if (project.aiGeneratedCode) {
+      console.log("[v0] Webshop: Rendering AI-generated code. Length:", project.aiGeneratedCode.length)
       return (
         <div className="min-h-screen bg-background">
           <iframe
-            srcDoc={aiGeneratedCode}
+            srcDoc={project.aiGeneratedCode}
             title="AI Generated Website"
             className="w-full min-h-screen border-0"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
@@ -89,6 +96,11 @@ export default async function SubdomainPage({ params }: PageProps) {
         </div>
       )
     }
+
+    console.log("[v0] Using default template")
+
+    const settings = await db.collection("webshop_settings").findOne({ projectId: projectObjectId })
+    const products = await db.collection("products").find({ projectId: projectObjectId }).toArray()
 
     const shopSettings = settings || {
       theme: "tech",
@@ -114,7 +126,6 @@ export default async function SubdomainPage({ params }: PageProps) {
 
     return (
       <div className={`min-h-screen ${themeConfig.bg}`}>
-        {/* Header */}
         <header className={`${themeConfig.header} sticky top-0 z-50`}>
           <div className={`container mx-auto px-4 py-6 flex justify-between items-center`}>
             <div>
@@ -134,7 +145,6 @@ export default async function SubdomainPage({ params }: PageProps) {
           </div>
         </header>
 
-        {/* Hero Section */}
         {shopSettings.headerStyle === "hero" && (
           <section className={`${themeConfig.bg} py-32 text-center border-b ${themeConfig.card}`}>
             <div className="container mx-auto px-4">
@@ -153,7 +163,6 @@ export default async function SubdomainPage({ params }: PageProps) {
           </section>
         )}
 
-        {/* Products Section */}
         <main className="container mx-auto px-4 py-16">
           {products.length === 0 ? (
             <div className="text-center py-32">
@@ -220,7 +229,6 @@ export default async function SubdomainPage({ params }: PageProps) {
           )}
         </main>
 
-        {/* Footer */}
         <footer className={`${themeConfig.header} border-t`}>
           <div className="container mx-auto px-4 py-12">
             <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-8">

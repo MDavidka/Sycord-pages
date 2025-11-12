@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -17,7 +19,11 @@ import {
   ArrowLeft,
   Palette,
   ShoppingCart,
-  MessageCircle,
+  Zap,
+  Package,
+  Sparkles,
+  Lock,
+  Unlock,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -28,47 +34,96 @@ const StyleOptionsComponent = ({
   onSelectStyle: (style: string) => void
   isLoading: boolean
 }) => {
-  const options = [
-    {
-      id: "default",
-      name: "Default",
-      description: "Clean, minimal starting template",
-      icon: "✨",
-    },
-    {
-      id: "browse",
-      name: "Browse",
-      description: "Coming soon - Choose from templates",
-      icon: "🎨",
-      disabled: true,
-    },
-    {
-      id: "ai",
-      name: "AI Builder",
-      description: "Create with Google AI assistance",
-      icon: "🤖",
-    },
-  ]
+  const [profileImage, setProfileImage] = useState<string>("")
+  const [shopName, setShopName] = useState<string>("")
+  const [isUploading, setIsUploading] = useState(false)
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        setProfileImage(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {options.map((option) => (
-        <button
-          key={option.id}
-          onClick={() => !option.disabled && onSelectStyle(option.id)}
-          disabled={option.disabled || isLoading}
-          className={`relative p-8 rounded-xl border-2 transition-all duration-300 transform ${
-            option.disabled
-              ? "opacity-50 cursor-not-allowed border-gray-200 bg-gray-50"
-              : "border-gray-300 hover:border-primary hover:shadow-lg cursor-pointer hover:scale-105"
-          }`}
-        >
-          <div className="text-4xl mb-4">{option.icon}</div>
-          <h3 className="font-bold text-lg mb-2">{option.name}</h3>
-          <p className="text-sm text-muted-foreground">{option.description}</p>
-          {option.disabled && <div className="text-xs text-muted-foreground mt-3">🔄 Coming Soon</div>}
-        </button>
-      ))}
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Shop Profile Image Upload */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Shop Profile Image</CardTitle>
+            <CardDescription>Upload a logo or profile picture for your shop</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer group">
+              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="profile-upload" />
+              <label htmlFor="profile-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center group-hover:bg-muted/80 transition-colors">
+                  {profileImage ? (
+                    <img
+                      src={profileImage || "/placeholder.svg"}
+                      alt="Profile"
+                      className="w-16 h-16 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <Plus className="h-6 w-6 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="text-sm">
+                  <p className="font-medium text-primary">Click to upload</p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
+                </div>
+              </label>
+            </div>
+            <Button className="w-full" disabled={!profileImage || isUploading}>
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                "Save Profile Image"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Edit Shop Name */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Shop Name</CardTitle>
+            <CardDescription>Edit your shop's display name</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Shop Name</Label>
+              <Input
+                value={shopName}
+                onChange={(e) => setShopName(e.target.value)}
+                placeholder="Enter your shop name"
+                className="text-base"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This name will be displayed on your website and public profile
+            </p>
+            <Button className="w-full" disabled={!shopName || isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Update Shop Name"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
@@ -96,6 +151,12 @@ const productComponents = {
   carousel: { name: "Carousel", description: "Scrollable product carousel" },
 }
 
+const paymentOptions = [
+  { id: "stripe", name: "Stripe", description: "Credit cards and digital wallets" },
+  { id: "paypal", name: "PayPal", description: "PayPal payments" },
+  { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
+]
+
 export default function SiteSettingsPage() {
   const params = useParams()
   const router = useRouter()
@@ -109,6 +170,7 @@ export default function SiteSettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [deployment, setDeployment] = useState<any>(null)
+  const [isFrozen, setIsFrozen] = useState(false)
 
   const [projectLoading, setProjectLoading] = useState(true)
   const [settingsLoading, setSettingsLoading] = useState(true)
@@ -126,23 +188,33 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"styles" | "products">("styles")
+  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai">("styles")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
+  const [selectedPage, setSelectedPage] = useState<string>("landing")
 
   useEffect(() => {
     if (!id) return
 
+    console.log("[v0] Settings page: Loading project with ID:", id)
+    console.log("[v0] Settings page: ID type:", typeof id)
+    console.log("[v0] Settings page: ID is valid ObjectId format:", /^[0-9a-f]{24}$/i.test(id))
+
     const fetchAllData = async () => {
       try {
         fetch(`/api/projects/${id}`)
-          .then((r) => r.json())
+          .then((r) => {
+            console.log("[v0] Settings page: Project fetch response status:", r.status)
+            return r.json()
+          })
           .then((data) => {
+            console.log("[v0] Settings page: Project fetch response:", data)
             if (data.message) throw new Error(data.message)
+            console.log("[v0] Settings page: Project loaded successfully. ID:", data._id, "Type:", typeof data._id)
             setProject(data)
             setProjectLoading(false)
           })
           .catch((err) => {
-            console.error("[v0] Error fetching project:", err)
+            console.error("[v0] Settings page: Error fetching project:", err)
             setProjectLoading(false)
           })
 
@@ -153,7 +225,7 @@ export default function SiteSettingsPage() {
             setSettingsLoading(false)
           })
           .catch((err) => {
-            console.error("[v0] Error fetching settings:", err)
+            console.error("[v0] Settings page: Error fetching settings:", err)
             setSettingsLoading(false)
           })
 
@@ -164,7 +236,7 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
           .catch((err) => {
-            console.error("[v0] Error fetching products:", err)
+            console.error("[v0] Settings page: Error fetching products:", err)
             setProductsLoading(false)
           })
 
@@ -175,7 +247,7 @@ export default function SiteSettingsPage() {
             setDeploymentLoading(false)
           })
           .catch((err) => {
-            console.error("[v0] Error fetching deployment:", err)
+            console.error("[v0] Settings page: Error fetching deployment:", err)
             setDeploymentLoading(false)
           })
       } finally {
@@ -314,8 +386,8 @@ export default function SiteSettingsPage() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">Loading site settings...</p>
+          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-foreground" />
+          <p className="text-foreground">Loading site settings...</p>
         </div>
       </div>
     )
@@ -342,83 +414,157 @@ export default function SiteSettingsPage() {
   const subdomain = project.businessName?.toLowerCase().replace(/\s+/g, "-")
   const siteUrl = `https://${subdomain}.ltpd.xyz`
 
+  const getWebsiteIcon = () => {
+    const style = project.style || "default"
+    switch (style) {
+      case "default":
+        return Package
+      case "browse":
+        return Sparkles
+      case "ai":
+        return Zap
+      default:
+        return Package
+    }
+  }
+
+  const WebsiteIcon = getWebsiteIcon()
+
+  const pages = [
+    { id: "landing", name: "Landing" },
+    { id: "shop", name: "Shop" },
+    { id: "about", name: "About" },
+    { id: "contact", name: "Contact" },
+  ]
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="relative w-full h-64 sm:h-80 md:h-screen bg-black overflow-hidden">
-        {/* Back button - positioned absolutely over preview */}
+      <div className="relative w-full h-[30vh] md:h-[90vh] bg-black overflow-hidden">
         <div className="absolute top-4 left-4 z-50">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="bg-black/30 hover:bg-black/50">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.back()}
+            className="bg-black/40 hover:bg-black/70 text-white opacity-100"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </div>
 
-        {/* Preview iframe */}
         {!deploymentLoading && deployment && (
           <>
             <iframe
               src={`https://${deployment.domain}`}
               className="w-full h-full border-0"
               title="Live Preview"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-              onLoad={(e) => {
-                console.log("[v0] Preview iframe loaded successfully")
-              }}
-              onError={(e) => {
-                console.error("[v0] Preview iframe failed to load:", e)
-              }}
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
             />
 
             <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black via-black/60 to-transparent z-10 pointer-events-none" />
 
-            <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between">
+            <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between gap-2 flex-wrap">
               <div className="flex flex-col gap-2">
-                <code className="text-sm font-mono text-white/80">{deployment.domain}</code>
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  {deployment.domain && (
+                    <span className="text-xs md:text-base font-bold text-white font-sans truncate">
+                      {deployment.domain}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
                   <span className="text-xs text-white/60 uppercase tracking-wider">Live</span>
                 </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFrozen(!isFrozen)}
+                className="bg-white/20 hover:bg-white/30 text-white flex-shrink-0"
+              >
+                {isFrozen ? (
+                  <>
+                    <Lock className="h-3 w-3 mr-1" />
+                    <span className="text-xs">Frozen</span>
+                  </>
+                ) : (
+                  <>
+                    <Unlock className="h-3 w-3 mr-1" />
+                    <span className="text-xs">Active</span>
+                  </>
+                )}
+              </Button>
             </div>
           </>
         )}
 
         {deploymentLoading && (
-          <div className="flex items-center justify-center w-full h-full">
+          <div className="flex items-center justify-center w-full h-full bg-card">
             <div className="text-center">
-              <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-white" />
-              <p className="text-white/60">Loading preview...</p>
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
+              <p className="text-xs md:text-sm text-muted-foreground">Loading preview...</p>
             </div>
           </div>
         )}
 
         {!deployment && !deploymentLoading && (
-          <div className="flex items-center justify-center w-full h-full">
-            <div className="text-center">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-white/60" />
-              <p className="text-white/60">Preview not available yet. Please deploy your website first.</p>
+          <div className="flex items-center justify-center w-full h-full bg-card">
+            <div className="text-center px-4">
+              <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-xs md:text-sm text-muted-foreground">
+                Preview not available. Deploy your website first.
+              </p>
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex justify-center py-8 px-4 bg-background border-b">
-        <Button asChild size="lg" className="px-8">
-          <a href={`https://${deployment?.domain}`} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Visit Website
-          </a>
-        </Button>
+      <div className="py-4 px-4 bg-background border-b">
+        <div className="container mx-auto max-w-7xl">
+          <div className="flex items-center justify-between gap-2">
+            {isFrozen && (
+              <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
+                <Lock className="h-3 w-3" />
+                <span className="font-medium">Frozen</span>
+              </div>
+            )}
+            <div className="flex-1" />
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedPage}
+                onChange={(e) => setSelectedPage(e.target.value)}
+                className="px-2 py-1 border border-input rounded bg-background text-xs md:text-sm text-foreground"
+              >
+                {pages.map((page) => (
+                  <option key={page.id} value={page.id}>
+                    {page.name}
+                  </option>
+                ))}
+              </select>
+              <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
+                <a
+                  href={`https://${deployment?.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => isFrozen && e.preventDefault()}
+                >
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="border-b bg-card sticky top-0 z-40">
+      <div className="border-b bg-background sticky top-0 z-40 overflow-x-auto">
         <div className="container mx-auto px-4 max-w-7xl">
-          <div className="flex gap-0">
+          <div className="flex gap-2 min-w-min md:min-w-0 py-3">
             <button
               onClick={() => setActiveTab("styles")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
+              className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 font-medium whitespace-nowrap text-sm md:text-base transition-all duration-200 rounded-lg ${
                 activeTab === "styles"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-md hover:shadow-lg"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:shadow-sm"
               }`}
             >
               <Palette className="h-4 w-4" />
@@ -426,71 +572,57 @@ export default function SiteSettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab("products")}
-              className={`flex items-center gap-2 px-6 py-4 font-medium transition-colors border-b-2 ${
+              className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 font-medium whitespace-nowrap text-sm md:text-base transition-all duration-200 rounded-lg ${
                 activeTab === "products"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-md hover:shadow-lg"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:shadow-sm"
               }`}
             >
               <ShoppingCart className="h-4 w-4" />
               <span>Products</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("payments")}
+              className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 font-medium whitespace-nowrap text-sm md:text-base transition-all duration-200 rounded-lg ${
+                activeTab === "payments"
+                  ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-md hover:shadow-lg"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:shadow-sm"
+              }`}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              <span className="hidden sm:inline">Payments</span>
+              <span className="sm:hidden">Pay</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("ai")}
+              className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 font-medium whitespace-nowrap text-sm md:text-base transition-all duration-200 rounded-lg ${
+                activeTab === "ai"
+                  ? "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground shadow-md hover:shadow-lg"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:shadow-sm"
+              }`}
+            >
+              <Zap className="h-4 w-4" />
+              <span className="hidden sm:inline">AI Builder</span>
+              <span className="sm:hidden">AI</span>
             </button>
           </div>
         </div>
       </div>
 
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Styles Tab */}
         {activeTab === "styles" && (
           <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-bold mb-2">Choose Your Style</h2>
-              <p className="text-muted-foreground mb-6">Select how you'd like to design your website</p>
+              <h2 className="text-2xl font-bold mb-2">Customize Your Shop</h2>
+              <p className="text-muted-foreground mb-6">Upload a profile image and edit your shop name</p>
             </div>
 
             <StyleOptionsComponent onSelectStyle={handleStyleSelect} isLoading={false} />
 
-            {selectedStyle === "default" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Default Template</CardTitle>
-                  <CardDescription>Start with our clean, minimal template</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    The default template includes a professional header, hero section, product grid, and footer. You can
-                    customize colors and add products from the Products tab.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      setSettings((prev: any) => ({ ...prev, template: "default" }))
-                      handleSettingsUpdate()
-                    }}
-                  >
-                    Apply Default Template
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {selectedStyle === "ai" && (
-              <Card className="h-[600px]">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageCircle className="h-5 w-5" />
-                    AI Website Builder
-                  </CardTitle>
-                  <CardDescription>Describe your vision, and AI will generate the code</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[calc(100%-80px)]">
-                  <AIWebsiteBuilder projectId={id} />
-                </CardContent>
-              </Card>
-            )}
+            {/* Additional content can be added here */}
           </div>
         )}
 
-        {/* Products Tab */}
         {activeTab === "products" && (
           <div className="space-y-6">
             {productsLoading ? (
@@ -665,6 +797,48 @@ export default function SiteSettingsPage() {
                 </Card>
               </>
             )}
+          </div>
+        )}
+
+        {activeTab === "payments" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">Payment Methods</h2>
+              <p className="text-muted-foreground mb-6">Choose how your customers can pay</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {paymentOptions.map((option) => (
+                <Card key={option.id} className="cursor-pointer hover:border-primary hover:shadow-md transition-all">
+                  <CardHeader>
+                    <CardTitle className="text-lg">{option.name}</CardTitle>
+                    <CardDescription>{option.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button className="w-full">Enable</Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "ai" && (
+          <div className="h-[calc(100vh-400px)] min-h-96 flex flex-col">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-2">AI Website Builder</h2>
+              <p className="text-muted-foreground">Describe your website and let AI design it for you</p>
+            </div>
+            <div className="flex-1 border rounded-lg bg-card overflow-hidden">
+              {id ? (
+                <AIWebsiteBuilder projectId={id} />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <AlertCircle className="h-6 w-6 text-destructive mr-2" />
+                  <span className="text-destructive">Project ID not available</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

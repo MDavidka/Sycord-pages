@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { WebsitePreviewCard } from "@/components/website-preview-card"
 import { WelcomeOverlay } from "@/components/welcome-overlay"
 import { CreateProjectModal } from "@/components/create-project-modal"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
@@ -65,7 +66,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-foreground mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Betöltés...</p>
+          <p className="text-foreground">Betöltés...</p>
         </div>
       </div>
     )
@@ -100,6 +101,12 @@ export default function DashboardPage() {
             className="text-sm text-muted-foreground hover:text-foreground px-4 py-2 hover:bg-accent rounded-md"
           >
             Projektek
+          </Link>
+          <Link
+            href="/subscriptions"
+            className="text-sm text-muted-foreground hover:text-foreground px-4 py-2 hover:bg-accent rounded-md"
+          >
+            Plans
           </Link>
           <Link
             href="#"
@@ -187,7 +194,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background md:ml-16">
         <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
           <div className="container mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4 md:gap-8">
@@ -202,6 +209,12 @@ export default function DashboardPage() {
                 <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Projektek
                 </Link>
+                <Link
+                  href="/subscriptions"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Plans
+                </Link>
                 <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Analitika
                 </Link>
@@ -215,6 +228,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2 md:gap-3">
               <MobileNav />
+              <ThemeToggle />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -241,6 +255,15 @@ export default function DashboardPage() {
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Beállítások</span>
                   </DropdownMenuItem>
+                  {session?.user?.email === "dmarton336@gmail.com" && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => router.push("/admin")}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span className="text-primary font-semibold">Admin Panel</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => signOut({ callbackUrl: "/" })}
@@ -255,7 +278,7 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <main className="container mx-auto px-4 py-6 md:py-8">
+        <main className="container mx-auto px-4 py-6 md:py-8 pb-20 md:pb-6">
           <div className="flex flex-col gap-4 mb-6 md:mb-8">
             <div className="flex items-center justify-between">
               <h1 className="text-lg font-semibold text-foreground">Projektek</h1>
@@ -277,7 +300,7 @@ export default function DashboardPage() {
           </div>
 
           {isLoading ? (
-            <div className="border border-dashed border-border rounded-lg p-12 text-center">
+            <div className="border border-dashed border-border rounded-lg p-12 text-center bg-card">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-foreground mx-auto mb-4"></div>
               <p className="text-muted-foreground">Betöltés...</p>
             </div>
@@ -309,6 +332,7 @@ export default function DashboardPage() {
                       projectId={project._id}
                       businessName={project.businessName}
                       createdAt={project.createdAt}
+                      style={project.style || "default"}
                       onDelete={(deploymentId) => handleDeleteDeployment(deploymentId, project._id)}
                     />
                   ) : (
