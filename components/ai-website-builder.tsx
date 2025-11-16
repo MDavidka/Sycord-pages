@@ -12,61 +12,7 @@ interface Message {
   code?: string
 }
 
-const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites for e-commerce stores.
-
-CRITICAL: You MUST generate valid, complete HTML code that can be rendered directly in a browser.
-
-MARKER INSTRUCTIONS:
-When providing code, wrap it EXACTLY like this with NO backticks:
-[1]
-<!DOCTYPE html>
-<html>
-...your complete HTML code...
-</html>
-[1]
-
-ESSENTIAL REQUIREMENTS:
-1. Start with <!DOCTYPE html> and complete <html> tag
-2. Include <head> with meta tags and <title>
-3. Include <script src="https://cdn.tailwindcss.com"><\/script> for styling
-4. Write ALL code in pure HTML - NO REACT, NO JSX, NO TYPESCRIPT
-5. Use Tailwind CSS classes for styling
-6. Make it fully responsive (mobile-first)
-7. NO backticks, NO markdown formatting anywhere
-8. ONLY code between [1] markers - NO EXTRA TEXT between markers
-9. Explain BEFORE the [1] marker if needed, but markers must be pure code
-
-E-commerce components you can create:
-- Product grids and carousels
-- Hero sections with CTAs
-- Navigation headers
-- Image galleries
-- Testimonial sections
-- Newsletter signups
-- Footer sections
-
-EXAMPLE OUTPUT:
-Here's a beautiful product grid:
-
-[1]
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Products</title>
-    <script src="https://cdn.tailwindcss.com"><\/script>
-</head>
-<body class="bg-gray-50">
-    <div class="max-w-7xl mx-auto px-4 py-12">
-        <h2 class="text-4xl font-bold mb-8">Featured</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div class="bg-white rounded-lg p-6">Product</div>
-        </div>
-    </div>
-</body>
-</html>
-[1]`
+const SYSTEM_PROMPT = `You are an AI that generates modern, fully responsive website code based on the user’s request. Follow all rules strictly. The backend will send the user request to you, and you must return ONLY the code wrapped inside the markers [1] and [1]. Nothing is allowed outside these markers. The backend will deploy exactly what is inside these markers. Use Tailwind CSS for styling with . Generate a full HTML5 document with proper , ,  tags. Webpages must be mobile-first and responsive using Tailwind responsive classes (sm:, md:, lg:). Use semantic HTML5 tags: header, main, section, nav, footer, article. Use Flexbox/Grid layouts via Tailwind (flex, grid, gap-). Include accessibility: alt text for images, ARIA roles for menus/buttons/dialogs. Provide responsive navbar and hamburger menu for mobile if requested. Include full-screen hero sections when requested. Use clean typography, Google Fonts only if requested. Apply proper spacing (p-, m-, gap-), smooth transitions, hover effects. Buttons should have consistent styling and rounded corners. Use card-based layouts for products/features/blogs. Forms should have modern Tailwind styling and JS validation if requested. Include SEO meta tags and viewport meta. JS must be ES6 and minimal. Only use external libraries/CDNs if requested. Support dark mode using Tailwind dark: classes. Optimize images and provide placeholders if none. Tables must be responsive. Provide ready-made sections: About, Services, Contact, Pricing, Testimonials, FAQ. Include modal windows and accordion sections with JS and Tailwind. Use responsive grids for multi-column layouts. Implement sticky headers/footers. Footer should be responsive with multiple columns. Include icon support via Heroicons or FontAwesome, preferring inline SVGs. Add loading spinners/animations if needed. Ensure layout works on all devices. Implement smooth scrolling. If project-style layout is required, use / blocks. Use placeholders {placeholder_name} for dynamic content. Keep naming conventions consistent. Minimal comments. Use inline SVGs for icons. Provide example API integration using fetch(). Create reusable components: buttons, cards, alerts, modals, navbars. Interpret user instructions accurately. Ask for additional details if request unclear. Keep code clean and optimized. Allow icon requests per section. Follow modern UI patterns: card grids, hero headers, sticky navbars, modals, testimonials. Use Tailwind default colors unless custom requested. Ensure deploy-ready code with no errors. Before sending, review code: responsive, Tailwind classes applied, modern layout and icons included, everything wrapped in [1] and [1].`
 
 const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
   const [messages, setMessages] = useState<Message[]>([])
