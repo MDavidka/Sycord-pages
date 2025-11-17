@@ -186,13 +186,12 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Messages Area - Cleaner and more spacious */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      {/* Chat Messages Area - Full screen with modern styling */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full text-center">
-            <div className="text-muted-foreground">
-              <p className="text-sm font-medium">Start creating your website</p>
-              <p className="text-xs mt-1 opacity-70">Describe what you want and I'll generate the code</p>
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-muted-foreground">
+              <p className="text-base font-medium">Start creating</p>
             </div>
           </div>
         )}
@@ -200,46 +199,46 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
         {messages.map((message) => (
           <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-sm rounded-lg p-2.5 text-sm ${
+              className={`max-w-2xl rounded-2xl px-4 py-3 ${
                 message.role === "user"
                   ? "bg-blue-600 text-white"
                   : "bg-slate-100 dark:bg-slate-800 text-foreground"
               }`}
             >
-              <p className="whitespace-pre-wrap text-xs leading-relaxed">{message.content}</p>
+              <p className="text-sm leading-relaxed">{message.content}</p>
 
               {message.code && (
-                <div className="mt-2.5 pt-2.5 border-t border-current/20">
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <Code2 className="h-3.5 w-3.5" />
-                    <span className="text-xs font-medium opacity-70">Code</span>
+                <div className="mt-4 pt-3 border-t border-current/20 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Code2 className="h-4 w-4" />
+                    <span className="text-xs font-semibold opacity-70">Generated Code</span>
                   </div>
-                  <pre className="bg-slate-900 rounded p-2 overflow-x-auto text-xs max-h-40 overflow-y-auto font-mono text-slate-200 border border-slate-700">
-                    <code>{message.code.substring(0, 250)}...</code>
+                  <pre className="bg-slate-950 dark:bg-slate-900 rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto font-mono text-xs text-slate-300 border border-slate-700">
+                    <code>{message.code.substring(0, 300)}...</code>
                   </pre>
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 pt-2">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-xs h-8 px-2"
+                      className="text-xs h-7 px-2.5"
                       onClick={() => navigator.clipboard.writeText(message.code!)}
                     >
                       Copy
                     </Button>
                     <Button
                       size="sm"
-                      className="text-xs h-8 flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                      className="text-xs h-7 flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md"
                       onClick={() => handleDeployCode(message.code!)}
                       disabled={isLoading || deployedCode === message.code}
                     >
                       {deployedCode === message.code ? (
                         <>
-                          <CheckCircle className="h-3 w-3 mr-1" />
+                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
                           Live
                         </>
                       ) : (
                         <>
-                          <Send className="h-3 w-3 mr-1" />
+                          <Send className="h-3.5 w-3.5 mr-1.5" />
                           Deploy
                         </>
                       )}
@@ -253,19 +252,17 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
 
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-slate-100 dark:bg-slate-800 rounded-lg p-2">
-              <div className="flex items-center gap-1.5">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="text-xs text-muted-foreground">Generating...</span>
-              </div>
+            <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl px-4 py-3 flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              <span className="text-sm text-muted-foreground">Generating...</span>
             </div>
           </div>
         )}
 
         {error && (
           <div className="flex justify-start">
-            <div className="bg-red-500/10 rounded-lg p-2 text-red-600 dark:text-red-400 text-xs flex items-start gap-1.5 max-w-xs border border-red-200 dark:border-red-900/50">
-              <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+            <div className="bg-red-500/10 rounded-2xl px-4 py-3 text-red-600 dark:text-red-400 text-sm flex items-start gap-2 max-w-xl border border-red-200 dark:border-red-900/50">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           </div>
@@ -273,8 +270,8 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
 
         {deploySuccess && (
           <div className="flex justify-start">
-            <div className="bg-green-500/10 rounded-lg p-2 text-green-700 dark:text-green-400 text-xs flex items-start gap-1.5 max-w-xs border border-green-200 dark:border-green-900/50">
-              <CheckCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+            <div className="bg-green-500/10 rounded-2xl px-4 py-3 text-green-700 dark:text-green-400 text-sm flex items-start gap-2 max-w-xl border border-green-200 dark:border-green-900/50">
+              <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
               <span>Changes live on your website!</span>
             </div>
           </div>
@@ -283,9 +280,9 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Clean and minimal */}
-      <div className="border-t bg-background px-4 py-3 shadow-sm">
-        <div className="flex gap-2">
+      {/* Input Area - Modern and minimal */}
+      <div className="border-t bg-background px-4 py-4">
+        <div className="flex gap-2.5 items-end">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -297,13 +294,13 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
             }}
             placeholder="Describe your design..."
             disabled={isLoading}
-            className="flex-1 h-9 text-sm rounded-lg border border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 px-3 transition-colors"
+            className="flex-1 h-10 text-sm rounded-2xl border border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 px-4 transition-all"
           />
           <Button
             onClick={handleSendMessage}
             disabled={isLoading || !input.trim()}
             size="sm"
-            className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            className="h-10 px-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-2xl transition-colors"
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
