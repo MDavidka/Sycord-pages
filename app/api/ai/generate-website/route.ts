@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
+const MODEL_FALLBACK = [
+  "gemini-2.5-pro",      // Highest quality
+  "gemini-2.0-pro",      // Second tier
+  "gemini-2.0-flash",    // Fastest fallback
+  "gemini-1.5-pro",      // Legacy fallback
+]
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -18,25 +25,48 @@ export async function POST(request: Request) {
     }
 
     const client = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN)
-    const model = client.getGenerativeModel({ model: "gemini-3-pro-preview" })
 
-    const conversationHistory = messages.map((msg: any) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }))
+    let responseText = null
+    let lastError = null
+    let usedModel = null
 
-    const response = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: systemPrompt }],
-        },
-        ...conversationHistory,
-      ],
-    })
+    for (const modelName of MODEL_FALLBACK) {
+      try {
+        console.log(`[v0] Attempting with model: ${modelName}`)
+        const model = client.getGenerativeModel({ model: modelName })
 
-    const responseText = response.response.text()
-    console.log("[v0] AI Response received, length:", responseText.length)
+        const conversationHistory = messages.map((msg: any) => ({
+          role: msg.role === "user" ? "user" : "model",
+          parts: [{ text: msg.content }],
+        }))
+
+        const response = await model.generateContent({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: systemPrompt }],
+            },
+            ...conversationHistory,
+          ],
+        })
+
+        responseText = response.response.text()
+        usedModel = modelName
+        console.log(`[v0] Success with ${modelName}, response length:`, responseText.length)
+        break // Success, exit retry loop
+      } catch (error: any) {
+        console.error(`[v0] Failed with ${modelName}:`, error.message)
+        lastError = error
+        // Continue to next model in fallback
+      }
+    }
+
+    if (!responseText) {
+      console.error("[v0] All model attempts failed")
+      throw lastError || new Error("All AI models failed")
+    }
+
+    console.log(`[v0] Final model used: ${usedModel}`)
 
     const codeMarkerRegex = /\[1\]([\s\S]*?)\[1\]/
     const codeMarkerMatch = responseText.match(codeMarkerRegex)
@@ -63,6 +93,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       content: responseText,
       code: extractedCode || null,
+      modelUsed: usedModel, // Include which model was successful
     })
   } catch (error: any) {
     console.error("[v0] AI generation error:", error)
