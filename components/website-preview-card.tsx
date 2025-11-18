@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertCircle, Trash2, Edit2, CheckCircle2, Package, Sparkles, Zap } from "lucide-react"
+import { AlertCircle, Trash2, Edit2, CheckCircle2, Package, Sparkles, Zap } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
@@ -41,13 +41,12 @@ export function WebsitePreviewCard({
       })
 
       if (response.ok) {
-        console.log("[v0] Website deleted successfully")
         onDelete?.(deploymentId)
       } else {
         alert("Failed to delete website")
       }
     } catch (error) {
-      console.error("[v0] Error deleting website:", error)
+      console.error("Error deleting website:", error)
       alert("Error deleting website")
     } finally {
       setIsDeleting(false)
@@ -87,7 +86,7 @@ export function WebsitePreviewCard({
           </div>
         </div>
       ) : (
-        <div className="relative w-full h-48 sm:h-72 md:h-[28rem] bg-gray-100 overflow-hidden group">
+        <div className="relative w-full h-40 sm:h-56 md:h-72 bg-gray-100 overflow-hidden group">
           {imageLoading && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-foreground"></div>
@@ -105,7 +104,7 @@ export function WebsitePreviewCard({
             <div className="w-full h-full overflow-hidden flex items-start justify-start">
               <iframe
                 src={`https://${domain}`}
-                className="w-[1440px] h-[1440px] border-none origin-top-left scale-[0.85] sm:scale-[0.95] md:scale-[1.05] lg:scale-[1.1]"
+                className="w-full h-full border-none"
                 onLoad={() => setImageLoading(false)}
                 onError={() => {
                   setImageError(true)
