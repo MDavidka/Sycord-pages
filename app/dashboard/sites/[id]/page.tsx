@@ -449,6 +449,17 @@ export default function SiteSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background relative">
+      <div className="fixed top-4 left-4 z-50 md:hidden">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => router.push("/dashboard")}
+          className="shadow-lg bg-black/50 text-white hover:bg-black/70 backdrop-blur-md"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+      </div>
+
       <div className="fixed top-4 right-4 z-50 md:hidden">
         <Button
           variant="secondary"
@@ -508,6 +519,17 @@ export default function SiteSettingsPage() {
 
       <main className="transition-all duration-300 md:ml-64 min-h-screen flex flex-col">
         <div className="relative w-full h-[30vh] md:h-[50vh] bg-black overflow-hidden flex-shrink-0">
+          <div className="absolute top-4 left-4 z-30 hidden md:block">
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => router.push("/dashboard")}
+              className="shadow-lg bg-black/50 text-white hover:bg-black/70 backdrop-blur-md"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </div>
+
           {/* But kept other overlay elements */}
 
           {!deploymentLoading && deployment && (
