@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const MODELS = [
+  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
   { id: "gemini-2.0-pro-exp-02-05", name: "Gemini 2.0 Pro (Latest)" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Stable)" },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Fast)" },

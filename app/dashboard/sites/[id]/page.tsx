@@ -855,10 +855,6 @@ export default function SiteSettingsPage() {
 
           {activeTab === "ai" && (
             <div className="h-[calc(100vh-400px)] min-h-96 flex flex-col">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">AI Website Builder</h2>
-                <p className="text-muted-foreground">Describe your website and let AI design it for you</p>
-              </div>
               <div className="flex-1 border rounded-lg bg-card overflow-hidden">
                 {id ? (
                   <AIWebsiteBuilder projectId={id} />
