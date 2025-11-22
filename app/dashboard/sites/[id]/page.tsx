@@ -13,7 +13,6 @@ import AIWebsiteBuilder from "@/components/ai-website-builder"
 import {
   Trash2,
   Plus,
-  ExternalLink,
   AlertCircle,
   Loader2,
   ArrowLeft,
@@ -22,10 +21,6 @@ import {
   Zap,
   Package,
   Sparkles,
-  Lock,
-  Unlock,
-  Settings,
-  BookOpen,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -159,7 +154,7 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
-export default function SiteSettingsPage() {
+export default function SettingsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
@@ -190,7 +185,7 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "blog">("styles")
+  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai">("styles")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [selectedPage, setSelectedPage] = useState<string>("landing")
 
@@ -441,196 +436,48 @@ export default function SiteSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Preview Section */}
-      <div className="relative w-full h-[30vh] md:h-[90vh] bg-black overflow-hidden">
-        <div className="absolute top-4 left-4 z-50">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.back()}
-            className="bg-black/40 hover:bg-black/70 text-white opacity-100"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {!deploymentLoading && deployment && (
-          <>
-            <iframe
-              src={`https://${deployment.domain}`}
-              className="w-full h-full border-0"
-              title="Live Preview"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
-            />
-
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black via-black/60 to-transparent z-10 pointer-events-none" />
-
-            <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  {deployment.domain && (
-                    <span className="text-xs md:text-base font-bold text-white font-sans truncate">
-                      {deployment.domain}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
-                  <span className="text-xs text-white/60 uppercase tracking-wider">Live</span>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsFrozen(!isFrozen)}
-                className="bg-white/20 hover:bg-white/30 text-white flex-shrink-0"
-              >
-                {isFrozen ? (
-                  <>
-                    <Lock className="h-3 w-3 mr-1" />
-                    <span className="text-xs">Frozen</span>
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="h-3 w-3 mr-1" />
-                    <span className="text-xs">Active</span>
-                  </>
-                )}
-              </Button>
-            </div>
-          </>
-        )}
-
-        {deploymentLoading && (
-          <div className="flex items-center justify-center w-full h-full bg-card">
-            <div className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
-              <p className="text-xs md:text-sm text-muted-foreground">Loading preview...</p>
-            </div>
-          </div>
-        )}
-
-        {!deployment && !deploymentLoading && (
-          <div className="flex items-center justify-center w-full h-full bg-card">
-            <div className="text-center px-4">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-xs md:text-sm text-muted-foreground">
-                Preview not available. Deploy your website first.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Frosted Glass Sidebar Layout */}
-      <div className="flex">
-        {/* Frosted Glass Sidebar */}
-        <div className="w-16 md:w-20 bg-white/10 backdrop-blur-xl border-r border-white/20 flex flex-col items-center py-4 gap-2 sticky top-0 h-screen overflow-y-auto">
+      <div className="flex flex-col md:flex-row gap-0 md:gap-4 h-screen md:h-auto">
+        <aside className="fixed md:relative bottom-0 md:top-0 left-0 right-0 md:w-20 h-16 md:h-screen bg-gradient-to-r md:bg-gradient-to-b from-background/80 via-background/60 to-background/40 backdrop-blur-md border-t md:border-r border-white/10 md:border-white/5 flex md:flex-col items-center md:items-start justify-start md:justify-start gap-2 p-2 md:p-3 rounded-t-lg md:rounded-none overflow-x-auto md:overflow-y-auto">
           <button
             onClick={() => setActiveTab("styles")}
-            title="Styles"
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeTab === "styles"
-                ? "bg-white/30 text-white shadow-lg"
-                : "bg-transparent text-white/60 hover:bg-white/10 hover:text-white"
+            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
+              activeTab === "styles" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
             }`}
+            title="Styles"
           >
             <Palette className="h-5 w-5" />
           </button>
-
           <button
             onClick={() => setActiveTab("products")}
-            title="Products"
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeTab === "products"
-                ? "bg-white/30 text-white shadow-lg"
-                : "bg-transparent text-white/60 hover:bg-white/10 hover:text-white"
+            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
+              activeTab === "products" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
             }`}
+            title="Products"
           >
             <ShoppingCart className="h-5 w-5" />
           </button>
-
           <button
             onClick={() => setActiveTab("payments")}
-            title="Payments"
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeTab === "payments"
-                ? "bg-white/30 text-white shadow-lg"
-                : "bg-transparent text-white/60 hover:bg-white/10 hover:text-white"
+            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
+              activeTab === "payments" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
             }`}
+            title="Payments"
           >
-            <Settings className="h-5 w-5" />
+            <ShoppingCart className="h-5 w-5" />
           </button>
-
           <button
             onClick={() => setActiveTab("ai")}
-            title="AI Builder"
-            className={`p-3 rounded-lg transition-all duration-200 ${
-              activeTab === "ai"
-                ? "bg-white/30 text-white shadow-lg"
-                : "bg-transparent text-white/60 hover:bg-white/10 hover:text-white"
+            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
+              activeTab === "ai" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
             }`}
+            title="AI Builder"
           >
             <Zap className="h-5 w-5" />
           </button>
+        </aside>
 
-          {project.websiteType === "blog" && (
-            <button
-              onClick={() => setActiveTab("blog")}
-              title="Blog Stories"
-              className={`p-3 rounded-lg transition-all duration-200 ${
-                activeTab === "blog"
-                  ? "bg-white/30 text-white shadow-lg"
-                  : "bg-transparent text-white/60 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <BookOpen className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Page Header */}
-          <div className="py-4 px-4 bg-background border-b">
-            <div className="container mx-auto max-w-7xl">
-              <div className="flex items-center justify-between gap-2">
-                {isFrozen && (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
-                    <Lock className="h-3 w-3" />
-                    <span className="font-medium">Frozen</span>
-                  </div>
-                )}
-                <div className="flex-1" />
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedPage}
-                    onChange={(e) => setSelectedPage(e.target.value)}
-                    className="px-2 py-1 border border-input rounded bg-background text-xs md:text-sm text-foreground"
-                  >
-                    {pages.map((page) => (
-                      <option key={page.id} value={page.id}>
-                        {page.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
-                    <a
-                      href={`https://${deployment?.domain}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => isFrozen && e.preventDefault()}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="container mx-auto px-4 max-w-7xl py-6">
+        <div className="flex-1 overflow-auto pb-20 md:pb-0">
+          <div className="container mx-auto px-4 py-8 max-w-7xl">
             {activeTab === "styles" && (
               <div className="space-y-8">
                 <div>
@@ -865,16 +712,6 @@ export default function SiteSettingsPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-
-            {activeTab === "blog" && project.websiteType === "blog" && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Blog Stories</h2>
-                  <p className="text-muted-foreground mb-6">Manage your blog stories</p>
-                </div>
-                {/* Blog content can be added here */}
               </div>
             )}
           </div>
