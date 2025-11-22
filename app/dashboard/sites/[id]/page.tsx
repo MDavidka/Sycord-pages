@@ -13,6 +13,7 @@ import AIWebsiteBuilder from "@/components/ai-website-builder"
 import {
   Trash2,
   Plus,
+  ExternalLink,
   AlertCircle,
   Loader2,
   ArrowLeft,
@@ -21,6 +22,8 @@ import {
   Zap,
   Package,
   Sparkles,
+  Lock,
+  CreditCard,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -154,7 +157,7 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
-export default function SettingsPage() {
+export default function SiteSettingsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
@@ -435,286 +438,328 @@ export default function SettingsPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="flex flex-col md:flex-row gap-0 md:gap-4 h-screen md:h-auto">
-        <aside className="fixed md:relative bottom-0 md:top-0 left-0 right-0 md:w-20 h-16 md:h-screen bg-gradient-to-r md:bg-gradient-to-b from-background/80 via-background/60 to-background/40 backdrop-blur-md border-t md:border-r border-white/10 md:border-white/5 flex md:flex-col items-center md:items-start justify-start md:justify-start gap-2 p-2 md:p-3 rounded-t-lg md:rounded-none overflow-x-auto md:overflow-y-auto">
-          <button
-            onClick={() => setActiveTab("styles")}
-            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
-              activeTab === "styles" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
-            }`}
-            title="Styles"
-          >
-            <Palette className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => setActiveTab("products")}
-            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
-              activeTab === "products" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
-            }`}
-            title="Products"
-          >
-            <ShoppingCart className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => setActiveTab("payments")}
-            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
-              activeTab === "payments" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
-            }`}
-            title="Payments"
-          >
-            <ShoppingCart className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => setActiveTab("ai")}
-            className={`p-3 rounded-lg transition-all duration-200 flex-shrink-0 ${
-              activeTab === "ai" ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10"
-            }`}
-            title="AI Builder"
-          >
-            <Zap className="h-5 w-5" />
-          </button>
-        </aside>
+    <div className="flex min-h-screen bg-background">
+      {/* Frosted Glass Sidebar */}
+      <div className="fixed left-0 top-0 h-full w-20 bg-background/80 backdrop-blur-md border-r border-border/50 z-40 flex flex-col items-center py-20 gap-4">
+        <button
+          onClick={() => setActiveTab("styles")}
+          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
+            activeTab === "styles"
+              ? "bg-primary/20 text-white shadow-lg"
+              : "text-white/60 hover:text-white hover:bg-white/10"
+          }`}
+          title="Styles"
+        >
+          <Palette className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => setActiveTab("products")}
+          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
+            activeTab === "products"
+              ? "bg-primary/20 text-white shadow-lg"
+              : "text-white/60 hover:text-white hover:bg-white/10"
+          }`}
+          title="Products"
+        >
+          <ShoppingCart className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => setActiveTab("payments")}
+          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
+            activeTab === "payments"
+              ? "bg-primary/20 text-white shadow-lg"
+              : "text-white/60 hover:text-white hover:bg-white/10"
+          }`}
+          title="Payments"
+        >
+          <CreditCard className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => setActiveTab("ai")}
+          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
+            activeTab === "ai"
+              ? "bg-primary/20 text-white shadow-lg"
+              : "text-white/60 hover:text-white hover:bg-white/10"
+          }`}
+          title="AI Builder"
+        >
+          <Zap className="h-5 w-5" />
+        </button>
+      </div>
 
-        <div className="flex-1 overflow-auto pb-20 md:pb-0">
-          <div className="container mx-auto px-4 py-8 max-w-7xl">
-            {activeTab === "styles" && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Customize Your Shop</h2>
-                  <p className="text-muted-foreground mb-6">Upload a profile image and edit your shop name</p>
+      {/* Main Content Area */}
+      <div className="flex-1 ml-20">
+        {/* Header */}
+        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+          <div className="container mx-auto px-4 max-w-7xl">
+            <div className="flex items-center justify-between gap-2">
+              {isFrozen && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
+                  <Lock className="h-3 w-3" />
+                  <span className="font-medium">Frozen</span>
                 </div>
-
-                <StyleOptionsComponent onSelectStyle={handleStyleSelect} isLoading={false} />
-
-                {/* Additional content can be added here */}
-              </div>
-            )}
-
-            {activeTab === "products" && (
-              <div className="space-y-6">
-                {productsLoading ? (
-                  <Card>
-                    <CardContent className="py-12">
-                      <div className="flex items-center justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                        <span className="ml-2 text-muted-foreground">Loading products...</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <>
-                    {productError && (
-                      <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
-                        <AlertCircle className="h-5 w-5 flex-shrink-0" />
-                        <p>{productError}</p>
-                      </div>
-                    )}
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Add New Product</CardTitle>
-                        <CardDescription>Add products with price, description, and image</CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>Product Name*</Label>
-                            <Input
-                              value={newProduct.name}
-                              onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-                              placeholder="Enter product name"
-                              disabled={isAddingProduct}
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label>Price*</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={newProduct.price}
-                              onChange={(e) =>
-                                setNewProduct({ ...newProduct, price: Number.parseFloat(e.target.value) })
-                              }
-                              placeholder="0.00"
-                              disabled={isAddingProduct}
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label>Category</Label>
-                            <Input
-                              value={newProduct.category}
-                              onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                              placeholder="e.g., Clothing, Electronics"
-                              disabled={isAddingProduct}
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label>Image URL</Label>
-                            <Input
-                              value={newProduct.image}
-                              onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
-                              placeholder="https://..."
-                              disabled={isAddingProduct}
-                            />
-                          </div>
-
-                          <div className="space-y-2 md:col-span-2">
-                            <Label>Description</Label>
-                            <Input
-                              value={newProduct.description}
-                              onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                              placeholder="Product description"
-                              disabled={isAddingProduct}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={newProduct.inStock}
-                            onCheckedChange={(checked) => setNewProduct({ ...newProduct, inStock: checked })}
-                            disabled={isAddingProduct}
-                          />
-                          <Label>In Stock</Label>
-                        </div>
-
-                        <Button onClick={handleAddProduct} disabled={isAddingProduct} className="w-full">
-                          {isAddingProduct ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Adding...
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add Product
-                            </>
-                          )}
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Your Products ({products.length})</CardTitle>
-                        <CardDescription>Manage all your products</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {products.length === 0 ? (
-                          <div className="text-center py-12">
-                            <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                            <p className="text-muted-foreground">No products yet. Add your first product above.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-3">
-                            {products.map((product) => (
-                              <div
-                                key={product._id}
-                                className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                              >
-                                <div className="flex items-start gap-4 flex-1">
-                                  {product.image && (
-                                    <img
-                                      src={product.image || "/placeholder.svg"}
-                                      alt={product.name}
-                                      className="w-16 h-16 object-cover rounded"
-                                      onError={(e) => {
-                                        ;(e.target as any).style.display = "none"
-                                      }}
-                                    />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold truncate">{product.name}</h3>
-                                    <p className="text-sm text-muted-foreground truncate">{product.description}</p>
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                      <span className="text-sm font-medium bg-primary/10 px-2 py-1 rounded">
-                                        {currencySymbols[settings?.currency || "USD"]}
-                                        {product.price}
-                                      </span>
-                                      {product.category && (
-                                        <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-muted">
-                                          {product.category}
-                                        </span>
-                                      )}
-                                      <span
-                                        className={`text-xs px-2 py-1 rounded font-medium ${
-                                          product.inStock ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                                        }`}
-                                      >
-                                        {product.inStock ? "In Stock" : "Out of Stock"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => handleDeleteProduct(product._id, product.name)}
-                                  className="w-full md:w-auto"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-              </div>
-            )}
-
-            {activeTab === "payments" && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">Payment Methods</h2>
-                  <p className="text-muted-foreground mb-6">Choose how your customers can pay</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {paymentOptions.map((option) => (
-                    <Card
-                      key={option.id}
-                      className="cursor-pointer hover:border-primary hover:shadow-md transition-all"
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-lg">{option.name}</CardTitle>
-                        <CardDescription>{option.description}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <Button className="w-full">Enable</Button>
-                      </CardContent>
-                    </Card>
+              )}
+              <div className="flex-1" />
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedPage}
+                  onChange={(e) => setSelectedPage(e.target.value)}
+                  className="px-2 py-1 border border-input rounded bg-background text-xs md:text-sm text-foreground"
+                >
+                  {pages.map((page) => (
+                    <option key={page.id} value={page.id}>
+                      {page.name}
+                    </option>
                   ))}
-                </div>
+                </select>
+                <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
+                  <a
+                    href={`https://${deployment?.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => isFrozen && e.preventDefault()}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </Button>
               </div>
-            )}
+            </div>
+          </div>
+        </div>
 
-            {activeTab === "ai" && (
-              <div className="h-[calc(100vh-400px)] min-h-96 flex flex-col">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">AI Website Builder</h2>
-                  <p className="text-muted-foreground">Describe your website and let AI design it for you</p>
-                </div>
-                <div className="flex-1 border rounded-lg bg-card overflow-hidden">
-                  {id ? (
-                    <AIWebsiteBuilder projectId={id} />
-                  ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <AlertCircle className="h-6 w-6 text-destructive mr-2" />
-                      <span className="text-destructive">Project ID not available</span>
+        {/* Content */}
+        <div className="container mx-auto px-4 max-w-7xl py-6">
+          {activeTab === "styles" && (
+            <div className="space-y-8">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Customize Your Shop</h2>
+                <p className="text-muted-foreground mb-6">Upload a profile image and edit your shop name</p>
+              </div>
+
+              <StyleOptionsComponent onSelectStyle={handleStyleSelect} isLoading={false} />
+
+              {/* Additional content can be added here */}
+            </div>
+          )}
+
+          {activeTab === "products" && (
+            <div className="space-y-6">
+              {productsLoading ? (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      <span className="ml-2 text-muted-foreground">Loading products...</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {productError && (
+                    <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive text-destructive rounded-lg">
+                      <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                      <p>{productError}</p>
                     </div>
                   )}
-                </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Add New Product</CardTitle>
+                      <CardDescription>Add products with price, description, and image</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Product Name*</Label>
+                          <Input
+                            value={newProduct.name}
+                            onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                            placeholder="Enter product name"
+                            disabled={isAddingProduct}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Price*</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={newProduct.price}
+                            onChange={(e) => setNewProduct({ ...newProduct, price: Number.parseFloat(e.target.value) })}
+                            placeholder="0.00"
+                            disabled={isAddingProduct}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Category</Label>
+                          <Input
+                            value={newProduct.category}
+                            onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                            placeholder="e.g., Clothing, Electronics"
+                            disabled={isAddingProduct}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Image URL</Label>
+                          <Input
+                            value={newProduct.image}
+                            onChange={(e) => setNewProduct({ ...newProduct, image: e.target.value })}
+                            placeholder="https://..."
+                            disabled={isAddingProduct}
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <Label>Description</Label>
+                          <Input
+                            value={newProduct.description}
+                            onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                            placeholder="Product description"
+                            disabled={isAddingProduct}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={newProduct.inStock}
+                          onCheckedChange={(checked) => setNewProduct({ ...newProduct, inStock: checked })}
+                          disabled={isAddingProduct}
+                        />
+                        <Label>In Stock</Label>
+                      </div>
+
+                      <Button onClick={handleAddProduct} disabled={isAddingProduct} className="w-full">
+                        {isAddingProduct ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add Product
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Your Products ({products.length})</CardTitle>
+                      <CardDescription>Manage all your products</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {products.length === 0 ? (
+                        <div className="text-center py-12">
+                          <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                          <p className="text-muted-foreground">No products yet. Add your first product above.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {products.map((product) => (
+                            <div
+                              key={product._id}
+                              className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-start gap-4 flex-1">
+                                {product.image && (
+                                  <img
+                                    src={product.image || "/placeholder.svg"}
+                                    alt={product.name}
+                                    className="w-16 h-16 object-cover rounded"
+                                    onError={(e) => {
+                                      ;(e.target as any).style.display = "none"
+                                    }}
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold truncate">{product.name}</h3>
+                                  <p className="text-sm text-muted-foreground truncate">{product.description}</p>
+                                  <div className="flex flex-wrap gap-2 mt-2">
+                                    <span className="text-sm font-medium bg-primary/10 px-2 py-1 rounded">
+                                      {currencySymbols[settings?.currency || "USD"]}
+                                      {product.price}
+                                    </span>
+                                    {product.category && (
+                                      <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-muted">
+                                        {product.category}
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded font-medium ${
+                                        product.inStock ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                      }`}
+                                    >
+                                      {product.inStock ? "In Stock" : "Out of Stock"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteProduct(product._id, product.name)}
+                                className="w-full md:w-auto"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === "payments" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Payment Methods</h2>
+                <p className="text-muted-foreground mb-6">Choose how your customers can pay</p>
               </div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {paymentOptions.map((option) => (
+                  <Card key={option.id} className="cursor-pointer hover:border-primary hover:shadow-md transition-all">
+                    <CardHeader>
+                      <CardTitle className="text-lg">{option.name}</CardTitle>
+                      <CardDescription>{option.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button className="w-full">Enable</Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "ai" && (
+            <div className="h-[calc(100vh-400px)] min-h-96 flex flex-col">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold mb-2">AI Website Builder</h2>
+                <p className="text-muted-foreground">Describe your website and let AI design it for you</p>
+              </div>
+              <div className="flex-1 border rounded-lg bg-card overflow-hidden">
+                {id ? (
+                  <AIWebsiteBuilder projectId={id} />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <AlertCircle className="h-6 w-6 text-destructive mr-2" />
+                    <span className="text-destructive">Project ID not available</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
