@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import AIWebsiteBuilder from "@/components/ai-website-builder"
 import {
@@ -26,109 +26,13 @@ import {
   Unlock,
   Menu,
   X,
+  Settings,
+  Store,
+  Layout,
+  Upload,
+  Check
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
-
-const StyleOptionsComponent = ({
-  onSelectStyle,
-  isLoading,
-}: {
-  onSelectStyle: (style: string) => void
-  isLoading: boolean
-}) => {
-  const [profileImage, setProfileImage] = useState<string>("")
-  const [shopName, setShopName] = useState<string>("")
-  const [isUploading, setIsUploading] = useState(false)
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = () => {
-        setProfileImage(reader.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Shop Profile Image Upload */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Shop Profile Image</CardTitle>
-            <CardDescription>Upload a logo or profile picture for your shop</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer group">
-              <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="profile-upload" />
-              <label htmlFor="profile-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center group-hover:bg-muted/80 transition-colors">
-                  {profileImage ? (
-                    <img
-                      src={profileImage || "/placeholder.svg"}
-                      alt="Profile"
-                      className="w-16 h-16 rounded-lg object-cover"
-                    />
-                  ) : (
-                    <Plus className="h-6 w-6 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="text-sm">
-                  <p className="font-medium text-primary">Click to upload</p>
-                  <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
-                </div>
-              </label>
-            </div>
-            <Button className="w-full" disabled={!profileImage || isUploading}>
-              {isUploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                "Save Profile Image"
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Edit Shop Name */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Shop Name</CardTitle>
-            <CardDescription>Edit your shop's display name</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Shop Name</Label>
-              <Input
-                value={shopName}
-                onChange={(e) => setShopName(e.target.value)}
-                placeholder="Enter your shop name"
-                className="text-base"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              This name will be displayed on your website and public profile
-            </p>
-            <Button className="w-full" disabled={!shopName || isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Update Shop Name"
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -191,29 +95,27 @@ export default function SiteSettingsPage() {
   const [productError, setProductError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai">("styles")
+  const [activeSubTab, setActiveSubTab] = useState<"settings" | "store" | "pages">("settings")
+
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [selectedPage, setSelectedPage] = useState<string>("landing")
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false) // Added sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+
+  // Settings State
+  const [shopName, setShopName] = useState("")
+  const [profileImage, setProfileImage] = useState("")
 
   useEffect(() => {
     if (!id) return
 
-    console.log("[v0] Settings page: Loading project with ID:", id)
-    console.log("[v0] Settings page: ID type:", typeof id)
-    console.log("[v0] Settings page: ID is valid ObjectId format:", /^[0-9a-f]{24}$/i.test(id))
-
     const fetchAllData = async () => {
       try {
         fetch(`/api/projects/${id}`)
-          .then((r) => {
-            console.log("[v0] Settings page: Project fetch response status:", r.status)
-            return r.json()
-          })
+          .then((r) => r.json())
           .then((data) => {
-            console.log("[v0] Settings page: Project fetch response:", data)
             if (data.message) throw new Error(data.message)
-            console.log("[v0] Settings page: Project loaded successfully. ID:", data._id, "Type:", typeof data._id)
             setProject(data)
+            setShopName(data.businessName || "")
             setProjectLoading(false)
           })
           .catch((err) => {
@@ -272,6 +174,19 @@ export default function SiteSettingsPage() {
       ...prev,
       [componentType]: componentValue,
     }))
+    // Auto-save when component selected
+    // Note: In a real app we might want to debounce or wait for explicit save
+  }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        setProfileImage(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
   }
 
   const handleSettingsUpdate = async () => {
@@ -282,31 +197,28 @@ export default function SiteSettingsPage() {
     try {
       console.log("[v0] Sending settings to API:", settings)
 
-      if (!settings.headerComponent) {
-        throw new Error("Please select a header style")
-      }
-      if (!settings.heroComponent) {
-        throw new Error("Please select a hero section")
-      }
-      if (!settings.productComponent) {
-        throw new Error("Please select a product layout")
+      // Merge shop name into project update if needed, but here we update settings
+      const updatedSettings = {
+        ...settings,
+        shopName: shopName, // sending shopName if API accepts it in settings
+        profileImage: profileImage || settings.profileImage
       }
 
       const response = await fetch(`/api/projects/${id}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(updatedSettings),
       })
 
       const responseData = await response.json()
-      console.log("[v0] API response:", responseData)
 
       if (!response.ok) {
         throw new Error(responseData.message || "Failed to save settings")
       }
 
       setSaveSuccess(true)
-      await fetch(`/api/projects/${id}/settings`)
+      // Refresh settings
+      fetch(`/api/projects/${id}/settings`)
         .then((r) => r.json())
         .then(setSettings)
 
@@ -447,6 +359,12 @@ export default function SiteSettingsPage() {
     { id: "ai", label: "AI Builder", icon: Zap },
   ]
 
+  const subTabs = [
+    { id: "settings", label: "Settings", icon: Settings },
+    { id: "store", label: "Store", icon: Store },
+    { id: "pages", label: "Pages", icon: Layout },
+  ]
+
   return (
     <div className="min-h-screen bg-background relative">
       <div className="fixed top-4 left-4 z-30 md:hidden">
@@ -531,8 +449,6 @@ export default function SiteSettingsPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </div>
-
-          {/* But kept other overlay elements */}
 
           {!deploymentLoading && deployment && (
             <>
@@ -641,15 +557,165 @@ export default function SiteSettingsPage() {
 
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
           {activeTab === "styles" && (
-            <div className="space-y-8">
-              <div>
-                <h2 className="text-2xl font-bold mb-2">Customize Your Shop</h2>
-                <p className="text-muted-foreground mb-6">Upload a profile image and edit your shop name</p>
+            <div className="space-y-6">
+              {/* Website Card / Header */}
+              <div className="relative rounded-xl overflow-hidden bg-card border border-border shadow-sm group">
+                {/* Banner */}
+                <div className="h-32 bg-gradient-to-r from-blue-600/20 to-purple-600/20 w-full" />
+
+                {/* Profile Circle */}
+                <div className="absolute top-20 left-6">
+                   <div className="relative">
+                    <div className="w-24 h-24 rounded-full border-4 border-background bg-muted overflow-hidden">
+                      {profileImage ? (
+                         <img src={profileImage} alt="Shop Profile" className="w-full h-full object-cover" />
+                      ) : (
+                         <div className="w-full h-full flex items-center justify-center bg-muted">
+                           <Store className="h-8 w-8 text-muted-foreground/50" />
+                         </div>
+                      )}
+                    </div>
+                    <label htmlFor="card-profile-upload" className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center cursor-pointer shadow-lg hover:bg-primary/90 transition-colors">
+                      <Upload className="h-4 w-4" />
+                      <input type="file" id="card-profile-upload" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                    </label>
+                   </div>
+                </div>
+
+                {/* Info & Actions */}
+                <div className="pt-14 pb-6 px-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                  <div className="mt-2">
+                     <h2 className="text-2xl font-bold">{shopName || "My Awesome Shop"}</h2>
+                     <p className="text-muted-foreground text-sm">{siteUrl}</p>
+                  </div>
+                  <Button onClick={handleSettingsUpdate} disabled={isSaving} className="gap-2">
+                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    Save Changes
+                  </Button>
+                </div>
               </div>
 
-              <StyleOptionsComponent onSelectStyle={handleStyleSelect} isLoading={false} />
+              {/* Sub-tabs Navigation */}
+              <div className="flex border-b border-border/50">
+                {subTabs.map(tab => {
+                   const Icon = tab.icon
+                   return (
+                     <button
+                       key={tab.id}
+                       onClick={() => setActiveSubTab(tab.id as any)}
+                       className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                         activeSubTab === tab.id
+                           ? "border-primary text-primary"
+                           : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                       }`}
+                     >
+                       <Icon className="h-4 w-4" />
+                       {tab.label}
+                     </button>
+                   )
+                })}
+              </div>
 
-              {/* Additional content can be added here */}
+              {/* Settings Sub-tab */}
+              {activeSubTab === "settings" && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>General Information</CardTitle>
+                      <CardDescription>Update your shop's basic details</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Shop Name</Label>
+                        <Input
+                          value={shopName}
+                          onChange={(e) => setShopName(e.target.value)}
+                          placeholder="My Awesome Shop"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Store Sub-tab */}
+              {activeSubTab === "store" && (
+                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                   <div>
+                     <h3 className="text-lg font-medium mb-4">Product Layout</h3>
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                       {Object.entries(productComponents).map(([key, comp]) => (
+                         <div
+                           key={key}
+                           onClick={() => handleComponentSelect("productComponent", key)}
+                           className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
+                             settings?.productComponent === key
+                               ? "border-primary bg-primary/5 ring-1 ring-primary"
+                               : "border-transparent bg-card hover:bg-accent hover:border-border shadow-sm"
+                           }`}
+                         >
+                           <div className="mb-3 h-20 bg-muted/50 rounded flex items-center justify-center">
+                             {/* Placeholder visual */}
+                             <div className="w-12 h-12 bg-muted rounded grid grid-cols-2 gap-1 p-1">
+                               <div className="bg-foreground/10 rounded" />
+                               <div className="bg-foreground/10 rounded" />
+                               <div className="bg-foreground/10 rounded" />
+                               <div className="bg-foreground/10 rounded" />
+                             </div>
+                           </div>
+                           <p className="font-medium text-sm">{comp.name}</p>
+                           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{comp.description}</p>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                 </div>
+              )}
+
+              {/* Pages Sub-tab */}
+              {activeSubTab === "pages" && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                   <div>
+                     <h3 className="text-lg font-medium mb-4">Header Style</h3>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                       {Object.entries(headerComponents).map(([key, comp]) => (
+                         <div
+                           key={key}
+                           onClick={() => handleComponentSelect("headerComponent", key)}
+                           className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                             settings?.headerComponent === key
+                               ? "border-primary bg-primary/5 ring-1 ring-primary"
+                               : "border-transparent bg-card hover:bg-accent hover:border-border shadow-sm"
+                           }`}
+                         >
+                           <p className="font-medium text-sm mb-1">{comp.name}</p>
+                           <p className="text-xs text-muted-foreground">{comp.description}</p>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-lg font-medium mb-4">Hero Section</h3>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                       {Object.entries(heroComponents).map(([key, comp]) => (
+                         <div
+                           key={key}
+                           onClick={() => handleComponentSelect("heroComponent", key)}
+                           className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                             settings?.heroComponent === key
+                               ? "border-primary bg-primary/5 ring-1 ring-primary"
+                               : "border-transparent bg-card hover:bg-accent hover:border-border shadow-sm"
+                           }`}
+                         >
+                           <p className="font-medium text-sm mb-1">{comp.name}</p>
+                           <p className="text-xs text-muted-foreground">{comp.description}</p>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                </div>
+              )}
             </div>
           )}
 
