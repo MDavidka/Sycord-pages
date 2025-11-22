@@ -21,23 +21,45 @@ export async function POST(request: Request) {
     const client = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN)
     const model = client.getGenerativeModel({ model: PLAN_MODEL })
 
-    const lastUserMessage = messages[messages.length - 1].content
+    const lastUserMessage = messages[messages.length - 1]
 
-    const prompt = `
+    // Prepare history excluding the last message (which is the new request)
+    const historyMessages = messages.slice(0, -1).map((msg: any) => {
+      let textContent = msg.content
+      if (msg.role === "assistant" && msg.code) {
+        textContent += `\n\n[EXISTING CODE CONTEXT]\n${msg.code}\n[END EXISTING CODE]`
+      }
+      return {
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: textContent }],
+      }
+    })
+
+    const systemContext = `
     You are an expert technical architect.
-    Create a comprehensive, step-by-step implementation plan for the following website request: "${lastUserMessage}"
+    Create a comprehensive, step-by-step implementation plan for the user's request.
 
-    The plan should cover:
-    1.  **Structure**: HTML5 semantic structure.
-    2.  **Components**: Key sections (Header, Hero, Features, etc.).
-    3.  **Styling**: Tailwind CSS classes to be used for a modern, professional look.
-    4.  **Interactivity**: Any simple script requirements (e.g. mobile menu).
+    CONTEXT:
+    - If existing code is present in the history, the plan should focus on MODIFYING that code to fulfill the request.
+    - If no code exists, plan a new website from scratch.
 
-    Format the output as a clean, numbered list. Keep it concise, technical, and focused on the implementation details.
-    Do NOT generate the code yet, just the plan.
+    REQUIREMENTS:
+    1. **Structure**: HTML5 semantic structure.
+    2.  **Components**: Key sections.
+    3.  **Styling**: Tailwind CSS classes.
+    4.  **Interactivity**: Script requirements.
+
+    Format as a concise numbered list. Do NOT generate code.
     `
 
-    const result = await model.generateContent(prompt)
+    const result = await model.generateContent({
+      contents: [
+        { role: "user", parts: [{ text: systemContext }] }, // System context as first message
+        ...historyMessages,
+        { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
+      ]
+    })
+
     const planText = result.response.text()
 
     return NextResponse.json({

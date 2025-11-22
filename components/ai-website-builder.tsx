@@ -52,8 +52,9 @@ ESSENTIAL REQUIREMENTS:
 4. Write ALL code in pure HTML - NO REACT, NO JSX, NO TYPESCRIPT
 5. Use Tailwind CSS classes for styling
 6. Make it fully responsive (mobile-first)
-7. NO backticks, NO markdown formatting anywhere
-8. ONLY code between [1] markers`
+7. DESIGN STYLE: Use HeroUI (NextUI) aesthetics. Use clean, modern design with ample whitespace, rounded-2xl border radius, subtle shadows, and primary colors like standard blue/purple/black. Use Tailwind classes to mimic HeroUI components (e.g. buttons with slight shadow and rounded corners, inputs with clean borders, cards with soft shadows).
+8. NO backticks, NO markdown formatting anywhere
+9. ONLY code between [1] markers`
 
 type Step = "idle" | "planning" | "coding" | "done"
 

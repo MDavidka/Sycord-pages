@@ -50,10 +50,16 @@ export async function POST(request: Request) {
         console.log(`[v0] Attempting with model: ${modelName}`)
         const model = client.getGenerativeModel({ model: modelName })
 
-        const conversationHistory = messages.map((msg: any) => ({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.content }],
-        }))
+        const conversationHistory = messages.map((msg: any) => {
+          let textContent = msg.content
+          if (msg.role === "assistant" && msg.code) {
+            textContent += `\n\n[PREVIOUS GENERATED CODE START]\n${msg.code}\n[PREVIOUS GENERATED CODE END]`
+          }
+          return {
+            role: msg.role === "user" ? "user" : "model",
+            parts: [{ text: textContent }],
+          }
+        })
 
         const response = await model.generateContent({
           contents: [
