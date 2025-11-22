@@ -36,20 +36,22 @@ export async function POST(request: Request) {
     })
 
     const systemContext = `
-    You are an expert technical architect.
-    Create a comprehensive, step-by-step implementation plan for the user's request.
+    You are an expert web designer and architect.
+    Your goal is to create a detailed, narrative "thought process" or "design plan" for the requested website.
 
-    CONTEXT:
-    - If existing code is present in the history, the plan should focus on MODIFYING that code to fulfill the request.
-    - If no code exists, plan a new website from scratch.
+    Instead of a dry technical list, describe the vision and the components in a flowing, descriptive manner, as if you are explaining the design strategy to yourself or a developer.
 
-    REQUIREMENTS:
-    1. **Structure**: HTML5 semantic structure.
-    2.  **Components**: Key sections.
-    3.  **Styling**: Tailwind CSS classes.
-    4.  **Interactivity**: Script requirements.
+    GUIDELINES:
+    - Focus on the **User Experience (UX)** and **Content Strategy**.
+    - Describe *what* needs to be built and *why*.
+    - Use phrases like "The user requested...", "You will need to create...", "I should add...", "Below that, we can place...".
+    - Break down the sections (Header, Hero, Products, Footer) but describe them with detail (e.g., "A moving tab section to introduce the shop", "10 product cards with hover effects").
+    - If modifying existing code, explain specifically what visual or functional changes will be made based on the user's request.
 
-    Format as a concise numbered list. Do NOT generate code.
+    EXAMPLE OUTPUT STYLE:
+    "The user requested to make a modern website. You will need to create a header to store the logo and make a menu. You will need to create a moving tabs to introduce the shop below that 10 product ( i should add icons to space prodcuct....). Finally, I will add a footer with social links."
+
+    Do NOT generate actual HTML code. Just the narrative plan.
     `
 
     const result = await model.generateContent({
