@@ -23,7 +23,9 @@ import {
   Package,
   Sparkles,
   Lock,
-  CreditCard,
+  Unlock,
+  Menu,
+  X,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -191,6 +193,7 @@ export default function SiteSettingsPage() {
   const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai">("styles")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [selectedPage, setSelectedPage] = useState<string>("landing")
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false) // Added sidebar state
 
   useEffect(() => {
     if (!id) return
@@ -437,61 +440,146 @@ export default function SiteSettingsPage() {
     { id: "contact", name: "Contact" },
   ]
 
+  const navItems = [
+    { id: "styles", label: "Styles", icon: Palette },
+    { id: "products", label: "Products", icon: ShoppingCart },
+    { id: "payments", label: "Payments", icon: Lock }, // Using Lock as placeholder for Payments or CreditCard if not available
+    { id: "ai", label: "AI Builder", icon: Zap },
+  ]
+
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Frosted Glass Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-20 bg-background/80 backdrop-blur-md border-r border-border/50 z-40 flex flex-col items-center py-20 gap-4">
-        <button
-          onClick={() => setActiveTab("styles")}
-          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
-            activeTab === "styles"
-              ? "bg-primary/20 text-white shadow-lg"
-              : "text-white/60 hover:text-white hover:bg-white/10"
-          }`}
-          title="Styles"
+    <div className="min-h-screen bg-background relative">
+      <div className="fixed top-4 right-4 z-50 md:hidden">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="shadow-lg bg-black/50 text-white hover:bg-black/70 backdrop-blur-md"
         >
-          <Palette className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setActiveTab("products")}
-          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
-            activeTab === "products"
-              ? "bg-primary/20 text-white shadow-lg"
-              : "text-white/60 hover:text-white hover:bg-white/10"
-          }`}
-          title="Products"
-        >
-          <ShoppingCart className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setActiveTab("payments")}
-          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
-            activeTab === "payments"
-              ? "bg-primary/20 text-white shadow-lg"
-              : "text-white/60 hover:text-white hover:bg-white/10"
-          }`}
-          title="Payments"
-        >
-          <CreditCard className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setActiveTab("ai")}
-          className={`flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${
-            activeTab === "ai"
-              ? "bg-primary/20 text-white shadow-lg"
-              : "text-white/60 hover:text-white hover:bg-white/10"
-          }`}
-          title="AI Builder"
-        >
-          <Zap className="h-5 w-5" />
-        </button>
+          {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </Button>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 ml-20">
-        {/* Header */}
-        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-          <div className="container mx-auto px-4 max-w-7xl">
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } backdrop-blur-xl bg-black/40 border-r border-white/10 flex flex-col`}
+      >
+        <div className="p-6 flex flex-col h-full">
+          <div className="flex items-center gap-2 mb-8 text-white">
+            <WebsiteIcon className="h-6 w-6" />
+            <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
+          </div>
+
+          <nav className="flex-1 space-y-2">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeTab === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id as any)
+                    setIsSidebarOpen(false)
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
+                    isActive ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-5 w-5 text-white" />
+                  <span className="font-medium text-sm">{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="mt-auto pt-6 border-t border-white/10">
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10 gap-3 px-4"
+              onClick={() => router.push("/dashboard")}
+            >
+              <ArrowLeft className="h-5 w-5" />
+              <span className="font-medium text-sm">Back to Dashboard</span>
+            </Button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="transition-all duration-300 md:ml-64 min-h-screen flex flex-col">
+        <div className="relative w-full h-[30vh] md:h-[50vh] bg-black overflow-hidden flex-shrink-0">
+          {/* But kept other overlay elements */}
+
+          {!deploymentLoading && deployment && (
+            <>
+              <iframe
+                src={`https://${deployment.domain}`}
+                className="w-full h-full border-0"
+                title="Live Preview"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
+              />
+
+              <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black via-black/60 to-transparent z-10 pointer-events-none" />
+
+              <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    {deployment.domain && (
+                      <span className="text-xs md:text-base font-bold text-white font-sans truncate">
+                        {deployment.domain}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
+                    <span className="text-xs text-white/60 uppercase tracking-wider">Live</span>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsFrozen(!isFrozen)}
+                  className="bg-white/20 hover:bg-white/30 text-white flex-shrink-0"
+                >
+                  {isFrozen ? (
+                    <>
+                      <Lock className="h-3 w-3 mr-1" />
+                      <span className="text-xs">Frozen</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="h-3 w-3 mr-1" />
+                      <span className="text-xs">Active</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {deploymentLoading && (
+            <div className="flex items-center justify-center w-full h-full bg-card">
+              <div className="text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
+                <p className="text-xs md:text-sm text-muted-foreground">Loading preview...</p>
+              </div>
+            </div>
+          )}
+
+          {!deployment && !deploymentLoading && (
+            <div className="flex items-center justify-center w-full h-full bg-card">
+              <div className="text-center px-4">
+                <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  Preview not available. Deploy your website first.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="py-4 px-4 bg-background border-b">
+          <div className="container mx-auto max-w-7xl">
             <div className="flex items-center justify-between gap-2">
               {isFrozen && (
                 <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
@@ -527,8 +615,7 @@ export default function SiteSettingsPage() {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="container mx-auto px-4 max-w-7xl py-6">
+        <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
           {activeTab === "styles" && (
             <div className="space-y-8">
               <div>
@@ -761,7 +848,7 @@ export default function SiteSettingsPage() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   )
 }
