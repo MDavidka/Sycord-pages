@@ -449,12 +449,12 @@ export default function SiteSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background relative">
-      <div className="fixed top-4 left-4 z-50 md:hidden">
+      <div className="fixed top-4 left-4 z-30 md:hidden">
         <Button
           variant="secondary"
           size="icon"
           onClick={() => router.push("/dashboard")}
-          className="shadow-lg bg-black/50 text-white hover:bg-black/70 backdrop-blur-md"
+          className="shadow-lg bg-background/60 backdrop-blur-md border border-border text-foreground hover:bg-accent hover:text-accent-foreground"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -465,19 +465,19 @@ export default function SiteSettingsPage() {
           variant="secondary"
           size="icon"
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="shadow-lg bg-black/50 text-white hover:bg-black/70 backdrop-blur-md"
+          className="shadow-lg bg-background/60 backdrop-blur-md border border-border text-foreground hover:bg-accent hover:text-accent-foreground"
         >
           {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
       </div>
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-56 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } backdrop-blur-xl bg-black/40 border-r border-white/10 flex flex-col`}
+        } backdrop-blur-xl bg-sidebar border-r border-sidebar-border flex flex-col`}
       >
         <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center gap-2 mb-8 text-white">
+          <div className="flex items-center gap-2 mb-8 text-sidebar-foreground">
             <WebsiteIcon className="h-6 w-6" />
             <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
           </div>
@@ -494,20 +494,22 @@ export default function SiteSettingsPage() {
                     setIsSidebarOpen(false)
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                    isActive ? "bg-white/20 text-white shadow-lg" : "text-white/70 hover:bg-white/10 hover:text-white"
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   }`}
                 >
-                  <Icon className="h-5 w-5 text-white" />
+                  <Icon className="h-5 w-5" />
                   <span className="font-medium text-sm">{item.label}</span>
                 </button>
               )
             })}
           </nav>
 
-          <div className="mt-auto pt-6 border-t border-white/10">
+          <div className="mt-auto pt-6 border-t border-sidebar-border">
             <Button
               variant="ghost"
-              className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10 gap-3 px-4"
+              className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent gap-3 px-4"
               onClick={() => router.push("/dashboard")}
             >
               <ArrowLeft className="h-5 w-5" />
@@ -517,14 +519,14 @@ export default function SiteSettingsPage() {
         </div>
       </aside>
 
-      <main className="transition-all duration-300 md:ml-64 min-h-screen flex flex-col">
+      <main className="transition-all duration-300 md:ml-56 min-h-screen flex flex-col">
         <div className="relative w-full h-[30vh] md:h-[50vh] bg-black overflow-hidden flex-shrink-0">
           <div className="absolute top-4 left-4 z-30 hidden md:block">
             <Button
               variant="secondary"
               size="icon"
               onClick={() => router.push("/dashboard")}
-              className="shadow-lg bg-black/50 text-white hover:bg-black/70 backdrop-blur-md"
+              className="shadow-lg bg-background/60 backdrop-blur-md border border-border text-foreground hover:bg-accent hover:text-accent-foreground"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
