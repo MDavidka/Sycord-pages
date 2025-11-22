@@ -3,16 +3,35 @@
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Loader2, Send, Code2, AlertCircle, CheckCircle } from 'lucide-react'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Loader2,
+  Send,
+  Bot,
+  User,
+  Check,
+  ChevronDown,
+  Terminal,
+  Cpu,
+  Sparkles,
+  FileCode,
+  ArrowRight,
+  Rocket,
+} from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
-interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  code?: string
-}
+const MODELS = [
+  { id: "gemini-2.0-pro-exp-02-05", name: "Gemini 2.0 Pro (Latest)" },
+  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Stable)" },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Fast)" },
+]
 
-const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites for e-commerce stores.
+const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 
 CRITICAL: You MUST generate valid, complete HTML code that can be rendered directly in a browser.
 
@@ -33,48 +52,28 @@ ESSENTIAL REQUIREMENTS:
 5. Use Tailwind CSS classes for styling
 6. Make it fully responsive (mobile-first)
 7. NO backticks, NO markdown formatting anywhere
-8. ONLY code between [1] markers - NO EXTRA TEXT between markers
-9. Explain BEFORE the [1] marker if needed, but markers must be pure code
+8. ONLY code between [1] markers`
 
-E-commerce components you can create:
-- Product grids and carousels
-- Hero sections with CTAs
-- Navigation headers
-- Image galleries
-- Testimonial sections
-- Newsletter signups
-- Footer sections
+type Step = "idle" | "planning" | "coding" | "done"
 
-EXAMPLE OUTPUT:
-Here's a beautiful product grid:
-
-[1]
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Products</title>
-    <script src="https://cdn.tailwindcss.com"><\/script>
-</head>
-<body class="bg-gray-50">
-    <div class="max-w-7xl mx-auto px-4 py-12">
-        <h2 class="text-4xl font-bold mb-8">Featured</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div class="bg-white rounded-lg p-6">Product</div>
-        </div>
-    </div>
-</body>
-</html>
-[1]`
+interface Message {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  code?: string
+  plan?: string
+}
 
 const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState(MODELS[0])
+  const [step, setStep] = useState<Step>("idle")
+  const [currentPlan, setCurrentPlan] = useState("")
+  const [displayedPlan, setDisplayedPlan] = useState("")
   const [deployedCode, setDeployedCode] = useState<string | null>(null)
   const [deploySuccess, setDeploySuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -83,10 +82,20 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, displayedPlan, step])
+
+  // Typewriter effect for the plan
+  useEffect(() => {
+    if (currentPlan && displayedPlan.length < currentPlan.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedPlan(currentPlan.slice(0, displayedPlan.length + 5)) // Reveal chunks for speed
+      }, 10)
+      return () => clearTimeout(timeout)
+    }
+  }, [currentPlan, displayedPlan])
 
   const handleSendMessage = async () => {
-    if (!input.trim() || isLoading) return
+    if (!input.trim() || step === "planning" || step === "coding") return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -96,193 +105,231 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
 
     setMessages((prev) => [...prev, userMessage])
     setInput("")
-    setIsLoading(true)
+    setStep("planning")
     setError(null)
-    setDeploySuccess(false)
+    setCurrentPlan("")
+    setDisplayedPlan("")
 
     try {
-      const response = await fetch("/api/ai/generate-website", {
+      // Step 1: Generate Plan (Small Model)
+      const planResponse = await fetch("/api/ai/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+        }),
+      })
+
+      if (!planResponse.ok) throw new Error("Failed to generate plan")
+
+      const planData = await planResponse.json()
+      const planText = planData.plan
+      setCurrentPlan(planText)
+
+      // Step 2: Generate Code (Big Model)
+      setStep("coding")
+
+      const codeResponse = await fetch("/api/ai/generate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
           messages: [...messages, userMessage],
           systemPrompt: SYSTEM_PROMPT,
+          plan: planText,
+          model: selectedModel.id,
         }),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to generate response")
-      }
+      if (!codeResponse.ok) throw new Error("Failed to generate code")
 
-      const data = await response.json()
+      const codeData = await codeResponse.json()
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: data.content,
-        code: data.code,
+        content: codeData.content,
+        code: codeData.code,
+        plan: planText,
       }
 
       setMessages((prev) => [...prev, assistantMessage])
+      setStep("done")
     } catch (err: any) {
       setError(err.message || "An error occurred")
-    } finally {
-      setIsLoading(false)
+      setStep("idle")
     }
   }
 
   const handleDeployCode = async (code: string) => {
-    if (!code || isLoading) return
-
-    if (!projectId) {
-      setError("Project ID is missing. Please refresh the page.")
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-    setDeploySuccess(false)
+    if (!code) return
 
     try {
-      if (!code.toLowerCase().includes("<!doctype") && !code.toLowerCase().includes("<html")) {
-        throw new Error("Invalid code: must contain valid HTML structure")
-      }
-
       const deployUrl = `/api/projects/${encodeURIComponent(projectId)}/deploy-code`
-
       const response = await fetch(deployUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       })
 
-      const responseData = await response.json()
-
-      if (!response.ok) {
-        throw new Error(responseData.message || `Deploy failed with status ${response.status}`)
-      }
+      if (!response.ok) throw new Error("Deploy failed")
 
       setDeployedCode(code)
       setDeploySuccess(true)
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 2).toString(),
-          role: "assistant",
-          content: "✅ Website deployed successfully! Your changes are now live.",
-        },
-      ])
-
       setTimeout(() => setDeploySuccess(false), 3000)
     } catch (err: any) {
       setError(err.message || "Failed to deploy code")
-    } finally {
-      setIsLoading(false)
     }
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {/* Chat Messages Area - Full screen with modern styling */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-muted-foreground">
-              <p className="text-base font-medium">Start creating</p>
+    <div className="flex flex-col h-full bg-background text-foreground font-sans">
+      {/* Header / Model Selector */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Bot className="h-4 w-4" />
+          <span>AI Architect</span>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background">
+              <Cpu className="h-3.5 w-3.5" />
+              {selectedModel.name}
+              <ChevronDown className="h-3 w-3 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {MODELS.map((model) => (
+              <DropdownMenuItem
+                key={model.id}
+                onClick={() => setSelectedModel(model)}
+                className="text-xs cursor-pointer"
+              >
+                {selectedModel.id === model.id && <Check className="h-3 w-3 mr-2" />}
+                {selectedModel.id !== model.id && <div className="w-5" />}
+                {model.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-8">
+        {messages.length === 0 && step === "idle" && (
+          <div className="flex flex-col items-center justify-center h-full text-center opacity-30 space-y-4">
+            <div className="h-16 w-16 rounded-full bg-foreground/5 flex items-center justify-center">
+              <Sparkles className="h-8 w-8" />
             </div>
+            <p className="text-sm font-medium">Describe your vision. AI will build it.</p>
           </div>
         )}
 
         {messages.map((message) => (
-          <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div
-              className={`max-w-2xl rounded-2xl px-4 py-3 ${
-                message.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 dark:bg-slate-800 text-foreground"
-              }`}
-            >
-              <p className="text-sm leading-relaxed">{message.content}</p>
+          <div key={message.id} className="space-y-6">
+            {/* User Message */}
+            {message.role === "user" && (
+              <div className="flex justify-end">
+                <div className="max-w-2xl bg-foreground/5 rounded-2xl px-5 py-3 text-sm">
+                  <p>{message.content}</p>
+                </div>
+              </div>
+            )}
 
-              {message.code && (
-                <div className="mt-4 pt-3 border-t border-current/20 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Code2 className="h-4 w-4" />
-                    <span className="text-xs font-semibold opacity-70">Generated Code</span>
+            {/* Assistant Message (Completed) */}
+            {message.role === "assistant" && message.code && (
+              <div className="flex justify-start w-full">
+                <div className="w-full max-w-3xl space-y-4">
+                  {/* Plan Summary Card (Collapsed/Minimal) */}
+                  <div className="pl-4 border-l-2 border-border/50">
+                    <h3 className="text-xs font-medium uppercase tracking-wider opacity-50 mb-2 flex items-center gap-2">
+                      <Terminal className="h-3 w-3" />
+                      Execution Plan
+                    </h3>
+                    <div className="text-xs text-muted-foreground line-clamp-3 hover:line-clamp-none transition-all cursor-pointer">
+                      {message.plan}
+                    </div>
                   </div>
-                  <pre className="bg-slate-950 dark:bg-slate-900 rounded-lg p-3 overflow-x-auto max-h-48 overflow-y-auto font-mono text-xs text-slate-300 border border-slate-700">
-                    <code>{message.code.substring(0, 300)}...</code>
-                  </pre>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-xs h-7 px-2.5"
-                      onClick={() => navigator.clipboard.writeText(message.code!)}
-                    >
-                      Copy
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="text-xs h-7 flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md"
-                      onClick={() => handleDeployCode(message.code!)}
-                      disabled={isLoading || deployedCode === message.code}
-                    >
-                      {deployedCode === message.code ? (
-                        <>
-                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
-                          Live
-                        </>
-                      ) : (
-                        <>
-                          <Send className="h-3.5 w-3.5 mr-1.5" />
-                          Deploy
-                        </>
-                      )}
-                    </Button>
+
+                  {/* Deploy Card */}
+                  <Card className="border-border/50 shadow-sm bg-card/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <FileCode className="h-4 w-4" />
+                        Website Ready to Deploy
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pb-3">
+                      <div className="bg-muted/30 rounded-md p-3 font-mono text-xs text-muted-foreground border border-border/30">
+                        {message.code.substring(0, 150)}...
+                      </div>
+                    </CardContent>
+                    <CardFooter className="pt-0">
+                      <Button
+                        className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
+                        onClick={() => handleDeployCode(message.code!)}
+                        disabled={deployedCode === message.code}
+                      >
+                        {deployedCode === message.code ? (
+                          <>
+                            <Check className="h-4 w-4" />
+                            Deployed Successfully
+                          </>
+                        ) : (
+                          <>
+                            <Rocket className="h-4 w-4" />
+                            Deploy Website
+                          </>
+                        )}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Live Status Area (While working) */}
+        {(step === "planning" || step === "coding") && (
+          <div className="flex justify-start w-full max-w-3xl">
+            <div className="w-full space-y-6">
+
+              {/* Status Indicator */}
+              <div className="flex items-center gap-3 text-sm font-medium animate-pulse">
+                <div className="h-2 w-2 rounded-full bg-foreground" />
+                {step === "planning" ? "AI is drafting a blueprint..." : "AI is generating code..."}
+              </div>
+
+              {/* Streaming Plan */}
+              {(currentPlan || step === "coding") && (
+                <div className="pl-5 border-l border-foreground/20 ml-1">
+                   <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <Terminal className="h-3 w-3" />
+                      Architectural Plan
+                    </h3>
+                  <div className="font-mono text-xs leading-relaxed opacity-80 whitespace-pre-wrap">
+                    {displayedPlan}
+                    {displayedPlan.length < currentPlan.length && <span className="inline-block w-1.5 h-3 bg-foreground ml-1 animate-pulse" />}
                   </div>
                 </div>
               )}
             </div>
           </div>
-        ))}
-
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl px-4 py-3 flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-              <span className="text-sm text-muted-foreground">Generating...</span>
-            </div>
-          </div>
         )}
 
         {error && (
-          <div className="flex justify-start">
-            <div className="bg-red-500/10 rounded-2xl px-4 py-3 text-red-600 dark:text-red-400 text-sm flex items-start gap-2 max-w-xl border border-red-200 dark:border-red-900/50">
-              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          </div>
-        )}
-
-        {deploySuccess && (
-          <div className="flex justify-start">
-            <div className="bg-green-500/10 rounded-2xl px-4 py-3 text-green-700 dark:text-green-400 text-sm flex items-start gap-2 max-w-xl border border-green-200 dark:border-green-900/50">
-              <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>Changes live on your website!</span>
-            </div>
+          <div className="flex items-center gap-2 text-red-500 text-sm bg-red-500/5 p-3 rounded-lg border border-red-500/10">
+            <span className="font-bold">Error:</span> {error}
           </div>
         )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - Modern and minimal */}
-      <div className="border-t bg-background px-4 py-4">
-        <div className="flex gap-2.5 items-end">
+      {/* Input Area */}
+      <div className="p-4 bg-background border-t border-border/50">
+        <div className="relative max-w-3xl mx-auto">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -292,17 +339,21 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
                 handleSendMessage()
               }
             }}
-            placeholder="Describe your design..."
-            disabled={isLoading}
-            className="flex-1 h-10 text-sm rounded-2xl border border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 px-4 transition-all"
+            placeholder={step === "idle" || step === "done" ? "Describe the website you want to build..." : "AI is working..."}
+            disabled={step === "planning" || step === "coding"}
+            className="pr-12 h-12 rounded-xl bg-muted/30 border-border/50 focus-visible:ring-1 focus-visible:ring-foreground/20"
           />
           <Button
+            size="icon"
+            disabled={!input.trim() || step === "planning" || step === "coding"}
             onClick={handleSendMessage}
-            disabled={isLoading || !input.trim()}
-            size="sm"
-            className="h-10 px-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-2xl transition-colors"
+            className="absolute right-1.5 top-1.5 h-9 w-9 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-all"
           >
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {step === "planning" || step === "coding" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowRight className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>

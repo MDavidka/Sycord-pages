@@ -3,11 +3,10 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const MODEL_FALLBACK = [
-  "gemini-2.5-pro",      // Highest quality
-  "gemini-2.0-pro",      // Second tier
-  "gemini-2.0-flash",    // Fastest fallback
-  "gemini-1.5-pro",      // Legacy fallback
+const DEFAULT_MODELS = [
+  "gemini-2.0-pro-exp-02-05", // Latest experimental
+  "gemini-1.5-pro",      // Stable fallback
+  "gemini-2.0-flash",    // Fast fallback
 ]
 
 export async function POST(request: Request) {
@@ -17,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, systemPrompt, projectId } = await request.json()
+    const { messages, systemPrompt, projectId, plan, model: requestedModel } = await request.json()
 
     if (!process.env.GOOGLE_API_TOKEN) {
       console.error("[v0] GOOGLE_API_TOKEN not configured")
@@ -26,11 +25,26 @@ export async function POST(request: Request) {
 
     const client = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN)
 
+    let modelsToTry = [...DEFAULT_MODELS]
+
+    // If a specific model is requested, prioritize it
+    if (requestedModel) {
+      // Remove it if it exists in the list to avoid duplicates, then add to front
+      modelsToTry = modelsToTry.filter(m => m !== requestedModel)
+      modelsToTry.unshift(requestedModel)
+    }
+
     let responseText = null
     let lastError = null
     let usedModel = null
 
-    for (const modelName of MODEL_FALLBACK) {
+    // enhance system prompt with plan if available
+    let effectiveSystemPrompt = systemPrompt
+    if (plan) {
+      effectiveSystemPrompt += `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\nGenerate the code for the website based on this plan.`
+    }
+
+    for (const modelName of modelsToTry) {
       try {
         console.log(`[v0] Attempting with model: ${modelName}`)
         const model = client.getGenerativeModel({ model: modelName })
@@ -44,7 +58,7 @@ export async function POST(request: Request) {
           contents: [
             {
               role: "user",
-              parts: [{ text: systemPrompt }],
+              parts: [{ text: effectiveSystemPrompt }],
             },
             ...conversationHistory,
           ],
@@ -74,7 +88,6 @@ export async function POST(request: Request) {
 
     if (extractedCode) {
       console.log("[v0] Code extracted with markers, length:", extractedCode.length)
-      console.log("[v0] Code preview:", extractedCode.substring(0, 150))
     } else {
       console.warn("[v0] No code markers found, checking for HTML in response")
       const htmlRegex = /<html[\s\S]*<\/html>/i
@@ -93,7 +106,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       content: responseText,
       code: extractedCode || null,
-      modelUsed: usedModel, // Include which model was successful
+      modelUsed: usedModel,
     })
   } catch (error: any) {
     console.error("[v0] AI generation error:", error)
