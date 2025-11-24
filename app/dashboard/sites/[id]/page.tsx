@@ -30,7 +30,13 @@ import {
   Store,
   Layout,
   Upload,
-  Check
+  Check,
+  Tag,
+  BarChart3,
+  Users,
+  History,
+  FileText,
+  CreditCard
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -94,7 +100,7 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai">("styles")
+  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount">("styles")
   const [activeSubTab, setActiveSubTab] = useState<"settings" | "store" | "pages">("settings")
 
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
@@ -352,11 +358,31 @@ export default function SiteSettingsPage() {
     { id: "contact", name: "Contact" },
   ]
 
-  const navItems = [
-    { id: "styles", label: "Styles", icon: Palette },
-    { id: "products", label: "Products", icon: ShoppingCart },
-    { id: "payments", label: "Payments", icon: Lock }, // Using Lock as placeholder for Payments or CreditCard if not available
-    { id: "ai", label: "AI Builder", icon: Zap },
+  const navGroups = [
+    {
+      title: "Home",
+      items: [
+        { id: "styles", label: "Themes", icon: Palette },
+        { id: "ai", label: "AI Builder", icon: Zap },
+        { id: "pages", label: "Pages", icon: FileText },
+        { id: "products", label: "Products", icon: ShoppingCart },
+        { id: "payments", label: "Payments", icon: CreditCard },
+      ]
+    },
+    {
+      title: "Orders",
+      items: [
+        { id: "orders", label: "History", icon: History },
+      ]
+    },
+    {
+      title: "Management",
+      items: [
+        { id: "customers", label: "Customers", icon: Users },
+        { id: "analytics", label: "Analytics", icon: BarChart3 },
+        { id: "discount", label: "Discount", icon: Tag },
+      ]
+    }
   ]
 
   const subTabs = [
@@ -400,28 +426,37 @@ export default function SiteSettingsPage() {
             <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
           </div>
 
-          <nav className="flex-1 space-y-2">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = activeTab === item.id
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id as any)
-                    setIsSidebarOpen(false)
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="font-medium text-sm">{item.label}</span>
-                </button>
-              )
-            })}
+          <nav className="flex-1 space-y-6 overflow-y-auto pr-2">
+            {navGroups.map((group) => (
+              <div key={group.title}>
+                <h3 className="px-4 mb-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
+                  {group.title}
+                </h3>
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const Icon = item.icon
+                    const isActive = activeTab === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id as any)
+                          setIsSidebarOpen(false)
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span className="font-medium text-sm">{item.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
 
           <div className="mt-auto pt-6 border-t border-sidebar-border">
@@ -503,6 +538,22 @@ export default function SiteSettingsPage() {
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
                 <p className="text-xs md:text-sm text-muted-foreground">Loading preview...</p>
               </div>
+            </div>
+          )}
+
+          {["pages", "orders", "customers", "analytics", "discount"].includes(activeTab) && (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center border-2 border-dashed border-border rounded-xl bg-muted/20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                {activeTab === "pages" && <FileText className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "orders" && <History className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "customers" && <Users className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "analytics" && <BarChart3 className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "discount" && <Tag className="h-8 w-8 text-muted-foreground" />}
+              </div>
+              <h3 className="text-xl font-semibold capitalize mb-2">{activeTab}</h3>
+              <p className="text-muted-foreground max-w-md">
+                This feature is coming soon. You will be able to manage your {activeTab} here.
+              </p>
             </div>
           )}
 
