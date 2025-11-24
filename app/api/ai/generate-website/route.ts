@@ -116,13 +116,25 @@ export async function POST(request: Request) {
         extractedPageName = "index.html" // Default to index.html if not specified
         console.log("[v0] Code extracted with legacy markers")
       } else {
-        console.warn("[v0] No code markers found, checking for HTML in response")
-        const htmlRegex = /<html[\s\S]*<\/html>/i
-        const htmlMatch = responseText.match(htmlRegex)
-        if (htmlMatch) {
-          extractedCode = htmlMatch[0].trim()
+        console.warn("[v0] No code markers found, checking for HTML/Markdown in response")
+
+        // Fallback 2: Markdown code blocks
+        const markdownRegex = /```(?:html)?([\s\S]*?)```/i
+        const markdownMatch = responseText.match(markdownRegex)
+
+        if (markdownMatch) {
+          extractedCode = markdownMatch[1].trim()
           extractedPageName = "index.html"
-          console.log("[v0] Code extracted from HTML fallback")
+          console.log("[v0] Code extracted from Markdown fallback")
+        } else {
+          // Fallback 3: Raw HTML
+          const htmlRegex = /<html[\s\S]*<\/html>/i
+          const htmlMatch = responseText.match(htmlRegex)
+          if (htmlMatch) {
+            extractedCode = htmlMatch[0].trim()
+            extractedPageName = "index.html"
+            console.log("[v0] Code extracted from HTML fallback")
+          }
         }
       }
     }
