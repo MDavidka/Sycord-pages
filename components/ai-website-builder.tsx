@@ -227,20 +227,25 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     }
   }
 
-  const handleDeployCode = async (code: string) => {
-    if (!code) return
+  const handleDeployCode = async () => {
+    if (generatedPages.length === 0) return
 
     try {
       const deployUrl = `/api/projects/${encodeURIComponent(projectId)}/deploy-code`
       const response = await fetch(deployUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({
+          files: generatedPages.map(p => ({ name: p.name, content: p.code }))
+        }),
       })
 
       if (!response.ok) throw new Error("Deploy failed")
 
-      setDeployedCode(code)
+      // Determine which code was "deployed" for the UI feedback - just use the latest one generated or index
+      const latestCode = generatedPages[generatedPages.length - 1]?.code
+      setDeployedCode(latestCode)
+
       setDeploySuccess(true)
       setTimeout(() => setDeploySuccess(false), 3000)
     } catch (err: any) {
@@ -354,7 +359,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                     <CardFooter className="pt-0">
                       <Button
                         className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
-                        onClick={() => handleDeployCode(message.code!)}
+                        onClick={handleDeployCode}
                         disabled={deployedCode === message.code}
                       >
                         {deployedCode === message.code ? (
@@ -365,7 +370,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                         ) : (
                           <>
                             <Rocket className="h-4 w-4" />
-                            Deploy This Page
+                            Deploy Site
                           </>
                         )}
                       </Button>

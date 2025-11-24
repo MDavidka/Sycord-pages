@@ -83,15 +83,15 @@ export default async function SubdomainPage({ params }: PageProps) {
 
     console.log("[v0] Webshop: Project found. Name:", project.businessName, "Has AI code:", !!project.aiGeneratedCode)
 
-    if (project.aiGeneratedCode) {
-      console.log("[v0] Webshop: Rendering AI-generated code. Length:", project.aiGeneratedCode.length)
+    if (project.pages || project.aiGeneratedCode) {
+      console.log("[v0] Webshop: Rendering AI-generated site.")
       return (
         <div className="min-h-screen bg-background">
           <iframe
-            srcDoc={project.aiGeneratedCode}
+            src="/content/index.html"
             title="AI Generated Website"
             className="w-full min-h-screen border-0"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-top-navigation"
           />
         </div>
       )
