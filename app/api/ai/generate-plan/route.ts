@@ -3,8 +3,6 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-// User requested "gemini-2.5-flash", mapping to "gemini-2.0-flash" as the standard fast model
-// or "gemini-1.5-flash" if 2.0 is unavailable. Sticking to 2.0-flash for performance.
 const PLAN_MODEL = "gemini-2.0-flash"
 
 export async function POST(request: Request) {
@@ -24,53 +22,37 @@ export async function POST(request: Request) {
     const model = client.getGenerativeModel({ model: PLAN_MODEL })
 
     const lastUserMessage = messages[messages.length - 1]
-    const isContinuation = lastUserMessage.content.toLowerCase().includes("continue")
 
-    // Prepare history excluding the last message (which is the new request)
-    const historyMessages = messages.slice(0, -1).map((msg: any) => {
-      let textContent = msg.content
-      if (msg.role === "assistant" && msg.code) {
-        textContent += `\n\n[EXISTING CODE CONTEXT]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[END EXISTING CODE]`
-      }
-      return {
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: textContent }],
-      }
-    })
+    const prompt = `
+    You are a Senior Technical Architect planning a production-grade website.
+    Your task is to list ALL the files needed to build the user's requested website.
 
-    const systemContext = `
-    You are an expert web designer and architect.
-    Your goal is to create a detailed, narrative "thought process" or "design plan" for the requested website.
+    REQUIREMENTS:
+    1.  **Scale**: Plan for a complete, robust website. You must list at least 10-15 files.
+    2.  **Core Files**: Always include 'index.html', 'styles.css', 'script.js'.
+    3.  **Pages**: Include standard pages (e.g., 'about.html', 'contact.html', 'faq.html', 'terms.html', 'privacy.html') and feature-specific pages (e.g., 'shop.html', 'product.html', 'cart.html', 'checkout.html', 'login.html', 'register.html') relevant to the request.
+    4.  **Output Format**: Return ONLY a valid JSON array of strings. No markdown formatting, no explanations.
 
-    CONTEXT:
-    ${isContinuation
-      ? "**CONTINUATION PHASE**: The user wants to continue building the website. Based on the existing code in history, plan the NEXT specific page or feature that needs to be implemented. Do NOT re-plan what is already built."
-      : "**INITIAL PHASE**: The user wants to create a new website. Plan the core structure, starting with 'index.html'."}
+    Example Output:
+    ["index.html", "styles.css", "script.js", "about.html", "contact.html", "shop.html", "product.html", "cart.html", "checkout.html", "terms.html"]
 
-    GUIDELINES:
-    1.  **Focus**: Describe *what* needs to be built next and *why*.
-    2.  **Structure**: If starting, plan 'index.html'. If continuing, plan the next logical page (e.g., 'shop.html', 'about.html').
-    3.  **Modern UI/UX**: Include plans for scrollable sections, promotional banners with fade-in animations, and modern, rounded buttons with hover effects.
-    4.  **Narrative Style**: Use phrases like "The user requested...", "Next, I will create...", "I should add...".
-
-    EXAMPLE OUTPUT STYLE:
-    "The user requested to make a modern website. You will need to create a sticky header to store the logo and make a navigation menu. I will design a Hero section with a fade-in animation. Below that, you will need to create a moving tabs section to introduce the shop categories. Then, a scrollable horizontal list of 10 featured products with modern card styling and hover effects. I should add icons to space product details...."
-
-    Do NOT generate actual HTML code. Just the narrative plan.
+    User Request: "${lastUserMessage.content}"
     `
 
-    const result = await model.generateContent({
-      contents: [
-        { role: "user", parts: [{ text: systemContext }] }, // System context as first message
-        ...historyMessages,
-        { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
-      ]
-    })
+    const result = await model.generateContent(prompt)
+    const responseText = result.response.text()
 
-    const planText = result.response.text()
+    // Extract JSON if wrapped in markdown code blocks
+    let cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim()
+
+    // Basic validation
+    if (!cleanJson.startsWith("[")) {
+        console.warn("[v0] Plan response not JSON, attempting to extract list")
+        // Fallback logic could go here, but for now relying on strong prompt
+    }
 
     return NextResponse.json({
-      plan: planText,
+      plan: cleanJson, // Sending the JSON string for frontend to parse
     })
   } catch (error: any) {
     console.error("[v0] Plan generation error:", error)
