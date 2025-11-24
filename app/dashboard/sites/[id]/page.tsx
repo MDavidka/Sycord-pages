@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import AIWebsiteBuilder from "@/components/ai-website-builder"
+import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
 import {
   Trash2,
   Plus,
@@ -111,6 +111,9 @@ export default function SiteSettingsPage() {
   const [shopName, setShopName] = useState("")
   const [profileImage, setProfileImage] = useState("")
 
+  // AI Generated Pages State (Lifted)
+  const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([])
+
   useEffect(() => {
     if (!id) return
 
@@ -180,8 +183,6 @@ export default function SiteSettingsPage() {
       ...prev,
       [componentType]: componentValue,
     }))
-    // Auto-save when component selected
-    // Note: In a real app we might want to debounce or wait for explicit save
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,10 +204,9 @@ export default function SiteSettingsPage() {
     try {
       console.log("[v0] Sending settings to API:", settings)
 
-      // Merge shop name into project update if needed, but here we update settings
       const updatedSettings = {
         ...settings,
-        shopName: shopName, // sending shopName if API accepts it in settings
+        shopName: shopName,
         profileImage: profileImage || settings.profileImage
       }
 
@@ -223,7 +223,6 @@ export default function SiteSettingsPage() {
       }
 
       setSaveSuccess(true)
-      // Refresh settings
       fetch(`/api/projects/${id}/settings`)
         .then((r) => r.json())
         .then(setSettings)
@@ -538,22 +537,6 @@ export default function SiteSettingsPage() {
                 <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
                 <p className="text-xs md:text-sm text-muted-foreground">Loading preview...</p>
               </div>
-            </div>
-          )}
-
-          {["pages", "orders", "customers", "analytics", "discount"].includes(activeTab) && (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center border-2 border-dashed border-border rounded-xl bg-muted/20 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                {activeTab === "pages" && <FileText className="h-8 w-8 text-muted-foreground" />}
-                {activeTab === "orders" && <History className="h-8 w-8 text-muted-foreground" />}
-                {activeTab === "customers" && <Users className="h-8 w-8 text-muted-foreground" />}
-                {activeTab === "analytics" && <BarChart3 className="h-8 w-8 text-muted-foreground" />}
-                {activeTab === "discount" && <Tag className="h-8 w-8 text-muted-foreground" />}
-              </div>
-              <h3 className="text-xl font-semibold capitalize mb-2">{activeTab}</h3>
-              <p className="text-muted-foreground max-w-md">
-                This feature is coming soon. You will be able to manage your {activeTab} here.
-              </p>
             </div>
           )}
 
@@ -974,7 +957,11 @@ export default function SiteSettingsPage() {
             <div className="h-[calc(100vh-200px)] min-h-96 flex flex-col -mx-4 -mb-8">
               <div className="flex-1 bg-background overflow-hidden">
                 {id ? (
-                  <AIWebsiteBuilder projectId={id} />
+                  <AIWebsiteBuilder
+                    projectId={id}
+                    generatedPages={generatedPages}
+                    setGeneratedPages={setGeneratedPages}
+                  />
                 ) : (
                   <div className="flex items-center justify-center h-full">
                     <AlertCircle className="h-6 w-6 text-destructive mr-2" />
@@ -982,6 +969,75 @@ export default function SiteSettingsPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {["orders", "customers", "analytics", "discount"].includes(activeTab) && (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center border-2 border-dashed border-border rounded-xl bg-muted/20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                {activeTab === "orders" && <History className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "customers" && <Users className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "analytics" && <BarChart3 className="h-8 w-8 text-muted-foreground" />}
+                {activeTab === "discount" && <Tag className="h-8 w-8 text-muted-foreground" />}
+              </div>
+              <h3 className="text-xl font-semibold capitalize mb-2">{activeTab}</h3>
+              <p className="text-muted-foreground max-w-md">
+                This feature is coming soon. You will be able to manage your {activeTab} here.
+              </p>
+            </div>
+          )}
+
+          {activeTab === "pages" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+               <div className="flex items-center justify-between">
+                 <div>
+                   <h2 className="text-2xl font-bold">Site Pages</h2>
+                   <p className="text-muted-foreground">Manage your AI-generated pages and content.</p>
+                 </div>
+                 <Button onClick={() => setActiveTab("ai")}>
+                   <Plus className="h-4 w-4 mr-2" /> Create New Page
+                 </Button>
+               </div>
+
+               {generatedPages.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center h-[40vh] text-center border-2 border-dashed border-border rounded-xl bg-muted/20">
+                   <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                     <FileText className="h-8 w-8 text-muted-foreground" />
+                   </div>
+                   <h3 className="text-xl font-semibold mb-2">No Pages Yet</h3>
+                   <p className="text-muted-foreground max-w-md mb-6">
+                     Use the AI Builder to generate your website structure and pages.
+                   </p>
+                   <Button onClick={() => setActiveTab("ai")}>Go to AI Builder</Button>
+                 </div>
+               ) : (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                   {generatedPages.map((page, i) => (
+                     <Card key={i} className="overflow-hidden hover:border-primary/50 transition-all group">
+                       <CardHeader className="pb-3">
+                         <CardTitle className="flex items-center justify-between">
+                           <span className="flex items-center gap-2 truncate">
+                             <FileText className="h-4 w-4 text-primary"/>
+                             {page.name}
+                           </span>
+                         </CardTitle>
+                         <CardDescription className="text-xs">
+                           Generated {new Date(page.timestamp).toLocaleTimeString()}
+                         </CardDescription>
+                       </CardHeader>
+                       <CardContent className="pb-3">
+                         <div className="bg-muted rounded-md p-3 font-mono text-[10px] text-muted-foreground h-32 overflow-hidden relative border border-border/50">
+                           {page.code}
+                           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted to-transparent"/>
+                         </div>
+                       </CardContent>
+                       <CardFooter className="pt-0 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <Button size="sm" variant="outline" className="h-7 text-xs">View Code</Button>
+                       </CardFooter>
+                     </Card>
+                   ))}
+                 </div>
+               )}
             </div>
           )}
         </div>

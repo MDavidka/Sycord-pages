@@ -81,13 +81,19 @@ interface Message {
   pageName?: string
 }
 
-interface GeneratedPage {
+export interface GeneratedPage {
   name: string
   code: string
   timestamp: number
 }
 
-const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
+interface AIWebsiteBuilderProps {
+  projectId: string
+  generatedPages: GeneratedPage[]
+  setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
+}
+
+const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [selectedModel, setSelectedModel] = useState(MODELS[0])
@@ -97,7 +103,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
   const [deployedCode, setDeployedCode] = useState<string | null>(null)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([])
+  // generatedPages state lifted up
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {

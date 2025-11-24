@@ -42,7 +42,12 @@ export async function POST(request: Request) {
     // enhance system prompt with plan if available
     let effectiveSystemPrompt = systemPrompt
     if (plan) {
-      effectiveSystemPrompt += `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\nGenerate the code for the website based on this plan.`
+      effectiveSystemPrompt += `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\n`
+      effectiveSystemPrompt += `REQUIREMENTS:
+      1.  **Production Ready**: Include working JavaScript for all interactive elements (menus, sliders, modals). Use <script> tags.
+      2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned (e.g. href="shop.html").
+      3.  **Context**: You are building ONE cohesive website. If 'index.html' exists in history, and you are building 'shop.html', ensure 'shop.html' has the same header/footer and links back to 'index.html'.
+      `
     }
 
     for (const modelName of modelsToTry) {
@@ -53,7 +58,7 @@ export async function POST(request: Request) {
         const conversationHistory = messages.map((msg: any) => {
           let textContent = msg.content
           if (msg.role === "assistant" && msg.code) {
-            textContent += `\n\n[PREVIOUS GENERATED CODE START]\n${msg.code}\n[PREVIOUS GENERATED CODE END]`
+            textContent += `\n\n[PREVIOUS GENERATED CODE START]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[PREVIOUS GENERATED CODE END]`
           }
           return {
             role: msg.role === "user" ? "user" : "model",
@@ -107,7 +112,7 @@ export async function POST(request: Request) {
       const oldMatch = responseText.match(oldRegex)
       if (oldMatch) {
         extractedCode = oldMatch[1].trim()
-        extractedPageName = "index" // Default
+        extractedPageName = "index.html" // Default to index.html if not specified
         console.log("[v0] Code extracted with legacy markers")
       } else {
         console.warn("[v0] No code markers found, checking for HTML in response")
@@ -115,7 +120,7 @@ export async function POST(request: Request) {
         const htmlMatch = responseText.match(htmlRegex)
         if (htmlMatch) {
           extractedCode = htmlMatch[0].trim()
-          extractedPageName = "index"
+          extractedPageName = "index.html"
           console.log("[v0] Code extracted from HTML fallback")
         }
       }
