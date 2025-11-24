@@ -89,19 +89,35 @@ export async function POST(request: Request) {
 
     console.log(`[v0] Final model used: ${usedModel}`)
 
-    const codeMarkerRegex = /\[1\]([\s\S]*?)\[1\]/
+    // Regex to capture code and page name
+    // Format: [1]...code...[1<page_name>]
+    const codeMarkerRegex = /\[1\]([\s\S]*?)\[1<(.+?)>\]/
     const codeMarkerMatch = responseText.match(codeMarkerRegex)
-    let extractedCode = codeMarkerMatch ? codeMarkerMatch[1].trim() : null
 
-    if (extractedCode) {
-      console.log("[v0] Code extracted with markers, length:", extractedCode.length)
+    let extractedCode = null
+    let extractedPageName = null
+
+    if (codeMarkerMatch) {
+      extractedCode = codeMarkerMatch[1].trim()
+      extractedPageName = codeMarkerMatch[2].trim()
+      console.log("[v0] Code extracted with page name:", extractedPageName)
     } else {
-      console.warn("[v0] No code markers found, checking for HTML in response")
-      const htmlRegex = /<html[\s\S]*<\/html>/i
-      const htmlMatch = responseText.match(htmlRegex)
-      if (htmlMatch) {
-        extractedCode = htmlMatch[0].trim()
-        console.log("[v0] Code extracted from HTML fallback, length:", extractedCode.length)
+      // Fallback to old format [1]...[1]
+      const oldRegex = /\[1\]([\s\S]*?)\[1\]/
+      const oldMatch = responseText.match(oldRegex)
+      if (oldMatch) {
+        extractedCode = oldMatch[1].trim()
+        extractedPageName = "index" // Default
+        console.log("[v0] Code extracted with legacy markers")
+      } else {
+        console.warn("[v0] No code markers found, checking for HTML in response")
+        const htmlRegex = /<html[\s\S]*<\/html>/i
+        const htmlMatch = responseText.match(htmlRegex)
+        if (htmlMatch) {
+          extractedCode = htmlMatch[0].trim()
+          extractedPageName = "index"
+          console.log("[v0] Code extracted from HTML fallback")
+        }
       }
     }
 
@@ -110,9 +126,13 @@ export async function POST(request: Request) {
       extractedCode = "<!DOCTYPE html>\n" + extractedCode
     }
 
+    const shouldContinue = responseText.includes("[continue]")
+
     return NextResponse.json({
       content: responseText,
       code: extractedCode || null,
+      pageName: extractedPageName || null,
+      shouldContinue: shouldContinue,
       modelUsed: usedModel,
     })
   } catch (error: any) {

@@ -17,6 +17,8 @@ import {
   FileCode,
   ArrowRight,
   Rocket,
+  File,
+  Layers
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -43,7 +45,19 @@ When providing code, wrap it EXACTLY like this with NO backticks:
 <html>
 ...your complete HTML code...
 </html>
-[1]
+[1<page_name>]
+
+Replace <page_name> with the specific name of the page (e.g., home, about, product-detail).
+
+MULTIPLE PAGES:
+If the user request implies multiple pages (e.g. "create a shop with checkout"), generate one page at a time.
+At the end of your response (after the [1<...>] marker), add the tag [continue] to signal that you have more pages to generate.
+The system will automatically prompt you to continue.
+
+IMAGES:
+Use REAL photos from LoremFlickr for high-quality placeholders.
+Format: https://loremflickr.com/{width}/{height}/{keyword}
+Example: https://loremflickr.com/800/600/fashion,clothing
 
 ESSENTIAL REQUIREMENTS:
 1. Start with <!DOCTYPE html> and complete <html> tag
@@ -52,9 +66,9 @@ ESSENTIAL REQUIREMENTS:
 4. Write ALL code in pure HTML - NO REACT, NO JSX, NO TYPESCRIPT
 5. Use Tailwind CSS classes for styling
 6. Make it fully responsive (mobile-first)
-7. DESIGN STYLE: Use HeroUI (NextUI) aesthetics. Use clean, modern design with ample whitespace, rounded-2xl border radius, subtle shadows, and primary colors like standard blue/purple/black. Use Tailwind classes to mimic HeroUI components (e.g. buttons with slight shadow and rounded corners, inputs with clean borders, cards with soft shadows).
-8. NO backticks, NO markdown formatting anywhere
-9. ONLY code between [1] markers`
+7. DESIGN STYLE: Use HeroUI (NextUI) aesthetics. Use clean, modern design with ample whitespace, rounded-2xl border radius, subtle shadows, and primary colors like standard blue/purple/black. Use Tailwind classes to mimic HeroUI components.
+8. NO backticks, NO markdown formatting anywhere inside markers.
+`
 
 type Step = "idle" | "planning" | "coding" | "done"
 
@@ -64,6 +78,13 @@ interface Message {
   content: string
   code?: string
   plan?: string
+  pageName?: string
+}
+
+interface GeneratedPage {
+  name: string
+  code: string
+  timestamp: number
 }
 
 const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
@@ -76,6 +97,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
   const [deployedCode, setDeployedCode] = useState<string | null>(null)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -96,39 +118,52 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
     }
   }, [currentPlan, displayedPlan])
 
-  const handleSendMessage = async () => {
-    if (!input.trim() || step === "planning" || step === "coding") return
-
+  const generateResponse = async (userInput: string, isContinuation = false) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: userInput,
     }
 
-    setMessages((prev) => [...prev, userMessage])
-    setInput("")
-    setStep("planning")
+    // Only add user message to UI if it's not an automatic continuation
+    let newMessages = [...messages]
+    if (!isContinuation) {
+      newMessages.push(userMessage)
+      setMessages(newMessages)
+      setInput("")
+      setStep("planning")
+      setCurrentPlan("")
+      setDisplayedPlan("")
+    } else {
+      // For continuation, we append the prompt to history but maybe not show it as a bubble?
+      // Or we show a system status "Continuing generation..."
+      // We'll add it to history for the API context
+      newMessages.push(userMessage)
+    }
+
     setError(null)
-    setCurrentPlan("")
-    setDisplayedPlan("")
 
     try {
-      // Step 1: Generate Plan (Small Model)
-      const planResponse = await fetch("/api/ai/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-        }),
-      })
+      let planText = currentPlan
 
-      if (!planResponse.ok) throw new Error("Failed to generate plan")
+      // Step 1: Generate Plan (Only if new request)
+      if (!isContinuation) {
+        const planResponse = await fetch("/api/ai/generate-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: newMessages,
+          }),
+        })
 
-      const planData = await planResponse.json()
-      const planText = planData.plan
-      setCurrentPlan(planText)
+        if (!planResponse.ok) throw new Error("Failed to generate plan")
 
-      // Step 2: Generate Code (Big Model)
+        const planData = await planResponse.json()
+        planText = planData.plan
+        setCurrentPlan(planText)
+      }
+
+      // Step 2: Generate Code
       setStep("coding")
 
       const codeResponse = await fetch("/api/ai/generate-website", {
@@ -136,7 +171,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          messages: [...messages, userMessage],
+          messages: newMessages,
           systemPrompt: SYSTEM_PROMPT,
           plan: planText,
           model: selectedModel.id,
@@ -152,11 +187,34 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
         role: "assistant",
         content: codeData.content,
         code: codeData.code,
-        plan: planText,
+        pageName: codeData.pageName,
+        plan: isContinuation ? undefined : planText, // Only attach plan to first message of sequence? Or all.
       }
 
       setMessages((prev) => [...prev, assistantMessage])
+
+      if (codeData.code && codeData.pageName) {
+        setGeneratedPages(prev => {
+          // Update existing page or add new
+          const existing = prev.findIndex(p => p.name === codeData.pageName)
+          if (existing >= 0) {
+            const updated = [...prev]
+            updated[existing] = { name: codeData.pageName, code: codeData.code, timestamp: Date.now() }
+            return updated
+          }
+          return [...prev, { name: codeData.pageName, code: codeData.code, timestamp: Date.now() }]
+        })
+      }
+
       setStep("done")
+
+      // Handle Continuation
+      if (codeData.shouldContinue) {
+        setTimeout(() => {
+          generateResponse("Continue generating the next page.", true)
+        }, 1000)
+      }
+
     } catch (err: any) {
       setError(err.message || "An error occurred")
       setStep("idle")
@@ -192,28 +250,40 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
           <Bot className="h-4 w-4" />
           <span>AI Architect</span>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background">
-              <Cpu className="h-3.5 w-3.5" />
-              {selectedModel.name}
-              <ChevronDown className="h-3 w-3 opacity-50" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {MODELS.map((model) => (
-              <DropdownMenuItem
-                key={model.id}
-                onClick={() => setSelectedModel(model)}
-                className="text-xs cursor-pointer"
-              >
-                {selectedModel.id === model.id && <Check className="h-3 w-3 mr-2" />}
-                {selectedModel.id !== model.id && <div className="w-5" />}
-                {model.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          {generatedPages.length > 0 && (
+             <div className="flex gap-1 mr-4">
+                {generatedPages.map(page => (
+                  <div key={page.name} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded-md text-xs border border-border/50">
+                    <File className="h-3 w-3 opacity-50" />
+                    <span>{page.name}</span>
+                  </div>
+                ))}
+             </div>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background">
+                <Cpu className="h-3.5 w-3.5" />
+                {selectedModel.name}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {MODELS.map((model) => (
+                <DropdownMenuItem
+                  key={model.id}
+                  onClick={() => setSelectedModel(model)}
+                  className="text-xs cursor-pointer"
+                >
+                  {selectedModel.id === model.id && <Check className="h-3 w-3 mr-2" />}
+                  {selectedModel.id !== model.id && <div className="w-5" />}
+                  {model.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -227,7 +297,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
           </div>
         )}
 
-        {messages.map((message) => (
+        {messages.map((message, idx) => (
           <div key={message.id} className="space-y-6">
             {/* User Message */}
             {message.role === "user" && (
@@ -242,28 +312,37 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
             {message.role === "assistant" && message.code && (
               <div className="flex justify-start w-full">
                 <div className="w-full max-w-3xl space-y-4">
-                  {/* Plan Summary Card (Collapsed/Minimal) */}
-                  <div className="pl-4 border-l-2 border-border/50">
-                    <h3 className="text-xs font-medium uppercase tracking-wider opacity-50 mb-2 flex items-center gap-2">
-                      <Terminal className="h-3 w-3" />
-                      Execution Plan
-                    </h3>
-                    <div className="text-xs text-muted-foreground line-clamp-3 hover:line-clamp-none transition-all cursor-pointer">
-                      {message.plan}
+                  {/* Plan Summary Card (Collapsed/Minimal) - Only show on first response of sequence or if plan exists */}
+                  {message.plan && (
+                    <div className="pl-4 border-l-2 border-border/50">
+                      <h3 className="text-xs font-medium uppercase tracking-wider opacity-50 mb-2 flex items-center gap-2">
+                        <Terminal className="h-3 w-3" />
+                        Execution Plan
+                      </h3>
+                      <div className="text-xs text-muted-foreground line-clamp-3 hover:line-clamp-none transition-all cursor-pointer">
+                        {message.plan}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Deploy Card */}
                   <Card className="border-border/50 shadow-sm bg-card/50">
                     <CardHeader className="pb-3">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <FileCode className="h-4 w-4" />
-                        Website Ready to Deploy
+                      <CardTitle className="text-base flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileCode className="h-4 w-4" />
+                          <span>Page: {message.pageName || "Unknown"}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                           <Layers className="h-3 w-3" />
+                           v{idx + 1}
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pb-3">
-                      <div className="bg-muted/30 rounded-md p-3 font-mono text-xs text-muted-foreground border border-border/30">
-                        {message.code.substring(0, 150)}...
+                      <div className="bg-muted/30 rounded-md p-3 font-mono text-xs text-muted-foreground border border-border/30 max-h-32 overflow-hidden relative">
+                        {message.code.substring(0, 300)}...
+                        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted/30 to-transparent" />
                       </div>
                     </CardContent>
                     <CardFooter className="pt-0">
@@ -275,12 +354,12 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
                         {deployedCode === message.code ? (
                           <>
                             <Check className="h-4 w-4" />
-                            Deployed Successfully
+                            Deployed
                           </>
                         ) : (
                           <>
                             <Rocket className="h-4 w-4" />
-                            Deploy Website
+                            Deploy This Page
                           </>
                         )}
                       </Button>
@@ -338,7 +417,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                handleSendMessage()
+                generateResponse(input)
               }
             }}
             placeholder={step === "idle" || step === "done" ? "Describe the website you want to build..." : "AI is working..."}
@@ -348,7 +427,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId: string }) => {
           <Button
             size="icon"
             disabled={!input.trim() || step === "planning" || step === "coding"}
-            onClick={handleSendMessage}
+            onClick={() => generateResponse(input)}
             className="absolute right-1.5 top-1.5 h-9 w-9 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-all"
           >
             {step === "planning" || step === "coding" ? (
