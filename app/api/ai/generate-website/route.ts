@@ -45,8 +45,9 @@ export async function POST(request: Request) {
       effectiveSystemPrompt += `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\n`
       effectiveSystemPrompt += `REQUIREMENTS:
       1.  **Production Ready**: Include working JavaScript for all interactive elements (menus, sliders, modals). Use <script> tags.
-      2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned (e.g. href="shop.html").
+      2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned (e.g. href="shop.html"). IMPORTANT: Filenames in links MUST match the generated filenames exactly.
       3.  **Context**: You are building ONE cohesive website. If 'index.html' exists in history, and you are building 'shop.html', ensure 'shop.html' has the same header/footer and links back to 'index.html'.
+      4.  **Modern Styling**: Use Tailwind CSS utility classes for animations (e.g., 'transition-all duration-300', 'hover:scale-105', 'animate-fade-in'). Create custom animations in <style> if needed.
       `
     }
 

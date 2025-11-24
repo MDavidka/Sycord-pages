@@ -7,7 +7,9 @@ export async function GET(
   { params }: { params: Promise<{ subdomain: string; path: string[] }> }
 ) {
   const { subdomain, path } = await params
-  const filename = path.join("/")
+  const rawFilename = path.join("/")
+  // Normalize filename: remove leading slash
+  const filename = rawFilename.replace(/^\//, "")
 
   try {
     const client = await clientPromise
@@ -50,20 +52,30 @@ export async function GET(
       return new Response("Content Not Found", { status: 404 })
     }
 
-    // Find file in pages array
-    // Handle cases where filename might be "about" but stored as "about.html"
-    let file = project.pages.find((p: any) => p.name === filename)
+    // Find file in pages array with robust matching
+    let file = project.pages.find((p: any) => {
+        const storedName = p.name.replace(/^\//, "")
+        return storedName === filename
+    })
 
+    // Try adding .html if missing
     if (!file && !filename.includes('.')) {
-        file = project.pages.find((p: any) => p.name === `${filename}.html`)
+        file = project.pages.find((p: any) => {
+            const storedName = p.name.replace(/^\//, "")
+            return storedName === `${filename}.html`
+        })
     }
 
-    // Default to index.html if root request (should ideally be handled by page.tsx but good fallback)
+    // Default to index.html if root request
     if (!file && (filename === "" || filename === "index")) {
-        file = project.pages.find((p: any) => p.name === "index.html")
+        file = project.pages.find((p: any) => {
+            const storedName = p.name.replace(/^\//, "")
+            return storedName === "index.html"
+        })
     }
 
     if (!file) {
+      console.log(`[v0] File not found: ${filename} in project ${projectId}`)
       return new Response("File Not Found", { status: 404 })
     }
 

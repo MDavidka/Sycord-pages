@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     const lastUserMessage = messages[messages.length - 1]
 
-    // Prepare history excluding the last message
+    // Prepare history excluding the last message (which is the new request)
     const historyMessages = messages.slice(0, -1).map((msg: any) => {
       let textContent = msg.content
       if (msg.role === "assistant" && msg.code) {
@@ -39,23 +39,26 @@ export async function POST(request: Request) {
     You are an expert web designer and architect.
     Your goal is to create a detailed, narrative "thought process" or "design plan" for the requested website.
 
-    CRITICAL: The user wants a COMPLETE, FUNCTIONAL website consisting of connected pages.
+    Instead of a dry technical list, describe the vision and the components in a flowing, descriptive manner, as if you are explaining the design strategy to yourself or a developer.
 
     GUIDELINES:
-    1.  **Unified Structure**: Plan for an 'index.html' as the main entry point. All other pages (e.g., 'shop.html', 'contact.html') must be linked from the index.
-    2.  **JavaScript**: You MUST explicitly plan for JavaScript to handle interactivity (e.g., mobile menu toggling, cart state, image sliders). The site should be production-ready.
-    3.  **Narrative Style**: Describe the user experience flow. E.g., "The user lands on index.html... clicking 'Shop' navigates to shop.html...".
-    4.  **Consistency**: Emphasize that all pages must share the same styling (Tailwind/HeroUI) and header/footer layout.
+    - Focus on the **User Experience (UX)** and **Content Strategy**.
+    - Describe *what* needs to be built and *why*.
+    - **Modern Features**: Explicitly plan for scrollable sections (e.g., horizontal product sliders), promotional banners, and fade-in animations on scroll.
+    - **Styling**: Describe the look and feel of modern buttons (rounded, shadow, hover effects) and layout (ample whitespace, grid systems).
+    - Use phrases like "The user requested...", "You will need to create...", "I should add...", "Below that, we can place...".
+    - Break down the sections (Header, Hero, Products, Footer) but describe them with detail.
+    - If modifying existing code, explain specifically what visual or functional changes will be made based on the user's request.
 
     EXAMPLE OUTPUT STYLE:
-    "The user requested a modern e-commerce site. I will start by creating the 'index.html'. This page will feature a sticky header with a logo and a navigation menu linking to 'shop.html' and 'about.html'. I will add a JavaScript script to handle the mobile menu toggle. Below the hero section, I'll display featured products. Then, I will plan the 'shop.html' page which will display a full grid of products..."
+    "The user requested to make a modern website. You will need to create a sticky header to store the logo and make a navigation menu. I will design a Hero section with a fade-in animation. Below that, you will need to create a moving tabs section to introduce the shop categories. Then, a scrollable horizontal list of 10 featured products with modern card styling and hover effects. I should add icons to space product details...."
 
-    Do NOT generate actual HTML code yet. Just the narrative plan.
+    Do NOT generate actual HTML code. Just the narrative plan.
     `
 
     const result = await model.generateContent({
       contents: [
-        { role: "user", parts: [{ text: systemContext }] },
+        { role: "user", parts: [{ text: systemContext }] }, // System context as first message
         ...historyMessages,
         { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
       ]

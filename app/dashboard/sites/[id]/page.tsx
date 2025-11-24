@@ -125,6 +125,15 @@ export default function SiteSettingsPage() {
             if (data.message) throw new Error(data.message)
             setProject(data)
             setShopName(data.businessName || "")
+
+            if (data.pages && Array.isArray(data.pages)) {
+              setGeneratedPages(data.pages.map((p: any) => ({
+                name: p.name,
+                code: p.content,
+                timestamp: Date.now()
+              })))
+            }
+
             setProjectLoading(false)
           })
           .catch((err) => {
