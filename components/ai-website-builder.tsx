@@ -79,6 +79,7 @@ interface Message {
   code?: string
   plan?: string
   pageName?: string
+  isIntermediate?: boolean
 }
 
 export interface GeneratedPage {
@@ -141,33 +142,30 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       setCurrentPlan("")
       setDisplayedPlan("")
     } else {
-      // For continuation, we append the prompt to history but maybe not show it as a bubble?
-      // Or we show a system status "Continuing generation..."
-      // We'll add it to history for the API context
+      // For continuation, we treat it as a system loop, so we don't show a new user bubble
+      // But we append it to history for context
       newMessages.push(userMessage)
     }
 
     setError(null)
 
     try {
-      let planText = currentPlan
+      // Step 1: Generate Plan (ALWAYS generate a plan for the next step)
+      // Even for continuation, we need to plan "what to continue"
+      const planResponse = await fetch("/api/ai/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: newMessages,
+        }),
+      })
 
-      // Step 1: Generate Plan (Only if new request)
-      if (!isContinuation) {
-        const planResponse = await fetch("/api/ai/generate-plan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: newMessages,
-          }),
-        })
+      if (!planResponse.ok) throw new Error("Failed to generate plan")
 
-        if (!planResponse.ok) throw new Error("Failed to generate plan")
-
-        const planData = await planResponse.json()
-        planText = planData.plan
-        setCurrentPlan(planText)
-      }
+      const planData = await planResponse.json()
+      const planText = planData.plan
+      setCurrentPlan(planText)
+      setDisplayedPlan("") // Reset display for new plan
 
       // Step 2: Generate Code
       setStep("coding")
@@ -194,7 +192,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         content: codeData.content,
         code: codeData.code,
         pageName: codeData.pageName,
-        plan: isContinuation ? undefined : planText, // Only attach plan to first message of sequence? Or all.
+        plan: planText,
+        isIntermediate: codeData.shouldContinue // Mark as intermediate if continuing
       }
 
       setMessages((prev) => [...prev, assistantMessage])
@@ -218,7 +217,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       if (codeData.shouldContinue) {
         setTimeout(() => {
           generateResponse("Continue generating the next page.", true)
-        }, 1000)
+        }, 1500) // Slight delay for effect
       }
 
     } catch (err: any) {
@@ -336,8 +335,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                     </div>
                   )}
 
-                  {/* Deploy Card */}
-                  <Card className="border-border/50 shadow-sm bg-card/50">
+                  {/* Deploy Card - Only show if NOT intermediate */}
+                  <Card className={`border-border/50 shadow-sm bg-card/50 ${message.isIntermediate ? 'opacity-50' : ''}`}>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-base flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -356,25 +355,35 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                         <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted/30 to-transparent" />
                       </div>
                     </CardContent>
-                    <CardFooter className="pt-0">
-                      <Button
-                        className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
-                        onClick={handleDeployCode}
-                        disabled={deployedCode === message.code}
-                      >
-                        {deployedCode === message.code ? (
-                          <>
-                            <Check className="h-4 w-4" />
-                            Deployed
-                          </>
-                        ) : (
-                          <>
-                            <Rocket className="h-4 w-4" />
-                            Deploy Site
-                          </>
-                        )}
-                      </Button>
-                    </CardFooter>
+                    {!message.isIntermediate && (
+                      <CardFooter className="pt-0">
+                        <Button
+                          className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
+                          onClick={handleDeployCode}
+                          disabled={deployedCode === message.code}
+                        >
+                          {deployedCode === message.code ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Deployed
+                            </>
+                          ) : (
+                            <>
+                              <Rocket className="h-4 w-4" />
+                              Deploy Site
+                            </>
+                          )}
+                        </Button>
+                      </CardFooter>
+                    )}
+                    {message.isIntermediate && (
+                      <CardFooter className="pt-0">
+                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Generating next part...
+                        </div>
+                      </CardFooter>
+                    )}
                   </Card>
                 </div>
               </div>

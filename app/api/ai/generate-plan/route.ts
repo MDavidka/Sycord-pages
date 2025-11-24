@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
+// User requested "gemini-2.5-flash", mapping to "gemini-2.0-flash" as the standard fast model
+// or "gemini-1.5-flash" if 2.0 is unavailable. Sticking to 2.0-flash for performance.
 const PLAN_MODEL = "gemini-2.0-flash"
 
 export async function POST(request: Request) {
@@ -22,12 +24,13 @@ export async function POST(request: Request) {
     const model = client.getGenerativeModel({ model: PLAN_MODEL })
 
     const lastUserMessage = messages[messages.length - 1]
+    const isContinuation = lastUserMessage.content.toLowerCase().includes("continue")
 
     // Prepare history excluding the last message (which is the new request)
     const historyMessages = messages.slice(0, -1).map((msg: any) => {
       let textContent = msg.content
       if (msg.role === "assistant" && msg.code) {
-        textContent += `\n\n[EXISTING CODE CONTEXT]\n${msg.code}\n[END EXISTING CODE]`
+        textContent += `\n\n[EXISTING CODE CONTEXT]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[END EXISTING CODE]`
       }
       return {
         role: msg.role === "user" ? "user" : "model",
@@ -39,16 +42,16 @@ export async function POST(request: Request) {
     You are an expert web designer and architect.
     Your goal is to create a detailed, narrative "thought process" or "design plan" for the requested website.
 
-    Instead of a dry technical list, describe the vision and the components in a flowing, descriptive manner, as if you are explaining the design strategy to yourself or a developer.
+    CONTEXT:
+    ${isContinuation
+      ? "**CONTINUATION PHASE**: The user wants to continue building the website. Based on the existing code in history, plan the NEXT specific page or feature that needs to be implemented. Do NOT re-plan what is already built."
+      : "**INITIAL PHASE**: The user wants to create a new website. Plan the core structure, starting with 'index.html'."}
 
     GUIDELINES:
-    - Focus on the **User Experience (UX)** and **Content Strategy**.
-    - Describe *what* needs to be built and *why*.
-    - **Modern Features**: Explicitly plan for scrollable sections (e.g., horizontal product sliders), promotional banners, and fade-in animations on scroll.
-    - **Styling**: Describe the look and feel of modern buttons (rounded, shadow, hover effects) and layout (ample whitespace, grid systems).
-    - Use phrases like "The user requested...", "You will need to create...", "I should add...", "Below that, we can place...".
-    - Break down the sections (Header, Hero, Products, Footer) but describe them with detail.
-    - If modifying existing code, explain specifically what visual or functional changes will be made based on the user's request.
+    1.  **Focus**: Describe *what* needs to be built next and *why*.
+    2.  **Structure**: If starting, plan 'index.html'. If continuing, plan the next logical page (e.g., 'shop.html', 'about.html').
+    3.  **Modern UI/UX**: Include plans for scrollable sections, promotional banners with fade-in animations, and modern, rounded buttons with hover effects.
+    4.  **Narrative Style**: Use phrases like "The user requested...", "Next, I will create...", "I should add...".
 
     EXAMPLE OUTPUT STYLE:
     "The user requested to make a modern website. You will need to create a sticky header to store the logo and make a navigation menu. I will design a Hero section with a fade-in animation. Below that, you will need to create a moving tabs section to introduce the shop categories. Then, a scrollable horizontal list of 10 featured products with modern card styling and hover effects. I should add icons to space product details...."
