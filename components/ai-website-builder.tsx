@@ -18,7 +18,8 @@ import {
   ArrowRight,
   Rocket,
   File,
-  Layers
+  Layers,
+  ListTodo
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -27,12 +28,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const MODELS = [
-  { id: "gemini-3-pro-preview", name: "Gemini 3 Pro Preview" },
-  { id: "gemini-2.0-pro-exp-02-05", name: "Gemini 2.0 Pro (Latest)" },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (Stable)" },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Fast)" },
-]
+// Locked to single model as requested, labeled "Mini [Beta]"
+const LOCKED_MODEL = { id: "gemini-3-pro-preview", name: "Mini [Beta]" }
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 
@@ -47,12 +44,7 @@ When providing code, wrap it EXACTLY like this with NO backticks:
 </html>
 [1<page_name>]
 
-Replace <page_name> with the specific name of the page (e.g., home, about, product-detail).
-
-MULTIPLE PAGES:
-If the user request implies multiple pages (e.g. "create a shop with checkout"), generate one page at a time.
-At the end of your response (after the [1<...>] marker), add the tag [continue] to signal that you have more pages to generate.
-The system will automatically prompt you to continue.
+Replace <page_name> with the specific name of the file you are generating (e.g., index.html, style.css).
 
 IMAGES:
 Use REAL photos from LoremFlickr for high-quality placeholders.
@@ -60,14 +52,11 @@ Format: https://loremflickr.com/{width}/{height}/{keyword}
 Example: https://loremflickr.com/800/600/fashion,clothing
 
 ESSENTIAL REQUIREMENTS:
-1. Start with <!DOCTYPE html> and complete <html> tag
-2. Include <head> with meta tags and <title>
-3. Include <script src="https://cdn.tailwindcss.com"><\/script> for styling
-4. Write ALL code in pure HTML - NO REACT, NO JSX, NO TYPESCRIPT
-5. Use Tailwind CSS classes for styling
-6. Make it fully responsive (mobile-first)
-7. DESIGN STYLE: Use HeroUI (NextUI) aesthetics. Use clean, modern design with ample whitespace, rounded-2xl border radius, subtle shadows, and primary colors like standard blue/purple/black. Use Tailwind classes to mimic HeroUI components.
-8. NO backticks, NO markdown formatting anywhere inside markers.
+1. Write ALL code in pure HTML/CSS/JS - NO REACT, NO JSX.
+2. Use Tailwind CSS classes for styling (include CDN).
+3. Make it fully responsive (mobile-first).
+4. DESIGN STYLE: Use HeroUI (NextUI) aesthetics. Clean, modern, rounded-2xl, subtle shadows.
+5. NO backticks inside markers.
 `
 
 type Step = "idle" | "planning" | "coding" | "done"
@@ -97,14 +86,17 @@ interface AIWebsiteBuilderProps {
 const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
-  const [selectedModel, setSelectedModel] = useState(MODELS[0])
   const [step, setStep] = useState<Step>("idle")
-  const [currentPlan, setCurrentPlan] = useState("")
-  const [displayedPlan, setDisplayedPlan] = useState("")
+  const [currentPlan, setCurrentPlan] = useState("") // Displayed text
   const [deployedCode, setDeployedCode] = useState<string | null>(null)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // generatedPages state lifted up
+
+  // Task List State
+  const [plannedFiles, setPlannedFiles] = useState<string[]>([])
+  const [currentFileIndex, setCurrentFileIndex] = useState(0)
+  const [isBuilding, setIsBuilding] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -113,115 +105,123 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, displayedPlan, step])
+  }, [messages, currentPlan, step])
 
-  // Typewriter effect for the plan
-  useEffect(() => {
-    if (currentPlan && displayedPlan.length < currentPlan.length) {
-      const timeout = setTimeout(() => {
-        setDisplayedPlan(currentPlan.slice(0, displayedPlan.length + 5)) // Reveal chunks for speed
-      }, 10)
-      return () => clearTimeout(timeout)
-    }
-  }, [currentPlan, displayedPlan])
+  // Main Orchestration Function
+  const startGeneration = async () => {
+    if (!input.trim()) return
 
-  const generateResponse = async (userInput: string, isContinuation = false) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: userInput,
+      content: input,
     }
 
-    // Only add user message to UI if it's not an automatic continuation
-    let newMessages = [...messages]
-    if (!isContinuation) {
-      newMessages.push(userMessage)
-      setMessages(newMessages)
-      setInput("")
-      setStep("planning")
-      setCurrentPlan("")
-      setDisplayedPlan("")
-    } else {
-      // For continuation, we treat it as a system loop, so we don't show a new user bubble
-      // But we append it to history for context
-      newMessages.push(userMessage)
-    }
-
+    setMessages(prev => [...prev, userMessage])
+    setInput("")
     setError(null)
+    setStep("planning")
+    setCurrentPlan("Brainstorming site structure...")
 
     try {
-      // Step 1: Generate Plan (ALWAYS generate a plan for the next step)
-      // Even for continuation, we need to plan "what to continue"
+      // Step 1: Brainstorm / Plan Files
       const planResponse = await fetch("/api/ai/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: newMessages,
+          messages: [...messages, userMessage],
         }),
       })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
 
       const planData = await planResponse.json()
-      const planText = planData.plan
-      setCurrentPlan(planText)
-      setDisplayedPlan("") // Reset display for new plan
+      let files = []
+      try {
+        files = JSON.parse(planData.plan)
+        if (!Array.isArray(files)) throw new Error("Invalid plan format")
+      } catch (e) {
+        console.warn("Plan parsing failed, defaulting to index.html")
+        files = ["index.html"]
+      }
 
-      // Step 2: Generate Code
-      setStep("coding")
+      setPlannedFiles(files)
+      setCurrentFileIndex(0)
+      setIsBuilding(true)
 
+      // Start the loop
+      processNextFile(files, 0, [...messages, userMessage])
+
+    } catch (err: any) {
+      setError(err.message || "An error occurred during planning")
+      setStep("idle")
+    }
+  }
+
+  // Recursive function to process files one by one
+  const processNextFile = async (files: string[], index: number, currentHistory: Message[]) => {
+    if (index >= files.length) {
+      setIsBuilding(false)
+      setStep("done")
+      setCurrentPlan("All files generated successfully!")
+      return
+    }
+
+    const filename = files[index]
+    setStep("coding")
+    setCurrentPlan(`Generating ${filename} (${index + 1}/${files.length})...`)
+
+    try {
       const codeResponse = await fetch("/api/ai/generate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          messages: newMessages,
+          messages: currentHistory,
           systemPrompt: SYSTEM_PROMPT,
-          plan: planText,
-          model: selectedModel.id,
+          plan: `You are currently generating the file: '${filename}'. Ensure it is complete and integrates with previous files.`,
+          model: LOCKED_MODEL.id,
         }),
       })
 
-      if (!codeResponse.ok) throw new Error("Failed to generate code")
+      if (!codeResponse.ok) throw new Error(`Failed to generate ${filename}`)
 
       const codeData = await codeResponse.json()
 
       const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: Date.now().toString(),
         role: "assistant",
         content: codeData.content,
         code: codeData.code,
-        pageName: codeData.pageName,
-        plan: planText,
-        isIntermediate: codeData.shouldContinue // Mark as intermediate if continuing
+        pageName: codeData.pageName || filename,
+        isIntermediate: index < files.length - 1 // Only show deploy on last one? Or allow early deploy? User said "dont publish before the last stepp"
       }
 
-      setMessages((prev) => [...prev, assistantMessage])
+      // Update history
+      const newHistory = [...currentHistory, assistantMessage]
+      setMessages(prev => [...prev, assistantMessage])
 
-      if (codeData.code && codeData.pageName) {
+      // Update generated pages state
+      if (codeData.code) {
+        const finalName = codeData.pageName || filename
         setGeneratedPages(prev => {
-          // Update existing page or add new
-          const existing = prev.findIndex(p => p.name === codeData.pageName)
+          const existing = prev.findIndex(p => p.name === finalName)
           if (existing >= 0) {
             const updated = [...prev]
-            updated[existing] = { name: codeData.pageName, code: codeData.code, timestamp: Date.now() }
+            updated[existing] = { name: finalName, code: codeData.code, timestamp: Date.now() }
             return updated
           }
-          return [...prev, { name: codeData.pageName, code: codeData.code, timestamp: Date.now() }]
+          return [...prev, { name: finalName, code: codeData.code, timestamp: Date.now() }]
         })
       }
 
-      setStep("done")
-
-      // Handle Continuation
-      if (codeData.shouldContinue) {
-        setTimeout(() => {
-          generateResponse("Continue generating the next page.", true)
-        }, 1500) // Slight delay for effect
-      }
+      // Next iteration
+      setCurrentFileIndex(index + 1)
+      processNextFile(files, index + 1, newHistory)
 
     } catch (err: any) {
-      setError(err.message || "An error occurred")
+      setError(err.message || `Error generating ${filename}`)
+      setIsBuilding(false)
       setStep("idle")
     }
   }
@@ -241,7 +241,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       if (!response.ok) throw new Error("Deploy failed")
 
-      // Determine which code was "deployed" for the UI feedback - just use the latest one generated or index
+      // Determine which code was "deployed" for the UI feedback
       const latestCode = generatedPages[generatedPages.length - 1]?.code
       setDeployedCode(latestCode)
 
@@ -261,38 +261,19 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           <span>AI Architect</span>
         </div>
         <div className="flex items-center gap-2">
-          {generatedPages.length > 0 && (
-             <div className="flex gap-1 mr-4">
-                {generatedPages.map(page => (
-                  <div key={page.name} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded-md text-xs border border-border/50">
-                    <File className="h-3 w-3 opacity-50" />
-                    <span>{page.name}</span>
-                  </div>
-                ))}
+          {/* Task Progress Indicator */}
+          {isBuilding && (
+             <div className="flex items-center gap-2 mr-4 px-3 py-1 bg-muted rounded-full text-xs animate-pulse">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>{currentFileIndex + 1} / {plannedFiles.length}</span>
              </div>
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background">
-                <Cpu className="h-3.5 w-3.5" />
-                {selectedModel.name}
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              {MODELS.map((model) => (
-                <DropdownMenuItem
-                  key={model.id}
-                  onClick={() => setSelectedModel(model)}
-                  className="text-xs cursor-pointer"
-                >
-                  {selectedModel.id === model.id && <Check className="h-3 w-3 mr-2" />}
-                  {selectedModel.id !== model.id && <div className="w-5" />}
-                  {model.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+
+          <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background opacity-80 cursor-not-allowed">
+            <Cpu className="h-3.5 w-3.5" />
+            {LOCKED_MODEL.name}
+            <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">LOCKED</span>
+          </Button>
         </div>
       </div>
 
@@ -303,7 +284,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
             <div className="h-16 w-16 rounded-full bg-foreground/5 flex items-center justify-center">
               <Sparkles className="h-8 w-8" />
             </div>
-            <p className="text-sm font-medium">Describe your vision. AI will build it.</p>
+            <p className="text-sm font-medium">Describe your vision. AI will build the entire site.</p>
           </div>
         )}
 
@@ -322,31 +303,20 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
             {message.role === "assistant" && message.code && (
               <div className="flex justify-start w-full">
                 <div className="w-full max-w-3xl space-y-4">
-                  {/* Plan Summary Card (Collapsed/Minimal) - Only show on first response of sequence or if plan exists */}
-                  {message.plan && (
-                    <div className="pl-4 border-l-2 border-border/50">
-                      <h3 className="text-xs font-medium uppercase tracking-wider opacity-50 mb-2 flex items-center gap-2">
-                        <Terminal className="h-3 w-3" />
-                        Execution Plan
-                      </h3>
-                      <div className="text-xs text-muted-foreground line-clamp-3 hover:line-clamp-none transition-all cursor-pointer">
-                        {message.plan}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Deploy Card - Only show if NOT intermediate */}
-                  <Card className={`border-border/50 shadow-sm bg-card/50 ${message.isIntermediate ? 'opacity-50' : ''}`}>
+                  {/* Deploy Card */}
+                  <Card className={`border-border/50 shadow-sm bg-card/50 ${message.isIntermediate ? 'opacity-70' : ''}`}>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-base flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <FileCode className="h-4 w-4" />
-                          <span>Page: {message.pageName || "Unknown"}</span>
+                          <span>File: {message.pageName || "Unknown"}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
-                           <Layers className="h-3 w-3" />
-                           v{idx + 1}
-                        </div>
+                        {message.isIntermediate && (
+                           <div className="text-xs text-muted-foreground flex items-center gap-1">
+                             <ListTodo className="h-3 w-3" />
+                             In Progress
+                           </div>
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pb-3">
@@ -376,14 +346,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                         </Button>
                       </CardFooter>
                     )}
-                    {message.isIntermediate && (
-                      <CardFooter className="pt-0">
-                        <div className="text-xs text-muted-foreground flex items-center gap-2">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Generating next part...
-                        </div>
-                      </CardFooter>
-                    )}
                   </Card>
                 </div>
               </div>
@@ -395,25 +357,26 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         {(step === "planning" || step === "coding") && (
           <div className="flex justify-start w-full max-w-3xl">
             <div className="w-full space-y-6">
-
-              {/* Status Indicator */}
               <div className="flex items-center gap-3 text-sm font-medium animate-pulse">
                 <div className="h-2 w-2 rounded-full bg-foreground" />
-                {step === "planning" ? "AI is drafting a blueprint..." : "AI is generating code..."}
+                {currentPlan}
               </div>
 
-              {/* Streaming Plan */}
-              {(currentPlan || step === "coding") && (
-                <div className="pl-5 border-l border-foreground/20 ml-1">
-                   <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <Terminal className="h-3 w-3" />
-                      Architectural Plan
-                    </h3>
-                  <div className="font-mono text-xs leading-relaxed opacity-80 whitespace-pre-wrap">
-                    {displayedPlan}
-                    {displayedPlan.length < currentPlan.length && <span className="inline-block w-1.5 h-3 bg-foreground ml-1 animate-pulse" />}
-                  </div>
-                </div>
+              {/* Task List Visualization */}
+              {plannedFiles.length > 0 && (
+                 <div className="pl-5 border-l border-foreground/10 ml-1 space-y-2">
+                    {plannedFiles.map((file, i) => (
+                       <div key={file} className={`flex items-center gap-2 text-xs ${
+                          i === currentFileIndex ? "text-foreground font-medium" :
+                          i < currentFileIndex ? "text-muted-foreground line-through opacity-50" : "text-muted-foreground opacity-30"
+                       }`}>
+                          {i < currentFileIndex ? <Check className="h-3 w-3" /> :
+                           i === currentFileIndex ? <Loader2 className="h-3 w-3 animate-spin" /> :
+                           <div className="w-3 h-3 rounded-full border border-current" />}
+                          {file}
+                       </div>
+                    ))}
+                 </div>
               )}
             </div>
           </div>
@@ -437,7 +400,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                generateResponse(input)
+                startGeneration()
               }
             }}
             placeholder={step === "idle" || step === "done" ? "Describe the website you want to build..." : "AI is working..."}
@@ -447,7 +410,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           <Button
             size="icon"
             disabled={!input.trim() || step === "planning" || step === "coding"}
-            onClick={() => generateResponse(input)}
+            onClick={startGeneration}
             className="absolute right-1.5 top-1.5 h-9 w-9 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-all"
           >
             {step === "planning" || step === "coding" ? (
