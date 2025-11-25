@@ -28,8 +28,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-// Locked to single model as requested (switched to 2.0 Pro due to rate limits)
-const LOCKED_MODEL = { id: "gemini-2.0-pro-exp-02-05", name: "Gemini 2.0 Pro" }
+// Locked to single model as requested
+const LOCKED_MODEL = { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" }
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 

@@ -4,6 +4,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const DEFAULT_MODELS = [
+  "gemini-2.5-pro",      // User requested specific model
   "gemini-2.0-pro-exp-02-05", // Latest experimental
   "gemini-1.5-pro",      // Stable fallback
   "gemini-2.0-flash",    // Fast fallback
