@@ -24,17 +24,18 @@ export async function POST(request: Request) {
     const lastUserMessage = messages[messages.length - 1]
 
     const prompt = `
-    You are a Senior Technical Architect planning a production-grade website.
-    Your task is to list ALL the files needed to build the user's requested website.
+    You are a Senior Technical Architect planning a concise, production-grade website.
+    Your task is to list the ESSENTIAL files needed to build the user's requested website.
 
     REQUIREMENTS:
-    1.  **Scale**: Plan for a complete, robust website. You must list at least 10-15 files.
-    2.  **Core Files**: Always include 'index.html', 'styles.css', 'script.js'.
-    3.  **Pages**: Include standard pages (e.g., 'about.html', 'contact.html', 'faq.html', 'terms.html', 'privacy.html') and feature-specific pages (e.g., 'shop.html', 'product.html', 'cart.html', 'checkout.html', 'login.html', 'register.html') relevant to the request.
-    4.  **Output Format**: Return ONLY a valid JSON array of strings. No markdown formatting, no explanations.
+    1.  **Speed & Conciseness**: Plan for a minimalistic but functional structure.
+    2.  **File Count**: Strictly limit to **2 to 5 files** maximum.
+    3.  **Core Files**: Typically 'index.html', 'script.js', and 'styles.css' (or a specific page like 'shop.html').
+    4.  **Essential Functions Only**: Do not create separate files for minor features. Combine logic where possible.
+    5.  **Output Format**: Return ONLY a valid JSON array of strings. No markdown formatting, no explanations.
 
     Example Output:
-    ["index.html", "styles.css", "script.js", "about.html", "contact.html", "shop.html", "product.html", "cart.html", "checkout.html", "terms.html"]
+    ["index.html", "script.js", "styles.css", "shop.html"]
 
     User Request: "${lastUserMessage.content}"
     `
