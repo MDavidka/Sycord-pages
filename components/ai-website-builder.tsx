@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 // Locked to single model as requested
-const LOCKED_MODEL = { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" }
+const LOCKED_MODEL = { id: "gemini-2.5-flash-live", name: "Gemini 2.5 Flash Live" }
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 
