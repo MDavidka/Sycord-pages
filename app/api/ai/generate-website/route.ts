@@ -4,12 +4,9 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
 const DEFAULT_MODELS = [
-  "gemini-2.5-flash-live",
-  "gemini-2.5-pro",
-  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
   "gemini-2.0-pro-exp-02-05",
   "gemini-1.5-pro",
-  "gemini-2.0-flash",
 ]
 
 export async function POST(request: Request) {
