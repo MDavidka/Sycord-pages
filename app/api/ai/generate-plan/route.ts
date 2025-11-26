@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const PLAN_MODEL = "gemini-2.0-flash"
+const PLAN_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+]
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -19,8 +23,6 @@ export async function POST(request: Request) {
     }
 
     const client = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN)
-    const model = client.getGenerativeModel({ model: PLAN_MODEL })
-
     const lastUserMessage = messages[messages.length - 1]
 
     // Prepare history excluding the last message
@@ -58,15 +60,34 @@ export async function POST(request: Request) {
     }
     `
 
-    const result = await model.generateContent({
-      contents: [
-        { role: "user", parts: [{ text: systemContext }] },
-        ...historyMessages,
-        { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
-      ]
-    })
+    let responseText = null
+    let lastError = null
 
-    const responseText = result.response.text()
+    for (const modelName of PLAN_MODELS) {
+      try {
+        console.log(`[v0] Planning with model: ${modelName}`)
+        const model = client.getGenerativeModel({ model: modelName })
+
+        const result = await model.generateContent({
+          contents: [
+            { role: "user", parts: [{ text: systemContext }] },
+            ...historyMessages,
+            { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
+          ]
+        })
+
+        responseText = result.response.text()
+        console.log(`[v0] Plan success with ${modelName}`)
+        break
+      } catch (e: any) {
+        console.error(`[v0] Plan failed with ${modelName}:`, e.message)
+        lastError = e
+      }
+    }
+
+    if (!responseText) {
+      throw lastError || new Error("All planning models failed")
+    }
 
     // Extract JSON
     let cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim()
