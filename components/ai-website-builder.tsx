@@ -19,7 +19,8 @@ import {
   Rocket,
   File,
   Layers,
-  ListTodo
+  ListTodo,
+  BrainCircuit
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -51,12 +52,20 @@ Use REAL photos from LoremFlickr for high-quality placeholders.
 Format: https://loremflickr.com/{width}/{height}/{keyword}
 Example: https://loremflickr.com/800/600/fashion,clothing
 
+PRODUCTION STANDARDS:
+1.  **Functionality**: All features must work in a static environment.
+    -   **Login**: Simulate login using localStorage. (e.g., save 'isLoggedIn' token).
+    -   **Cart**: Save items to localStorage. Update header cart count.
+    -   **Navigation**: Check localStorage state (e.g., show 'Logout' if logged in).
+2.  **Interactivity**: Use vanilla JavaScript to handle clicks, form submissions, and UI updates. Add event listeners in <script>.
+3.  **Forms**: Add 'submit' event listeners to all forms. Prevent default submission and handle logic (e.g. redirect to next page).
+4.  **Styling**: Use HeroUI (NextUI) aesthetics via Tailwind CSS classes. Clean, modern, rounded-2xl, subtle shadows.
+
 ESSENTIAL REQUIREMENTS:
 1. Write ALL code in pure HTML/CSS/JS - NO REACT, NO JSX.
 2. Use Tailwind CSS classes for styling (include CDN).
 3. Make it fully responsive (mobile-first).
-4. DESIGN STYLE: Use HeroUI (NextUI) aesthetics. Clean, modern, rounded-2xl, subtle shadows.
-5. NO backticks inside markers.
+4. NO backticks inside markers.
 `
 
 type Step = "idle" | "planning" | "coding" | "done"
@@ -87,7 +96,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [step, setStep] = useState<Step>("idle")
-  const [currentPlan, setCurrentPlan] = useState("") // Displayed text
+  const [currentPlan, setCurrentPlan] = useState("") // Displayed text status
   const [deployedCode, setDeployedCode] = useState<string | null>(null)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +130,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     setInput("")
     setError(null)
     setStep("planning")
-    setCurrentPlan("Brainstorming site structure...")
+    setCurrentPlan("Architecting solution...")
 
     try {
       // Step 1: Brainstorm / Plan Files
@@ -137,20 +146,43 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       const planData = await planResponse.json()
       let files = []
+      let thoughtProcess = ""
+
       try {
-        files = JSON.parse(planData.plan)
-        if (!Array.isArray(files)) throw new Error("Invalid plan format")
+        // Clean potential markdown before parsing
+        let rawJson = planData.plan
+        if (rawJson.includes("```")) {
+           rawJson = rawJson.replace(/```json/g, "").replace(/```/g, "").trim()
+        }
+        const parsed = JSON.parse(rawJson)
+        files = parsed.files || []
+        thoughtProcess = parsed.thoughtProcess || "Planning structure..."
+
+        if (!Array.isArray(files) || files.length === 0) throw new Error("Invalid file list")
       } catch (e) {
-        console.warn("Plan parsing failed, defaulting to index.html")
+        console.warn("Plan parsing failed, defaulting to index.html", e)
         files = ["index.html"]
+        thoughtProcess = "I will start by creating the main index page."
       }
 
       setPlannedFiles(files)
       setCurrentFileIndex(0)
       setIsBuilding(true)
 
+      // Add the architectural plan to chat
+      const planMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: thoughtProcess,
+        plan: "Architectural Strategy",
+        isIntermediate: false
+      }
+
+      const newHistory = [...messages, userMessage, planMessage]
+      setMessages(newHistory)
+
       // Start the loop
-      processNextFile(files, 0, [...messages, userMessage])
+      processNextFile(files, 0, newHistory, thoughtProcess)
 
     } catch (err: any) {
       setError(err.message || "An error occurred during planning")
@@ -159,7 +191,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
   }
 
   // Recursive function to process files one by one
-  const processNextFile = async (files: string[], index: number, currentHistory: Message[]) => {
+  const processNextFile = async (files: string[], index: number, currentHistory: Message[], architecturalContext: string) => {
     if (index >= files.length) {
       setIsBuilding(false)
       setStep("done")
@@ -179,7 +211,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           projectId,
           messages: currentHistory,
           systemPrompt: SYSTEM_PROMPT,
-          plan: `You are currently generating the file: '${filename}'. Ensure it is complete and integrates with previous files.`,
+          // Pass the specific file task + the global architectural context
+          plan: `CURRENT TASK: Generate code for file '${filename}'.\n\nARCHITECTURAL CONTEXT: ${architecturalContext}\n\nEnsure '${filename}' implements the features described in the context and integrates with other files.`,
           model: LOCKED_MODEL.id,
         }),
       })
@@ -191,10 +224,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       const assistantMessage: Message = {
         id: Date.now().toString(),
         role: "assistant",
-        content: codeData.content,
+        content: codeData.content, // Often empty/short if code is extracted
         code: codeData.code,
         pageName: codeData.pageName || filename,
-        isIntermediate: index < files.length - 1 // Only show deploy on last one? Or allow early deploy? User said "dont publish before the last stepp"
+        isIntermediate: index < files.length - 1
       }
 
       // Update history
@@ -217,7 +250,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       // Next iteration
       setCurrentFileIndex(index + 1)
-      processNextFile(files, index + 1, newHistory)
+      processNextFile(files, index + 1, newHistory, architecturalContext)
 
     } catch (err: any) {
       setError(err.message || `Error generating ${filename}`)
@@ -299,7 +332,23 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
               </div>
             )}
 
-            {/* Assistant Message (Completed) */}
+            {/* Assistant/Plan Message (Text Only) */}
+            {message.role === "assistant" && !message.code && (
+               <div className="flex justify-start w-full">
+                 <div className="max-w-2xl w-full space-y-2">
+                    {message.plan === "Architectural Strategy" && (
+                        <div className="flex items-center gap-2 text-xs font-medium text-primary uppercase tracking-wider">
+                            <BrainCircuit className="h-3 w-3" /> Architectural Strategy
+                        </div>
+                    )}
+                    <div className="bg-muted/50 rounded-2xl px-5 py-4 text-sm leading-relaxed border border-border/50">
+                       {message.content}
+                    </div>
+                 </div>
+               </div>
+            )}
+
+            {/* Assistant Message (Code/Completed) */}
             {message.role === "assistant" && message.code && (
               <div className="flex justify-start w-full">
                 <div className="w-full max-w-3xl space-y-4">

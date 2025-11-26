@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const PLAN_MODEL = "gemini-2.0-flash-lite-preview-02-05"
+const PLAN_MODEL = "gemini-2.0-flash"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -23,37 +23,61 @@ export async function POST(request: Request) {
 
     const lastUserMessage = messages[messages.length - 1]
 
-    const prompt = `
-    You are a Senior Technical Architect planning a concise, production-grade website.
-    Your task is to list the ESSENTIAL files needed to build the user's requested website.
+    // Prepare history excluding the last message
+    const historyMessages = messages.slice(0, -1).map((msg: any) => {
+      let textContent = msg.content
+      if (msg.role === "assistant" && msg.code) {
+        textContent += `\n\n[EXISTING CODE CONTEXT]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[END EXISTING CODE]`
+      }
+      return {
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: textContent }],
+      }
+    })
+
+    const systemContext = `
+    You are a Senior Technical Architect planning a production-grade website.
+    Your goal is to create a detailed architectural plan and file structure.
+
+    OUTPUT FORMAT:
+    Return a single JSON object with exactly these two keys:
+    1.  "thoughtProcess": A detailed narrative explaining the user flow, core functionality, and data strategy. Explain *how* features will work (e.g., "I will use localStorage to persist the cart state between index.html and cart.html. The checkout form will validate inputs using JS...").
+    2.  "files": A JSON array of strings listing the ESSENTIAL files (min 2, max 5).
 
     REQUIREMENTS:
-    1.  **Speed & Conciseness**: Plan for a minimalistic but functional structure.
-    2.  **File Count**: Strictly limit to **2 to 5 files** maximum.
-    3.  **Core Files**: Typically 'index.html', 'script.js', and 'styles.css' (or a specific page like 'shop.html').
-    4.  **Essential Functions Only**: Do not create separate files for minor features. Combine logic where possible.
-    5.  **Output Format**: Return ONLY a valid JSON array of strings. No markdown formatting, no explanations.
+    1.  **Deep Thinking**: Analyze the request. If the user wants a shop, explain the cart logic. If a login, explain the auth simulation.
+    2.  **File Constraints**: Strictly 2-5 files. Combine logic into 'script.js' and 'styles.css' (if needed) rather than fragmenting.
+    3.  **Production Ready**: The plan must ensure the site functions (navigation, state, interaction) without a backend.
 
     Example Output:
-    ["index.html", "script.js", "styles.css", "shop.html"]
-
-    User Request: "${lastUserMessage.content}"
+    {
+      "thoughtProcess": "The user wants a portfolio. I will create a responsive 'index.html' with a hero section and a project grid. I will use 'script.js' to handle a contact form validation and a dark mode toggle stored in localStorage. A 'projects.html' page will list detailed case studies.",
+      "files": ["index.html", "script.js", "projects.html"]
+    }
     `
 
-    const result = await model.generateContent(prompt)
+    const result = await model.generateContent({
+      contents: [
+        { role: "user", parts: [{ text: systemContext }] },
+        ...historyMessages,
+        { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
+      ]
+    })
+
     const responseText = result.response.text()
 
-    // Extract JSON if wrapped in markdown code blocks
+    // Extract JSON
     let cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim()
 
-    // Basic validation
-    if (!cleanJson.startsWith("[")) {
-        console.warn("[v0] Plan response not JSON, attempting to extract list")
-        // Fallback logic could go here, but for now relying on strong prompt
+    // Handle potential extra text if AI chats
+    const jsonStart = cleanJson.indexOf('{')
+    const jsonEnd = cleanJson.lastIndexOf('}')
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+        cleanJson = cleanJson.substring(jsonStart, jsonEnd + 1)
     }
 
     return NextResponse.json({
-      plan: cleanJson, // Sending the JSON string for frontend to parse
+      plan: cleanJson,
     })
   } catch (error: any) {
     console.error("[v0] Plan generation error:", error)
