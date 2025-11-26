@@ -98,15 +98,28 @@ export async function POST(request: Request) {
 
     // Regex to capture code and page name
     // Format: [1]...code...[1<page_name>]
-    const codeMarkerRegex = /\[1\]([\s\S]*?)\[1<(.+?)>\]/
-    const codeMarkerMatch = responseText.match(codeMarkerRegex)
+    // Also support [1<page_name>]...[1<page_name>] just in case
+    let codeMarkerRegex = /\[1\]([\s\S]*?)\[1<(.+?)>\]/
+    let codeMarkerMatch = responseText.match(codeMarkerRegex)
 
     let extractedCode = null
     let extractedPageName = null
 
-    if (codeMarkerMatch) {
-      extractedCode = codeMarkerMatch[1].trim()
-      extractedPageName = codeMarkerMatch[2].trim()
+    if (!codeMarkerMatch) {
+        // Try alternative format: start tag has name too
+        codeMarkerRegex = /\[1<(.+?)>\]([\s\S]*?)\[1<\1>\]/
+        const match = responseText.match(codeMarkerRegex)
+        if (match) {
+            extractedPageName = match[1].trim()
+            extractedCode = match[2].trim()
+            codeMarkerMatch = match
+        }
+    } else {
+        extractedCode = codeMarkerMatch[1].trim()
+        extractedPageName = codeMarkerMatch[2].trim()
+    }
+
+    if (extractedCode) {
       console.log("[v0] Code extracted with page name:", extractedPageName)
     } else {
       // Fallback to old format [1]...[1]
