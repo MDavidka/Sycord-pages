@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const PLAN_MODEL = "gemini-2.0-flash"
+const PLAN_MODEL = "gemini-2.0-flash-lite-preview-02-05"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -36,23 +36,25 @@ export async function POST(request: Request) {
     })
 
     const systemContext = `
-    You are a Senior Technical Architect planning a production-grade website.
+    You are a Senior Technical Architect planning a massive, production-grade website.
     Your goal is to create a detailed architectural plan and file structure.
 
     OUTPUT FORMAT:
     Return a single JSON object with exactly these two keys:
     1.  "thoughtProcess": A detailed narrative explaining the user flow, core functionality, and data strategy. Explain *how* features will work (e.g., "I will use localStorage to persist the cart state between index.html and cart.html. The checkout form will validate inputs using JS...").
-    2.  "files": A JSON array of strings listing the ESSENTIAL files (min 2, max 5).
+    2.  "files": A JSON array of strings listing the files.
 
     REQUIREMENTS:
     1.  **Deep Thinking**: Analyze the request. If the user wants a shop, explain the cart logic. If a login, explain the auth simulation.
-    2.  **File Constraints**: Strictly 2-5 files. Combine logic into 'script.js' and 'styles.css' (if needed) rather than fragmenting.
-    3.  **Production Ready**: The plan must ensure the site functions (navigation, state, interaction) without a backend.
+    2.  **Scale**: Plan for a COMPLETE experience. Do not limit yourself to 2-3 files.
+    3.  **File Count**: Aim for **5 to 15 files** to cover all functionality.
+    4.  **Functional Pages**: Create separate HTML files for 'cart.html', 'checkout.html', 'product-detail.html', 'login.html', 'register.html', 'dashboard.html', 'about.html', 'contact.html' if relevant.
+    5.  **Production Ready**: The plan must ensure the site functions (navigation, state, interaction) without a backend.
 
     Example Output:
     {
-      "thoughtProcess": "The user wants a portfolio. I will create a responsive 'index.html' with a hero section and a project grid. I will use 'script.js' to handle a contact form validation and a dark mode toggle stored in localStorage. A 'projects.html' page will list detailed case studies.",
-      "files": ["index.html", "script.js", "projects.html"]
+      "thoughtProcess": "The user wants a clothing store. I will create a responsive 'index.html' with a hero section. I need 'shop.html' for the catalog, 'product.html' for details, 'cart.html' for the shopping cart, and 'checkout.html'. 'script.js' will handle the cart logic.",
+      "files": ["index.html", "styles.css", "script.js", "shop.html", "product.html", "cart.html", "checkout.html", "login.html", "register.html"]
     }
     `
 

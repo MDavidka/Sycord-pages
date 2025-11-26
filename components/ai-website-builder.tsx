@@ -59,7 +59,14 @@ PRODUCTION STANDARDS:
     -   **Navigation**: Check localStorage state (e.g., show 'Logout' if logged in).
 2.  **Interactivity**: Use vanilla JavaScript to handle clicks, form submissions, and UI updates. Add event listeners in <script>.
 3.  **Forms**: Add 'submit' event listeners to all forms. Prevent default submission and handle logic (e.g. redirect to next page).
-4.  **Styling**: Use HeroUI (NextUI) aesthetics via Tailwind CSS classes. Clean, modern, rounded-2xl, subtle shadows.
+4.  **Styling (HeroUI Aesthetic)**:
+    -   Use Tailwind CSS.
+    -   **Radius**: Use 'rounded-2xl' or 'rounded-3xl' for cards and buttons.
+    -   **Shadows**: Use 'shadow-lg' or 'shadow-xl' for depth.
+    -   **Glassmorphism**: Use 'backdrop-blur-md bg-white/80' for headers/modals.
+    -   **Typography**: Use 'font-sans', 'tracking-tight' for headings.
+    -   **Spacing**: Use generous padding ('p-8', 'py-12', 'gap-8').
+    -   **Gradients**: Use subtle gradients for backgrounds or text ('bg-gradient-to-r').
 
 ESSENTIAL REQUIREMENTS:
 1. Write ALL code in pure HTML/CSS/JS - NO REACT, NO JSX.
