@@ -1,16 +1,17 @@
 import GoogleProvider from "next-auth/providers/google"
 import type { AuthOptions } from "next-auth"
 
+// Warn instead of crashing immediately to allow imports in other files
 if (!process.env.GOOGLE_CLIENT_ID) {
-  throw new Error("Missing GOOGLE_CLIENT_ID environment variable")
+  console.warn("Warning: Missing GOOGLE_CLIENT_ID environment variable")
 }
 
 if (!process.env.GOOGLE_CLIENT_SECRET) {
-  throw new Error("Missing GOOGLE_CLIENT_SECRET environment variable")
+  console.warn("Warning: Missing GOOGLE_CLIENT_SECRET environment variable")
 }
 
 if (!process.env.AUTH_SECRET) {
-  throw new Error("Missing AUTH_SECRET environment variable")
+  console.warn("Warning: Missing AUTH_SECRET environment variable")
 }
 
 const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "https://ltpd.xyz"
@@ -18,8 +19,8 @@ const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "https://ltpd.xyz"
 export const authOptions: AuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
       authorization: {
         params: {
           prompt: "select_account",

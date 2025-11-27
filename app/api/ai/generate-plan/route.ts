@@ -16,9 +16,11 @@ export async function POST(request: Request) {
 
     const apiKey = process.env.GOOGLE_API_KEY
     if (!apiKey) {
+      console.error("[v0] GOOGLE_API_KEY not configured")
       return NextResponse.json({ message: "AI service not configured (Google)" }, { status: 500 })
     }
 
+    // Initialize inside try/catch to catch initialization errors
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
         model: PLAN_MODEL,
@@ -30,9 +32,6 @@ export async function POST(request: Request) {
     const lastUserMessage = messages[messages.length - 1]
 
     // Construct prompt
-    // Gemini handles history differently, but for a plan we mainly need the latest context + system prompt
-    // Ideally we pass full history, but simplicity suggests passing the conversation as text or just the prompt
-
     const systemContext = `
     You are a Senior Technical Architect planning a massive, production-grade website.
     Your goal is to create a detailed architectural plan and file structure.

@@ -15,9 +15,10 @@ export async function POST(request: Request) {
   try {
     const { messages, systemPrompt, plan } = await request.json()
 
-    const apiKey = process.env.QROG_API
+    // Support both user-requested QROG_API and standard GROQ_API
+    const apiKey = process.env.QROG_API || process.env.GROQ_API
     if (!apiKey) {
-      console.error("[v0] QROG_API not configured")
+      console.error("[v0] AI Service Not Configured: QROG_API or GROQ_API missing")
       return NextResponse.json({ message: "AI service not configured" }, { status: 500 })
     }
 
@@ -66,9 +67,19 @@ export async function POST(request: Request) {
     })
 
     if (!response.ok) {
-      const errorData = await response.json()
-      console.error("[v0] Groq API Error:", errorData)
-      throw new Error(errorData.error?.message || `Groq API error: ${response.status}`)
+      let errorMsg = `Groq API error: ${response.status}`
+      try {
+          const errorData = await response.json()
+          console.error("[v0] Groq API Error:", errorData)
+          if (errorData.error?.message) {
+              errorMsg = errorData.error.message
+          }
+      } catch (e) {
+          console.error("[v0] Groq API returned non-JSON error:", response.status, response.statusText)
+          const text = await response.text()
+          console.error("[v0] Groq Error Body:", text.substring(0, 500))
+      }
+      throw new Error(errorMsg)
     }
 
     const data = await response.json()
