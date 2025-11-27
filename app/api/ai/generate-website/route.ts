@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const DEFAULT_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-2.0-pro-exp-02-05",
-  "gemini-1.5-pro",
-  "gemini-1.5-flash",
-]
+// Groq Configuration
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+const CODE_MODEL = "qwen/qwen3-32b"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -17,83 +13,68 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, systemPrompt, projectId, plan, model: requestedModel } = await request.json()
+    const { messages, systemPrompt, plan } = await request.json()
 
-    if (!process.env.GOOGLE_API_TOKEN) {
-      console.error("[v0] GOOGLE_API_TOKEN not configured")
+    const apiKey = process.env.QROG_API
+    if (!apiKey) {
+      console.error("[v0] QROG_API not configured")
       return NextResponse.json({ message: "AI service not configured" }, { status: 500 })
     }
 
-    const client = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN)
-
-    let modelsToTry = [...DEFAULT_MODELS]
-
-    // If a specific model is requested, prioritize it
-    if (requestedModel) {
-      // Remove it if it exists in the list to avoid duplicates, then add to front
-      modelsToTry = modelsToTry.filter(m => m !== requestedModel)
-      modelsToTry.unshift(requestedModel)
-    }
-
-    let responseText = null
-    let lastError = null
-    let usedModel = null
-
-    // enhance system prompt with plan if available
+    // Enhance system prompt with plan
     let effectiveSystemPrompt = systemPrompt
     if (plan) {
       effectiveSystemPrompt += `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\n`
       effectiveSystemPrompt += `REQUIREMENTS:
-      1.  **Production Ready**: Include working JavaScript for all interactive elements (menus, sliders, modals). Use <script> tags.
-      2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned (e.g. href="shop.html"). IMPORTANT: Filenames in links MUST match the generated filenames exactly.
-      3.  **Context**: You are building ONE cohesive website. If 'index.html' exists in history, and you are building 'shop.html', ensure 'shop.html' has the same header/footer and links back to 'index.html'.
-      4.  **Modern Styling**: Use Tailwind CSS utility classes for animations (e.g., 'transition-all duration-300', 'hover:scale-105', 'animate-fade-in'). Create custom animations in <style> if needed.
+      1.  **Production Ready**: Include working JavaScript for all interactive elements. Use <script> tags.
+      2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned.
+      3.  **Context**: You are building ONE cohesive website.
+      4.  **Modern Styling**: Use Tailwind CSS utility classes.
       `
     }
 
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`[v0] Attempting with model: ${modelName}`)
-        const model = client.getGenerativeModel({ model: modelName })
-
-        const conversationHistory = messages.map((msg: any) => {
-          let textContent = msg.content
-          if (msg.role === "assistant" && msg.code) {
-            textContent += `\n\n[PREVIOUS GENERATED CODE START]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[PREVIOUS GENERATED CODE END]`
-          }
-          return {
-            role: msg.role === "user" ? "user" : "model",
-            parts: [{ text: textContent }],
-          }
-        })
-
-        const response = await model.generateContent({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: effectiveSystemPrompt }],
-            },
-            ...conversationHistory,
-          ],
-        })
-
-        responseText = response.response.text()
-        usedModel = modelName
-        console.log(`[v0] Success with ${modelName}, response length:`, responseText.length)
-        break // Success, exit retry loop
-      } catch (error: any) {
-        console.error(`[v0] Failed with ${modelName}:`, error.message)
-        lastError = error
-        // Continue to next model in fallback
+    // Map messages to OpenAI format (Groq is compatible)
+    const conversationHistory = messages.map((msg: any) => {
+      let textContent = msg.content
+      if (msg.role === "assistant" && msg.code) {
+        textContent += `\n\n[PREVIOUS GENERATED CODE START]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[PREVIOUS GENERATED CODE END]`
       }
+      return {
+        role: msg.role === "user" ? "user" : "assistant",
+        content: textContent,
+      }
+    })
+
+    const payload = {
+      model: CODE_MODEL,
+      messages: [
+        { role: "system", content: effectiveSystemPrompt },
+        ...conversationHistory
+      ],
+      temperature: 0.7, // Standard for code
     }
 
-    if (!responseText) {
-      console.error("[v0] All model attempts failed")
-      throw lastError || new Error("All AI models failed")
+    console.log(`[v0] Generating code with Groq model: ${CODE_MODEL}`)
+
+    const response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error("[v0] Groq API Error:", errorData)
+      throw new Error(errorData.error?.message || `Groq API error: ${response.status}`)
     }
 
-    console.log(`[v0] Final model used: ${usedModel}`)
+    const data = await response.json()
+    const responseText = data.choices[0]?.message?.content || ""
+
+    console.log(`[v0] Success with ${CODE_MODEL}, response length:`, responseText.length)
 
     // Regex to capture code and page name
     // Format: [1]...code...[1<page_name>]
@@ -121,33 +102,24 @@ export async function POST(request: Request) {
     if (extractedCode) {
       console.log("[v0] Code extracted with page name:", extractedPageName)
     } else {
-      // Fallback to old format [1]...[1]
-      const oldRegex = /\[1\]([\s\S]*?)\[1\]/
-      const oldMatch = responseText.match(oldRegex)
-      if (oldMatch) {
-        extractedCode = oldMatch[1].trim()
-        extractedPageName = "index.html" // Default to index.html if not specified
-        console.log("[v0] Code extracted with legacy markers")
+      console.warn("[v0] No code markers found, checking for HTML/Markdown in response")
+
+      // Fallback 2: Markdown code blocks
+      const markdownRegex = /```(?:html)?([\s\S]*?)```/i
+      const markdownMatch = responseText.match(markdownRegex)
+
+      if (markdownMatch) {
+        extractedCode = markdownMatch[1].trim()
+        extractedPageName = "index.html"
+        console.log("[v0] Code extracted from Markdown fallback")
       } else {
-        console.warn("[v0] No code markers found, checking for HTML/Markdown in response")
-
-        // Fallback 2: Markdown code blocks
-        const markdownRegex = /```(?:html)?([\s\S]*?)```/i
-        const markdownMatch = responseText.match(markdownRegex)
-
-        if (markdownMatch) {
-          extractedCode = markdownMatch[1].trim()
+        // Fallback 3: Raw HTML
+        const htmlRegex = /<html[\s\S]*<\/html>/i
+        const htmlMatch = responseText.match(htmlRegex)
+        if (htmlMatch) {
+          extractedCode = htmlMatch[0].trim()
           extractedPageName = "index.html"
-          console.log("[v0] Code extracted from Markdown fallback")
-        } else {
-          // Fallback 3: Raw HTML
-          const htmlRegex = /<html[\s\S]*<\/html>/i
-          const htmlMatch = responseText.match(htmlRegex)
-          if (htmlMatch) {
-            extractedCode = htmlMatch[0].trim()
-            extractedPageName = "index.html"
-            console.log("[v0] Code extracted from HTML fallback")
-          }
+          console.log("[v0] Code extracted from HTML fallback")
         }
       }
     }
@@ -164,7 +136,7 @@ export async function POST(request: Request) {
       code: extractedCode || null,
       pageName: extractedPageName || null,
       shouldContinue: shouldContinue,
-      modelUsed: usedModel,
+      modelUsed: CODE_MODEL,
     })
   } catch (error: any) {
     console.error("[v0] AI generation error:", error)

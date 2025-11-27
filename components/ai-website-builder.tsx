@@ -29,8 +29,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-// Locked to single model as requested (Standard Flash for reliability)
-const LOCKED_MODEL = { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" }
+// Locked to single model as requested (Qwen via Groq)
+const LOCKED_MODEL = { id: "qwen/qwen3-32b", name: "Qwen 3 32B (Groq)" }
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 

@@ -3,11 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const PLAN_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro",
-]
+const PLAN_MODEL = "gemini-1.5-flash"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -18,24 +14,24 @@ export async function POST(request: Request) {
   try {
     const { messages } = await request.json()
 
-    if (!process.env.GOOGLE_API_TOKEN) {
-      return NextResponse.json({ message: "AI service not configured" }, { status: 500 })
+    const apiKey = process.env.GOOGLE_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ message: "AI service not configured (Google)" }, { status: 500 })
     }
 
-    const client = new GoogleGenerativeAI(process.env.GOOGLE_API_TOKEN)
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({
+        model: PLAN_MODEL,
+        generationConfig: {
+            responseMimeType: "application/json"
+        }
+    })
+
     const lastUserMessage = messages[messages.length - 1]
 
-    // Prepare history excluding the last message
-    const historyMessages = messages.slice(0, -1).map((msg: any) => {
-      let textContent = msg.content
-      if (msg.role === "assistant" && msg.code) {
-        textContent += `\n\n[EXISTING CODE CONTEXT]\nPage: ${msg.pageName || 'unknown'}\n${msg.code}\n[END EXISTING CODE]`
-      }
-      return {
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: textContent }],
-      }
-    })
+    // Construct prompt
+    // Gemini handles history differently, but for a plan we mainly need the latest context + system prompt
+    // Ideally we pass full history, but simplicity suggests passing the conversation as text or just the prompt
 
     const systemContext = `
     You are a Senior Technical Architect planning a massive, production-grade website.
@@ -43,56 +39,34 @@ export async function POST(request: Request) {
 
     OUTPUT FORMAT:
     Return a single JSON object with exactly these two keys:
-    1.  "thoughtProcess": A detailed narrative explaining the user flow, core functionality, and data strategy. Explain *how* features will work (e.g., "I will use localStorage to persist the cart state between index.html and cart.html. The checkout form will validate inputs using JS...").
+    1.  "thoughtProcess": A detailed narrative explaining the user flow, core functionality, and data strategy.
     2.  "files": A JSON array of strings listing the files.
 
     REQUIREMENTS:
-    1.  **Deep Thinking**: Analyze the request. If the user wants a shop, explain the cart logic. If a login, explain the auth simulation.
-    2.  **Scale**: Plan for a COMPLETE experience. Do not limit yourself to 2-3 files.
-    3.  **File Count**: Aim for **5 to 15 files** to cover all functionality.
-    4.  **Functional Pages**: Create separate HTML files for 'cart.html', 'checkout.html', 'product-detail.html', 'login.html', 'register.html', 'dashboard.html', 'about.html', 'contact.html' if relevant.
-    5.  **Production Ready**: The plan must ensure the site functions (navigation, state, interaction) without a backend.
+    1.  **Scale**: Plan for a COMPLETE experience.
+    2.  **File Count**: Aim for **5 to 15 files**.
+    3.  **Production Ready**: Ensure functional logic.
 
     Example Output:
     {
-      "thoughtProcess": "The user wants a clothing store. I will create a responsive 'index.html' with a hero section. I need 'shop.html' for the catalog, 'product.html' for details, 'cart.html' for the shopping cart, and 'checkout.html'. 'script.js' will handle the cart logic.",
-      "files": ["index.html", "styles.css", "script.js", "shop.html", "product.html", "cart.html", "checkout.html", "login.html", "register.html"]
+      "thoughtProcess": "...",
+      "files": ["index.html", "styles.css", "script.js", "shop.html"]
     }
     `
 
-    let responseText = null
-    let lastError = null
+    // Combine history for context
+    const historyText = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")
+    const finalPrompt = `${systemContext}\n\nCONVERSATION HISTORY:\n${historyText}\n\nRequest: ${lastUserMessage.content}`
 
-    for (const modelName of PLAN_MODELS) {
-      try {
-        console.log(`[v0] Planning with model: ${modelName}`)
-        const model = client.getGenerativeModel({ model: modelName })
+    console.log(`[v0] Generating plan with Google model: ${PLAN_MODEL}`)
 
-        const result = await model.generateContent({
-          contents: [
-            { role: "user", parts: [{ text: systemContext }] },
-            ...historyMessages,
-            { role: "user", parts: [{ text: `Request: ${lastUserMessage.content}` }] }
-          ]
-        })
+    const result = await model.generateContent(finalPrompt)
+    const response = await result.response
+    const responseText = response.text()
 
-        responseText = result.response.text()
-        console.log(`[v0] Plan success with ${modelName}`)
-        break
-      } catch (e: any) {
-        console.error(`[v0] Plan failed with ${modelName}:`, e.message)
-        lastError = e
-      }
-    }
-
-    if (!responseText) {
-      throw lastError || new Error("All planning models failed")
-    }
-
-    // Extract JSON
+    // Clean JSON if needed (SDK usually handles this with responseMimeType, but safety check)
     let cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim()
 
-    // Handle potential extra text if AI chats
     const jsonStart = cleanJson.indexOf('{')
     const jsonEnd = cleanJson.lastIndexOf('}')
     if (jsonStart !== -1 && jsonEnd !== -1) {
