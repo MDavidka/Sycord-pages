@@ -2,9 +2,15 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
-// Groq Configuration
+// API Configurations
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-const CODE_MODEL = "qwen/qwen3-32b"
+const MISTRAL_API_URL = "https://codestral.mistral.ai/v1/chat/completions"
+
+// Map models to their specific endpoints and Env Vars
+const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
+  "qwen/qwen3-32b": { url: GROQ_API_URL, envVar: "QROG_API", provider: "Groq" },
+  "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" }
+}
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -13,13 +19,23 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, systemPrompt, plan } = await request.json()
+    const { messages, systemPrompt, plan, model } = await request.json()
 
-    // Support both user-requested QROG_API and standard GROQ_API
-    const apiKey = process.env.QROG_API || process.env.GROQ_API
+    // Default to Codestral if not specified, or fallback to Qwen
+    const modelId = model || "codestral-2501"
+    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["codestral-2501"]
+
+    // Retrieve the correct API key
+    let apiKey = process.env[config.envVar]
+
+    // Fallback for Qwen/Groq specific weirdness from previous steps
+    if (config.provider === "Groq" && !apiKey) {
+        apiKey = process.env.GROQ_API
+    }
+
     if (!apiKey) {
-      console.error("[v0] AI Service Not Configured: QROG_API or GROQ_API missing")
-      return NextResponse.json({ message: "AI service not configured" }, { status: 500 })
+      console.error(`[v0] AI Service Not Configured: ${config.envVar} missing`)
+      return NextResponse.json({ message: `AI service not configured (${config.provider})` }, { status: 500 })
     }
 
     // Enhance system prompt with plan
@@ -34,7 +50,7 @@ export async function POST(request: Request) {
       `
     }
 
-    // Map messages to OpenAI format (Groq is compatible)
+    // Map messages to OpenAI format (Mistral/Groq are compatible)
     const conversationHistory = messages.map((msg: any) => {
       let textContent = msg.content
       if (msg.role === "assistant" && msg.code) {
@@ -47,17 +63,18 @@ export async function POST(request: Request) {
     })
 
     const payload = {
-      model: CODE_MODEL,
+      model: modelId,
       messages: [
         { role: "system", content: effectiveSystemPrompt },
         ...conversationHistory
       ],
-      temperature: 0.7, // Standard for code
+      temperature: 0.7,
+      stream: false // Explicitly disable streaming for now
     }
 
-    console.log(`[v0] Generating code with Groq model: ${CODE_MODEL}`)
+    console.log(`[v0] Generating code with ${config.provider} model: ${modelId}`)
 
-    const response = await fetch(GROQ_API_URL, {
+    const response = await fetch(config.url, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -67,17 +84,17 @@ export async function POST(request: Request) {
     })
 
     if (!response.ok) {
-      let errorMsg = `Groq API error: ${response.status}`
+      let errorMsg = `${config.provider} API error: ${response.status}`
       try {
           const errorData = await response.json()
-          console.error("[v0] Groq API Error:", errorData)
+          console.error(`[v0] ${config.provider} API Error:`, errorData)
           if (errorData.error?.message) {
               errorMsg = errorData.error.message
           }
       } catch (e) {
-          console.error("[v0] Groq API returned non-JSON error:", response.status, response.statusText)
+          console.error(`[v0] ${config.provider} API returned non-JSON error:`, response.status, response.statusText)
           const text = await response.text()
-          console.error("[v0] Groq Error Body:", text.substring(0, 500))
+          console.error(`[v0] ${config.provider} Error Body:`, text.substring(0, 500))
       }
       throw new Error(errorMsg)
     }
@@ -85,7 +102,7 @@ export async function POST(request: Request) {
     const data = await response.json()
     const responseText = data.choices[0]?.message?.content || ""
 
-    console.log(`[v0] Success with ${CODE_MODEL}, response length:`, responseText.length)
+    console.log(`[v0] Success with ${modelId}, response length:`, responseText.length)
 
     // Regex to capture code and page name
     // Format: [1]...code...[1<page_name>]
@@ -147,7 +164,7 @@ export async function POST(request: Request) {
       code: extractedCode || null,
       pageName: extractedPageName || null,
       shouldContinue: shouldContinue,
-      modelUsed: CODE_MODEL,
+      modelUsed: modelId,
     })
   } catch (error: any) {
     console.error("[v0] AI generation error:", error)

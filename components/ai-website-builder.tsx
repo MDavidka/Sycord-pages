@@ -29,8 +29,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-// Locked to single model as requested (Qwen via Groq)
-const LOCKED_MODEL = { id: "qwen/qwen3-32b", name: "Qwen 3 32B (Groq)" }
+// Locked to single model as requested (Codestral via Mistral)
+const LOCKED_MODEL = { id: "codestral-2501", name: "developer-test1" }
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 
