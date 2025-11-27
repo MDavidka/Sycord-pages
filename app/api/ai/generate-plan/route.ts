@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const PLAN_MODEL = "gemini-1.5-flash"
+const PLAN_MODEL = "gemini-2.5-flash-lite"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
