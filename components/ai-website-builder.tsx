@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const MODELS = [
-  { id: "llama3.1-8b", name: "Llama 3.1 70B (Cerebras)", provider: "Cerebras" },
+  { id: "zai-glm-4.6", name: "dildo", provider: "Cerebras" },
   { id: "qwen-3-32b", name: "Qwen 3 32B (Cerebras)", provider: "Cerebras" },
   { id: "codestral-2501", name: "developer-test1", provider: "Mistral" },
   { id: "qwen/qwen3-32b", name: "Qwen 3 32B (Groq)", provider: "Groq" },
