@@ -4,12 +4,14 @@ import { authOptions } from "@/lib/auth"
 
 // API Configurations
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-const MISTRAL_API_URL = "https://codestral.mistral.ai/v1/chat/completions"
+const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
+// Cloudflare URL is dynamic, so we use a placeholder here
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
   "qwen/qwen3-32b": { url: GROQ_API_URL, envVar: "QROG_API", provider: "Groq" },
-  "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" }
+  "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" },
+  "@cf/qwen/qwen3-30b-a3b-fp8": { url: "CLOUDFLARE_DYNAMIC", envVar: "CLOUDFLARE_API", provider: "Cloudflare" }
 }
 
 export async function POST(request: Request) {
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
   try {
     const { messages, systemPrompt, plan, model } = await request.json()
 
-    // Default to Codestral if not specified, or fallback to Qwen
+    // Default to Codestral if not specified
     const modelId = model || "codestral-2501"
     const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["codestral-2501"]
 
@@ -38,6 +40,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: `AI service not configured (${config.provider})` }, { status: 500 })
     }
 
+    // Determine URL
+    let apiUrl = config.url
+    if (config.provider === "Cloudflare") {
+        const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
+        if (!accountId) {
+             console.error("[v0] CLOUDFLARE_ACCOUNT_ID missing")
+             return NextResponse.json({ message: "Cloudflare Account ID not configured" }, { status: 500 })
+        }
+        // Use OpenAI-compatible endpoint
+        apiUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`
+    }
+
     // Enhance system prompt with plan
     let effectiveSystemPrompt = systemPrompt
     if (plan) {
@@ -50,7 +64,7 @@ export async function POST(request: Request) {
       `
     }
 
-    // Map messages to OpenAI format (Mistral/Groq are compatible)
+    // Map messages to OpenAI format (Mistral/Groq/Cloudflare are compatible)
     const conversationHistory = messages.map((msg: any) => {
       let textContent = msg.content
       if (msg.role === "assistant" && msg.code) {
@@ -69,12 +83,12 @@ export async function POST(request: Request) {
         ...conversationHistory
       ],
       temperature: 0.7,
-      stream: false // Explicitly disable streaming for now
+      stream: false
     }
 
     console.log(`[v0] Generating code with ${config.provider} model: ${modelId}`)
 
-    const response = await fetch(config.url, {
+    const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -91,6 +105,10 @@ export async function POST(request: Request) {
           if (errorData.error?.message) {
               errorMsg = errorData.error.message
           }
+          // Cloudflare specific error structure
+          if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+             errorMsg = errorData.errors[0].message
+          }
       } catch (e) {
           console.error(`[v0] ${config.provider} API returned non-JSON error:`, response.status, response.statusText)
           const text = await response.text()
@@ -100,7 +118,8 @@ export async function POST(request: Request) {
     }
 
     const data = await response.json()
-    const responseText = data.choices[0]?.message?.content || ""
+    // Cloudflare response structure might slightly differ, but OpenAI compatible endpoint usually follows choice[0].message
+    const responseText = data.choices?.[0]?.message?.content || data.result?.response || ""
 
     console.log(`[v0] Success with ${modelId}, response length:`, responseText.length)
 

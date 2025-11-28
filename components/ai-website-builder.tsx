@@ -29,8 +29,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-// Locked to single model as requested (Codestral via Mistral)
-const LOCKED_MODEL = { id: "codestral-2501", name: "developer-test1" }
+const MODELS = [
+  { id: "codestral-2501", name: "developer-test1", provider: "Mistral" },
+  { id: "qwen/qwen3-32b", name: "Qwen 3 32B (Groq)", provider: "Groq" },
+  { id: "@cf/qwen/qwen3-30b-a3b-fp8", name: "Qwen 3 30B (Cloudflare)", provider: "Cloudflare" },
+]
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
 
@@ -107,6 +110,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
   const [deployedCode, setDeployedCode] = useState<string | null>(null)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Model Selection State
+  const [selectedModel, setSelectedModel] = useState(MODELS[0])
 
   // Task List State
   const [plannedFiles, setPlannedFiles] = useState<string[]>([])
@@ -220,7 +226,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           systemPrompt: SYSTEM_PROMPT,
           // Pass the specific file task + the global architectural context
           plan: `CURRENT TASK: Generate code for file '${filename}'.\n\nARCHITECTURAL CONTEXT: ${architecturalContext}\n\nEnsure '${filename}' implements the features described in the context and integrates with other files.`,
-          model: LOCKED_MODEL.id,
+          model: selectedModel.id, // Pass selected model
         }),
       })
 
@@ -309,11 +315,27 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
              </div>
           )}
 
-          <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background opacity-80 cursor-not-allowed">
-            <Cpu className="h-3.5 w-3.5" />
-            {LOCKED_MODEL.name}
-            <span className="text-[10px] bg-primary/10 text-primary px-1 rounded">LOCKED</span>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-2 text-xs font-medium border-border/50 bg-background">
+                <Cpu className="h-3.5 w-3.5" />
+                {selectedModel.name}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {MODELS.map(model => (
+                <DropdownMenuItem
+                  key={model.id}
+                  onClick={() => setSelectedModel(model)}
+                  className="gap-2 text-xs"
+                >
+                  {model.id === selectedModel.id && <Check className="h-3 w-3" />}
+                  <span className={model.id === selectedModel.id ? "ml-0" : "ml-5"}>{model.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
