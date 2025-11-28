@@ -98,32 +98,45 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
     })
 
+    // Cloudflare might return 200 even with logic errors, need to parse JSON to be sure
+    const data = await response.json()
+
     if (!response.ok) {
       let errorMsg = `${config.provider} API error: ${response.status}`
-      try {
-          const errorData = await response.json()
-          console.error(`[v0] ${config.provider} API Error:`, errorData)
-          if (errorData.error?.message) {
-              errorMsg = errorData.error.message
-          }
-          // Cloudflare specific error structure
-          if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
-             errorMsg = errorData.errors[0].message
-          }
-      } catch (e) {
-          console.error(`[v0] ${config.provider} API returned non-JSON error:`, response.status, response.statusText)
-          const text = await response.text()
-          console.error(`[v0] ${config.provider} Error Body:`, text.substring(0, 500))
+      console.error(`[v0] ${config.provider} API Error (Status ${response.status}):`, data)
+
+      if (data.error?.message) {
+          errorMsg = data.error.message
+      } else if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+          errorMsg = data.errors[0].message
       }
       throw new Error(errorMsg)
     }
 
-    const data = await response.json()
-    // Cloudflare response structure might slightly differ, but OpenAI compatible endpoint usually follows choice[0].message
-    const responseText = data.choices?.[0]?.message?.content || data.result?.response || ""
+    // Check for "success: false" in Cloudflare response
+    if (config.provider === "Cloudflare" && data.success === false) {
+        console.error(`[v0] Cloudflare API reported failure:`, data.errors)
+        const msg = data.errors?.[0]?.message || "Cloudflare API request failed"
+        throw new Error(`Cloudflare API Error: ${msg}`)
+    }
+
+    // Extract response text
+    // 1. OpenAI compatible: data.choices[0].message.content
+    // 2. Workers AI REST (non-OpenAI): data.result.response
+    // 3. Workers AI raw string: data.result
+    let responseText = ""
+
+    if (data.choices && data.choices[0]?.message?.content) {
+        responseText = data.choices[0].message.content
+    } else if (data.result && typeof data.result === 'object' && data.result.response) {
+        responseText = data.result.response
+    } else if (data.result && typeof data.result === 'string') {
+        responseText = data.result
+    }
 
     if (!responseText) {
-        throw new Error("Empty response from AI provider")
+        console.error(`[v0] Empty response payload from ${config.provider}. Full response:`, JSON.stringify(data, null, 2))
+        throw new Error(`Empty response from AI provider (${config.provider})`)
     }
 
     console.log(`[v0] Success with ${modelId}, response length:`, responseText.length)
