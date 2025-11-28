@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth"
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 const CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
+const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
 // Cloudflare URL is dynamic, so we use a placeholder here
@@ -14,6 +15,7 @@ const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: str
   "qwen-3-32b": { url: CEREBRAS_API_URL, envVar: "CEREBRAS_API", provider: "Cerebras" },
   "qwen/qwen3-32b": { url: GROQ_API_URL, envVar: "QROG_API", provider: "Groq" },
   "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" },
+  "sonar": { url: PERPLEXITY_API_URL, envVar: "PERPLEXITY", provider: "Perplexity" },
   "@cf/qwen/qwen3-30b-a3b-fp8": { url: "CLOUDFLARE_DYNAMIC", envVar: "CLOUDFLARE_API", provider: "Cloudflare" }
 }
 
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
       `
     }
 
-    // Map messages to OpenAI format (Mistral/Groq/Cloudflare are compatible)
+    // Map messages to OpenAI format (Mistral/Groq/Cloudflare/Perplexity are compatible)
     const conversationHistory = messages.map((msg: any) => {
       let textContent = msg.content
       if (msg.role === "assistant" && msg.code) {
