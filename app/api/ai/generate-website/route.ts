@@ -5,10 +5,12 @@ import { authOptions } from "@/lib/auth"
 // API Configurations
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+const CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
 // Cloudflare URL is dynamic, so we use a placeholder here
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
+  "qwen-3-32b": { url: CEREBRAS_API_URL, envVar: "CEREBRAS_API", provider: "Cerebras" },
   "qwen/qwen3-32b": { url: GROQ_API_URL, envVar: "QROG_API", provider: "Groq" },
   "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" },
   "@cf/qwen/qwen3-30b-a3b-fp8": { url: "CLOUDFLARE_DYNAMIC", envVar: "CLOUDFLARE_API", provider: "Cloudflare" }
@@ -23,9 +25,9 @@ export async function POST(request: Request) {
   try {
     const { messages, systemPrompt, plan, model } = await request.json()
 
-    // Default to Codestral if not specified
-    const modelId = model || "codestral-2501"
-    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["codestral-2501"]
+    // Default to Cerebras Qwen if not specified (Main node)
+    const modelId = model || "qwen-3-32b"
+    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["qwen-3-32b"]
 
     // Retrieve the correct API key
     let apiKey = process.env[config.envVar]
