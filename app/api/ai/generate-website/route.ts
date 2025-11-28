@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned.
       3.  **Context**: You are building ONE cohesive website.
       4.  **Modern Styling**: Use Tailwind CSS utility classes.
+      5.  **Output Format**: You MUST wrap the code in [1] and [1<filename>] markers.
       `
     }
 
@@ -121,6 +122,10 @@ export async function POST(request: Request) {
     // Cloudflare response structure might slightly differ, but OpenAI compatible endpoint usually follows choice[0].message
     const responseText = data.choices?.[0]?.message?.content || data.result?.response || ""
 
+    if (!responseText) {
+        throw new Error("Empty response from AI provider")
+    }
+
     console.log(`[v0] Success with ${modelId}, response length:`, responseText.length)
 
     // Regex to capture code and page name
@@ -160,8 +165,8 @@ export async function POST(request: Request) {
         extractedPageName = "index.html"
         console.log("[v0] Code extracted from Markdown fallback")
       } else {
-        // Fallback 3: Raw HTML
-        const htmlRegex = /<html[\s\S]*<\/html>/i
+        // Fallback 3: Raw HTML (look for <html or <!DOCTYPE)
+        const htmlRegex = /<!DOCTYPE html>[\s\S]*<\/html>|<html[\s\S]*<\/html>/i
         const htmlMatch = responseText.match(htmlRegex)
         if (htmlMatch) {
           extractedCode = htmlMatch[0].trim()
@@ -169,6 +174,15 @@ export async function POST(request: Request) {
           console.log("[v0] Code extracted from HTML fallback")
         }
       }
+    }
+
+    if (!extractedCode) {
+       // Last ditch effort: if the response is somewhat long and contains HTML tags, treat it as code
+       if (responseText.length > 50 && (responseText.includes("<html") || responseText.includes("<div"))) {
+           console.log("[v0] Code extracted from raw text fallback")
+           extractedCode = responseText
+           extractedPageName = "index.html"
+       }
     }
 
     if (extractedCode && !extractedCode.toLowerCase().includes("<!doctype")) {
@@ -180,7 +194,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       content: responseText,
-      code: extractedCode || null,
+      code: extractedCode || null, // Ensure explicit null if failed
       pageName: extractedPageName || null,
       shouldContinue: shouldContinue,
       modelUsed: modelId,
