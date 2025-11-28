@@ -10,6 +10,7 @@ const CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 // Map models to their specific endpoints and Env Vars
 // Cloudflare URL is dynamic, so we use a placeholder here
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
+  "llama-3.1-70b": { url: CEREBRAS_API_URL, envVar: "CEREBRAS_API", provider: "Cerebras" },
   "qwen-3-32b": { url: CEREBRAS_API_URL, envVar: "CEREBRAS_API", provider: "Cerebras" },
   "qwen/qwen3-32b": { url: GROQ_API_URL, envVar: "QROG_API", provider: "Groq" },
   "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" },
@@ -25,9 +26,9 @@ export async function POST(request: Request) {
   try {
     const { messages, systemPrompt, plan, model } = await request.json()
 
-    // Default to Cerebras Qwen if not specified (Main node)
-    const modelId = model || "qwen-3-32b"
-    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["qwen-3-32b"]
+    // Default to Cerebras Llama 3.1 70B if not specified (Main node)
+    const modelId = model || "llama-3.1-70b"
+    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["llama-3.1-70b"]
 
     // Retrieve the correct API key
     let apiKey = process.env[config.envVar]
