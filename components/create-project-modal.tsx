@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { ProjectForm } from "./project-form"
@@ -17,14 +17,22 @@ interface CreateProjectModalProps {
 
 export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
   const router = useRouter()
-  const { data: session } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const [isLoading, setIsLoading] = useState(false)
 
-  // Check if user has Vercel linked. Since we can't easily check 'linked accounts' from client session without custom logic,
-  // we check if we have the token. If not, we ask them to connect.
-  // Note: This assumes the user logged in or linked Vercel.
-  // For a robust implementation, the user object should have a flag 'isVercelLinked'.
-  // As a heuristic for this task: check if vercelAccessToken is present in session (added in auth.ts).
+  // Log session state for debugging
+  useEffect(() => {
+    if (isOpen) {
+        console.log("[v0-debug] Modal open. Session:", session)
+        // @ts-ignore
+        if (session?.user?.vercelAccessToken) {
+            console.log("[v0-debug] Vercel token present in session")
+        } else {
+            console.log("[v0-debug] Vercel token MISSING")
+        }
+    }
+  }, [isOpen, session])
+
   // @ts-ignore
   const isVercelConnected = !!session?.user?.vercelAccessToken
 

@@ -49,9 +49,10 @@ export const authOptions: AuthOptions = {
       client: {
         token_endpoint_auth_method: "client_secret_post",
       },
-      // Ensure checks are standard. Vercel doesn't mandate PKCE but supports state.
-      checks: ["state"],
+      // Ensure checks are standard. Adding PKCE just in case.
+      checks: ["state", "pkce"],
       profile(profile) {
+        console.log("[v0] Vercel Profile Data Received:", JSON.stringify(profile, null, 2))
         return {
           id: profile.user.uid,
           name: profile.user.name || profile.user.username,
@@ -99,6 +100,7 @@ export const authOptions: AuthOptions = {
       return token
     },
     async session({ session, token }) {
+      // console.log("[v0] Session Callback")
       if (token && session.user) {
         session.user.id = token.id as string
         session.user.image = token.picture as string
@@ -112,7 +114,7 @@ export const authOptions: AuthOptions = {
         // Log status of Vercel linking in session
         // @ts-ignore
         if (session.user.vercelAccessToken) {
-             console.log(`[v0] Session created for user ${session.user.email} (Vercel Linked)`)
+             // console.log(`[v0] Session active with Vercel Link`)
         }
       }
       return session
