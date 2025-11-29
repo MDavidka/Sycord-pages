@@ -1,17 +1,21 @@
 import GoogleProvider from "next-auth/providers/google"
 import type { AuthOptions } from "next-auth"
 
-// Warn instead of crashing immediately to allow imports in other files
+// Log detailed warnings for debugging
 if (!process.env.GOOGLE_CLIENT_ID) {
-  console.warn("Warning: Missing GOOGLE_CLIENT_ID environment variable")
+  console.warn("[v0] Auth Warning: Missing GOOGLE_CLIENT_ID")
 }
-
 if (!process.env.GOOGLE_CLIENT_SECRET) {
-  console.warn("Warning: Missing GOOGLE_CLIENT_SECRET environment variable")
+  console.warn("[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET")
 }
-
+if (!process.env.VERCEL_CLIENT_ID) {
+  console.warn("[v0] Auth Warning: Missing VERCEL_CLIENT_ID")
+}
+if (!process.env.VERCEL_CLIENT_SECRET) {
+  console.warn("[v0] Auth Warning: Missing VERCEL_CLIENT_SECRET")
+}
 if (!process.env.AUTH_SECRET) {
-  console.warn("Warning: Missing AUTH_SECRET environment variable")
+  console.warn("[v0] Auth Warning: Missing AUTH_SECRET")
 }
 
 const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "https://ltpd.xyz"
@@ -29,7 +33,7 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
-    // Custom Vercel Provider since built-in might be missing in this version
+    // Custom Vercel Provider
     {
       id: "vercel",
       name: "Vercel",
@@ -37,11 +41,14 @@ export const authOptions: AuthOptions = {
       clientId: process.env.VERCEL_CLIENT_ID,
       clientSecret: process.env.VERCEL_CLIENT_SECRET,
       authorization: {
-        params: { scope: "global" },
         url: "https://vercel.com/oauth/authorize",
+        params: { scope: "global" },
       },
       token: "https://api.vercel.com/v2/oauth/access_token",
       userinfo: "https://api.vercel.com/www/user",
+      client: {
+        token_endpoint_auth_method: "client_secret_post",
+      },
       profile(profile) {
         return {
           id: profile.user.uid,
