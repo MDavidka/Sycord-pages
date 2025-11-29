@@ -30,12 +30,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const MODELS = [
-  { id: "llama-3.1-70b", name: "Llama 3.1 70B (Cerebras)", provider: "Cerebras" },
-  { id: "qwen-3-32b", name: "Qwen 3 32B (Cerebras)", provider: "Cerebras" },
-  { id: "codestral-2501", name: "developer-test1", provider: "Mistral" },
-  { id: "sonar", name: "Sonar (Perplexity)", provider: "Perplexity" },
-  { id: "qwen/qwen3-32b", name: "Qwen 3 32B (Groq)", provider: "Groq" },
-  { id: "@cf/qwen/qwen3-30b-a3b-fp8", name: "Qwen 3 30B (Cloudflare)", provider: "Cloudflare" },
+  { id: "gemini-2.5-flash-lite", name: "GOGL-dev (Google)", provider: "Google" },
+  { id: "deepseek-v3.2-exp", name: "DEEP-dev (DeepSeek)", provider: "DeepSeek" },
 ]
 
 const SYSTEM_PROMPT = `You are an expert web developer creating beautiful, production-ready HTML websites.
@@ -101,12 +97,11 @@ export interface GeneratedPage {
 
 interface AIWebsiteBuilderProps {
   projectId: string
-  subdomain?: string
   generatedPages: GeneratedPage[]
   setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
 }
 
-const AIWebsiteBuilder = ({ projectId, subdomain, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
+const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [step, setStep] = useState<Step>("idle")
@@ -408,7 +403,7 @@ const AIWebsiteBuilder = ({ projectId, subdomain, generatedPages, setGeneratedPa
                       </div>
                     </CardContent>
                     {!message.isIntermediate && (
-                      <CardFooter className="pt-0 flex flex-wrap gap-2">
+                      <CardFooter className="pt-0">
                         <Button
                           className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
                           onClick={handleDeployCode}
@@ -426,17 +421,6 @@ const AIWebsiteBuilder = ({ projectId, subdomain, generatedPages, setGeneratedPa
                             </>
                           )}
                         </Button>
-
-                        {deployedCode === message.code && subdomain && (
-                            <Button
-                                variant="outline"
-                                className="w-full sm:w-auto gap-2"
-                                onClick={() => window.open(`http://${subdomain}.ltpd.xyz`, '_blank')}
-                            >
-                                <ArrowRight className="h-4 w-4" />
-                                Visit Live Site
-                            </Button>
-                        )}
                       </CardFooter>
                     )}
                   </Card>

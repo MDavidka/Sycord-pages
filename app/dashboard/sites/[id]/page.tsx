@@ -968,7 +968,6 @@ export default function SiteSettingsPage() {
                 {id ? (
                   <AIWebsiteBuilder
                     projectId={id}
-                    subdomain={subdomain}
                     generatedPages={generatedPages}
                     setGeneratedPages={setGeneratedPages}
                   />

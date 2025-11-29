@@ -14,9 +14,10 @@ export async function POST(request: Request) {
   try {
     const { messages } = await request.json()
 
-    const apiKey = process.env.GOOGLE_API_KEY
+    // Use GOOGLE_AI_API by default, fallback to GOOGLE_API_KEY
+    const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
     if (!apiKey) {
-      console.error("[v0] GOOGLE_API_KEY not configured")
+      console.error("[v0] GOOGLE_AI_API (or GOOGLE_API_KEY) not configured")
       return NextResponse.json({ message: "AI service not configured (Google)" }, { status: 500 })
     }
 

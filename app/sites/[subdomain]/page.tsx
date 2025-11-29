@@ -85,12 +85,10 @@ export default async function SubdomainPage({ params }: PageProps) {
 
     if (project.pages || project.aiGeneratedCode) {
       console.log("[v0] Webshop: Rendering AI-generated site.")
-      // Use relative path for content so it resolves correctly whether accessing via
-      // subdomain directly (root) or path (/sites/subdomain)
       return (
         <div className="min-h-screen bg-background">
           <iframe
-            src="content/index.html"
+            src="/content/index.html"
             title="AI Generated Website"
             className="w-full min-h-screen border-0"
             sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-top-navigation"

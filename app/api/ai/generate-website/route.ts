@@ -3,20 +3,13 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
 // API Configurations
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
-const CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
-const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
+const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
-// Cloudflare URL is dynamic, so we use a placeholder here
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
-  "llama-3.1-70b": { url: CEREBRAS_API_URL, envVar: "CEREBRAS_API", provider: "Cerebras" },
-  "qwen-3-32b": { url: CEREBRAS_API_URL, envVar: "CEREBRAS_API", provider: "Cerebras" },
-  "qwen/qwen3-32b": { url: GROQ_API_URL, envVar: "QROG_API", provider: "Groq" },
-  "codestral-2501": { url: MISTRAL_API_URL, envVar: "MISTRAL_API", provider: "Mistral" },
-  "sonar": { url: PERPLEXITY_API_URL, envVar: "PERPLEXITY", provider: "Perplexity" },
-  "@cf/qwen/qwen3-30b-a3b-fp8": { url: "CLOUDFLARE_DYNAMIC", envVar: "CLOUDFLARE_API", provider: "Cloudflare" }
+  "gemini-2.5-flash-lite": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
+  "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" }
 }
 
 export async function POST(request: Request) {
@@ -28,33 +21,21 @@ export async function POST(request: Request) {
   try {
     const { messages, systemPrompt, plan, model } = await request.json()
 
-    // Default to Cerebras Llama 3.1 70B if not specified (Main node)
-    const modelId = model || "llama-3.1-70b"
-    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["llama-3.1-70b"]
+    // Default to Google if not specified
+    const modelId = model || "gemini-2.5-flash-lite"
+    const config = MODEL_CONFIGS[modelId] || MODEL_CONFIGS["gemini-2.5-flash-lite"]
 
     // Retrieve the correct API key
     let apiKey = process.env[config.envVar]
 
-    // Fallback for Qwen/Groq specific weirdness from previous steps
-    if (config.provider === "Groq" && !apiKey) {
-        apiKey = process.env.GROQ_API
+    // Fallback for Google if strictly GOOGLE_AI_API is missing but GOOGLE_API_KEY exists (common pattern)
+    if (config.provider === "Google" && !apiKey) {
+        apiKey = process.env.GOOGLE_API_KEY
     }
 
     if (!apiKey) {
       console.error(`[v0] AI Service Not Configured: ${config.envVar} missing`)
       return NextResponse.json({ message: `AI service not configured (${config.provider})` }, { status: 500 })
-    }
-
-    // Determine URL
-    let apiUrl = config.url
-    if (config.provider === "Cloudflare") {
-        const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-        if (!accountId) {
-             console.error("[v0] CLOUDFLARE_ACCOUNT_ID missing")
-             return NextResponse.json({ message: "Cloudflare Account ID not configured" }, { status: 500 })
-        }
-        // Use OpenAI-compatible endpoint
-        apiUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`
     }
 
     // Prepare messages array
@@ -66,9 +47,11 @@ export async function POST(request: Request) {
       3.  **Context**: You are building ONE cohesive website.
       4.  **Modern Styling**: Use Tailwind CSS utility classes.
       5.  **Output Format**: You MUST wrap the code in [1] and [1<filename>] markers.
+      6.  **Token Efficiency**: Do NOT generate binary files (images, PDFs). Use placeholder URLs (e.g. LoremFlickr) instead. Be concise.
+      7.  **File Naming**: Use strictly lowercase filenames with extensions (e.g., index.html, style.css).
       `
 
-    // Map messages to OpenAI format (Mistral/Groq/Cloudflare/Perplexity are compatible)
+    // Map messages to OpenAI format
     const conversationHistory = messages.map((msg: any) => {
       let textContent = msg.content
       if (msg.role === "assistant" && msg.code) {
@@ -95,15 +78,12 @@ export async function POST(request: Request) {
     }
 
     // Sanitize messages to ensure strict alternation (System -> User -> Assistant -> User ...)
-    // Some APIs (Perplexity, Mistral) are very strict about this.
     const sanitizedMessages: any[] = []
 
-    // Always start with system if present (usually first)
     if (rawMessages.length > 0 && rawMessages[0].role === "system") {
         sanitizedMessages.push(rawMessages[0])
     }
 
-    // Iterate through the rest
     for (let i = (rawMessages.length > 0 && rawMessages[0].role === "system" ? 1 : 0); i < rawMessages.length; i++) {
         const msg = rawMessages[i]
         const lastMsg = sanitizedMessages[sanitizedMessages.length - 1]
@@ -113,15 +93,7 @@ export async function POST(request: Request) {
             if (msg.role === "user") {
                 sanitizedMessages.push(msg)
             } else {
-                // If it's assistant, we must prepend a dummy user message or skip (skipping might lose context, prepending is safer for strict APIs)
-                // However, usually conversation starts with user. If not, it's a logic error upstream.
-                // Let's assume we can merge it into a dummy user message if needed, or just warn.
-                // For now, let's try to convert it to user if it's the very first non-system message (rare edge case)
-                // Better: Just push it and hope the API accepts 'System -> Assistant' (some do).
-                // Perplexity says: "After system, user... should alternate". So System -> Assistant is invalid.
-                // Force User role if it's the first message after system
                 if (sanitizedMessages.length > 0 && sanitizedMessages[0].role === "system") {
-                     // We need a user message first.
                      sanitizedMessages.push({ role: "user", content: "Continue." })
                      sanitizedMessages.push(msg)
                 } else {
@@ -131,7 +103,6 @@ export async function POST(request: Request) {
         } else {
             // Alternation check
             if (lastMsg.role === msg.role) {
-                // Roles are same, merge content
                 lastMsg.content += `\n\n${msg.content}`
             } else {
                 sanitizedMessages.push(msg)
@@ -139,13 +110,8 @@ export async function POST(request: Request) {
         }
     }
 
-    // Ensure the last message is NOT system (unlikely) and matches alternation logic.
-    // Specifically for Perplexity, if the last message ended up being Assistant (because we merged a trailing user into a previous user? No, User -> Assistant -> User is normal).
-    // The previous error was likely due to [User, User] sequence when appending 'plan'.
-    // The merging logic above fixes [User, User] -> [User].
-
     const payload = {
-      model: modelId,
+      model: modelId, // Google OpenAI compat endpoint handles Gemini IDs
       messages: sanitizedMessages,
       temperature: 0.7,
       stream: false
@@ -153,7 +119,7 @@ export async function POST(request: Request) {
 
     console.log(`[v0] Generating code with ${config.provider} model: ${modelId}`)
 
-    const response = await fetch(apiUrl, {
+    const response = await fetch(config.url, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
@@ -162,41 +128,25 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
     })
 
-    // Cloudflare might return 200 even with logic errors, need to parse JSON to be sure
-    const data = await response.json()
-
     if (!response.ok) {
       let errorMsg = `${config.provider} API error: ${response.status}`
-      console.error(`[v0] ${config.provider} API Error (Status ${response.status}):`, data)
-
-      if (data.error?.message) {
-          errorMsg = data.error.message
-      } else if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
-          errorMsg = data.errors[0].message
+      try {
+          const errorData = await response.json()
+          console.error(`[v0] ${config.provider} API Error:`, errorData)
+          if (errorData.error?.message) {
+              errorMsg = errorData.error.message
+          }
+      } catch (e) {
+          console.error(`[v0] ${config.provider} API returned non-JSON error:`, response.status, response.statusText)
+          const text = await response.text()
+          console.error(`[v0] ${config.provider} Error Body:`, text.substring(0, 500))
       }
       throw new Error(errorMsg)
     }
 
-    // Check for "success: false" in Cloudflare response
-    if (config.provider === "Cloudflare" && data.success === false) {
-        console.error(`[v0] Cloudflare API reported failure:`, data.errors)
-        const msg = data.errors?.[0]?.message || "Cloudflare API request failed"
-        throw new Error(`Cloudflare API Error: ${msg}`)
-    }
-
-    // Extract response text
-    // 1. OpenAI compatible: data.choices[0].message.content
-    // 2. Workers AI REST (non-OpenAI): data.result.response
-    // 3. Workers AI raw string: data.result
-    let responseText = ""
-
-    if (data.choices && data.choices[0]?.message?.content) {
-        responseText = data.choices[0].message.content
-    } else if (data.result && typeof data.result === 'object' && data.result.response) {
-        responseText = data.result.response
-    } else if (data.result && typeof data.result === 'string') {
-        responseText = data.result
-    }
+    const data = await response.json()
+    // Standard OpenAI response format
+    const responseText = data.choices?.[0]?.message?.content || ""
 
     if (!responseText) {
         console.error(`[v0] Empty response payload from ${config.provider}. Full response:`, JSON.stringify(data, null, 2))
@@ -206,8 +156,6 @@ export async function POST(request: Request) {
     console.log(`[v0] Success with ${modelId}, response length:`, responseText.length)
 
     // Regex to capture code and page name
-    // Format: [1]...code...[1<page_name>]
-    // Also support [1<page_name>]...[1<page_name>] just in case
     let codeMarkerRegex = /\[1\]([\s\S]*?)\[1<(.+?)>\]/
     let codeMarkerMatch = responseText.match(codeMarkerRegex)
 
@@ -215,7 +163,6 @@ export async function POST(request: Request) {
     let extractedPageName = null
 
     if (!codeMarkerMatch) {
-        // Try alternative format: start tag has name too
         codeMarkerRegex = /\[1<(.+?)>\]([\s\S]*?)\[1<\1>\]/
         const match = responseText.match(codeMarkerRegex)
         if (match) {
@@ -230,79 +177,40 @@ export async function POST(request: Request) {
 
     if (extractedCode) {
       console.log("[v0] Code extracted with page name:", extractedPageName)
-
-      // Post-processing: Remove internal markdown blocks if present (rare but possible)
-      // Sometimes models put ```html ... ``` INSIDE the markers
-      const internalMarkdownRegex = /```(?:html)?([\s\S]*?)```/i
-      const internalMatch = extractedCode.match(internalMarkdownRegex)
-      if (internalMatch) {
-          console.log("[v0] Stripping markdown block from inside extracted code")
-          extractedCode = internalMatch[1].trim()
-      }
-
-      // Cleanup: Remove common conversational prefixes if they slipped in
-      // e.g. "Here is the code:"
-      // Strategy: Keep everything from the first '<' to the last '>'
-      const firstTag = extractedCode.indexOf('<')
-      const lastTag = extractedCode.lastIndexOf('>')
-      if (firstTag !== -1 && lastTag !== -1 && lastTag > firstTag) {
-          const originalLength = extractedCode.length
-          extractedCode = extractedCode.substring(firstTag, lastTag + 1)
-          if (extractedCode.length < originalLength) {
-             console.log("[v0] Trimmed conversational filler from code")
-          }
-      }
-
     } else {
       console.warn("[v0] No code markers found, checking for HTML/Markdown in response")
-
-      // Fallback 2: Markdown code blocks
       const markdownRegex = /```(?:html)?([\s\S]*?)```/i
       const markdownMatch = responseText.match(markdownRegex)
 
       if (markdownMatch) {
         extractedCode = markdownMatch[1].trim()
         extractedPageName = "index.html"
-        console.log("[v0] Code extracted from Markdown fallback")
       } else {
-        // Fallback 3: Raw HTML (look for <html or <!DOCTYPE)
         const htmlRegex = /<!DOCTYPE html>[\s\S]*<\/html>|<html[\s\S]*<\/html>/i
         const htmlMatch = responseText.match(htmlRegex)
         if (htmlMatch) {
           extractedCode = htmlMatch[0].trim()
           extractedPageName = "index.html"
-          console.log("[v0] Code extracted from HTML fallback")
         }
       }
     }
 
     if (!extractedCode) {
-       // Last ditch effort: if the response is somewhat long and contains HTML tags, treat it as code
        if (responseText.length > 50 && (responseText.includes("<html") || responseText.includes("<div"))) {
-           console.log("[v0] Code extracted from raw text fallback")
            extractedCode = responseText
            extractedPageName = "index.html"
        }
     }
 
-    // Clean up DOCTYPE duplication or missing DOCTYPE
-    if (extractedCode) {
-        if (!extractedCode.toLowerCase().includes("<!doctype")) {
-            console.warn("[v0] Code missing DOCTYPE, adding it")
-            extractedCode = "<!DOCTYPE html>\n" + extractedCode
-        }
-        // Remove double DOCTYPE if present (case insensitive check, regex replace)
-        // This handles cases where we might have added it, or the AI added it twice.
-        // We want exactly one at the start.
-        // But simply ensuring it starts with one is safer.
-        // If it appears later, we leave it (unlikely to be valid but better than destroying code)
+    if (extractedCode && !extractedCode.toLowerCase().includes("<!doctype")) {
+      extractedCode = "<!DOCTYPE html>\n" + extractedCode
     }
 
     const shouldContinue = responseText.includes("[continue]")
 
     return NextResponse.json({
       content: responseText,
-      code: extractedCode || null, // Ensure explicit null if failed
+      code: extractedCode || null,
       pageName: extractedPageName || null,
       shouldContinue: shouldContinue,
       modelUsed: modelId,
