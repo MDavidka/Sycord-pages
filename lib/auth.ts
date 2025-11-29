@@ -52,7 +52,7 @@ export const authOptions: AuthOptions = {
       // Ensure checks are standard. Adding PKCE just in case.
       checks: ["state", "pkce"],
       profile(profile) {
-        console.log("[v0] Vercel Profile Data Received:", JSON.stringify(profile, null, 2))
+        console.log("[v0-DEBUG] Vercel Profile Callback RAW:", JSON.stringify(profile, null, 2))
         return {
           id: profile.user.uid,
           name: profile.user.name || profile.user.username,
@@ -80,21 +80,40 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async jwt({ token, account, profile }) {
-      console.log("[v0] JWT Callback Triggered")
+      console.log("[v0-DEBUG] JWT Callback Triggered")
+      console.log("[v0-DEBUG] JWT Input:", {
+          tokenKeys: Object.keys(token),
+          accountProvider: account?.provider,
+          hasProfile: !!profile
+      })
+
+      if (profile) {
+           console.log("[v0-DEBUG] JWT Profile Data:", JSON.stringify(profile, null, 2))
+      }
+
       if (account) {
-        console.log(`[v0] JWT Update: Provider=${account.provider}`)
+           console.log("[v0-DEBUG] JWT Account Data:", JSON.stringify({ ...account, access_token: "REDACTED" }, null, 2))
       }
 
       if (account && profile) {
-        token.id = profile.sub
-        token.picture = profile.picture
-        token.email = profile.email
-        token.name = profile.name
+        // Fallback for Vercel which might not have 'sub' at top level of raw profile
+        const profileId = profile.sub || profile.user?.uid || profile.id
+
+        if (profileId) {
+            token.id = profileId
+        } else {
+            console.error("[v0-ERROR] No ID found in profile:", JSON.stringify(profile))
+        }
+
+        token.picture = profile.picture || (profile.user?.uid ? `https://vercel.com/api/www/avatar/${profile.user.uid}` : null)
+        token.email = profile.email || profile.user?.email
+        token.name = profile.name || profile.user?.name || profile.user?.username
         token.isPremium = false
       }
+
       // Store Vercel access token if logging in via Vercel or linking
       if (account?.provider === "vercel") {
-        console.log("[v0] Vercel token detected, saving to session...")
+        console.log("[v0-DEBUG] Vercel token detected, saving to token...")
         token.vercelAccessToken = account.access_token
       }
       return token
@@ -102,10 +121,11 @@ export const authOptions: AuthOptions = {
     async session({ session, token }) {
       // console.log("[v0] Session Callback")
       if (token && session.user) {
-        session.user.id = token.id as string
-        session.user.image = token.picture as string
-        session.user.email = token.email as string
-        session.user.name = token.name as string
+        if (token.id) session.user.id = token.id as string
+        if (token.picture) session.user.image = token.picture as string
+        if (token.email) session.user.email = token.email as string
+        if (token.name) session.user.name = token.name as string
+
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
         // @ts-ignore
@@ -115,6 +135,8 @@ export const authOptions: AuthOptions = {
         // @ts-ignore
         if (session.user.vercelAccessToken) {
              // console.log(`[v0] Session active with Vercel Link`)
+        } else {
+             console.log("[v0-DEBUG] Session created WITHOUT Vercel Token")
         }
       }
       return session
@@ -127,27 +149,27 @@ export const authOptions: AuthOptions = {
   debug: true,
   logger: {
     error(code: any, metadata: any) {
-      console.error(`[NextAuth][Error][${code}]`, JSON.stringify(metadata, null, 2))
+      console.error(`[NextAuth-ERROR][${code}]`, JSON.stringify(metadata, null, 2))
     },
     warn(code: any) {
-      console.warn(`[NextAuth][Warn][${code}]`)
+      console.warn(`[NextAuth-WARN][${code}]`)
     },
     debug(code: any, metadata: any) {
-      console.log(`[NextAuth][Debug][${code}]`, JSON.stringify(metadata, null, 2))
+      console.log(`[NextAuth-DEBUG][${code}]`, JSON.stringify(metadata, null, 2))
     }
   },
   events: {
     async signIn(message) {
-        console.log("[v0] Auth Event: signIn", message.user.email, "Provider:", message.account?.provider)
+        console.log("[v0-EVENT] signIn", message.user.email, "Provider:", message.account?.provider)
     },
     async linkAccount(message) {
-        console.log("[v0] Auth Event: linkAccount", message.user.email, "Provider:", message.account.provider)
+        console.log("[v0-EVENT] linkAccount", message.user.email, "Provider:", message.account.provider)
     },
     async session(message) {
         // console.log("[v0] Auth Event: session active") // Too verbose
     },
     async error(message) {
-        console.error("[v0] Auth Event: ERROR", message)
+        console.error("[v0-EVENT] ERROR:", message)
     }
   }
 }
