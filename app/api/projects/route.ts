@@ -5,6 +5,7 @@ import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
+import { deployToVercel } from "@/lib/vercel"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -97,8 +98,23 @@ export async function POST(request: Request) {
       }
     }
 
+    // Check for Vercel Auth and Trigger Deployment if possible
+    const user = await db.collection("users").findOne({ _id: session.user.id })
+    let vercelAuthRequired = false
+
+    if (user && user.vercelToken) {
+      try {
+        // Use the new shared function
+        await deployToVercel(user.vercelToken, { ...newProject, _id: projectResult.insertedId }, db)
+      } catch (err) {
+          console.error("Auto-deployment failed:", err)
+      }
+    } else {
+      vercelAuthRequired = true
+    }
+
     const updatedProject = await db.collection("projects").findOne({ _id: projectResult.insertedId })
-    return NextResponse.json(updatedProject, { status: 201 })
+    return NextResponse.json({ ...updatedProject, vercelAuthRequired }, { status: 201 })
   } catch (error: any) {
     console.error("[v0] Error creating project:", error)
     return NextResponse.json(
