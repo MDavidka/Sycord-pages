@@ -3,13 +3,14 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
+import { toast } from "sonner"
 import {
   Trash2,
   Plus,
@@ -72,6 +73,7 @@ const paymentOptions = [
 export default function SiteSettingsPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const id = params.id as string
 
   const [project, setProject] = useState<any>(null)
@@ -116,6 +118,55 @@ export default function SiteSettingsPage() {
 
   useEffect(() => {
     if (!id) return
+
+    // Auto deployment logic from URL params
+    const checkAutoDeploy = async () => {
+      const autoDeploy = searchParams.get("auto_deploy")
+      const vercelConnected = searchParams.get("vercel_connected")
+
+      if (autoDeploy === "true" && vercelConnected === "true") {
+        try {
+          toast.loading("Deploying project to Vercel...", { id: "deploy-toast" })
+
+          const response = await fetch(`/api/projects/${id}/deploy`, {
+            method: "POST"
+          })
+
+          const data = await response.json()
+
+          if (!response.ok) {
+            throw new Error(data.message || "Deployment failed")
+          }
+
+          toast.success("Project deployed successfully!", { id: "deploy-toast" })
+
+          // Refresh data after deployment
+          fetch(`/api/projects/${id}`)
+             .then(r => r.json())
+             .then(data => {
+                setProject(data)
+                // Also refresh deployment info
+                return fetch(`/api/projects/${id}/deployments`)
+             })
+             .then(r => r.json())
+             .then(data => {
+                setDeployment(data.deployment || null)
+             })
+
+        } catch (error: any) {
+          console.error("Auto deploy error:", error)
+          toast.error(error.message || "Failed to deploy project", { id: "deploy-toast" })
+        } finally {
+            // Clean up URL params
+            const newUrl = new URL(window.location.href)
+            newUrl.searchParams.delete("auto_deploy")
+            newUrl.searchParams.delete("vercel_connected")
+            window.history.replaceState({}, "", newUrl.toString())
+        }
+      }
+    }
+
+    checkAutoDeploy()
 
     const fetchAllData = async () => {
       try {
