@@ -28,9 +28,15 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   // @ts-ignore
   const isVercelConnected = !!session?.user?.vercelAccessToken
 
-  const handleVercelConnect = () => {
-    // Sign in with Vercel to link account or get token
-    signIn("vercel", { callbackUrl: window.location.href })
+  const handleVercelConnect = async () => {
+    console.log("[v0] User initiated Vercel connection flow")
+    try {
+      // Sign in with Vercel to link account or get token
+      await signIn("vercel", { callbackUrl: window.location.href })
+    } catch (err) {
+      console.error("[v0] SignIn call failed", err)
+      toast.error("Failed to initiate login")
+    }
   }
 
   const handleFormSubmit = async (formData: any) => {

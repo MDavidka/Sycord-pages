@@ -77,6 +77,11 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async jwt({ token, account, profile }) {
+      console.log("[v0] JWT Callback Triggered")
+      if (account) {
+        console.log(`[v0] JWT Update: Provider=${account.provider}`)
+      }
+
       if (account && profile) {
         token.id = profile.sub
         token.picture = profile.picture
@@ -86,6 +91,7 @@ export const authOptions: AuthOptions = {
       }
       // Store Vercel access token if logging in via Vercel or linking
       if (account?.provider === "vercel") {
+        console.log("[v0] Vercel token detected, saving to session...")
         token.vercelAccessToken = account.access_token
       }
       return token
@@ -100,6 +106,12 @@ export const authOptions: AuthOptions = {
         session.user.isPremium = (token.isPremium as boolean) || false
         // @ts-ignore
         session.user.vercelAccessToken = token.vercelAccessToken as string | undefined
+
+        // Log status of Vercel linking in session
+        // @ts-ignore
+        if (session.user.vercelAccessToken) {
+             console.log(`[v0] Session created for user ${session.user.email} (Vercel Linked)`)
+        }
       }
       return session
     },
@@ -108,10 +120,30 @@ export const authOptions: AuthOptions = {
     signIn: "/login",
   },
   secret: process.env.AUTH_SECRET,
-  debug: process.env.NODE_ENV === "development",
+  debug: true, // Force debug mode to see all internal NextAuth steps
   logger: {
     error(code: any, metadata: any) {
-      console.error(`NextAuth Error - Code: ${code}`, JSON.stringify(metadata, null, 2))
+      console.error(`[NextAuth][Error][${code}]`, JSON.stringify(metadata, null, 2))
     },
+    warn(code: any) {
+      console.warn(`[NextAuth][Warn][${code}]`)
+    },
+    debug(code: any, metadata: any) {
+      console.log(`[NextAuth][Debug][${code}]`, JSON.stringify(metadata, null, 2))
+    }
   },
+  events: {
+    async signIn(message) {
+        console.log("[v0] Auth Event: signIn", message.user.email, "Provider:", message.account?.provider)
+    },
+    async linkAccount(message) {
+        console.log("[v0] Auth Event: linkAccount", message.user.email, "Provider:", message.account.provider)
+    },
+    async session(message) {
+        // console.log("[v0] Auth Event: session active") // Too verbose
+    },
+    async error(message) {
+        console.error("[v0] Auth Event: ERROR", message)
+    }
+  }
 }
