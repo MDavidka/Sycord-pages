@@ -5,6 +5,8 @@ import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
+import { deployToVercel } from "@/lib/vercel"
+import { activateLocalDeployment } from "@/lib/local-deploy"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -34,15 +36,22 @@ export async function POST(request: Request) {
 
   const webpageId = generateWebpageId()
 
+  // Store the subdomain in the project but don't activate it yet
+  const sanitizedSubdomain = body.subdomain
+        ? body.subdomain.toLowerCase().trim().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "")
+        : null
+
   const newProject = {
     ...body,
-    webpageId, // 9-digit ID for frontend display
+    webpageId,
     userId: session.user.id,
     userEmail: session.user.email,
     userName: session.user.name,
     userIP: userIP,
     isPremium: isPremium,
     status: "pending",
+    // Save intended subdomain, but don't set 'domain' or 'deploymentId' yet
+    subdomain: sanitizedSubdomain,
     createdAt: new Date(),
   }
 
@@ -50,55 +59,26 @@ export async function POST(request: Request) {
     const projectResult = await db.collection("projects").insertOne(newProject)
     const projectId = projectResult.insertedId.toString()
 
-    if (body.subdomain) {
-      const sanitizedSubdomain = body.subdomain
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9-]/g, "-")
-        .replace(/^-+|-+$/g, "")
+    // Check for Vercel Auth and Trigger Deployment if possible
+    const user = await db.collection("users").findOne({ _id: session.user.id })
+    let vercelAuthRequired = false
 
-      console.log("[v0] Sanitized subdomain:", sanitizedSubdomain, "from original:", body.subdomain)
-
-      if (sanitizedSubdomain.length >= 3 && !containsCurseWords(sanitizedSubdomain)) {
-        try {
-          const deployment = {
-            projectId: projectResult.insertedId,
-            userId: session.user.id,
-            subdomain: sanitizedSubdomain,
-            domain: `${sanitizedSubdomain}.ltpd.xyz`,
-            status: "active",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            deploymentData: {
-              businessName: body.businessName,
-              businessDescription: body.businessDescription || "",
-            },
-          }
-
-          const deploymentResult = await db.collection("deployments").insertOne(deployment)
-          console.log("[v0] Deployment created:", deploymentResult.insertedId, "subdomain:", sanitizedSubdomain)
-
-          await db.collection("projects").updateOne(
-            { _id: projectResult.insertedId },
-            {
-              $set: {
-                deploymentId: deploymentResult.insertedId,
-                subdomain: sanitizedSubdomain,
-                domain: `${sanitizedSubdomain}.ltpd.xyz`,
-                deployedAt: new Date(),
-              },
-            },
-          )
-        } catch (deploymentError: any) {
-          console.error("[v0] Error creating deployment during project creation:", deploymentError.message)
-        }
-      } else {
-        console.log("[v0] Subdomain rejected - too short or contains curse words:", sanitizedSubdomain)
+    if (user && user.vercelToken) {
+      try {
+        const fullProject = { ...newProject, _id: projectResult.insertedId }
+        // 1. Deploy to Vercel
+        await deployToVercel(user.vercelToken, fullProject, db)
+        // 2. Activate Local Deployment (My Domain)
+        await activateLocalDeployment(fullProject, db)
+      } catch (err) {
+          console.error("Auto-deployment failed:", err)
       }
+    } else {
+      vercelAuthRequired = true
     }
 
     const updatedProject = await db.collection("projects").findOne({ _id: projectResult.insertedId })
-    return NextResponse.json(updatedProject, { status: 201 })
+    return NextResponse.json({ ...updatedProject, vercelAuthRequired }, { status: 201 })
   } catch (error: any) {
     console.error("[v0] Error creating project:", error)
     return NextResponse.json(

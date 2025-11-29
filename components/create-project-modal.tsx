@@ -67,10 +67,19 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       setIsLoading(false)
       onClose()
 
-      // Wait a bit for modal to close before redirecting
-      setTimeout(() => {
-        router.push(`/dashboard/sites/${newProject._id}`)
-      }, 100)
+      if (newProject.vercelAuthRequired) {
+        toast.info("Vercel deployment required. Redirecting to connect...", { duration: 5000 })
+        // Use a small delay to let the toast show
+        setTimeout(() => {
+          // Redirect to Vercel Connect, with return to the new project page and auto-deploy flag
+          window.location.href = `/api/auth/vercel/connect?next=/dashboard/sites/${newProject._id}?auto_deploy=true`
+        }, 1500)
+      } else {
+        // Wait a bit for modal to close before redirecting
+        setTimeout(() => {
+          router.push(`/dashboard/sites/${newProject._id}`)
+        }, 100)
+      }
     } catch (error) {
       console.error("[v0] Project creation error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create project")
