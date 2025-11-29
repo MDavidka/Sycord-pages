@@ -80,24 +80,73 @@ export async function POST(request: Request) {
       }
     })
 
-    // Construct final payload messages
-    const apiMessages = [
+    // Construct raw payload messages
+    const rawMessages = [
         { role: "system", content: effectiveSystemPrompt },
         ...conversationHistory
     ]
 
-    // If 'plan' (current task) is provided, append it as a USER message to ensure strict alternating roles or at least valid ending
-    // This fixes "Last message must have role user" errors on strict APIs (Mistral, Groq, Cerebras)
+    // If 'plan' (current task) is provided, append it as a USER message
     if (plan) {
-        apiMessages.push({
+        rawMessages.push({
             role: "user",
             content: `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\n`
         })
     }
 
+    // Sanitize messages to ensure strict alternation (System -> User -> Assistant -> User ...)
+    // Some APIs (Perplexity, Mistral) are very strict about this.
+    const sanitizedMessages: any[] = []
+
+    // Always start with system if present (usually first)
+    if (rawMessages.length > 0 && rawMessages[0].role === "system") {
+        sanitizedMessages.push(rawMessages[0])
+    }
+
+    // Iterate through the rest
+    for (let i = (rawMessages.length > 0 && rawMessages[0].role === "system" ? 1 : 0); i < rawMessages.length; i++) {
+        const msg = rawMessages[i]
+        const lastMsg = sanitizedMessages[sanitizedMessages.length - 1]
+
+        if (!lastMsg) {
+            // First non-system message MUST be user
+            if (msg.role === "user") {
+                sanitizedMessages.push(msg)
+            } else {
+                // If it's assistant, we must prepend a dummy user message or skip (skipping might lose context, prepending is safer for strict APIs)
+                // However, usually conversation starts with user. If not, it's a logic error upstream.
+                // Let's assume we can merge it into a dummy user message if needed, or just warn.
+                // For now, let's try to convert it to user if it's the very first non-system message (rare edge case)
+                // Better: Just push it and hope the API accepts 'System -> Assistant' (some do).
+                // Perplexity says: "After system, user... should alternate". So System -> Assistant is invalid.
+                // Force User role if it's the first message after system
+                if (sanitizedMessages.length > 0 && sanitizedMessages[0].role === "system") {
+                     // We need a user message first.
+                     sanitizedMessages.push({ role: "user", content: "Continue." })
+                     sanitizedMessages.push(msg)
+                } else {
+                    sanitizedMessages.push(msg)
+                }
+            }
+        } else {
+            // Alternation check
+            if (lastMsg.role === msg.role) {
+                // Roles are same, merge content
+                lastMsg.content += `\n\n${msg.content}`
+            } else {
+                sanitizedMessages.push(msg)
+            }
+        }
+    }
+
+    // Ensure the last message is NOT system (unlikely) and matches alternation logic.
+    // Specifically for Perplexity, if the last message ended up being Assistant (because we merged a trailing user into a previous user? No, User -> Assistant -> User is normal).
+    // The previous error was likely due to [User, User] sequence when appending 'plan'.
+    // The merging logic above fixes [User, User] -> [User].
+
     const payload = {
       model: modelId,
-      messages: apiMessages,
+      messages: sanitizedMessages,
       temperature: 0.7,
       stream: false
     }
