@@ -141,6 +141,10 @@ export default function AdminPage() {
     return null
   }
 
+  // Calculate the redirect URI for display
+  const currentAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://ltpd.xyz";
+  const callbackUrl = `${currentAppUrl}/api/auth/callback/vercel`;
+
   return (
     <div className="min-h-screen bg-background relative">
       {/* Mobile Navigation Controls */}
@@ -447,6 +451,13 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                    <p className="font-semibold mb-1">Common Error: "The app ID is invalid"</p>
+                    <p>
+                      This error usually means the <strong>Redirect URL</strong> configured in the Vercel Integration Console does not match the URL of your deployed application exactly.
+                    </p>
+                  </div>
+
                   <div className="space-y-4">
                     <div className="p-4 bg-muted rounded-lg border border-border">
                       <h3 className="font-medium mb-2 flex items-center gap-2">
@@ -473,7 +484,12 @@ export default function AdminPage() {
                       <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
                         <li>Go to <a href="https://vercel.com/dashboard/integrations/console" target="_blank" className="text-primary hover:underline">Vercel Integrations Console</a>.</li>
                         <li>Create a new Integration (e.g., "Sycord Pages").</li>
-                        <li>Set the <strong>Redirect URL</strong> to: <code className="bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_APP_URL || "https://ltpd.xyz"}/api/auth/callback/vercel</code></li>
+                        <li>
+                          Set the <strong>Redirect URL</strong> to EXACTLY this value:
+                          <div className="mt-1 bg-black text-white px-2 py-1 rounded font-mono select-all">
+                            {callbackUrl}
+                          </div>
+                        </li>
                         <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.</li>
                         <li>Add these variables to your Vercel Project Settings (Settings &rarr; Environment Variables).</li>
                         <li>Redeploy your application.</li>

@@ -49,6 +49,8 @@ export const authOptions: AuthOptions = {
       client: {
         token_endpoint_auth_method: "client_secret_post",
       },
+      // Ensure checks are standard. Vercel doesn't mandate PKCE but supports state.
+      checks: ["state"],
       profile(profile) {
         return {
           id: profile.user.uid,
@@ -120,7 +122,7 @@ export const authOptions: AuthOptions = {
     signIn: "/login",
   },
   secret: process.env.AUTH_SECRET,
-  debug: true, // Force debug mode to see all internal NextAuth steps
+  debug: true,
   logger: {
     error(code: any, metadata: any) {
       console.error(`[NextAuth][Error][${code}]`, JSON.stringify(metadata, null, 2))
