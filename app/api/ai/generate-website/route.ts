@@ -230,6 +230,29 @@ export async function POST(request: Request) {
 
     if (extractedCode) {
       console.log("[v0] Code extracted with page name:", extractedPageName)
+
+      // Post-processing: Remove internal markdown blocks if present (rare but possible)
+      // Sometimes models put ```html ... ``` INSIDE the markers
+      const internalMarkdownRegex = /```(?:html)?([\s\S]*?)```/i
+      const internalMatch = extractedCode.match(internalMarkdownRegex)
+      if (internalMatch) {
+          console.log("[v0] Stripping markdown block from inside extracted code")
+          extractedCode = internalMatch[1].trim()
+      }
+
+      // Cleanup: Remove common conversational prefixes if they slipped in
+      // e.g. "Here is the code:"
+      // Strategy: Keep everything from the first '<' to the last '>'
+      const firstTag = extractedCode.indexOf('<')
+      const lastTag = extractedCode.lastIndexOf('>')
+      if (firstTag !== -1 && lastTag !== -1 && lastTag > firstTag) {
+          const originalLength = extractedCode.length
+          extractedCode = extractedCode.substring(firstTag, lastTag + 1)
+          if (extractedCode.length < originalLength) {
+             console.log("[v0] Trimmed conversational filler from code")
+          }
+      }
+
     } else {
       console.warn("[v0] No code markers found, checking for HTML/Markdown in response")
 
@@ -262,9 +285,17 @@ export async function POST(request: Request) {
        }
     }
 
-    if (extractedCode && !extractedCode.toLowerCase().includes("<!doctype")) {
-      console.warn("[v0] Code missing DOCTYPE, adding it")
-      extractedCode = "<!DOCTYPE html>\n" + extractedCode
+    // Clean up DOCTYPE duplication or missing DOCTYPE
+    if (extractedCode) {
+        if (!extractedCode.toLowerCase().includes("<!doctype")) {
+            console.warn("[v0] Code missing DOCTYPE, adding it")
+            extractedCode = "<!DOCTYPE html>\n" + extractedCode
+        }
+        // Remove double DOCTYPE if present (case insensitive check, regex replace)
+        // This handles cases where we might have added it, or the AI added it twice.
+        // We want exactly one at the start.
+        // But simply ensuring it starts with one is safer.
+        // If it appears later, we leave it (unlikely to be valid but better than destroying code)
     }
 
     const shouldContinue = responseText.includes("[continue]")

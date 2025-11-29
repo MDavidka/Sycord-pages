@@ -101,11 +101,12 @@ export interface GeneratedPage {
 
 interface AIWebsiteBuilderProps {
   projectId: string
+  subdomain?: string
   generatedPages: GeneratedPage[]
   setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
 }
 
-const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
+const AIWebsiteBuilder = ({ projectId, subdomain, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [step, setStep] = useState<Step>("idle")
@@ -407,7 +408,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                       </div>
                     </CardContent>
                     {!message.isIntermediate && (
-                      <CardFooter className="pt-0">
+                      <CardFooter className="pt-0 flex flex-wrap gap-2">
                         <Button
                           className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
                           onClick={handleDeployCode}
@@ -425,6 +426,17 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                             </>
                           )}
                         </Button>
+
+                        {deployedCode === message.code && subdomain && (
+                            <Button
+                                variant="outline"
+                                className="w-full sm:w-auto gap-2"
+                                onClick={() => window.open(`http://${subdomain}.ltpd.xyz`, '_blank')}
+                            >
+                                <ArrowRight className="h-4 w-4" />
+                                Visit Live Site
+                            </Button>
+                        )}
                       </CardFooter>
                     )}
                   </Card>
