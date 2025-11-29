@@ -6,6 +6,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ProjectForm } from "./project-form"
 import { themes } from "@/lib/webshop-types"
 import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { signIn, useSession } from "next-auth/react"
+import { TriangleAlert, ExternalLink } from "lucide-react"
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -14,13 +17,24 @@ interface CreateProjectModalProps {
 
 export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
   const router = useRouter()
+  const { data: session } = useSession()
   const [isLoading, setIsLoading] = useState(false)
 
+  // Check if user has Vercel linked. Since we can't easily check 'linked accounts' from client session without custom logic,
+  // we check if we have the token. If not, we ask them to connect.
+  // Note: This assumes the user logged in or linked Vercel.
+  // For a robust implementation, the user object should have a flag 'isVercelLinked'.
+  // As a heuristic for this task: check if vercelAccessToken is present in session (added in auth.ts).
+  // @ts-ignore
+  const isVercelConnected = !!session?.user?.vercelAccessToken
+
+  const handleVercelConnect = () => {
+    // Sign in with Vercel to link account or get token
+    signIn("vercel", { callbackUrl: window.location.href })
+  }
+
   const handleFormSubmit = async (formData: any) => {
-    if (isLoading) {
-      console.log("[v0] Submission already in progress")
-      return
-    }
+    if (isLoading) return
 
     console.log("[v0] Form submitted with data:", formData)
     setIsLoading(true)
@@ -67,19 +81,10 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       setIsLoading(false)
       onClose()
 
-      if (newProject.vercelAuthRequired) {
-        toast.info("Vercel deployment required. Redirecting to connect...", { duration: 5000 })
-        // Use a small delay to let the toast show
-        setTimeout(() => {
-          // Redirect to Vercel Connect, with return to the new project page and auto-deploy flag
-          window.location.href = `/api/auth/vercel/connect?next=/dashboard/sites/${newProject._id}?auto_deploy=true`
-        }, 1500)
-      } else {
-        // Wait a bit for modal to close before redirecting
-        setTimeout(() => {
-          router.push(`/dashboard/sites/${newProject._id}`)
-        }, 100)
-      }
+      // Wait a bit for modal to close before redirecting
+      setTimeout(() => {
+        router.push(`/dashboard/sites/${newProject._id}`)
+      }, 100)
     } catch (error) {
       console.error("[v0] Project creation error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create project")
@@ -98,7 +103,34 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
         </DialogHeader>
 
         <div className="py-4 md:py-6">
-          <ProjectForm onSubmit={handleFormSubmit} />
+          {!isVercelConnected ? (
+            <div className="flex flex-col items-center justify-center space-y-6 py-8 text-center">
+              <div className="h-16 w-16 bg-black text-white rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M24 22.525H0l12-21.05 12 21.05z" />
+                </svg>
+              </div>
+              <div className="space-y-2 max-w-md">
+                <h3 className="text-lg font-semibold">Connect Vercel to Continue</h3>
+                <p className="text-sm text-muted-foreground">
+                  We use Vercel for free, high-performance hosting. You must connect your Vercel account to deploy your website.
+                </p>
+              </div>
+              <Button
+                onClick={handleVercelConnect}
+                className="w-full max-w-xs bg-black text-white hover:bg-zinc-800 gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Connect Vercel Account
+              </Button>
+              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-3 rounded-md border border-amber-200">
+                <TriangleAlert className="w-4 h-4" />
+                <p>This creates a project on your personal Vercel dashboard.</p>
+              </div>
+            </div>
+          ) : (
+            <ProjectForm onSubmit={handleFormSubmit} />
+          )}
         </div>
       </DialogContent>
     </Dialog>

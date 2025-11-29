@@ -5,12 +5,17 @@ import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
-import { deployToVercel } from "@/lib/vercel"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
+
+  // @ts-ignore
+  const vercelToken = session.user.vercelAccessToken
+  if (!vercelToken) {
+    return NextResponse.json({ message: "Vercel account not connected" }, { status: 403 })
   }
 
   const client = await clientPromise
@@ -32,12 +37,79 @@ export async function POST(request: Request) {
   }
 
   const userIP = getClientIP(request)
-
   const webpageId = generateWebpageId()
+
+  // Sanitize project name for Vercel (must be max 100 chars, lowercase alphanumeric + hyphens)
+  const vercelProjectName = (body.subdomain || body.businessName || "project")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, "-")
+    .substring(0, 90) + "-" + Math.random().toString(36).substring(2, 7)
+
+  // Vercel Integration: Create Project
+  let vercelProjectId = null
+  try {
+    console.log("[v0] Creating Vercel project:", vercelProjectName)
+    const createProjectRes = await fetch("https://api.vercel.com/v9/projects", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${vercelToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: vercelProjectName,
+        framework: null // Static site
+      }),
+    })
+
+    if (!createProjectRes.ok) {
+      const errorData = await createProjectRes.json()
+      console.error("[v0] Vercel Create Project Error:", errorData)
+      throw new Error(`Failed to create Vercel project: ${errorData.message || createProjectRes.statusText}`)
+    }
+
+    const projectData = await createProjectRes.json()
+    vercelProjectId = projectData.id
+
+    // Vercel Integration: Initial Deployment (Starter HTML)
+    const starterHtml = `<!DOCTYPE html><html><head><title>${body.businessName}</title></head><body><h1>Welcome to ${body.businessName}</h1><p>Your site is being built!</p></body></html>`
+
+    console.log("[v0] Creating initial deployment for:", vercelProjectId)
+    const deployRes = await fetch("https://api.vercel.com/v13/deployments", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${vercelToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: vercelProjectName,
+          project: vercelProjectId,
+          files: [
+            {
+              file: "index.html",
+              data: starterHtml
+            }
+          ],
+          target: "production"
+        }),
+    })
+
+    if (!deployRes.ok) {
+        const deployError = await deployRes.json()
+        console.error("[v0] Vercel Initial Deploy Error:", deployError)
+        // Don't fail the whole creation if deployment fails, but log it
+    } else {
+        console.log("[v0] Initial Vercel deployment triggered")
+    }
+
+  } catch (vercelError: any) {
+    console.error("[v0] Vercel Integration Failed:", vercelError)
+    return NextResponse.json({ message: "Vercel integration failed: " + vercelError.message }, { status: 500 })
+  }
 
   const newProject = {
     ...body,
-    webpageId, // 9-digit ID for frontend display
+    webpageId,
     userId: session.user.id,
     userEmail: session.user.email,
     userName: session.user.name,
@@ -45,6 +117,8 @@ export async function POST(request: Request) {
     isPremium: isPremium,
     status: "pending",
     createdAt: new Date(),
+    vercelProjectId: vercelProjectId,
+    vercelProjectName: vercelProjectName
   }
 
   try {
@@ -57,8 +131,6 @@ export async function POST(request: Request) {
         .trim()
         .replace(/[^a-z0-9-]/g, "-")
         .replace(/^-+|-+$/g, "")
-
-      console.log("[v0] Sanitized subdomain:", sanitizedSubdomain, "from original:", body.subdomain)
 
       if (sanitizedSubdomain.length >= 3 && !containsCurseWords(sanitizedSubdomain)) {
         try {
@@ -77,7 +149,6 @@ export async function POST(request: Request) {
           }
 
           const deploymentResult = await db.collection("deployments").insertOne(deployment)
-          console.log("[v0] Deployment created:", deploymentResult.insertedId, "subdomain:", sanitizedSubdomain)
 
           await db.collection("projects").updateOne(
             { _id: projectResult.insertedId },
@@ -91,30 +162,13 @@ export async function POST(request: Request) {
             },
           )
         } catch (deploymentError: any) {
-          console.error("[v0] Error creating deployment during project creation:", deploymentError.message)
+          console.error("[v0] Error creating deployment record:", deploymentError.message)
         }
-      } else {
-        console.log("[v0] Subdomain rejected - too short or contains curse words:", sanitizedSubdomain)
       }
-    }
-
-    // Check for Vercel Auth and Trigger Deployment if possible
-    const user = await db.collection("users").findOne({ _id: session.user.id })
-    let vercelAuthRequired = false
-
-    if (user && user.vercelToken) {
-      try {
-        // Use the new shared function
-        await deployToVercel(user.vercelToken, { ...newProject, _id: projectResult.insertedId }, db)
-      } catch (err) {
-          console.error("Auto-deployment failed:", err)
-      }
-    } else {
-      vercelAuthRequired = true
     }
 
     const updatedProject = await db.collection("projects").findOne({ _id: projectResult.insertedId })
-    return NextResponse.json({ ...updatedProject, vercelAuthRequired }, { status: 201 })
+    return NextResponse.json(updatedProject, { status: 201 })
   } catch (error: any) {
     console.error("[v0] Error creating project:", error)
     return NextResponse.json(

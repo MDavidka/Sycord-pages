@@ -1,4 +1,5 @@
 import GoogleProvider from "next-auth/providers/google"
+import VercelProvider from "next-auth/providers/vercel"
 import type { AuthOptions } from "next-auth"
 
 // Warn instead of crashing immediately to allow imports in other files
@@ -29,6 +30,10 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
+    VercelProvider({
+      clientId: process.env.VERCEL_CLIENT_ID || "",
+      clientSecret: process.env.VERCEL_CLIENT_SECRET || "",
+    }),
   ],
   session: {
     strategy: "jwt",
@@ -55,6 +60,10 @@ export const authOptions: AuthOptions = {
         token.name = profile.name
         token.isPremium = false
       }
+      // Store Vercel access token if logging in via Vercel or linking
+      if (account?.provider === "vercel") {
+        token.vercelAccessToken = account.access_token
+      }
       return token
     },
     async session({ session, token }) {
@@ -65,6 +74,8 @@ export const authOptions: AuthOptions = {
         session.user.name = token.name as string
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
+        // @ts-ignore
+        session.user.vercelAccessToken = token.vercelAccessToken as string | undefined
       }
       return session
     },
