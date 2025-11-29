@@ -1,5 +1,4 @@
 import GoogleProvider from "next-auth/providers/google"
-import VercelProvider from "next-auth/providers/vercel"
 import type { AuthOptions } from "next-auth"
 
 // Warn instead of crashing immediately to allow imports in other files
@@ -30,10 +29,28 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
-    VercelProvider({
-      clientId: process.env.VERCEL_CLIENT_ID || "",
-      clientSecret: process.env.VERCEL_CLIENT_SECRET || "",
-    }),
+    // Custom Vercel Provider since built-in might be missing in this version
+    {
+      id: "vercel",
+      name: "Vercel",
+      type: "oauth",
+      clientId: process.env.VERCEL_CLIENT_ID,
+      clientSecret: process.env.VERCEL_CLIENT_SECRET,
+      authorization: {
+        params: { scope: "global" },
+        url: "https://vercel.com/oauth/authorize",
+      },
+      token: "https://api.vercel.com/v2/oauth/access_token",
+      userinfo: "https://api.vercel.com/www/user",
+      profile(profile) {
+        return {
+          id: profile.user.uid,
+          name: profile.user.name || profile.user.username,
+          email: profile.user.email,
+          image: `https://vercel.com/api/www/avatar/${profile.user.uid}`,
+        }
+      },
+    },
   ],
   session: {
     strategy: "jwt",

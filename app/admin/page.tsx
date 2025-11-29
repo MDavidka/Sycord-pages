@@ -24,7 +24,9 @@ import {
   Settings,
   Shield,
   LogOut,
-  BarChart3
+  BarChart3,
+  Server,
+  Key
 } from "lucide-react"
 
 interface User {
@@ -47,7 +49,7 @@ export default function AdminPage() {
   const [updatingUser, setUpdatingUser] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<"overview" | "users">("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "users" | "env">("overview")
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -198,6 +200,17 @@ export default function AdminPage() {
             >
               <Users className="h-5 w-5" />
               <span className="font-medium text-sm">User Management</span>
+            </button>
+            <button
+              onClick={() => { setActiveTab("env"); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
+                activeTab === "env"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              }`}
+            >
+              <Key className="h-5 w-5" />
+              <span className="font-medium text-sm">Env Setup</span>
             </button>
           </nav>
 
@@ -418,6 +431,58 @@ export default function AdminPage() {
                   </div>
                 )}
              </div>
+          )}
+
+          {/* Environment Variables Guide Tab */}
+          {activeTab === "env" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Server className="h-5 w-5 text-primary" />
+                    Vercel Integration Setup
+                  </CardTitle>
+                  <CardDescription>
+                    To enable Vercel login and automatic project deployment, you must configure the following environment variables in your Vercel project settings.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="p-4 bg-muted rounded-lg border border-border">
+                      <h3 className="font-medium mb-2 flex items-center gap-2">
+                        <Key className="h-4 w-4" /> Required Environment Variables
+                      </h3>
+                      <div className="space-y-3 font-mono text-sm">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground select-all">VERCEL_CLIENT_ID</span>
+                          <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
+                            Client ID from your Vercel Integration (OAuth App)
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground select-all">VERCEL_CLIENT_SECRET</span>
+                          <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
+                            Client Secret from your Vercel Integration (OAuth App)
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm">Setup Instructions</h3>
+                      <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                        <li>Go to <a href="https://vercel.com/dashboard/integrations/console" target="_blank" className="text-primary hover:underline">Vercel Integrations Console</a>.</li>
+                        <li>Create a new Integration (e.g., "Sycord Pages").</li>
+                        <li>Set the <strong>Redirect URL</strong> to: <code className="bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_APP_URL || "https://ltpd.xyz"}/api/auth/callback/vercel</code></li>
+                        <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.</li>
+                        <li>Add these variables to your Vercel Project Settings (Settings &rarr; Environment Variables).</li>
+                        <li>Redeploy your application.</li>
+                      </ol>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
         </div>
