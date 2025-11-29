@@ -57,18 +57,16 @@ export async function POST(request: Request) {
         apiUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`
     }
 
-    // Enhance system prompt with plan
+    // Prepare messages array
+    // Standardize system prompt
     let effectiveSystemPrompt = systemPrompt
-    if (plan) {
-      effectiveSystemPrompt += `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\n`
-      effectiveSystemPrompt += `REQUIREMENTS:
+    effectiveSystemPrompt += `\n\nREQUIREMENTS:
       1.  **Production Ready**: Include working JavaScript for all interactive elements. Use <script> tags.
       2.  **Interconnectivity**: Ensure all <a> links point to the correct .html files as planned.
       3.  **Context**: You are building ONE cohesive website.
       4.  **Modern Styling**: Use Tailwind CSS utility classes.
       5.  **Output Format**: You MUST wrap the code in [1] and [1<filename>] markers.
       `
-    }
 
     // Map messages to OpenAI format (Mistral/Groq/Cloudflare/Perplexity are compatible)
     const conversationHistory = messages.map((msg: any) => {
@@ -82,12 +80,24 @@ export async function POST(request: Request) {
       }
     })
 
-    const payload = {
-      model: modelId,
-      messages: [
+    // Construct final payload messages
+    const apiMessages = [
         { role: "system", content: effectiveSystemPrompt },
         ...conversationHistory
-      ],
+    ]
+
+    // If 'plan' (current task) is provided, append it as a USER message to ensure strict alternating roles or at least valid ending
+    // This fixes "Last message must have role user" errors on strict APIs (Mistral, Groq, Cerebras)
+    if (plan) {
+        apiMessages.push({
+            role: "user",
+            content: `\n\nIMPORTANT: You must strictly follow this implementation plan:\n${plan}\n\n`
+        })
+    }
+
+    const payload = {
+      model: modelId,
+      messages: apiMessages,
       temperature: 0.7,
       stream: false
     }
