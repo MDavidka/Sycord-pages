@@ -101,11 +101,12 @@ export interface GeneratedPage {
 
 interface AIWebsiteBuilderProps {
   projectId: string
+  subdomain?: string
   generatedPages: GeneratedPage[]
   setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
 }
 
-const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
+const AIWebsiteBuilder = ({ projectId, subdomain, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [step, setStep] = useState<Step>("idle")
@@ -230,6 +231,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           // Pass the specific file task + the global architectural context
           plan: `CURRENT TASK: Generate code for file '${filename}'.\n\nARCHITECTURAL CONTEXT: ${architecturalContext}\n\nEnsure '${filename}' implements the features described in the context and integrates with other files.`,
           model: selectedModel.id, // Pass selected model
+          targetFile: filename, // Explicitly tell backend which file this is
         }),
       })
 
@@ -407,7 +409,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                       </div>
                     </CardContent>
                     {!message.isIntermediate && (
-                      <CardFooter className="pt-0">
+                      <CardFooter className="pt-0 flex flex-wrap gap-2">
                         <Button
                           className="w-full sm:w-auto gap-2 bg-foreground text-background hover:bg-foreground/90"
                           onClick={handleDeployCode}
@@ -425,6 +427,17 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                             </>
                           )}
                         </Button>
+
+                        {deployedCode === message.code && subdomain && (
+                            <Button
+                                variant="outline"
+                                className="w-full sm:w-auto gap-2"
+                                onClick={() => window.open(`http://${subdomain}.ltpd.xyz`, '_blank')}
+                            >
+                                <ArrowRight className="h-4 w-4" />
+                                Visit Live Site
+                            </Button>
+                        )}
                       </CardFooter>
                     )}
                   </Card>
@@ -461,6 +474,54 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
               )}
             </div>
           </div>
+        )}
+
+        {/* Completion Summary Card */}
+        {step === "done" && generatedPages.length > 0 && (
+            <div className="flex justify-start w-full max-w-3xl">
+                <Card className="w-full border-green-500/20 bg-green-500/5">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-green-600">
+                            <Check className="h-5 w-5" />
+                            Website Generation Complete
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            Successfully generated {generatedPages.length} files. You can now deploy the entire website.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 text-xs font-mono mb-4">
+                            {generatedPages.map(p => (
+                                <div key={p.name} className="flex items-center gap-2 p-2 bg-background/50 rounded border border-border/50">
+                                    <FileCode className="h-3 w-3 opacity-50" />
+                                    {p.name}
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                    <CardFooter>
+                        <div className="flex flex-col w-full gap-2">
+                            <Button
+                                className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+                                onClick={handleDeployCode}
+                            >
+                                <Rocket className="h-4 w-4" />
+                                Deploy Full Website
+                            </Button>
+                            {deploySuccess && subdomain && (
+                                <Button
+                                    variant="outline"
+                                    className="w-full gap-2"
+                                    onClick={() => window.open(`http://${subdomain}.ltpd.xyz`, '_blank')}
+                                >
+                                    <ArrowRight className="h-4 w-4" />
+                                    View Live Site
+                                </Button>
+                            )}
+                        </div>
+                    </CardFooter>
+                </Card>
+            </div>
         )}
 
         {error && (

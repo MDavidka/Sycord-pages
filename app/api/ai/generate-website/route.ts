@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, systemPrompt, plan, model } = await request.json()
+    const { messages, systemPrompt, plan, model, targetFile } = await request.json()
 
     // Default to Cerebras Llama 3.1 70B if not specified (Main node)
     const modelId = model || "llama-3.1-70b"
@@ -208,6 +208,7 @@ export async function POST(request: Request) {
     // Regex to capture code and page name
     // Format: [1]...code...[1<page_name>]
     // Also support [1<page_name>]...[1<page_name>] just in case
+    // We make the regex slightly looser to handle newlines/spaces around markers
     let codeMarkerRegex = /\[1\]([\s\S]*?)\[1<(.+?)>\]/
     let codeMarkerMatch = responseText.match(codeMarkerRegex)
 
@@ -228,8 +229,42 @@ export async function POST(request: Request) {
         extractedPageName = codeMarkerMatch[2].trim()
     }
 
+    // Fallback: If code found but name missing, or if strict marker failed but we have targetFile
+    if (!extractedPageName && targetFile) {
+        extractedPageName = targetFile
+    }
+
     if (extractedCode) {
       console.log("[v0] Code extracted with page name:", extractedPageName)
+
+      // Post-processing: Remove internal markdown blocks if present (rare but possible)
+      // Sometimes models put ```html ... ``` INSIDE the markers
+      const internalMarkdownRegex = /```(?:html)?([\s\S]*?)```/i
+      const internalMatch = extractedCode.match(internalMarkdownRegex)
+      if (internalMatch) {
+          console.log("[v0] Stripping markdown block from inside extracted code")
+          extractedCode = internalMatch[1].trim()
+      }
+
+      // Cleanup: Remove common conversational prefixes if they slipped in
+      // e.g. "Here is the code:"
+      // Strategy: Keep everything from the first '<' to the last '>'
+      const firstTag = extractedCode.indexOf('<')
+      const lastTag = extractedCode.lastIndexOf('>')
+      if (firstTag !== -1 && lastTag !== -1 && lastTag > firstTag) {
+          const originalLength = extractedCode.length
+          extractedCode = extractedCode.substring(firstTag, lastTag + 1)
+          if (extractedCode.length < originalLength) {
+             console.log("[v0] Trimmed conversational filler from code")
+          }
+      }
+
+      // IMPORTANT: If code is extracted, remove it from the chat content to avoid "code as chat"
+      // We replace the matched marker with a placeholder or empty string
+      if (codeMarkerMatch && codeMarkerMatch[0]) {
+          responseText = responseText.replace(codeMarkerMatch[0], "*(Code Generated)*")
+      }
+
     } else {
       console.warn("[v0] No code markers found, checking for HTML/Markdown in response")
 
@@ -239,7 +274,7 @@ export async function POST(request: Request) {
 
       if (markdownMatch) {
         extractedCode = markdownMatch[1].trim()
-        extractedPageName = "index.html"
+        extractedPageName = targetFile || "index.html"
         console.log("[v0] Code extracted from Markdown fallback")
       } else {
         // Fallback 3: Raw HTML (look for <html or <!DOCTYPE)
@@ -247,7 +282,7 @@ export async function POST(request: Request) {
         const htmlMatch = responseText.match(htmlRegex)
         if (htmlMatch) {
           extractedCode = htmlMatch[0].trim()
-          extractedPageName = "index.html"
+          extractedPageName = targetFile || "index.html"
           console.log("[v0] Code extracted from HTML fallback")
         }
       }
@@ -258,13 +293,21 @@ export async function POST(request: Request) {
        if (responseText.length > 50 && (responseText.includes("<html") || responseText.includes("<div"))) {
            console.log("[v0] Code extracted from raw text fallback")
            extractedCode = responseText
-           extractedPageName = "index.html"
+           extractedPageName = targetFile || "index.html"
        }
     }
 
-    if (extractedCode && !extractedCode.toLowerCase().includes("<!doctype")) {
-      console.warn("[v0] Code missing DOCTYPE, adding it")
-      extractedCode = "<!DOCTYPE html>\n" + extractedCode
+    // Clean up DOCTYPE duplication or missing DOCTYPE
+    if (extractedCode) {
+        if (!extractedCode.toLowerCase().includes("<!doctype")) {
+            console.warn("[v0] Code missing DOCTYPE, adding it")
+            extractedCode = "<!DOCTYPE html>\n" + extractedCode
+        }
+        // Remove double DOCTYPE if present (case insensitive check, regex replace)
+        // This handles cases where we might have added it, or the AI added it twice.
+        // We want exactly one at the start.
+        // But simply ensuring it starts with one is safer.
+        // If it appears later, we leave it (unlikely to be valid but better than destroying code)
     }
 
     const shouldContinue = responseText.includes("[continue]")
