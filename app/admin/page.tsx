@@ -26,7 +26,10 @@ import {
   LogOut,
   BarChart3,
   Server,
-  Key
+  Key,
+  Triangle,
+  Copy,
+  Check
 } from "lucide-react"
 
 interface User {
@@ -35,6 +38,8 @@ interface User {
   name: string
   projectCount: number
   isPremium: boolean
+  hasVercelLinked: boolean
+  vercelAccessToken: string | null
   ip: string
   createdAt: string
   websites: Array<{ id: string; businessName: string; subdomain: string }>
@@ -50,6 +55,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"overview" | "users">("overview")
+  const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -127,6 +133,12 @@ export default function AdminPage() {
     } finally {
       setUpdatingUser(null)
     }
+  }
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedToken(id)
+    setTimeout(() => setCopiedToken(null), 2000)
   }
 
   const formatDate = (dateString: string) => {
@@ -289,12 +301,12 @@ export default function AdminPage() {
 
                 <Card className="border-border shadow-sm">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Free Plan</CardTitle>
-                    <Users className="h-4 w-4 text-green-500" />
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Vercel Connected</CardTitle>
+                    <Triangle className="h-4 w-4 text-black fill-black" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{users.filter((u) => !u.isPremium).length}</div>
-                    <p className="text-xs text-muted-foreground">Standard users</p>
+                    <div className="text-2xl font-bold">{users.filter((u) => u.hasVercelLinked).length}</div>
+                    <p className="text-xs text-muted-foreground">Users with Vercel linked</p>
                   </CardContent>
                 </Card>
               </div>
@@ -339,6 +351,11 @@ export default function AdminPage() {
                                 <div>
                                   <div className="flex items-center gap-2">
                                      <h3 className="font-bold text-lg text-foreground">{user.name}</h3>
+                                     {user.hasVercelLinked && (
+                                        <Badge variant="secondary" className="bg-black text-white hover:bg-black/90 gap-1 h-5 text-[10px] px-1.5 border-none">
+                                           <Triangle className="h-2 w-2 fill-white" /> Vercel
+                                        </Badge>
+                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                     <Mail className="h-3.5 w-3.5" />
@@ -357,7 +374,32 @@ export default function AdminPage() {
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                              {user.vercelAccessToken && (
+                                <div className="mt-4 bg-muted/50 border border-border/50 rounded-lg p-3">
+                                  <div className="flex items-center justify-between gap-2 mb-1">
+                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider flex items-center gap-1">
+                                      <Key className="h-3 w-3" /> Vercel Token
+                                    </span>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-6 w-6"
+                                      onClick={() => copyToClipboard(user.vercelAccessToken!, user.userId)}
+                                    >
+                                      {copiedToken === user.userId ? (
+                                        <Check className="h-3.5 w-3.5 text-green-500" />
+                                      ) : (
+                                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                                      )}
+                                    </Button>
+                                  </div>
+                                  <code className="text-[10px] break-all font-mono text-muted-foreground bg-background/50 p-1.5 rounded block border border-border/30">
+                                    {user.vercelAccessToken}
+                                  </code>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-4">
                                 <div className="bg-muted/30 p-2 rounded-lg">
                                   <p className="text-xs text-muted-foreground">Projects</p>
                                   <p className="font-medium">{user.projectCount}</p>
