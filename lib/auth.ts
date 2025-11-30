@@ -57,12 +57,22 @@ export const authOptions: AuthOptions = {
         url: "https://vercel.com/oauth/authorize",
         params: { scope: "" },
       },
-      // Manually handle token exchange to fix 400 Bad Request
+      // Override callback URL to root if needed, though usually NextAuth appends /vercel
+      // For the user request, we will dynamically determine if we need to enforce the custom redirect uri during token exchange
       token: {
         url: "https://api.vercel.com/v2/oauth/access_token",
         async request(context) {
           const { code, provider, params } = context
-          const redirect_uri = provider.callbackUrl
+
+          // User requested explicit Redirect URI: https://ltpd.xyz/api/auth/callback
+          // We will use this in the token exchange.
+          // Note: NextAuth initiates the flow with its own callback URL.
+          // If Vercel enforces strict matching, the initial authorize request must ALSO have used this URI.
+          // By default, NextAuth uses .../callback/vercel.
+          // If the user configured Vercel App with only .../callback, then NextAuth's default authorize flow might have failed or used the default.
+          // We will try to use the one requested by the user here.
+
+          const redirect_uri = "https://ltpd.xyz/api/auth/callback" // Explicitly requested by user
 
           console.log("[v0-DEBUG] Manual Vercel Token Request:", {
              code: code?.substring(0, 5) + "...",

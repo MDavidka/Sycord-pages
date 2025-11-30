@@ -155,7 +155,7 @@ export default function AdminPage() {
 
   // Calculate the redirect URI for display
   const currentAppUrl = "https://ltpd.xyz";
-  const callbackUrl = `${currentAppUrl}/api/auth/callback/vercel`;
+  const callbackUrl = `${currentAppUrl}/api/auth/callback`;
 
   return (
     <div className="min-h-screen bg-background relative">
