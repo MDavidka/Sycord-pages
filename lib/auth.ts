@@ -55,15 +55,14 @@ export const authOptions: AuthOptions = {
       clientSecret: process.env.VERCEL_CLIENT_SECRET,
       authorization: {
         url: "https://vercel.com/oauth/authorize",
-        params: { scope: "global" },
+        params: { scope: "" }, // Empty scope or remove - Vercel uses "global" by default
       },
       token: "https://api.vercel.com/v2/oauth/access_token",
       userinfo: "https://api.vercel.com/www/user",
       client: {
-        token_endpoint_auth_method: "client_secret_post",
+        token_endpoint_auth_method: "client_secret_basic",
       },
-      // Ensure checks are standard. Adding PKCE just in case.
-      checks: ["state", "pkce"],
+      checks: ["state"],
       profile(profile) {
         console.log("[v0-DEBUG] Vercel Profile Callback RAW:", JSON.stringify(profile, null, 2))
         return {
