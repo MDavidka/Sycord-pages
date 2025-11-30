@@ -37,6 +37,7 @@ interface User {
   isPremium: boolean
   ip: string
   createdAt: string
+  vercelConnected?: boolean
   websites: Array<{ id: string; businessName: string; subdomain: string }>
 }
 
@@ -365,6 +366,12 @@ export default function AdminPage() {
                                     </Badge>
                                   ) : (
                                     <Badge variant="outline" className="text-muted-foreground">Free</Badge>
+                                  )}
+                                  {user.vercelConnected && (
+                                    <Badge variant="outline" className="bg-black/5 text-black border-black/20 gap-1">
+                                      <div className="w-3 h-3 rounded-full bg-black text-white flex items-center justify-center text-[8px]">▲</div>
+                                      Vercel
+                                    </Badge>
                                   )}
                                   <span className="text-xs text-muted-foreground font-mono">{user.userId.substring(0,8)}...</span>
                                 </div>
