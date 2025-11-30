@@ -14,10 +14,20 @@ export async function POST(request: Request) {
 
   const client = await clientPromise
   const db = client.db()
+
+  // Fetch user to get Vercel Access Token
+  const user = await db.collection("users").findOne({ id: session.user.id })
+  const vercelToken = user?.vercelAccessToken
+
+  if (!vercelToken) {
+    return NextResponse.json({ message: "Vercel account not connected. Please connect your Vercel account in settings or login with Vercel." }, { status: 403 })
+  }
+
   const body = await request.json()
 
   const userProjects = await db.collection("projects").find({ userId: session.user.id }).toArray()
 
+  // @ts-ignore
   const isPremium = session.user.isPremium || false
   const MAX_FREE_WEBSITES = 3
 
@@ -33,6 +43,95 @@ export async function POST(request: Request) {
   const userIP = getClientIP(request)
   const webpageId = generateWebpageId()
 
+  // Sanitize project name for Vercel
+  const vercelProjectName = (body.subdomain || body.businessName || "project")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, "-")
+    .substring(0, 90) + "-" + Math.random().toString(36).substring(2, 7)
+
+  // Vercel Integration
+  let vercelProjectId = null
+  try {
+    console.log("[v0] Creating Vercel project:", vercelProjectName)
+
+    // 1. Create Project
+    const createProjectRes = await fetch("https://api.vercel.com/v9/projects", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${vercelToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: vercelProjectName,
+        framework: null // Static site
+      }),
+    })
+
+    if (!createProjectRes.ok) {
+      const errorData = await createProjectRes.json()
+      console.error("[v0] Vercel Create Project Error:", errorData)
+      throw new Error(`Failed to create Vercel project: ${errorData.message || createProjectRes.statusText}`)
+    }
+
+    const projectData = await createProjectRes.json()
+    vercelProjectId = projectData.id
+
+    // 2. Initial Deployment
+    const starterHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${body.businessName}</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f0f0; }
+        .container { text-align: center; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 0.5rem; }
+        p { color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to ${body.businessName}</h1>
+        <p>Your site is successfully deployed!</p>
+    </div>
+</body>
+</html>`
+
+    console.log("[v0] Creating initial deployment for:", vercelProjectId)
+    const deployRes = await fetch("https://api.vercel.com/v13/deployments", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${vercelToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: vercelProjectName,
+          project: vercelProjectId,
+          files: [
+            {
+              file: "index.html",
+              data: starterHtml
+            }
+          ],
+          target: "production"
+        }),
+    })
+
+    if (!deployRes.ok) {
+        const deployError = await deployRes.json()
+        console.error("[v0] Vercel Initial Deploy Error:", deployError)
+        // We log but continue, effectively creating the project but failing the first deploy.
+    } else {
+        console.log("[v0] Initial Vercel deployment triggered")
+    }
+
+  } catch (vercelError: any) {
+    console.error("[v0] Vercel Integration Failed:", vercelError)
+    return NextResponse.json({ message: "Vercel integration failed: " + vercelError.message }, { status: 500 })
+  }
+
   const newProject = {
     ...body,
     webpageId,
@@ -42,8 +141,9 @@ export async function POST(request: Request) {
     userIP: userIP,
     isPremium: isPremium,
     status: "pending",
-    createdAt: new Date()
-    // Removed Vercel fields
+    createdAt: new Date(),
+    vercelProjectId: vercelProjectId,
+    vercelProjectName: vercelProjectName
   }
 
   try {
