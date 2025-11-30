@@ -18,9 +18,21 @@ if (!process.env.AUTH_SECRET) {
   console.warn("[v0] Auth Warning: Missing AUTH_SECRET")
 }
 
-const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "https://ltpd.xyz"
+const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "http://localhost:3000"
+
+const getCookieDomain = () => {
+  const url = process.env.NEXTAUTH_URL || "http://localhost:3000"
+  const domain = new URL(url).hostname
+
+  if (process.env.NODE_ENV === "production") {
+    // For production, use domain without www prefix but with dot for subdomains
+    return domain.startsWith("www.") ? domain.slice(4) : domain
+  }
+  return undefined // No domain restriction for local development
+}
 
 export const authOptions: AuthOptions = {
+  url: NEXTAUTH_URL,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -74,7 +86,7 @@ export const authOptions: AuthOptions = {
         sameSite: "lax",
         path: "/",
         secure: process.env.NODE_ENV === "production",
-        domain: process.env.NODE_ENV === "production" ? ".ltpd.xyz" : undefined,
+        domain: getCookieDomain(),
       },
     },
   },
@@ -82,17 +94,17 @@ export const authOptions: AuthOptions = {
     async jwt({ token, account, profile }) {
       console.log("[v0-DEBUG] JWT Callback Triggered")
       console.log("[v0-DEBUG] JWT Input:", {
-          tokenKeys: Object.keys(token),
-          accountProvider: account?.provider,
-          hasProfile: !!profile
+        tokenKeys: Object.keys(token),
+        accountProvider: account?.provider,
+        hasProfile: !!profile,
       })
 
       if (profile) {
-           console.log("[v0-DEBUG] JWT Profile Data:", JSON.stringify(profile, null, 2))
+        console.log("[v0-DEBUG] JWT Profile Data:", JSON.stringify(profile, null, 2))
       }
 
       if (account) {
-           console.log("[v0-DEBUG] JWT Account Data:", JSON.stringify({ ...account, access_token: "REDACTED" }, null, 2))
+        console.log("[v0-DEBUG] JWT Account Data:", JSON.stringify({ ...account, access_token: "REDACTED" }, null, 2))
       }
 
       if (account && profile) {
@@ -100,12 +112,13 @@ export const authOptions: AuthOptions = {
         const profileId = profile.sub || profile.user?.uid || profile.id
 
         if (profileId) {
-            token.id = profileId
+          token.id = profileId
         } else {
-            console.error("[v0-ERROR] No ID found in profile:", JSON.stringify(profile))
+          console.error("[v0-ERROR] No ID found in profile:", JSON.stringify(profile))
         }
 
-        token.picture = profile.picture || (profile.user?.uid ? `https://vercel.com/api/www/avatar/${profile.user.uid}` : null)
+        token.picture =
+          profile.picture || (profile.user?.uid ? `https://vercel.com/api/www/avatar/${profile.user.uid}` : null)
         token.email = profile.email || profile.user?.email
         token.name = profile.name || profile.user?.name || profile.user?.username
         token.isPremium = false
@@ -134,9 +147,9 @@ export const authOptions: AuthOptions = {
         // Log status of Vercel linking in session
         // @ts-ignore
         if (session.user.vercelAccessToken) {
-             // console.log(`[v0] Session active with Vercel Link`)
+          // console.log(`[v0] Session active with Vercel Link`)
         } else {
-             console.log("[v0-DEBUG] Session created WITHOUT Vercel Token")
+          console.log("[v0-DEBUG] Session created WITHOUT Vercel Token")
         }
       }
       return session
@@ -156,20 +169,20 @@ export const authOptions: AuthOptions = {
     },
     debug(code: any, metadata: any) {
       console.log(`[NextAuth-DEBUG][${code}]`, JSON.stringify(metadata, null, 2))
-    }
+    },
   },
   events: {
     async signIn(message) {
-        console.log("[v0-EVENT] signIn", message.user.email, "Provider:", message.account?.provider)
+      console.log("[v0-EVENT] signIn", message.user.email, "Provider:", message.account?.provider)
     },
     async linkAccount(message) {
-        console.log("[v0-EVENT] linkAccount", message.user.email, "Provider:", message.account.provider)
+      console.log("[v0-EVENT] linkAccount", message.user.email, "Provider:", message.account.provider)
     },
     async session(message) {
-        // console.log("[v0] Auth Event: session active") // Too verbose
+      // console.log("[v0] Auth Event: session active") // Too verbose
     },
     async error(message) {
-        console.error("[v0-EVENT] ERROR:", message)
-    }
-  }
+      console.error("[v0-EVENT] ERROR:", message)
+    },
+  },
 }

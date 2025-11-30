@@ -23,13 +23,13 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   // Log session state for debugging
   useEffect(() => {
     if (isOpen) {
-        console.log("[v0-debug] Modal open. Session:", session)
-        // @ts-ignore
-        if (session?.user?.vercelAccessToken) {
-            console.log("[v0-debug] Vercel token present in session")
-        } else {
-            console.log("[v0-debug] Vercel token MISSING")
-        }
+      console.log("[v0-debug] Modal open. Session:", session)
+      // @ts-ignore
+      if (session?.user?.vercelAccessToken) {
+        console.log("[v0-debug] Vercel token present in session")
+      } else {
+        console.log("[v0-debug] Vercel token MISSING")
+      }
     }
   }, [isOpen, session])
 
@@ -39,8 +39,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   const handleVercelConnect = async () => {
     console.log("[v0] User initiated Vercel connection flow")
     try {
-      // Sign in with Vercel to link account or get token
-      await signIn("vercel", { callbackUrl: window.location.href })
+      await signIn("vercel", { callbackUrl: "/dashboard" })
     } catch (err) {
       console.error("[v0] SignIn call failed", err)
       toast.error("Failed to initiate login")
@@ -127,7 +126,8 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
               <div className="space-y-2 max-w-md">
                 <h3 className="text-lg font-semibold">Connect Vercel to Continue</h3>
                 <p className="text-sm text-muted-foreground">
-                  We use Vercel for free, high-performance hosting. You must connect your Vercel account to deploy your website.
+                  We use Vercel for free, high-performance hosting. You must connect your Vercel account to deploy your
+                  website.
                 </p>
               </div>
               <Button
