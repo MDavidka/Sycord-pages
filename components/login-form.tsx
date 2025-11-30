@@ -29,13 +29,14 @@ export default function LoginForm() {
           <p className="text-muted-foreground mb-8">Jelentkezzen be a fiókjába a folytatáshoz.</p>
 
           <div className="flex flex-col gap-3">
-             <Button
-              onClick={() => signIn("vercel", { callbackUrl: "/dashboard" })}
-              className="w-full bg-black text-white hover:bg-neutral-800 border border-neutral-800 h-11"
-            >
-              <Triangle className="fill-white h-4 w-4 mr-2" />
-              Sign in with Vercel
-            </Button>
+             <a href="/api/auth/authorize" className="w-full">
+               <Button
+                className="w-full bg-black text-white hover:bg-neutral-800 border border-neutral-800 h-11"
+              >
+                <Triangle className="fill-white h-4 w-4 mr-2" />
+                Sign in with Vercel
+              </Button>
+            </a>
 
             <Button
               onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
