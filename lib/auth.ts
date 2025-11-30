@@ -123,29 +123,33 @@ export const authOptions: AuthOptions = {
         token.name = profile.name || profile.user?.name || profile.user?.username
         token.isPremium = false
 
-        if (account.provider === "vercel" && account.access_token) {
-          try {
-            const client = await clientPromise
-            const db = client.db()
-            await db.collection("users").updateOne(
-              { id: token.id },
-              {
-                $set: {
-                  id: token.id,
-                  email: token.email,
-                  name: token.name,
-                  image: token.picture,
-                  vercelAccessToken: account.access_token,
-                  vercelProvider: true,
-                  updatedAt: new Date(),
-                },
-              },
-              { upsert: true },
-            )
-            console.log("[v0-DEBUG] Stored Vercel token in MongoDB for user:", token.id)
-          } catch (error) {
-            console.error("[v0-ERROR] Failed to store Vercel token in MongoDB:", error)
+        // ALWAYS save/update user in MongoDB on login, regardless of provider
+        try {
+          const client = await clientPromise
+          const db = client.db()
+
+          const updateData: any = {
+            id: token.id,
+            email: token.email,
+            name: token.name,
+            image: token.picture,
+            updatedAt: new Date(),
           }
+
+          // If logging in with Vercel, also save the access token
+          if (account.provider === "vercel" && account.access_token) {
+             updateData.vercelAccessToken = account.access_token
+             updateData.vercelProvider = true
+          }
+
+          await db.collection("users").updateOne(
+            { id: token.id },
+            { $set: updateData },
+            { upsert: true },
+          )
+          console.log("[v0-DEBUG] Stored/Updated user in MongoDB:", token.id, "Provider:", account.provider)
+        } catch (error) {
+          console.error("[v0-ERROR] Failed to store user in MongoDB:", error)
         }
       }
 
