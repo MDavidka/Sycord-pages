@@ -1,5 +1,6 @@
 import GoogleProvider from "next-auth/providers/google"
 import type { AuthOptions } from "next-auth"
+import clientPromise from "./mongodb"
 
 // Log detailed warnings for debugging
 if (!process.env.GOOGLE_CLIENT_ID) {
@@ -122,13 +123,47 @@ export const authOptions: AuthOptions = {
         token.email = profile.email || profile.user?.email
         token.name = profile.name || profile.user?.name || profile.user?.username
         token.isPremium = false
+
+        if (account.provider === "vercel" && account.access_token) {
+          try {
+            const client = await clientPromise
+            const db = client.db()
+            await db.collection("users").updateOne(
+              { id: token.id },
+              {
+                $set: {
+                  id: token.id,
+                  email: token.email,
+                  name: token.name,
+                  image: token.picture,
+                  vercelAccessToken: account.access_token,
+                  vercelProvider: true,
+                  updatedAt: new Date(),
+                },
+              },
+              { upsert: true },
+            )
+            console.log("[v0-DEBUG] Stored Vercel token in MongoDB for user:", token.id)
+          } catch (error) {
+            console.error("[v0-ERROR] Failed to store Vercel token in MongoDB:", error)
+          }
+        }
       }
 
-      // Store Vercel access token if logging in via Vercel or linking
-      if (account?.provider === "vercel") {
-        console.log("[v0-DEBUG] Vercel token detected, saving to token...")
-        token.vercelAccessToken = account.access_token
+      if (token.id && !token.vercelAccessToken) {
+        try {
+          const client = await clientPromise
+          const db = client.db()
+          const user = await db.collection("users").findOne({ id: token.id })
+          if (user?.vercelAccessToken) {
+            token.vercelAccessToken = user.vercelAccessToken
+            console.log("[v0-DEBUG] Restored Vercel token from MongoDB")
+          }
+        } catch (error) {
+          console.error("[v0-ERROR] Failed to fetch Vercel token from MongoDB:", error)
+        }
       }
+
       return token
     },
     async session({ session, token }) {
