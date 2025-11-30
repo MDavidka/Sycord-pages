@@ -55,13 +55,47 @@ export const authOptions: AuthOptions = {
       clientSecret: process.env.VERCEL_CLIENT_SECRET,
       authorization: {
         url: "https://vercel.com/oauth/authorize",
-        params: { scope: "" }, // Empty scope or remove - Vercel uses "global" by default
+        params: { scope: "" },
       },
-      token: "https://api.vercel.com/v2/oauth/access_token",
+      // Manually handle token exchange to fix 400 Bad Request
+      token: {
+        url: "https://api.vercel.com/v2/oauth/access_token",
+        async request(context) {
+          const { code, provider, params } = context
+          const redirect_uri = provider.callbackUrl
+
+          console.log("[v0-DEBUG] Manual Vercel Token Request:", {
+             code: code?.substring(0, 5) + "...",
+             redirect_uri,
+             clientId: provider.clientId?.substring(0, 5) + "..."
+          })
+
+          const body = new URLSearchParams()
+          body.append("client_id", provider.clientId as string)
+          body.append("client_secret", provider.clientSecret as string)
+          body.append("code", code as string)
+          body.append("redirect_uri", redirect_uri as string)
+
+          const response = await fetch("https://api.vercel.com/v2/oauth/access_token", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body,
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error("[v0-ERROR] Vercel Token Request Failed:", response.status, errorText)
+            throw new Error(`Vercel Token Error: ${response.status} ${errorText}`)
+          }
+
+          const tokens = await response.json()
+          console.log("[v0-DEBUG] Vercel Token Success")
+          return { tokens }
+        },
+      },
       userinfo: "https://api.vercel.com/www/user",
-      client: {
-        token_endpoint_auth_method: "client_secret_basic",
-      },
       checks: ["state"],
       profile(profile) {
         console.log("[v0-DEBUG] Vercel Profile Callback RAW:", JSON.stringify(profile, null, 2))
