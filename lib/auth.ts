@@ -156,6 +156,7 @@ export const authOptions: AuthOptions = {
           if (account.provider === "vercel" && account.access_token) {
              updateData.vercelAccessToken = account.access_token
              updateData.vercelProvider = true
+             console.log("[v0-DEBUG] Vercel Access Token found to be saved:", account.access_token.substring(0, 10) + "...")
           }
 
           await db.collection("users").updateOne(
