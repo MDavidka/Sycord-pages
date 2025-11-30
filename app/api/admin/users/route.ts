@@ -32,8 +32,6 @@ export async function GET() {
             userId: user.id,
             email: user.email || "Unknown",
             name: user.name || "Unknown",
-            // Check for Vercel token or explicitly set flag
-            hasVercelLinked: !!(user.vercelAccessToken),
             projectCount: userProjects.length,
             isPremium: user.isPremium || false, // Fallback if not set in user doc
             ip: userProjects.length > 0 ? (userProjects[0].userIP || "Unknown") : "Unknown", // Best effort IP from projects

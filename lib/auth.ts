@@ -9,12 +9,6 @@ if (!process.env.GOOGLE_CLIENT_ID) {
 if (!process.env.GOOGLE_CLIENT_SECRET) {
   console.warn("[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET")
 }
-if (!process.env.VERCEL_CLIENT_ID) {
-  console.warn("[v0] Auth Warning: Missing VERCEL_CLIENT_ID")
-}
-if (!process.env.VERCEL_CLIENT_SECRET) {
-  console.warn("[v0] Auth Warning: Missing VERCEL_CLIENT_SECRET")
-}
 if (!process.env.AUTH_SECRET) {
   console.warn("[v0] Auth Warning: Missing AUTH_SECRET")
 }
@@ -46,33 +40,6 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
-    // Custom Vercel Provider
-    {
-      id: "vercel",
-      name: "Vercel",
-      type: "oauth",
-      clientId: process.env.VERCEL_CLIENT_ID,
-      clientSecret: process.env.VERCEL_CLIENT_SECRET,
-      authorization: {
-        url: "https://vercel.com/oauth/authorize",
-        params: { scope: "" }, // Empty scope or remove - Vercel uses "global" by default
-      },
-      token: "https://api.vercel.com/v2/oauth/access_token",
-      userinfo: "https://api.vercel.com/www/user",
-      client: {
-        token_endpoint_auth_method: "client_secret_basic",
-      },
-      checks: ["state"],
-      profile(profile) {
-        console.log("[v0-DEBUG] Vercel Profile Callback RAW:", JSON.stringify(profile, null, 2))
-        return {
-          id: profile.user.uid,
-          name: profile.user.name || profile.user.username,
-          email: profile.user.email,
-          image: `https://vercel.com/api/www/avatar/${profile.user.uid}`,
-        }
-      },
-    },
   ],
   session: {
     strategy: "jwt",
@@ -93,37 +60,19 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async jwt({ token, account, profile }) {
       console.log("[v0-DEBUG] JWT Callback Triggered")
-      console.log("[v0-DEBUG] JWT Input:", {
-        tokenKeys: Object.keys(token),
-        accountProvider: account?.provider,
-        hasProfile: !!profile,
-      })
-
-      if (profile) {
-        console.log("[v0-DEBUG] JWT Profile Data:", JSON.stringify(profile, null, 2))
-      }
-
-      if (account) {
-        console.log("[v0-DEBUG] JWT Account Data:", JSON.stringify({ ...account, access_token: "REDACTED" }, null, 2))
-      }
 
       if (account && profile) {
-        // Fallback for Vercel which might not have 'sub' at top level of raw profile
         const profileId = profile.sub || profile.user?.uid || profile.id
-
         if (profileId) {
           token.id = profileId
-        } else {
-          console.error("[v0-ERROR] No ID found in profile:", JSON.stringify(profile))
         }
 
-        token.picture =
-          profile.picture || (profile.user?.uid ? `https://vercel.com/api/www/avatar/${profile.user.uid}` : null)
+        token.picture = profile.picture
         token.email = profile.email || profile.user?.email
         token.name = profile.name || profile.user?.name || profile.user?.username
         token.isPremium = false
 
-        // ALWAYS save/update user in MongoDB on login, regardless of provider
+        // ALWAYS save/update user in MongoDB on login
         try {
           const client = await clientPromise
           const db = client.db()
@@ -134,12 +83,6 @@ export const authOptions: AuthOptions = {
             name: token.name,
             image: token.picture,
             updatedAt: new Date(),
-          }
-
-          // If logging in with Vercel, also save the access token
-          if (account.provider === "vercel" && account.access_token) {
-             updateData.vercelAccessToken = account.access_token
-             updateData.vercelProvider = true
           }
 
           await db.collection("users").updateOne(
@@ -153,24 +96,9 @@ export const authOptions: AuthOptions = {
         }
       }
 
-      if (token.id && !token.vercelAccessToken) {
-        try {
-          const client = await clientPromise
-          const db = client.db()
-          const user = await db.collection("users").findOne({ id: token.id })
-          if (user?.vercelAccessToken) {
-            token.vercelAccessToken = user.vercelAccessToken
-            console.log("[v0-DEBUG] Restored Vercel token from MongoDB")
-          }
-        } catch (error) {
-          console.error("[v0-ERROR] Failed to fetch Vercel token from MongoDB:", error)
-        }
-      }
-
       return token
     },
     async session({ session, token }) {
-      // console.log("[v0] Session Callback")
       if (token && session.user) {
         if (token.id) session.user.id = token.id as string
         if (token.picture) session.user.image = token.picture as string
@@ -179,16 +107,6 @@ export const authOptions: AuthOptions = {
 
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
-        // @ts-ignore
-        session.user.vercelAccessToken = token.vercelAccessToken as string | undefined
-
-        // Log status of Vercel linking in session
-        // @ts-ignore
-        if (session.user.vercelAccessToken) {
-          // console.log(`[v0] Session active with Vercel Link`)
-        } else {
-          console.log("[v0-DEBUG] Session created WITHOUT Vercel Token")
-        }
       }
       return session
     },
@@ -212,12 +130,6 @@ export const authOptions: AuthOptions = {
   events: {
     async signIn(message) {
       console.log("[v0-EVENT] signIn", message.user.email, "Provider:", message.account?.provider)
-    },
-    async linkAccount(message) {
-      console.log("[v0-EVENT] linkAccount", message.user.email, "Provider:", message.account.provider)
-    },
-    async session(message) {
-      // console.log("[v0] Auth Event: session active") // Too verbose
     },
     async error(message) {
       console.error("[v0-EVENT] ERROR:", message)
