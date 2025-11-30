@@ -1,5 +1,6 @@
 import GoogleProvider from "next-auth/providers/google"
 import type { AuthOptions } from "next-auth"
+import clientPromise from "@/lib/mongodb"
 
 // Log detailed warnings for debugging
 if (!process.env.GOOGLE_CLIENT_ID) {
@@ -33,7 +34,7 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
-    // Custom Vercel Provider
+    // Custom Vercel Provider with Explicit Token Handling
     {
       id: "vercel",
       name: "Vercel",
@@ -44,15 +45,55 @@ export const authOptions: AuthOptions = {
         url: "https://vercel.com/oauth/authorize",
         params: { scope: "global" },
       },
-      token: "https://api.vercel.com/v2/oauth/access_token",
-      userinfo: "https://api.vercel.com/www/user",
-      client: {
-        token_endpoint_auth_method: "client_secret_post",
+      token: {
+        url: "https://api.vercel.com/v2/oauth/access_token",
+        async request(context) {
+            const { provider, params } = context
+            // Construct redirect_uri manually to ensure it matches what was likely sent during authorize.
+            // NextAuth normally handles this, but explicit control helps debug.
+            // If NEXTAUTH_URL is set, NextAuth uses that.
+            // Vercel requires the redirect_uri to match exactly what is registered in the Integration.
+            const redirectUri = process.env.NEXTAUTH_URL
+                ? `${process.env.NEXTAUTH_URL}/api/auth/callback/vercel`
+                : "http://localhost:3000/api/auth/callback/vercel"; // Fallback for dev if env missing
+
+            console.log("[v0-DEBUG] Token Request Params:", {
+                code: params.code,
+                redirect_uri: redirectUri,
+                client_id: provider.clientId ? "PRESENT" : "MISSING"
+            });
+
+            const body = new URLSearchParams({
+                client_id: provider.clientId!,
+                client_secret: provider.clientSecret!,
+                code: params.code!,
+                redirect_uri: redirectUri,
+                grant_type: "authorization_code",
+            });
+
+            const response = await fetch("https://api.vercel.com/v2/oauth/access_token", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body: body,
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("[v0-ERROR] Vercel Token Exchange Failed:", response.status, errorText);
+                throw new Error(`Vercel Token Error: ${errorText}`);
+            }
+
+            const tokens = await response.json();
+            return {
+                tokens
+            };
+        }
       },
-      // Ensure checks are standard. Adding PKCE just in case.
-      checks: ["state", "pkce"],
+      userinfo: "https://api.vercel.com/www/user",
       profile(profile) {
-        console.log("[v0] Vercel Profile Data Received:", JSON.stringify(profile, null, 2))
+        console.log("[v0-DEBUG] Vercel Profile Callback RAW:", JSON.stringify(profile, null, 2))
         return {
           id: profile.user.uid,
           name: profile.user.name || profile.user.username,
@@ -80,42 +121,83 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async jwt({ token, account, profile }) {
-      console.log("[v0] JWT Callback Triggered")
-      if (account) {
-        console.log(`[v0] JWT Update: Provider=${account.provider}`)
+      // 1. Determine User ID and Data
+      let userId = token.id as string | undefined;
+      let userEmail = token.email as string | undefined;
+      let userName = token.name as string | undefined;
+      let userImage = token.picture as string | undefined;
+
+      if (profile) {
+          // Fallback for Vercel which might not have 'sub' at top level of raw profile
+          const profileId = profile.sub || profile.user?.uid || profile.id
+          if (profileId) userId = profileId;
+          if (profile.email || profile.user?.email) userEmail = profile.email || profile.user?.email;
+          if (profile.name || profile.user?.name || profile.user?.username) userName = profile.name || profile.user?.name || profile.user?.username;
+          if (profile.picture || profile.user?.uid) userImage = profile.picture || `https://vercel.com/api/www/avatar/${profile.user?.uid}`;
+
+          token.id = userId;
+          token.email = userEmail;
+          token.name = userName;
+          token.picture = userImage;
       }
 
-      if (account && profile) {
-        token.id = profile.sub
-        token.picture = profile.picture
-        token.email = profile.email
-        token.name = profile.name
-        token.isPremium = false
+      // 2. Persist User in MongoDB
+      if (userId && (account || profile)) {
+          try {
+              const client = await clientPromise;
+              const db = client.db();
+              const updateDoc: any = {
+                  $set: {
+                      email: userEmail,
+                      name: userName,
+                      image: userImage,
+                      lastLogin: new Date(),
+                      ip: "unknown" // We can't easily get IP here, updated in API routes usually
+                  },
+                  $setOnInsert: {
+                      createdAt: new Date(),
+                      isPremium: false
+                  }
+              };
+
+              // If Vercel login, save token
+              if (account?.provider === "vercel") {
+                  console.log("[v0-DEBUG] Vercel token detected, saving to database for user:", userId);
+                  token.vercelAccessToken = account.access_token;
+                  updateDoc.$set.vercelAccessToken = account.access_token;
+                  updateDoc.$set.vercelConnected = true;
+                  updateDoc.$set.vercelId = userId; // Vercel ID is the User ID in this context if logged in with Vercel
+              }
+
+              // Update or Insert User
+              await db.collection("users").updateOne(
+                  { _id: userId },
+                  updateDoc,
+                  { upsert: true }
+              );
+          } catch (e) {
+              console.error("[v0-ERROR] Failed to save user to DB in JWT callback", e);
+          }
+      } else if (userId) {
+          // If we don't have account/profile (subsequent requests), try to fetch Vercel token from DB if missing in token
+          // This ensures if session cookie is lost but DB has it, we might recover it,
+          // though usually we trust the token payload.
+          // For now, rely on token persistence.
       }
-      // Store Vercel access token if logging in via Vercel or linking
-      if (account?.provider === "vercel") {
-        console.log("[v0] Vercel token detected, saving to session...")
-        token.vercelAccessToken = account.access_token
-      }
+
       return token
     },
     async session({ session, token }) {
-      // console.log("[v0] Session Callback")
       if (token && session.user) {
-        session.user.id = token.id as string
-        session.user.image = token.picture as string
-        session.user.email = token.email as string
-        session.user.name = token.name as string
+        if (token.id) session.user.id = token.id as string
+        if (token.picture) session.user.image = token.picture as string
+        if (token.email) session.user.email = token.email as string
+        if (token.name) session.user.name = token.name as string
+
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
         // @ts-ignore
         session.user.vercelAccessToken = token.vercelAccessToken as string | undefined
-
-        // Log status of Vercel linking in session
-        // @ts-ignore
-        if (session.user.vercelAccessToken) {
-             // console.log(`[v0] Session active with Vercel Link`)
-        }
       }
       return session
     },
@@ -127,27 +209,21 @@ export const authOptions: AuthOptions = {
   debug: true,
   logger: {
     error(code: any, metadata: any) {
-      console.error(`[NextAuth][Error][${code}]`, JSON.stringify(metadata, null, 2))
+      console.error(`[NextAuth-ERROR][${code}]`, JSON.stringify(metadata, null, 2))
     },
     warn(code: any) {
-      console.warn(`[NextAuth][Warn][${code}]`)
+      console.warn(`[NextAuth-WARN][${code}]`)
     },
     debug(code: any, metadata: any) {
-      console.log(`[NextAuth][Debug][${code}]`, JSON.stringify(metadata, null, 2))
+      // console.log(`[NextAuth-DEBUG][${code}]`, JSON.stringify(metadata, null, 2))
     }
   },
   events: {
     async signIn(message) {
-        console.log("[v0] Auth Event: signIn", message.user.email, "Provider:", message.account?.provider)
-    },
-    async linkAccount(message) {
-        console.log("[v0] Auth Event: linkAccount", message.user.email, "Provider:", message.account.provider)
-    },
-    async session(message) {
-        // console.log("[v0] Auth Event: session active") // Too verbose
+        console.log("[v0-EVENT] signIn", message.user.email, "Provider:", message.account?.provider)
     },
     async error(message) {
-        console.error("[v0] Auth Event: ERROR", message)
+        console.error("[v0-EVENT] ERROR:", message)
     }
   }
 }
