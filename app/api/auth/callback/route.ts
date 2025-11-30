@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const storedState = request.cookies.get('oauth_state')?.value;
     const storedNonce = request.cookies.get('oauth_nonce')?.value;
     const codeVerifier = request.cookies.get('oauth_code_verifier')?.value;
+    const redirectTarget = request.cookies.get('oauth_redirect_to')?.value || '/dashboard';
 
     if (!validate(state, storedState)) {
       throw new Error('State mismatch');
@@ -35,12 +36,6 @@ export async function GET(request: NextRequest) {
       request.nextUrl.origin,
     );
 
-    // Nonce validation skipped for now as id_token decoding might need extra lib or manual parsing
-    // and Vercel's basic OAuth might not always return id_token in expected JWT format for all scopes.
-    // However, if we do:
-    // const decodedNonce = decodeNonce(tokenData.id_token);
-    // if (!validate(decodedNonce, storedNonce)) { throw new Error('Nonce mismatch'); }
-
     await setAuthCookies(tokenData);
 
     // --- MongoDB Persistence ---
@@ -50,12 +45,13 @@ export async function GET(request: NextRequest) {
 
     const cookieStore = await cookies();
 
-    // Clear the state, nonce, and oauth_code_verifier cookies
+    // Clear temporary cookies
     cookieStore.set('oauth_state', '', { maxAge: 0 });
     cookieStore.set('oauth_nonce', '', { maxAge: 0 });
     cookieStore.set('oauth_code_verifier', '', { maxAge: 0 });
+    cookieStore.set('oauth_redirect_to', '', { maxAge: 0 });
 
-    return Response.redirect(new URL('/dashboard', request.url));
+    return Response.redirect(new URL(redirectTarget, request.url));
   } catch (error) {
     console.error('OAuth callback error:', error);
     // Redirect to login with error
@@ -79,12 +75,11 @@ async function exchangeCodeForToken(
   requestOrigin: string,
 ): Promise<TokenData> {
   const params = new URLSearchParams({
-    // grant_type: 'authorization_code', // Vercel API v2 might not require this or uses custom params
     client_id: process.env.VERCEL_CLIENT_ID as string,
     client_secret: process.env.VERCEL_CLIENT_SECRET as string,
     code: code,
     code_verifier: code_verifier || '',
-    redirect_uri: `${requestOrigin}/api/auth/callback`, // This matches the authorize step
+    redirect_uri: `${requestOrigin}/api/auth/callback`,
   });
 
   const response = await fetch('https://api.vercel.com/v2/oauth/access_token', {
@@ -120,11 +115,6 @@ async function persistUserToDB(vercelUser: any, token: string) {
     try {
         const client = await clientPromise;
         const db = client.db();
-
-        // Upsert user based on Vercel ID
-        // Note: This creates a separate user record if the ID doesn't match Google's.
-        // If we want to link, we'd need to know the Google User ID here (from session).
-        // For now, we assume Vercel Login creates/updates a user based on Vercel ID.
 
         await db.collection("users").updateOne(
             { id: vercelUser.uid },

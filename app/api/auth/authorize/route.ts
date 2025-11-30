@@ -40,15 +40,26 @@ export async function GET(req: NextRequest) {
     sameSite: 'lax',
   });
 
+  // Handle custom redirect URL
+  const nextUrl = req.nextUrl.searchParams.get('next') || req.nextUrl.searchParams.get('callbackUrl');
+  if (nextUrl) {
+      cookieStore.set('oauth_redirect_to', nextUrl, {
+        maxAge: 10 * 60,
+        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        sameSite: 'lax',
+      });
+  }
+
   const queryParams = new URLSearchParams({
-    client_id: process.env.VERCEL_CLIENT_ID as string, // Using VERCEL_CLIENT_ID as per previous config
+    client_id: process.env.VERCEL_CLIENT_ID as string,
     redirect_uri: `${req.nextUrl.origin}/api/auth/callback`,
     state,
     nonce,
     code_challenge,
     code_challenge_method: 'S256',
     response_type: 'code',
-    scope: 'openid email profile offline_access', // Added scopes just in case
+    scope: 'openid email profile offline_access',
   });
 
   const authorizationUrl = `https://vercel.com/oauth/authorize?${queryParams.toString()}`;
