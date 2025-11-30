@@ -9,36 +9,47 @@ export async function GET() {
     const client = await clientPromise
     const db = client.db()
 
-    // Get all users from projects collection (unique users)
+    // 1. Fetch all registered users from the 'users' collection
+    const users = await db.collection("users").find({}).toArray()
+
+    // 2. Fetch all projects to calculate stats
     const projects = await db.collection("projects").find({}).toArray()
 
-    // Extract unique users with their stats
-    const userMap = new Map()
-
+    // 3. Map projects to users for counting
+    const projectMap = new Map()
     for (const project of projects) {
-      if (!userMap.has(project.userId)) {
-        userMap.set(project.userId, {
-          userId: project.userId,
-          email: project.userEmail || "Unknown",
-          name: project.userName || "Unknown",
-          projectCount: 0,
-          isPremium: false,
-          ip: project.userIP || "Unknown",
-          createdAt: project.createdAt,
-          websites: [],
-        })
+      if (!projectMap.has(project.userId)) {
+        projectMap.set(project.userId, [])
       }
-
-      const user = userMap.get(project.userId)
-      user.projectCount += 1
-      user.websites.push({
-        id: project._id,
-        businessName: project.businessName,
-        subdomain: project.subdomain,
-      })
+      projectMap.get(project.userId).push(project)
     }
 
-    return NextResponse.json(Array.from(userMap.values()))
+    // 4. Construct the response object combining User + Project data
+    const userList = users.map(user => {
+        const userProjects = projectMap.get(user.id) || []
+
+        return {
+            userId: user.id,
+            email: user.email || "Unknown",
+            name: user.name || "Unknown",
+            // Check for Vercel token or explicitly set flag
+            hasVercelLinked: !!(user.vercelAccessToken),
+            projectCount: userProjects.length,
+            isPremium: user.isPremium || false, // Fallback if not set in user doc
+            ip: userProjects.length > 0 ? (userProjects[0].userIP || "Unknown") : "Unknown", // Best effort IP from projects
+            createdAt: user.createdAt || new Date().toISOString(), // Fallback if missing
+            websites: userProjects.map((p: any) => ({
+                id: p._id,
+                businessName: p.businessName,
+                subdomain: p.subdomain
+            }))
+        }
+    })
+
+    // Sort by most recent (assuming _id or createdAt can be used, but users might not have createdAt)
+    // We'll trust the natural order or sort by name for now, or just leave as is.
+
+    return NextResponse.json(userList)
   } catch (error) {
     console.error("[v0] Admin users GET error:", error)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -26,7 +26,8 @@ import {
   LogOut,
   BarChart3,
   Server,
-  Key
+  Key,
+  Triangle
 } from "lucide-react"
 
 interface User {
@@ -35,6 +36,7 @@ interface User {
   name: string
   projectCount: number
   isPremium: boolean
+  hasVercelLinked: boolean
   ip: string
   createdAt: string
   websites: Array<{ id: string; businessName: string; subdomain: string }>
@@ -304,12 +306,12 @@ export default function AdminPage() {
 
                 <Card className="border-border shadow-sm">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Free Plan</CardTitle>
-                    <Users className="h-4 w-4 text-green-500" />
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Vercel Connected</CardTitle>
+                    <Triangle className="h-4 w-4 text-black fill-black" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">{users.filter((u) => !u.isPremium).length}</div>
-                    <p className="text-xs text-muted-foreground">Standard users</p>
+                    <div className="text-2xl font-bold">{users.filter((u) => u.hasVercelLinked).length}</div>
+                    <p className="text-xs text-muted-foreground">Users with Vercel linked</p>
                   </CardContent>
                 </Card>
               </div>
@@ -352,7 +354,14 @@ export default function AdminPage() {
                             <div className="flex-1 space-y-4">
                               <div className="flex items-start justify-between">
                                 <div>
-                                  <h3 className="font-bold text-lg text-foreground">{user.name}</h3>
+                                  <div className="flex items-center gap-2">
+                                     <h3 className="font-bold text-lg text-foreground">{user.name}</h3>
+                                     {user.hasVercelLinked && (
+                                        <Badge variant="secondary" className="bg-black text-white hover:bg-black/90 gap-1 h-5 text-[10px] px-1.5 border-none">
+                                           <Triangle className="h-2 w-2 fill-white" /> Vercel
+                                        </Badge>
+                                     )}
+                                  </div>
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                     <Mail className="h-3.5 w-3.5" />
                                     <span>{user.email}</span>
