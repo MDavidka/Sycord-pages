@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const tokenData = await exchangeCodeForToken(
       code,
       codeVerifier,
-      request.nextUrl.origin
+      request
     );
     const decodedNonce = decodeNonce(tokenData.id_token);
 
@@ -85,15 +85,19 @@ function decodeNonce(idToken: string): string {
 async function exchangeCodeForToken(
   code: string,
   code_verifier: string | undefined,
-  requestOrigin: string
+  request: NextRequest
 ): Promise<TokenData> {
+  // Force HTTPS in production to match Vercel App configuration
+  const protocol = process.env.NODE_ENV === "production" ? "https" : request.nextUrl.protocol;
+  const redirect_uri = `${protocol}://${request.nextUrl.host}/api/auth/callback`;
+
   const params = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
     client_secret: process.env.VERCEL_APP_CLIENT_SECRET as string,
     code: code,
     code_verifier: code_verifier || "",
-    redirect_uri: `${requestOrigin}/api/auth/callback`,
+    redirect_uri,
   });
 
   const response = await fetch("https://api.vercel.com/login/oauth/token", {

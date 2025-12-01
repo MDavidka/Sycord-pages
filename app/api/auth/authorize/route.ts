@@ -38,9 +38,13 @@ export async function GET(req: NextRequest) {
     sameSite: "lax",
   });
 
+  // Force HTTPS in production to match Vercel App configuration
+  const protocol = process.env.NODE_ENV === "production" ? "https" : req.nextUrl.protocol;
+  const redirect_uri = `${protocol}://${req.nextUrl.host}/api/auth/callback`;
+
   const queryParams = new URLSearchParams({
     client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
-    redirect_uri: `${req.nextUrl.origin}/api/auth/callback`,
+    redirect_uri,
     state,
     nonce,
     code_challenge,
