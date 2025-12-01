@@ -89,13 +89,18 @@ async function exchangeCodeForToken(
   code_verifier: string | undefined,
   requestOrigin: string
 ): Promise<TokenData> {
+  const redirectUri = `${requestOrigin}/api/auth/callback`;
+  console.log("==================================================");
+  console.log("[REDIRECT_URI USED] :", redirectUri);
+  console.log("==================================================");
+
   const params = new URLSearchParams({
     grant_type: "authorization_code",
     client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
     client_secret: process.env.VERCEL_APP_CLIENT_SECRET as string,
     code: code,
     code_verifier: code_verifier || "",
-    redirect_uri: `${requestOrigin}/api/auth/callback`,
+    redirect_uri: redirectUri,
   });
 
   const response = await fetch("https://api.vercel.com/login/oauth/token", {
