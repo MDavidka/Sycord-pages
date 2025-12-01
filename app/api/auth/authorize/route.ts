@@ -10,6 +10,10 @@ function generateSecureRandomString(length: number) {
 }
 
 export async function GET(req: NextRequest) {
+  console.log("==================================================");
+  console.log("[AUTHORIZE] Step 1: Flow started");
+  console.log("[AUTHORIZE] Origin:", req.nextUrl.origin);
+
   const state = generateSecureRandomString(43);
   const nonce = generateSecureRandomString(43);
   const code_verifier = generateSecureRandomString(43);
@@ -18,6 +22,8 @@ export async function GET(req: NextRequest) {
     .update(code_verifier)
     .digest("base64url");
   const cookieStore = await cookies();
+
+  console.log("[AUTHORIZE] Step 2: Generated secure strings");
 
   cookieStore.set("oauth_state", state, {
     maxAge: 10 * 60, // 10 minutes
@@ -37,10 +43,14 @@ export async function GET(req: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
   });
+  console.log("[AUTHORIZE] Step 3: Cookies set (state, nonce, verifier)");
+
+  const redirect_uri = `${req.nextUrl.origin}/api/auth/callback`;
+  console.log("[AUTHORIZE] Step 4: Constructing redirect_uri:", redirect_uri);
 
   const queryParams = new URLSearchParams({
     client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
-    redirect_uri: `${req.nextUrl.origin}/api/auth/callback`,
+    redirect_uri: redirect_uri,
     state,
     nonce,
     code_challenge,
@@ -50,5 +60,8 @@ export async function GET(req: NextRequest) {
   });
 
   const authorizationUrl = `https://vercel.com/oauth/authorize?${queryParams.toString()}`;
+  console.log("[AUTHORIZE] Step 5: Redirecting user to Vercel:", authorizationUrl);
+  console.log("==================================================");
+
   return NextResponse.redirect(authorizationUrl);
 }

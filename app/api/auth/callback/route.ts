@@ -14,44 +14,63 @@ interface TokenData {
 export async function GET(request: NextRequest) {
   try {
     console.log("==================================================");
+    console.log("[CALLBACK] Step 1: Flow started");
     console.log("[REDIRECTED TO] Origin:", request.nextUrl.origin);
+    console.log("[CALLBACK] Full URL:", request.url);
     console.log("==================================================");
+
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
 
     if (!code) {
+      console.error("[CALLBACK] Error: Authorization code missing");
       throw new Error("Authorization code is required");
     }
+    console.log("[CALLBACK] Step 2: Code and state received");
 
     const cookieStore = await cookies();
     const storedState = cookieStore.get("oauth_state")?.value;
     const storedNonce = cookieStore.get("oauth_nonce")?.value;
     const codeVerifier = cookieStore.get("oauth_code_verifier")?.value;
 
+    console.log("[CALLBACK] Step 3: Cookies retrieved");
+    console.log("[CALLBACK] Stored State exists:", !!storedState);
+    console.log("[CALLBACK] Stored Nonce exists:", !!storedNonce);
+    console.log("[CALLBACK] Code Verifier exists:", !!codeVerifier);
+
     if (!validate(state, storedState)) {
+      console.error("[CALLBACK] Error: State mismatch");
       throw new Error("State mismatch");
     }
+    console.log("[CALLBACK] Step 4: State validated successfully");
 
     const tokenData = await exchangeCodeForToken(
       code,
       codeVerifier,
       request.nextUrl.origin
     );
+    console.log("[CALLBACK] Step 5: Token exchanged successfully");
+
     const decodedNonce = decodeNonce(tokenData.id_token);
 
     if (!validate(decodedNonce, storedNonce)) {
+      console.error("[CALLBACK] Error: Nonce mismatch");
       throw new Error("Nonce mismatch");
     }
+    console.log("[CALLBACK] Step 6: Nonce validated successfully");
 
     await setAuthCookies(tokenData);
+    console.log("[CALLBACK] Step 7: Auth cookies set");
 
     // --- MongoDB Persistence (Integrated to satisfy "make it to token store" requirement) ---
     try {
+        console.log("[CALLBACK] Step 8: Fetching Vercel user details...");
         const user = await fetchVercelUser(tokenData.access_token);
+        console.log("[CALLBACK] Step 9: Persisting user to MongoDB...");
         await persistUserToDB(user, tokenData.access_token);
     } catch (e) {
-        console.error("Failed to persist user to MongoDB, but auth was successful.", e);
+        console.error("[CALLBACK] Warning: Failed to persist user to MongoDB, but auth was successful.", e);
     }
     // --------------------------------------------------------------------------------------
 
@@ -59,10 +78,11 @@ export async function GET(request: NextRequest) {
     cookieStore.set("oauth_state", "", { maxAge: 0 });
     cookieStore.set("oauth_nonce", "", { maxAge: 0 });
     cookieStore.set("oauth_code_verifier", "", { maxAge: 0 });
+    console.log("[CALLBACK] Step 10: Cleanup done. Redirecting...");
 
     return Response.redirect(new URL("/dashboard", request.url));
   } catch (error) {
-    console.error("OAuth callback error:", error);
+    console.error("[CALLBACK] Fatal OAuth callback error:", error);
     return Response.redirect(new URL("/login?error=OAuthCallbackError", request.url));
   }
 }
@@ -91,6 +111,7 @@ async function exchangeCodeForToken(
 ): Promise<TokenData> {
   const redirectUri = `${requestOrigin}/api/auth/callback`;
   console.log("==================================================");
+  console.log("[CALLBACK] Exchanging code for token");
   console.log("[REDIRECT_URI USED] :", redirectUri);
   console.log("==================================================");
 
@@ -113,6 +134,7 @@ async function exchangeCodeForToken(
 
   if (!response.ok) {
     const errorData = await response.json();
+    console.error("[CALLBACK] Token exchange failed:", JSON.stringify(errorData));
     throw new Error(
       `Failed to exchange code for token: ${JSON.stringify(errorData)}`
     );
