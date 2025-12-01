@@ -56,7 +56,18 @@ export async function GET(req: NextRequest) {
     scope: "openid email profile offline_access", // Changed 'openai' to 'openid' - Vercel OAuth only supports openid, email, profile, offline_access
   })
 
-  console.log("[v0] OAuth redirect_uri:", queryParams.get("redirect_uri"))
+  const finalRedirectUri = queryParams.get("redirect_uri")
+  const finalClientId = queryParams.get("client_id")
+  console.log("[v0] ========== OAUTH AUTHORIZE DEBUG ==========")
+  console.log("[v0] Client ID:", finalClientId)
+  console.log("[v0] Redirect URI:", finalRedirectUri)
+  console.log("[v0] Scope:", queryParams.get("scope"))
+  console.log("[v0] Code Challenge:", queryParams.get("code_challenge"))
+  console.log("[v0] NEXTAUTH_URL env:", process.env.NEXTAUTH_URL)
+  console.log("[v0] NODE_ENV:", process.env.NODE_ENV)
+  console.log("[v0] Authorization URL:", `https://vercel.com/oauth/authorize?${queryParams.toString()}`)
+  console.log("[v0] ==========================================")
+
   const authorizationUrl = `https://vercel.com/oauth/authorize?${queryParams.toString()}`
   return NextResponse.redirect(authorizationUrl)
 }
