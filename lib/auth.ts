@@ -91,9 +91,28 @@ export const authOptions: AuthOptions = {
             { $set: updateData },
             { upsert: true },
           )
+
+          // Fetch the latest user data to get vercelAccessToken
+          const user = await db.collection("users").findOne({ id: token.id })
+          if (user && user.vercelAccessToken) {
+            token.vercelAccessToken = user.vercelAccessToken
+          }
+
           // console.log("[v0-DEBUG] Stored/Updated user in MongoDB:", token.id, "Provider:", account.provider)
         } catch (error) {
-          console.error("[v0-ERROR] Failed to store user in MongoDB:", error)
+          console.error("[v0-ERROR] Failed to store/fetch user in MongoDB:", error)
+        }
+      } else {
+        // If no account/profile (e.g. session update), fetch vercelAccessToken from DB
+        try {
+          const client = await clientPromise
+          const db = client.db()
+          const user = await db.collection("users").findOne({ id: token.id })
+          if (user && user.vercelAccessToken) {
+            token.vercelAccessToken = user.vercelAccessToken
+          }
+        } catch (error) {
+           // console.error("[v0-ERROR] Failed to fetch user from MongoDB:", error)
         }
       }
 
@@ -108,6 +127,8 @@ export const authOptions: AuthOptions = {
 
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
+        // @ts-ignore
+        session.user.vercelAccessToken = (token.vercelAccessToken as string) || null
       }
       return session
     },

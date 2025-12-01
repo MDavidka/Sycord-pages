@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/mongodb";
 
 interface TokenData {
   access_token: string;
@@ -21,9 +21,10 @@ export async function GET(request: NextRequest) {
       throw new Error("Authorization code is required");
     }
 
-    const storedState = request.cookies.get("oauth_state")?.value;
-    const storedNonce = request.cookies.get("oauth_nonce")?.value;
-    const codeVerifier = request.cookies.get("oauth_code_verifier")?.value;
+    const cookieStore = await cookies();
+    const storedState = cookieStore.get("oauth_state")?.value;
+    const storedNonce = cookieStore.get("oauth_nonce")?.value;
+    const codeVerifier = cookieStore.get("oauth_code_verifier")?.value;
 
     if (!validate(state, storedState)) {
       throw new Error("State mismatch");
@@ -50,8 +51,6 @@ export async function GET(request: NextRequest) {
         console.error("Failed to persist user to MongoDB, but auth was successful.", e);
     }
     // --------------------------------------------------------------------------------------
-
-    const cookieStore = await cookies();
 
     // Clear the state, nonce, and oauth_code_verifier cookies
     cookieStore.set("oauth_state", "", { maxAge: 0 });

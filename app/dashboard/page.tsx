@@ -5,8 +5,9 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, Menu } from "lucide-react"
+import { Settings, Plus, LogOut, User, Menu, TriangleAlert } from "lucide-react"
 import { useState, useEffect, Suspense } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,14 +33,28 @@ function DashboardContent() {
   const [showWelcome, setShowWelcome] = useState(true)
   const [deletingDeployments, setDeletingDeployments] = useState<Set<string>>(new Set())
   const [flaggedDeployments, setFlaggedDeployments] = useState<Set<string>>(new Set())
+  const [debugError, setDebugError] = useState<string | null>(null)
 
-  // Check for auto-open modal query param
+  // Check for auto-open modal query param and errors
   useEffect(() => {
-    if (searchParams.get("open_create_modal") === "true") {
-        setIsModalOpen(true)
-        router.replace("/dashboard")
+    const openCreateModal = searchParams.get("open_create_modal")
+    const error = searchParams.get("error")
+
+    if (error) {
+      setDebugError(error)
+      // Clean up URL
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete("error")
+      window.history.replaceState({}, "", newUrl.toString())
     }
-  }, [searchParams, router])
+
+    if (openCreateModal === "true") {
+        setIsModalOpen(true)
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.delete("open_create_modal")
+        window.history.replaceState({}, "", newUrl.toString())
+    }
+  }, [searchParams])
 
   useEffect(() => {
     async function fetchProjects() {
@@ -342,6 +357,29 @@ function DashboardContent() {
         isVisible={showWelcome}
         onComplete={() => setShowWelcome(false)}
       />
+
+      {/* Debug Error Popup */}
+      <Dialog open={!!debugError} onOpenChange={(open) => !open && setDebugError(null)}>
+        <DialogContent className="sm:max-w-md border-red-200 bg-red-50 dark:bg-red-950/20">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <TriangleAlert className="h-5 w-5" />
+              Authentication Error
+            </DialogTitle>
+            <DialogDescription className="text-red-600/90 dark:text-red-400/90">
+              An error occurred during the authentication process.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-4 bg-white dark:bg-black/20 rounded-md border border-red-100 dark:border-red-900/50 font-mono text-sm break-all">
+            {debugError}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setDebugError(null)} className="border-red-200 hover:bg-red-100 hover:text-red-700 dark:border-red-900 dark:hover:bg-red-900/40">
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

@@ -61,10 +61,21 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   // @ts-ignore
   const isVercelConnected = !!session?.user?.vercelAccessToken
 
+  // Optional: Check if the user has a cookie indicating connection if session is stale, but rely on session for now.
+  // We can add a refresh button or auto-refresh if needed.
+
   const handleVercelConnect = () => {
     console.log("[v0] User initiated Vercel connection flow")
-    // Redirect to manual auth with return URL to dashboard with a flag to reopen modal
-    window.location.href = `/api/auth/authorize?next=${encodeURIComponent("/dashboard?open_create_modal=true")}`
+    // Redirect to manual auth. Note: The callback will redirect to /dashboard.
+    // If we want to reopen the modal, we rely on the callback logic or user manual action.
+    // But since callback redirects to /dashboard, we can add a query param there if needed,
+    // but standard flow is just redirect to /dashboard.
+    // However, to improve UX, we can try to preserve state.
+    // The authorize endpoint usually takes a 'next' param if implemented, but our current authorize/route.ts doesn't seem to use it?
+    // Let's check authorize/route.ts content.
+    // It constructs the Vercel URL directly. It does NOT seem to forward 'next' param to state.
+    // So for now, simple redirect is best.
+    window.location.href = `/api/auth/authorize`
   }
 
   const handleFormSubmit = async (formData: any) => {
