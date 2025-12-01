@@ -7,7 +7,7 @@ import { authOptions } from "@/lib/auth";
 interface TokenData {
   access_token: string;
   token_type: string;
-  id_token: string;
+  id_token?: string; // Optional because Integration flow might not return it if openid scope is not requested
   expires_in: number;
   scope: string;
   refresh_token: string;
@@ -55,13 +55,16 @@ export async function GET(request: NextRequest) {
     );
     console.log("[CALLBACK] Step 5: Token exchanged successfully");
 
-    const decodedNonce = decodeNonce(tokenData.id_token);
-
-    if (!validate(decodedNonce, storedNonce)) {
-      console.error("[CALLBACK] Error: Nonce mismatch");
-      throw new Error("Nonce mismatch");
+    if (tokenData.id_token) {
+        const decodedNonce = decodeNonce(tokenData.id_token);
+        if (!validate(decodedNonce, storedNonce)) {
+          console.error("[CALLBACK] Error: Nonce mismatch");
+          throw new Error("Nonce mismatch");
+        }
+        console.log("[CALLBACK] Step 6: Nonce validated successfully");
+    } else {
+        console.warn("[CALLBACK] Step 6: Skipping Nonce validation (id_token missing - likely Integration flow)");
     }
-    console.log("[CALLBACK] Step 6: Nonce validated successfully");
 
     await setAuthCookies(tokenData);
     console.log("[CALLBACK] Step 7: Auth cookies set");

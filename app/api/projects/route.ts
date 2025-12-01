@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         name: vercelProjectName,
-        framework: null // Static site
+        // framework: null // Removed framework: null to rely on default behavior
       }),
     })
 
