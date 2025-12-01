@@ -13,6 +13,7 @@ interface TokenData {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("Origin:", request.nextUrl.origin);
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
