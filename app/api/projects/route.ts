@@ -15,9 +15,10 @@ export async function POST(request: Request) {
   const client = await clientPromise
   const db = client.db()
 
-  // Fetch user to get Vercel Access Token
+  // Fetch user to get Vercel Access Token and Team ID
   const user = await db.collection("users").findOne({ id: session.user.id })
   const vercelToken = user?.vercelAccessToken
+  const vercelTeamId = user?.vercelTeamId
 
   if (!vercelToken) {
     return NextResponse.json({ message: "Vercel account not connected. Please connect your Vercel account in settings or login with Vercel." }, { status: 403 })
@@ -56,7 +57,12 @@ export async function POST(request: Request) {
     console.log("[v0] Creating Vercel project:", vercelProjectName)
 
     // 1. Create Project
-    const createProjectRes = await fetch("https://api.vercel.com/v9/projects", {
+    // Append teamId query parameter if user is part of a team installation
+    const projectsEndpoint = vercelTeamId
+        ? `https://api.vercel.com/v9/projects?teamId=${vercelTeamId}`
+        : "https://api.vercel.com/v9/projects";
+
+    const createProjectRes = await fetch(projectsEndpoint, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${vercelToken}`,
@@ -100,7 +106,12 @@ export async function POST(request: Request) {
 </html>`
 
     console.log("[v0] Creating initial deployment for:", vercelProjectId)
-    const deployRes = await fetch("https://api.vercel.com/v13/deployments", {
+
+    const deploymentsEndpoint = vercelTeamId
+        ? `https://api.vercel.com/v13/deployments?teamId=${vercelTeamId}`
+        : "https://api.vercel.com/v13/deployments";
+
+    const deployRes = await fetch(deploymentsEndpoint, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${vercelToken}`,
