@@ -59,8 +59,8 @@ export async function POST(request: Request) {
     // 1. Create Project
     // Append teamId query parameter if user is part of a team installation
     const projectsEndpoint = vercelTeamId
-        ? `https://api.vercel.com/v9/projects?teamId=${vercelTeamId}`
-        : "https://api.vercel.com/v9/projects";
+        ? `https://api.vercel.com/v10/projects?teamId=${vercelTeamId}`
+        : "https://api.vercel.com/v10/projects";
 
     const createProjectRes = await fetch(projectsEndpoint, {
       method: "POST",
