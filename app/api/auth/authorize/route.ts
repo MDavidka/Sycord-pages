@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   const queryParams = new URLSearchParams({
     client_id: process.env.VERCEL_CLIENT_ID as string,
-    redirect_uri: `${req.nextUrl.origin}/api/auth/callback/vercel`, // Updated path
+    redirect_uri: `${req.nextUrl.origin}/api/auth/callback/vercel`, // Correctly using /vercel suffix
     state,
     nonce,
     code_challenge,
