@@ -42,14 +42,14 @@ export async function GET(request: NextRequest) {
 
     await setAuthCookies(tokenData);
 
-    // --- MongoDB Persistence (Integrated from previous implementation) ---
+    // --- MongoDB Persistence (Integrated to satisfy "make it to token store" requirement) ---
     try {
         const user = await fetchVercelUser(tokenData.access_token);
         await persistUserToDB(user, tokenData.access_token);
     } catch (e) {
         console.error("Failed to persist user to MongoDB, but auth was successful.", e);
     }
-    // -------------------------------------------------------------------
+    // --------------------------------------------------------------------------------------
 
     const cookieStore = await cookies();
 
@@ -89,8 +89,8 @@ async function exchangeCodeForToken(
 ): Promise<TokenData> {
   const params = new URLSearchParams({
     grant_type: "authorization_code",
-    client_id: process.env.VERCEL_CLIENT_ID as string,
-    client_secret: process.env.VERCEL_CLIENT_SECRET as string,
+    client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
+    client_secret: process.env.VERCEL_APP_CLIENT_SECRET as string,
     code: code,
     code_verifier: code_verifier || "",
     redirect_uri: `${requestOrigin}/api/auth/callback`,
