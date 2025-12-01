@@ -67,16 +67,17 @@ async function exchangeCodeForToken(
   code_verifier: string | undefined,
   requestOrigin: string,
 ): Promise<TokenData> {
+  const redirect_uri = `${process.env.NEXTAUTH_URL || "https://ltpd.xyz"}/api/auth/callback`
+
   const params = new URLSearchParams({
     client_id: process.env.VERCEL_CLIENT_ID as string,
     client_secret: process.env.VERCEL_CLIENT_SECRET as string,
     code: code,
     code_verifier: code_verifier || "",
-    redirect_uri: process.env.NEXTAUTH_URL
-      ? `${process.env.NEXTAUTH_URL}/api/auth/callback`
-      : `${requestOrigin}/api/auth/callback`,
+    redirect_uri: redirect_uri,
   })
 
+  console.log("[v0] Token exchange redirect_uri:", redirect_uri)
   const response = await fetch("https://api.vercel.com/v2/oauth/access_token", {
     method: "POST",
     headers: {
@@ -87,6 +88,7 @@ async function exchangeCodeForToken(
 
   if (!response.ok) {
     const errorData = await response.json()
+    console.log("[v0] OAuth error response:", errorData)
     throw new Error(`Failed to exchange code for token: ${JSON.stringify(errorData)}`)
   }
 

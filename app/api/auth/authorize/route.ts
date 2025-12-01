@@ -47,17 +47,16 @@ export async function GET(req: NextRequest) {
 
   const queryParams = new URLSearchParams({
     client_id: process.env.VERCEL_CLIENT_ID as string,
-    redirect_uri: process.env.NEXTAUTH_URL
-      ? `${process.env.NEXTAUTH_URL}/api/auth/callback`
-      : `${req.nextUrl.origin}/api/auth/callback`,
+    redirect_uri: `${process.env.NEXTAUTH_URL || "https://ltpd.xyz"}/api/auth/callback`,
     state,
     nonce,
     code_challenge,
     code_challenge_method: "S256",
     response_type: "code",
-    scope: "openai email profile offline_access",
+    scope: "openid email profile offline_access", // Changed 'openai' to 'openid' - Vercel OAuth only supports openid, email, profile, offline_access
   })
 
+  console.log("[v0] OAuth redirect_uri:", queryParams.get("redirect_uri"))
   const authorizationUrl = `https://vercel.com/oauth/authorize?${queryParams.toString()}`
   return NextResponse.redirect(authorizationUrl)
 }
