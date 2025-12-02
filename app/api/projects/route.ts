@@ -16,16 +16,22 @@ export async function POST(request: Request) {
   const client = await clientPromise
   const db = client.db()
 
+  console.log("==========================================");
+  console.log(`[Vercel Project Creation] Start for User: ${session.user.email}`);
+
   let vercelToken: string
   try {
     vercelToken = await getValidVercelToken(session.user.id)
+    console.log(`[Vercel Project Creation] Token obtained (ending in ...${vercelToken.slice(-5)})`);
   } catch (error: any) {
+    console.error("[Vercel Project Creation] Token validation failed:", error);
     return NextResponse.json({ message: error.message || "Vercel authentication failed" }, { status: 403 })
   }
 
   // Fetch user to get Team ID (Token is already validated)
   const user = await db.collection("users").findOne({ id: session.user.id })
   const vercelTeamId = user?.vercelTeamId
+  console.log(`[Vercel Project Creation] Vercel Team ID: ${vercelTeamId || "None (Personal Account)"}`);
 
   const body = await request.json()
 
@@ -57,13 +63,15 @@ export async function POST(request: Request) {
   // Vercel Integration
   let vercelProjectId = null
   try {
-    console.log("[v0] Creating Vercel project:", vercelProjectName)
+    console.log(`[Vercel Project Creation] Creating project: ${vercelProjectName}`);
 
     // 1. Create Project
     // Append teamId query parameter if user is part of a team installation
     const projectsEndpoint = vercelTeamId
         ? `https://api.vercel.com/v10/projects?teamId=${vercelTeamId}`
         : "https://api.vercel.com/v10/projects";
+
+    console.log(`[Vercel Project Creation] Endpoint: ${projectsEndpoint}`);
 
     const createProjectRes = await fetch(projectsEndpoint, {
       method: "POST",
@@ -78,11 +86,20 @@ export async function POST(request: Request) {
     })
 
     if (!createProjectRes.ok) {
-      const errorData = await createProjectRes.json()
-      console.error("[v0] Vercel Create Project Error:", errorData)
+      const errorText = await createProjectRes.text();
+      let errorData;
+      try {
+          errorData = JSON.parse(errorText);
+      } catch (e) {
+          errorData = { message: errorText };
+      }
+
+      console.error("[Vercel Project Creation] API Error Response Status:", createProjectRes.status);
+      console.error("[Vercel Project Creation] API Error Response Body:", JSON.stringify(errorData, null, 2));
 
       // Check for invalid token error to prompt reconnect
       if (errorData.error?.code === 'forbidden' || errorData.error?.invalidToken) {
+          console.warn("[Vercel Project Creation] Token invalid/forbidden. Unsetting user tokens.");
           // Remove invalid tokens from DB to force reconnect
           await db.collection("users").updateOne(
               { id: session.user.id },
@@ -106,6 +123,7 @@ export async function POST(request: Request) {
 
     const projectData = await createProjectRes.json()
     vercelProjectId = projectData.id
+    console.log(`[Vercel Project Creation] Project created successfully. ID: ${vercelProjectId}`);
 
     // 2. Initial Deployment
     const starterHtml = `<!DOCTYPE html>

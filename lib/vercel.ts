@@ -5,7 +5,10 @@ export async function getValidVercelToken(userId: string): Promise<string> {
   const db = client.db();
   const user = await db.collection("users").findOne({ id: userId });
 
+  console.log(`[Vercel Token Check] User ID: ${userId}`);
+
   if (!user || !user.vercelAccessToken) {
+    console.error("[Vercel Token Check] User not found or token missing");
     throw new Error("Vercel account not connected");
   }
 
@@ -14,7 +17,12 @@ export async function getValidVercelToken(userId: string): Promise<string> {
   const expiresAt = user.vercelExpiresAt || 0; // Default to 0 if missing (treat as expired)
   const buffer = 5 * 60 * 1000; // 5 minutes buffer
 
+  console.log(`[Vercel Token Check] Expires At: ${expiresAt} (Date: ${new Date(expiresAt).toISOString()})`);
+  console.log(`[Vercel Token Check] Now: ${now} (Date: ${new Date(now).toISOString()})`);
+  console.log(`[Vercel Token Check] Has Refresh Token: ${!!user.vercelRefreshToken}`);
+
   if (expiresAt > now + buffer) {
+    console.log("[Vercel Token Check] Token is valid.");
     return user.vercelAccessToken;
   }
 
@@ -22,14 +30,11 @@ export async function getValidVercelToken(userId: string): Promise<string> {
   if (!user.vercelRefreshToken) {
     // If we don't have a refresh token but have an access token without expiry (legacy),
     // we might try to use it, but if it fails, the user must re-authenticate.
-    // Ideally, we should have stored expiresAt. If strictly missing, we might assume valid if legacy,
-    // but better to fail safe if we suspect expiration.
-    // However, if we just implemented persistence, old users might not have refresh tokens.
-    // We'll try to use the existing token if no refresh token is present, but warn.
     if (expiresAt === 0) {
-        console.warn("[Vercel] No expiry or refresh token found. Using existing token.");
+        console.warn("[Vercel] No expiry or refresh token found (Legacy). Using existing token.");
         return user.vercelAccessToken;
     }
+    console.error("[Vercel] Session expired and no refresh token available.");
     throw new Error("Vercel session expired. Please reconnect your Vercel account.");
   }
 
@@ -50,9 +55,9 @@ export async function getValidVercelToken(userId: string): Promise<string> {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("[Vercel] Token refresh failed:", errorData);
-      throw new Error(`Failed to refresh Vercel token: ${JSON.stringify(errorData)}`);
+      const errorText = await response.text();
+      console.error(`[Vercel] Token refresh failed. Status: ${response.status}. Body: ${errorText}`);
+      throw new Error(`Failed to refresh Vercel token: ${errorText}`);
     }
 
     const data = await response.json();
@@ -60,6 +65,8 @@ export async function getValidVercelToken(userId: string): Promise<string> {
     const newRefreshToken = data.refresh_token;
     const newExpiresIn = data.expires_in;
     const newExpiresAt = Date.now() + (newExpiresIn * 1000);
+
+    console.log(`[Vercel] Refresh successful. New Expiry: ${new Date(newExpiresAt).toISOString()}`);
 
     // Update DB
     await db.collection("users").updateOne(
@@ -74,11 +81,11 @@ export async function getValidVercelToken(userId: string): Promise<string> {
       }
     );
 
-    console.log("[Vercel] Token refreshed successfully.");
+    console.log("[Vercel] Database updated with new tokens.");
     return newAccessToken;
 
   } catch (error) {
-    console.error("[Vercel] Error refreshing token:", error);
+    console.error("[Vercel] Fatal error refreshing token:", error);
     throw new Error("Failed to refresh Vercel authentication.");
   }
 }
