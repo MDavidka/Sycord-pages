@@ -80,6 +80,27 @@ export async function POST(request: Request) {
     if (!createProjectRes.ok) {
       const errorData = await createProjectRes.json()
       console.error("[v0] Vercel Create Project Error:", errorData)
+
+      // Check for invalid token error to prompt reconnect
+      if (errorData.error?.code === 'forbidden' || errorData.error?.invalidToken) {
+          // Remove invalid tokens from DB to force reconnect
+          await db.collection("users").updateOne(
+              { id: session.user.id },
+              {
+                  $unset: {
+                      vercelAccessToken: "",
+                      vercelRefreshToken: "",
+                      vercelExpiresAt: ""
+                  }
+              }
+          )
+          // Return specific error structure for frontend to handle
+          return NextResponse.json({
+              message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
+              code: "VERCEL_TOKEN_EXPIRED"
+          }, { status: 403 })
+      }
+
       throw new Error(`Failed to create Vercel project: ${errorData.message || createProjectRes.statusText}`)
     }
 
