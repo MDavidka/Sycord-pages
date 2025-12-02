@@ -87,12 +87,12 @@ export async function GET(request: NextRequest) {
         }
 
         console.log("[CALLBACK] Step 9: Linking Vercel token to Google user...");
-        await linkVercelToUser(session.user.email, tokenData.access_token, vercelUser, tokenData.team_id);
+        await linkVercelToUser(session.user.email, tokenData, vercelUser);
     } else {
         console.log("[CALLBACK] No session found. Falling back to Vercel-only persistence (or new user creation).");
          try {
             const user = await fetchVercelUser(tokenData.access_token);
-            await persistUserToDB(user, tokenData.access_token, tokenData.team_id);
+            await persistUserToDB(user, tokenData);
         } catch (e) {
             console.error("[CALLBACK] Error: Failed to persist user (no session & fetch failed).", e);
         }
@@ -205,19 +205,21 @@ async function fetchVercelUser(token: string) {
 }
 
 // New function to link Vercel to existing Google User
-async function linkVercelToUser(email: string, token: string, vercelUser: any, teamId?: string) {
+async function linkVercelToUser(email: string, tokenData: TokenData, vercelUser: any) {
     try {
         const client = await clientPromise;
         const db = client.db();
 
         const updateData: any = {
-            vercelAccessToken: token,
+            vercelAccessToken: tokenData.access_token,
+            vercelRefreshToken: tokenData.refresh_token,
+            vercelExpiresAt: Date.now() + (tokenData.expires_in * 1000),
             vercelProvider: true,
             vercelLinkedAt: new Date()
         };
 
-        if (teamId) {
-            updateData.vercelTeamId = teamId;
+        if (tokenData.team_id) {
+            updateData.vercelTeamId = tokenData.team_id;
         }
 
         if (vercelUser) {
@@ -238,7 +240,7 @@ async function linkVercelToUser(email: string, token: string, vercelUser: any, t
 }
 
 // Fallback for non-logged in users (creates a new user based on Vercel ID)
-async function persistUserToDB(vercelUser: any, token: string, teamId?: string) {
+async function persistUserToDB(vercelUser: any, tokenData: TokenData) {
     try {
         const client = await clientPromise;
         const db = client.db();
@@ -248,13 +250,15 @@ async function persistUserToDB(vercelUser: any, token: string, teamId?: string) 
             name: vercelUser.name || vercelUser.username,
             email: vercelUser.email,
             image: `https://vercel.com/api/www/avatar/${vercelUser.id}`,
-            vercelAccessToken: token,
+            vercelAccessToken: tokenData.access_token,
+            vercelRefreshToken: tokenData.refresh_token,
+            vercelExpiresAt: Date.now() + (tokenData.expires_in * 1000),
             vercelProvider: true,
             updatedAt: new Date()
         };
 
-        if (teamId) {
-            updateData.vercelTeamId = teamId;
+        if (tokenData.team_id) {
+            updateData.vercelTeamId = tokenData.team_id;
         }
 
         await db.collection("users").updateOne(

@@ -5,6 +5,7 @@ import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
+import { getValidVercelToken } from "@/lib/vercel"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -15,14 +16,16 @@ export async function POST(request: Request) {
   const client = await clientPromise
   const db = client.db()
 
-  // Fetch user to get Vercel Access Token and Team ID
-  const user = await db.collection("users").findOne({ id: session.user.id })
-  const vercelToken = user?.vercelAccessToken
-  const vercelTeamId = user?.vercelTeamId
-
-  if (!vercelToken) {
-    return NextResponse.json({ message: "Vercel account not connected. Please connect your Vercel account in settings or login with Vercel." }, { status: 403 })
+  let vercelToken: string
+  try {
+    vercelToken = await getValidVercelToken(session.user.id)
+  } catch (error: any) {
+    return NextResponse.json({ message: error.message || "Vercel authentication failed" }, { status: 403 })
   }
+
+  // Fetch user to get Team ID (Token is already validated)
+  const user = await db.collection("users").findOne({ id: session.user.id })
+  const vercelTeamId = user?.vercelTeamId
 
   const body = await request.json()
 
