@@ -97,9 +97,10 @@ export async function POST(request: Request) {
       console.error("[Vercel Project Creation] API Error Response Status:", createProjectRes.status);
       console.error("[Vercel Project Creation] API Error Response Body:", JSON.stringify(errorData, null, 2));
 
-      // Check for invalid token error to prompt reconnect
-      if (errorData.error?.code === 'forbidden' || errorData.error?.invalidToken) {
-          console.warn("[Vercel Project Creation] Token invalid/forbidden. Unsetting user tokens.");
+      // Check for invalid token error (401 or invalid_token code) to prompt reconnect
+      // We only force logout on 401. 403 means valid token but insufficient permissions.
+      if (createProjectRes.status === 401 || errorData.error?.code === 'invalid_token') {
+          console.warn("[Vercel Project Creation] Token invalid/unauthorized (401). Unsetting user tokens.");
           // Remove invalid tokens from DB to force reconnect
           await db.collection("users").updateOne(
               { id: session.user.id },
@@ -115,7 +116,11 @@ export async function POST(request: Request) {
           return NextResponse.json({
               message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
               code: "VERCEL_TOKEN_EXPIRED"
-          }, { status: 403 })
+          }, { status: 401 })
+      }
+
+      if (createProjectRes.status === 403) {
+          console.error("[Vercel Project Creation] 403 Forbidden. The token is valid but lacks permission. Check Integration Scopes.");
       }
 
       throw new Error(`Failed to create Vercel project: ${errorData.message || createProjectRes.statusText}`)
