@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
   console.log("[AUTHORIZE] Step 4: Constructing redirect_uri:", redirect_uri);
 
   const queryParams = new URLSearchParams({
-    client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
+    client_id: (process.env.VERCEL_CLIENT_ID || process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID) as string,
     redirect_uri: redirect_uri,
     state,
     nonce,

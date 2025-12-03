@@ -47,8 +47,8 @@ export async function getValidVercelToken(userId: string): Promise<string> {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({
-        client_id: process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID as string,
-        client_secret: process.env.VERCEL_APP_CLIENT_SECRET as string,
+        client_id: (process.env.VERCEL_CLIENT_ID || process.env.NEXT_PUBLIC_VERCEL_APP_CLIENT_ID) as string,
+        client_secret: (process.env.VERCEL_CLIENT_SECRET || process.env.VERCEL_APP_CLIENT_SECRET) as string,
         grant_type: "refresh_token",
         refresh_token: user.vercelRefreshToken,
       }),
