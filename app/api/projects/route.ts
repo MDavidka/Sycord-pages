@@ -121,6 +121,10 @@ export async function POST(request: Request) {
 
       if (createProjectRes.status === 403) {
           console.error("[Vercel Project Creation] 403 Forbidden. The token is valid but lacks permission. Check Integration Scopes.");
+          return NextResponse.json({
+              message: "Permission denied by Vercel. Please reinstall the integration and ensure 'Projects' scope is set to 'Read & Write' or 'All Projects' access is granted.",
+              code: "VERCEL_PERMISSION_DENIED"
+          }, { status: 403 })
       }
 
       throw new Error(`Failed to create Vercel project: ${errorData.message || createProjectRes.statusText}`)
