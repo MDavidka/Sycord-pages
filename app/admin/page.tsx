@@ -6,22 +6,16 @@ import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import {
   AlertCircle,
   Users,
   Zap,
   Globe,
-  Trash2,
-  Calendar,
-  Mail,
   Search,
-  LayoutDashboard,
   Menu,
   X,
   ArrowLeft,
-  Settings,
   Shield,
   LogOut,
   BarChart3,
@@ -29,8 +23,8 @@ import {
   Key,
   Triangle,
   Copy,
-  Check
 } from "lucide-react"
+import { UserCard } from "@/components/admin/user-card"
 
 interface User {
   userId: string
@@ -55,7 +49,6 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"overview" | "users" | "env">("overview")
-  const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -135,27 +128,35 @@ export default function AdminPage() {
     }
   }
 
-  const copyToClipboard = (text: string, id: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedToken(id)
-    setTimeout(() => setCopiedToken(null), 2000)
-  }
+  const removeToken = async (userId: string) => {
+    if (!confirm("Remove Vercel token for this user?")) {
+      return
+    }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
+    try {
+      setUpdatingUser(userId)
+      const response = await fetch(`/api/admin/users/${userId}/remove-token`, {
+        method: "POST",
+      })
+
+      if (!response.ok) throw new Error("Failed to remove token")
+
+      setUsers(users.map((user) => (user.userId === userId ? { ...user, vercelAccessToken: null } : user)))
+      console.log("[v0] Token removed for user:", userId)
+    } catch (error) {
+      console.error("[v0] Error removing token:", error)
+      alert("Failed to remove token")
+    } finally {
+      setUpdatingUser(null)
+    }
   }
 
   if (!session?.user?.email?.includes("dmarton336@gmail.com")) {
     return null
   }
 
-  // Calculate the redirect URI for display
-  const currentAppUrl = "https://ltpd.xyz";
-  const callbackUrl = `${currentAppUrl}/api/auth/callback/vercel`;
+  const currentAppUrl = "https://ltpd.xyz"
+  const callbackUrl = `${currentAppUrl}/api/auth/callback/vercel`
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -196,7 +197,10 @@ export default function AdminPage() {
 
           <nav className="flex-1 space-y-2">
             <button
-              onClick={() => { setActiveTab("overview"); setIsSidebarOpen(false); }}
+              onClick={() => {
+                setActiveTab("overview")
+                setIsSidebarOpen(false)
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
                 activeTab === "overview"
                   ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
@@ -207,7 +211,10 @@ export default function AdminPage() {
               <span className="font-medium text-sm">Overview</span>
             </button>
             <button
-              onClick={() => { setActiveTab("users"); setIsSidebarOpen(false); }}
+              onClick={() => {
+                setActiveTab("users")
+                setIsSidebarOpen(false)
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
                 activeTab === "users"
                   ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
@@ -218,7 +225,10 @@ export default function AdminPage() {
               <span className="font-medium text-sm">User Management</span>
             </button>
             <button
-              onClick={() => { setActiveTab("env"); setIsSidebarOpen(false); }}
+              onClick={() => {
+                setActiveTab("env")
+                setIsSidebarOpen(false)
+              }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
                 activeTab === "env"
                   ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
@@ -231,7 +241,7 @@ export default function AdminPage() {
           </nav>
 
           <div className="mt-auto pt-6 border-t border-sidebar-border space-y-2">
-             <Button
+            <Button
               variant="ghost"
               className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent gap-3 px-4"
               onClick={() => router.push("/dashboard")}
@@ -253,24 +263,23 @@ export default function AdminPage() {
 
       <main className="transition-all duration-300 md:ml-56 min-h-screen flex flex-col">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
-
           {/* Header Card */}
           <div className="relative rounded-xl overflow-hidden bg-card border border-border shadow-sm group mb-8">
             <div className="h-32 bg-gradient-to-r from-primary/20 to-purple-600/20 w-full" />
             <div className="absolute top-20 left-6">
-               <div className="w-24 h-24 rounded-full border-4 border-background bg-muted overflow-hidden flex items-center justify-center">
-                  <Shield className="h-10 w-10 text-primary" />
-               </div>
+              <div className="w-24 h-24 rounded-full border-4 border-background bg-muted overflow-hidden flex items-center justify-center">
+                <Shield className="h-10 w-10 text-primary" />
+              </div>
             </div>
             <div className="pt-14 pb-6 px-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="mt-2">
-                 <h2 className="text-2xl font-bold">Admin Dashboard</h2>
-                 <p className="text-muted-foreground text-sm">Manage users, subscriptions, and platform health</p>
+                <h2 className="text-2xl font-bold">Admin Dashboard</h2>
+                <p className="text-muted-foreground text-sm">Manage users, subscriptions, and platform health</p>
               </div>
               <div className="flex gap-2">
-                  <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-3 py-1">
-                    v1.0.0
-                  </Badge>
+                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-3 py-1">
+                  v1.0.0
+                </Badge>
               </div>
             </div>
           </div>
@@ -278,7 +287,7 @@ export default function AdminPage() {
           {/* Overview Tab */}
           {activeTab === "overview" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="border-border shadow-sm">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground">Total Users</CardTitle>
@@ -307,9 +316,7 @@ export default function AdminPage() {
                     <Globe className="h-4 w-4 text-blue-500" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold">
-                      {users.reduce((acc, u) => acc + u.projectCount, 0)}
-                    </div>
+                    <div className="text-2xl font-bold">{users.reduce((acc, u) => acc + u.projectCount, 0)}</div>
                     <p className="text-xs text-muted-foreground">Total created</p>
                   </CardContent>
                 </Card>
@@ -330,155 +337,43 @@ export default function AdminPage() {
 
           {/* Users Tab */}
           {activeTab === "users" && (
-             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by email, name, or user ID..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 h-12 bg-card border-border rounded-xl"
-                  />
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by email, name, or user ID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-12 bg-card border-border rounded-xl"
+                />
+              </div>
+
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4"></div>
+                  <p className="text-muted-foreground">Fetching user data...</p>
                 </div>
-
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mb-4"></div>
-                    <p className="text-muted-foreground">Fetching user data...</p>
-                  </div>
-                ) : filteredUsers.length === 0 ? (
-                  <div className="text-center py-12 bg-card border border-dashed border-border rounded-xl">
-                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-lg font-medium">No users found</p>
-                    <p className="text-muted-foreground">Try adjusting your search criteria</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {filteredUsers.map((user) => (
-                      <Card
-                        key={user.userId}
-                        className="border-border hover:border-primary/30 transition-colors shadow-sm"
-                      >
-                        <CardContent className="p-6">
-                          <div className="flex flex-col md:flex-row gap-6">
-                            <div className="flex-1 space-y-4">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                     <h3 className="font-bold text-lg text-foreground">{user.name}</h3>
-                                     {user.hasVercelLinked && (
-                                        <Badge variant="secondary" className="bg-black text-white hover:bg-black/90 gap-1 h-5 text-[10px] px-1.5 border-none">
-                                           <Triangle className="h-2 w-2 fill-white" /> Vercel
-                                        </Badge>
-                                     )}
-                                  </div>
-                                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                    <Mail className="h-3.5 w-3.5" />
-                                    <span>{user.email}</span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-2">
-                                   {user.isPremium ? (
-                                    <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 hover:bg-yellow-500/20">
-                                      <Zap className="h-3 w-3 mr-1" /> Premium
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-muted-foreground">Free</Badge>
-                                  )}
-                                  <span className="text-xs text-muted-foreground font-mono">{user.userId.substring(0,8)}...</span>
-                                </div>
-                              </div>
-
-                              {user.vercelAccessToken && (
-                                <div className="mt-4 bg-muted/50 border border-border/50 rounded-lg p-3">
-                                  <div className="flex items-center justify-between gap-2 mb-1">
-                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider flex items-center gap-1">
-                                      <Key className="h-3 w-3" /> Vercel Token
-                                    </span>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-6 w-6"
-                                      onClick={() => copyToClipboard(user.vercelAccessToken!, user.userId)}
-                                    >
-                                      {copiedToken === user.userId ? (
-                                        <Check className="h-3.5 w-3.5 text-green-500" />
-                                      ) : (
-                                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                                      )}
-                                    </Button>
-                                  </div>
-                                  <code className="text-[10px] break-all font-mono text-muted-foreground bg-background/50 p-1.5 rounded block border border-border/30">
-                                    {user.vercelAccessToken}
-                                  </code>
-                                </div>
-                              )}
-
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-4">
-                                <div className="bg-muted/30 p-2 rounded-lg">
-                                  <p className="text-xs text-muted-foreground">Projects</p>
-                                  <p className="font-medium">{user.projectCount}</p>
-                                </div>
-                                <div className="bg-muted/30 p-2 rounded-lg">
-                                  <p className="text-xs text-muted-foreground">Joined</p>
-                                  <p className="font-medium">{formatDate(user.createdAt)}</p>
-                                </div>
-                                <div className="bg-muted/30 p-2 rounded-lg col-span-2">
-                                   <p className="text-xs text-muted-foreground">IP Address</p>
-                                   <p className="font-mono text-xs">{user.ip}</p>
-                                </div>
-                              </div>
-
-                               {user.websites.length > 0 && (
-                                <div className="pt-2">
-                                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">Websites</p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {user.websites.map((website) => (
-                                      <a
-                                        key={website.id}
-                                        href={`https://${website.subdomain}.ltpd.xyz`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary border border-border rounded-md px-3 py-1.5 text-xs transition-colors"
-                                      >
-                                        <Globe className="h-3 w-3 text-muted-foreground" />
-                                        <span className="font-medium">{website.businessName}</span>
-                                        <span className="text-muted-foreground opacity-50">({website.subdomain})</span>
-                                      </a>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex md:flex-col justify-end gap-2 border-t md:border-t-0 md:border-l border-border pt-4 md:pt-0 md:pl-6 min-w-[140px]">
-                              <Button
-                                size="sm"
-                                variant={user.isPremium ? "outline" : "default"}
-                                onClick={() => togglePremium(user.userId, user.isPremium)}
-                                disabled={updatingUser === user.userId}
-                                className="w-full"
-                              >
-                                {user.isPremium ? "Downgrade" : "Upgrade"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => deleteUser(user.userId, user.name)}
-                                disabled={updatingUser === user.userId}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-             </div>
+              ) : filteredUsers.length === 0 ? (
+                <div className="text-center py-12 bg-card border border-dashed border-border rounded-xl">
+                  <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium">No users found</p>
+                  <p className="text-muted-foreground">Try adjusting your search criteria</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredUsers.map((user) => (
+                    <UserCard
+                      key={user.userId}
+                      user={user}
+                      onDelete={deleteUser}
+                      onTogglePremium={togglePremium}
+                      onRemoveToken={removeToken}
+                      updatingUser={updatingUser}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Environment Variables Guide Tab */}
@@ -491,14 +386,16 @@ export default function AdminPage() {
                     Vercel Integration Setup
                   </CardTitle>
                   <CardDescription>
-                    To enable Vercel login and automatic project deployment, you must configure the following environment variables in your Vercel project settings.
+                    To enable Vercel login and automatic project deployment, you must configure the following
+                    environment variables in your Vercel project settings.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
                     <p className="font-semibold mb-1">Common Error: "The app ID is invalid"</p>
                     <p>
-                      This error usually means the <strong>Redirect URL</strong> configured in the Vercel Integration Console does not match the URL of your deployed application exactly.
+                      This error usually means the <strong>Redirect URL</strong> configured in the Vercel Integration
+                      Console does not match the URL of your deployed application exactly.
                     </p>
                   </div>
 
@@ -526,27 +423,42 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       <h3 className="font-semibold text-sm">Setup Instructions</h3>
                       <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                        <li>Go to <a href="https://vercel.com/dashboard/integrations/console" target="_blank" className="text-primary hover:underline">Vercel Integrations Console</a>.</li>
+                        <li>
+                          Go to{" "}
+                          <a
+                            href="https://vercel.com/dashboard/integrations/console"
+                            target="_blank"
+                            className="text-primary hover:underline"
+                            rel="noreferrer"
+                          >
+                            Vercel Integrations Console
+                          </a>
+                          .
+                        </li>
                         <li>Create a new Integration (e.g., "Sycord Pages").</li>
                         <li>
                           Set the <strong>Redirect URL</strong> to EXACTLY this value:
                           <div className="mt-1 bg-black text-white px-2 py-1 rounded font-mono select-all flex items-center justify-between group">
-                             <span className="truncate">{callbackUrl}</span>
-                             <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-white hover:text-white/80 hover:bg-white/10"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(callbackUrl)
-                                  alert("Copied Redirect URL!")
-                                }}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
+                            <span className="truncate">{callbackUrl}</span>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-white hover:text-white/80 hover:bg-white/10"
+                              onClick={() => {
+                                navigator.clipboard.writeText(callbackUrl)
+                                alert("Copied Redirect URL!")
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
                           </div>
                         </li>
-                        <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.</li>
-                        <li>Add these variables to your Vercel Project Settings (Settings &rarr; Environment Variables).</li>
+                        <li>
+                          Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.
+                        </li>
+                        <li>
+                          Add these variables to your Vercel Project Settings (Settings &rarr; Environment Variables).
+                        </li>
                         <li>Redeploy your application.</li>
                       </ol>
                     </div>
@@ -555,7 +467,6 @@ export default function AdminPage() {
               </Card>
             </div>
           )}
-
         </div>
       </main>
     </div>

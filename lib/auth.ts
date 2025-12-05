@@ -1,13 +1,13 @@
-import GoogleProvider from "next-auth/providers/google"
+import CredentialsProvider from "next-auth/providers/credentials"
 import type { AuthOptions } from "next-auth"
 import clientPromise from "./mongodb"
 
 // Log detailed warnings for debugging
-if (!process.env.GOOGLE_CLIENT_ID) {
-  console.warn("[v0] Auth Warning: Missing GOOGLE_CLIENT_ID")
+if (!process.env.VERCEL_CLIENT_ID) {
+  console.warn("[v0] Auth Warning: Missing VERCEL_CLIENT_ID")
 }
-if (!process.env.GOOGLE_CLIENT_SECRET) {
-  console.warn("[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET")
+if (!process.env.VERCEL_CLIENT_SECRET) {
+  console.warn("[v0] Auth Warning: Missing VERCEL_CLIENT_SECRET")
 }
 if (!process.env.AUTH_SECRET) {
   console.warn("[v0] Auth Warning: Missing AUTH_SECRET")
@@ -29,49 +29,50 @@ const getCookieDomain = () => {
 export const authOptions: AuthOptions = {
   url: NEXTAUTH_URL,
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      authorization: {
-        params: {
-          prompt: "select_account",
-          access_type: "offline",
-          response_type: "code",
-        },
+    CredentialsProvider({
+      name: "Vercel",
+      credentials: {
+        access_token: { label: "Access Token", type: "password" },
+        refresh_token: { label: "Refresh Token", type: "password" },
+        user_id: { label: "User ID", type: "text" },
+        user_email: { label: "Email", type: "email" },
+        user_name: { label: "Name", type: "text" },
+        expires_at: { label: "Expires At", type: "text" },
+      },
+      async authorize(credentials) {
+        // This is called after the OAuth callback stores tokens in session
+        if (credentials?.access_token && credentials?.user_id && credentials?.user_email) {
+          return {
+            id: credentials.user_id,
+            email: credentials.user_email,
+            name: credentials.user_name || credentials.user_email,
+            image: `https://vercel.com/api/www/avatar/${credentials.user_id}`,
+            vercelAccessToken: credentials.access_token,
+            vercelRefreshToken: credentials.refresh_token,
+            vercelExpiresAt: credentials.expires_at,
+          }
+        }
+        return null
       },
     }),
-    // Vercel Provider Removed (Handled manually via /api/auth/authorize & /callback)
   ],
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
-  // cookies: {
-  //   sessionToken: {
-  //     name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
-  //     options: {
-  //       httpOnly: true,
-  //       sameSite: "lax",
-  //       path: "/",
-  //       secure: process.env.NODE_ENV === "production",
-  //       domain: getCookieDomain(),
-  //     },
-  //   },
-  // },
   callbacks: {
-    async jwt({ token, account, profile }) {
-      // console.log("[v0-DEBUG] JWT Callback Triggered")
-
-      if (account && profile) {
-        const profileId = profile.sub || profile.user?.uid || profile.id
-        if (profileId) {
-          token.id = profileId
-        }
-
-        token.picture = profile.picture
-        token.email = profile.email || profile.user?.email
-        token.name = profile.name || profile.user?.name || profile.user?.username
-        token.isPremium = false
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id
+        token.email = user.email
+        token.name = user.name
+        token.picture = user.image
+        // @ts-ignore
+        token.vercelAccessToken = user.vercelAccessToken
+        // @ts-ignore
+        token.vercelRefreshToken = user.vercelRefreshToken
+        // @ts-ignore
+        token.vercelExpiresAt = user.vercelExpiresAt
 
         // ALWAYS save/update user in MongoDB on login
         try {
@@ -83,36 +84,32 @@ export const authOptions: AuthOptions = {
             email: token.email,
             name: token.name,
             image: token.picture,
+            vercelAccessToken: token.vercelAccessToken,
+            vercelRefreshToken: token.vercelRefreshToken,
+            vercelExpiresAt: token.vercelExpiresAt,
+            provider: "vercel",
             updatedAt: new Date(),
           }
 
-          await db.collection("users").updateOne(
-            { id: token.id },
-            { $set: updateData },
-            { upsert: true },
-          )
+          await db.collection("users").updateOne({ id: token.id }, { $set: updateData }, { upsert: true })
 
-          // Fetch the latest user data to get vercelAccessToken
-          const user = await db.collection("users").findOne({ id: token.id })
-          if (user && user.vercelAccessToken) {
-            token.vercelAccessToken = user.vercelAccessToken
-          }
-
-          // console.log("[v0-DEBUG] Stored/Updated user in MongoDB:", token.id, "Provider:", account.provider)
+          console.log("[v0-DEBUG] Stored/Updated user in MongoDB:", token.id)
         } catch (error) {
           console.error("[v0-ERROR] Failed to store/fetch user in MongoDB:", error)
         }
       } else {
-        // If no account/profile (e.g. session update), fetch vercelAccessToken from DB
+        // If no user, try to fetch from DB (session refresh)
         try {
           const client = await clientPromise
           const db = client.db()
           const user = await db.collection("users").findOne({ id: token.id })
-          if (user && user.vercelAccessToken) {
+          if (user) {
             token.vercelAccessToken = user.vercelAccessToken
+            token.vercelRefreshToken = user.vercelRefreshToken
+            token.vercelExpiresAt = user.vercelExpiresAt
           }
         } catch (error) {
-           // console.error("[v0-ERROR] Failed to fetch user from MongoDB:", error)
+          console.error("[v0-ERROR] Failed to fetch user from MongoDB:", error)
         }
       }
 
@@ -126,9 +123,9 @@ export const authOptions: AuthOptions = {
         if (token.name) session.user.name = token.name as string
 
         // @ts-ignore
-        session.user.isPremium = (token.isPremium as boolean) || false
-        // @ts-ignore
         session.user.vercelAccessToken = (token.vercelAccessToken as string) || null
+        // @ts-ignore
+        session.user.isPremium = false
       }
       return session
     },
@@ -151,7 +148,7 @@ export const authOptions: AuthOptions = {
   },
   events: {
     async signIn(message) {
-      // console.log("[v0-EVENT] signIn", message.user.email, "Provider:", message.account?.provider)
+      console.log("[v0-EVENT] signIn", message.user.email)
     },
     async error(message) {
       console.error("[v0-EVENT] ERROR:", message)
