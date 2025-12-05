@@ -46,18 +46,18 @@ export const authOptions: AuthOptions = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
-  cookies: {
-    sessionToken: {
-      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        domain: getCookieDomain(),
-      },
-    },
-  },
+  // cookies: {
+  //   sessionToken: {
+  //     name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+  //     options: {
+  //       httpOnly: true,
+  //       sameSite: "lax",
+  //       path: "/",
+  //       secure: process.env.NODE_ENV === "production",
+  //       domain: getCookieDomain(),
+  //     },
+  //   },
+  // },
   callbacks: {
     async jwt({ token, account, profile }) {
       // console.log("[v0-DEBUG] JWT Callback Triggered")
