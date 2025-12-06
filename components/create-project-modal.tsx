@@ -126,12 +126,17 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       if (!response.ok) {
         const data = await response.json()
         
-        // Create detailed error object
+        // Create detailed error object with sanitized details
+        const sanitizedDetails = data.error || data.details
         const errorDetails = {
           message: data.message || "Failed to create project",
           code: data.code,
           status: response.status,
-          details: data.error || data.details || JSON.stringify(data, null, 2)
+          details: typeof sanitizedDetails === 'string' 
+            ? sanitizedDetails.substring(0, 500) // Limit to 500 chars
+            : sanitizedDetails 
+            ? JSON.stringify(sanitizedDetails).substring(0, 500)
+            : undefined
         }
         
         setDeploymentError(errorDetails)

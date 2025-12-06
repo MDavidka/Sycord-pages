@@ -101,7 +101,7 @@ export async function POST(request: Request) {
              return NextResponse.json({
                 message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects. For Team accounts, ensure you have the correct role.",
                 code: "VERCEL_PERMISSION_DENIED",
-                details: `Project creation failed with status 403. Error: ${JSON.stringify(projectError)}`
+                details: `Project creation failed with status 403. Error: ${projectError.message || projectError.error?.message || "Permission denied"}`
             }, { status: 403 })
         }
 
@@ -195,7 +195,7 @@ export async function POST(request: Request) {
             return NextResponse.json({
                 message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
                 code: "VERCEL_TOKEN_EXPIRED",
-                details: `Authentication failed with status 401. Error: ${JSON.stringify(deployError)}`
+                details: `Authentication failed with status 401. Error: ${deployError.message || deployError.error?.message || "Token expired or invalid"}`
             }, { status: 401 })
         }
 
@@ -203,7 +203,7 @@ export async function POST(request: Request) {
              return NextResponse.json({
                 message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects.",
                 code: "VERCEL_PERMISSION_DENIED",
-                details: `Deployment failed with status 403. Error: ${JSON.stringify(deployError)}`
+                details: `Deployment failed with status 403. Error: ${deployError.message || deployError.error?.message || "Permission denied"}`
             }, { status: 403 })
         }
 
