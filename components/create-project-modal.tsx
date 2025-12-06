@@ -127,16 +127,12 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
         const data = await response.json()
         
         // Create detailed error object with sanitized details
-        const sanitizedDetails = data.error || data.details
+        // Only include safe error information, avoid exposing internal details
         const errorDetails = {
           message: data.message || "Failed to create project",
           code: data.code,
           status: response.status,
-          details: typeof sanitizedDetails === 'string' 
-            ? sanitizedDetails.substring(0, 500) // Limit to 500 chars
-            : sanitizedDetails 
-            ? JSON.stringify(sanitizedDetails).substring(0, 500)
-            : undefined
+          details: data.details || data.error || undefined
         }
         
         setDeploymentError(errorDetails)
@@ -159,11 +155,11 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
     } catch (error) {
       console.error("[v0] Project creation error:", error)
       
-      // Create error object for unexpected errors
+      // Create error object for unexpected errors - only safe information
       const errorDetails = {
         message: error instanceof Error ? error.message : "An unexpected error occurred",
         status: 500,
-        details: error instanceof Error ? error.stack : String(error)
+        details: "An unexpected error occurred during project creation"
       }
       
       setDeploymentError(errorDetails)

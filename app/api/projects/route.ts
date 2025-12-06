@@ -220,10 +220,10 @@ export async function POST(request: Request) {
   } catch (vercelError: any) {
     console.error("[v0] Vercel Integration Failed:", vercelError)
     
-    // Provide detailed error information
+    // Provide detailed error information - only safe properties
     const errorResponse: any = {
       message: vercelError.message || "Vercel integration failed",
-      error: vercelError.toString()
+      error: vercelError.message || "An error occurred during Vercel integration"
     }
     
     // Add specific error codes if available

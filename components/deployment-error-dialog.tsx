@@ -22,14 +22,14 @@ export function DeploymentErrorDialog({ isOpen, onClose, error }: DeploymentErro
 
   if (!error) return null
 
-  const handleCopyError = () => {
+  const handleCopyError = async () => {
     try {
       if (!navigator.clipboard) {
         console.error("Clipboard API not available");
         return;
       }
       const errorText = `Error: ${error.message}\nCode: ${error.code || "N/A"}\nStatus: ${error.status || "N/A"}\nDetails: ${error.details || "N/A"}`
-      navigator.clipboard.writeText(errorText)
+      await navigator.clipboard.writeText(errorText)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
