@@ -142,12 +142,26 @@ export async function POST(request: Request) {
 
     const deploymentsEndpoint = getVercelDeploymentUrl(vercelTeamId);
 
+    // Create claim metadata for Vercel claim deployments
+    // This allows users to properly claim and deploy their sites
+    const claimMetadata = JSON.stringify({
+      claimable: true,
+      userId: session.user.id,
+      userEmail: session.user.email,
+      businessName: body.businessName,
+      createdAt: new Date().toISOString()
+    });
+
     const deployBody: any = {
         name: vercelProjectName,
         files: [
           {
             file: "index.html",
             data: starterHtml
+          },
+          {
+            file: ".vercel/claim",
+            data: claimMetadata
           }
         ],
         target: "production"
