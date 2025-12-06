@@ -6,6 +6,7 @@ import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
 import { deployToFirebase, getFirebaseProjects } from "@/lib/firebase-deploy"
+import { getValidFirebaseToken } from "@/lib/google-token-refresh"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -16,12 +17,12 @@ export async function POST(request: Request) {
   const client = await clientPromise
   const db = client.db()
 
-  // Get user's Firebase Token
-  // @ts-ignore
-  const firebaseAccessToken = session.user.firebaseAccessToken;
-
-  if (!firebaseAccessToken) {
-    return NextResponse.json({ message: "Firebase not connected. Please connect your account first." }, { status: 403 })
+  let firebaseAccessToken: string;
+  try {
+    firebaseAccessToken = await getValidFirebaseToken(session.user.id);
+  } catch (error: any) {
+    console.error("[Project Creation] Failed to get valid Firebase token:", error);
+    return NextResponse.json({ message: "Firebase connection expired or invalid. Please reconnect your account." }, { status: 403 });
   }
 
   const body = await request.json()
@@ -43,11 +44,13 @@ export async function POST(request: Request) {
   const userIP = getClientIP(request)
   const webpageId = generateWebpageId()
 
+  // Ensure siteId is max 30 chars.
+  // 30 - 5 (suffix) = 25 chars for base name.
   const sanitizedSubdomain = (body.subdomain || body.businessName || "project")
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9-]/g, "-")
-    .substring(0, 30)
+    .substring(0, 24)
     .replace(/^-+|-+$/g, "") + "-" + Math.random().toString(36).substring(2, 6);
 
   // Firebase Deployment Logic

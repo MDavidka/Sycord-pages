@@ -17,7 +17,7 @@ interface CreateProjectModalProps {
 
 export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
   const router = useRouter()
-  const { data: session } = useSession()
+  const { data: session, update } = useSession()
   const [isLoading, setIsLoading] = useState(false)
 
   // Log session state for debugging
@@ -25,16 +25,32 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
     if (isOpen) {
       console.log("[v0-debug] Modal open. Session:", session)
       // @ts-ignore
-      if (session?.user?.firebaseAccessToken) {
-        console.log("[v0-debug] Firebase token present in session")
+      if (session?.user?.isFirebaseConnected) {
+        console.log("[v0-debug] Firebase connected in session")
       } else {
-        console.log("[v0-debug] Firebase token MISSING")
+        console.log("[v0-debug] Firebase connection MISSING")
       }
     }
   }, [isOpen, session])
 
+  // Check for firebase_connected param in URL to force session update
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("firebase_connected")) {
+            console.log("[v0-debug] Firebase connected flag found, updating session...");
+            update().then(() => {
+                console.log("[v0-debug] Session updated.");
+                // Remove the param from URL without reload
+                url.searchParams.delete("firebase_connected");
+                window.history.replaceState({}, "", url.toString());
+            });
+        }
+    }
+  }, [update]);
+
   // @ts-ignore
-  const isFirebaseConnected = !!session?.user?.firebaseAccessToken
+  const isFirebaseConnected = !!session?.user?.isFirebaseConnected
 
   const handleFirebaseConnect = () => {
     console.log("[v0] User initiated Firebase connection flow")

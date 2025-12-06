@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     cookieStore.set("firebase_oauth_state", "", { maxAge: 0 });
     cookieStore.set("firebase_code_verifier", "", { maxAge: 0 });
 
-    return Response.redirect(new URL("/dashboard", request.url));
+    return Response.redirect(new URL("/dashboard?firebase_connected=true", request.url));
   } catch (error) {
     console.error("[FIREBASE CALLBACK] Fatal error:", error);
     return Response.redirect(new URL("/dashboard?error=FirebaseConnectionFailed", request.url));

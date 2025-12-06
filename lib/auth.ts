@@ -128,7 +128,7 @@ export const authOptions: AuthOptions = {
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
         // @ts-ignore
-        session.user.firebaseAccessToken = (token.firebaseAccessToken as string) || null
+        session.user.isFirebaseConnected = !!token.firebaseAccessToken
       }
       return session
     },
