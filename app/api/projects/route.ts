@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         },
         body: JSON.stringify({
           name: vercelProjectName,
-          framework: "other", // Use 'other' for static sites or specify if needed
+          // framework field omitted - Vercel will auto-detect for static sites
         }),
     });
 
