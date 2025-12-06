@@ -65,76 +65,11 @@ export async function POST(request: Request) {
   try {
     console.log(`[Vercel Project Creation] Creating project: ${vercelProjectName}`);
 
-    // 1. Create Project
-    // Append teamId query parameter if user is part of a team installation
-    const projectsEndpoint = vercelTeamId
-        ? `https://api.vercel.com/v10/projects?teamId=${vercelTeamId}`
-        : "https://api.vercel.com/v10/projects";
+    // 1. Initial Deployment (Implicit Project Creation)
+    // We skip explicit project creation (/v10/projects) and go straight to deployment (/v13/deployments)
+    // Vercel will automatically create the project if it doesn't exist, using the 'name' field.
+    // IMPORTANT: Do NOT include 'project' ID in the first deployment payload.
 
-    console.log(`[Vercel Project Creation] Endpoint: ${projectsEndpoint}`);
-
-    const createProjectRes = await fetch(projectsEndpoint, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${vercelToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: vercelProjectName,
-        // framework: null // Removed framework: null to rely on default behavior
-      }),
-    })
-
-    if (!createProjectRes.ok) {
-      const errorText = await createProjectRes.text();
-      let errorData;
-      try {
-          errorData = JSON.parse(errorText);
-      } catch (e) {
-          errorData = { message: errorText };
-      }
-
-      console.error("[Vercel Project Creation] API Error Response Status:", createProjectRes.status);
-      console.error("[Vercel Project Creation] API Error Response Body:", JSON.stringify(errorData, null, 2));
-
-      // Check for invalid token error (401 or invalid_token code) to prompt reconnect
-      // We only force logout on 401. 403 means valid token but insufficient permissions.
-      if (createProjectRes.status === 401 || errorData.error?.code === 'invalid_token') {
-          console.warn("[Vercel Project Creation] Token invalid/unauthorized (401). Unsetting user tokens.");
-          // Remove invalid tokens from DB to force reconnect
-          await db.collection("users").updateOne(
-              { id: session.user.id },
-              {
-                  $unset: {
-                      vercelAccessToken: "",
-                      vercelRefreshToken: "",
-                      vercelExpiresAt: ""
-                  }
-              }
-          )
-          // Return specific error structure for frontend to handle
-          return NextResponse.json({
-              message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
-              code: "VERCEL_TOKEN_EXPIRED"
-          }, { status: 401 })
-      }
-
-      if (createProjectRes.status === 403) {
-          console.error("[Vercel Project Creation] 403 Forbidden. The token is valid but lacks permission. Check Integration Scopes.");
-          return NextResponse.json({
-              message: "Permission denied by Vercel. This means the Vercel Integration does not have 'Projects' scope enabled with 'Read & Write' access. Please go to your Vercel Integration Console > Scopes, enable 'Projects' as 'Read & Write', and reinstall the integration.",
-              code: "VERCEL_PERMISSION_DENIED"
-          }, { status: 403 })
-      }
-
-      throw new Error(`Failed to create Vercel project: ${errorData.message || createProjectRes.statusText}`)
-    }
-
-    const projectData = await createProjectRes.json()
-    vercelProjectId = projectData.id
-    console.log(`[Vercel Project Creation] Project created successfully. ID: ${vercelProjectId}`);
-
-    // 2. Initial Deployment
     const starterHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -156,7 +91,7 @@ export async function POST(request: Request) {
 </body>
 </html>`
 
-    console.log("[v0] Creating initial deployment for:", vercelProjectId)
+    console.log(`[Vercel Project Creation] triggering initial deployment for project: ${vercelProjectName}`)
 
     const deploymentsEndpoint = vercelTeamId
         ? `https://api.vercel.com/v13/deployments?teamId=${vercelTeamId}`
@@ -170,7 +105,7 @@ export async function POST(request: Request) {
         },
         body: JSON.stringify({
           name: vercelProjectName,
-          project: vercelProjectId,
+          // project: vercelProjectId, // OMITTED for first deploy to trigger implicit creation
           files: [
             {
               file: "index.html",
@@ -182,12 +117,52 @@ export async function POST(request: Request) {
     })
 
     if (!deployRes.ok) {
-        const deployError = await deployRes.json()
-        console.error("[v0] Vercel Initial Deploy Error:", deployError)
-        // We log but continue, effectively creating the project but failing the first deploy.
-    } else {
-        console.log("[v0] Initial Vercel deployment triggered")
+        const errorText = await deployRes.text();
+        let deployError;
+        try {
+            deployError = JSON.parse(errorText);
+        } catch (e) {
+            deployError = { message: errorText };
+        }
+
+        console.error("[Vercel Project Creation] Deployment Error Status:", deployRes.status)
+        console.error("[Vercel Project Creation] Deployment Error Body:", JSON.stringify(deployError, null, 2))
+
+        // Check for invalid token error (401 or invalid_token code) to prompt reconnect
+        if (deployRes.status === 401 || deployError.error?.code === 'invalid_token') {
+            console.warn("[Vercel Project Creation] Token invalid/unauthorized (401). Unsetting user tokens.");
+            await db.collection("users").updateOne(
+                { id: session.user.id },
+                {
+                    $unset: {
+                        vercelAccessToken: "",
+                        vercelRefreshToken: "",
+                        vercelExpiresAt: ""
+                    }
+                }
+            )
+            return NextResponse.json({
+                message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
+                code: "VERCEL_TOKEN_EXPIRED"
+            }, { status: 401 })
+        }
+
+        if (deployRes.status === 403) {
+             return NextResponse.json({
+                message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects.",
+                code: "VERCEL_PERMISSION_DENIED"
+            }, { status: 403 })
+        }
+
+        throw new Error(`Failed to deploy to Vercel: ${deployError.message || deployRes.statusText}`)
     }
+
+    const deploymentData = await deployRes.json()
+    console.log("[Vercel Project Creation] Initial deployment successful:", deploymentData.id)
+
+    // Extract projectId from the deployment response
+    vercelProjectId = deploymentData.projectId
+    const deploymentId = deploymentData.id
 
   } catch (vercelError: any) {
     console.error("[v0] Vercel Integration Failed:", vercelError)

@@ -3,22 +3,27 @@ import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
 export async function middleware(request: NextRequest) {
-  // Check for NextAuth token (only auth method now)
+  // Check for NextAuth token
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
   })
 
+  // Check for Vercel Manual Token
+  const vercelToken = request.cookies.get("access_token")?.value
+
   // Dashboard Protection
   if (request.nextUrl.pathname.startsWith("/dashboard")) {
-    if (!token) {
+    // Allow if either token exists
+    if (!token && !vercelToken) {
       return NextResponse.redirect(new URL("/login", request.url))
     }
   }
 
   // Login Page Redirection
   if (request.nextUrl.pathname === "/login") {
-    if (token) {
+    // Redirect if either token exists
+    if (token || vercelToken) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
   }
@@ -27,5 +32,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/((?!_next/static|_next/image|favicon.ico|logo.png).*)s"],
+  matcher: ["/dashboard/:path*", "/login", "/((?!_next/static|_next/image|favicon.ico|logo.png).*)"],
 }

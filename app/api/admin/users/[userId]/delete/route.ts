@@ -23,8 +23,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
 
     await db.collection("projects").deleteMany({ userId })
 
-    await db.collection("users").deleteOne({ id: userId })
-
     return NextResponse.json({
       success: true,
       message: `User and all associated data deleted`,
