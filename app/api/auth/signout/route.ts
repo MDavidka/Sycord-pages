@@ -1,35 +1,16 @@
 import { cookies } from 'next/headers';
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import clientPromise from "@/lib/mongodb";
 
 export async function POST() {
   const cookieStore = await cookies();
-  
-  // Get session to identify user
-  const session = await getServerSession(authOptions);
-  
-  // Delete Vercel OAuth cookies
-  cookieStore.set('access_token', '', { maxAge: 0 });
-  cookieStore.set('refresh_token', '', { maxAge: 0 });
-  cookieStore.set('oauth_state', '', { maxAge: 0 });
-  cookieStore.set('oauth_nonce', '', { maxAge: 0 });
-  cookieStore.set('oauth_code_verifier', '', { maxAge: 0 });
+  const accessToken = cookieStore.get('access_token')?.value;
 
-  // Delete user from database if logged in
-  if (session?.user?.id) {
-    try {
-      const client = await clientPromise;
-      const db = client.db();
-      
-      // Changed from updateOne($unset) to deleteOne as requested ("remove user fulder fron database")
-      await db.collection("users").deleteOne({ id: session.user.id });
-      
-      console.log(`[Signout] Deleted user record: ${session.user.id}`);
-    } catch (error) {
-      console.error('[Signout] Error deleting user from database:', error);
-    }
+  if (!accessToken) {
+    return Response.json({ error: 'No access token found' }, { status: 401 });
   }
 
-  return Response.json({ success: true }, { status: 200 });
+  // Simplified revocation
+  cookieStore.set('access_token', '', { maxAge: 0 });
+  cookieStore.set('refresh_token', '', { maxAge: 0 });
+
+  return Response.json({}, { status: 200 });
 }
