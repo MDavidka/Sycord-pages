@@ -5,7 +5,7 @@ import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
-import { deployToFirebase, getFirebaseProjects } from "@/lib/firebase-deploy"
+import { deployToFirebase, getFirebaseProjects, createFirebaseProject } from "@/lib/firebase-deploy"
 import { getValidFirebaseToken } from "@/lib/google-token-refresh"
 
 export async function POST(request: Request) {
@@ -64,12 +64,19 @@ export async function POST(request: Request) {
     const projects = await getFirebaseProjects(firebaseAccessToken);
 
     if (!projects || projects.length === 0) {
-        throw new Error("No Firebase Projects found. Please create a project in the Firebase Console first.");
+        console.log("[Firebase] No projects found, attempting to create one...");
+        try {
+            const newProject = await createFirebaseProject(firebaseAccessToken);
+            firebaseProjectId = newProject.projectId;
+        } catch (createError: any) {
+             console.error("[Firebase] Failed to create project:", createError);
+             throw new Error("No Firebase Projects found and failed to create one automatically. Please create a project in the Firebase Console (https://console.firebase.google.com) and try again.");
+        }
+    } else {
+        // Use the first project
+        const project = projects[0];
+        firebaseProjectId = project.projectId;
     }
-
-    // Use the first project
-    const project = projects[0];
-    firebaseProjectId = project.projectId;
 
     console.log(`[Firebase] Using project: ${firebaseProjectId}`);
 
