@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
-import { VercelLogViewer } from "@/components/vercel-log-viewer"
 import {
   Trash2,
   Plus,
@@ -603,8 +602,6 @@ export default function SiteSettingsPage() {
                   </Button>
                 </div>
               </div>
-
-              <VercelLogViewer logs={deploymentLogs} error={deploymentError} />
             </div>
           </div>
         </div>

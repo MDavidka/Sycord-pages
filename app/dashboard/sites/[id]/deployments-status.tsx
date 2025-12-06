@@ -94,7 +94,7 @@ export function DeploymentsStatus({ projectId, projectName }: DeploymentsStatusP
           <div className="flex-1">
             <h4 className="font-semibold text-sm mb-2">Test Your Deployment</h4>
             <p className="text-sm text-muted-foreground mb-3">
-              Make sure DNS is configured with a wildcard record for *.ltpd.xyz pointing to Vercel.
+              Make sure DNS is configured with a wildcard record for *.ltpd.xyz pointing to your hosting provider.
             </p>
             <Button size="sm" onClick={testDomain} disabled={testingDomain} className="mb-2">
               {testingDomain ? (
@@ -129,10 +129,10 @@ export function DeploymentsStatus({ projectId, projectName }: DeploymentsStatusP
         <h4 className="font-semibold text-sm mb-2">DNS Configuration</h4>
         <p className="text-xs text-muted-foreground mb-2">For subdomain {deployment.domain} to work, ensure:</p>
         <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-          <li>DNS record: *.ltpd.xyz → CNAME → cname.vercel-dns.com</li>
-          <li>Domain configured in Vercel project settings</li>
+          <li>DNS record: *.ltpd.xyz → CNAME → your-hosting-provider.com</li>
+          <li>Domain configured in hosting settings</li>
           <li>Wait 5-15 minutes for DNS propagation</li>
-          <li>Check Vercel logs for [v0] debug messages</li>
+          <li>Check deployment logs for debug messages</li>
         </ul>
       </div>
     </div>
