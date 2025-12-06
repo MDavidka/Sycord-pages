@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     code_challenge,
     code_challenge_method: "S256",
     response_type: "code",
-    scope: "openid profile email read:projects write:projects read:deployments write:deployments",
+    scope: "openid profile email read:projects write:projects read:deployments write:deployments offline_access",
   });
 
   const authorizationUrl = `https://vercel.com/oauth/authorize?${queryParams.toString()}`;

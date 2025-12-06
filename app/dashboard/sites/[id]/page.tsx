@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
+import { VercelLogViewer } from "@/components/vercel-log-viewer"
 import {
   Trash2,
   Plus,
@@ -83,6 +84,8 @@ export default function SiteSettingsPage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [deployment, setDeployment] = useState<any>(null)
   const [isFrozen, setIsFrozen] = useState(false)
+  const [deploymentLogs, setDeploymentLogs] = useState<string[]>([])
+  const [deploymentError, setDeploymentError] = useState<string | null>(null)
 
   const [projectLoading, setProjectLoading] = useState(true)
   const [settingsLoading, setSettingsLoading] = useState(true)
@@ -168,10 +171,14 @@ export default function SiteSettingsPage() {
           .then((data) => {
             setDeployment(data.deployment || null)
             setDeploymentLoading(false)
+            if (data.logs) {
+              setDeploymentLogs(data.logs)
+            }
           })
           .catch((err) => {
             console.error("[v0] Settings page: Error fetching deployment:", err)
             setDeploymentLoading(false)
+            setDeploymentError("Failed to fetch deployment status")
           })
       } finally {
         setIsInitialLoading(false)
@@ -563,37 +570,41 @@ export default function SiteSettingsPage() {
 
         <div className="py-4 px-4 bg-background border-b">
           <div className="container mx-auto max-w-7xl">
-            <div className="flex items-center justify-between gap-2">
-              {isFrozen && (
-                <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
-                  <Lock className="h-3 w-3" />
-                  <span className="font-medium">Frozen</span>
-                </div>
-              )}
-              <div className="flex-1" />
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedPage}
-                  onChange={(e) => setSelectedPage(e.target.value)}
-                  className="px-2 py-1 border border-input rounded bg-background text-xs md:text-sm text-foreground"
-                >
-                  {pages.map((page) => (
-                    <option key={page.id} value={page.id}>
-                      {page.name}
-                    </option>
-                  ))}
-                </select>
-                <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
-                  <a
-                    href={`https://${deployment?.domain}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => isFrozen && e.preventDefault()}
+             <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-2">
+                {isFrozen && (
+                  <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
+                    <Lock className="h-3 w-3" />
+                    <span className="font-medium">Frozen</span>
+                  </div>
+                )}
+                <div className="flex-1" />
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedPage}
+                    onChange={(e) => setSelectedPage(e.target.value)}
+                    className="px-2 py-1 border border-input rounded bg-background text-xs md:text-sm text-foreground"
                   >
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </Button>
+                    {pages.map((page) => (
+                      <option key={page.id} value={page.id}>
+                        {page.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
+                    <a
+                      href={`https://${deployment?.domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => isFrozen && e.preventDefault()}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </Button>
+                </div>
               </div>
+
+              <VercelLogViewer logs={deploymentLogs} error={deploymentError} />
             </div>
           </div>
         </div>
