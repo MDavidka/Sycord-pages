@@ -9,6 +9,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useSession } from "next-auth/react"
 import { TriangleAlert, ExternalLink } from "lucide-react"
+import { DeploymentErrorDialog } from "./deployment-error-dialog"
 
 interface CreateProjectModalProps {
   isOpen: boolean
@@ -19,6 +20,13 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   const router = useRouter()
   const { data: session } = useSession()
   const [isLoading, setIsLoading] = useState(false)
+  const [deploymentError, setDeploymentError] = useState<{
+    message: string
+    code?: string
+    status?: number
+    details?: string
+  } | null>(null)
+  const [showErrorDialog, setShowErrorDialog] = useState(false)
 
   // Log session state for debugging
   useEffect(() => {
@@ -83,6 +91,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
 
     console.log("[v0] Form submitted with data:", formData)
     setIsLoading(true)
+    setDeploymentError(null) // Reset previous errors
 
     try {
       const theme = themes[formData.selectedStyle as keyof typeof themes]
@@ -116,7 +125,19 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
 
       if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.message || "Failed to create project")
+        
+        // Create detailed error object
+        const errorDetails = {
+          message: data.message || "Failed to create project",
+          code: data.code,
+          status: response.status,
+          details: data.error || data.details || JSON.stringify(data, null, 2)
+        }
+        
+        setDeploymentError(errorDetails)
+        setShowErrorDialog(true)
+        setIsLoading(false)
+        return
       }
 
       const newProject = await response.json()
@@ -132,53 +153,70 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
       }, 100)
     } catch (error) {
       console.error("[v0] Project creation error:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to create project")
+      
+      // Create error object for unexpected errors
+      const errorDetails = {
+        message: error instanceof Error ? error.message : "An unexpected error occurred",
+        status: 500,
+        details: error instanceof Error ? error.stack : String(error)
+      }
+      
+      setDeploymentError(errorDetails)
+      setShowErrorDialog(true)
       setIsLoading(false)
     }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 md:p-6">
-        <DialogHeader>
-          <DialogTitle className="text-lg md:text-xl">Új Projekt Létrehozása</DialogTitle>
-          <DialogDescription className="text-xs md:text-sm">
-            Lépésről lépésre hozz létre egy új weboldalt
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 md:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg md:text-xl">Új Projekt Létrehozása</DialogTitle>
+            <DialogDescription className="text-xs md:text-sm">
+              Lépésről lépésre hozz létre egy új weboldalt
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="py-4 md:py-6">
-          {!isVercelConnected ? (
-            <div className="flex flex-col items-center justify-center space-y-6 py-8 text-center">
-              <div className="h-16 w-16 bg-black text-white rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M24 22.525H0l12-21.05 12 21.05z" />
-                </svg>
+          <div className="py-4 md:py-6">
+            {!isVercelConnected ? (
+              <div className="flex flex-col items-center justify-center space-y-6 py-8 text-center">
+                <div className="h-16 w-16 bg-black text-white rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M24 22.525H0l12-21.05 12 21.05z" />
+                  </svg>
+                </div>
+                <div className="space-y-2 max-w-md">
+                  <h3 className="text-lg font-semibold">Connect Vercel to Continue</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We use Vercel for free, high-performance hosting. You must connect your Vercel account to deploy your
+                    website.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleVercelConnect}
+                  className="w-full max-w-xs bg-black text-white hover:bg-zinc-800 gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Connect Vercel Account
+                </Button>
+                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-3 rounded-md border border-amber-200">
+                  <TriangleAlert className="w-4 h-4" />
+                  <p>This creates a project on your personal Vercel dashboard.</p>
+                </div>
               </div>
-              <div className="space-y-2 max-w-md">
-                <h3 className="text-lg font-semibold">Connect Vercel to Continue</h3>
-                <p className="text-sm text-muted-foreground">
-                  We use Vercel for free, high-performance hosting. You must connect your Vercel account to deploy your
-                  website.
-                </p>
-              </div>
-              <Button
-                onClick={handleVercelConnect}
-                className="w-full max-w-xs bg-black text-white hover:bg-zinc-800 gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Connect Vercel Account
-              </Button>
-              <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-3 rounded-md border border-amber-200">
-                <TriangleAlert className="w-4 h-4" />
-                <p>This creates a project on your personal Vercel dashboard.</p>
-              </div>
-            </div>
-          ) : (
-            <ProjectForm onSubmit={handleFormSubmit} />
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+            ) : (
+              <ProjectForm onSubmit={handleFormSubmit} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <DeploymentErrorDialog
+        isOpen={showErrorDialog}
+        onClose={() => setShowErrorDialog(false)}
+        error={deploymentError}
+      />
+    </>
   )
 }

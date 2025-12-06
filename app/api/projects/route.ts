@@ -100,7 +100,8 @@ export async function POST(request: Request) {
         if (projectRes.status === 403) {
              return NextResponse.json({
                 message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects. For Team accounts, ensure you have the correct role.",
-                code: "VERCEL_PERMISSION_DENIED"
+                code: "VERCEL_PERMISSION_DENIED",
+                details: `Project creation failed with status 403. Error: ${JSON.stringify(projectError)}`
             }, { status: 403 })
         }
 
@@ -193,14 +194,16 @@ export async function POST(request: Request) {
             )
             return NextResponse.json({
                 message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
-                code: "VERCEL_TOKEN_EXPIRED"
+                code: "VERCEL_TOKEN_EXPIRED",
+                details: `Authentication failed with status 401. Error: ${JSON.stringify(deployError)}`
             }, { status: 401 })
         }
 
         if (deployRes.status === 403) {
              return NextResponse.json({
                 message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects.",
-                code: "VERCEL_PERMISSION_DENIED"
+                code: "VERCEL_PERMISSION_DENIED",
+                details: `Deployment failed with status 403. Error: ${JSON.stringify(deployError)}`
             }, { status: 403 })
         }
 
@@ -216,7 +219,25 @@ export async function POST(request: Request) {
 
   } catch (vercelError: any) {
     console.error("[v0] Vercel Integration Failed:", vercelError)
-    return NextResponse.json({ message: "Vercel integration failed: " + vercelError.message }, { status: 500 })
+    
+    // Provide detailed error information
+    const errorResponse: any = {
+      message: vercelError.message || "Vercel integration failed",
+      error: vercelError.toString()
+    }
+    
+    // Add specific error codes if available
+    if (vercelError.message?.includes("Permission denied")) {
+      errorResponse.code = "VERCEL_PERMISSION_DENIED"
+    } else if (vercelError.message?.includes("expired") || vercelError.message?.includes("authentication")) {
+      errorResponse.code = "VERCEL_AUTH_FAILED"
+    } else if (vercelError.message?.includes("quota") || vercelError.message?.includes("limit")) {
+      errorResponse.code = "VERCEL_QUOTA_EXCEEDED"
+    } else if (vercelError.message?.includes("network") || vercelError.message?.includes("fetch")) {
+      errorResponse.code = "NETWORK_ERROR"
+    }
+    
+    return NextResponse.json(errorResponse, { status: 500 })
   }
 
   const newProject = {
