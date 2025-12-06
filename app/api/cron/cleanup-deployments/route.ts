@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
 export async function GET(request: Request) {
-  // Verify this is from Vercel Cron
+  // Verify this is from a cron job
   const authHeader = request.headers.get("authorization")
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })

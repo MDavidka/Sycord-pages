@@ -27,7 +27,6 @@ import {
   BarChart3,
   Server,
   Key,
-  Triangle,
   Copy,
   Check
 } from "lucide-react"
@@ -38,8 +37,6 @@ interface User {
   name: string
   projectCount: number
   isPremium: boolean
-  hasVercelLinked: boolean
-  vercelAccessToken: string | null
   ip: string
   createdAt: string
   websites: Array<{ id: string; businessName: string; subdomain: string }>
@@ -155,7 +152,6 @@ export default function AdminPage() {
 
   // Calculate the redirect URI for display
   const currentAppUrl = "https://ltpd.xyz";
-  const callbackUrl = `${currentAppUrl}/api/auth/callback/vercel`;
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -313,17 +309,6 @@ export default function AdminPage() {
                     <p className="text-xs text-muted-foreground">Total created</p>
                   </CardContent>
                 </Card>
-
-                <Card className="border-border shadow-sm">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Vercel Connected</CardTitle>
-                    <Triangle className="h-4 w-4 text-black fill-black" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{users.filter((u) => u.hasVercelLinked).length}</div>
-                    <p className="text-xs text-muted-foreground">Users with Vercel linked</p>
-                  </CardContent>
-                </Card>
               </div>
             </div>
           )}
@@ -366,12 +351,7 @@ export default function AdminPage() {
                                 <div>
                                   <div className="flex items-center gap-2">
                                      <h3 className="font-bold text-lg text-foreground">{user.name}</h3>
-                                     {user.hasVercelLinked && (
-                                        <Badge variant="secondary" className="bg-black text-white hover:bg-black/90 gap-1 h-5 text-[10px] px-1.5 border-none">
-                                           <Triangle className="h-2 w-2 fill-white" /> Vercel
-                                        </Badge>
-                                     )}
-                                  </div>
+                                                                       </div>
                                   <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                                     <Mail className="h-3.5 w-3.5" />
                                     <span>{user.email}</span>
@@ -388,31 +368,6 @@ export default function AdminPage() {
                                   <span className="text-xs text-muted-foreground font-mono">{user.userId.substring(0,8)}...</span>
                                 </div>
                               </div>
-
-                              {user.vercelAccessToken && (
-                                <div className="mt-4 bg-muted/50 border border-border/50 rounded-lg p-3">
-                                  <div className="flex items-center justify-between gap-2 mb-1">
-                                    <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider flex items-center gap-1">
-                                      <Key className="h-3 w-3" /> Vercel Token
-                                    </span>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-6 w-6"
-                                      onClick={() => copyToClipboard(user.vercelAccessToken!, user.userId)}
-                                    >
-                                      {copiedToken === user.userId ? (
-                                        <Check className="h-3.5 w-3.5 text-green-500" />
-                                      ) : (
-                                        <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-                                      )}
-                                    </Button>
-                                  </div>
-                                  <code className="text-[10px] break-all font-mono text-muted-foreground bg-background/50 p-1.5 rounded block border border-border/30">
-                                    {user.vercelAccessToken}
-                                  </code>
-                                </div>
-                              )}
 
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-4">
                                 <div className="bg-muted/30 p-2 rounded-lg">
@@ -488,20 +443,13 @@ export default function AdminPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Server className="h-5 w-5 text-primary" />
-                    Vercel Integration Setup
+                    Environment Configuration
                   </CardTitle>
                   <CardDescription>
-                    To enable Vercel login and automatic project deployment, you must configure the following environment variables in your Vercel project settings.
+                    Required environment variables for the application
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-                    <p className="font-semibold mb-1">Common Error: "The app ID is invalid"</p>
-                    <p>
-                      This error usually means the <strong>Redirect URL</strong> configured in the Vercel Integration Console does not match the URL of your deployed application exactly.
-                    </p>
-                  </div>
-
                   <div className="space-y-4">
                     <div className="p-4 bg-muted rounded-lg border border-border">
                       <h3 className="font-medium mb-2 flex items-center gap-2">
@@ -509,46 +457,36 @@ export default function AdminPage() {
                       </h3>
                       <div className="space-y-3 font-mono text-sm">
                         <div className="flex flex-col gap-1">
-                          <span className="text-muted-foreground select-all">VERCEL_CLIENT_ID</span>
+                          <span className="text-muted-foreground select-all">MONGO_URI</span>
                           <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
-                            Client ID from your Vercel Integration (OAuth App)
+                            MongoDB connection string
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <span className="text-muted-foreground select-all">VERCEL_CLIENT_SECRET</span>
+                          <span className="text-muted-foreground select-all">AUTH_SECRET</span>
                           <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
-                            Client Secret from your Vercel Integration (OAuth App)
+                            NextAuth secret for session encryption
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground select-all">GOOGLE_CLIENT_ID</span>
+                          <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
+                            Google OAuth client ID
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground select-all">GOOGLE_CLIENT_SECRET</span>
+                          <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
+                            Google OAuth client secret
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-muted-foreground select-all">NEXTAUTH_URL</span>
+                          <div className="bg-background border rounded px-3 py-2 text-xs text-muted-foreground">
+                            Application URL (e.g., https://yourdomain.com)
                           </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <h3 className="font-semibold text-sm">Setup Instructions</h3>
-                      <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                        <li>Go to <a href="https://vercel.com/dashboard/integrations/console" target="_blank" className="text-primary hover:underline">Vercel Integrations Console</a>.</li>
-                        <li>Create a new Integration (e.g., "Sycord Pages").</li>
-                        <li>
-                          Set the <strong>Redirect URL</strong> to EXACTLY this value:
-                          <div className="mt-1 bg-black text-white px-2 py-1 rounded font-mono select-all flex items-center justify-between group">
-                             <span className="truncate">{callbackUrl}</span>
-                             <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 text-white hover:text-white/80 hover:bg-white/10"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(callbackUrl)
-                                  alert("Copied Redirect URL!")
-                                }}
-                              >
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                          </div>
-                        </li>
-                        <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong>.</li>
-                        <li>Add these variables to your Vercel Project Settings (Settings &rarr; Environment Variables).</li>
-                        <li>Redeploy your application.</li>
-                      </ol>
                     </div>
                   </div>
                 </CardContent>

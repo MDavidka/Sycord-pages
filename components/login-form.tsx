@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Triangle } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 
 export default function LoginForm() {
   return (
@@ -29,15 +29,6 @@ export default function LoginForm() {
           <p className="text-muted-foreground mb-8">Jelentkezzen be a fiókjába a folytatáshoz.</p>
 
           <div className="flex flex-col gap-3">
-             <a href="/api/auth/authorize" className="w-full">
-               <Button
-                className="w-full bg-black text-white hover:bg-neutral-800 border border-neutral-800 h-11"
-              >
-                <Triangle className="fill-white h-4 w-4 mr-2" />
-                Sign in with Vercel
-              </Button>
-            </a>
-
             <Button
               onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
               variant="outline"
