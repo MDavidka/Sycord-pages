@@ -16,7 +16,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleFormSubmit = async (formData: any) {
+  const handleFormSubmit = async (formData: any) => {
     if (isLoading) return
 
     console.log("[v0] Form submitted with data:", formData)
