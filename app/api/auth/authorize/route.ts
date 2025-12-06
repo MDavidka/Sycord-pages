@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     code_challenge,
     code_challenge_method: "S256",
     response_type: "code",
-    scope: "openid email profile offline_access", // Default OIDC scopes. Project permissions are managed in Vercel Integration Console.
+    scope: "openid profile email read:projects write:projects read:deployments write:deployments",
   });
 
   const authorizationUrl = `https://vercel.com/oauth/authorize?${queryParams.toString()}`;
