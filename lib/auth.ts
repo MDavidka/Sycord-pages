@@ -92,10 +92,10 @@ export const authOptions: AuthOptions = {
             { upsert: true },
           )
 
-          // Fetch the latest user data to get vercelAccessToken
+          // Fetch the latest user data to get firebaseAccessToken
           const user = await db.collection("users").findOne({ id: token.id })
-          if (user && user.vercelAccessToken) {
-            token.vercelAccessToken = user.vercelAccessToken
+          if (user && user.firebaseAccessToken) {
+            token.firebaseAccessToken = user.firebaseAccessToken
           }
 
           // console.log("[v0-DEBUG] Stored/Updated user in MongoDB:", token.id, "Provider:", account.provider)
@@ -103,13 +103,13 @@ export const authOptions: AuthOptions = {
           console.error("[v0-ERROR] Failed to store/fetch user in MongoDB:", error)
         }
       } else {
-        // If no account/profile (e.g. session update), fetch vercelAccessToken from DB
+        // If no account/profile (e.g. session update), fetch firebaseAccessToken from DB
         try {
           const client = await clientPromise
           const db = client.db()
           const user = await db.collection("users").findOne({ id: token.id })
-          if (user && user.vercelAccessToken) {
-            token.vercelAccessToken = user.vercelAccessToken
+          if (user && user.firebaseAccessToken) {
+            token.firebaseAccessToken = user.firebaseAccessToken
           }
         } catch (error) {
            // console.error("[v0-ERROR] Failed to fetch user from MongoDB:", error)
@@ -128,7 +128,7 @@ export const authOptions: AuthOptions = {
         // @ts-ignore
         session.user.isPremium = (token.isPremium as boolean) || false
         // @ts-ignore
-        session.user.vercelAccessToken = (token.vercelAccessToken as string) || null
+        session.user.firebaseAccessToken = (token.firebaseAccessToken as string) || null
       }
       return session
     },

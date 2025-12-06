@@ -5,8 +5,7 @@ import clientPromise from "@/lib/mongodb"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
-import { getValidVercelToken } from "@/lib/vercel"
-import { getVercelProjectCreationUrl, getVercelDeploymentUrl } from "@/lib/vercel-api-utils"
+import { deployToFirebase, getFirebaseProjects } from "@/lib/firebase-deploy"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -17,25 +16,15 @@ export async function POST(request: Request) {
   const client = await clientPromise
   const db = client.db()
 
-  console.log("==========================================");
-  console.log(`[Vercel Project Creation] Start for User: ${session.user.email}`);
+  // Get user's Firebase Token
+  // @ts-ignore
+  const firebaseAccessToken = session.user.firebaseAccessToken;
 
-  let vercelToken: string
-  try {
-    vercelToken = await getValidVercelToken(session.user.id)
-    console.log(`[Vercel Project Creation] Token obtained (ending in ...${vercelToken.slice(-5)})`);
-  } catch (error: any) {
-    console.error("[Vercel Project Creation] Token validation failed:", error);
-    return NextResponse.json({ message: error.message || "Vercel authentication failed" }, { status: 403 })
+  if (!firebaseAccessToken) {
+    return NextResponse.json({ message: "Firebase not connected. Please connect your account first." }, { status: 403 })
   }
 
-  // Fetch user to get Team ID (Token is already validated)
-  const user = await db.collection("users").findOne({ id: session.user.id })
-  const vercelTeamId = user?.vercelTeamId
-  console.log(`[Vercel Project Creation] Vercel Team ID: ${vercelTeamId || "None (Personal Account)"}`);
-
   const body = await request.json()
-
   const userProjects = await db.collection("projects").find({ userId: session.user.id }).toArray()
 
   // @ts-ignore
@@ -54,68 +43,39 @@ export async function POST(request: Request) {
   const userIP = getClientIP(request)
   const webpageId = generateWebpageId()
 
-  // Sanitize project name for Vercel
-  const vercelProjectName = (body.subdomain || body.businessName || "project")
+  const sanitizedSubdomain = (body.subdomain || body.businessName || "project")
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9-]/g, "-")
-    .substring(0, 90) + "-" + Math.random().toString(36).substring(2, 7)
+    .substring(0, 30)
+    .replace(/^-+|-+$/g, "") + "-" + Math.random().toString(36).substring(2, 6);
 
-  // Vercel Integration
-  let vercelProjectId = null
+  // Firebase Deployment Logic
+  let deployResult = null;
+  let firebaseProjectId = null;
+  let siteId = null;
+
   try {
-    console.log(`[Vercel Project Creation] Creating project: ${vercelProjectName}`);
+    // 1. Get List of Projects and pick the first one (Simplification)
+    // In a real app, we might ask the user to pick one in the UI.
+    const projects = await getFirebaseProjects(firebaseAccessToken);
 
-    // 1. Explicit Project Creation (POST /v11/projects)
-    // We use explicit project creation as requested to ensure proper team scoping and permissions.
-    // If teamId is present, it must be passed in the URL.
-
-    const projectsEndpoint = getVercelProjectCreationUrl(vercelTeamId);
-
-    console.log(`[Vercel Project Creation] Creating project via: ${projectsEndpoint}`);
-
-    const projectRes = await fetch(projectsEndpoint, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${vercelToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: vercelProjectName,
-          framework: "other", // Use 'other' for static sites or specify if needed
-        }),
-    });
-
-    if (!projectRes.ok) {
-        const errorText = await projectRes.text();
-        let projectError;
-        try {
-            projectError = JSON.parse(errorText);
-        } catch (e) {
-            projectError = { message: errorText };
-        }
-
-        console.error("[Vercel Project Creation] Project Creation Error:", projectRes.status, projectError);
-
-        if (projectRes.status === 403) {
-             return NextResponse.json({
-                message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects. For Team accounts, ensure you have the correct role.",
-                code: "VERCEL_PERMISSION_DENIED"
-            }, { status: 403 })
-        }
-
-        // If project already exists, we can proceed to deployment
-        if (projectRes.status !== 409) { // 409 Conflict means project exists
-            throw new Error(`Failed to create project on Vercel: ${projectError.message || projectRes.statusText}`)
-        }
-        console.log("[Vercel Project Creation] Project might already exist (409), proceeding to deployment.");
-    } else {
-        const projectData = await projectRes.json();
-        vercelProjectId = projectData.id;
-        console.log(`[Vercel Project Creation] Project created successfully: ${vercelProjectId}`);
+    if (!projects || projects.length === 0) {
+        throw new Error("No Firebase Projects found. Please create a project in the Firebase Console first.");
     }
 
-    // 2. Initial Deployment using proper Vercel Integration flow
+    // Use the first project
+    const project = projects[0];
+    firebaseProjectId = project.projectId;
+
+    console.log(`[Firebase] Using project: ${firebaseProjectId}`);
+
+    // 2. Determine Site ID
+    // We try to use the sanitized subdomain as the site ID.
+    // Site IDs must be unique globally in Firebase Hosting (web.app).
+    siteId = sanitizedSubdomain;
+
+    // 3. Create initial content
     const starterHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,7 +83,7 @@ export async function POST(request: Request) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${body.businessName}</title>
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #FF9966 0%, #FF5E62 100%); }
         .container { text-align: center; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px; }
         h1 { color: #333; margin-bottom: 0.5rem; }
         p { color: #666; }
@@ -132,118 +92,29 @@ export async function POST(request: Request) {
 <body>
     <div class="container">
         <h1>Welcome to ${body.businessName}</h1>
-        <p>Your site is successfully deployed!</p>
-        <p style="margin-top: 1rem; font-size: 0.875rem; color: #999;">Powered by Vercel</p>
+        <p>Your site is successfully deployed to Firebase Hosting!</p>
+        <p style="margin-top: 1rem; font-size: 0.875rem; color: #999;">Powered by Firebase</p>
     </div>
 </body>
-</html>`
+</html>`;
 
-    // Create vercel.json configuration for the deployment
-    const vercelConfig = {
-      version: 2,
-      builds: [
-        {
-          src: "index.html",
-          use: "@vercel/static"
-        }
-      ],
-      routes: [
-        {
-          src: "/(.*)",
-          dest: "/$1"
-        }
-      ]
+    // 4. Deploy
+    console.log(`[Firebase] Deploying to site: ${siteId}`);
+    deployResult = await deployToFirebase(firebaseAccessToken, firebaseProjectId, siteId, starterHtml);
+
+  } catch (error: any) {
+    console.error("[Firebase] Deployment failed:", error);
+
+    // Handle invalid token
+    if (error.code === 401 || error.message?.includes("401")) {
+         await db.collection("users").updateOne(
+            { id: session.user.id },
+            { $unset: { firebaseAccessToken: "", firebaseRefreshToken: "", firebaseExpiresAt: "" } }
+        );
+        return NextResponse.json({ message: "Firebase connection expired. Please reconnect." }, { status: 401 });
     }
 
-    console.log(`[Vercel Project Creation] triggering initial deployment for project: ${vercelProjectName}`)
-
-    const deploymentsEndpoint = getVercelDeploymentUrl(vercelTeamId);
-
-    const deployBody: any = {
-        name: vercelProjectName,
-        files: [
-          {
-            file: "index.html",
-            data: starterHtml
-          },
-          {
-            file: "vercel.json",
-            data: JSON.stringify(vercelConfig, null, 2)
-          }
-        ],
-        target: "production",
-        projectSettings: {
-          framework: null,
-          buildCommand: null,
-          outputDirectory: null
-        }
-    };
-
-    // If we have a project ID from the explicit creation step, use it
-    if (vercelProjectId) {
-        deployBody.project = vercelProjectId;
-    }
-
-    const deployRes = await fetch(deploymentsEndpoint, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${vercelToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(deployBody),
-    })
-
-    if (!deployRes.ok) {
-        const errorText = await deployRes.text();
-        let deployError;
-        try {
-            deployError = JSON.parse(errorText);
-        } catch (e) {
-            deployError = { message: errorText };
-        }
-
-        console.error("[Vercel Project Creation] Deployment Error Status:", deployRes.status)
-        console.error("[Vercel Project Creation] Deployment Error Body:", JSON.stringify(deployError, null, 2))
-
-        // Check for invalid token error (401 or invalid_token code) to prompt reconnect
-        if (deployRes.status === 401 || deployError.error?.code === 'invalid_token') {
-            console.warn("[Vercel Project Creation] Token invalid/unauthorized (401). Unsetting user tokens.");
-            await db.collection("users").updateOne(
-                { id: session.user.id },
-                {
-                    $unset: {
-                        vercelAccessToken: "",
-                        vercelRefreshToken: "",
-                        vercelExpiresAt: ""
-                    }
-                }
-            )
-            return NextResponse.json({
-                message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
-                code: "VERCEL_TOKEN_EXPIRED"
-            }, { status: 401 })
-        }
-
-        if (deployRes.status === 403) {
-             return NextResponse.json({
-                message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects.",
-                code: "VERCEL_PERMISSION_DENIED"
-            }, { status: 403 })
-        }
-
-        throw new Error(`Failed to deploy to Vercel: ${deployError.message || deployRes.statusText}`)
-    }
-
-    const deploymentData = await deployRes.json()
-    console.log("[Vercel Project Creation] Initial deployment successful:", deploymentData.id)
-
-    // Extract projectId from the deployment response
-    vercelProjectId = deploymentData.projectId
-    const deploymentId = deploymentData.id
-
-  } catch (vercelError: any) {
-    console.error("[v0] Vercel Integration Failed:", vercelError)
-    return NextResponse.json({ message: "Vercel integration failed: " + vercelError.message }, { status: 500 })
+    return NextResponse.json({ message: "Firebase deployment failed: " + error.message }, { status: 500 });
   }
 
   const newProject = {
@@ -256,34 +127,28 @@ export async function POST(request: Request) {
     isPremium: isPremium,
     status: "pending",
     createdAt: new Date(),
-    vercelProjectId: vercelProjectId,
-    vercelProjectName: vercelProjectName
+    firebaseProjectId: firebaseProjectId,
+    firebaseSiteId: siteId,
   }
 
   try {
     const projectResult = await db.collection("projects").insertOne(newProject)
-    const projectId = projectResult.insertedId.toString()
 
-    if (body.subdomain) {
-      const sanitizedSubdomain = body.subdomain
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9-]/g, "-")
-        .replace(/^-+|-+$/g, "")
-
-      if (sanitizedSubdomain.length >= 3 && !containsCurseWords(sanitizedSubdomain)) {
+    if (deployResult) {
         try {
           const deployment = {
             projectId: projectResult.insertedId,
             userId: session.user.id,
             subdomain: sanitizedSubdomain,
-            domain: `${sanitizedSubdomain}.ltpd.xyz`,
+            domain: deployResult.url.replace("https://", ""), // store domain without protocol
             status: "active",
             createdAt: new Date(),
             updatedAt: new Date(),
             deploymentData: {
               businessName: body.businessName,
               businessDescription: body.businessDescription || "",
+              firebaseSiteId: siteId,
+              firebaseProjectId: firebaseProjectId
             },
           }
 
@@ -295,7 +160,7 @@ export async function POST(request: Request) {
               $set: {
                 deploymentId: deploymentResult.insertedId,
                 subdomain: sanitizedSubdomain,
-                domain: `${sanitizedSubdomain}.ltpd.xyz`,
+                domain: deployment.domain,
                 deployedAt: new Date(),
               },
             },
@@ -303,7 +168,6 @@ export async function POST(request: Request) {
         } catch (deploymentError: any) {
           console.error("[v0] Error creating deployment record:", deploymentError.message)
         }
-      }
     }
 
     const updatedProject = await db.collection("projects").findOne({ _id: projectResult.insertedId })

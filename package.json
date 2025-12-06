@@ -51,6 +51,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "gcp-metadata": "latest",
+    "googleapis": "^167.0.0",
     "html-validator": "6.0.1",
     "input-otp": "1.4.1",
     "kerberos": "latest",
