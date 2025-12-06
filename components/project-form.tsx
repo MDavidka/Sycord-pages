@@ -198,7 +198,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                   }}
                   autoFocus
                 />
-                {subdomainError && <p className="text-sm text-red-500 animate-in fade-in duration-200">{subdomainError}</p>}
+                {subdomainError && <p className="text-sm text-red-500 transition-opacity duration-200">{subdomainError}</p>}
               </div>
             ) : (
               <div className="space-y-4">
@@ -243,8 +243,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
         return (
           <div className="space-y-4 px-2 md:px-4">
             <h2 className="text-xl md:text-2xl font-bold text-center">Válassz egy stílust</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 max-h-72 md:max-h-96 overflow-y-auto pr-1 scrollbar-thin">
-              {Object.entries(themes).map(([key, theme]) => (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3 max-h-72 md:max-h-96 overflow-y-auto pr-1">{Object.entries(themes).map(([key, theme]) => (
                 <button
                   key={key}
                   onClick={() => setFormData({ ...formData, selectedStyle: key })}
@@ -331,7 +330,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
       <div className="mb-6 md:mb-8 min-h-[280px] md:min-h-[320px] overflow-hidden">
         <div 
           key={currentStep}
-          className={`animate-in ${slideDirection === 'forward' ? 'slide-in-from-right' : 'slide-in-from-left'} fade-in duration-300`}
+          className={`transition-all duration-300 ease-in-out ${slideDirection === 'forward' ? 'translate-x-0 opacity-100' : 'translate-x-0 opacity-100'}`}
         >
           {renderStep()}
         </div>
