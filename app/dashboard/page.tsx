@@ -192,6 +192,18 @@ function DashboardContent() {
     }
   }
 
+  const handleLogout = async () => {
+    try {
+      // Call signout API to clear cookies and database
+      await fetch('/api/auth/signout', { method: 'POST' })
+    } catch (error) {
+      console.error('[v0] Error during logout:', error)
+    } finally {
+      // Sign out from NextAuth
+      signOut({ callbackUrl: "/" })
+    }
+  }
+
   // handleDeleteProject function omitted or same as before...
 
   return (
@@ -268,7 +280,7 @@ function DashboardContent() {
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={() => signOut({ callbackUrl: "/" })}
+                    onClick={handleLogout}
                     className="text-destructive focus:text-destructive"
                   >
                     <LogOut className="mr-2 h-4 w-4" />

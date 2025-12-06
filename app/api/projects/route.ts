@@ -115,7 +115,7 @@ export async function POST(request: Request) {
         console.log(`[Vercel Project Creation] Project created successfully: ${vercelProjectId}`);
     }
 
-    // 2. Initial Deployment
+    // 2. Initial Deployment using proper Vercel Integration flow
     const starterHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,8 +123,8 @@ export async function POST(request: Request) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${body.businessName}</title>
     <style>
-        body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f0f0; }
-        .container { text-align: center; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .container { text-align: center; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 500px; }
         h1 { color: #333; margin-bottom: 0.5rem; }
         p { color: #666; }
     </style>
@@ -133,9 +133,27 @@ export async function POST(request: Request) {
     <div class="container">
         <h1>Welcome to ${body.businessName}</h1>
         <p>Your site is successfully deployed!</p>
+        <p style="margin-top: 1rem; font-size: 0.875rem; color: #999;">Powered by Vercel</p>
     </div>
 </body>
 </html>`
+
+    // Create vercel.json configuration for the deployment
+    const vercelConfig = {
+      version: 2,
+      builds: [
+        {
+          src: "index.html",
+          use: "@vercel/static"
+        }
+      ],
+      routes: [
+        {
+          src: "/(.*)",
+          dest: "/$1"
+        }
+      ]
+    }
 
     console.log(`[Vercel Project Creation] triggering initial deployment for project: ${vercelProjectName}`)
 
@@ -147,9 +165,18 @@ export async function POST(request: Request) {
           {
             file: "index.html",
             data: starterHtml
+          },
+          {
+            file: "vercel.json",
+            data: JSON.stringify(vercelConfig, null, 2)
           }
         ],
-        target: "production"
+        target: "production",
+        projectSettings: {
+          framework: null,
+          buildCommand: null,
+          outputDirectory: null
+        }
     };
 
     // If we have a project ID from the explicit creation step, use it
