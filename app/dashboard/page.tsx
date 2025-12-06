@@ -5,7 +5,7 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, Menu, TriangleAlert } from "lucide-react"
+import { Settings, Plus, LogOut, User, Menu, TriangleAlert, RefreshCw } from "lucide-react"
 import { useState, useEffect, Suspense } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import {
@@ -22,6 +22,7 @@ import { WebsitePreviewCard } from "@/components/website-preview-card"
 import { WelcomeOverlay } from "@/components/welcome-overlay"
 import { CreateProjectModal } from "@/components/create-project-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { cn } from "@/lib/utils"
 
 function DashboardContent() {
   const { data: session, status } = useSession()
@@ -106,6 +107,10 @@ function DashboardContent() {
       .map((n) => n[0])
       .join("")
       .toUpperCase() || "U"
+
+  // Check if Vercel is connected (assuming if vercelAccessToken is missing it's not connected or expired)
+  // @ts-ignore
+  const isVercelConnected = !!session?.user?.vercelAccessToken;
 
   const MobileNav = () => (
     <Sheet>
@@ -204,7 +209,10 @@ function DashboardContent() {
     }
   }
 
-  // handleDeleteProject function omitted or same as before...
+  const handleReconnectVercel = () => {
+    // Redirect to Vercel authorization
+    window.location.href = "/api/auth/authorize";
+  }
 
   return (
     <>
@@ -247,7 +255,7 @@ function DashboardContent() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
-                    <Avatar className="h-10 w-10">
+                    <Avatar className={cn("h-10 w-10", !isVercelConnected && "border-2 border-red-500 box-content")}>
                       <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
                       <AvatarFallback className="bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                     </Avatar>
@@ -261,6 +269,15 @@ function DashboardContent() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {!isVercelConnected && (
+                    <>
+                      <DropdownMenuItem onClick={handleReconnectVercel} className="bg-red-50 text-red-600 focus:bg-red-100 focus:text-red-700 dark:bg-red-900/20 dark:text-red-400 dark:focus:bg-red-900/40">
+                        <RefreshCw className="mr-2 h-4 w-4 animate-in spin-in-180" />
+                        <span>Connect Vercel</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem>
                     <User className="mr-2 h-4 w-4" />
                     <span>Profil</span>

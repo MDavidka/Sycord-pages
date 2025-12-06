@@ -41,7 +41,7 @@ export async function getValidVercelToken(userId: string): Promise<string> {
   console.log("[Vercel] Refreshing expired access token...");
 
   try {
-    const response = await fetch("https://api.vercel.com/v2/oauth/access_token", {
+    const response = await fetch("https://api.vercel.com/login/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

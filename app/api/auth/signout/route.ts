@@ -16,32 +16,18 @@ export async function POST() {
   cookieStore.set('oauth_nonce', '', { maxAge: 0 });
   cookieStore.set('oauth_code_verifier', '', { maxAge: 0 });
 
-  // Clear Vercel tokens from database if user is logged in
+  // Delete user from database if logged in
   if (session?.user?.id) {
     try {
       const client = await clientPromise;
       const db = client.db();
       
-      await db.collection("users").updateOne(
-        { id: session.user.id },
-        {
-          $unset: {
-            vercelAccessToken: "",
-            vercelRefreshToken: "",
-            vercelExpiresAt: "",
-            vercelTeamId: "",
-            vercelId: "",
-            vercelUsername: "",
-            vercelEmail: "",
-            vercelProvider: "",
-            vercelLinkedAt: ""
-          }
-        }
-      );
+      // Changed from updateOne($unset) to deleteOne as requested ("remove user fulder fron database")
+      await db.collection("users").deleteOne({ id: session.user.id });
       
-      console.log(`[Signout] Cleared Vercel data for user: ${session.user.id}`);
+      console.log(`[Signout] Deleted user record: ${session.user.id}`);
     } catch (error) {
-      console.error('[Signout] Error clearing database:', error);
+      console.error('[Signout] Error deleting user from database:', error);
     }
   }
 
