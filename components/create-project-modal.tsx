@@ -216,7 +216,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                     onClick={() => {
                       const deployUrl = new URL("https://vercel.com/new/clone")
                       deployUrl.searchParams.set("repository-url", "https://github.com/Edev-s/Sycord-pages")
-                      deployUrl.searchParams.set("project-name", "sycord-site")
+                      deployUrl.searchParams.set("project-name", "sycord-pages-template")
                       window.open(deployUrl.toString(), "_blank")
                     }}
                     variant="outline"

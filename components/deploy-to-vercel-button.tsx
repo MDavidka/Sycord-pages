@@ -4,13 +4,13 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ExternalLink, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { toast } from "sonner"
 
 interface DeployToVercelButtonProps {
-  projectId: string
   businessName: string
 }
 
-export function DeployToVercelButton({ projectId, businessName }: DeployToVercelButtonProps) {
+export function DeployToVercelButton({ businessName }: DeployToVercelButtonProps) {
   const [isGenerating, setIsGenerating] = useState(false)
 
   const handleDeploy = async () => {
@@ -29,8 +29,8 @@ export function DeployToVercelButton({ projectId, businessName }: DeployToVercel
       // Open the Deploy to Vercel page in a new tab
       window.open(deployUrl.toString(), "_blank")
     } catch (error) {
-      console.error("[v0] Error generating deploy URL:", error)
-      alert("Failed to generate deploy URL. Please try again.")
+      console.error("[DeployToVercelButton] Error generating deploy URL:", error)
+      toast.error("Failed to generate deploy URL. Please try again.")
     } finally {
       setIsGenerating(false)
     }
