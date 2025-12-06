@@ -100,7 +100,8 @@ export async function POST(request: Request) {
         if (projectRes.status === 403) {
              return NextResponse.json({
                 message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects. For Team accounts, ensure you have the correct role.",
-                code: "VERCEL_PERMISSION_DENIED"
+                code: "VERCEL_PERMISSION_DENIED",
+                details: `Project creation failed with status 403. Error: ${projectError.message || projectError.error?.message || "Permission denied"}`
             }, { status: 403 })
         }
 
@@ -193,14 +194,16 @@ export async function POST(request: Request) {
             )
             return NextResponse.json({
                 message: "Your Vercel connection has expired. Please disconnect and reconnect your Vercel account in the settings.",
-                code: "VERCEL_TOKEN_EXPIRED"
+                code: "VERCEL_TOKEN_EXPIRED",
+                details: `Authentication failed with status 401. Error: ${deployError.message || deployError.error?.message || "Token expired or invalid"}`
             }, { status: 401 })
         }
 
         if (deployRes.status === 403) {
              return NextResponse.json({
                 message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects.",
-                code: "VERCEL_PERMISSION_DENIED"
+                code: "VERCEL_PERMISSION_DENIED",
+                details: `Deployment failed with status 403. Error: ${deployError.message || deployError.error?.message || "Permission denied"}`
             }, { status: 403 })
         }
 
@@ -216,7 +219,28 @@ export async function POST(request: Request) {
 
   } catch (vercelError: any) {
     console.error("[v0] Vercel Integration Failed:", vercelError)
-    return NextResponse.json({ message: "Vercel integration failed: " + vercelError.message }, { status: 500 })
+    
+    // Determine error code based on error message
+    let errorCode: string | undefined;
+    const errorMessage = vercelError.message || "Vercel integration failed";
+    
+    if (errorMessage.includes("Permission denied")) {
+      errorCode = "VERCEL_PERMISSION_DENIED";
+    } else if (errorMessage.includes("expired") || errorMessage.includes("authentication")) {
+      errorCode = "VERCEL_AUTH_FAILED";
+    } else if (errorMessage.includes("quota") || errorMessage.includes("limit")) {
+      errorCode = "VERCEL_QUOTA_EXCEEDED";
+    } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+      errorCode = "NETWORK_ERROR";
+    }
+    
+    // Provide detailed error information - only safe properties
+    const errorResponse = {
+      message: errorMessage,
+      ...(errorCode && { code: errorCode })
+    };
+    
+    return NextResponse.json(errorResponse, { status: 500 })
   }
 
   const newProject = {
