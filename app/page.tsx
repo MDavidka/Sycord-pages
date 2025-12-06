@@ -72,14 +72,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Stats Section */}
       <section className="border-y border-border">
         <div className="container mx-auto px-4 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="text-center md:text-left">
               <div className="text-3xl font-bold text-foreground mb-1">100M+</div>
               <div className="text-sm text-muted-foreground mb-2">API kérések naponta</div>
-              <div className="text-xs text-muted-foreground/60">Vercel</div>
+              <div className="text-xs text-muted-foreground/60">Powered by Next.js</div>
             </div>
             <div className="text-center md:text-left">
               <div className="text-3xl font-bold text-foreground mb-1">99.9%</div>
@@ -89,7 +88,7 @@ export default function LandingPage() {
             <div className="text-center md:text-left">
               <div className="text-3xl font-bold text-foreground mb-1">10K</div>
               <div className="text-sm text-muted-foreground mb-2">Aktív felhasználók</div>
-              <div className="text-xs text-muted-foreground/60">Stripe</div>
+              <div className="text-xs text-muted-foreground/60">Growing Daily</div>
             </div>
             <div className="text-center md:text-left">
               <div className="text-3xl font-bold text-foreground mb-1">24/7</div>

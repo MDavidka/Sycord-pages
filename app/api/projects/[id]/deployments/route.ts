@@ -35,15 +35,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       projectId: new ObjectId(id),
     })
 
-    // Fetch logs if available (mocking for now, or fetching from a logs collection if we had one)
-    // Real implementation would fetch from Vercel API if we stored the deployment ID
+    // Simple deployment logs
     let logs: string[] = []
-    if (deployment && project.vercelProjectId) {
-       // We can add a simple log entry to show it's working
-       logs.push(`[System] Fetching status for project: ${project.vercelProjectName || project.businessName}`)
-       if (deployment.status === 'active') {
-         logs.push(`[System] Deployment is active at https://${deployment.domain}`)
-       }
+    if (deployment) {
+       logs.push(`[System] Deployment is active at https://${deployment.domain}`)
     }
 
     return NextResponse.json({ deployment: deployment || null, logs })

@@ -28,22 +28,14 @@ export async function GET() {
     const userList = users.map(user => {
         const userProjects = projectMap.get(user.id) || []
 
-        // Safety: We return a masked version of the token or just a boolean if it exists.
-        // User requested "Token to vercel should be stored and displayed on admin page"
-        // so we will return it.
-
         return {
             userId: user.id,
             email: user.email || "Unknown",
             name: user.name || "Unknown",
-            // Vercel Integration Data
-            hasVercelLinked: !!(user.vercelAccessToken),
-            vercelAccessToken: user.vercelAccessToken || null,
-
             projectCount: userProjects.length,
-            isPremium: user.isPremium || false, // Fallback if not set in user doc
-            ip: userProjects.length > 0 ? (userProjects[0].userIP || "Unknown") : "Unknown", // Best effort IP from projects
-            createdAt: user.createdAt || new Date().toISOString(), // Fallback if missing
+            isPremium: user.isPremium || false,
+            ip: userProjects.length > 0 ? (userProjects[0].userIP || "Unknown") : "Unknown",
+            createdAt: user.createdAt || new Date().toISOString(),
             websites: userProjects.map((p: any) => ({
                 id: p._id,
                 businessName: p.businessName,
