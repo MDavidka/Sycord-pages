@@ -7,7 +7,7 @@ import { authOptions } from "@/lib/auth";
 interface TokenData {
   access_token: string;
   token_type: string;
-  id_token?: string;
+  id_token?: string; // Optional because Integration flow might not return it if openid scope is not requested
   expires_in: number;
   scope: string;
   refresh_token: string;
@@ -38,6 +38,9 @@ export async function GET(request: NextRequest) {
     const codeVerifier = cookieStore.get("oauth_code_verifier")?.value;
 
     console.log("[CALLBACK] Step 3: Cookies retrieved");
+    console.log("[CALLBACK] Stored State exists:", !!storedState);
+    console.log("[CALLBACK] Stored Nonce exists:", !!storedNonce);
+    console.log("[CALLBACK] Code Verifier exists:", !!codeVerifier);
 
     if (!validate(state, storedState)) {
       console.error("[CALLBACK] Error: State mismatch");
@@ -53,42 +56,50 @@ export async function GET(request: NextRequest) {
     console.log("[CALLBACK] Step 5: Token exchanged successfully");
 
     if (tokenData.id_token) {
-      const decodedNonce = decodeNonce(tokenData.id_token);
-      if (!validate(decodedNonce, storedNonce)) {
-        console.error("[CALLBACK] Error: Nonce mismatch");
-        throw new Error("Nonce mismatch");
-      }
-      console.log("[CALLBACK] Step 6: Nonce validated successfully");
+        const decodedNonce = decodeNonce(tokenData.id_token);
+        if (!validate(decodedNonce, storedNonce)) {
+          console.error("[CALLBACK] Error: Nonce mismatch");
+          throw new Error("Nonce mismatch");
+        }
+        console.log("[CALLBACK] Step 6: Nonce validated successfully");
     } else {
-      console.warn("[CALLBACK] Step 6: Skipping Nonce validation (id_token missing)");
+        console.warn("[CALLBACK] Step 6: Skipping Nonce validation (id_token missing - likely Integration flow)");
     }
 
     await setAuthCookies(tokenData);
     console.log("[CALLBACK] Step 7: Auth cookies set");
 
+    // --- User Linking Logic ---
+    // Try to get the session to link to the logged-in Google user
     const session = await getServerSession(authOptions);
+    console.log("[CALLBACK] Step 8: Checking for existing session...");
 
     if (session?.user?.email) {
-      console.log("[CALLBACK] Found logged-in user:", session.user.email);
+        console.log("[CALLBACK] Found logged-in user:", session.user.email);
 
-      let vercelUser = null;
-      try {
-        vercelUser = await fetchVercelUser(tokenData.access_token);
-      } catch (e) {
-        console.error("[CALLBACK] Warning: Failed to fetch Vercel user details.", e);
-      }
+        let vercelUser = null;
+        try {
+            console.log("[CALLBACK] Fetching Vercel user details...");
+            vercelUser = await fetchVercelUser(tokenData.access_token);
+            console.log("[CALLBACK] Vercel User fetched:", vercelUser.id);
+        } catch (e) {
+            console.error("[CALLBACK] Warning: Failed to fetch Vercel user details. Proceeding with token only.", e);
+        }
 
-      await linkVercelToUser(session.user.email, tokenData, vercelUser);
+        console.log("[CALLBACK] Step 9: Linking Vercel token to Google user...");
+        await linkVercelToUser(session.user.email, tokenData, vercelUser);
     } else {
-      console.log("[CALLBACK] No session found. Persisting Vercel user.");
-      try {
-        const user = await fetchVercelUser(tokenData.access_token);
-        await persistUserToDB(user, tokenData);
-      } catch (e) {
-        console.error("[CALLBACK] Error: Failed to persist user.", e);
-      }
+        console.log("[CALLBACK] No session found. Falling back to Vercel-only persistence (or new user creation).");
+         try {
+            const user = await fetchVercelUser(tokenData.access_token);
+            await persistUserToDB(user, tokenData);
+        } catch (e) {
+            console.error("[CALLBACK] Error: Failed to persist user (no session & fetch failed).", e);
+        }
     }
+    // --------------------------------------------------------------------------------------
 
+    // Clear the state, nonce, and oauth_code_verifier cookies
     cookieStore.set("oauth_state", "", { maxAge: 0 });
     cookieStore.set("oauth_nonce", "", { maxAge: 0 });
     cookieStore.set("oauth_code_verifier", "", { maxAge: 0 });
@@ -101,8 +112,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function validate(value: string | null, storedValue: string | undefined): boolean {
-  return !!value && !!storedValue && value === storedValue;
+function validate(
+  value: string | null,
+  storedValue: string | undefined
+): boolean {
+  if (!value || !storedValue) {
+    return false;
+  }
+  return value === storedValue;
 }
 
 function decodeNonce(idToken: string): string {
@@ -118,7 +135,6 @@ async function exchangeCodeForToken(
   requestOrigin: string
 ): Promise<TokenData> {
   const redirectUri = `${requestOrigin}/api/auth/callback`;
-
   console.log("==================================================");
   console.log("[CALLBACK] Exchanging code for token");
   console.log("[REDIRECT_URI USED] :", redirectUri);
@@ -131,14 +147,13 @@ async function exchangeCodeForToken(
     code: code,
     code_verifier: code_verifier || "",
     redirect_uri: redirectUri,
-
-    // ✅ FIX: Add missing scopes here
-    scope: "openid profile email read:projects write:projects read:deployments write:deployments",
   });
 
   const response = await fetch("https://api.vercel.com/login/oauth/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
     body: params.toString(),
   });
 
@@ -167,77 +182,94 @@ async function setAuthCookies(tokenData: TokenData) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24 * 30, // 30 days
   });
 }
+
+// --- Helper Functions ---
 
 async function fetchVercelUser(token: string) {
-  const response = await fetch("https://api.vercel.com/v2/user", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    console.error("[CALLBACK] fetchVercelUser failed:", response.status, text);
-    throw new Error(`Failed to fetch user: ${response.status} ${text}`);
-  }
-
-  const data = await response.json();
-  return data.user;
-}
-
-async function linkVercelToUser(email: string, tokenData: TokenData, vercelUser: any) {
-  try {
-    const client = await clientPromise;
-    const db = client.db();
-
-    const updateData: any = {
-      vercelAccessToken: tokenData.access_token,
-      vercelRefreshToken: tokenData.refresh_token,
-      vercelExpiresAt: Date.now() + tokenData.expires_in * 1000,
-      vercelProvider: true,
-      vercelLinkedAt: new Date(),
-    };
-
-    if (tokenData.team_id) updateData.vercelTeamId = tokenData.team_id;
-    if (vercelUser) {
-      updateData.vercelId = vercelUser.id;
-      updateData.vercelUsername = vercelUser.username;
-      updateData.vercelEmail = vercelUser.email;
+    // UPDATED: Using v2 endpoint as per typical Vercel API usage for authenticated users
+    const response = await fetch('https://api.vercel.com/v2/user', {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        console.error("[CALLBACK] fetchVercelUser failed:", response.status, text);
+        throw new Error(`Failed to fetch user: ${response.status} ${text}`);
     }
-
-    await db.collection("users").updateOne(
-      { email },
-      { $set: updateData }
-    );
-  } catch (e) {
-    console.error("[DB ERROR] Linking failed:", e);
-  }
+    const data = await response.json();
+    return data.user;
 }
 
+// New function to link Vercel to existing Google User
+async function linkVercelToUser(email: string, tokenData: TokenData, vercelUser: any) {
+    try {
+        const client = await clientPromise;
+        const db = client.db();
+
+        const updateData: any = {
+            vercelAccessToken: tokenData.access_token,
+            vercelRefreshToken: tokenData.refresh_token,
+            vercelExpiresAt: Date.now() + (tokenData.expires_in * 1000),
+            vercelProvider: true,
+            vercelLinkedAt: new Date()
+        };
+
+        if (tokenData.team_id) {
+            updateData.vercelTeamId = tokenData.team_id;
+        }
+
+        if (vercelUser) {
+            updateData.vercelId = vercelUser.id;
+            updateData.vercelUsername = vercelUser.username;
+            updateData.vercelEmail = vercelUser.email;
+        }
+
+        const result = await db.collection("users").updateOne(
+            { email: email },
+            { $set: updateData }
+        );
+
+        console.log(`[v0-DEBUG] Linked Vercel to User (${email}). Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`);
+    } catch (e) {
+        console.error("[v0-ERROR] DB Link Failed:", e);
+    }
+}
+
+// Fallback for non-logged in users (creates a new user based on Vercel ID)
 async function persistUserToDB(vercelUser: any, tokenData: TokenData) {
-  try {
-    const client = await clientPromise;
-    const db = client.db();
+    try {
+        const client = await clientPromise;
+        const db = client.db();
 
-    const updateData = {
-      id: vercelUser.id,
-      name: vercelUser.name || vercelUser.username,
-      email: vercelUser.email,
-      image: `https://vercel.com/api/www/avatar/${vercelUser.id}`,
-      vercelAccessToken: tokenData.access_token,
-      vercelRefreshToken: tokenData.refresh_token,
-      vercelExpiresAt: Date.now() + tokenData.expires_in * 1000,
-      vercelProvider: true,
-      updatedAt: new Date(),
-    };
+        const updateData: any = {
+            id: vercelUser.id,
+            name: vercelUser.name || vercelUser.username,
+            email: vercelUser.email,
+            image: `https://vercel.com/api/www/avatar/${vercelUser.id}`,
+            vercelAccessToken: tokenData.access_token,
+            vercelRefreshToken: tokenData.refresh_token,
+            vercelExpiresAt: Date.now() + (tokenData.expires_in * 1000),
+            vercelProvider: true,
+            updatedAt: new Date()
+        };
 
-    await db.collection("users").updateOne(
-      { id: vercelUser.id },
-      { $set: updateData },
-      { upsert: true }
-    );
-  } catch (e) {
-    console.error("[DB ERROR] Persisting failed:", e);
-  }
+        if (tokenData.team_id) {
+            updateData.vercelTeamId = tokenData.team_id;
+        }
+
+        await db.collection("users").updateOne(
+            { id: vercelUser.id }, // Use 'id' from v2/user response (was 'uid' in older API?)
+            {
+                $set: updateData
+            },
+            { upsert: true }
+        );
+        console.log("[v0-DEBUG] Persisted Vercel User:", vercelUser.id);
+    } catch (e) {
+        console.error("[v0-ERROR] DB Persist Failed:", e);
+    }
 }

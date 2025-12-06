@@ -6,6 +6,7 @@ import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
 import { getValidVercelToken } from "@/lib/vercel"
+import { getVercelProjectCreationUrl, getVercelDeploymentUrl } from "@/lib/vercel-api-utils"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -65,11 +66,56 @@ export async function POST(request: Request) {
   try {
     console.log(`[Vercel Project Creation] Creating project: ${vercelProjectName}`);
 
-    // 1. Initial Deployment (Implicit Project Creation)
-    // We skip explicit project creation (/v10/projects) and go straight to deployment (/v13/deployments)
-    // Vercel will automatically create the project if it doesn't exist, using the 'name' field.
-    // IMPORTANT: Do NOT include 'project' ID in the first deployment payload.
+    // 1. Explicit Project Creation (POST /v11/projects)
+    // We use explicit project creation as requested to ensure proper team scoping and permissions.
+    // If teamId is present, it must be passed in the URL.
 
+    const projectsEndpoint = getVercelProjectCreationUrl(vercelTeamId);
+
+    console.log(`[Vercel Project Creation] Creating project via: ${projectsEndpoint}`);
+
+    const projectRes = await fetch(projectsEndpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${vercelToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: vercelProjectName,
+          framework: "other", // Use 'other' for static sites or specify if needed
+        }),
+    });
+
+    if (!projectRes.ok) {
+        const errorText = await projectRes.text();
+        let projectError;
+        try {
+            projectError = JSON.parse(errorText);
+        } catch (e) {
+            projectError = { message: errorText };
+        }
+
+        console.error("[Vercel Project Creation] Project Creation Error:", projectRes.status, projectError);
+
+        if (projectRes.status === 403) {
+             return NextResponse.json({
+                message: "Permission denied by Vercel. Please ensure the Vercel Integration has 'Projects' scope enabled (Read & Write) and access to All Projects. For Team accounts, ensure you have the correct role.",
+                code: "VERCEL_PERMISSION_DENIED"
+            }, { status: 403 })
+        }
+
+        // If project already exists, we can proceed to deployment
+        if (projectRes.status !== 409) { // 409 Conflict means project exists
+            throw new Error(`Failed to create project on Vercel: ${projectError.message || projectRes.statusText}`)
+        }
+        console.log("[Vercel Project Creation] Project might already exist (409), proceeding to deployment.");
+    } else {
+        const projectData = await projectRes.json();
+        vercelProjectId = projectData.id;
+        console.log(`[Vercel Project Creation] Project created successfully: ${vercelProjectId}`);
+    }
+
+    // 2. Initial Deployment
     const starterHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -93,9 +139,23 @@ export async function POST(request: Request) {
 
     console.log(`[Vercel Project Creation] triggering initial deployment for project: ${vercelProjectName}`)
 
-    const deploymentsEndpoint = vercelTeamId
-        ? `https://api.vercel.com/v13/deployments?teamId=${vercelTeamId}`
-        : "https://api.vercel.com/v13/deployments";
+    const deploymentsEndpoint = getVercelDeploymentUrl(vercelTeamId);
+
+    const deployBody: any = {
+        name: vercelProjectName,
+        files: [
+          {
+            file: "index.html",
+            data: starterHtml
+          }
+        ],
+        target: "production"
+    };
+
+    // If we have a project ID from the explicit creation step, use it
+    if (vercelProjectId) {
+        deployBody.project = vercelProjectId;
+    }
 
     const deployRes = await fetch(deploymentsEndpoint, {
         method: "POST",
@@ -103,17 +163,7 @@ export async function POST(request: Request) {
           "Authorization": `Bearer ${vercelToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: vercelProjectName,
-          // project: vercelProjectId, // OMITTED for first deploy to trigger implicit creation
-          files: [
-            {
-              file: "index.html",
-              data: starterHtml
-            }
-          ],
-          target: "production"
-        }),
+        body: JSON.stringify(deployBody),
     })
 
     if (!deployRes.ok) {
