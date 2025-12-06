@@ -29,12 +29,25 @@ export async function deployToFirebase(
     try {
         await firebaseHosting.projects.sites.get({ name: parent });
     } catch (e: any) {
-        if (e.code === 404) {
-            console.log(`[Firebase Deploy] Site ${siteId} not found, creating...`);
-            await firebaseHosting.projects.sites.create({
-                parent: `projects/${projectId}`,
-                siteId: siteId
-            });
+        if (e.code === 404 || e.response?.status === 404) {
+            // Note: If siteId == projectId (default site), it should exist.
+            // If it doesn't, maybe the project is fresh and site not initialized.
+            // But usually default site is created automatically.
+            // If we are using a secondary siteId, we must create it.
+            // But secondary sites require Blaze plan.
+            // If we are here with default siteId and 404, it's weird.
+            console.log(`[Firebase Deploy] Site ${siteId} not found. Attempting to create (if not default)...`);
+
+            // Try creation
+            try {
+                await firebaseHosting.projects.sites.create({
+                    parent: `projects/${projectId}`,
+                    siteId: siteId
+                });
+            } catch (createErr: any) {
+                console.error(`[Firebase Deploy] Failed to create site ${siteId}:`, createErr.message);
+                throw new Error(`Site ${siteId} could not be found or created. Ensure your project has the correct plan or site configuration.`);
+            }
         } else {
             throw e;
         }
@@ -151,77 +164,84 @@ export async function createFirebaseProject(accessToken: string) {
     console.log(`[Firebase Create] Creating new GCP Project: ${projectId}`);
 
     // 2. Create GCP Project
-    // Note: Creating a project might require a parent resource if the user is in an org.
-    // We assume a personal account (no parent) for simplicity, or let the API decide.
-    // If it fails due to missing parent, it might be an org policy.
-
-    const projectRes = await crm.projects.create({
+    await crm.projects.create({
         requestBody: {
             projectId,
             name: displayName
         }
     });
 
-    // Wait for operation is not directly supported by v1 `create` which returns Operation?
-    // Actually v1 `create` returns `Operation` but `googleapis` types might vary.
-    // Let's assume it returns an Operation and we need to poll it.
-    // However, for simplicity and because we don't have a robust poller:
-    // We can just wait a bit and try to get the project.
+    console.log("[Firebase Create] Waiting for project creation (10s)...");
+    await new Promise(r => setTimeout(r, 10000)); // Increased wait to 10s
 
-    console.log("[Firebase Create] Waiting for project creation...");
-    await new Promise(r => setTimeout(r, 5000)); // Wait 5s
+    // 3. Enable APIs
+    // We need: firebase.googleapis.com, firebasehosting.googleapis.com, serviceusage.googleapis.com
+    const services = [
+        "serviceusage.googleapis.com",
+        "firebase.googleapis.com",
+        "firebasehosting.googleapis.com"
+    ];
 
-    // 3. Enable Firebase API
-    // We need to enable `firebase.googleapis.com` on the new project.
-    // Endpoint: projects/{project}/services/{service}
-    console.log("[Firebase Create] Enabling Firebase API...");
-    // Format: projects/123/services/firebase.googleapis.com
-    // Use numeric projectNumber? No, projectId works usually.
-    // But `serviceusage` often expects project NUMBER or ID.
-
-    try {
-        const enableOp = await serviceUsage.services.enable({
-            name: `projects/${projectId}/services/firebase.googleapis.com`
-        });
-        // Wait again
-        await new Promise(r => setTimeout(r, 5000));
-    } catch (e) {
-        console.error("[Firebase Create] Failed to enable API (might be already enabled or permission issue):", e);
-        // Continue and hope for the best
+    console.log("[Firebase Create] Enabling Services...");
+    for (const service of services) {
+        try {
+            console.log(`[Firebase Create] Enabling ${service}...`);
+            await serviceUsage.services.enable({
+                name: `projects/${projectId}/services/${service}`
+            });
+            await new Promise(r => setTimeout(r, 2000)); // Wait between enables
+        } catch (e: any) {
+             console.error(`[Firebase Create] Failed to enable ${service}:`, e.message);
+        }
     }
 
-    // 4. Add Firebase
+    await new Promise(r => setTimeout(r, 5000)); // Wait for API propagation
+
+    // 4. Add Firebase with Retry
     console.log("[Firebase Create] Adding Firebase...");
-    try {
-        const addOp = await firebase.projects.addFirebase({
-            project: `projects/${projectId}`,
-            requestBody: {}
-        });
+    let firebaseAdded = false;
+    let attempts = 0;
+    while (!firebaseAdded && attempts < 5) {
+        try {
+            attempts++;
+            const addOp = await firebase.projects.addFirebase({
+                project: `projects/${projectId}`,
+                requestBody: {}
+            });
 
-        // Poll for completion of AddFirebase
-        let opName = addOp.data.name;
-        if (opName) {
-            console.log(`[Firebase Create] Polling operation: ${opName}`);
-            while (true) {
-                // We need to use `firebase.operations.get` but it's not strictly in the `firebase` client in some versions.
-                // It is under `firebase.availableProjects`? No.
-                // Actually the `firebase` API definition usually has an `operations` service.
-                // Let's check `googleapis` structure.
-                // If not available, we wait a fixed time.
-                // `googleapis` v1beta1 firebase has `operations`.
-
-                // @ts-ignore
-                const op = await firebase.operations.get({ name: opName });
-                if (op.data.done) {
-                    if (op.data.error) throw new Error(op.data.error.message);
-                    break;
+            // Poll for completion
+            let opName = addOp.data.name;
+            if (opName) {
+                console.log(`[Firebase Create] Polling operation: ${opName}`);
+                while (true) {
+                    // @ts-ignore
+                    const op = await firebase.operations.get({ name: opName });
+                    if (op.data.done) {
+                        if (op.data.error) throw new Error(op.data.error.message);
+                        break;
+                    }
+                    await new Promise(r => setTimeout(r, 2000));
                 }
-                await new Promise(r => setTimeout(r, 2000));
+            }
+            firebaseAdded = true;
+            console.log("[Firebase Create] Firebase added successfully.");
+
+        } catch (e: any) {
+            console.warn(`[Firebase Create] AddFirebase attempt ${attempts} failed:`, e.message);
+            if (e.message.includes("permission") || e.message.includes("Caller does not have permission")) {
+                console.log("[Firebase Create] Waiting for IAM propagation (5s)...");
+                await new Promise(r => setTimeout(r, 5000));
+            } else {
+                 // If other error (e.g. already exists), maybe break?
+                 // But sticking to retry if it might be transient.
+                 // If fatal, we throw eventually.
+                 if (attempts >= 5) throw e;
             }
         }
-    } catch (e: any) {
-        // If it says "already exists" or similar, we proceed.
-        console.warn("[Firebase Create] AddFirebase warning:", e.message);
+    }
+
+    if (!firebaseAdded) {
+        throw new Error("Failed to add Firebase to project after multiple attempts.");
     }
 
     console.log(`[Firebase Create] Project ready: ${projectId}`);

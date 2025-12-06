@@ -81,9 +81,9 @@ export async function POST(request: Request) {
     console.log(`[Firebase] Using project: ${firebaseProjectId}`);
 
     // 2. Determine Site ID
-    // We try to use the sanitized subdomain as the site ID.
-    // Site IDs must be unique globally in Firebase Hosting (web.app).
-    siteId = sanitizedSubdomain;
+    // Use the default site (same as project ID) to ensure compatibility with Spark (Free) plan.
+    // Secondary sites require Blaze plan.
+    siteId = firebaseProjectId;
 
     // 3. Create initial content
     const starterHtml = `<!DOCTYPE html>
