@@ -205,6 +205,29 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                   <TriangleAlert className="w-4 h-4" />
                   <p>This creates a project on your personal Vercel dashboard.</p>
                 </div>
+                
+                {/* Alternative: Deploy to Vercel Button */}
+                <div className="w-full max-w-md pt-6 border-t border-border">
+                  <h4 className="text-sm font-semibold mb-2">Or deploy directly</h4>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Use Vercel's Deploy Button to deploy this template directly to your Vercel account without API connection.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      const deployUrl = new URL("https://vercel.com/new/clone")
+                      deployUrl.searchParams.set("repository-url", "https://github.com/Edev-s/Sycord-pages")
+                      deployUrl.searchParams.set("project-name", "sycord-pages-template")
+                      window.open(deployUrl.toString(), "_blank")
+                    }}
+                    variant="outline"
+                    className="w-full gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M24 22.525H0l12-21.05 12 21.05z" />
+                    </svg>
+                    Deploy with Vercel (Claim Deployment)
+                  </Button>
+                </div>
               </div>
             ) : (
               <ProjectForm onSubmit={handleFormSubmit} />
