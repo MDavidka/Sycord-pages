@@ -220,22 +220,25 @@ export async function POST(request: Request) {
   } catch (vercelError: any) {
     console.error("[v0] Vercel Integration Failed:", vercelError)
     
-    // Provide detailed error information - only safe properties
-    const errorResponse: any = {
-      message: vercelError.message || "Vercel integration failed",
-      error: vercelError.message || "An error occurred during Vercel integration"
+    // Determine error code based on error message
+    let errorCode: string | undefined;
+    const errorMessage = vercelError.message || "Vercel integration failed";
+    
+    if (errorMessage.includes("Permission denied")) {
+      errorCode = "VERCEL_PERMISSION_DENIED";
+    } else if (errorMessage.includes("expired") || errorMessage.includes("authentication")) {
+      errorCode = "VERCEL_AUTH_FAILED";
+    } else if (errorMessage.includes("quota") || errorMessage.includes("limit")) {
+      errorCode = "VERCEL_QUOTA_EXCEEDED";
+    } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+      errorCode = "NETWORK_ERROR";
     }
     
-    // Add specific error codes if available
-    if (vercelError.message?.includes("Permission denied")) {
-      errorResponse.code = "VERCEL_PERMISSION_DENIED"
-    } else if (vercelError.message?.includes("expired") || vercelError.message?.includes("authentication")) {
-      errorResponse.code = "VERCEL_AUTH_FAILED"
-    } else if (vercelError.message?.includes("quota") || vercelError.message?.includes("limit")) {
-      errorResponse.code = "VERCEL_QUOTA_EXCEEDED"
-    } else if (vercelError.message?.includes("network") || vercelError.message?.includes("fetch")) {
-      errorResponse.code = "NETWORK_ERROR"
-    }
+    // Provide detailed error information - only safe properties
+    const errorResponse = {
+      message: errorMessage,
+      ...(errorCode && { code: errorCode })
+    };
     
     return NextResponse.json(errorResponse, { status: 500 })
   }
