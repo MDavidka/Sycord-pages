@@ -29,6 +29,12 @@ async function cloudflareApiCall(
 
       console.log(`[Cloudflare] DEBUG: Response status: ${response.status} ${response.statusText}`)
       
+      // Don't retry on auth errors
+      if (response.status === 401 || response.status === 403) {
+        console.error(`[Cloudflare] Auth error: ${response.status}`)
+        return response
+      }
+
       if (response.ok || response.status === 404 || response.status === 409) {
         return response
       }
@@ -86,6 +92,12 @@ async function ensureProject(
   if (checkResponse.ok) {
     console.log("[Cloudflare] ✅ Project exists")
     return
+  }
+
+  if (checkResponse.status === 401 || checkResponse.status === 403) {
+    const err = await checkResponse.json().catch(() => ({}))
+    const msg = err.errors?.[0]?.message || "Check your API Token permissions"
+    throw new Error(`Cloudflare Access Denied (${checkResponse.status}): ${msg}`)
   }
 
   // Project doesn't exist, create it
@@ -250,7 +262,8 @@ export async function POST(request: Request) {
     })
 
     if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      console.error(`[Cloudflare] Project not found in DB: ${projectId} for user ${session.user.email}`)
+      return NextResponse.json({ error: "Local project not found. Please ensure you are logged in and own this project." }, { status: 404 })
     }
 
     // Determine project name

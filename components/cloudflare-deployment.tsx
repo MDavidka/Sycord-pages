@@ -138,6 +138,9 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
     try {
       addLog("🚀 Starting deployment to Cloudflare Pages...")
 
+      // Step 1: Check connectivity
+      addLog("📡 Checking Cloudflare connectivity...")
+
       const response = await fetch("/api/cloudflare/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -146,6 +149,16 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
 
       if (!response.ok) {
         const errorData = await response.json()
+
+        // Handle specific error cases
+        if (response.status === 404 && errorData.error?.includes("Local project")) {
+           addLog("❌ Error: Local project ID mismatch.")
+        } else if (response.status === 500 && errorData.error?.includes("Cloudflare Access Denied")) {
+           addLog("❌ Error: Cloudflare authentication failed.")
+        } else {
+           addLog(`❌ Error: ${errorData.error || response.statusText}`)
+        }
+
         throw new Error(errorData.error || "Deployment failed")
       }
 
@@ -388,9 +401,33 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
             <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
               Debug Information
             </summary>
-            <pre className="mt-2 rounded-lg bg-muted p-4 overflow-x-auto text-xs">
-              {JSON.stringify(debugInfo, null, 2)}
-            </pre>
+            <div className="mt-2 rounded-lg bg-muted p-4 text-xs space-y-2">
+              <div>
+                <strong>Local Project:</strong> {debugInfo.project.name} (ID: {debugInfo.project.id})
+              </div>
+              <div>
+                 <strong>Pages Count:</strong> {debugInfo.project.pagesCount}
+              </div>
+              <div>
+                <strong>Auth Status:</strong> {debugInfo.authentication.isAuthenticated ? "✅ Authenticated" : "❌ Not Authenticated"}
+              </div>
+              {debugInfo.authentication.isAuthenticated && (
+                <div>
+                  <strong>Token Saved:</strong> {debugInfo.authentication.tokenUpdatedAt ? new Date(debugInfo.authentication.tokenUpdatedAt).toLocaleString() : "Unknown"}
+                </div>
+              )}
+              {debugInfo.project.cloudflareUrl && (
+                <div>
+                  <strong>Cloudflare URL:</strong> {debugInfo.project.cloudflareUrl}
+                </div>
+              )}
+               <div>
+                  <strong>Raw Data:</strong>
+                  <pre className="mt-1 overflow-x-auto">
+                    {JSON.stringify(debugInfo, null, 2)}
+                  </pre>
+               </div>
+            </div>
           </details>
         )}
       </CardContent>
