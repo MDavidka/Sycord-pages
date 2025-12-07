@@ -49,7 +49,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString()
-    setDeploymentLogs(prev => [...prev, `[${timestamp}] ${message}`])
+    setDeploymentLogs((prev) => [...prev, `[${timestamp}] ${message}`])
   }
 
   const fetchDebugInfo = async () => {
@@ -60,7 +60,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
         const data = await response.json()
         setDebugInfo(data)
         setIsAuthenticated(data.authentication.isAuthenticated)
-        
+
         if (data.project.firebaseUrl) {
           setDeploymentUrl(data.project.firebaseUrl)
         }
@@ -79,7 +79,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
       setIsAuthenticated(true)
       addLog("✅ Authentication successful! You can now deploy.")
       fetchDebugInfo()
-      
+
       // Clean up URL
       const url = new URL(window.location.href)
       url.searchParams.delete("firebase_auth")
@@ -91,7 +91,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
   const handleAuthenticate = async () => {
     setIsAuthenticating(true)
     setError(null)
-    
+
     try {
       addLog("🔐 Redirecting to Google OAuth...")
       // Redirect to OAuth initiation endpoint
@@ -107,12 +107,12 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
     setIsDeploying(true)
     setError(null)
     setDeploymentStatus("Starting deployment...")
-    
+
     try {
       addLog("🚀 Starting Firebase deployment")
       addLog("🔍 Checking authentication...")
-      
-      const response = await fetch("/api/firebase/deploy", {
+
+      const response = await fetch("/api/firebase/deploy-cli", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId }),
@@ -124,19 +124,18 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
       }
 
       const data = await response.json()
-      
+
       addLog("📦 Files prepared successfully")
       addLog("☁️ Uploading to Firebase Hosting...")
       addLog("✅ Files uploaded successfully")
       addLog("🎉 Deployment finalized")
       addLog(`🌐 Site is live at: ${data.url}`)
-      
+
       setDeploymentUrl(data.url)
       setDeploymentStatus("Deployment successful!")
-      
+
       // Refresh debug info
       fetchDebugInfo()
-      
     } catch (err: any) {
       console.error("[Firebase] Deploy error:", err)
       setError(err.message || "Deployment failed")
@@ -155,9 +154,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
             <Rocket className="h-5 w-5" />
             Deploy to Firebase
           </CardTitle>
-          <CardDescription>
-            Deploy your website to Firebase Hosting with automatic SSL and global CDN
-          </CardDescription>
+          <CardDescription>Deploy your website to Firebase Hosting with automatic SSL and global CDN</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
@@ -175,13 +172,15 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
           )}
 
           {deploymentStatus && (
-            <div className={`flex items-center gap-3 p-4 rounded-lg border ${
-              deploymentStatus.includes("successful") 
-                ? "bg-green-50 border-green-200 text-green-700"
-                : deploymentStatus.includes("failed")
-                ? "bg-red-50 border-red-200 text-red-700"
-                : "bg-blue-50 border-blue-200 text-blue-700"
-            }`}>
+            <div
+              className={`flex items-center gap-3 p-4 rounded-lg border ${
+                deploymentStatus.includes("successful")
+                  ? "bg-green-50 border-green-200 text-green-700"
+                  : deploymentStatus.includes("failed")
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "bg-blue-50 border-blue-200 text-blue-700"
+              }`}
+            >
               {deploymentStatus.includes("successful") ? (
                 <CheckCircle className="h-5 w-5 flex-shrink-0" />
               ) : deploymentStatus.includes("failed") ? (
@@ -248,7 +247,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
               )}
             </Button>
           </div>
-          
+
           <Button
             onClick={() => {
               setShowDebug(!showDebug)
@@ -290,7 +289,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
                     <div>Firebase URL: {debugInfo.project.firebaseUrl || "Not deployed"}</div>
                   </div>
                 </div>
-                
+
                 <div>
                   <h4 className="font-semibold text-sm mb-2">Authentication Status</h4>
                   <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1">
@@ -302,24 +301,28 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
                     )}
                   </div>
                 </div>
-                
+
                 {debugInfo.pages.length > 0 && (
                   <div>
                     <h4 className="font-semibold text-sm mb-2">Pages to Deploy</h4>
                     <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1">
                       {debugInfo.pages.map((page, i) => (
-                        <div key={i}>{page.name} ({(page.size / 1024).toFixed(2)} KB)</div>
+                        <div key={i}>
+                          {page.name} ({(page.size / 1024).toFixed(2)} KB)
+                        </div>
                       ))}
                     </div>
                   </div>
                 )}
-                
+
                 {debugInfo.recommendations.length > 0 && (
                   <div>
                     <h4 className="font-semibold text-sm mb-2">Recommendations</h4>
                     <div className="space-y-2">
                       {debugInfo.recommendations.map((rec, i) => (
-                        <div key={i} className="text-sm">{rec}</div>
+                        <div key={i} className="text-sm">
+                          {rec}
+                        </div>
                       ))}
                     </div>
                   </div>
