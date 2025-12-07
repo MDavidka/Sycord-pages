@@ -139,7 +139,8 @@ async function getOrCreateProject(
  */
 async function generateDeploymentPackage(files: DeployFile[]) {
   const manifest: Record<string, { size: number; sha1: string }> = {};
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  // Use STORE (no compression) to verify integrity and debugging
+  const archive = archiver("zip", { zlib: { level: 0 } });
 
   const chunks: Buffer[] = [];
 
@@ -163,6 +164,8 @@ async function generateDeploymentPackage(files: DeployFile[]) {
       const contentBuffer = Buffer.isBuffer(file.content)
         ? file.content
         : Buffer.from(file.content);
+
+      console.log(`[Cloudflare] Adding file: ${cleanPath} (${contentBuffer.length} bytes)`);
 
       // Compute SHA1 (Required by Cloudflare)
       const sha1 = crypto.createHash("sha1").update(contentBuffer).digest("hex");
@@ -394,7 +397,21 @@ export async function POST(request: Request) {
 </body>
 </html>`
         });
+    } else {
+        pages.forEach(page => {
+            const fileName = page.name === "index" ? "index.html" : `${page.name}.html`;
+            files.push({
+                path: `/${fileName}`,
+                content: page.content || ""
+            });
+        });
     }
+
+    // Explicitly add _headers file to ensure proper mime types
+    files.push({
+        path: "/_headers",
+        content: `/index.html\n  Content-Type: text/html; charset=utf-8\n`
+    });
 
     // 5. Ensure Project Exists & Get Details
     // We now fetch the canonical subdomain from Cloudflare
