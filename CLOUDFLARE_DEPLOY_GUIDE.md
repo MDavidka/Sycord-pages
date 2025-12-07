@@ -14,7 +14,7 @@ The new implementation uses the **Cloudflare Pages Direct Upload v2** endpoint (
 
 *   **ZIP Generation**: Uses `archiver` to bundle all project files (from MongoDB) into a single ZIP buffer in memory.
 *   **Manifest Generation**: computes the SHA1 hash (not SHA256) for every file and normalizes paths to start with `/` as per Cloudflare specs.
-*   **Multipart Upload**: Uses the native `FormData` and `Blob` (available in Node 18+) to construct the request. This ensures compatibility with the native `fetch` API.
+*   **Multipart Upload**: Uses the `form-data` package to construct the multipart body. It explicitly converts the form to a Buffer (`form.getBuffer()`) and retrieves the correct headers (`form.getHeaders()`) to ensure compatibility with Node.js `fetch`.
 
 ## 2. Technical Implementation Details
 
@@ -25,10 +25,11 @@ The new implementation uses the **Cloudflare Pages Direct Upload v2** endpoint (
 *   Returns `{ manifest, zipBuffer }`.
 
 ### `uploadToCloudflare(...)`
-*   Constructs a native `FormData` object.
-*   Appends `manifest` as a `Blob` with `type: "application/json"`.
-*   Appends `file` as a `Blob` with `type: "application/zip"` and filename `site.zip`.
-*   Sends the request to Cloudflare using `fetch`. The browser/runtime automatically sets the `Content-Type` header with the correct boundary.
+*   Constructs a `FormData` object (from `form-data` package).
+*   Appends `manifest` with `{ contentType: "application/json" }`.
+*   Appends `file` as the ZIP buffer with `{ filename: "site.zip", contentType: "application/zip" }`.
+*   Converts the form to a Buffer using `form.getBuffer()`.
+*   Sends the request using `fetch`, explicitly passing the headers from `form.getHeaders()`.
 
 ## 3. Testing Instructions
 

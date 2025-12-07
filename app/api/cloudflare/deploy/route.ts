@@ -5,9 +5,7 @@ import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import archiver from "archiver";
-
-// We use global FormData and Blob (available in Node 18+)
-// No import needed for FormData/Blob in Next.js 16 environment
+import FormData from "form-data";
 
 /**
  * Cloudflare API Configuration
@@ -191,30 +189,34 @@ async function uploadToCloudflare(
   manifest: any,
   zipBuffer: Buffer
 ) {
-  // Use global FormData (Node 18+)
+  // Use 'form-data' package to create a stream/buffer with correct headers
   const form = new FormData();
 
-  // 1. Append Manifest as Blob with strict Content-Type
-  // Cloudflare requires the part named "manifest" to be application/json
-  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-  form.append("manifest", manifestBlob, "manifest.json");
+  // 1. Append Manifest
+  // Cloudflare requires the part named "manifest" to have Content-Type: application/json
+  form.append("manifest", JSON.stringify(manifest), {
+    contentType: "application/json",
+  });
 
-  // 2. Append ZIP file as Blob with strict Content-Type
-  // Cloudflare requires the part named "file" to be application/zip
-  const zipBlob = new Blob([zipBuffer], { type: 'application/zip' });
-  form.append("file", zipBlob, "site.zip");
+  // 2. Append ZIP file
+  // Cloudflare requires the part named "file" to have Content-Type: application/zip
+  form.append("file", zipBuffer, {
+    filename: "site.zip",
+    contentType: "application/zip",
+  });
 
   const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
   
-  // Do NOT set Content-Type header manually for FormData.
-  // The fetch implementation will generate the multipart boundary.
+  // Convert form to buffer to avoid stream issues with fetch in some environments
+  const body = form.getBuffer();
+  const headers = form.getHeaders(); // Get multipart headers with boundary
+
   const response = await cloudflareApiCall(
     url,
     {
       method: "POST",
-      body: form,
-      // @ts-ignore - 'duplex' might be needed for some Node.js fetch implementations
-      duplex: 'half',
+      body: body as any, // Cast to any to satisfy RequestInit type (Buffer is valid)
+      headers: headers,
     },
     apiToken
   );
