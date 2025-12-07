@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket } from "lucide-react"
+import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket, Info } from "lucide-react"
 
 interface FirebaseDeploymentProps {
   projectId: string
@@ -11,18 +12,40 @@ interface FirebaseDeploymentProps {
 }
 
 export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymentProps) {
+  const searchParams = useSearchParams()
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
   const [deploymentStatus, setDeploymentStatus] = useState<string | null>(null)
   const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [deploymentLogs, setDeploymentLogs] = useState<string[]>([])
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  // Check for OAuth success on mount
+  useEffect(() => {
+    const firebaseAuth = searchParams.get("firebase_auth")
+    if (firebaseAuth === "success") {
+      setIsAuthenticated(true)
+      addLog("✅ Authentication successful! You can now deploy.")
+      
+      // Clean up URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete("firebase_auth")
+      window.history.replaceState({}, "", url.toString())
+    }
+  }, [searchParams])
+
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString()
+    setDeploymentLogs(prev => [...prev, `[${timestamp}] ${message}`])
+  }
 
   const handleAuthenticate = async () => {
     setIsAuthenticating(true)
     setError(null)
     
     try {
+      addLog("🔐 Redirecting to Google OAuth...")
       // Redirect to OAuth initiation endpoint
       window.location.href = `/api/firebase/auth/initiate?projectId=${projectId}`
     } catch (err: any) {
@@ -32,20 +55,14 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
     }
   }
 
-  const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString()
-    setDeploymentLogs(prev => [...prev, `[${timestamp}] ${message}`])
-  }
-
   const handleDeploy = async () => {
     setIsDeploying(true)
     setError(null)
     setDeploymentStatus("Starting deployment...")
-    setDeploymentLogs([])
-
+    
     try {
       addLog("🚀 Starting Firebase deployment")
-      addLog("📦 Preparing files...")
+      addLog("🔍 Checking authentication...")
       
       const response = await fetch("/api/firebase/deploy", {
         method: "POST",
@@ -60,6 +77,8 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
 
       const data = await response.json()
       
+      addLog("📦 Files prepared successfully")
+      addLog("☁️ Uploading to Firebase Hosting...")
       addLog("✅ Files uploaded successfully")
       addLog("🎉 Deployment finalized")
       addLog(`🌐 Site is live at: ${data.url}`)
@@ -97,6 +116,13 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
             </div>
           )}
 
+          {isAuthenticated && !deploymentStatus && (
+            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
+              <CheckCircle className="h-5 w-5 flex-shrink-0" />
+              <p className="text-sm font-medium">Authentication successful! You're ready to deploy.</p>
+            </div>
+          )}
+
           {deploymentStatus && (
             <div className={`flex items-center gap-3 p-4 rounded-lg border ${
               deploymentStatus.includes("successful") 
@@ -118,7 +144,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
 
           {deploymentUrl && (
             <div className="p-4 border border-border rounded-lg bg-muted/50">
-              <p className="text-sm font-medium mb-2">Your site is live!</p>
+              <p className="text-sm font-medium mb-2">Your site is live! 🎉</p>
               <a
                 href={deploymentUrl}
                 target="_blank"
@@ -134,14 +160,19 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
           <div className="space-y-2">
             <Button
               onClick={handleAuthenticate}
-              disabled={isAuthenticating || isDeploying}
-              variant="outline"
+              disabled={isAuthenticating || isDeploying || isAuthenticated}
+              variant={isAuthenticated ? "outline" : "default"}
               className="w-full"
             >
               {isAuthenticating ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Authenticating...
+                </>
+              ) : isAuthenticated ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Authenticated
                 </>
               ) : (
                 "1. Authenticate with Google"
@@ -150,7 +181,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
 
             <Button
               onClick={handleDeploy}
-              disabled={isDeploying || isAuthenticating}
+              disabled={isDeploying || isAuthenticating || !isAuthenticated}
               className="w-full"
             >
               {isDeploying ? (
@@ -188,7 +219,10 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">How it works</CardTitle>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Info className="h-4 w-4" />
+            How it works
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <div className="flex items-start gap-2">
@@ -197,15 +231,19 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
           </div>
           <div className="flex items-start gap-2">
             <span className="font-bold text-foreground">2.</span>
-            <p>After authentication, click "Deploy to Firebase" to start deployment</p>
+            <p>You'll be redirected to Google to authorize access to Firebase</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="font-bold text-foreground">3.</span>
-            <p>Your site will be created on Firebase and deployed with automatic SSL</p>
+            <p>After successful authentication, return here and click "Deploy to Firebase"</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="font-bold text-foreground">4.</span>
-            <p>You'll receive a live URL (e.g., your-site.web.app) that's ready to share</p>
+            <p>Your site will be created on Firebase with automatic SSL and global CDN</p>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="font-bold text-foreground">5.</span>
+            <p>You'll receive a live URL (e.g., your-site.web.app) that's ready to share!</p>
           </div>
         </CardContent>
       </Card>
