@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     const debugInfo = {
       project: {
         id: project._id.toString(),
-        name: project.name,
+        name: project.name || project.businessName || "Untitled Project",
         hasPages: pagesCount > 0,
         pagesCount,
         cloudflareProjectName: project.cloudflareProjectName || null,

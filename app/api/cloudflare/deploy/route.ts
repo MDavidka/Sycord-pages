@@ -271,8 +271,10 @@ export async function POST(request: Request) {
     let cfProjectName = cloudflareProjectName || project.cloudflareProjectName
 
     if (!cfProjectName) {
-      // Generate a project name from the project title
-      cfProjectName = project.name
+      // Generate a project name from the project title or fallback
+      const baseName = project.name || project.businessName || `project-${projectId}`
+
+      cfProjectName = baseName
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, "-")
         .replace(/--+/g, "-")
