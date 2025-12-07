@@ -88,18 +88,19 @@ async function cloudflareApiCall(
 }
 
 /**
- * Ensure the project exists in Cloudflare Pages
+ * Get or create Cloudflare Pages project and return details
  */
-async function ensureProject(
+async function getOrCreateProject(
   accountId: string,
   projectName: string,
   apiToken: string
-): Promise<void> {
+): Promise<{ subdomain: string; name: string }> {
   const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}`;
   const checkResponse = await cloudflareApiCall(url, { method: "GET" }, apiToken, 1);
 
   if (checkResponse.ok) {
-    return;
+    const data = await checkResponse.json();
+    return data.result;
   }
 
   if (checkResponse.status === 404) {
@@ -124,7 +125,9 @@ async function ensureProject(
 
     // Wait a bit for propagation
     await new Promise((r) => setTimeout(r, 2000));
-    return;
+
+    const createData = await createResponse.json();
+    return createData.result;
   }
 
   const err = await checkResponse.text();
@@ -309,8 +312,12 @@ export async function POST(request: Request) {
         });
     }
 
-    // 5. Ensure Project Exists
-    await ensureProject(tokenDoc.accountId, cfProjectName, tokenDoc.apiToken);
+    // 5. Ensure Project Exists & Get Details
+    // We now fetch the canonical subdomain from Cloudflare
+    const cfProject = await getOrCreateProject(tokenDoc.accountId, cfProjectName, tokenDoc.apiToken);
+
+    const liveSubdomain = cfProject.subdomain;
+    console.log(`[Cloudflare] Project Subdomain: ${liveSubdomain}`);
 
     // 6. Generate Package (Manifest + ZIP)
     console.log(`[Cloudflare] Generating package for ${cfProjectName}...`);
@@ -328,8 +335,8 @@ export async function POST(request: Request) {
     );
 
     const deploymentId = result.result?.id;
-    const url = result.result?.url;
-    const deploymentUrl = `https://${cfProjectName}.pages.dev`;
+    // Use the canonical subdomain provided by Cloudflare
+    const deploymentUrl = `https://${liveSubdomain}`;
 
     console.log(`[Cloudflare] Deployment Success: ${deploymentUrl}`);
 
