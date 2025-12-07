@@ -57,7 +57,7 @@ function httpsRequest(url, options = {}) {
       },
     };
 
-    console.log(`📊 DEBUG: Making ${reqOptions.method} request to ${url.substring(0, 80)}...`);
+    console.log(`📊 DEBUG: Making ${reqOptions.method} request to ${urlObj.hostname}${urlObj.pathname}`);
 
     const req = https.request(reqOptions, (res) => {
       let data = '';
@@ -73,8 +73,8 @@ function httpsRequest(url, options = {}) {
             resolve({ status: res.statusCode, data: data });
           }
         } else {
-          console.error(`❌ HTTP ${res.statusCode} Error Response:`, data.substring(0, 500));
-          reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          console.error(`❌ HTTP ${res.statusCode} Error`);
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusText || 'Request failed'}`));
         }
       });
     });
@@ -194,12 +194,11 @@ async function deployToCloudflare(files) {
   const stage = deployResponse.data.result?.stage;
 
   if (!uploadUrl) {
-    console.error('❌ ERROR: No upload URL in response:', JSON.stringify(deployResponse.data, null, 2));
-    throw new Error('No upload URL received from Cloudflare');
+    console.error('❌ ERROR: No upload URL in response. Success:', deployResponse.data.success);
+    throw new Error('No upload URL received from Cloudflare. Check API permissions and project settings.');
   }
 
   console.log(`✅ Deployment created (ID: ${deploymentId}, Stage: ${stage})`);
-  console.log(`📊 DEBUG: Upload URL: ${uploadUrl.substring(0, 50)}...`);
   console.log('📤 Uploading files...');
 
   // Create file manifest
