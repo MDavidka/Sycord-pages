@@ -76,7 +76,11 @@ async function firebaseApiCall(
       const contentTypeHeader = response.headers.get("content-type")
 
       if (contentTypeHeader?.includes("application/json")) {
-        errorData = await response.json().catch(() => ({ rawText: "Could not parse JSON" }))
+        errorData = await response.json().catch(() => ({ 
+          rawText: "Could not parse JSON",
+          status: response.status,
+          statusText: response.statusText
+        }))
       } else {
         // If response is HTML or other format, capture as text
         const text = await response.text()
@@ -200,6 +204,9 @@ async function createHostingVersion(
 
 /**
  * Upload files to Firebase Hosting version
+ * Note: This loads all files into memory as base64. For very large deployments
+ * (>100MB total), consider implementing batched uploads or using the uploadUrl
+ * mechanism for individual file uploads.
  */
 async function uploadFiles(
   versionName: string,
@@ -209,12 +216,12 @@ async function uploadFiles(
 ): Promise<void> {
   console.log("[Firebase] Uploading", files.length, "files to version:", versionName)
 
-  // Prepare files in gzip format with base64 encoding
+  // Prepare files in base64 format
+  // Note: For production use with large files, consider gzip compression
   const fileList: Record<string, string> = {}
   
   for (const file of files) {
-    // For now, we'll use base64 encoding directly
-    // In production, you'd want to gzip compress first
+    // Convert to base64 (Firebase expects base64-encoded content)
     const base64Content = Buffer.from(file.content, "utf-8").toString("base64")
     fileList[file.path] = base64Content
   }
@@ -362,9 +369,21 @@ export async function POST(request: Request) {
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, "-")
         .replace(/^-+|-+$/g, "")
+        .replace(/-+/g, "-") // Replace multiple hyphens with single
         .substring(0, 30)
 
-      fbProjectId = `${sanitizedName}-${Date.now().toString(36)}`
+      // Ensure at least 6 characters and valid format
+      const baseName = sanitizedName.length >= 6 ? sanitizedName : "site-" + sanitizedName
+      const timestamp = Date.now().toString(36)
+      
+      // Combine base name with timestamp, ensuring total length is 6-30 chars
+      fbProjectId = `${baseName}-${timestamp}`.substring(0, 30)
+      
+      // Validate Firebase project ID format
+      if (!/^[a-z][a-z0-9-]*[a-z0-9]$/.test(fbProjectId)) {
+        fbProjectId = `site-${timestamp}`
+      }
+      
       console.log("[Firebase REST] Generated project ID:", fbProjectId)
     }
 
@@ -413,12 +432,41 @@ export async function POST(request: Request) {
 
     // Prepare files for deployment
     const filesToDeploy: Array<{ path: string; content: string }> = []
+    const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB per file (Firebase limit)
+    const MAX_TOTAL_SIZE = 50 * 1024 * 1024 // 50MB total (reasonable limit)
+    let totalSize = 0
 
     if (project.pages && project.pages.length > 0) {
       for (const page of project.pages) {
         let filePath = page.name
         if (!filePath.startsWith("/")) {
           filePath = "/" + filePath
+        }
+
+        const fileSize = Buffer.byteLength(page.content, "utf-8")
+        
+        // Check individual file size
+        if (fileSize > MAX_FILE_SIZE) {
+          return NextResponse.json(
+            {
+              message: "File too large",
+              details: `File "${filePath}" is ${(fileSize / 1024 / 1024).toFixed(2)}MB, which exceeds the 10MB limit.`,
+            },
+            { status: 413 },
+          )
+        }
+        
+        totalSize += fileSize
+        
+        // Check total deployment size
+        if (totalSize > MAX_TOTAL_SIZE) {
+          return NextResponse.json(
+            {
+              message: "Deployment too large",
+              details: `Total deployment size exceeds ${(MAX_TOTAL_SIZE / 1024 / 1024).toFixed(0)}MB. Consider splitting your deployment or reducing file sizes.`,
+            },
+            { status: 413 },
+          )
         }
 
         filesToDeploy.push({

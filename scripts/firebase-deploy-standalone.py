@@ -97,19 +97,31 @@ class FirebaseDeployer:
             raise FileNotFoundError(f"Deploy directory not found: {self.deploy_dir}")
         
         files = []
+        MAX_FILE_SIZE_MB = 10  # Firebase limit
+        
         for file_path in self.deploy_dir.rglob("*"):
             if file_path.is_file():
-                # Read file content
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-                
-                # Get relative path with leading slash
-                relative_path = "/" + str(file_path.relative_to(self.deploy_dir)).replace("\\", "/")
-                
-                files.append({
-                    "path": relative_path,
-                    "content": content
-                })
+                try:
+                    # Read file content with error handling
+                    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                        content = f.read()
+                    
+                    # Validate file size
+                    size_mb = len(content.encode("utf-8")) / 1024 / 1024
+                    if size_mb > MAX_FILE_SIZE_MB:
+                        print(f"⚠️  Warning: {file_path.name} is {size_mb:.2f}MB (limit: {MAX_FILE_SIZE_MB}MB), skipping...")
+                        continue
+                    
+                    # Get relative path with leading slash
+                    relative_path = "/" + str(file_path.relative_to(self.deploy_dir)).replace("\\", "/")
+                    
+                    files.append({
+                        "path": relative_path,
+                        "content": content
+                    })
+                except Exception as e:
+                    print(f"⚠️  Warning: Failed to read {file_path.name}: {e}")
+                    # Continue with other files
         
         print(f"✅ Found {len(files)} file(s)")
         return files

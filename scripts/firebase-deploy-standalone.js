@@ -129,9 +129,23 @@ async function readDirectory(dir, baseDir = dir) {
       // Recursively read subdirectories
       files.push(...await readDirectory(fullPath, baseDir));
     } else if (item.isFile()) {
-      const content = await fs.readFile(fullPath, 'utf-8');
-      const relativePath = '/' + path.relative(baseDir, fullPath).replace(/\\/g, '/');
-      files.push({ path: relativePath, content });
+      try {
+        // Read file with error handling
+        const content = await fs.readFile(fullPath, 'utf-8');
+        const relativePath = '/' + path.relative(baseDir, fullPath).replace(/\\/g, '/');
+        
+        // Validate file size (10MB limit per file)
+        const sizeInMB = Buffer.byteLength(content, 'utf-8') / 1024 / 1024;
+        if (sizeInMB > 10) {
+          console.warn(`⚠️  Warning: ${relativePath} is ${sizeInMB.toFixed(2)}MB (limit: 10MB), skipping...`);
+          continue;
+        }
+        
+        files.push({ path: relativePath, content });
+      } catch (error) {
+        console.warn(`⚠️  Warning: Failed to read ${fullPath}: ${error.message}`);
+        // Continue with other files
+      }
     }
   }
 
