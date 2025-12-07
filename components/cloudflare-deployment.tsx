@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket, Info, Settings } from "lucide-react"
+import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket, Info, Settings, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface CloudflareDeploymentProps {
@@ -35,13 +35,19 @@ interface DebugInfo {
   recommendations: string[]
 }
 
+interface LogEntry {
+  message: string
+  type: 'info' | 'success' | 'error'
+  timestamp: string
+}
+
 export function CloudflareDeployment({ projectId, projectName }: CloudflareDeploymentProps) {
   const [isConfiguring, setIsConfiguring] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
   const [deploymentStatus, setDeploymentStatus] = useState<string | null>(null)
   const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [deploymentLogs, setDeploymentLogs] = useState<string[]>([])
+  const [deploymentLogs, setDeploymentLogs] = useState<LogEntry[]>([])
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null)
@@ -51,9 +57,9 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
   const [apiToken, setApiToken] = useState("")
   const [accountId, setAccountId] = useState("")
 
-  const addLog = (message: string) => {
+  const addLog = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     const timestamp = new Date().toLocaleTimeString()
-    setDeploymentLogs((prev) => [...prev, `[${timestamp}] ${message}`])
+    setDeploymentLogs((prev) => [...prev, { message, type, timestamp }])
   }
 
   const fetchDebugInfo = async () => {
@@ -92,7 +98,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
     setError(null)
 
     try {
-      addLog("🔐 Validating Cloudflare credentials...")
+      addLog("🔐 Validating Cloudflare credentials...", "info")
       
       const response = await fetch("/api/cloudflare/auth", {
         method: "POST",
@@ -109,7 +115,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
         throw new Error(errorData.error || "Failed to validate credentials")
       }
 
-      addLog("✅ Credentials validated and saved!")
+      addLog("✅ Credentials validated and saved!", "success")
       setIsAuthenticated(true)
       setShowConfig(false)
       setApiToken("")
@@ -118,7 +124,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
     } catch (err: any) {
       console.error("[Cloudflare] Config error:", err)
       setError(err.message || "Failed to save credentials")
-      addLog(`❌ Error: ${err.message}`)
+      addLog(`❌ Error: ${err.message}`, "error")
     } finally {
       setIsConfiguring(false)
     }
@@ -133,13 +139,13 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
     setIsDeploying(true)
     setError(null)
     setDeploymentStatus("deploying")
-    setDeploymentLogs([])
+    setDeploymentLogs([]) // Clear previous logs
 
     try {
-      addLog("🚀 Starting deployment to Cloudflare Pages...")
+      addLog("🚀 Starting deployment to Cloudflare Pages...", "info")
 
       // Step 1: Check connectivity
-      addLog("📡 Checking Cloudflare connectivity...")
+      addLog("📡 Checking Cloudflare connectivity...", "info")
 
       const response = await fetch("/api/cloudflare/deploy", {
         method: "POST",
@@ -152,11 +158,11 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
 
         // Handle specific error cases
         if (response.status === 404 && errorData.error?.includes("Local project")) {
-           addLog("❌ Error: Local project ID mismatch.")
+           addLog("❌ Error: Local project ID mismatch.", "error")
         } else if (response.status === 500 && errorData.error?.includes("Cloudflare Access Denied")) {
-           addLog("❌ Error: Cloudflare authentication failed.")
+           addLog("❌ Error: Cloudflare authentication failed.", "error")
         } else {
-           addLog(`❌ Error: ${errorData.error || response.statusText}`)
+           addLog(`❌ Error: ${errorData.error || response.statusText}`, "error")
         }
 
         throw new Error(errorData.error || "Deployment failed")
@@ -164,8 +170,8 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
 
       const result = await response.json()
 
-      addLog("✅ Deployment successful!")
-      addLog(`🌐 Your site is live at: ${result.url}`)
+      addLog("✅ Deployment successful!", "success")
+      addLog(`🌐 Your site is live at: ${result.url}`, "success")
       
       setDeploymentStatus("success")
       setDeploymentUrl(result.url)
@@ -174,7 +180,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
       console.error("[Cloudflare] Deploy error:", err)
       setError(err.message || "Deployment failed")
       setDeploymentStatus("error")
-      addLog(`❌ Deployment failed: ${err.message}`)
+      addLog(`❌ Deployment failed: ${err.message}`, "error")
     } finally {
       setIsDeploying(false)
     }
@@ -191,7 +197,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
       })
 
       setIsAuthenticated(false)
-      addLog("🗑️ Credentials removed")
+      addLog("🗑️ Credentials removed", "info")
       await fetchDebugInfo()
     } catch (err) {
       console.error("[Cloudflare] Failed to remove credentials:", err)
@@ -228,7 +234,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
         )}
 
         {showConfig && (
-          <div className="space-y-4 border rounded-lg p-4">
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
             <div className="space-y-2">
               <Label htmlFor="apiToken">Cloudflare API Token</Label>
               <Input
@@ -238,16 +244,8 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
                 value={apiToken}
                 onChange={(e) => setApiToken(e.target.value)}
               />
-              <p className="text-sm text-muted-foreground">
-                Create a token with "Cloudflare Pages: Edit" permission at{" "}
-                <a
-                  href="https://dash.cloudflare.com/profile/api-tokens"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Cloudflare Dashboard
-                </a>
+              <p className="text-xs text-muted-foreground">
+                Requires "Pages: Edit" permission.
               </p>
             </div>
 
@@ -259,15 +257,13 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
               />
-              <p className="text-sm text-muted-foreground">
-                Find your Account ID in the Cloudflare dashboard URL or Pages section
-              </p>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-2">
               <Button
                 onClick={handleSaveCredentials}
                 disabled={isConfiguring || !apiToken || !accountId}
+                size="sm"
               >
                 {isConfiguring ? (
                   <>
@@ -281,7 +277,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
                   </>
                 )}
               </Button>
-              <Button variant="outline" onClick={() => setShowConfig(false)}>
+              <Button variant="outline" size="sm" onClick={() => setShowConfig(false)}>
                 Cancel
               </Button>
             </div>
@@ -291,27 +287,29 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
         {/* Status Display */}
         {isAuthenticated && debugInfo && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              <span>Cloudflare credentials configured</span>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span>Ready to deploy</span>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleRemoveCredentials}
-                className="ml-auto h-auto p-0 text-xs"
+                className="h-auto p-0 text-xs text-muted-foreground hover:text-destructive"
               >
-                Remove
+                Unlink Cloudflare
               </Button>
             </div>
             {debugInfo.project.cloudflareUrl && (
               <div className="flex items-center gap-2 text-sm">
-                <ExternalLink className="h-4 w-4" />
-                <span>Last deployed: </span>
+                <ExternalLink className="h-4 w-4 text-primary" />
+                <span>Live Site: </span>
                 <a
                   href={debugInfo.project.cloudflareUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-primary hover:underline font-medium"
                 >
                   {debugInfo.project.cloudflareUrl}
                 </a>
@@ -324,7 +322,17 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="font-medium">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Empty State Warning */}
+        {isAuthenticated && debugInfo && debugInfo.project.pagesCount === 0 && (
+          <Alert className="border-blue-200 bg-blue-50">
+             <Info className="h-4 w-4 text-blue-600" />
+             <AlertDescription className="text-blue-800">
+                No custom pages found. Deploying will publish the default "Start Imagining" placeholder site.
+             </AlertDescription>
           </Alert>
         )}
 
@@ -333,102 +341,79 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
           <Button
             onClick={handleDeploy}
             disabled={isDeploying || !isAuthenticated}
-            className="w-full"
+            className="w-full relative"
+            size="lg"
           >
             {isDeploying ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deploying...
+                Deploying to Cloudflare...
               </>
             ) : (
               <>
                 <Rocket className="mr-2 h-4 w-4" />
-                Deploy to Cloudflare
+                {debugInfo?.project.cloudflareUrl ? "Redeploy to Cloudflare" : "Deploy to Cloudflare"}
               </>
             )}
           </Button>
-
-          {!isAuthenticated && (
-            <Button
-              variant="outline"
-              onClick={() => setShowConfig(true)}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              Configure
-            </Button>
-          )}
         </div>
 
         {/* Deployment Status */}
-        {deploymentStatus && (
-          <div className="space-y-2">
-            {deploymentStatus === "success" && deploymentUrl && (
-              <Alert className="border-green-500 bg-green-50">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800">
-                  Deployment successful! Your site is live at{" "}
-                  <a
-                    href={deploymentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium underline"
-                  >
-                    {deploymentUrl}
-                  </a>
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
+        {deploymentStatus === "success" && deploymentUrl && (
+          <Alert className="border-green-500 bg-green-50 mt-4">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800 font-medium">
+              Deployment Successful! <br />
+              <a
+                href={deploymentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline mt-1 inline-block"
+              >
+                Visit {deploymentUrl}
+              </a>
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Deployment Logs */}
         {deploymentLogs.length > 0 && (
-          <div className="space-y-2">
-            <Label>Deployment Logs</Label>
-            <div className="rounded-lg bg-muted p-4 max-h-60 overflow-y-auto font-mono text-sm">
+          <div className="space-y-2 mt-4">
+            <div className="flex items-center justify-between">
+                <Label>Deployment Logs</Label>
+                {isDeploying && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+            </div>
+            <div className="rounded-lg bg-slate-950 p-4 max-h-60 overflow-y-auto font-mono text-xs shadow-inner">
               {deploymentLogs.map((log, i) => (
-                <div key={i} className="text-muted-foreground">
-                  {log}
+                <div key={i} className={`py-0.5 border-b border-white/5 last:border-0 ${
+                    log.type === 'error' ? 'text-red-400 font-bold' :
+                    log.type === 'success' ? 'text-green-400 font-bold' :
+                    'text-slate-300'
+                }`}>
+                  <span className="opacity-40 mr-2 text-slate-500">[{log.timestamp}]</span>
+                  {log.message}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Debug Info */}
+        {/* Debug Info (Collapsed) */}
         {debugInfo && (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-              Debug Information
-            </summary>
-            <div className="mt-2 rounded-lg bg-muted p-4 text-xs space-y-2">
-              <div>
-                <strong>Local Project:</strong> {debugInfo.project.name} (ID: {debugInfo.project.id})
-              </div>
-              <div>
-                 <strong>Pages Count:</strong> {debugInfo.project.pagesCount}
-              </div>
-              <div>
-                <strong>Auth Status:</strong> {debugInfo.authentication.isAuthenticated ? "✅ Authenticated" : "❌ Not Authenticated"}
-              </div>
-              {debugInfo.authentication.isAuthenticated && (
-                <div>
-                  <strong>Token Saved:</strong> {debugInfo.authentication.tokenUpdatedAt ? new Date(debugInfo.authentication.tokenUpdatedAt).toLocaleString() : "Unknown"}
+          <div className="pt-2 border-t">
+            <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground flex items-center gap-1">
+                    <Info className="h-3 w-3" /> Debug Information
+                </summary>
+                <div className="mt-2 p-2 bg-muted rounded border overflow-x-auto">
+                    <pre>{JSON.stringify({
+                        project: debugInfo.project.name,
+                        id: debugInfo.project.id,
+                        url: debugInfo.project.cloudflareUrl
+                    }, null, 2)}</pre>
                 </div>
-              )}
-              {debugInfo.project.cloudflareUrl && (
-                <div>
-                  <strong>Cloudflare URL:</strong> {debugInfo.project.cloudflareUrl}
-                </div>
-              )}
-               <div>
-                  <strong>Raw Data:</strong>
-                  <pre className="mt-1 overflow-x-auto">
-                    {JSON.stringify(debugInfo, null, 2)}
-                  </pre>
-               </div>
-            </div>
-          </details>
+            </details>
+          </div>
         )}
       </CardContent>
     </Card>
