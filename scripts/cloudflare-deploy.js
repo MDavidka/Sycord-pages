@@ -57,7 +57,7 @@ function httpsRequest(url, options = {}) {
       },
     };
 
-    console.log(`📊 DEBUG: Making ${reqOptions.method} request to ${urlObj.hostname}${urlObj.pathname}`);
+    console.log(`📊 DEBUG: Making ${reqOptions.method} request to Cloudflare API`);
 
     const req = https.request(reqOptions, (res) => {
       let data = '';
@@ -73,7 +73,7 @@ function httpsRequest(url, options = {}) {
             resolve({ status: res.statusCode, data: data });
           }
         } else {
-          console.error(`❌ HTTP ${res.statusCode} Error`);
+          console.error(`❌ HTTP ${res.statusCode} Error - ${reqOptions.method} to ${urlObj.pathname}`);
           reject(new Error(`HTTP ${res.statusCode}: ${res.statusText || 'Request failed'}`));
         }
       });
@@ -235,8 +235,8 @@ async function deploy() {
 
   // Validate configuration
   console.log('\n🔧 Configuration:');
-  console.log(`   Account ID: ${config.accountId ? config.accountId.substring(0, 8) + '...' : 'NOT SET'}`);
-  console.log(`   API Token: ${config.apiToken ? 'SET (hidden)' : 'NOT SET'}`);
+  console.log(`   Account ID: ${config.accountId ? 'configured' : 'NOT SET'}`);
+  console.log(`   API Token: ${config.apiToken ? 'configured' : 'NOT SET'}`);
   console.log(`   Project Name: ${config.projectName || 'NOT SET'}`);
   console.log(`   Deploy Dir: ${config.deployDir}`);
   console.log(`   Branch: ${config.branch}`);

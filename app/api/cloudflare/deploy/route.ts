@@ -191,9 +191,9 @@ async function deployToCloudflare(
   )
 
   if (!uploadResponse.ok) {
-    const errorData = await uploadResponse.json().catch(() => ({ error: "Unknown error" }))
-    console.error("[Cloudflare] ERROR: Failed to upload files. Status:", uploadResponse.status)
-    throw new Error(`Failed to upload files: HTTP ${uploadResponse.status}`)
+    const statusText = uploadResponse.statusText || 'Upload failed'
+    console.error(`[Cloudflare] ERROR: Failed to upload files. Status: ${uploadResponse.status} ${statusText}`)
+    throw new Error(`Failed to upload files: HTTP ${uploadResponse.status} - ${statusText}`)
   }
 
   const uploadData = await uploadResponse.json()
@@ -292,7 +292,7 @@ export async function POST(request: Request) {
 
     // Deploy to Cloudflare
     console.log(`[Cloudflare] Deploying ${files.length} files...`)
-    console.log(`[Cloudflare] DEBUG: Account ID: ${tokenDoc.accountId.substring(0, 8)}...`)
+    console.log(`[Cloudflare] DEBUG: Account ID: configured`)
     console.log(`[Cloudflare] DEBUG: Project name: ${cfProjectName}`)
     console.log(`[Cloudflare] DEBUG: Total file size: ${files.reduce((sum, f) => sum + f.content.length, 0)} bytes`)
 
