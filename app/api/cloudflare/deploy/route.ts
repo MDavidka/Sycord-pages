@@ -139,8 +139,7 @@ async function getOrCreateProject(
  */
 async function generateDeploymentPackage(files: DeployFile[]) {
   const manifest: Record<string, { size: number; sha1: string }> = {};
-  // Use STORE (no compression) to verify integrity and debugging
-  const archive = archiver("zip", { zlib: { level: 0 } });
+  const archive = archiver("zip", { zlib: { level: 0 } }); // No compression for debugging
 
   const chunks: Buffer[] = [];
 
@@ -161,9 +160,15 @@ async function generateDeploymentPackage(files: DeployFile[]) {
       let cleanPath = file.path.startsWith("/") ? file.path : `/${file.path}`;
 
       // Convert content to Buffer if it's string
-      const contentBuffer = Buffer.isBuffer(file.content)
+      let contentBuffer = Buffer.isBuffer(file.content)
         ? file.content
         : Buffer.from(file.content);
+
+      // Verify content is not empty
+      if (contentBuffer.length === 0) {
+        console.warn(`[Cloudflare] Warning: File ${cleanPath} is empty. Injecting placeholder.`);
+        contentBuffer = Buffer.from("<!-- Empty Page -->");
+      }
 
       console.log(`[Cloudflare] Adding file: ${cleanPath} (${contentBuffer.length} bytes)`);
 
@@ -212,7 +217,7 @@ async function uploadToCloudflare(
   });
 
   const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
-  
+
   // Convert form to buffer to avoid stream issues with fetch in some environments
   const body = form.getBuffer();
   const headers = form.getHeaders(); // Get multipart headers with boundary
@@ -400,18 +405,18 @@ export async function POST(request: Request) {
     } else {
         pages.forEach(page => {
             const fileName = page.name === "index" ? "index.html" : `${page.name}.html`;
+            // Check for empty content and provide fallback
+            const hasContent = page.content && page.content.trim().length > 0;
+            const content = hasContent
+                ? page.content
+                : `<!DOCTYPE html><html><head><title>${page.name}</title></head><body><h1>${page.name}</h1><p>This page is currently empty.</p></body></html>`;
+
             files.push({
                 path: `/${fileName}`,
-                content: page.content || ""
+                content: content
             });
         });
     }
-
-    // Explicitly add _headers file to ensure proper mime types
-    files.push({
-        path: "/_headers",
-        content: `/index.html\n  Content-Type: text/html; charset=utf-8\n`
-    });
 
     // 5. Ensure Project Exists & Get Details
     // We now fetch the canonical subdomain from Cloudflare
