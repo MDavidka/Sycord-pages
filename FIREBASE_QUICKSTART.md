@@ -16,11 +16,11 @@ This guide will help you quickly set up and test the Firebase deployment integra
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project (or use existing)
 3. Enable these APIs:
-   ```
+   \`\`\`
    - Firebase Management API
    - Firebase Hosting API
    - Cloud Resource Manager API
-   ```
+   \`\`\`
 
 4. Set up OAuth consent screen:
    - Navigate to: APIs & Services → OAuth consent screen
@@ -39,17 +39,17 @@ This guide will help you quickly set up and test the Firebase deployment integra
    - Create OAuth 2.0 Client ID
    - Application type: **Web application**
    - Add authorized redirect URI:
-     ```
+     \`\`\`
      https://your-domain.com/api/firebase/auth/callback
      http://localhost:3000/api/firebase/auth/callback (for testing)
-     ```
+     \`\`\`
    - Copy **Client ID** and **Client Secret**
 
 ### 2. Environment Variables
 
 Add to your `.env.local`:
 
-```env
+\`\`\`env
 # Google OAuth (for Firebase)
 GOOGLE_CLIENT_ID=your-client-id-here.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret-here
@@ -60,19 +60,19 @@ AUTH_SECRET=your-random-secret-here
 
 # MongoDB
 MONGO_URI=mongodb://localhost:27017/sycord-pages
-```
+\`\`\`
 
 ### 3. Install Dependencies
 
-```bash
+\`\`\`bash
 npm install --legacy-peer-deps
-```
+\`\`\`
 
 ### 4. Start Development Server
 
-```bash
+\`\`\`bash
 npm run dev
-```
+\`\`\`
 
 ### 5. Test the Flow
 
@@ -111,22 +111,22 @@ npm run dev
 ## Quick Debug Commands
 
 ### Check MongoDB for tokens:
-```javascript
+\`\`\`javascript
 // In MongoDB shell
 use sycord-pages
 db.firebase_tokens.find().pretty()
-```
+\`\`\`
 
 ### Check project deployment status:
-```javascript
+\`\`\`javascript
 db.projects.find({ firebaseProjectId: { $exists: true } }).pretty()
-```
+\`\`\`
 
 ### Test status endpoint:
-```bash
+\`\`\`bash
 curl http://localhost:3000/api/firebase/status?projectId=YOUR_PROJECT_ID \
   -H "Cookie: next-auth.session-token=YOUR_SESSION_TOKEN"
-```
+\`\`\`
 
 ## Common Issues
 
@@ -172,12 +172,12 @@ curl http://localhost:3000/api/firebase/status?projectId=YOUR_PROJECT_ID \
 
 1. Get a project with Firebase tokens
 2. Manually expire the token in MongoDB:
-   ```javascript
+   \`\`\`javascript
    db.firebase_tokens.updateOne(
      { projectId: ObjectId("your-project-id") },
      { $set: { updatedAt: new Date(Date.now() - 7200000) } } // 2 hours ago
    )
-   ```
+   \`\`\`
 3. Try deploying again - should auto-refresh
 
 ### Test with multiple projects:
@@ -199,13 +199,13 @@ curl http://localhost:3000/api/firebase/status?projectId=YOUR_PROJECT_ID \
 
 ### Watch deployment logs in real-time:
 
-```bash
+\`\`\`bash
 # Terminal 1: Start dev server
 npm run dev
 
 # Terminal 2: Watch logs
 tail -f .next/server/server.log | grep "\[Firebase\]"
-```
+\`\`\`
 
 ### Monitor API calls:
 

@@ -16,7 +16,7 @@ The Firebase deployment feature allows users to deploy their AI-generated websit
 
 ### Flow Diagram
 
-```
+\`\`\`
 User clicks "Authenticate with Google"
   ↓
 Redirect to /api/firebase/auth/initiate
@@ -46,7 +46,7 @@ Upload all files using populateFiles API
 Finalize version
   ↓
 Create release → Site goes live!
-```
+\`\`\`
 
 ## API Endpoints
 
@@ -83,7 +83,7 @@ Handles the OAuth callback from Google.
 
 **Database Update:**
 - Stores tokens in `firebase_tokens` collection:
-  ```json
+  \`\`\`json
   {
     "projectId": ObjectId,
     "userId": String,
@@ -95,27 +95,27 @@ Handles the OAuth callback from Google.
     "createdAt": Date,
     "updatedAt": Date
   }
-  ```
+  \`\`\`
 
 #### `POST /api/firebase/auth/refresh`
 
 Refreshes an expired access token using the refresh token.
 
 **Request Body:**
-```json
+\`\`\`json
 {
   "projectId": "string",
   "userId": "string"
 }
-```
+\`\`\`
 
 **Response:**
-```json
+\`\`\`json
 {
   "accessToken": "string",
   "success": true
 }
-```
+\`\`\`
 
 ### Deployment Endpoints
 
@@ -124,12 +124,12 @@ Refreshes an expired access token using the refresh token.
 Main deployment endpoint that handles the entire Firebase deployment process.
 
 **Request Body:**
-```json
+\`\`\`json
 {
   "projectId": "string",
   "firebaseProjectId": "string" (optional)
 }
-```
+\`\`\`
 
 **Process:**
 1. Get valid access token (refresh if needed)
@@ -141,7 +141,7 @@ Main deployment endpoint that handles the entire Firebase deployment process.
 7. Create release
 
 **Response (Success):**
-```json
+\`\`\`json
 {
   "success": true,
   "message": "Deployment successful",
@@ -150,15 +150,15 @@ Main deployment endpoint that handles the entire Firebase deployment process.
   "versionName": "sites/your-project/versions/xxx",
   "releaseName": "sites/your-project/releases/xxx"
 }
-```
+\`\`\`
 
 **Response (Error):**
-```json
+\`\`\`json
 {
   "message": "Error message",
   "error": "Detailed error"
 }
-```
+\`\`\`
 
 #### `GET /api/firebase/status`
 
@@ -168,7 +168,7 @@ Returns debug information about the project's Firebase deployment status.
 - `projectId` (required): The project ID
 
 **Response:**
-```json
+\`\`\`json
 {
   "project": {
     "id": "string",
@@ -196,13 +196,13 @@ Returns debug information about the project's Firebase deployment status.
   ],
   "recommendations": ["string"]
 }
-```
+\`\`\`
 
 ## Environment Variables
 
 The following environment variables are required:
 
-```env
+\`\`\`env
 # Google OAuth (already configured for NextAuth)
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
@@ -213,7 +213,7 @@ AUTH_SECRET=your-secret-key
 
 # MongoDB (already configured)
 MONGO_URI=mongodb://...
-```
+\`\`\`
 
 ## Google Cloud Console Setup
 
@@ -240,7 +240,7 @@ To use Firebase deployment, you need to set up a Google Cloud project:
 
 Stores OAuth tokens for Firebase deployment.
 
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   projectId: ObjectId,        // Reference to projects collection
@@ -253,7 +253,7 @@ Stores OAuth tokens for Firebase deployment.
   createdAt: Date,           // When token was first created
   updatedAt: Date            // When token was last refreshed
 }
-```
+\`\`\`
 
 **Indexes:**
 - `{ projectId: 1, userId: 1 }` (unique)
@@ -262,7 +262,7 @@ Stores OAuth tokens for Firebase deployment.
 
 Added Firebase-related fields:
 
-```javascript
+\`\`\`javascript
 {
   // ... existing fields ...
   firebaseProjectId: String,      // Firebase project ID
@@ -275,7 +275,7 @@ Added Firebase-related fields:
     }
   ]
 }
-```
+\`\`\`
 
 ## UI Components
 
@@ -293,22 +293,22 @@ A comprehensive React component that handles the entire deployment UI:
 - Success state with live URL link
 
 **Props:**
-```typescript
+\`\`\`typescript
 interface FirebaseDeploymentProps {
   projectId: string
   projectName: string
 }
-```
+\`\`\`
 
 **Usage:**
-```tsx
+\`\`\`tsx
 import { FirebaseDeployment } from "@/components/firebase-deployment"
 
 <FirebaseDeployment 
   projectId={projectId} 
   projectName={projectName} 
 />
-```
+\`\`\`
 
 ## Error Handling
 
@@ -343,10 +343,10 @@ The UI includes a debug panel that shows:
 
 All endpoints use consistent logging with `[Firebase]` prefix:
 
-```javascript
+\`\`\`javascript
 console.log("[Firebase] Step description")
 console.error("[Firebase] Error description:", error)
-```
+\`\`\`
 
 ### Status Endpoint
 
