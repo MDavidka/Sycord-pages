@@ -288,22 +288,48 @@ export async function POST(request: Request) {
       .find({ projectId: new ObjectId(projectId) })
       .toArray()
 
-    if (pages.length === 0) {
-      return NextResponse.json(
-        { error: "No pages found in project" },
-        { status: 400 }
-      )
-    }
-
     // Convert pages to files
     const files: Array<{ path: string; content: string }> = []
 
-    for (const page of pages) {
-      const fileName = page.name === "index" ? "index.html" : `${page.name}.html`
+    if (pages.length === 0) {
+      // Create a default starter page if no pages exist
+      console.log("[Cloudflare] No pages found, deploying default starter page")
+      const title = project.businessName || project.name || "My Website"
+      const defaultContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #f3f4f6; color: #1f2937; }
+        .card { background: white; padding: 3rem; border-radius: 1rem; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); text-align: center; max-width: 28rem; width: 90%; }
+        h1 { margin-bottom: 1rem; font-size: 2rem; font-weight: 700; color: #111827; }
+        p { color: #6b7280; line-height: 1.6; margin-bottom: 1.5rem; }
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; background-color: #e5e7eb; color: #374151; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>${title}</h1>
+        <p>This website is currently under construction. Check back soon for updates!</p>
+        <div class="badge">Deployed via Cloudflare Pages</div>
+    </div>
+</body>
+</html>`
+
       files.push({
-        path: `/${fileName}`,
-        content: page.content || "",
+        path: "/index.html",
+        content: defaultContent,
       })
+    } else {
+      for (const page of pages) {
+        const fileName = page.name === "index" ? "index.html" : `${page.name}.html`
+        files.push({
+          path: `/${fileName}`,
+          content: page.content || "",
+        })
+      }
     }
 
     // Deploy to Cloudflare
