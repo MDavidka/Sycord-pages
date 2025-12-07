@@ -2,6 +2,12 @@
 
 This guide will help you quickly set up and test the Firebase deployment integration.
 
+## ⚠️ Important: REST API Implementation
+
+This implementation uses **Firebase Hosting REST API** directly - no Firebase CLI required!
+
+For detailed REST API documentation, see: [FIREBASE_REST_API_DEPLOYMENT.md](./FIREBASE_REST_API_DEPLOYMENT.md)
+
 ## Prerequisites
 
 - Google Cloud account
@@ -150,12 +156,15 @@ curl http://localhost:3000/api/firebase/status?projectId=YOUR_PROJECT_ID \
 
 ### "Failed to create Firebase project"
 
-**Cause:** Missing API enablement or insufficient permissions
+**Cause:** Firebase project doesn't exist or Hosting not initialized
 
 **Fix:**
-1. Verify all three APIs are enabled in Google Cloud Console
-2. Check that your OAuth token has the correct scopes
-3. Try re-authenticating
+1. The REST API implementation requires the project to exist first
+2. Go to https://console.firebase.google.com/
+3. Create a Firebase project (or select an existing one)
+4. Navigate to Hosting and click "Get Started"
+5. The deployment will provide detailed instructions if project/hosting is missing
+6. Follow the instructions shown in the deployment logs
 
 ### "Failed to upload files"
 
