@@ -2,6 +2,15 @@
 
 This document explains how the Cloudflare Pages deployment integration works in Sycord Pages.
 
+## Recent Updates
+
+### Deployment Fix (December 2024)
+- **Fixed**: Added required `stage` parameter to deployment API calls
+- **Issue**: Previous deployments might have failed due to missing `stage` parameter
+- **Solution**: Now explicitly sets `stage: "production"` for main branch deployments
+- **Added**: Comprehensive debug logging throughout the deployment process
+- **Reference**: [Cloudflare API Documentation](https://developers.cloudflare.com/api/operations/pages-deployment-create-deployment)
+
 ## Overview
 
 The Cloudflare Pages deployment feature allows users to deploy their AI-generated websites directly to Cloudflare Pages with just a few clicks. The deployment process includes:
@@ -192,9 +201,18 @@ Creates a new Pages project.
 #### 4. Create Deployment
 ```
 POST /accounts/{account_id}/pages/projects/{project_name}/deployments
-Body: { "branch": "main" }
+Body: { 
+  "branch": "main",
+  "stage": "production"  // Required: "production" or "preview"
+}
 ```
 Initiates a new deployment and returns an upload URL.
+
+**Important**: The `stage` parameter is required and must be set to either:
+- `"production"` - Deploys to the main production URL (`project-name.pages.dev`)
+- `"preview"` - Deploys to a preview URL (for testing branches)
+
+Reference: [Cloudflare API - Stage Schema](https://developers.cloudflare.com/api/operations/pages-deployment-create-deployment)
 
 #### 5. Upload Files
 ```
@@ -281,6 +299,46 @@ To use a custom domain:
 - Individual files must be under 25MB
 - Total deployment size has limits based on your Cloudflare plan
 - Check Cloudflare status page for any service issues
+
+### Debug Logging
+
+The deployment system now includes detailed debug logging to help diagnose issues:
+
+#### What's Logged
+
+1. **API Calls**: Every API request to Cloudflare with attempt counts
+2. **Response Status**: HTTP status codes and response details
+3. **Deployment Details**: 
+   - Project name and account ID (masked)
+   - Branch and stage settings
+   - Deployment ID and stage confirmation
+4. **File Upload Details**:
+   - Each file being uploaded with size information
+   - Base64 encoding size
+   - Total manifest size
+5. **Error Details**: Full error responses from Cloudflare API
+
+#### Viewing Debug Logs
+
+**Server-side logs** (for developers):
+- Check your server console/logs where the Next.js app is running
+- Logs are prefixed with `[Cloudflare]` and `DEBUG:` for easy filtering
+
+**Standalone script logs**:
+- Debug output is automatically included in console output
+- Look for `📊 DEBUG:` entries for detailed information
+
+**Example debug output**:
+```
+[Cloudflare] DEBUG: Creating deployment for project: my-site
+[Cloudflare] DEBUG: Branch: main, Stage: production
+[Cloudflare] DEBUG: API call attempt 1/3 to https://api.cloudflare.com/...
+[Cloudflare] DEBUG: Response status: 200 OK
+[Cloudflare] DEBUG: Deploy response: { "result": { "id": "...", "stage": "production", ... } }
+[Cloudflare] ✅ Deployment created (ID: abc123, Stage: production)
+[Cloudflare] DEBUG: Adding file: /index.html (1024 bytes, 1368 base64 chars)
+[Cloudflare] DEBUG: Total files in manifest: 3
+```
 
 ### Getting Help
 
