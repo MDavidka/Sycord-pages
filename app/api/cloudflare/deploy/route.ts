@@ -296,19 +296,103 @@ export async function POST(request: Request) {
     const files: DeployFile[] = [];
 
     if (pages.length === 0) {
-        // Fallback: Default "Coming Soon" page
-        const title = project.businessName || project.name || "My Website";
+        // Fallback: Default "Start Imagining" page
+        const title = project.businessName || project.name || "New Site";
         files.push({
             path: "/index.html",
-            content: `<!DOCTYPE html><html><head><title>${title}</title></head><body><h1>${title}</h1><p>Coming Soon!</p></body></html>`
-        });
-    } else {
-        pages.forEach(page => {
-            const fileName = page.name === "index" ? "index.html" : `${page.name}.html`;
-            files.push({
-                path: `/${fileName}`,
-                content: page.content || ""
-            });
+            content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title} - Start Imagining</title>
+    <meta name="description" content="Your new site is ready to be built.">
+    <style>
+        :root {
+            --bg-color: #f9fafb;
+            --text-color: #111827;
+            --accent-color: #3b82f6;
+            --secondary-text: #6b7280;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #0f172a;
+                --text-color: #f3f4f6;
+                --accent-color: #60a5fa;
+                --secondary-text: #9ca3af;
+            }
+        }
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+            text-align: center;
+        }
+        main {
+            max-width: 600px;
+            width: 100%;
+            animation: fadeIn 1s ease-out;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            background: linear-gradient(135deg, var(--text-color) 0%, var(--accent-color) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        p {
+            font-size: 1.25rem;
+            color: var(--secondary-text);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .icon-container {
+            margin-bottom: 2rem;
+            display: inline-flex;
+            padding: 1rem;
+            border-radius: 1rem;
+            background-color: rgba(59, 130, 246, 0.1);
+            animation: float 3s ease-in-out infinite;
+        }
+        svg {
+            width: 48px;
+            height: 48px;
+            color: var(--accent-color);
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+            100% { transform: translateY(0px); }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="icon-container">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+            </svg>
+        </div>
+        <h1>Start Imagining Your Site</h1>
+        <p>This is a preview of your future project. Use the AI Builder to generate content and watch this space transform.</p>
+    </main>
+</body>
+</html>`
         });
     }
 
