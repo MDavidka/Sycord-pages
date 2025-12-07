@@ -19,6 +19,9 @@
  *   CLOUDFLARE_API_TOKEN - Your Cloudflare API token
  *   CLOUDFLARE_PROJECT_NAME - Your Pages project name
  *   DEPLOY_DIR - Directory containing files to deploy (default: ./out)
+ * 
+ * Note: This script is designed for text-based files (HTML, CSS, JS).
+ * For sites with binary assets (images, fonts), use Wrangler CLI or the web interface.
  */
 
 const fs = require('fs').promises;
