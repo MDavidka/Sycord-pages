@@ -4,11 +4,34 @@ import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket, Info } from "lucide-react"
+import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket, Info, Bug } from "lucide-react"
 
 interface FirebaseDeploymentProps {
   projectId: string
   projectName: string
+}
+
+interface DebugInfo {
+  project: {
+    id: string
+    name: string
+    hasPages: boolean
+    pagesCount: number
+    firebaseProjectId: string | null
+    firebaseUrl: string | null
+    firebaseDeployedAt: string | null
+  }
+  authentication: {
+    isAuthenticated: boolean
+    hasAccessToken: boolean
+    hasRefreshToken: boolean
+    tokenCreatedAt: string | null
+    tokenUpdatedAt: string | null
+    tokenExpiresIn: number | null
+    scopes: string | null
+  }
+  pages: Array<{ name: string; size: number }>
+  recommendations: string[]
 }
 
 export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymentProps) {
@@ -20,6 +43,9 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
   const [error, setError] = useState<string | null>(null)
   const [deploymentLogs, setDeploymentLogs] = useState<string[]>([])
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null)
+  const [loadingDebug, setLoadingDebug] = useState(false)
 
   // Check for OAuth success on mount
   useEffect(() => {
@@ -27,6 +53,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
     if (firebaseAuth === "success") {
       setIsAuthenticated(true)
       addLog("✅ Authentication successful! You can now deploy.")
+      fetchDebugInfo()
       
       // Clean up URL
       const url = new URL(window.location.href)
@@ -38,6 +65,26 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString()
     setDeploymentLogs(prev => [...prev, `[${timestamp}] ${message}`])
+  }
+
+  const fetchDebugInfo = async () => {
+    setLoadingDebug(true)
+    try {
+      const response = await fetch(`/api/firebase/status?projectId=${projectId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setDebugInfo(data)
+        setIsAuthenticated(data.authentication.isAuthenticated)
+        
+        if (data.project.firebaseUrl) {
+          setDeploymentUrl(data.project.firebaseUrl)
+        }
+      }
+    } catch (err) {
+      console.error("[Firebase] Failed to fetch debug info:", err)
+    } finally {
+      setLoadingDebug(false)
+    }
   }
 
   const handleAuthenticate = async () => {
@@ -85,6 +132,9 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
       
       setDeploymentUrl(data.url)
       setDeploymentStatus("Deployment successful!")
+      
+      // Refresh debug info
+      fetchDebugInfo()
       
     } catch (err: any) {
       console.error("[Firebase] Deploy error:", err)
@@ -197,8 +247,89 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
               )}
             </Button>
           </div>
+          
+          <Button
+            onClick={() => {
+              setShowDebug(!showDebug)
+              if (!showDebug && !debugInfo) {
+                fetchDebugInfo()
+              }
+            }}
+            variant="ghost"
+            size="sm"
+            className="w-full"
+          >
+            <Bug className="h-4 w-4 mr-2" />
+            {showDebug ? "Hide" : "Show"} Debug Information
+          </Button>
         </CardContent>
       </Card>
+
+      {showDebug && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Bug className="h-4 w-4" />
+              Debug Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingDebug ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : debugInfo ? (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Project Status</h4>
+                  <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1">
+                    <div>Name: {debugInfo.project.name}</div>
+                    <div>Pages: {debugInfo.project.pagesCount}</div>
+                    <div>Firebase Project: {debugInfo.project.firebaseProjectId || "Not created"}</div>
+                    <div>Firebase URL: {debugInfo.project.firebaseUrl || "Not deployed"}</div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Authentication Status</h4>
+                  <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1">
+                    <div>Authenticated: {debugInfo.authentication.isAuthenticated ? "✅ Yes" : "❌ No"}</div>
+                    <div>Has Access Token: {debugInfo.authentication.hasAccessToken ? "✅ Yes" : "❌ No"}</div>
+                    <div>Has Refresh Token: {debugInfo.authentication.hasRefreshToken ? "✅ Yes" : "❌ No"}</div>
+                    {debugInfo.authentication.tokenExpiresIn && (
+                      <div>Token Expires In: {debugInfo.authentication.tokenExpiresIn}s</div>
+                    )}
+                  </div>
+                </div>
+                
+                {debugInfo.pages.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Pages to Deploy</h4>
+                    <div className="bg-muted p-3 rounded-lg text-xs font-mono space-y-1">
+                      {debugInfo.pages.map((page, i) => (
+                        <div key={i}>{page.name} ({(page.size / 1024).toFixed(2)} KB)</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {debugInfo.recommendations.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2">Recommendations</h4>
+                    <div className="space-y-2">
+                      {debugInfo.recommendations.map((rec, i) => (
+                        <div key={i} className="text-sm">{rec}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Click to load debug information</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {deploymentLogs.length > 0 && (
         <Card>
