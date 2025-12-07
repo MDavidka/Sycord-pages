@@ -3,7 +3,7 @@
 /**
  * Standalone Cloudflare Pages Deployment Script
  * 
- * This script deploys static websites to Cloudflare Pages using the REST API.
+ * This script deploys static websites to Cloudflare Pages using the Direct Upload API.
  * No Wrangler CLI required!
  * 
  * Requirements:
@@ -20,13 +20,16 @@
  *   CLOUDFLARE_PROJECT_NAME - Your Pages project name
  *   DEPLOY_DIR - Directory containing files to deploy (default: ./out)
  * 
- * Note: This script is designed for text-based files (HTML, CSS, JS).
- * For sites with binary assets (images, fonts), use Wrangler CLI or the web interface.
+ * How it works:
+ * 1. Calculates SHA-256 hashes for all files
+ * 2. Creates a deployment with a manifest (path -> hash mapping)
+ * 3. Uploads file contents using multipart/form-data (hash as field name)
  */
 
 const fs = require('fs').promises;
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 
 // Configuration
 const config = {
@@ -171,8 +174,27 @@ async function deployToCloudflare(files) {
   console.log(`📊 DEBUG: Deploying ${files.length} files`);
   console.log(`📊 DEBUG: Total size: ${files.reduce((sum, f) => sum + f.content.length, 0)} bytes`);
 
-  // Create deployment
-  console.log('📝 Creating deployment...');
+  // Calculate file hashes (SHA-256) and prepare file contents
+  const fileHashes = {};
+  const fileContents = {};
+  
+  for (const file of files) {
+    const hash = crypto.createHash('sha256').update(file.content).digest('hex');
+    
+    // Check for hash collision (extremely unlikely but worth validating)
+    if (fileContents[hash] && fileContents[hash] !== file.content) {
+      throw new Error(`Hash collision detected for ${file.path}. This is extremely rare - please report this issue.`);
+    }
+    
+    fileHashes[file.path] = hash;
+    fileContents[hash] = file.content;
+    console.log(`   📄 ${file.path} (${(file.content.length / 1024).toFixed(2)} KB, SHA-256: ${hash.substring(0, 12)}...)`);
+  }
+
+  console.log(`📊 DEBUG: Total files in manifest: ${Object.keys(fileHashes).length}`);
+
+  // Create deployment with manifest
+  console.log('📝 Creating deployment with manifest...');
   console.log(`📊 DEBUG: Branch: ${config.branch}, Stage: production`);
   
   const deployResponse = await httpsRequest(
@@ -183,6 +205,7 @@ async function deployToCloudflare(files) {
       body: {
         branch: config.branch,
         stage: 'production', // Required: "production" or "preview"
+        manifest: fileHashes, // Map of path -> sha256 hash
       },
     }
   );
@@ -201,26 +224,57 @@ async function deployToCloudflare(files) {
   console.log(`✅ Deployment created (ID: ${deploymentId}, Stage: ${stage})`);
   console.log('📤 Uploading files...');
 
-  // Create file manifest
-  const manifest = {};
-  for (const file of files) {
-    const base64Content = Buffer.from(file.content, 'utf-8').toString('base64');
-    manifest[file.path] = base64Content;
-    console.log(`   📄 ${file.path} (${(file.content.length / 1024).toFixed(2)} KB → ${(base64Content.length / 1024).toFixed(2)} KB base64)`);
+  // Upload files using multipart/form-data
+  // Each file is uploaded with its SHA-256 hash as the field name
+  const boundary = '----CloudflarePagesFormBoundary' + Date.now();
+  let formDataBody = '';
+  
+  for (const [hash, content] of Object.entries(fileContents)) {
+    formDataBody += `--${boundary}\r\n`;
+    formDataBody += `Content-Disposition: form-data; name="${hash}"\r\n`;
+    formDataBody += `Content-Type: application/octet-stream\r\n\r\n`;
+    formDataBody += `${content}\r\n`;
   }
+  formDataBody += `--${boundary}--\r\n`;
 
-  console.log(`📊 DEBUG: Total files in manifest: ${Object.keys(manifest).length}`);
-  console.log(`📊 DEBUG: Total manifest size: ${JSON.stringify(manifest).length} bytes`);
+  console.log(`📊 DEBUG: Form data size: ${formDataBody.length} bytes`);
 
-  // Upload manifest
-  console.log('📤 Uploading manifest to Cloudflare...');
-  const uploadResponse = await httpsRequest(uploadUrl, {
+  // Upload to the signed URL (no Authorization header needed)
+  const uploadUrlObj = new URL(uploadUrl);
+  const uploadOptions = {
+    hostname: uploadUrlObj.hostname,
+    path: uploadUrlObj.pathname + uploadUrlObj.search,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: { manifest },
+    headers: {
+      'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      'Content-Length': Buffer.byteLength(formDataBody),
+    },
+  };
+
+  const uploadResponse = await new Promise((resolve, reject) => {
+    const req = https.request(uploadOptions, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        console.log(`📊 DEBUG: Upload response status: ${res.statusCode}`);
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const parsed = JSON.parse(data);
+            resolve({ status: res.statusCode, data: parsed });
+          } catch (e) {
+            resolve({ status: res.statusCode, data: data });
+          }
+        } else {
+          reject(new Error(`Upload failed with status ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(formDataBody);
+    req.end();
   });
 
-  console.log(`📊 DEBUG: Upload response status: ${uploadResponse.status}`);
   console.log('✅ Files uploaded successfully');
 
   return {
