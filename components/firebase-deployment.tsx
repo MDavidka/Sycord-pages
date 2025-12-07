@@ -47,21 +47,6 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
   const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null)
   const [loadingDebug, setLoadingDebug] = useState(false)
 
-  // Check for OAuth success on mount
-  useEffect(() => {
-    const firebaseAuth = searchParams.get("firebase_auth")
-    if (firebaseAuth === "success") {
-      setIsAuthenticated(true)
-      addLog("✅ Authentication successful! You can now deploy.")
-      fetchDebugInfo()
-      
-      // Clean up URL
-      const url = new URL(window.location.href)
-      url.searchParams.delete("firebase_auth")
-      window.history.replaceState({}, "", url.toString())
-    }
-  }, [searchParams])
-
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString()
     setDeploymentLogs(prev => [...prev, `[${timestamp}] ${message}`])
@@ -86,6 +71,22 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
       setLoadingDebug(false)
     }
   }
+
+  // Check for OAuth success on mount
+  useEffect(() => {
+    const firebaseAuth = searchParams.get("firebase_auth")
+    if (firebaseAuth === "success") {
+      setIsAuthenticated(true)
+      addLog("✅ Authentication successful! You can now deploy.")
+      fetchDebugInfo()
+      
+      // Clean up URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete("firebase_auth")
+      window.history.replaceState({}, "", url.toString())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const handleAuthenticate = async () => {
     setIsAuthenticating(true)

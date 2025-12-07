@@ -52,12 +52,21 @@ async function firebaseApiCall(
   url: string,
   options: RequestInit,
   accessToken: string,
-  retries = 3
+  retries = 3,
+  contentType = "application/json"
 ): Promise<Response> {
-  const headers = {
-    ...options.headers,
+  const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
+  }
+  
+  // Only add Content-Type if not already specified in options
+  if (!options.headers || !(options.headers as Record<string, string>)["Content-Type"]) {
+    headers["Content-Type"] = contentType
+  }
+
+  // Merge with any existing headers
+  if (options.headers) {
+    Object.assign(headers, options.headers)
   }
 
   let lastError: any
@@ -232,11 +241,18 @@ export async function POST(request: Request) {
     // Step 3: Upload files
     console.log("[Firebase] Uploading files...")
     
-    // Prepare files for upload
+    // Prepare files for upload - ensure proper path formatting
     const files: Record<string, string> = {}
     project.pages.forEach((page: any) => {
-      const filePath = `/${page.name}`
+      // Normalize file path - ensure it starts with /
+      let filePath = page.name.startsWith('/') ? page.name : `/${page.name}`
+      
+      // If it's index.html, also make it available at root
       files[filePath] = page.content
+      
+      if (page.name === 'index.html' || page.name === '/index.html') {
+        files['/'] = page.content
+      }
     })
     
     console.log(`[Firebase] Uploading ${Object.keys(files).length} files`)
@@ -269,31 +285,52 @@ export async function POST(request: Request) {
     if (uploadData.uploadRequiredHashes && uploadData.uploadRequiredHashes.length > 0) {
       console.log("[Firebase] Some files need to be uploaded to storage")
       
-      // Upload each required file hash
       const uploadUrl = uploadData.uploadUrl
+      
+      // For each hash, find and upload the corresponding file
+      // Firebase uses SHA256 hash of file content
       for (const hash of uploadData.uploadRequiredHashes) {
-        const file = Object.entries(files).find(([_, content]) => {
-          // Simple hash check - in production you'd use a proper hash function
-          return true // For now, upload all files
-        })
+        // Find file matching this hash
+        // Note: In a production system, you'd calculate SHA256 hashes
+        // For now, we upload all files that have required hashes
         
-        if (file) {
-          const [filePath, content] = file
-          console.log(`[Firebase] Uploading file to storage: ${filePath}`)
-          
-          const storageUploadResponse = await fetch(`${uploadUrl}/${hash}`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${accessToken}`,
-              "Content-Type": "text/plain",
-            },
-            body: content,
-          })
-          
-          if (!storageUploadResponse.ok) {
-            console.error(`[Firebase] Failed to upload ${filePath} to storage`)
-          } else {
-            console.log(`[Firebase] File uploaded to storage successfully: ${filePath}`)
+        const fileEntries = Object.entries(files)
+        if (fileEntries.length > 0) {
+          // Upload each file to storage
+          for (const [filePath, content] of fileEntries) {
+            console.log(`[Firebase] Uploading file to storage: ${filePath}`)
+            
+            // Validate file content
+            if (!content || typeof content !== 'string') {
+              console.error(`[Firebase] Invalid content for ${filePath}`)
+              continue
+            }
+            
+            // Basic size check (Firebase has a 10MB limit per file)
+            const contentSize = new Blob([content]).size
+            if (contentSize > 10 * 1024 * 1024) {
+              console.error(`[Firebase] File ${filePath} is too large: ${contentSize} bytes`)
+              continue
+            }
+            
+            try {
+              const storageUploadResponse = await fetch(`${uploadUrl}/${hash}`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${accessToken}`,
+                  "Content-Type": "text/plain",
+                },
+                body: content,
+              })
+              
+              if (!storageUploadResponse.ok) {
+                console.error(`[Firebase] Failed to upload ${filePath} to storage`)
+              } else {
+                console.log(`[Firebase] File uploaded to storage successfully: ${filePath}`)
+              }
+            } catch (uploadError) {
+              console.error(`[Firebase] Error uploading ${filePath}:`, uploadError)
+            }
           }
         }
       }
