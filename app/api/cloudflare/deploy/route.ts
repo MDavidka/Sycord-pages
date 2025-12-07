@@ -5,7 +5,9 @@ import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import archiver from "archiver";
-import FormData from "form-data";
+
+// We use global FormData and Blob (available in Node 18+)
+// No import needed for FormData/Blob in Next.js 16 environment
 
 /**
  * Cloudflare API Configuration
@@ -33,7 +35,7 @@ async function cloudflareApiCall(
     Authorization: `Bearer ${apiToken}`,
   };
 
-  // Merge headers, but be careful with FormData which sets its own Content-Type
+  // Merge headers
   if (options.headers) {
     Object.assign(headers, options.headers);
   }
@@ -55,9 +57,6 @@ async function cloudflareApiCall(
         return response;
       }
 
-      // If 404/409/429, we might want to handle differently
-      // 429 is rate limit -> retry
-      // 5xx -> retry
       if (response.status < 500 && response.status !== 429) {
           // Client error, usually don't retry unless we know it's transient
           return response;
@@ -115,7 +114,6 @@ async function ensureProject(
         body: JSON.stringify({
           name: projectName,
           production_branch: "main",
-          // Default config usually works
         }),
       },
       apiToken
@@ -174,10 +172,7 @@ async function generateDeploymentPackage(files: DeployFile[]) {
         sha1: sha1,
       };
 
-      // Add to ZIP (remove leading slash for zip internal structure, usually cleaner)
-      // But Cloudflare might expect paths in zip to match manifest.
-      // Usually zip entries are relative. "index.html".
-      // Manifest says "/index.html".
+      // Add to ZIP (relative path)
       const zipPath = cleanPath.startsWith("/") ? cleanPath.slice(1) : cleanPath;
       archive.append(contentBuffer, { name: zipPath });
     });
@@ -196,29 +191,30 @@ async function uploadToCloudflare(
   manifest: any,
   zipBuffer: Buffer
 ) {
+  // Use global FormData (Node 18+)
   const form = new FormData();
 
-  // 1. Append Manifest (must be named "manifest", Content-Type: application/json)
-  form.append("manifest", JSON.stringify(manifest), {
-    contentType: "application/json",
-  });
+  // 1. Append Manifest as Blob with strict Content-Type
+  // Cloudflare requires the part named "manifest" to be application/json
+  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  form.append("manifest", manifestBlob, "manifest.json");
 
-  // 2. Append ZIP file (must be named "file", Content-Type: application/zip)
-  form.append("file", zipBuffer, {
-    filename: "site.zip",
-    contentType: "application/zip",
-  });
+  // 2. Append ZIP file as Blob with strict Content-Type
+  // Cloudflare requires the part named "file" to be application/zip
+  const zipBlob = new Blob([zipBuffer], { type: 'application/zip' });
+  form.append("file", zipBlob, "site.zip");
 
   const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
   
-  // Use node-fetch compatible call with headers from form-data
+  // Do NOT set Content-Type header manually for FormData.
+  // The fetch implementation will generate the multipart boundary.
   const response = await cloudflareApiCall(
     url,
     {
       method: "POST",
-      body: form as any, // Cast to any because FormData type mismatch with fetch body
-      // form-data getHeaders() returns the multipart content-type with boundary
-      headers: form.getHeaders(),
+      body: form,
+      // @ts-ignore - 'duplex' might be needed for some Node.js fetch implementations
+      duplex: 'half',
     },
     apiToken
   );
@@ -330,8 +326,8 @@ export async function POST(request: Request) {
     );
 
     const deploymentId = result.result?.id;
-    const url = result.result?.url; // or construct from alias
-    const deploymentUrl = `https://${cfProjectName}.pages.dev`; // Primary alias usually
+    const url = result.result?.url;
+    const deploymentUrl = `https://${cfProjectName}.pages.dev`;
 
     console.log(`[Cloudflare] Deployment Success: ${deploymentUrl}`);
 
