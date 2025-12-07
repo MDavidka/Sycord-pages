@@ -136,7 +136,8 @@ async function ensureProject(
   console.log("[Cloudflare] ✅ Project created")
 
   // Wait for propagation
-  await new Promise(resolve => setTimeout(resolve, 2000))
+  // Increased wait time to 5 seconds to ensure project is available for deployment
+  await new Promise(resolve => setTimeout(resolve, 5000))
 }
 
 /**
