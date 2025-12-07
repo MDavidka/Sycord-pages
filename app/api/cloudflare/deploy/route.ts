@@ -192,15 +192,46 @@ async function deployToCloudflare(
   console.log(`[Cloudflare] DEBUG: Total files in manifest: ${Object.keys(manifest).length}`)
 
   // Upload manifest
-  const uploadResponse = await cloudflareApiCall(
-    uploadUrl,
-    {
+  // Use FormData to upload files directly
+  const formData = new FormData()
+
+  // Cloudflare Direct Upload expects the manifest as a file if uploading manually,
+  // or keys in FormData.
+  // Actually, Cloudflare Direct Upload works by sending a FormData where the values are the files.
+  // However, we need to base64 encode them for JSON transfer OR use FormData in Node.
+  // Let's stick to the official API docs for Direct Upload which expects FormData
+  // with files or "manifest" if using the JWT upload approach.
+
+  // Correct approach for Direct Upload via JWT (what we got as uploadUrl):
+  // It expects a POST with FormData.
+
+  // Since we are in Node.js environment (Next.js API route), we can use standard FormData
+  // provided by the runtime.
+
+  for (const [path, base64Content] of Object.entries(manifest)) {
+    // Decode base64 back to text/buffer for the blob
+    const content = Buffer.from(base64Content, 'base64').toString('utf-8')
+    // We need to strip the leading slash from the path for Cloudflare
+    const cleanPath = path.startsWith('/') ? path.substring(1) : path
+
+    // Create a Blob from content
+    const blob = new Blob([content], { type: 'text/html' })
+    formData.append(cleanPath, blob)
+  }
+
+  // We don't send Authorization header to the upload_url as it's a JWT url
+  // The uploadUrl already contains the necessary authentication
+
+  const uploadResponse = await fetch(uploadUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ manifest }),
-    },
-    apiToken
-  )
+      // FormData sets the Content-Type header automatically with boundary
+      body: formData,
+      headers: {
+        // Authorization header is NOT needed for the upload_url (it is a signed JWT URL)
+        // But we DO need User-Agent usually
+         "User-Agent": "Cloudflare-Pages-Deployer/1.0"
+      }
+  })
 
   if (!uploadResponse.ok) {
     const statusText = uploadResponse.statusText || 'Upload failed'
