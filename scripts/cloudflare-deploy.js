@@ -57,26 +57,37 @@ function httpsRequest(url, options = {}) {
       },
     };
 
+    console.log(`📊 DEBUG: Making ${reqOptions.method} request to ${url.substring(0, 80)}...`);
+
     const req = https.request(reqOptions, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
+        console.log(`📊 DEBUG: Response status: ${res.statusCode}`);
+        
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {
-            resolve({ status: res.statusCode, data: JSON.parse(data) });
+            const parsed = JSON.parse(data);
+            resolve({ status: res.statusCode, data: parsed });
           } catch (e) {
             resolve({ status: res.statusCode, data: data });
           }
         } else {
+          console.error(`❌ HTTP ${res.statusCode} Error Response:`, data.substring(0, 500));
           reject(new Error(`HTTP ${res.statusCode}: ${data}`));
         }
       });
     });
 
-    req.on('error', reject);
+    req.on('error', (error) => {
+      console.error('❌ Request error:', error.message);
+      reject(error);
+    });
 
     if (options.body) {
-      req.write(typeof options.body === 'string' ? options.body : JSON.stringify(options.body));
+      const bodyStr = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+      console.log(`📊 DEBUG: Request body size: ${bodyStr.length} bytes`);
+      req.write(bodyStr);
     }
 
     req.end();
@@ -157,9 +168,12 @@ async function readDirectory(dir, baseDir = dir) {
 // Deploy to Cloudflare Pages
 async function deployToCloudflare(files) {
   console.log(`🚀 Starting deployment to Cloudflare Pages...`);
+  console.log(`📊 DEBUG: Deploying ${files.length} files`);
+  console.log(`📊 DEBUG: Total size: ${files.reduce((sum, f) => sum + f.content.length, 0)} bytes`);
 
   // Create deployment
   console.log('📝 Creating deployment...');
+  console.log(`📊 DEBUG: Branch: ${config.branch}, Stage: production`);
   
   const deployResponse = await httpsRequest(
     `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/pages/projects/${config.projectName}/deployments`,
@@ -168,33 +182,46 @@ async function deployToCloudflare(files) {
       headers: { 'Content-Type': 'application/json' },
       body: {
         branch: config.branch,
+        stage: 'production', // Required: "production" or "preview"
       },
     }
   );
 
+  console.log(`📊 DEBUG: Deploy response status: ${deployResponse.status}`);
+  
   const uploadUrl = deployResponse.data.result?.upload_url;
   const deploymentId = deployResponse.data.result?.id;
+  const stage = deployResponse.data.result?.stage;
 
   if (!uploadUrl) {
+    console.error('❌ ERROR: No upload URL in response:', JSON.stringify(deployResponse.data, null, 2));
     throw new Error('No upload URL received from Cloudflare');
   }
 
-  console.log('✅ Deployment created, uploading files...');
+  console.log(`✅ Deployment created (ID: ${deploymentId}, Stage: ${stage})`);
+  console.log(`📊 DEBUG: Upload URL: ${uploadUrl.substring(0, 50)}...`);
+  console.log('📤 Uploading files...');
 
   // Create file manifest
   const manifest = {};
   for (const file of files) {
-    manifest[file.path] = Buffer.from(file.content, 'utf-8').toString('base64');
-    console.log(`   - ${file.path} (${(file.content.length / 1024).toFixed(2)} KB)`);
+    const base64Content = Buffer.from(file.content, 'utf-8').toString('base64');
+    manifest[file.path] = base64Content;
+    console.log(`   📄 ${file.path} (${(file.content.length / 1024).toFixed(2)} KB → ${(base64Content.length / 1024).toFixed(2)} KB base64)`);
   }
 
+  console.log(`📊 DEBUG: Total files in manifest: ${Object.keys(manifest).length}`);
+  console.log(`📊 DEBUG: Total manifest size: ${JSON.stringify(manifest).length} bytes`);
+
   // Upload manifest
-  await httpsRequest(uploadUrl, {
+  console.log('📤 Uploading manifest to Cloudflare...');
+  const uploadResponse = await httpsRequest(uploadUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { manifest },
   });
 
+  console.log(`📊 DEBUG: Upload response status: ${uploadResponse.status}`);
   console.log('✅ Files uploaded successfully');
 
   return {
@@ -208,6 +235,14 @@ async function deploy() {
   console.log('\n☁️  Cloudflare Pages Deployment Tool\n');
 
   // Validate configuration
+  console.log('\n🔧 Configuration:');
+  console.log(`   Account ID: ${config.accountId ? config.accountId.substring(0, 8) + '...' : 'NOT SET'}`);
+  console.log(`   API Token: ${config.apiToken ? 'SET (hidden)' : 'NOT SET'}`);
+  console.log(`   Project Name: ${config.projectName || 'NOT SET'}`);
+  console.log(`   Deploy Dir: ${config.deployDir}`);
+  console.log(`   Branch: ${config.branch}`);
+  console.log('');
+  
   if (!config.accountId) {
     console.error('❌ Error: Cloudflare Account ID is required');
     console.error('Provide via --account=xxx or CLOUDFLARE_ACCOUNT_ID env var');
