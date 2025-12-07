@@ -180,6 +180,12 @@ async function deployToCloudflare(files) {
   
   for (const file of files) {
     const hash = crypto.createHash('sha256').update(file.content).digest('hex');
+    
+    // Check for hash collision (extremely unlikely but worth validating)
+    if (fileContents[hash] && fileContents[hash] !== file.content) {
+      throw new Error(`Hash collision detected for ${file.path}. This is extremely rare - please report this issue.`);
+    }
+    
     fileHashes[file.path] = hash;
     fileContents[hash] = file.content;
     console.log(`   📄 ${file.path} (${(file.content.length / 1024).toFixed(2)} KB, SHA-256: ${hash.substring(0, 12)}...)`);
