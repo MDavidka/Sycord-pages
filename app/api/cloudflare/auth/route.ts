@@ -46,6 +46,22 @@ export async function POST(request: Request) {
       )
     }
 
+    const client = await clientPromise
+    const db = client.db()
+
+    // Verify project ownership
+    const project = await db.collection("projects").findOne({
+      _id: new ObjectId(projectId),
+      userId: session.user.id,
+    })
+
+    if (!project) {
+      return NextResponse.json(
+        { error: "Project not found or you do not have permission to modify it" },
+        { status: 403 }
+      )
+    }
+
     // Validate the token
     console.log("[Cloudflare] Validating API token...")
     const isValid = await validateCloudflareToken(apiToken, accountId)
@@ -56,9 +72,6 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-
-    const client = await clientPromise
-    const db = client.db()
 
     // Store or update the token
     await db.collection("cloudflare_tokens").updateOne(

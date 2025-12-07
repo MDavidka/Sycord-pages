@@ -27,9 +27,10 @@ export async function GET(request: Request) {
     const db = client.db()
 
     // Get project
+    // Projects are owned by user.id
     const project = await db.collection("projects").findOne({
       _id: new ObjectId(projectId),
-      userId: session.user.email,
+      userId: session.user.id,
     })
 
     if (!project) {

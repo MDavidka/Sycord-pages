@@ -256,13 +256,14 @@ export async function POST(request: Request) {
     }
 
     // Get project data
+    // Projects are owned by user.id, not email
     const project = await db.collection("projects").findOne({
       _id: new ObjectId(projectId),
-      userId: session.user.email,
+      userId: session.user.id,
     })
 
     if (!project) {
-      console.error(`[Cloudflare] Project not found in DB: ${projectId} for user ${session.user.email}`)
+      console.error(`[Cloudflare] Project not found in DB: ${projectId} for user ${session.user.id}`)
       return NextResponse.json({ error: "Local project not found. Please ensure you are logged in and own this project." }, { status: 404 })
     }
 
