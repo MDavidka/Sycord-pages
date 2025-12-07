@@ -2,6 +2,8 @@
 
 This repository now supports deployment to Cloudflare Pages! This guide will get you deploying in 5 minutes.
 
+> **✨ Latest Update**: Deployment system has been enhanced with correct API parameters and detailed debug logging for easier troubleshooting!
+
 ## What You Need
 
 1. **Cloudflare Account** (free): https://dash.cloudflare.com/
@@ -87,6 +89,22 @@ python3 scripts/cloudflare-deploy.py \
 - Check your internet connection
 - Try again (automatic retry is built-in)
 - Verify files are under 25MB each
+
+### Debug Logging
+The deployment system includes detailed logging to help diagnose issues:
+- Look for `📊 DEBUG:` entries in CLI output
+- Check for `[Cloudflare] DEBUG:` in server logs
+- Verify `Stage: production` appears in deployment logs
+- Full API responses are logged for troubleshooting
+
+**Example debug output:**
+```
+📊 DEBUG: Creating deployment for project: my-site
+📊 DEBUG: Branch: main, Stage: production
+✅ Deployment created (ID: abc123, Stage: production)
+📊 DEBUG: Adding file: /index.html (1024 bytes → 1368 base64 chars)
+📊 DEBUG: Total files in manifest: 3
+```
 
 ## Need Help?
 

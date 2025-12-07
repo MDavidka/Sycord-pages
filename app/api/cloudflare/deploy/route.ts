@@ -24,8 +24,11 @@ async function cloudflareApiCall(
   let lastError: any
   for (let i = 0; i < retries; i++) {
     try {
+      console.log(`[Cloudflare] DEBUG: API call attempt ${i + 1}/${retries}`)
       const response = await fetch(url, { ...options, headers })
 
+      console.log(`[Cloudflare] DEBUG: Response status: ${response.status} ${response.statusText}`)
+      
       if (response.ok || response.status === 404 || response.status === 409) {
         return response
       }
@@ -44,14 +47,18 @@ async function cloudflareApiCall(
       lastError = errorData
 
       if (i < retries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)))
+        const waitTime = 1000 * (i + 1)
+        console.log(`[Cloudflare] DEBUG: Retrying in ${waitTime}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, waitTime))
       }
     } catch (error) {
       console.error(`[Cloudflare] Request error (attempt ${i + 1}/${retries}):`, error)
       lastError = error
 
       if (i < retries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)))
+        const waitTime = 1000 * (i + 1)
+        console.log(`[Cloudflare] DEBUG: Retrying in ${waitTime}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, waitTime))
       }
     }
   }
@@ -121,6 +128,8 @@ async function deployToCloudflare(
 
   // Create deployment
   console.log("[Cloudflare] Creating deployment...")
+  console.log(`[Cloudflare] DEBUG: Creating deployment for project: ${projectName}`)
+  console.log(`[Cloudflare] DEBUG: Branch: main, Stage: production`)
   
   const deployResponse = await cloudflareApiCall(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects/${projectName}/deployments`,
@@ -129,6 +138,7 @@ async function deployToCloudflare(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         branch: "main",
+        stage: "production", // Required: "production" or "preview"
       }),
     },
     apiToken
@@ -140,14 +150,19 @@ async function deployToCloudflare(
   }
 
   const deployData = await deployResponse.json()
+  console.log(`[Cloudflare] DEBUG: Deploy response status: ${deployResponse.status}, has upload_url: ${!!deployData.result?.upload_url}`)
+  
   const uploadUrl = deployData.result?.upload_url
   const deploymentId = deployData.result?.id
+  const stage = deployData.result?.stage
 
   if (!uploadUrl) {
-    throw new Error("No upload URL received from Cloudflare")
+    console.error("[Cloudflare] ERROR: No upload URL in response. Success:", deployData.success)
+    throw new Error("No upload URL received from Cloudflare. Check API permissions and project settings.")
   }
 
-  console.log("[Cloudflare] ✅ Deployment created, uploading files...")
+  console.log(`[Cloudflare] ✅ Deployment created (ID: ${deploymentId}, Stage: ${stage})`)
+  console.log("[Cloudflare] Uploading files...")
 
   // Upload files as a zip/tarball or using the manifest
   // For simplicity, we'll upload files one by one or create a manifest
@@ -157,8 +172,12 @@ async function deployToCloudflare(
   const manifest: Record<string, string> = {}
   for (const file of files) {
     // Convert content to base64
-    manifest[file.path] = Buffer.from(file.content, "utf-8").toString("base64")
+    const base64Content = Buffer.from(file.content, "utf-8").toString("base64")
+    manifest[file.path] = base64Content
+    console.log(`[Cloudflare] DEBUG: Adding file: ${file.path} (${file.content.length} bytes, ${base64Content.length} base64 chars)`)
   }
+
+  console.log(`[Cloudflare] DEBUG: Total files in manifest: ${Object.keys(manifest).length}`)
 
   // Upload manifest
   const uploadResponse = await cloudflareApiCall(
@@ -172,10 +191,13 @@ async function deployToCloudflare(
   )
 
   if (!uploadResponse.ok) {
-    const errorData = await uploadResponse.json()
-    throw new Error(`Failed to upload files: ${JSON.stringify(errorData)}`)
+    const statusText = uploadResponse.statusText || 'Upload failed'
+    console.error(`[Cloudflare] ERROR: Failed to upload files. Status: ${uploadResponse.status} ${statusText}`)
+    throw new Error(`Failed to upload files: HTTP ${uploadResponse.status} - ${statusText}`)
   }
 
+  const uploadData = await uploadResponse.json()
+  console.log(`[Cloudflare] DEBUG: Upload successful, received confirmation`)
   console.log("[Cloudflare] ✅ Files uploaded successfully")
 
   // Construct the deployment URL
@@ -270,6 +292,9 @@ export async function POST(request: Request) {
 
     // Deploy to Cloudflare
     console.log(`[Cloudflare] Deploying ${files.length} files...`)
+    console.log(`[Cloudflare] DEBUG: Account ID: configured`)
+    console.log(`[Cloudflare] DEBUG: Project name: ${cfProjectName}`)
+    console.log(`[Cloudflare] DEBUG: Total file size: ${files.reduce((sum, f) => sum + f.content.length, 0)} bytes`)
 
     const { url, deploymentId } = await deployToCloudflare(
       tokenDoc.accountId,
@@ -277,6 +302,8 @@ export async function POST(request: Request) {
       files,
       tokenDoc.apiToken
     )
+
+    console.log(`[Cloudflare] DEBUG: Deployment successful - ID: ${deploymentId}`)
 
     // Update project with deployment info
     await db.collection("projects").updateOne(

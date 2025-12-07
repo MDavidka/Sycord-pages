@@ -2,6 +2,8 @@
 
 This guide explains how to deploy your Sycord Pages website to Cloudflare Pages.
 
+> **Latest Update**: Deployment logic has been fixed and enhanced with detailed debug logging to help diagnose any issues. All deployments now correctly use the production stage for reliable publishing.
+
 ## Quick Start (3 Steps)
 
 ### 1. Create Your Website
@@ -191,6 +193,26 @@ Want to use your own domain (e.g., `www.mysite.com`) instead of `.pages.dev`?
 1. Wait a few minutes before trying again
 2. Cloudflare has generous rate limits - this is rare
 3. Check if you're making multiple deployments simultaneously
+
+---
+
+### Deployment Stuck or Failing
+
+**Problem:** Deployment starts but doesn't complete, or fails with unclear errors.
+
+**Solution:**
+1. Check the deployment logs - look for detailed `DEBUG:` entries that show exactly what's happening
+2. Verify the deployment is using `stage: production` (shown in debug logs)
+3. Ensure your project name is valid (lowercase, alphanumeric, hyphens only)
+4. Check that all files are valid HTML/text content
+5. Look at server logs if you have access (for Next.js deployments)
+6. Try creating a simple test page first to verify the deployment pipeline
+
+**Debug Information to Look For:**
+- `[Cloudflare] DEBUG: Creating deployment for project: ...`
+- `[Cloudflare] DEBUG: Branch: main, Stage: production` (should say "production")
+- `[Cloudflare] ✅ Deployment created (ID: ..., Stage: production)`
+- Any error responses with full details
 
 ---
 
