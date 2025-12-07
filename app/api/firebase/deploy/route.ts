@@ -134,12 +134,138 @@ export async function POST(request: Request) {
     }
 
     if (!project.pages || project.pages.length === 0) {
-      return NextResponse.json(
+      console.log("[Firebase] No pages found, generating dummy website...")
+
+      const dummyIndexHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${project.businessName || "Welcome"} - Powered by Sycord</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 60px 40px;
+      text-align: center;
+      max-width: 600px;
+    }
+    
+    h1 {
+      color: #333;
+      font-size: 2.5em;
+      margin-bottom: 20px;
+    }
+    
+    .logo {
+      font-size: 4em;
+      margin-bottom: 20px;
+    }
+    
+    p {
+      color: #666;
+      font-size: 1.1em;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+    
+    .status {
+      background: #f0f4ff;
+      border-left: 4px solid #667eea;
+      padding: 20px;
+      margin: 30px 0;
+      border-radius: 8px;
+      text-align: left;
+    }
+    
+    .status h3 {
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+    
+    .status p {
+      margin: 0;
+      color: #555;
+      font-size: 0.95em;
+    }
+    
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+      color: #999;
+      font-size: 0.9em;
+    }
+    
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 14px 32px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 20px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">🚀</div>
+    <h1>${project.businessName || "Welcome to Your Site"}</h1>
+    <p>Your website is ready to go! This is the default landing page.</p>
+    
+    <div class="status">
+      <h3>✅ Deployment Successful</h3>
+      <p>Your site has been deployed to Firebase Hosting. This is an auto-generated placeholder page. Start building your custom pages in Sycord to replace this.</p>
+    </div>
+    
+    <p style="color: #999; font-size: 0.95em;">
+      Generated on ${new Date().toLocaleString()}
+    </p>
+    
+    <div class="footer">
+      <p>Powered by <strong>Sycord Pages</strong> | Firebase Hosting</p>
+    </div>
+  </div>
+</body>
+</html>`
+
+      // Add the dummy page to the project
+      project.pages = [
         {
-          message: "No pages to deploy. Please generate your website first.",
+          name: "index.html",
+          content: dummyIndexHtml,
         },
-        { status: 400 },
-      )
+      ]
+
+      // Optionally save to database so user can see the generated page
+      await db.collection("projects").updateOne({ _id: new ObjectId(projectId) }, { $set: { pages: project.pages } })
+
+      console.log("[Firebase] Dummy website generated")
     }
 
     // Get valid access token
