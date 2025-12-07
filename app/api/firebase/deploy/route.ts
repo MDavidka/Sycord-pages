@@ -78,7 +78,21 @@ async function firebaseApiCall(
         return response
       }
 
-      const errorData = await response.json().catch(() => ({}))
+      let errorData: any
+      const contentTypeHeader = response.headers.get("content-type")
+
+      if (contentTypeHeader?.includes("application/json")) {
+        errorData = await response.json().catch(() => ({ rawText: response.text() }))
+      } else {
+        // If response is HTML or other format, capture as text
+        const text = await response.text()
+        errorData = {
+          htmlResponse: text.substring(0, 200), // First 200 chars
+          fullStatus: response.status,
+          statusText: response.statusText,
+        }
+      }
+
       console.error(`[Firebase] API call failed (attempt ${i + 1}/${retries}):`, {
         url,
         status: response.status,
@@ -289,7 +303,7 @@ export async function POST(request: Request) {
     // Step 1: Check if Firebase project exists, create if not
     console.log("[Firebase] Checking if project exists:", fbProjectId)
 
-    const projectCheckUrl = `https://firebase.googleapis.com/v1beta1/projects/${fbProjectId}`
+    const projectCheckUrl = `https://firebase.googleapis.com/v1/projects/${fbProjectId}`
     let projectExists = false
 
     try {
@@ -303,7 +317,7 @@ export async function POST(request: Request) {
     if (!projectExists) {
       console.log("[Firebase] Creating Firebase project:", fbProjectId)
 
-      const createProjectUrl = "https://firebase.googleapis.com/v1beta1/projects"
+      const createProjectUrl = "https://firebase.googleapis.com/v1/projects"
       const createResponse = await firebaseApiCall(
         createProjectUrl,
         {
@@ -317,7 +331,14 @@ export async function POST(request: Request) {
       )
 
       if (!createResponse.ok) {
-        const errorData = await createResponse.json()
+        let errorData: any
+        const contentType = createResponse.headers.get("content-type")
+        if (contentType?.includes("application/json")) {
+          errorData = await createResponse.json().catch(() => ({}))
+        } else {
+          errorData = { message: await createResponse.text().then((t) => t.substring(0, 200)) }
+        }
+
         console.error("[Firebase] Failed to create project:", errorData)
         return NextResponse.json(
           {
@@ -334,10 +355,36 @@ export async function POST(request: Request) {
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
 
-    // Step 2: Create a new hosting version
+    // Step 2: Create a new hosting site (not version directly)
+    console.log("[Firebase] Setting up Firebase Hosting site")
+
+    const createSiteUrl = `https://firebase.googleapis.com/v1/projects/${fbProjectId}/locations/us-central1/webApps`
+    const siteResponse = await firebaseApiCall(
+      createSiteUrl,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          displayName: project.businessName || "My Site",
+        }),
+      },
+      accessToken,
+      1, // Single attempt for site creation
+    ).catch((err) => {
+      console.log("[Firebase] Web app may already exist:", err.message)
+      return null
+    })
+
+    let siteId = fbProjectId
+    if (siteResponse?.ok) {
+      const siteData = await siteResponse.json()
+      siteId = siteData.name?.split("/").pop() || fbProjectId
+      console.log("[Firebase] Web app created:", siteId)
+    }
+
+    // Step 3: Create a new hosting version
     console.log("[Firebase] Creating hosting version")
 
-    const versionUrl = `https://firebasehosting.googleapis.com/v1beta1/sites/${fbProjectId}/versions`
+    const versionUrl = `https://firebasehosting.googleapis.com/v1beta1/projects/${fbProjectId}/sites/${siteId}/versions`
     const versionResponse = await firebaseApiCall(
       versionUrl,
       {
@@ -359,7 +406,14 @@ export async function POST(request: Request) {
     )
 
     if (!versionResponse.ok) {
-      const errorData = await versionResponse.json()
+      let errorData: any
+      const contentType = versionResponse.headers.get("content-type")
+      if (contentType?.includes("application/json")) {
+        errorData = await versionResponse.json().catch(() => ({}))
+      } else {
+        errorData = { message: await versionResponse.text().then((t) => t.substring(0, 200)) }
+      }
+
       console.error("[Firebase] Failed to create version:", errorData)
       return NextResponse.json(
         {
@@ -374,7 +428,7 @@ export async function POST(request: Request) {
     const versionName = versionData.name
     console.log("[Firebase] Version created:", versionName)
 
-    // Step 3: Upload files
+    // Step 4: Upload files
     console.log("[Firebase] Uploading files...")
 
     // Prepare files for upload - ensure proper path formatting
@@ -477,7 +531,7 @@ export async function POST(request: Request) {
 
     console.log("[Firebase] All files uploaded")
 
-    // Step 4: Finalize the version
+    // Step 5: Finalize the version
     console.log("[Firebase] Finalizing version")
 
     const finalizeUrl = `https://firebasehosting.googleapis.com/v1beta1/${versionName}?update_mask=status`
@@ -506,10 +560,10 @@ export async function POST(request: Request) {
 
     console.log("[Firebase] Version finalized")
 
-    // Step 5: Create release to deploy the version
+    // Step 6: Create release to deploy the version
     console.log("[Firebase] Creating release")
 
-    const releaseUrl = `https://firebasehosting.googleapis.com/v1beta1/sites/${fbProjectId}/releases?versionName=${versionName}`
+    const releaseUrl = `https://firebasehosting.googleapis.com/v1beta1/projects/${fbProjectId}/sites/${siteId}/releases?versionName=${versionName}`
     const releaseResponse = await firebaseApiCall(
       releaseUrl,
       {
@@ -543,7 +597,7 @@ export async function POST(request: Request) {
         $set: {
           firebaseProjectId: fbProjectId,
           firebaseDeployedAt: new Date(),
-          firebaseUrl: `https://${fbProjectId}.web.app`,
+          firebaseUrl: `https://${siteId}.web.app`,
           updatedAt: new Date(),
         },
       },
@@ -554,7 +608,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Deployment successful",
-      url: `https://${fbProjectId}.web.app`,
+      url: `https://${siteId}.web.app`,
       projectId: fbProjectId,
       versionName,
       releaseName: releaseData.name,
