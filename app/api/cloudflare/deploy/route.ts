@@ -112,6 +112,17 @@ async function ensureProject(
       body: JSON.stringify({
         name: projectName,
         production_branch: "main",
+        build_config: {
+          build_command: "",
+          destination_dir: "dist",
+          root_dir: ""
+        },
+        deployment_configs: {
+          production: {
+            compatibility_flags: [],
+            compatibility_date: "2024-01-01"
+          }
+        }
       }),
     },
     apiToken
@@ -123,6 +134,9 @@ async function ensureProject(
   }
 
   console.log("[Cloudflare] ✅ Project created")
+
+  // Wait for propagation
+  await new Promise(resolve => setTimeout(resolve, 2000))
 }
 
 /**
