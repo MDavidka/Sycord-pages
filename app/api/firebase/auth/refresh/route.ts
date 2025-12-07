@@ -1,25 +1,49 @@
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
 /**
  * Refreshes Firebase access token using refresh token
+ * Validates that the requesting user owns the project
  */
 export async function POST(request: Request) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      console.log("[Firebase] Token refresh: Unauthorized - no session")
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
     const { projectId, userId } = await request.json()
 
     if (!projectId || !userId) {
       return NextResponse.json({ message: "Missing required parameters" }, { status: 400 })
     }
 
+    if (userId !== session.user.id) {
+      console.log("[Firebase] Token refresh: Unauthorized - userId mismatch")
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+    }
+
     const client = await clientPromise
     const db = client.db()
+
+    const project = await db.collection("projects").findOne({
+      _id: new ObjectId(projectId),
+      userId: session.user.id,
+    })
+
+    if (!project) {
+      console.log("[Firebase] Token refresh: Project not found or unauthorized")
+      return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
 
     // Get stored refresh token
     const tokenDoc = await db.collection("firebase_tokens").findOne({
       projectId: new ObjectId(projectId),
-      userId,
+      userId: session.user.id,
     })
 
     if (!tokenDoc || !tokenDoc.refreshToken) {
@@ -51,21 +75,21 @@ export async function POST(request: Request) {
 
     // Update access token
     await db.collection("firebase_tokens").updateOne(
-      { projectId: new ObjectId(projectId), userId },
+      { projectId: new ObjectId(projectId), userId: session.user.id },
       {
         $set: {
           accessToken: tokens.access_token,
           expiresIn: tokens.expires_in,
           updatedAt: new Date(),
         },
-      }
+      },
     )
 
     console.log("[Firebase] Token refreshed successfully for project:", projectId)
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       accessToken: tokens.access_token,
-      success: true 
+      success: true,
     })
   } catch (error: any) {
     console.error("[Firebase] Token refresh error:", error)

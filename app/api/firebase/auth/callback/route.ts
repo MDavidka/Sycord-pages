@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
@@ -26,7 +28,26 @@ export async function GET(request: Request) {
     const state = JSON.parse(stateParam)
     const { projectId, userId } = state
 
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id || session.user.id !== userId) {
+      console.error("[Firebase] OAuth callback: Session mismatch - unauthorized user")
+      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard?error=unauthorized`)
+    }
+
     console.log("[Firebase] Processing OAuth callback for project:", projectId)
+
+    const client = await clientPromise
+    const db = client.db()
+
+    const project = await db.collection("projects").findOne({
+      _id: new ObjectId(projectId),
+      userId: session.user.id,
+    })
+
+    if (!project) {
+      console.error("[Firebase] OAuth callback: Project not found or unauthorized")
+      return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard?error=project_not_found`)
+    }
 
     // Exchange code for tokens
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -48,21 +69,18 @@ export async function GET(request: Request) {
     }
 
     const tokens = await tokenResponse.json()
-    console.log("[Firebase] Tokens received:", { 
-      hasAccessToken: !!tokens.access_token, 
-      hasRefreshToken: !!tokens.refresh_token 
+    console.log("[Firebase] Tokens received:", {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
     })
 
     // Store tokens in database
-    const client = await clientPromise
-    const db = client.db()
-
     await db.collection("firebase_tokens").updateOne(
-      { projectId: new ObjectId(projectId), userId },
+      { projectId: new ObjectId(projectId), userId: session.user.id },
       {
         $set: {
           projectId: new ObjectId(projectId),
-          userId,
+          userId: session.user.id,
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           expiresIn: tokens.expires_in,
@@ -72,15 +90,13 @@ export async function GET(request: Request) {
           updatedAt: new Date(),
         },
       },
-      { upsert: true }
+      { upsert: true },
     )
 
     console.log("[Firebase] Tokens stored successfully for project:", projectId)
 
     // Redirect back to project page
-    return NextResponse.redirect(
-      `${process.env.NEXTAUTH_URL}/dashboard/sites/${projectId}?firebase_auth=success`
-    )
+    return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard/sites/${projectId}?firebase_auth=success`)
   } catch (error: any) {
     console.error("[Firebase] OAuth callback error:", error)
     return NextResponse.redirect(`${process.env.NEXTAUTH_URL}/dashboard?error=oauth_callback_failed`)
