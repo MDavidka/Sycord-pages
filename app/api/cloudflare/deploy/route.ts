@@ -4,14 +4,13 @@ import { authOptions } from "@/lib/auth";
 import clientPromise from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import crypto from "crypto";
-import archiver from "archiver";
 import FormData from "form-data";
 import fs from "fs";
 import path from "path";
 import os from "os";
 import { promisify } from "util";
 
-// Promisify fs functions if not using fs.promises directly (Node 14+ usually has fs/promises but explicit is safe)
+// Promisify fs functions
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(fs.mkdir);
 const readdir = promisify(fs.readdir);
@@ -158,16 +157,13 @@ async function getOrCreateProject(
 }
 
 /**
- * Generates the ZIP package from a directory on disk.
- * Also performs rigorous validation and logging as requested.
+ * Prepares the deployment package from disk.
+ * Returns the manifest (path -> hash) and a map of files (hash -> buffer).
  */
 async function generatePackageFromDisk(dirPath: string) {
   const manifest: Record<string, string> = {};
+  const fileMap: Record<string, Buffer> = {};
   const debugFiles: Record<string, any> = {};
-
-  // Create ZIP with level 0 (STORE)
-  const archive = archiver("zip", { zlib: { level: 0 } });
-  const chunks: Buffer[] = [];
 
   // Recursive directory scanner
   async function scan(currentDir: string, relativeRoot: string = "") {
@@ -199,20 +195,18 @@ async function generatePackageFromDisk(dirPath: string) {
         // 3. Prepare Manifest Key (Must be absolute path /foo.html)
         const manifestKey = `/${relativePath}`;
         manifest[manifestKey] = sha256;
+        fileMap[sha256] = content;
 
-        // 4. Debug Object Construction (User requested { manifest, files })
+        // 4. Debug Object Construction
         const base64Preview = content.toString("base64").substring(0, 50) + "...";
         debugFiles[relativePath] = {
           size: stats.size,
           sha256: sha256,
-          md5: md5, // Included for user verification
+          md5: md5,
           mime: getMimeType(entry.name),
           preview_base64: base64Preview,
           preview_text: content.length < 100 ? content.toString("utf8") : content.toString("utf8").substring(0, 100) + "..."
         };
-
-        // Add to ZIP
-        archive.append(content, { name: relativePath });
 
         // --- VALIDATION & LOGGING END ---
       }
@@ -237,63 +231,100 @@ async function generatePackageFromDisk(dirPath: string) {
     throw new Error("Missing index.html in deployment package.");
   }
 
-  return new Promise<{ manifest: string; zipBuffer: Buffer }>((resolve, reject) => {
-    archive.on("error", (err) => reject(err));
-    archive.on("data", (chunk) => chunks.push(chunk));
-    archive.on("end", () => {
-      const zipBuffer = Buffer.concat(chunks);
-      resolve({ manifest: JSON.stringify(manifest), zipBuffer });
-    });
-    archive.finalize();
-  });
+  return { manifest, fileMap };
 }
 
 /**
- * Uploads the deployment package to Cloudflare
+ * Performs a Two-Step Direct Upload:
+ * 1. POST /deployments with manifest -> Get upload_url
+ * 2. POST files to upload_url (multipart/form-data where key=hash)
  */
-async function uploadToCloudflare(
+async function uploadToCloudflareTwoStep(
   accountId: string,
   projectName: string,
   apiToken: string,
-  manifestString: string,
-  zipBuffer: Buffer
+  manifest: Record<string, string>,
+  fileMap: Record<string, Buffer>
 ) {
-  const form = new FormData();
+  // --- Step 1: Create Deployment (Send Manifest) ---
+  console.log(`[Cloudflare] Step 1: Creating deployment with manifest (${Object.keys(manifest).length} files)...`);
 
-  // 1. Append Manifest
-  form.append("manifest", manifestString, {
-    contentType: "application/json",
-  });
-
-  // 2. Append ZIP file
-  form.append("file", zipBuffer, {
-    filename: "site.zip",
-    contentType: "application/zip",
-  });
-
-  const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
-
-  const body = form.getBuffer();
-  const headers = form.getHeaders();
-
-  console.log(`[Cloudflare] Uploading multipart payload. Manifest len: ${manifestString.length}, Zip len: ${zipBuffer.length}`);
-
-  const response = await cloudflareApiCall(
-    url,
+  const createUrl = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
+  const createResponse = await cloudflareApiCall(
+    createUrl,
     {
       method: "POST",
-      body: body as any,
-      headers: headers,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        branch: "main",
+        manifest: manifest,
+      }),
     },
     apiToken
   );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Cloudflare Upload Failed: ${response.status} - ${errorText}`);
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text();
+    throw new Error(`Cloudflare Deployment Creation Failed: ${createResponse.status} - ${errorText}`);
   }
 
-  return response.json();
+  const createResult = await createResponse.json();
+  const uploadUrl = createResult.result?.upload_url;
+  const deploymentId = createResult.result?.id;
+
+  if (!uploadUrl) {
+    // If no upload_url, it might mean all files are already present (deduplicated)
+    console.log("[Cloudflare] No upload_url returned. Deployment might be complete (all files cached).");
+    return createResult;
+  }
+
+  console.log(`[Cloudflare] Step 1 Success. Deployment ID: ${deploymentId}. Upload URL: ${uploadUrl}`);
+
+  // --- Step 2: Upload Files (Multipart where key=SHA256) ---
+  const form = new FormData();
+  let totalBytes = 0;
+
+  // Cloudflare might ignore files it already has, but we upload all to be safe
+  // unless we want to parse the response for 'required' hashes (optional optimization).
+  // The standalone script uploads everything, so we will too.
+
+  for (const [hash, buffer] of Object.entries(fileMap)) {
+    form.append(hash, buffer, {
+      filename: hash, // Filename usually ignored but good practice
+      contentType: "application/octet-stream",
+    });
+    totalBytes += buffer.length;
+  }
+
+  console.log(`[Cloudflare] Step 2: Uploading ${Object.keys(fileMap).length} files (${totalBytes} bytes) to ${uploadUrl}...`);
+
+  // Note: Upload to the signed URL often doesn't need the Bearer token,
+  // but keeping it usually doesn't hurt unless it conflicts.
+  // The script says "no Authorization header needed".
+  // Let's use a plain fetch for the upload to avoid our helper's forced Auth header.
+
+  const uploadHeaders = form.getHeaders();
+
+  // Explicitly NOT adding Authorization header for the upload_url as it is signed
+  // and includes auth in the query string usually.
+
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "POST",
+    body: form.getBuffer() as any, // Cast to any for fetch compatibility
+    headers: {
+        ...uploadHeaders,
+        // "Content-Length": totalBytes.toString() // FormData usually handles this
+    }
+  });
+
+  if (!uploadResponse.ok) {
+    const errorText = await uploadResponse.text();
+    throw new Error(`Cloudflare File Upload Failed: ${uploadResponse.status} - ${errorText}`);
+  }
+
+  console.log("[Cloudflare] Step 2 Success: Files uploaded.");
+
+  return createResult;
 }
 
 /**
@@ -398,8 +429,7 @@ export async function POST(request: Request) {
                  content = `<!DOCTYPE html><html><body><h1>${page.name}</h1><p>Content coming soon.</p></body></html>`;
             }
 
-            // Ensure directory exists if filename contains paths (though currently pages are flat)
-            // But just in case user has "blog/index" as name
+            // Ensure directory exists
             await mkdir(path.dirname(filePath), { recursive: true });
 
             await writeFile(filePath, content, "utf8");
@@ -427,16 +457,16 @@ export async function POST(request: Request) {
     const cfProject = await getOrCreateProject(tokenDoc.accountId, cfProjectName, tokenDoc.apiToken);
     console.log(`[Cloudflare] Target: ${cfProject.name} (${cfProject.subdomain})`);
 
-    // 7. Generate Package from Disk (includes validation)
-    const { manifest, zipBuffer } = await generatePackageFromDisk(tempDir);
+    // 7. Generate Package (Manifest + File Map)
+    const { manifest, fileMap } = await generatePackageFromDisk(tempDir);
 
-    // 8. Upload
-    const result: any = await uploadToCloudflare(
+    // 8. Upload (Two-Step Flow)
+    const result: any = await uploadToCloudflareTwoStep(
         tokenDoc.accountId,
         cfProjectName,
         tokenDoc.apiToken,
         manifest,
-        zipBuffer
+        fileMap
     );
 
     const deploymentId = result.result?.id;
