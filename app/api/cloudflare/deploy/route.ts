@@ -46,70 +46,6 @@ function getMimeType(filename: string): string {
 }
 
 /**
- * Helper to make Cloudflare API calls with retry logic
- */
-async function cloudflareApiCall(
-  url: string,
-  options: RequestInit,
-  apiToken: string,
-  retries = 3
-): Promise<Response> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiToken}`,
-  };
-
-  // Merge headers
-  if (options.headers) {
-    Object.assign(headers, options.headers);
-  }
-
-  let lastError: any;
-  for (let i = 0; i < retries; i++) {
-    try {
-      const response = await fetch(url, { ...options, headers });
-
-      // Don't retry on auth errors (401, 403) or 4xx client errors (unless it's rate limiting)
-      if (response.status === 401 || response.status === 403) {
-        console.error(`[Cloudflare] Auth error: ${response.status}`);
-        return response;
-      }
-
-      if (response.ok) {
-        return response;
-      }
-
-      if (response.status < 500 && response.status !== 429) {
-          return response;
-      }
-
-      const errorText = await response.text();
-      console.error(`[Cloudflare] API call failed (attempt ${i + 1}/${retries}):`, {
-        url,
-        status: response.status,
-        error: errorText,
-      });
-
-      lastError = errorText;
-
-      if (i < retries - 1) {
-        const waitTime = 1000 * Math.pow(2, i); // Exponential backoff
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-      }
-    } catch (error) {
-      console.error(`[Cloudflare] Request error (attempt ${i + 1}/${retries}):`, error);
-      lastError = error;
-
-      if (i < retries - 1) {
-        const waitTime = 1000 * Math.pow(2, i);
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-      }
-    }
-  }
-
-  throw new Error(`API call failed after ${retries} retries: ${lastError}`);
-}
-
-/**
  * Get or create Cloudflare Pages project and return details
  */
 async function getOrCreateProject(
@@ -117,43 +53,56 @@ async function getOrCreateProject(
   projectName: string,
   apiToken: string
 ): Promise<{ subdomain: string; name: string }> {
+  // We use a simple fetch here since we need to handle 404 specifically
   const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}`;
-  const checkResponse = await cloudflareApiCall(url, { method: "GET" }, apiToken, 1);
 
-  if (checkResponse.ok) {
-    const data = await checkResponse.json();
-    return data.result;
-  }
-
-  if (checkResponse.status === 404) {
-    console.log(`[Cloudflare] Project ${projectName} not found. Creating...`);
-    const createResponse = await cloudflareApiCall(
-      `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: projectName,
-          production_branch: "main",
-        }),
+  try {
+    const checkResponse = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
       },
-      apiToken
-    );
+    });
 
-    if (!createResponse.ok) {
-      const err = await createResponse.text();
-      throw new Error(`Failed to create project: ${err}`);
+    if (checkResponse.ok) {
+      const data = await checkResponse.json();
+      return data.result;
     }
 
-    // Wait a bit for propagation
-    await new Promise((r) => setTimeout(r, 2000));
+    if (checkResponse.status === 404) {
+      console.log(`[Cloudflare] Project ${projectName} not found. Creating...`);
+      const createResponse = await fetch(
+        `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiToken}`,
+          },
+          body: JSON.stringify({
+            name: projectName,
+            production_branch: "main",
+          }),
+        }
+      );
 
-    const createData = await createResponse.json();
-    return createData.result;
+      if (!createResponse.ok) {
+        const err = await createResponse.text();
+        throw new Error(`Failed to create project: ${err}`);
+      }
+
+      // Wait a bit for propagation
+      await new Promise((r) => setTimeout(r, 2000));
+
+      const createData = await createResponse.json();
+      return createData.result;
+    }
+
+    const err = await checkResponse.text();
+    throw new Error(`Failed to check project existence: ${checkResponse.status} ${err}`);
+  } catch (error) {
+    throw error;
   }
-
-  const err = await checkResponse.text();
-  throw new Error(`Failed to check project existence: ${checkResponse.status} ${err}`);
 }
 
 /**
@@ -171,7 +120,11 @@ async function generatePackageFromDisk(dirPath: string) {
 
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
-      const relativePath = path.join(relativeRoot, entry.name).replace(/\\/g, "/"); // Ensure forward slashes
+
+      // Ensure forward slashes for Cloudflare paths
+      // relativeRoot is like "css", entry.name is "style.css" -> "css/style.css"
+      // or "" and "index.html" -> "index.html"
+      const relativePath = path.join(relativeRoot, entry.name).replace(/\\/g, "/");
 
       if (entry.isDirectory()) {
         await scan(fullPath, relativePath);
@@ -247,24 +200,31 @@ async function uploadToCloudflareTwoStep(
   fileMap: Record<string, Buffer>
 ) {
   // --- Step 1: Create Deployment (Send Manifest) ---
-  console.log(`[Cloudflare] Step 1: Creating deployment with manifest (${Object.keys(manifest).length} files)...`);
+  console.log(`[Cloudflare] Step 1: Creating deployment for project '${projectName}' with manifest (${Object.keys(manifest).length} files)...`);
 
   const createUrl = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
-  const createResponse = await cloudflareApiCall(
-    createUrl,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        branch: "main",
-        manifest: manifest,
-      }),
+
+  const createBody = JSON.stringify({
+    branch: "main",
+    stage: "production", // Added explicitly as per working script
+    manifest: manifest,
+  });
+
+  // Log strict body for debugging
+  console.log("[Cloudflare] Step 1 Body Preview:", createBody.substring(0, 500) + "...");
+
+  const createResponse = await fetch(createUrl, {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiToken}`
     },
-    apiToken
-  );
+    body: createBody,
+  });
 
   if (!createResponse.ok) {
     const errorText = await createResponse.text();
+    console.error(`[Cloudflare] Step 1 Failed: ${createResponse.status} - ${errorText}`);
     throw new Error(`Cloudflare Deployment Creation Failed: ${createResponse.status} - ${errorText}`);
   }
 
@@ -284,10 +244,6 @@ async function uploadToCloudflareTwoStep(
   const form = new FormData();
   let totalBytes = 0;
 
-  // Cloudflare might ignore files it already has, but we upload all to be safe
-  // unless we want to parse the response for 'required' hashes (optional optimization).
-  // The standalone script uploads everything, so we will too.
-
   for (const [hash, buffer] of Object.entries(fileMap)) {
     form.append(hash, buffer, {
       filename: hash, // Filename usually ignored but good practice
@@ -298,22 +254,14 @@ async function uploadToCloudflareTwoStep(
 
   console.log(`[Cloudflare] Step 2: Uploading ${Object.keys(fileMap).length} files (${totalBytes} bytes) to ${uploadUrl}...`);
 
-  // Note: Upload to the signed URL often doesn't need the Bearer token,
-  // but keeping it usually doesn't hurt unless it conflicts.
-  // The script says "no Authorization header needed".
-  // Let's use a plain fetch for the upload to avoid our helper's forced Auth header.
-
   const uploadHeaders = form.getHeaders();
-
-  // Explicitly NOT adding Authorization header for the upload_url as it is signed
-  // and includes auth in the query string usually.
 
   const uploadResponse = await fetch(uploadUrl, {
     method: "POST",
     body: form.getBuffer() as any, // Cast to any for fetch compatibility
     headers: {
         ...uploadHeaders,
-        // "Content-Length": totalBytes.toString() // FormData usually handles this
+        // No Auth header needed for signed upload_url
     }
   });
 
