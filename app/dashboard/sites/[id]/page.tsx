@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
+import { FirebaseDeployment } from "@/components/firebase-deployment"
 import {
   Trash2,
   Plus,
@@ -36,7 +37,8 @@ import {
   Users,
   History,
   FileText,
-  CreditCard
+  CreditCard,
+  Rocket
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -102,7 +104,7 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount">("styles")
+  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy">("styles")
   const [activeSubTab, setActiveSubTab] = useState<"settings" | "store" | "pages">("settings")
 
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
@@ -381,6 +383,12 @@ export default function SiteSettingsPage() {
         { id: "pages", label: "Pages", icon: FileText },
         { id: "products", label: "Products", icon: ShoppingCart },
         { id: "payments", label: "Payments", icon: CreditCard },
+      ]
+    },
+    {
+      title: "Deployment",
+      items: [
+        { id: "deploy", label: "Firebase Deploy", icon: Rocket },
       ]
     },
     {
@@ -986,6 +994,16 @@ export default function SiteSettingsPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === "deploy" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">Firebase Deployment</h2>
+                <p className="text-muted-foreground mb-6">Deploy your website to Firebase Hosting with automatic SSL and global CDN</p>
+              </div>
+              <FirebaseDeployment projectId={id} projectName={project?.businessName || "Site"} />
             </div>
           )}
 

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { uploadToCloudflarePages } from "@/lib/cloudflare-pages-upload"
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -14,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const { id } = await params
-    const { code, files, deployToCloudflare } = await request.json()
+    const { code, files } = await request.json()
 
     console.log("[v0] Deploy: Starting for project ID:", id, "User ID:", session.user.id)
 
@@ -39,51 +38,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    const updateData: any = {
+    let updateData: any = {
       aiCodeDeployedAt: new Date(),
       updatedAt: new Date(),
     }
 
+    // Handle Multi-File Deployment
     if (files && Array.isArray(files)) {
       console.log(`[v0] Deploy: Deploying ${files.length} files`)
 
       // Validate files
       for (const file of files) {
         if (!file.name || !file.content) {
-          return NextResponse.json({ message: "Invalid file format" }, { status: 400 })
+           return NextResponse.json({ message: "Invalid file format" }, { status: 400 })
         }
       }
 
       updateData.pages = files
 
       // Set main code for legacy/preview purposes (try index.html, or first file)
-      const indexFile = files.find((f: any) => f.name === "index.html" || f.name === "index")
+      const indexFile = files.find((f: any) => f.name === 'index.html' || f.name === 'index')
       if (indexFile) {
         updateData.aiGeneratedCode = indexFile.content
       } else if (files.length > 0) {
         updateData.aiGeneratedCode = files[0].content
       }
-
-      if (deployToCloudflare && process.env.CLOUDFLARE_API && process.env.CLOUDFLARE_ACCOUNT_ID) {
-        console.log("[v0] Deploy: Attempting Cloudflare Pages deployment...")
-
-        const result = await uploadToCloudflarePages(
-          files,
-          process.env.CLOUDFLARE_ACCOUNT_ID,
-          project.cloudflareProjectName || projectObjectId.toString(),
-          process.env.CLOUDFLARE_API,
-        )
-
-        if (result.success) {
-          console.log("[v0] Deploy: Cloudflare deployment successful:", result.deploymentId)
-          updateData.cloudflareDeploymentId = result.deploymentId
-          updateData.cloudflareDeployedAt = new Date()
-        } else {
-          console.error("[v0] Deploy: Cloudflare deployment failed:", result.error)
-          return NextResponse.json({ message: "Cloudflare deployment failed", error: result.error }, { status: 400 })
-        }
-      }
-    } else if (code) {
+    }
+    // Handle Legacy Single Code Deployment
+    else if (code) {
       console.log("[v0] Deploy: Deploying single code block")
       if (typeof code !== "string") {
         return NextResponse.json({ message: "Invalid code provided" }, { status: 400 })
@@ -96,7 +78,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     // Save to project
-    const updateResult = await db.collection("projects").updateOne({ _id: projectObjectId }, { $set: updateData })
+    const updateResult = await db.collection("projects").updateOne(
+      { _id: projectObjectId },
+      { $set: updateData },
+    )
 
     if (updateResult.modifiedCount === 0) {
       console.error("[v0] Deploy: Failed to update project document")
@@ -109,7 +94,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       message: "Code deployed successfully",
       success: true,
       projectId: projectObjectId.toString(),
-      cloudflareDeploymentId: updateData.cloudflareDeploymentId,
     })
   } catch (error: any) {
     console.error("[v0] Deploy: Unexpected error:", error.message)
