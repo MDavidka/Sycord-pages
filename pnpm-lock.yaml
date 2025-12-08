@@ -108,7 +108,7 @@ importers:
         specifier: 1.1.6
         version: 1.1.6(@types/react-dom@19.0.0)(@types/react@19.0.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       archiver:
-        specifier: ^7.0.1
+        specifier: latest
         version: 7.0.1
       autoprefixer:
         specifier: ^10.4.20
@@ -129,7 +129,7 @@ importers:
         specifier: 8.5.1
         version: 8.5.1(react@19.2.0)
       form-data:
-        specifier: ^4.0.5
+        specifier: latest
         version: 4.0.5
       gcp-metadata:
         specifier: latest

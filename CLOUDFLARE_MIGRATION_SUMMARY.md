@@ -79,7 +79,7 @@ Both scripts:
 ### 4. Database Schema
 
 #### New Collection: `cloudflare_tokens`
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   projectId: ObjectId,        // Reference to projects
@@ -89,11 +89,11 @@ Both scripts:
   createdAt: Date,
   updatedAt: Date
 }
-```
+\`\`\`
 
 #### Updated `projects` Collection
 New fields added (Firebase fields remain for backward compatibility):
-```javascript
+\`\`\`javascript
 {
   // Existing fields remain...
   cloudflareProjectName: String,     // Pages project name
@@ -106,7 +106,7 @@ New fields added (Firebase fields remain for backward compatibility):
   firebaseUrl: String,
   firebaseDeployedAt: Date
 }
-```
+\`\`\`
 
 ### 5. Documentation
 
@@ -143,25 +143,25 @@ These files are preserved for reference and potential future migration needs.
 ### Authentication Flow
 
 **Firebase (OAuth - Removed)**:
-```
+\`\`\`
 User → Google OAuth → Access Token + Refresh Token → MongoDB
-```
+\`\`\`
 
 **Cloudflare (API Token - New)**:
-```
+\`\`\`
 User → Provides API Token + Account ID → Validation → MongoDB
-```
+\`\`\`
 
 ### Deployment Flow
 
 **Cloudflare Pages Direct Upload**:
-```
+\`\`\`
 1. Validate credentials
 2. Check/create project (automatic)
 3. Create deployment (get upload URL)
 4. Upload files as base64 manifest
 5. Finalize (site goes live)
-```
+\`\`\`
 
 ### API Endpoints Used
 

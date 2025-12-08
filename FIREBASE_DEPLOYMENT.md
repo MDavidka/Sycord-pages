@@ -28,7 +28,7 @@ The Firebase deployment feature allows users to deploy their AI-generated websit
 
 ### Flow Diagram
 
-```
+\`\`\`
 User clicks "Authenticate with Google"
   ↓
 Redirect to /api/firebase/auth/initiate
@@ -60,7 +60,7 @@ Upload all files using populateFiles REST API
 Finalize version (via REST API)
   ↓
 Create release (via REST API) → Site goes live!
-```
+\`\`\`
 
 ### REST API Workflow
 
@@ -469,26 +469,26 @@ For users who want to deploy outside the web application, we provide standalone 
 **Location:** `scripts/firebase-deploy-standalone.js`
 
 **Usage:**
-```bash
+\`\`\`bash
 node scripts/firebase-deploy-standalone.js \
   --project=my-project-id \
   --token=ya29.a0... \
   --dir=./public \
   --channel=live
-```
+\`\`\`
 
 ### Python Script
 
 **Location:** `scripts/firebase-deploy-standalone.py`
 
 **Usage:**
-```bash
+\`\`\`bash
 python3 scripts/firebase-deploy-standalone.py \
   --project=my-project-id \
   --token=ya29.a0... \
   --dir=./public \
   --channel=live
-```
+\`\`\`
 
 Both scripts:
 - Use Firebase Hosting REST API only (no CLI required)

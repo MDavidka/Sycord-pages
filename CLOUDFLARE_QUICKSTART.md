@@ -41,22 +41,22 @@ This repository now supports deployment to Cloudflare Pages! This guide will get
 ## CLI Deployment (Optional)
 
 ### Node.js
-```bash
+\`\`\`bash
 node scripts/cloudflare-deploy.js \
   --account=your_account_id \
   --token=your_api_token \
   --project=my-site \
   --dir=./out
-```
+\`\`\`
 
 ### Python
-```bash
+\`\`\`bash
 python3 scripts/cloudflare-deploy.py \
   --account=your_account_id \
   --token=your_api_token \
   --project=my-site \
   --dir=./out
-```
+\`\`\`
 
 ## Documentation
 
@@ -98,13 +98,13 @@ The deployment system includes detailed logging to help diagnose issues:
 - Full API responses are logged for troubleshooting
 
 **Example debug output:**
-```
+\`\`\`
 📊 DEBUG: Creating deployment for project: my-site
 📊 DEBUG: Branch: main, Stage: production
 ✅ Deployment created (ID: abc123, Stage: production)
 📊 DEBUG: Adding file: /index.html (1024 bytes → 1368 base64 chars)
 📊 DEBUG: Total files in manifest: 3
-```
+\`\`\`
 
 ## Need Help?
 
