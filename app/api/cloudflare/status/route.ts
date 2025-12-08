@@ -43,11 +43,19 @@ export async function GET(request: Request) {
       userId: session.user.email,
     })
 
-    const projectPages = project.pages && Array.isArray(project.pages) ? project.pages : []
-    const pagesCount = projectPages.length
+    // Get pages count
+    const pagesCount = await db
+      .collection("pages")
+      .countDocuments({ projectId: new ObjectId(projectId) })
 
-    const pagesList = projectPages.map((p: any) => ({
-      name: p.name || "unnamed",
+    const pages = await db
+      .collection("pages")
+      .find({ projectId: new ObjectId(projectId) })
+      .project({ name: 1, content: 1 })
+      .toArray()
+
+    const pagesList = pages.map((p) => ({
+      name: p.name,
       size: p.content?.length || 0,
     }))
 
@@ -75,16 +83,21 @@ export async function GET(request: Request) {
 
     // Add recommendations
     if (!tokenDoc) {
-      debugInfo.recommendations.push("Store your Cloudflare API token and Account ID to enable deployment")
+      debugInfo.recommendations.push(
+        "Store your Cloudflare API token and Account ID to enable deployment"
+      )
     }
 
     if (pagesCount === 0) {
-      debugInfo.recommendations.push("Create at least one page before deploying (use the AI Builder)")
+      debugInfo.recommendations.push("Create at least one page before deploying")
     }
 
     return NextResponse.json(debugInfo)
   } catch (error: any) {
     console.error("[Cloudflare] Status error:", error)
-    return NextResponse.json({ error: error.message || "Failed to get status" }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || "Failed to get status" },
+      { status: 500 }
+    )
   }
 }

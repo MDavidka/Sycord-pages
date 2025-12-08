@@ -69,22 +69,22 @@ For user-based deployment (recommended):
    - User Type: **External**
    - Add required scopes (see below)
 4. Add authorized redirect URIs:
-   \`\`\`
+   ```
    https://your-domain.com/api/firebase/auth/callback
    http://localhost:3000/api/firebase/auth/callback  (for development)
-   \`\`\`
+   ```
 5. Save Client ID and Client Secret
 
 ### Required OAuth Scopes
 
-\`\`\`
+```
 openid
 profile
 email
 https://www.googleapis.com/auth/cloud-platform
 https://www.googleapis.com/auth/firebase
 https://www.googleapis.com/auth/firebase.hosting
-\`\`\`
+```
 
 ---
 
@@ -96,7 +96,7 @@ This is the approach used in the Sycord Pages application.
 
 **Step 1: Initiate OAuth Flow**
 
-\`\`\`http
+```http
 GET https://accounts.google.com/o/oauth2/v2/auth
   ?client_id=YOUR_CLIENT_ID
   &redirect_uri=https://your-app.com/callback
@@ -104,11 +104,11 @@ GET https://accounts.google.com/o/oauth2/v2/auth
   &scope=openid profile email https://www.googleapis.com/auth/firebase.hosting
   &access_type=offline
   &prompt=consent
-\`\`\`
+```
 
 **Step 2: Exchange Code for Tokens**
 
-\`\`\`http
+```http
 POST https://oauth2.googleapis.com/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -117,10 +117,10 @@ code=AUTHORIZATION_CODE
 &client_secret=YOUR_CLIENT_SECRET
 &redirect_uri=https://your-app.com/callback
 &grant_type=authorization_code
-\`\`\`
+```
 
 **Response:**
-\`\`\`json
+```json
 {
   "access_token": "ya29.a0...",
   "refresh_token": "1//0g...",
@@ -128,11 +128,11 @@ code=AUTHORIZATION_CODE
   "token_type": "Bearer",
   "scope": "..."
 }
-\`\`\`
+```
 
 **Step 3: Refresh Token When Expired**
 
-\`\`\`http
+```http
 POST https://oauth2.googleapis.com/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -140,7 +140,7 @@ client_id=YOUR_CLIENT_ID
 &client_secret=YOUR_CLIENT_SECRET
 &refresh_token=YOUR_REFRESH_TOKEN
 &grant_type=refresh_token
-\`\`\`
+```
 
 ### Option 2: Service Account (For Server-Side Only)
 
@@ -152,7 +152,7 @@ Use Google Cloud Service Account for automated deployments:
 4. Use with Google Auth Library
 
 **Example (Node.js):**
-\`\`\`javascript
+```javascript
 const { GoogleAuth } = require('google-auth-library');
 
 const auth = new GoogleAuth({
@@ -161,7 +161,7 @@ const auth = new GoogleAuth({
 });
 
 const accessToken = await auth.getAccessToken();
-\`\`\`
+```
 
 ### Storing Credentials Securely
 
@@ -184,19 +184,19 @@ const accessToken = await auth.getAccessToken();
 
 #### Step 1: Check if Firebase Project Exists
 
-\`\`\`http
+```http
 GET https://firebase.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID
 Authorization: Bearer YOUR_ACCESS_TOKEN
-\`\`\`
+```
 
 **Success Response (200):**
-\`\`\`json
+```json
 {
   "name": "projects/YOUR_PROJECT_ID",
   "projectId": "YOUR_PROJECT_ID",
   "displayName": "My Project"
 }
-\`\`\`
+```
 
 **Failure (404):**
 - Project doesn't exist
@@ -204,18 +204,18 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 
 #### Step 2: Check if Hosting is Initialized
 
-\`\`\`http
+```http
 GET https://firebasehosting.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID
 Authorization: Bearer YOUR_ACCESS_TOKEN
-\`\`\`
+```
 
 **Success Response (200):**
-\`\`\`json
+```json
 {
   "name": "projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID",
   "defaultUrl": "https://YOUR_SITE_ID.web.app"
 }
-\`\`\`
+```
 
 **Failure (404):**
 - Hosting not initialized
@@ -223,7 +223,7 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 
 #### Step 3: Create a New Hosting Version
 
-\`\`\`http
+```http
 POST https://firebasehosting.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions
 Authorization: Bearer YOUR_ACCESS_TOKEN
 Content-Type: application/json
@@ -238,20 +238,20 @@ Content-Type: application/json
     }]
   }
 }
-\`\`\`
+```
 
 **Success Response (200):**
-\`\`\`json
+```json
 {
   "name": "projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions/VERSION_ID",
   "status": "CREATED",
   "config": { ... }
 }
-\`\`\`
+```
 
 #### Step 4: Upload Files to the Version
 
-\`\`\`http
+```http
 POST https://firebasehosting.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions/VERSION_ID:populateFiles
 Authorization: Bearer YOUR_ACCESS_TOKEN
 Content-Type: application/json
@@ -263,28 +263,28 @@ Content-Type: application/json
     "/script.js": "Y29uc2..."
   }
 }
-\`\`\`
+```
 
 **File Preparation:**
-\`\`\`javascript
+```javascript
 // Node.js example
 const files = {
   "/index.html": Buffer.from(htmlContent, 'utf-8').toString('base64'),
   "/style.css": Buffer.from(cssContent, 'utf-8').toString('base64')
 };
-\`\`\`
+```
 
 **Success Response (200):**
-\`\`\`json
+```json
 {
   "uploadUrl": "...",
   "uploadRequiredHashes": []
 }
-\`\`\`
+```
 
 #### Step 5: Finalize the Version
 
-\`\`\`http
+```http
 PATCH https://firebasehosting.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions/VERSION_ID?update_mask=status
 Authorization: Bearer YOUR_ACCESS_TOKEN
 Content-Type: application/json
@@ -292,20 +292,20 @@ Content-Type: application/json
 {
   "status": "FINALIZED"
 }
-\`\`\`
+```
 
 **Success Response (200):**
-\`\`\`json
+```json
 {
   "name": "projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions/VERSION_ID",
   "status": "FINALIZED"
 }
-\`\`\`
+```
 
 #### Step 6: Create Release (Deploy Live)
 
 **For Live Channel:**
-\`\`\`http
+```http
 POST https://firebasehosting.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/releases?versionName=projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions/VERSION_ID
 Authorization: Bearer YOUR_ACCESS_TOKEN
 Content-Type: application/json
@@ -313,10 +313,10 @@ Content-Type: application/json
 {
   "message": "Deployed from my app"
 }
-\`\`\`
+```
 
 **For Preview Channel:**
-\`\`\`http
+```http
 POST https://firebasehosting.googleapis.com/v1beta1/projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/channels/preview/releases?versionName=projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/versions/VERSION_ID
 Authorization: Bearer YOUR_ACCESS_TOKEN
 Content-Type: application/json
@@ -324,10 +324,10 @@ Content-Type: application/json
 {
   "message": "Preview deployment"
 }
-\`\`\`
+```
 
 **Success Response (200):**
-\`\`\`json
+```json
 {
   "name": "projects/YOUR_PROJECT_ID/sites/YOUR_SITE_ID/releases/RELEASE_ID",
   "version": {
@@ -336,7 +336,7 @@ Content-Type: application/json
   },
   "type": "DEPLOY"
 }
-\`\`\`
+```
 
 **Your site is now live at:**
 - Live: `https://YOUR_SITE_ID.web.app`
@@ -355,10 +355,10 @@ Content-Type: application/json
 ### Common Headers
 
 All API requests require:
-\`\`\`http
+```http
 Authorization: Bearer YOUR_ACCESS_TOKEN
 Content-Type: application/json
-\`\`\`
+```
 
 ### Rate Limits
 
@@ -387,51 +387,51 @@ We provide ready-to-run deployment scripts in both Node.js and Python.
 **Location:** `scripts/firebase-deploy-standalone.js`
 
 **Usage:**
-\`\`\`bash
+```bash
 node scripts/firebase-deploy-standalone.js \
   --project=my-project-id \
   --token=ya29.a0... \
   --dir=./public \
   --channel=live
-\`\`\`
+```
 
 **Environment Variables:**
-\`\`\`bash
+```bash
 export FIREBASE_PROJECT_ID=my-project-id
 export FIREBASE_ACCESS_TOKEN=ya29.a0...
 export DEPLOY_DIR=./public
 export DEPLOY_CHANNEL=live
 
 node scripts/firebase-deploy-standalone.js
-\`\`\`
+```
 
 ### Python Script
 
 **Location:** `scripts/firebase-deploy-standalone.py`
 
 **Installation:**
-\`\`\`bash
+```bash
 pip install requests
-\`\`\`
+```
 
 **Usage:**
-\`\`\`bash
+```bash
 python3 scripts/firebase-deploy-standalone.py \
   --project=my-project-id \
   --token=ya29.a0... \
   --dir=./public \
   --channel=live
-\`\`\`
+```
 
 **Environment Variables:**
-\`\`\`bash
+```bash
 export FIREBASE_PROJECT_ID=my-project-id
 export FIREBASE_ACCESS_TOKEN=ya29.a0...
 export DEPLOY_DIR=./public
 export DEPLOY_CHANNEL=live
 
 python3 scripts/firebase-deploy-standalone.py
-\`\`\`
+```
 
 ---
 
@@ -440,14 +440,14 @@ python3 scripts/firebase-deploy-standalone.py
 ### Missing Permissions
 
 **Error:**
-\`\`\`json
+```json
 {
   "error": {
     "code": 403,
     "message": "PERMISSION_DENIED"
   }
 }
-\`\`\`
+```
 
 **Solution:**
 1. Verify user has Firebase Admin or Hosting Admin role
@@ -457,14 +457,14 @@ python3 scripts/firebase-deploy-standalone.py
 ### Invalid Token
 
 **Error:**
-\`\`\`json
+```json
 {
   "error": {
     "code": 401,
     "message": "Request had invalid authentication credentials"
   }
 }
-\`\`\`
+```
 
 **Solution:**
 1. Check if token expired (expires_in from OAuth response)
@@ -474,7 +474,7 @@ python3 scripts/firebase-deploy-standalone.py
 ### Project Not Found
 
 **Provide clear instructions:**
-\`\`\`
+```
 Firebase project 'my-project' does not exist.
 
 Please create it:
@@ -483,7 +483,7 @@ Please create it:
 3. Use project ID: my-project
 4. Enable Hosting in the console
 5. Return here and try again
-\`\`\`
+```
 
 ### File Upload Failures
 
@@ -510,7 +510,7 @@ Please create it:
 - Use short-lived access tokens with refresh tokens
 
 **Example MongoDB Storage:**
-\`\`\`javascript
+```javascript
 {
   projectId: ObjectId("..."),
   userId: "user123",
@@ -520,7 +520,7 @@ Please create it:
   createdAt: ISODate("2024-01-01T00:00:00Z"),
   updatedAt: ISODate("2024-01-01T00:00:00Z")
 }
-\`\`\`
+```
 
 ### OAuth Security
 
@@ -545,23 +545,23 @@ Firebase Hosting supports multiple deployment channels:
 ### Live Channel
 
 The production site accessible to all users:
-\`\`\`
+```
 https://YOUR_PROJECT_ID.web.app
-\`\`\`
+```
 
 ### Preview Channels
 
 Temporary deployments for testing:
-\`\`\`
+```
 https://YOUR_PROJECT_ID--preview.web.app
 https://YOUR_PROJECT_ID--pr-123.web.app
-\`\`\`
+```
 
 **Creating Preview Deployment:**
 Use the same workflow but change release endpoint to include channel:
-\`\`\`
+```
 POST .../channels/preview/releases?versionName=...
-\`\`\`
+```
 
 ---
 
@@ -569,7 +569,7 @@ POST .../channels/preview/releases?versionName=...
 
 ### Full Deployment Flow (JavaScript)
 
-\`\`\`javascript
+```javascript
 async function deployToFirebase(projectId, siteId, files, accessToken) {
   const headers = {
     'Authorization': `Bearer ${accessToken}`,
@@ -631,7 +631,7 @@ async function deployToFirebase(projectId, siteId, files, accessToken) {
 
   return `https://${siteId}.web.app`;
 }
-\`\`\`
+```
 
 ---
 

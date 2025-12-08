@@ -17,7 +17,7 @@ The deployment code was only sending the `branch` parameter without specifying t
 - `scripts/cloudflare-deploy.js` (Standalone deployment script)
 
 **Change:**
-\`\`\`javascript
+```javascript
 // Before
 body: JSON.stringify({
   branch: "main",
@@ -28,7 +28,7 @@ body: JSON.stringify({
   branch: "main",
   stage: "production", // Required: "production" or "preview"
 })
-\`\`\`
+```
 
 ### 2. Implemented Comprehensive Debug Logging
 Added detailed logging throughout the deployment process while maintaining security:
@@ -49,7 +49,7 @@ Added detailed logging throughout the deployment process while maintaining secur
 - File contents or paths (could expose structure)
 
 **Example Output:**
-\`\`\`
+```
 [Cloudflare] Creating deployment...
 [Cloudflare] DEBUG: Creating deployment for project: my-site
 [Cloudflare] DEBUG: Branch: main, Stage: production
@@ -61,7 +61,7 @@ Added detailed logging throughout the deployment process while maintaining secur
 [Cloudflare] DEBUG: Total files in manifest: 3
 [Cloudflare] DEBUG: Upload successful, received confirmation
 ✅ Files uploaded successfully
-\`\`\`
+```
 
 ### 3. Enhanced Error Handling
 - Better error messages with context

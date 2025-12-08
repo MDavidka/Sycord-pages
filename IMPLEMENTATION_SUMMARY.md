@@ -139,7 +139,7 @@ Both scripts:
 
 ## File Structure
 
-\`\`\`
+```
 /app/api/firebase/
 ├── auth/
 │   ├── initiate/route.ts      # OAuth initiation
@@ -162,7 +162,7 @@ Both scripts:
 ├── FIREBASE_REST_API_DEPLOYMENT.md # Complete API reference
 ├── FIREBASE_WORKFLOW_DIAGRAM.md    # Workflow diagrams
 └── HOW_TO_DEPLOY.md               # User guide
-\`\`\`
+```
 
 ## Testing Recommendations
 
