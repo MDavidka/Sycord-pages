@@ -324,13 +324,7 @@ export async function POST(request: Request) {
 </body>
 </html>`;
 
-        // Root index.html
-        files.push({
-            path: "/index.html",
-            content: content
-        });
-
-        // Nested folder index.html (per user request)
+        // ONLY Nested folder index.html (per user request: "1 nest system and 1 index file")
         files.push({
             path: "/my-site/index.html",
             content: content
@@ -349,14 +343,18 @@ export async function POST(request: Request) {
         });
     }
 
-    // Ensure index.html exists
-    const hasIndex = files.some(f => f.path === "/index.html");
-    if (!hasIndex && files.length > 0) {
-        const firstFile = files[0];
-        files.push({
-            path: "/index.html",
-            content: firstFile.content
-        });
+    // Ensure index.html exists (aliasing)
+    // SKIP aliasing if we are in fallback mode (pages.length === 0) to respect "1 index file" request
+    if (pages.length > 0) {
+        const hasIndex = files.some(f => f.path === "/index.html");
+        if (!hasIndex && files.length > 0) {
+            const firstFile = files[0];
+            console.log(`[Cloudflare] No index.html found. Aliasing ${firstFile.path} to /index.html`);
+            files.push({
+                path: "/index.html",
+                content: firstFile.content
+            });
+        }
     }
 
     // Add Debug Page
@@ -388,7 +386,12 @@ export async function POST(request: Request) {
     );
 
     const deploymentId = result.result?.id;
-    const deploymentUrl = `https://${cfProject.subdomain}`;
+
+    // Construct the correct URL based on deployment structure
+    let deploymentUrl = `https://${cfProject.subdomain}`;
+    if (pages.length === 0) {
+        deploymentUrl = `https://${cfProject.subdomain}/my-site/`;
+    }
 
     console.log(`[Cloudflare] Success! URL: ${deploymentUrl}`);
 
