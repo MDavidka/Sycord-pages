@@ -6,6 +6,18 @@ import { ObjectId } from "mongodb";
 import crypto from "crypto";
 import archiver from "archiver";
 import FormData from "form-data";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { promisify } from "util";
+
+// Promisify fs functions if not using fs.promises directly (Node 14+ usually has fs/promises but explicit is safe)
+const writeFile = promisify(fs.writeFile);
+const mkdir = promisify(fs.mkdir);
+const readdir = promisify(fs.readdir);
+const readFile = promisify(fs.readFile);
+const stat = promisify(fs.stat);
+const rm = promisify(fs.rm);
 
 /**
  * Cloudflare API Configuration
@@ -13,11 +25,25 @@ import FormData from "form-data";
 const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 
 /**
- * Interface for file objects used in deployment
+ * Helper to get MIME type based on extension
  */
-interface DeployFile {
-  path: string;
-  content: string | Buffer;
+function getMimeType(filename: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".txt": "text/plain",
+    ".xml": "application/xml",
+  };
+  return mimeTypes[ext] || "application/octet-stream";
 }
 
 /**
@@ -132,63 +158,92 @@ async function getOrCreateProject(
 }
 
 /**
- * Generates the Manifest and ZIP package for Cloudflare Direct Upload
+ * Generates the ZIP package from a directory on disk.
+ * Also performs rigorous validation and logging as requested.
  */
-async function generateDeploymentPackage(files: DeployFile[]) {
-  // Use SHA-256 for Cloudflare Pages (Direct Upload v2)
+async function generatePackageFromDisk(dirPath: string) {
   const manifest: Record<string, string> = {};
+  const debugFiles: Record<string, any> = {};
 
-  // Create ZIP with level 0 (STORE) to avoid compression issues and speed up build
+  // Create ZIP with level 0 (STORE)
   const archive = archiver("zip", { zlib: { level: 0 } });
-
   const chunks: Buffer[] = [];
+
+  // Recursive directory scanner
+  async function scan(currentDir: string, relativeRoot: string = "") {
+    const entries = await readdir(currentDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+      const relativePath = path.join(relativeRoot, entry.name).replace(/\\/g, "/"); // Ensure forward slashes
+
+      if (entry.isDirectory()) {
+        await scan(fullPath, relativePath);
+      } else if (entry.isFile()) {
+        const content = await readFile(fullPath);
+        const stats = await stat(fullPath);
+
+        // --- VALIDATION & LOGGING START ---
+
+        // 1. Check for empty files
+        if (content.length === 0) {
+          console.error(`[Cloudflare] CRITICAL: File ${relativePath} is 0 bytes! This causes blank pages.`);
+          throw new Error(`File ${relativePath} is empty. Deployment aborted.`);
+        }
+
+        // 2. Compute Hashes
+        // Cloudflare Pages Direct Upload v2 uses SHA-256
+        const sha256 = crypto.createHash("sha256").update(content).digest("hex");
+        const md5 = crypto.createHash("md5").update(content).digest("hex");
+
+        // 3. Prepare Manifest Key (Must be absolute path /foo.html)
+        const manifestKey = `/${relativePath}`;
+        manifest[manifestKey] = sha256;
+
+        // 4. Debug Object Construction (User requested { manifest, files })
+        const base64Preview = content.toString("base64").substring(0, 50) + "...";
+        debugFiles[relativePath] = {
+          size: stats.size,
+          sha256: sha256,
+          md5: md5, // Included for user verification
+          mime: getMimeType(entry.name),
+          preview_base64: base64Preview,
+          preview_text: content.length < 100 ? content.toString("utf8") : content.toString("utf8").substring(0, 100) + "..."
+        };
+
+        // Add to ZIP
+        archive.append(content, { name: relativePath });
+
+        // --- VALIDATION & LOGGING END ---
+      }
+    }
+  }
+
+  // Execute Scan
+  await scan(dirPath);
+
+  // LOGGING: Detailed Payload Inspection
+  const payloadDebug = {
+    manifest: manifest,
+    files: debugFiles
+  };
+  console.log("[Cloudflare] --- DEPLOYMENT PAYLOAD DEBUG ---");
+  console.log(JSON.stringify(payloadDebug, null, 2));
+  console.log("[Cloudflare] -------------------------------");
+
+  // Validate Index
+  if (!manifest["/index.html"]) {
+    console.error("[Cloudflare] CRITICAL: index.html is missing from manifest!");
+    throw new Error("Missing index.html in deployment package.");
+  }
 
   return new Promise<{ manifest: string; zipBuffer: Buffer }>((resolve, reject) => {
     archive.on("error", (err) => reject(err));
-
-    // Capture the zip output in memory
     archive.on("data", (chunk) => chunks.push(chunk));
-
     archive.on("end", () => {
       const zipBuffer = Buffer.concat(chunks);
-      // Cloudflare expects manifest as a string in the multipart body (or blob)
-      // The manifest entries must be "path": "hash"
-      // Note: Some v2 implementations use { key: hash }, others { path: hash }
-      // The most standard v2 is key (path) -> value (hash)
       resolve({ manifest: JSON.stringify(manifest), zipBuffer });
     });
-
-    // Process each file
-    files.forEach((file) => {
-      // Normalize path: Ensure it starts with / for manifest
-      let manifestPath = file.path.startsWith("/") ? file.path : `/${file.path}`;
-
-      // Convert content to Buffer if it's string
-      let contentBuffer = Buffer.isBuffer(file.content)
-        ? file.content
-        : Buffer.from(file.content);
-
-      // Sanity check: Empty files cause issues
-      if (contentBuffer.length === 0) {
-        console.warn(`[Cloudflare] Warning: File ${manifestPath} is empty. Injecting placeholder.`);
-        contentBuffer = Buffer.from("<!-- Empty Page -->");
-      }
-
-      // Compute SHA-256 (Critical for Cloudflare verification)
-      const hash = crypto.createHash("sha256").update(contentBuffer).digest("hex");
-
-      // Add to manifest
-      manifest[manifestPath] = hash;
-
-      console.log(`[Cloudflare] Pack: ${manifestPath} | Size: ${contentBuffer.length} | Hash: ${hash.substring(0, 8)}...`);
-
-      // Add to ZIP
-      // Zip paths should usually be relative (no leading slash), but let's be safe.
-      // archiver handles names well.
-      const zipName = manifestPath.startsWith("/") ? manifestPath.slice(1) : manifestPath;
-      archive.append(contentBuffer, { name: zipName });
-    });
-
     archive.finalize();
   });
 }
@@ -203,18 +258,14 @@ async function uploadToCloudflare(
   manifestString: string,
   zipBuffer: Buffer
 ) {
-  // Use 'form-data' package
   const form = new FormData();
 
   // 1. Append Manifest
-  // Cloudflare requires "manifest" part with Content-Type: application/json
   form.append("manifest", manifestString, {
     contentType: "application/json",
   });
 
   // 2. Append ZIP file
-  // Cloudflare requires "file" part with Content-Type: application/zip
-  // Note: Some docs say "files", but "file" is common for direct upload v2 bundle
   form.append("file", zipBuffer, {
     filename: "site.zip",
     contentType: "application/zip",
@@ -249,6 +300,8 @@ async function uploadToCloudflare(
  * POST /api/cloudflare/deploy
  */
 export async function POST(request: Request) {
+  let tempDir = "";
+
   try {
     const session = await getServerSession(authOptions);
 
@@ -300,20 +353,20 @@ export async function POST(request: Request) {
         .substring(0, 58);
     }
 
-    // 4. Collect Files
+    // 4. PREPARE TEMPORARY DIRECTORY (Disk-based workflow)
+    tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "cf-deploy-"));
+    console.log(`[Cloudflare] Created temp dir: ${tempDir}`);
+
+    // 5. Fetch Pages from DB and Write to Disk
     const pages = await db
       .collection("pages")
       .find({ projectId: new ObjectId(projectId) })
       .toArray();
 
-    const files: DeployFile[] = [];
-
-    // Fallback content if no pages
     if (pages.length === 0) {
+        // Create default index.html on disk
         const title = project.businessName || project.name || "New Site";
-        files.push({
-            path: "/index.html",
-            content: `<!DOCTYPE html>
+        const content = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -331,40 +384,53 @@ export async function POST(request: Request) {
         <p>Your site is ready. Use the AI Builder to add content.</p>
     </div>
 </body>
-</html>`
-        });
+</html>`;
+        await writeFile(path.join(tempDir, "index.html"), content, "utf8");
     } else {
-        pages.forEach(page => {
+        for (const page of pages) {
             const fileName = page.name === "index" ? "index.html" : `${page.name}.html`;
-            const content = (page.content && page.content.trim().length > 0)
-                ? page.content
-                : `<!DOCTYPE html><html><body><h1>${page.name}</h1><p>Content coming soon.</p></body></html>`;
-            files.push({
-                path: `/${fileName}`,
-                content: content
-            });
-        });
+            const filePath = path.join(tempDir, fileName);
+
+            // Validate DB Content before writing
+            let content = page.content;
+            if (!content || content.trim().length === 0) {
+                 console.warn(`[Cloudflare] DB content empty for ${fileName}. Using placeholder.`);
+                 content = `<!DOCTYPE html><html><body><h1>${page.name}</h1><p>Content coming soon.</p></body></html>`;
+            }
+
+            // Ensure directory exists if filename contains paths (though currently pages are flat)
+            // But just in case user has "blog/index" as name
+            await mkdir(path.dirname(filePath), { recursive: true });
+
+            await writeFile(filePath, content, "utf8");
+        }
     }
 
-    // Ensure index.html exists (aliasing)
-    const hasIndex = files.some(f => f.path === "/index.html");
-    if (!hasIndex && files.length > 0) {
-        const firstFile = files[0];
-        console.log(`[Cloudflare] No index.html found. Aliasing ${firstFile.path} to /index.html`);
-        files.push({
-            path: "/index.html",
-            content: firstFile.content
-        });
+    // Ensure index.html exists in temp dir (aliasing check)
+    try {
+        await stat(path.join(tempDir, "index.html"));
+    } catch (e) {
+        // If index.html missing, look for *any* html file and copy it
+        const files = await readdir(tempDir);
+        const firstHtml = files.find(f => f.endsWith(".html"));
+        if (firstHtml) {
+            console.log(`[Cloudflare] No index.html found. Copying ${firstHtml} to index.html`);
+            const content = await readFile(path.join(tempDir, firstHtml));
+            await writeFile(path.join(tempDir, "index.html"), content);
+        } else {
+            // Write a fallback
+            await writeFile(path.join(tempDir, "index.html"), "<h1>Site Under Construction</h1>", "utf8");
+        }
     }
 
-    // 5. Get Project Details
+    // 6. Get Project Details from Cloudflare
     const cfProject = await getOrCreateProject(tokenDoc.accountId, cfProjectName, tokenDoc.apiToken);
     console.log(`[Cloudflare] Target: ${cfProject.name} (${cfProject.subdomain})`);
 
-    // 6. Generate Package (Manifest + ZIP)
-    const { manifest, zipBuffer } = await generateDeploymentPackage(files);
+    // 7. Generate Package from Disk (includes validation)
+    const { manifest, zipBuffer } = await generatePackageFromDisk(tempDir);
 
-    // 7. Upload
+    // 8. Upload
     const result: any = await uploadToCloudflare(
         tokenDoc.accountId,
         cfProjectName,
@@ -378,7 +444,7 @@ export async function POST(request: Request) {
 
     console.log(`[Cloudflare] Success! URL: ${deploymentUrl}`);
 
-    // 8. Update DB
+    // 9. Update DB
     await db.collection("projects").updateOne(
       { _id: new ObjectId(projectId) },
       {
@@ -404,5 +470,15 @@ export async function POST(request: Request) {
       { error: error.message || "Deployment failed" },
       { status: 500 }
     );
+  } finally {
+      // Clean up temp dir
+      if (tempDir) {
+          try {
+              await rm(tempDir, { recursive: true, force: true });
+              console.log(`[Cloudflare] Cleaned up temp dir: ${tempDir}`);
+          } catch (e) {
+              console.error(`[Cloudflare] Failed to clean temp dir: ${e}`);
+          }
+      }
   }
 }
