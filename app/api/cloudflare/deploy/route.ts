@@ -41,8 +41,6 @@ async function cloudflareApiCall(
   let lastError: any;
   for (let i = 0; i < retries; i++) {
     try {
-      // console.log(`[Cloudflare] DEBUG: API call attempt ${i + 1}/${retries} to ${url}`);
-      
       const response = await fetch(url, { ...options, headers });
 
       // Don't retry on auth errors (401, 403) or 4xx client errors (unless it's rate limiting)
@@ -56,7 +54,6 @@ async function cloudflareApiCall(
       }
 
       if (response.status < 500 && response.status !== 429) {
-          // Client error, usually don't retry unless we know it's transient
           return response;
       }
 
@@ -138,12 +135,15 @@ async function getOrCreateProject(
  * Generates the Manifest and ZIP package for Cloudflare Direct Upload
  */
 async function generateDeploymentPackage(files: DeployFile[]) {
-  const manifest: Record<string, { size: number; sha1: string }> = {};
-  const archive = archiver("zip", { zlib: { level: 0 } }); // No compression for debugging
+  // Use SHA-256 for Cloudflare Pages (Direct Upload v2)
+  const manifest: Record<string, string> = {};
+
+  // Create ZIP with level 0 (STORE) to avoid compression issues and speed up build
+  const archive = archiver("zip", { zlib: { level: 0 } });
 
   const chunks: Buffer[] = [];
 
-  return new Promise<{ manifest: any; zipBuffer: Buffer }>((resolve, reject) => {
+  return new Promise<{ manifest: string; zipBuffer: Buffer }>((resolve, reject) => {
     archive.on("error", (err) => reject(err));
 
     // Capture the zip output in memory
@@ -151,39 +151,42 @@ async function generateDeploymentPackage(files: DeployFile[]) {
 
     archive.on("end", () => {
       const zipBuffer = Buffer.concat(chunks);
-      resolve({ manifest, zipBuffer });
+      // Cloudflare expects manifest as a string in the multipart body (or blob)
+      // The manifest entries must be "path": "hash"
+      // Note: Some v2 implementations use { key: hash }, others { path: hash }
+      // The most standard v2 is key (path) -> value (hash)
+      resolve({ manifest: JSON.stringify(manifest), zipBuffer });
     });
 
     // Process each file
     files.forEach((file) => {
-      // Normalize path: Ensure it starts with /
-      let cleanPath = file.path.startsWith("/") ? file.path : `/${file.path}`;
+      // Normalize path: Ensure it starts with / for manifest
+      let manifestPath = file.path.startsWith("/") ? file.path : `/${file.path}`;
 
       // Convert content to Buffer if it's string
       let contentBuffer = Buffer.isBuffer(file.content)
         ? file.content
         : Buffer.from(file.content);
 
-      // Verify content is not empty
+      // Sanity check: Empty files cause issues
       if (contentBuffer.length === 0) {
-        console.warn(`[Cloudflare] Warning: File ${cleanPath} is empty. Injecting placeholder.`);
+        console.warn(`[Cloudflare] Warning: File ${manifestPath} is empty. Injecting placeholder.`);
         contentBuffer = Buffer.from("<!-- Empty Page -->");
       }
 
-      console.log(`[Cloudflare] Adding file: ${cleanPath} (${contentBuffer.length} bytes)`);
-
-      // Compute SHA1 (Required by Cloudflare)
-      const sha1 = crypto.createHash("sha1").update(contentBuffer).digest("hex");
+      // Compute SHA-256 (Critical for Cloudflare verification)
+      const hash = crypto.createHash("sha256").update(contentBuffer).digest("hex");
 
       // Add to manifest
-      manifest[cleanPath] = {
-        size: contentBuffer.length,
-        sha1: sha1,
-      };
+      manifest[manifestPath] = hash;
 
-      // Add to ZIP (relative path)
-      const zipPath = cleanPath.startsWith("/") ? cleanPath.slice(1) : cleanPath;
-      archive.append(contentBuffer, { name: zipPath });
+      console.log(`[Cloudflare] Pack: ${manifestPath} | Size: ${contentBuffer.length} | Hash: ${hash.substring(0, 8)}...`);
+
+      // Add to ZIP
+      // Zip paths should usually be relative (no leading slash), but let's be safe.
+      // archiver handles names well.
+      const zipName = manifestPath.startsWith("/") ? manifestPath.slice(1) : manifestPath;
+      archive.append(contentBuffer, { name: zipName });
     });
 
     archive.finalize();
@@ -197,20 +200,21 @@ async function uploadToCloudflare(
   accountId: string,
   projectName: string,
   apiToken: string,
-  manifest: any,
+  manifestString: string,
   zipBuffer: Buffer
 ) {
-  // Use 'form-data' package to create a stream/buffer with correct headers
+  // Use 'form-data' package
   const form = new FormData();
 
   // 1. Append Manifest
-  // Cloudflare requires the part named "manifest" to have Content-Type: application/json
-  form.append("manifest", JSON.stringify(manifest), {
+  // Cloudflare requires "manifest" part with Content-Type: application/json
+  form.append("manifest", manifestString, {
     contentType: "application/json",
   });
 
   // 2. Append ZIP file
-  // Cloudflare requires the part named "file" to have Content-Type: application/zip
+  // Cloudflare requires "file" part with Content-Type: application/zip
+  // Note: Some docs say "files", but "file" is common for direct upload v2 bundle
   form.append("file", zipBuffer, {
     filename: "site.zip",
     contentType: "application/zip",
@@ -218,15 +222,16 @@ async function uploadToCloudflare(
 
   const url = `${CLOUDFLARE_API_BASE}/accounts/${accountId}/pages/projects/${projectName}/deployments`;
 
-  // Convert form to buffer to avoid stream issues with fetch in some environments
   const body = form.getBuffer();
-  const headers = form.getHeaders(); // Get multipart headers with boundary
+  const headers = form.getHeaders();
+
+  console.log(`[Cloudflare] Uploading multipart payload. Manifest len: ${manifestString.length}, Zip len: ${zipBuffer.length}`);
 
   const response = await cloudflareApiCall(
     url,
     {
       method: "POST",
-      body: body as any, // Cast to any to satisfy RequestInit type (Buffer is valid)
+      body: body as any,
       headers: headers,
     },
     apiToken
@@ -303,8 +308,8 @@ export async function POST(request: Request) {
 
     const files: DeployFile[] = [];
 
+    // Fallback content if no pages
     if (pages.length === 0) {
-        // Fallback: Default "Start Imagining" page
         const title = project.businessName || project.name || "New Site";
         files.push({
             path: "/index.html",
@@ -314,75 +319,26 @@ export async function POST(request: Request) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title} - Start Imagining</title>
-    <meta name="description" content="Your new site is ready to be built.">
     <style>
-        :root {
-            --bg-color: #ffffff;
-            --text-color: #0f172a;
-            --accent-color: #3b82f6;
-        }
-        body {
-            font-family: -apple-system, system-ui, sans-serif;
-            background: var(--bg-color);
-            color: var(--text-color);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 2rem;
-            text-align: center;
-        }
-        main {
-            max-width: 600px;
-            padding: 3rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            background: white;
-            border: 1px solid #e2e8f0;
-        }
-        h1 {
-            font-size: 2.5rem;
-            margin: 0 0 1rem;
-            color: var(--text-color);
-            font-weight: 800;
-        }
-        p {
-            font-size: 1.125rem;
-            color: #64748b;
-            line-height: 1.6;
-            margin-bottom: 2rem;
-        }
-        .badge {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            background: #eff6ff;
-            color: var(--accent-color);
-            border-radius: 9999px;
-            font-weight: 600;
-            font-size: 0.875rem;
-        }
+        body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f0f9ff; color: #0f172a; }
+        .card { background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
+        h1 { margin: 0 0 1rem; color: #3b82f6; }
     </style>
 </head>
 <body>
-    <main>
-        <h1>Welcome to ${title}</h1>
-        <p>This is your new website, deployed instantly via Cloudflare Pages. Use the AI Builder to start adding content and bringing your ideas to life.</p>
-        <div class="badge">Deployment Successful</div>
-    </main>
+    <div class="card">
+        <h1>${title}</h1>
+        <p>Your site is ready. Use the AI Builder to add content.</p>
+    </div>
 </body>
 </html>`
         });
     } else {
         pages.forEach(page => {
             const fileName = page.name === "index" ? "index.html" : `${page.name}.html`;
-            // Check for empty content and provide fallback
-            const hasContent = page.content && page.content.trim().length > 0;
-            const content = hasContent
+            const content = (page.content && page.content.trim().length > 0)
                 ? page.content
-                : `<!DOCTYPE html><html><head><title>${page.name}</title></head><body><h1>${page.name}</h1><p>This page is currently empty.</p></body></html>`;
-
+                : `<!DOCTYPE html><html><body><h1>${page.name}</h1><p>Content coming soon.</p></body></html>`;
             files.push({
                 path: `/${fileName}`,
                 content: content
@@ -390,8 +346,7 @@ export async function POST(request: Request) {
         });
     }
 
-    // CRITICAL FIX: Ensure index.html exists
-    // If files exist but no index.html (e.g. only "home.html"), aliasing is required for the root URL to work.
+    // Ensure index.html exists (aliasing)
     const hasIndex = files.some(f => f.path === "/index.html");
     if (!hasIndex && files.length > 0) {
         const firstFile = files[0];
@@ -402,19 +357,14 @@ export async function POST(request: Request) {
         });
     }
 
-    // 5. Ensure Project Exists & Get Details
+    // 5. Get Project Details
     const cfProject = await getOrCreateProject(tokenDoc.accountId, cfProjectName, tokenDoc.apiToken);
-
-    const liveSubdomain = cfProject.subdomain;
-    console.log(`[Cloudflare] Project Subdomain: ${liveSubdomain}`);
+    console.log(`[Cloudflare] Target: ${cfProject.name} (${cfProject.subdomain})`);
 
     // 6. Generate Package (Manifest + ZIP)
-    console.log(`[Cloudflare] Generating package for ${cfProjectName}...`);
     const { manifest, zipBuffer } = await generateDeploymentPackage(files);
-    console.log(`[Cloudflare] ZIP size: ${zipBuffer.length} bytes`);
 
     // 7. Upload
-    console.log(`[Cloudflare] Uploading to Cloudflare...`);
     const result: any = await uploadToCloudflare(
         tokenDoc.accountId,
         cfProjectName,
@@ -424,9 +374,9 @@ export async function POST(request: Request) {
     );
 
     const deploymentId = result.result?.id;
-    const deploymentUrl = `https://${liveSubdomain}`;
+    const deploymentUrl = `https://${cfProject.subdomain}`;
 
-    console.log(`[Cloudflare] Deployment Success: ${deploymentUrl}`);
+    console.log(`[Cloudflare] Success! URL: ${deploymentUrl}`);
 
     // 8. Update DB
     await db.collection("projects").updateOne(
