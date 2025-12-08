@@ -112,7 +112,7 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
       addLog("🚀 Starting Firebase deployment")
       addLog("🔍 Checking authentication...")
 
-      const response = await fetch("/api/firebase/deploy-cli", {
+      const response = await fetch("/api/firebase/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId }),
@@ -120,15 +120,29 @@ export function FirebaseDeployment({ projectId, projectName }: FirebaseDeploymen
 
       if (!response.ok) {
         const errorData = await response.json()
+
+        // Handle project/hosting not found errors with instructions
+        if (response.status === 404 && errorData.instructions) {
+          addLog("⚠️ " + errorData.message)
+          addLog("📋 Instructions:")
+          errorData.instructions.forEach((instruction: string) => {
+            addLog("   " + instruction)
+          })
+          throw new Error(errorData.message + "\n\nPlease check the deployment logs for setup instructions.")
+        }
+
         throw new Error(errorData.message || "Deployment failed")
       }
 
       const data = await response.json()
 
       addLog("📦 Files prepared successfully")
-      addLog("☁️ Uploading to Firebase Hosting...")
+      addLog("☁️ Creating hosting version...")
+      addLog("📤 Uploading files to Firebase Hosting...")
       addLog("✅ Files uploaded successfully")
-      addLog("🎉 Deployment finalized")
+      addLog("🔨 Finalizing version...")
+      addLog("🚀 Creating release...")
+      addLog("🎉 Deployment completed!")
       addLog(`🌐 Site is live at: ${data.url}`)
 
       setDeploymentUrl(data.url)

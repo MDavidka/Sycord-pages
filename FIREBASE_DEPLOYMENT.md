@@ -2,6 +2,18 @@
 
 This document explains how the Firebase deployment integration works in Sycord Pages.
 
+## ⚠️ Important: REST API Implementation
+
+As of December 2024, this implementation uses **Firebase Hosting REST API** directly, without requiring the Firebase CLI. This provides:
+
+- ✅ No Firebase CLI dependency
+- ✅ Works in any environment
+- ✅ Full control over deployment process
+- ✅ Easy to integrate into CI/CD
+- ✅ Multi-user support (each user deploys to their own Firebase project)
+
+For detailed REST API documentation, see: [FIREBASE_REST_API_DEPLOYMENT.md](./FIREBASE_REST_API_DEPLOYMENT.md)
+
 ## Overview
 
 The Firebase deployment feature allows users to deploy their AI-generated websites directly to Firebase Hosting with just a few clicks. The deployment process includes:
@@ -16,7 +28,7 @@ The Firebase deployment feature allows users to deploy their AI-generated websit
 
 ### Flow Diagram
 
-\`\`\`
+```
 User clicks "Authenticate with Google"
   ↓
 Redirect to /api/firebase/auth/initiate
@@ -35,18 +47,33 @@ Redirect back to project page with success message
   ↓
 User clicks "Deploy to Firebase"
   ↓
-POST to /api/firebase/deploy
+POST to /api/firebase/deploy (REST API implementation)
   ↓
-Check if Firebase project exists → Create if not
+Check if Firebase project exists (via REST API)
   ↓
-Create hosting version
+Check if Hosting is initialized (via REST API)
   ↓
-Upload all files using populateFiles API
+Create hosting version (via REST API)
   ↓
-Finalize version
+Upload all files using populateFiles REST API
   ↓
-Create release → Site goes live!
-\`\`\`
+Finalize version (via REST API)
+  ↓
+Create release (via REST API) → Site goes live!
+```
+
+### REST API Workflow
+
+The deployment uses Firebase Hosting REST API exclusively:
+
+1. **Project Detection**: `GET /v1beta1/projects/{projectId}`
+2. **Hosting Check**: `GET /v1beta1/projects/{projectId}/sites/{siteId}`
+3. **Version Creation**: `POST /v1beta1/projects/{projectId}/sites/{siteId}/versions`
+4. **File Upload**: `POST /v1beta1/{versionName}:populateFiles`
+5. **Finalization**: `PATCH /v1beta1/{versionName}?update_mask=status`
+6. **Release**: `POST /v1beta1/projects/{projectId}/sites/{siteId}/releases`
+
+For detailed API documentation, see [FIREBASE_REST_API_DEPLOYMENT.md](./FIREBASE_REST_API_DEPLOYMENT.md)
 
 ## API Endpoints
 
@@ -121,24 +148,26 @@ Refreshes an expired access token using the refresh token.
 
 #### `POST /api/firebase/deploy`
 
-Main deployment endpoint that handles the entire Firebase deployment process.
+Main deployment endpoint that handles the entire Firebase deployment process using REST API.
 
 **Request Body:**
 \`\`\`json
 {
   "projectId": "string",
-  "firebaseProjectId": "string" (optional)
+  "firebaseProjectId": "string" (optional),
+  "channel": "string" (optional, default: "live")
 }
 \`\`\`
 
 **Process:**
 1. Get valid access token (refresh if needed)
-2. Check if Firebase project exists
-3. Create Firebase project if needed
-4. Create hosting version
-5. Upload files to Firebase Hosting
-6. Finalize version
-7. Create release
+2. Check if Firebase project exists (via REST API)
+3. Check if Hosting is initialized (via REST API)
+4. If project/hosting doesn't exist, return instructions for manual setup
+5. Create hosting version (via REST API)
+6. Upload files to Firebase Hosting (via populateFiles REST API)
+7. Finalize version (via REST API)
+8. Create release (via REST API)
 
 **Response (Success):**
 \`\`\`json
@@ -147,8 +176,27 @@ Main deployment endpoint that handles the entire Firebase deployment process.
   "message": "Deployment successful",
   "url": "https://your-project.web.app",
   "projectId": "your-project-id",
-  "versionName": "sites/your-project/versions/xxx",
-  "releaseName": "sites/your-project/releases/xxx"
+  "siteId": "your-site-id",
+  "versionName": "projects/xxx/sites/xxx/versions/xxx",
+  "releaseName": "projects/xxx/sites/xxx/releases/xxx",
+  "channel": "live"
+}
+\`\`\`
+
+**Response (Project Not Found - 404):**
+\`\`\`json
+{
+  "message": "Firebase project does not exist",
+  "details": "The Firebase project 'xxx' does not exist...",
+  "instructions": [
+    "1. Go to https://console.firebase.google.com/",
+    "2. Click 'Add project' or select an existing project",
+    "3. Use project ID: xxx",
+    "4. Navigate to 'Hosting' in the left menu",
+    "5. Click 'Get started' to initialize Hosting",
+    "6. Return here and try deploying again"
+  ],
+  "helpUrl": "https://console.firebase.google.com/"
 }
 \`\`\`
 
@@ -156,7 +204,8 @@ Main deployment endpoint that handles the entire Firebase deployment process.
 \`\`\`json
 {
   "message": "Error message",
-  "error": "Detailed error"
+  "details": "Detailed error description",
+  "error": "Technical error details"
 }
 \`\`\`
 
@@ -407,9 +456,47 @@ Potential improvements:
 1. **Custom Domain Support:** Allow users to use their own domains
 2. **Deployment History:** Track and rollback to previous deployments
 3. **Build Optimization:** Minify HTML/CSS/JS before deployment
-4. **Preview Deployments:** Deploy to preview URLs before going live
+4. **Preview Deployments:** Deploy to preview URLs before going live (already supported via `channel` parameter)
 5. **Deployment Analytics:** Track page views and performance
 6. **Multi-region Hosting:** Deploy to multiple regions for better performance
+
+## Standalone Deployment Scripts
+
+For users who want to deploy outside the web application, we provide standalone scripts:
+
+### Node.js Script
+
+**Location:** `scripts/firebase-deploy-standalone.js`
+
+**Usage:**
+```bash
+node scripts/firebase-deploy-standalone.js \
+  --project=my-project-id \
+  --token=ya29.a0... \
+  --dir=./public \
+  --channel=live
+```
+
+### Python Script
+
+**Location:** `scripts/firebase-deploy-standalone.py`
+
+**Usage:**
+```bash
+python3 scripts/firebase-deploy-standalone.py \
+  --project=my-project-id \
+  --token=ya29.a0... \
+  --dir=./public \
+  --channel=live
+```
+
+Both scripts:
+- Use Firebase Hosting REST API only (no CLI required)
+- Support deployment channels (live, preview, custom)
+- Provide clear error messages and setup instructions
+- Work on any platform with Node.js/Python installed
+
+See [FIREBASE_REST_API_DEPLOYMENT.md](./FIREBASE_REST_API_DEPLOYMENT.md) for complete usage documentation.
 
 ## References
 
