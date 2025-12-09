@@ -369,6 +369,52 @@ export async function POST(request: Request) {
         content: "/*\n  Content-Type: text/html; charset=utf-8\n"
     });
 
+    // --- WORKER GENERATION ---
+    // Generate _worker.js to guarantee content serving (Advanced Mode)
+    let indexContent = "";
+    // Find the main content to embed
+    const fallbackIndex = files.find(f => f.path === "/my-site/index.html");
+    const rootIndex = files.find(f => f.path === "/index.html");
+
+    if (rootIndex) {
+        indexContent = rootIndex.content.toString();
+    } else if (fallbackIndex) {
+        indexContent = fallbackIndex.content.toString();
+    } else if (files.length > 0) {
+        indexContent = files[0].content.toString();
+    }
+
+    if (indexContent) {
+        // Escape content for template literal
+        const escapedContent = indexContent.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+
+        const workerScript = `
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    // Explicitly serve index content for root paths
+    if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname.startsWith("/my-site")) {
+      return new Response(\`${escapedContent}\`, {
+        headers: { "content-type": "text/html; charset=utf-8" }
+      });
+    }
+    // Try serving other static assets
+    try {
+      return await env.ASSETS.fetch(request);
+    } catch {
+      return new Response("Not Found (Worker)", { status: 404 });
+    }
+  }
+};`;
+
+        files.push({
+            path: "/_worker.js",
+            content: workerScript
+        });
+        console.log("[Cloudflare] Generated _worker.js for Advanced Mode");
+    }
+    // -------------------------
+
     // 5. Get Project Details
     const cfProject = await getOrCreateProject(tokenDoc.accountId, cfProjectName, tokenDoc.apiToken);
     console.log(`[Cloudflare] Target: ${cfProject.name} (${cfProject.subdomain})`);
