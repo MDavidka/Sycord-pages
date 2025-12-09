@@ -38,7 +38,8 @@ import {
   History,
   FileText,
   CreditCard,
-  Rocket
+  Rocket,
+  Home
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 
@@ -104,7 +105,7 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy">("styles")
+  const [activeTab, setActiveTab] = useState<"home" | "styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy">("home")
   const [activeSubTab, setActiveSubTab] = useState<"settings" | "store" | "pages">("settings")
 
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
@@ -378,6 +379,7 @@ export default function SiteSettingsPage() {
     {
       title: "Home",
       items: [
+        { id: "home", label: "Dashboard", icon: Home },
         { id: "styles", label: "Themes", icon: Palette },
         { id: "ai", label: "AI Builder", icon: Zap },
         { id: "pages", label: "Pages", icon: FileText },
@@ -495,6 +497,7 @@ export default function SiteSettingsPage() {
       </aside>
 
       <main className="transition-all duration-300 md:ml-56 min-h-screen flex flex-col">
+        {/* Preview Area (Always Visible) */}
         <div className="relative w-full h-[30vh] md:h-[50vh] bg-black overflow-hidden flex-shrink-0">
           <div className="absolute top-4 left-4 z-30 hidden md:block">
             <Button
@@ -615,6 +618,65 @@ export default function SiteSettingsPage() {
         </div>
 
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
+          {activeTab === "home" && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-bold">Deployment</h2>
+                        </div>
+                        <CloudflareDeployment projectId={id} projectName={project?.businessName || "Site"} />
+                    </div>
+
+                    <div className="space-y-6">
+                        <h2 className="text-2xl font-bold">Domain & Status</h2>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Worker Domains</CardTitle>
+                                <CardDescription>Manage your site's accessible URLs.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {project?.cloudflareUrl ? (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label>Primary Worker URL</Label>
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <div className="p-3 bg-muted rounded border font-mono text-sm flex-1 truncate">
+                                                    {project.cloudflareUrl}
+                                                </div>
+                                                <Button size="icon" variant="outline" asChild>
+                                                    <a href={project.cloudflareUrl} target="_blank" rel="noopener noreferrer">
+                                                        <ExternalLink className="h-4 w-4" />
+                                                    </a>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <Alert>
+                                            <Info className="h-4 w-4" />
+                                            <AlertDescription>
+                                                To add a custom domain (e.g. yoursite.com), configure it in the Cloudflare Dashboard under <strong>Workers & Pages &gt; {project?.cloudflareProjectName} &gt; Settings &gt; Domains & Routes</strong>.
+                                            </AlertDescription>
+                                        </Alert>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-6 text-muted-foreground">
+                                        Deploy your site to see domain settings.
+                                    </div>
+                                )}
+                            </CardContent>
+                            <CardFooter>
+                                <Button variant="outline" asChild className="w-full">
+                                    <a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">
+                                        Open Cloudflare Dashboard <ExternalLink className="ml-2 h-4 w-4" />
+                                    </a>
+                                </Button>
+                            </CardFooter>
+                        </Card>
+                    </div>
+                </div>
+            </div>
+          )}
+
           {activeTab === "styles" && (
             <div className="space-y-6">
               {/* Website Card / Header */}
