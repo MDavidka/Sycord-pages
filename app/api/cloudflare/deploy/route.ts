@@ -392,18 +392,39 @@ export async function POST(request: Request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    // Explicitly serve index content for root paths
+
+    // 1. API Handling (Stub)
+    if (url.pathname.startsWith('/api/')) {
+        return new Response(JSON.stringify({
+            message: "API is working",
+            time: new Date().toISOString(),
+            path: url.pathname
+        }), {
+            headers: { "Content-Type": "application/json" }
+        });
+    }
+
+    // 2. Explicitly serve index content for root paths (Optimization)
     if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname.startsWith("/my-site")) {
       return new Response(\`${escapedContent}\`, {
         headers: { "content-type": "text/html; charset=utf-8" }
       });
     }
-    // Try serving other static assets
+
+    // 3. Try serving other static assets (e.g. style.css)
     try {
-      return await env.ASSETS.fetch(request);
-    } catch {
-      return new Response("Not Found (Worker)", { status: 404 });
+      const asset = await env.ASSETS.fetch(request);
+      if (asset.status < 400) {
+          return asset;
+      }
+    } catch (e) {
+      // Fall through to SPA fallback
     }
+
+    // 4. SPA Fallback (Serve Embedded Index for unknown routes)
+    return new Response(\`${escapedContent}\`, {
+      headers: { "content-type": "text/html; charset=utf-8" }
+    });
   }
 };`;
 
@@ -411,7 +432,7 @@ export default {
             path: "/_worker.js",
             content: workerScript
         });
-        console.log("[Cloudflare] Generated _worker.js for Advanced Mode");
+        console.log("[Cloudflare] Generated _worker.js for Advanced Mode (API + SPA)");
     }
     // -------------------------
 
