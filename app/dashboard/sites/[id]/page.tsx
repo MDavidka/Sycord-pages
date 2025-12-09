@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
 import { CloudflareDeployment } from "@/components/cloudflare-deployment"
 import {
@@ -16,6 +17,7 @@ import {
   Plus,
   ExternalLink,
   AlertCircle,
+  Info,
   Loader2,
   ArrowLeft,
   Palette,
