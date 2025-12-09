@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
 import { CloudflareDeployment } from "@/components/cloudflare-deployment"
+import { CloudflareDomainManager } from "@/components/cloudflare-domain-manager"
 import {
   Trash2,
   Plus,
@@ -664,12 +665,6 @@ export default function SiteSettingsPage() {
                                                 </Button>
                                             </div>
                                         </div>
-                                        <Alert>
-                                            <Info className="h-4 w-4" />
-                                            <AlertDescription>
-                                                To add a custom domain (e.g. yoursite.com), configure it in the Cloudflare Dashboard under <strong>Workers & Pages &gt; {project?.cloudflareProjectName} &gt; Settings &gt; Domains & Routes</strong>.
-                                            </AlertDescription>
-                                        </Alert>
                                     </div>
                                 ) : (
                                     <div className="text-center py-6 text-muted-foreground">
@@ -677,14 +672,9 @@ export default function SiteSettingsPage() {
                                     </div>
                                 )}
                             </CardContent>
-                            <CardFooter>
-                                <Button variant="outline" asChild className="w-full">
-                                    <a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">
-                                        Open Cloudflare Dashboard <ExternalLink className="ml-2 h-4 w-4" />
-                                    </a>
-                                </Button>
-                            </CardFooter>
                         </Card>
+
+                        <CloudflareDomainManager projectId={id} />
                     </div>
                 </div>
             </div>
