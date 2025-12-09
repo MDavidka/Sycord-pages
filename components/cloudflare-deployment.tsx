@@ -14,7 +14,7 @@ interface CloudflareDeploymentProps {
 }
 
 interface DebugInfo {
-  project: {
+  project?: {
     id: string
     name: string
     hasPages: boolean
@@ -24,15 +24,15 @@ interface DebugInfo {
     cloudflareDeployedAt: string | null
     cloudflareDeploymentId: string | null
   }
-  authentication: {
+  authentication?: {
     isAuthenticated: boolean
     hasApiToken: boolean
     hasAccountId: boolean
     tokenCreatedAt: string | null
     tokenUpdatedAt: string | null
   }
-  pages: Array<{ name: string; size: number }>
-  recommendations: string[]
+  pages?: Array<{ name: string; size: number }>
+  recommendations?: string[]
 }
 
 interface LogEntry {
@@ -69,9 +69,9 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
       if (response.ok) {
         const data = await response.json()
         setDebugInfo(data)
-        setIsAuthenticated(data.authentication.isAuthenticated)
+        setIsAuthenticated(!!data?.authentication?.isAuthenticated)
 
-        if (data.project.cloudflareUrl) {
+        if (data?.project?.cloudflareUrl) {
           setDeploymentUrl(data.project.cloudflareUrl)
         }
       }
@@ -301,7 +301,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
                 Unlink Cloudflare
               </Button>
             </div>
-            {debugInfo.project.cloudflareUrl && (
+            {debugInfo.project?.cloudflareUrl && (
               <div className="flex items-center gap-2 text-sm">
                 <ExternalLink className="h-4 w-4 text-primary" />
                 <span>Live Site: </span>
@@ -327,7 +327,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
         )}
 
         {/* Empty State Warning */}
-        {isAuthenticated && debugInfo && debugInfo.project.pagesCount === 0 && (
+        {isAuthenticated && debugInfo && debugInfo.project?.pagesCount === 0 && (
           <Alert className="border-blue-200 bg-blue-50">
              <Info className="h-4 w-4 text-blue-600" />
              <AlertDescription className="text-blue-800">
@@ -352,7 +352,7 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
             ) : (
               <>
                 <Rocket className="mr-2 h-4 w-4" />
-                {debugInfo?.project.cloudflareUrl ? "Redeploy to Cloudflare" : "Deploy to Cloudflare"}
+                {debugInfo?.project?.cloudflareUrl ? "Redeploy to Cloudflare" : "Deploy to Cloudflare"}
               </>
             )}
           </Button>
@@ -407,9 +407,9 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
                 </summary>
                 <div className="mt-2 p-2 bg-muted rounded border overflow-x-auto">
                     <pre>{JSON.stringify({
-                        project: debugInfo.project.name,
-                        id: debugInfo.project.id,
-                        url: debugInfo.project.cloudflareUrl
+                        project: debugInfo.project?.name,
+                        id: debugInfo.project?.id,
+                        url: debugInfo.project?.cloudflareUrl
                     }, null, 2)}</pre>
                 </div>
             </details>

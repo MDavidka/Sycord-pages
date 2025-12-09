@@ -375,11 +375,14 @@ export default function SiteSettingsPage() {
     { id: "contact", name: "Contact" },
   ]
 
+  // Check if Home exists in lucide (safe fallback)
+  const HomeIcon = Home || Layout;
+
   const navGroups = [
     {
       title: "Home",
       items: [
-        { id: "home", label: "Dashboard", icon: Home },
+        { id: "home", label: "Dashboard", icon: HomeIcon },
         { id: "styles", label: "Themes", icon: Palette },
         { id: "ai", label: "AI Builder", icon: Zap },
         { id: "pages", label: "Pages", icon: FileText },
