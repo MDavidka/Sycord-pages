@@ -122,10 +122,12 @@ export default function SiteSettingsPage() {
     if (!id) return
 
     const fetchAllData = async () => {
+      console.log(`[v0] Settings page: Starting data fetch for project ${id}`)
       try {
-        fetch(`/api/projects/${id}`)
+        const fetchProject = fetch(`/api/projects/${id}`)
           .then((r) => r.json())
           .then((data) => {
+            console.log("[v0] Project data fetched:", data ? "Success" : "Empty")
             if (data.message) throw new Error(data.message)
             setProject(data)
             setShopName(data.businessName || "")
@@ -137,7 +139,6 @@ export default function SiteSettingsPage() {
                 timestamp: Date.now()
               })))
             }
-
             setProjectLoading(false)
           })
           .catch((err) => {
@@ -145,9 +146,10 @@ export default function SiteSettingsPage() {
             setProjectLoading(false)
           })
 
-        fetch(`/api/projects/${id}/settings`)
+        const fetchSettings = fetch(`/api/projects/${id}/settings`)
           .then((r) => r.json())
           .then((data) => {
+            console.log("[v0] Settings data fetched")
             setSettings(data)
             setSettingsLoading(false)
           })
@@ -156,9 +158,10 @@ export default function SiteSettingsPage() {
             setSettingsLoading(false)
           })
 
-        fetch(`/api/projects/${id}/products`)
+        const fetchProducts = fetch(`/api/projects/${id}/products`)
           .then((r) => r.json())
           .then((data) => {
+            console.log("[v0] Products data fetched")
             setProducts(Array.isArray(data) ? data : [])
             setProductsLoading(false)
           })
@@ -167,9 +170,10 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
 
-        fetch(`/api/projects/${id}/deployments`)
+        const fetchDeployments = fetch(`/api/projects/${id}/deployments`)
           .then((r) => r.json())
           .then((data) => {
+            console.log("[v0] Deployments data fetched")
             setDeployment(data.deployment || null)
             setDeploymentLoading(false)
             if (data.logs) {
@@ -181,6 +185,11 @@ export default function SiteSettingsPage() {
             setDeploymentLoading(false)
             setDeploymentError("Failed to fetch deployment status")
           })
+
+        await Promise.all([fetchProject, fetchSettings, fetchProducts, fetchDeployments])
+        console.log("[v0] All data fetches completed")
+      } catch (error) {
+        console.error("[v0] Error in fetchAllData:", error)
       } finally {
         setIsInitialLoading(false)
       }
