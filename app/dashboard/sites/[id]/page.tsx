@@ -348,7 +348,7 @@ export default function SiteSettingsPage() {
     )
   }
 
-  const subdomain = project.businessName?.toLowerCase().replace(/\s+/g, "-")
+  const subdomain = (project.businessName || "").toLowerCase().replace(/\s+/g, "-")
   const siteUrl = `https://${subdomain}.ltpd.xyz`
 
   const getWebsiteIcon = () => {
