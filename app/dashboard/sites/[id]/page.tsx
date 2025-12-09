@@ -415,6 +415,9 @@ export default function SiteSettingsPage() {
     { id: "pages", label: "Pages", icon: Layout },
   ]
 
+  // Construct preview URL safely
+  const previewUrl = deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
+
   return (
     <div className="min-h-screen bg-background relative">
       <div className="fixed top-4 left-4 z-30 md:hidden">
@@ -510,10 +513,10 @@ export default function SiteSettingsPage() {
             </Button>
           </div>
 
-          {!deploymentLoading && deployment && (
+          {!deploymentLoading && previewUrl && (
             <>
               <iframe
-                src={`https://${deployment.domain}`}
+                src={previewUrl}
                 className="w-full h-full border-0"
                 title="Live Preview"
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
@@ -524,11 +527,9 @@ export default function SiteSettingsPage() {
               <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    {deployment.domain && (
-                      <span className="text-xs md:text-base font-bold text-white font-sans truncate">
-                        {deployment.domain}
-                      </span>
-                    )}
+                    <span className="text-xs md:text-base font-bold text-white font-sans truncate">
+                      {previewUrl}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
@@ -566,7 +567,7 @@ export default function SiteSettingsPage() {
             </div>
           )}
 
-          {!deployment && !deploymentLoading && (
+          {!previewUrl && !deploymentLoading && (
             <div className="flex items-center justify-center w-full h-full bg-card">
               <div className="text-center px-4">
                 <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
@@ -603,10 +604,12 @@ export default function SiteSettingsPage() {
                   </select>
                   <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
                     <a
-                      href={`https://${deployment?.domain}`}
+                      href={previewUrl || "#"}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => isFrozen && e.preventDefault()}
+                      onClick={(e) => {
+                          if (isFrozen || !previewUrl) e.preventDefault()
+                      }}
                     >
                       <ExternalLink className="h-3 w-3" />
                     </a>
