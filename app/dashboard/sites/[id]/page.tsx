@@ -634,46 +634,9 @@ export default function SiteSettingsPage() {
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
           {activeTab === "home" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6">
                     <div className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-2xl font-bold">Deployment</h2>
-                        </div>
                         <CloudflareDeployment projectId={id} projectName={project?.businessName || "Site"} />
-                    </div>
-
-                    <div className="space-y-6">
-                        <h2 className="text-2xl font-bold">Domain & Status</h2>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Worker Domains</CardTitle>
-                                <CardDescription>Manage your site's accessible URLs.</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {project?.cloudflareUrl ? (
-                                    <div className="space-y-4">
-                                        <div>
-                                            <Label>Primary Worker URL</Label>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                <div className="p-3 bg-muted rounded border font-mono text-sm flex-1 truncate">
-                                                    {project.cloudflareUrl}
-                                                </div>
-                                                <Button size="icon" variant="outline" asChild>
-                                                    <a href={project.cloudflareUrl} target="_blank" rel="noopener noreferrer">
-                                                        <ExternalLink className="h-4 w-4" />
-                                                    </a>
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-6 text-muted-foreground">
-                                        Deploy your site to see domain settings.
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
                         <CloudflareDomainManager projectId={id} />
                     </div>
                 </div>
