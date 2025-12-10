@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
 import { CloudflareDeployment } from "@/components/cloudflare-deployment"
 import { CloudflareDomainManager } from "@/components/cloudflare-domain-manager"
+import { ServerCard } from "@/components/server-card"
 import {
   Trash2,
   Plus,
@@ -107,12 +108,13 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"home" | "styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy">("home")
+  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy">("styles")
   const [activeSubTab, setActiveSubTab] = useState<"settings" | "store" | "pages">("settings")
 
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [selectedPage, setSelectedPage] = useState<string>("landing")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isDeploying, setIsDeploying] = useState(false)
 
   // Settings State
   const [shopName, setShopName] = useState("")
@@ -331,6 +333,33 @@ export default function SiteSettingsPage() {
     }
   }
 
+  const handleDeploy = async () => {
+    setIsDeploying(true)
+    try {
+      const response = await fetch("/api/cloudflare/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Deployment failed")
+      }
+
+      // Refresh project data to get new deployment status
+      const projectRes = await fetch(`/api/projects/${id}`)
+      const projectData = await projectRes.json()
+      setProject(projectData)
+
+      alert("Deployment started successfully!")
+    } catch (error: any) {
+      alert(error.message)
+    } finally {
+      setIsDeploying(false)
+    }
+  }
+
   if (isInitialLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -390,8 +419,7 @@ export default function SiteSettingsPage() {
     {
       title: "Home",
       items: [
-        { id: "home", label: "Dashboard", icon: Layout },
-        { id: "styles", label: "Themes", icon: Palette },
+        { id: "styles", label: "Overview", icon: Layout },
         { id: "ai", label: "AI Builder", icon: Zap },
         { id: "pages", label: "Pages", icon: FileText },
         { id: "products", label: "Products", icon: ShoppingCart },
@@ -632,55 +660,22 @@ export default function SiteSettingsPage() {
         </div>
 
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
-          {activeTab === "home" && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="grid grid-cols-1 gap-6">
-                    <div className="space-y-6">
-                        <CloudflareDeployment projectId={id} projectName={project?.businessName || "Site"} />
-                        <CloudflareDomainManager projectId={id} />
-                    </div>
-                </div>
-            </div>
-          )}
 
           {activeTab === "styles" && (
             <div className="space-y-6">
-              {/* Website Card / Header */}
-              <div className="relative rounded-xl overflow-hidden bg-card border border-border shadow-sm group">
-                {/* Banner */}
-                <div className="h-32 bg-gradient-to-r from-blue-600/20 to-purple-600/20 w-full" />
-
-                {/* Profile Circle */}
-                <div className="absolute top-20 left-6">
-                   <div className="relative">
-                    <div className="w-24 h-24 rounded-full border-4 border-background bg-muted overflow-hidden">
-                      {profileImage ? (
-                         <img src={profileImage} alt="Shop Profile" className="w-full h-full object-cover" />
-                      ) : (
-                         <div className="w-full h-full flex items-center justify-center bg-muted">
-                           <Store className="h-8 w-8 text-muted-foreground/50" />
-                         </div>
-                      )}
-                    </div>
-                    <label htmlFor="card-profile-upload" className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center cursor-pointer shadow-lg hover:bg-primary/90 transition-colors">
-                      <Upload className="h-4 w-4" />
-                      <input type="file" id="card-profile-upload" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                    </label>
-                   </div>
-                </div>
-
-                {/* Info & Actions */}
-                <div className="pt-14 pb-6 px-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                  <div className="mt-2">
-                     <h2 className="text-2xl font-bold">{shopName || "My Awesome Shop"}</h2>
-                     <p className="text-muted-foreground text-sm">{siteUrl}</p>
-                  </div>
-                  <Button onClick={handleSettingsUpdate} disabled={isSaving} className="gap-2">
-                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Save Changes
-                  </Button>
-                </div>
-              </div>
+              <ServerCard
+                project={project}
+                deployment={deployment}
+                deploymentLogs={deploymentLogs}
+                isDeploying={isDeploying}
+                onDeploy={handleDeploy}
+                settings={settings}
+                profileImage={profileImage}
+                onProfileImageChange={handleImageUpload}
+                onSettingsUpdate={handleSettingsUpdate}
+                isSaving={isSaving}
+                siteUrl={siteUrl}
+              />
 
               {/* Sub-tabs Navigation */}
               <div className="flex border-b border-border/50">
