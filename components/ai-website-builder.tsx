@@ -258,6 +258,46 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           }
           return [...prev, { name: finalName, code: codeData.code, timestamp: Date.now() }]
         })
+
+        // Auto-save to database
+        const saveRes = await fetch(`/api/projects/${projectId}/pages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: finalName.replace(".html", ""),
+            content: codeData.code
+          })
+        })
+
+        if (saveRes.ok) {
+          console.log("[v0] Page auto-saved to DB")
+
+          // Trigger Auto-Deployment if this is a substantial file update
+          console.log("[v0] Triggering auto-deployment...")
+          try {
+            const deployRes = await fetch("/api/cloudflare/deploy", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ projectId })
+            })
+
+            if (deployRes.ok) {
+                console.log("[v0] Auto-deployment successful")
+                // Force a reload of the preview if iframe exists on the page
+                const iframe = document.querySelector('iframe[title="Live Preview"]') as HTMLIFrameElement
+                if (iframe) {
+                    // Force refresh by appending/updating a timestamp parameter
+                    const currentSrc = new URL(iframe.src)
+                    currentSrc.searchParams.set('t', Date.now().toString())
+                    iframe.src = currentSrc.toString()
+                }
+            } else {
+                console.error("[v0] Auto-deployment failed", await deployRes.text())
+            }
+          } catch (deployErr) {
+             console.error("[v0] Auto-deployment error:", deployErr)
+          }
+        }
       }
 
       // Next iteration

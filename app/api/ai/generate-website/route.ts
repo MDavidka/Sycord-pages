@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       5.  **Output Format**: You MUST wrap the code in [1] and [1<filename>] markers.
       6.  **Token Efficiency**: Do NOT generate binary files (images, PDFs). Use placeholder URLs (e.g. LoremFlickr) instead. Be concise.
       7.  **File Naming**: Use strictly lowercase filenames with extensions (e.g., index.html, style.css).
+      8.  **Structure**: Generate a self-contained HTML file (including CSS/JS) compatible with Cloudflare Workers. Start with <!DOCTYPE html>.
       `
 
     // Map messages to OpenAI format
