@@ -80,7 +80,7 @@ export function CloudflareDomainManager({ projectId }: CloudflareDomainManagerPr
   }
 
   return (
-    <Card>
+    <Card className="cloudflare-domain-manager">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Globe className="h-5 w-5" />

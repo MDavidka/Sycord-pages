@@ -5,7 +5,20 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { AlertCircle, CheckCircle, Loader2, ExternalLink, Rocket, Info, Settings, RefreshCw } from "lucide-react"
+import {
+  AlertCircle,
+  CheckCircle,
+  Loader2,
+  ExternalLink,
+  Rocket,
+  Info,
+  Settings,
+  RefreshCw,
+  Globe,
+  Clock,
+  Hash,
+  Terminal
+} from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface CloudflareDeploymentProps {
@@ -204,218 +217,213 @@ export function CloudflareDeployment({ projectId, projectName }: CloudflareDeplo
     }
   }
 
+  const getStatusColor = () => {
+    if (isDeploying) return "bg-yellow-500"
+    if (deploymentStatus === "success" || debugInfo?.project?.cloudflareUrl) return "bg-green-500"
+    if (deploymentStatus === "error" || error) return "bg-red-500"
+    return "bg-gray-300"
+  }
+
+  const getStatusText = () => {
+    if (isDeploying) return "Deploying..."
+    if (deploymentStatus === "success" || debugInfo?.project?.cloudflareUrl) return "Live"
+    if (deploymentStatus === "error" || error) return "Error"
+    return "Not Deployed"
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Rocket className="h-5 w-5" />
-          Deploy to Cloudflare Pages
-        </CardTitle>
-        <CardDescription>
-          Deploy your website to Cloudflare Pages with global CDN and automatic HTTPS
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Configuration Section */}
-        {!isAuthenticated && (
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              You need to configure your Cloudflare API credentials before deploying.
-              <Button
-                variant="link"
-                className="ml-2 p-0 h-auto"
-                onClick={() => setShowConfig(!showConfig)}
-              >
-                {showConfig ? "Hide" : "Show"} configuration
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {showConfig && (
-          <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
-            <div className="space-y-2">
-              <Label htmlFor="apiToken">Cloudflare API Token</Label>
-              <Input
-                id="apiToken"
-                type="password"
-                placeholder="Enter your Cloudflare API token"
-                value={apiToken}
-                onChange={(e) => setApiToken(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Requires "Pages: Edit" permission.
-              </p>
+    <Card className="overflow-hidden">
+      {!isAuthenticated ? (
+        <CardContent className="p-6">
+          <div className="flex flex-col items-center justify-center text-center space-y-4">
+            <div className="p-3 bg-muted rounded-full">
+              <Rocket className="h-6 w-6 text-muted-foreground" />
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="accountId">Account ID</Label>
-              <Input
-                id="accountId"
-                placeholder="Enter your Cloudflare Account ID"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-              />
+            <div>
+               <h3 className="font-semibold text-lg">Connect Cloudflare</h3>
+               <p className="text-sm text-muted-foreground max-w-sm">
+                  Deploy your website globally with Cloudflare Workers. Configure your API token to get started.
+               </p>
             </div>
+            <Button onClick={() => setShowConfig(!showConfig)}>
+               {showConfig ? "Hide Configuration" : "Configure Deployment"}
+            </Button>
 
-            <div className="flex gap-2 pt-2">
-              <Button
-                onClick={handleSaveCredentials}
-                disabled={isConfiguring || !apiToken || !accountId}
-                size="sm"
-              >
-                {isConfiguring ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Validating...
-                  </>
-                ) : (
-                  <>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Save Credentials
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowConfig(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Status Display */}
-        {isAuthenticated && debugInfo && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span>Ready to deploy</span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRemoveCredentials}
-                className="h-auto p-0 text-xs text-muted-foreground hover:text-destructive"
-              >
-                Unlink Cloudflare
-              </Button>
-            </div>
-            {debugInfo.project?.cloudflareUrl && (
-              <div className="flex items-center gap-2 text-sm">
-                <ExternalLink className="h-4 w-4 text-primary" />
-                <span>Live Site: </span>
-                <a
-                  href={debugInfo.project.cloudflareUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline font-medium"
-                >
-                  {debugInfo.project.cloudflareUrl}
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Error Display */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="font-medium">{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Empty State Warning */}
-        {isAuthenticated && debugInfo && debugInfo.project?.pagesCount === 0 && (
-          <Alert className="border-blue-200 bg-blue-50">
-             <Info className="h-4 w-4 text-blue-600" />
-             <AlertDescription className="text-blue-800">
-                No custom pages found. Deploying will publish the default "Start Imagining" placeholder site.
-             </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Deploy Button */}
-        <div className="flex gap-2">
-          <Button
-            onClick={handleDeploy}
-            disabled={isDeploying || !isAuthenticated}
-            className="w-full relative"
-            size="lg"
-          >
-            {isDeploying ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deploying to Cloudflare...
-              </>
-            ) : (
-              <>
-                <Rocket className="mr-2 h-4 w-4" />
-                {debugInfo?.project?.cloudflareUrl ? "Redeploy to Cloudflare" : "Deploy to Cloudflare"}
-              </>
-            )}
-          </Button>
-        </div>
-
-        {/* Deployment Status */}
-        {deploymentStatus === "success" && deploymentUrl && (
-          <Alert className="border-green-500 bg-green-50 mt-4">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800 font-medium">
-              Deployment Successful! <br />
-              <a
-                href={deploymentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline mt-1 inline-block"
-              >
-                Visit {deploymentUrl}
-              </a>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Deployment Logs */}
-        {deploymentLogs.length > 0 && (
-          <div className="space-y-2 mt-4">
-            <div className="flex items-center justify-between">
-                <Label>Deployment Logs</Label>
-                {isDeploying && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-            </div>
-            <div className="rounded-lg bg-slate-950 p-4 max-h-60 overflow-y-auto font-mono text-xs shadow-inner">
-              {deploymentLogs.map((log, i) => (
-                <div key={i} className={`py-0.5 border-b border-white/5 last:border-0 ${
-                    log.type === 'error' ? 'text-red-400 font-bold' :
-                    log.type === 'success' ? 'text-green-400 font-bold' :
-                    'text-slate-300'
-                }`}>
-                  <span className="opacity-40 mr-2 text-slate-500">[{log.timestamp}]</span>
-                  {log.message}
+            {showConfig && (
+              <div className="w-full max-w-md space-y-4 border rounded-lg p-4 bg-muted/20 text-left animate-in slide-in-from-top-2">
+                <div className="space-y-2">
+                  <Label htmlFor="apiToken">Cloudflare API Token</Label>
+                  <Input
+                    id="apiToken"
+                    type="password"
+                    placeholder="Token with 'Pages: Edit' permission"
+                    value={apiToken}
+                    onChange={(e) => setApiToken(e.target.value)}
+                  />
                 </div>
-              ))}
+
+                <div className="space-y-2">
+                  <Label htmlFor="accountId">Account ID</Label>
+                  <Input
+                    id="accountId"
+                    placeholder="Your Cloudflare Account ID"
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    onClick={handleSaveCredentials}
+                    disabled={isConfiguring || !apiToken || !accountId}
+                  >
+                    {isConfiguring ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Save & Connect"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      ) : (
+        <div className="divide-y divide-border">
+          {/* Header Section: Domain & Status */}
+          <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+               <div className="flex items-center gap-3">
+                  <h3 className="text-xl font-bold truncate">
+                    {debugInfo?.project?.cloudflareUrl
+                      ? debugInfo.project.cloudflareUrl.replace(/^https?:\/\//, '')
+                      : projectName}
+                  </h3>
+                  <div
+                    className={`h-3 w-3 rounded-full ${getStatusColor()} shadow-sm ring-2 ring-background`}
+                    title={getStatusText()}
+                  />
+               </div>
+               {deploymentUrl && (
+                 <a
+                   href={deploymentUrl}
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
+                 >
+                    {deploymentUrl} <ExternalLink className="h-3 w-3" />
+                 </a>
+               )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+               {/* Change Domain Button - Scrolls to Domain Manager if present on page */}
+               <Button
+                 variant="outline"
+                 onClick={() => {
+                   const el = document.querySelector('.cloudflare-domain-manager');
+                   if (el) el.scrollIntoView({ behavior: 'smooth' });
+                 }}
+               >
+                 Change Domain
+               </Button>
+
+               <Button
+                 onClick={handleDeploy}
+                 disabled={isDeploying}
+                 className="min-w-[100px]"
+               >
+                 {isDeploying ? (
+                   <>
+                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                     ...
+                   </>
+                 ) : (
+                   <>
+                     <RefreshCw className="mr-2 h-4 w-4" />
+                     Redeploy
+                   </>
+                 )}
+               </Button>
             </div>
           </div>
-        )}
 
-        {/* Debug Info (Collapsed) */}
-        {debugInfo && (
-          <div className="pt-2 border-t">
-            <details className="text-xs">
-                <summary className="cursor-pointer text-muted-foreground hover:text-foreground flex items-center gap-1">
-                    <Info className="h-3 w-3" /> Debug Information
+          {/* Last Build Info */}
+          <div className="p-6 bg-muted/10 grid grid-cols-1 md:grid-cols-3 gap-6">
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-background border rounded-md shadow-sm">
+                   <Rocket className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Status</p>
+                   <p className="font-medium text-sm">{getStatusText()}</p>
+                </div>
+             </div>
+
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-background border rounded-md shadow-sm">
+                   <Clock className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Last Build</p>
+                   <p className="font-medium text-sm">
+                     {debugInfo?.project?.cloudflareDeployedAt
+                       ? new Date(debugInfo.project.cloudflareDeployedAt).toLocaleString()
+                       : "Never"}
+                   </p>
+                </div>
+             </div>
+
+             <div className="flex items-center gap-3">
+                <div className="p-2 bg-background border rounded-md shadow-sm">
+                   <Hash className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Build ID</p>
+                   <p className="font-mono text-xs truncate max-w-[120px]" title={debugInfo?.project?.cloudflareDeploymentId || "N/A"}>
+                     {debugInfo?.project?.cloudflareDeploymentId?.substring(0, 8) || "N/A"}
+                   </p>
+                </div>
+             </div>
+          </div>
+
+          {/* Collapsible Logs & Settings */}
+          <div className="bg-muted/5">
+             <details className="group">
+                <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/20 transition-colors">
+                   <span className="text-sm font-medium flex items-center gap-2">
+                     <Terminal className="h-4 w-4 text-muted-foreground" />
+                     Deployment Logs & Settings
+                   </span>
+                   <Settings className="h-4 w-4 text-muted-foreground group-open:rotate-90 transition-transform" />
                 </summary>
-                <div className="mt-2 p-2 bg-muted rounded border overflow-x-auto">
-                    <pre>{JSON.stringify({
-                        project: debugInfo.project?.name,
-                        id: debugInfo.project?.id,
-                        url: debugInfo.project?.cloudflareUrl
-                    }, null, 2)}</pre>
+
+                <div className="p-4 border-t border-border/50 space-y-4">
+                    {deploymentLogs.length > 0 ? (
+                        <div className="rounded-md bg-black/90 p-3 max-h-48 overflow-y-auto font-mono text-xs text-white">
+                          {deploymentLogs.map((log, i) => (
+                            <div key={i} className={`py-0.5 border-b border-white/10 last:border-0 ${
+                                log.type === 'error' ? 'text-red-400' :
+                                log.type === 'success' ? 'text-green-400' :
+                                'text-gray-300'
+                            }`}>
+                              <span className="opacity-50 mr-2">[{log.timestamp}]</span>
+                              {log.message}
+                            </div>
+                          ))}
+                        </div>
+                    ) : (
+                        <div className="text-sm text-muted-foreground text-center py-4 italic">
+                           No logs available for this session.
+                        </div>
+                    )}
+
+                    <div className="flex justify-end pt-2">
+                       <Button variant="destructive" size="sm" onClick={handleRemoveCredentials}>
+                          Disconnect Cloudflare
+                       </Button>
+                    </div>
                 </div>
-            </details>
+             </details>
           </div>
-        )}
-      </CardContent>
+        </div>
+      )}
     </Card>
   )
 }
