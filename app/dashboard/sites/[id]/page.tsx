@@ -390,7 +390,8 @@ export default function SiteSettingsPage() {
   }
 
   const subdomain = (project.businessName || "").toLowerCase().replace(/\s+/g, "-")
-  const siteUrl = `https://${subdomain}.ltpd.xyz`
+  // Prefer the deployed Cloudflare URL if available, otherwise fallback to subdomain or placeholder
+  const siteUrl = project.cloudflareUrl || `https://${subdomain}.ltpd.xyz`
 
   const getWebsiteIcon = () => {
     const style = project.style || "default"
@@ -454,8 +455,8 @@ export default function SiteSettingsPage() {
     { id: "pages", label: "Pages", icon: Layout },
   ]
 
-  // Construct preview URL safely
-  const previewUrl = deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
+  // Construct preview URL safely - Prioritize Cloudflare Worker URL
+  const previewUrl = project?.cloudflareUrl || deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
 
   return (
     <div className="min-h-screen bg-background relative">
