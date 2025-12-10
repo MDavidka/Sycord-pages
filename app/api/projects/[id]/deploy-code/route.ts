@@ -88,6 +88,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ message: "Failed to save code to project" }, { status: 500 })
     }
 
+    // SYNC: Also save to 'pages' collection to ensure Cloudflare deployment picks it up
+    if (updateData.pages && Array.isArray(updateData.pages)) {
+      console.log(`[v0] Deploy: Syncing ${updateData.pages.length} pages to 'pages' collection`)
+      for (const page of updateData.pages) {
+        await db.collection("pages").updateOne(
+          { projectId: projectObjectId, name: page.name.replace(".html", "") },
+          { $set: { content: page.content, updatedAt: new Date() } },
+          { upsert: true }
+        )
+      }
+    }
+
     console.log("[v0] Deploy: Code saved successfully.")
 
     return NextResponse.json({

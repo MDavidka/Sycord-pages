@@ -30,7 +30,6 @@ interface ServerCardProps {
   onProfileImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onSettingsUpdate: () => void
   isSaving: boolean
-  siteUrl: string
 }
 
 export function ServerCard({
@@ -44,7 +43,6 @@ export function ServerCard({
   onProfileImageChange,
   onSettingsUpdate,
   isSaving,
-  siteUrl
 }: ServerCardProps) {
   const [showDomainManager, setShowDomainManager] = useState(false)
 
@@ -103,10 +101,14 @@ export function ServerCard({
            <div className="space-y-1">
               <h2 className="text-2xl font-bold">{settings?.shopName || project?.businessName || "My Awesome Shop"}</h2>
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                 <a href={project?.cloudflareUrl || siteUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
-                    {project?.cloudflareUrl ? project.cloudflareUrl.replace(/^https?:\/\//, '') : siteUrl}
-                    <ExternalLink className="h-3 w-3" />
-                 </a>
+                 {project?.cloudflareUrl ? (
+                   <a href={project.cloudflareUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
+                      {project.cloudflareUrl.replace(/^https?:\/\//, '')}
+                      <ExternalLink className="h-3 w-3" />
+                   </a>
+                 ) : (
+                    <span className="text-muted-foreground/50 italic">Not deployed yet</span>
+                 )}
                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted text-xs font-medium">
                     <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
                     {getStatusText()}

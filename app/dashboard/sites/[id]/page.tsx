@@ -389,9 +389,6 @@ export default function SiteSettingsPage() {
     )
   }
 
-  const subdomain = (project.businessName || "").toLowerCase().replace(/\s+/g, "-")
-  const siteUrl = `https://${subdomain}.ltpd.xyz`
-
   const getWebsiteIcon = () => {
     const style = project.style || "default"
     switch (style) {
@@ -674,7 +671,6 @@ export default function SiteSettingsPage() {
                 onProfileImageChange={handleImageUpload}
                 onSettingsUpdate={handleSettingsUpdate}
                 isSaving={isSaving}
-                siteUrl={siteUrl}
               />
 
               {/* Sub-tabs Navigation */}
