@@ -428,12 +428,6 @@ export default function SiteSettingsPage() {
       ]
     },
     {
-      title: "Deployment",
-      items: [
-        { id: "deploy", label: "Firebase Deploy", icon: Rocket },
-      ]
-    },
-    {
       title: "Orders",
       items: [
         { id: "orders", label: "History", icon: History },

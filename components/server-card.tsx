@@ -86,35 +86,37 @@ export function ServerCard({
            </div>
         </div>
 
-        {/* Top Right Actions */}
-        <div className="flex justify-end pt-4 gap-2">
-           <Button variant="outline" onClick={() => setShowDomainManager(!showDomainManager)}>
-             <Globe className="h-4 w-4 mr-2" />
-             {showDomainManager ? "Hide Domains" : "Manage Domains"}
-           </Button>
-           <Button onClick={onSettingsUpdate} disabled={isSaving}>
-             {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-             Save Changes
-           </Button>
+        {/* Top Right Actions - Mobile Optimized */}
+        <div className="flex flex-col sm:flex-row justify-end pt-16 sm:pt-4 gap-2">
+           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+             <Button variant="outline" onClick={() => setShowDomainManager(!showDomainManager)} className="w-full sm:w-auto">
+               <Globe className="h-4 w-4 mr-2" />
+               {showDomainManager ? "Hide Domains" : "Manage Domains"}
+             </Button>
+             <Button onClick={onSettingsUpdate} disabled={isSaving} className="w-full sm:w-auto">
+               {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+               Save Changes
+             </Button>
+           </div>
         </div>
 
         {/* Main Info */}
-        <div className="mt-4 flex flex-col md:flex-row gap-6 justify-between items-end">
-           <div className="space-y-1">
-              <h2 className="text-2xl font-bold">{settings?.shopName || project?.businessName || "My Awesome Shop"}</h2>
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                 <a href={project?.cloudflareUrl || siteUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
+        <div className="mt-6 flex flex-col md:flex-row gap-6 justify-between items-start md:items-end">
+           <div className="space-y-2 w-full">
+              <h2 className="text-2xl font-bold truncate pr-4">{settings?.shopName || project?.businessName || "My Awesome Shop"}</h2>
+              <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+                 <a href={project?.cloudflareUrl || siteUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1 max-w-[200px] truncate">
                     {project?.cloudflareUrl ? project.cloudflareUrl.replace(/^https?:\/\//, '') : siteUrl}
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
                  </a>
-                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted text-xs font-medium">
+                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted text-xs font-medium whitespace-nowrap">
                     <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
                     {getStatusText()}
                  </span>
               </div>
            </div>
 
-           <div className="flex gap-2 w-full md:w-auto">
+           <div className="w-full md:w-auto">
               <Button
                  onClick={onDeploy}
                  disabled={isDeploying}
