@@ -41,30 +41,31 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden">
-        {/* Background Illustration */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] md:h-[800px] pointer-events-none -z-10">
+      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[800px] flex items-center">
+        {/* Background Mockup */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-full pointer-events-none -z-10 opacity-60">
           <div className="relative w-full h-full">
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background z-10" />
+            {/* Gradient Overlay for bottom fade */}
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/20 to-background z-10" />
             <Image
-              src="/placeholder.jpg"
-              alt="Illustration"
+              src="/hero-mockup.jpg"
+              alt="Dashboard Mockup"
               fill
-              className="object-cover object-top opacity-50"
+              className="object-contain object-top"
               priority
             />
           </div>
         </div>
 
-        <div className="container mx-auto px-4 relative z-20">
+        <div className="container mx-auto px-4 relative z-20 mt-20">
           <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-block mb-4 px-3 py-1 rounded-full border border-border text-xs text-muted-foreground bg-background/50 backdrop-blur-sm">
+            <div className="inline-block mb-4 px-3 py-1 rounded-full border border-white/20 text-xs text-white bg-black/40 backdrop-blur-md">
               Most Bétában
             </div>
-            <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 text-balance leading-tight text-gradient">
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 text-balance leading-tight drop-shadow-lg">
               Építse modern alkalmazását a Sycorddal
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground mb-12 max-w-2xl mx-auto text-balance leading-relaxed">
+            <p className="text-lg md:text-xl text-gray-200 mb-12 max-w-2xl mx-auto text-balance leading-relaxed drop-shadow-md">
               A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és
               tapasztalja meg a fejlesztés jövőjét.
             </p>
