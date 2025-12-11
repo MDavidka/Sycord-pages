@@ -328,7 +328,7 @@ function DashboardContent() {
                 >
                   {project.domain && project.deploymentId ? (
                     <WebsitePreviewCard
-                      domain={project.domain}
+                      domain={project.cloudflareUrl || project.domain}
                       isLive={!flaggedDeployments.has(project.deploymentId)}
                       deploymentId={project.deploymentId}
                       projectId={project._id}

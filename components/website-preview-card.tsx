@@ -104,7 +104,7 @@ export function WebsitePreviewCard({
           ) : (
             <div className="w-full h-full overflow-hidden flex items-start justify-start">
               <iframe
-                src={`https://${domain}`}
+                src={domain.startsWith("http") ? domain : `https://${domain}`}
                 className="w-[1440px] h-[1440px] border-none origin-top-left scale-[0.85] sm:scale-[0.95] md:scale-[1.05] lg:scale-[1.1]"
                 onLoad={() => setImageLoading(false)}
                 onError={() => {
