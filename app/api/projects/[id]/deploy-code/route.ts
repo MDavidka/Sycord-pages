@@ -56,6 +56,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       updateData.pages = files
 
+      // Sync to 'pages' collection so Cloudflare deployment can pick them up
+      const pagesCollection = db.collection("pages")
+      for (const file of files) {
+          const pageName = file.name.replace('.html', '')
+          await pagesCollection.updateOne(
+              { projectId: projectObjectId, name: pageName },
+              {
+                  $set: {
+                      projectId: projectObjectId,
+                      name: pageName,
+                      content: file.content,
+                      updatedAt: new Date()
+                  },
+                  $setOnInsert: { createdAt: new Date() }
+              },
+              { upsert: true }
+          )
+      }
+
       // Set main code for legacy/preview purposes (try index.html, or first file)
       const indexFile = files.find((f: any) => f.name === 'index.html' || f.name === 'index')
       if (indexFile) {
