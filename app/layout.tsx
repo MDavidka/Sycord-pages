@@ -2,6 +2,9 @@ import type React from "react"
 import AuthProvider from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import "./globals.css"
+import { Inter } from 'next/font/google'
+
+const inter = Inter({ subsets: ['latin'], weight: ['400', '600'] })
 
 export default function RootLayout({
   children,
@@ -10,7 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased">
+      <body className={`${inter.className} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AuthProvider>
             {children}
