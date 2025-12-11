@@ -4,6 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Zap, Globe, Shield } from "lucide-react"
+import { Countdown } from "@/components/countdown"
 
 export default function LandingPage() {
   return (
@@ -40,34 +41,37 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-24 md:py-32">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-block mb-4 px-3 py-1 rounded-full border border-border text-xs text-muted-foreground">
-            Most Bétában
+      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden">
+        {/* Background Illustration */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[600px] md:h-[800px] pointer-events-none -z-10">
+          <div className="relative w-full h-full">
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background z-10" />
+            <Image
+              src="/placeholder.jpg"
+              alt="Illustration"
+              fill
+              className="object-cover object-top opacity-50"
+              priority
+            />
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 text-balance leading-tight text-gradient">
-            Építse modern alkalmazását a Sycorddal
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto text-balance leading-relaxed">
-            A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és
-            tapasztalja meg a fejlesztés jövőjét.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/login">
-              <Button size="lg" className="bg-white text-black hover:bg-white/90 text-base px-8">
-                Építés megkezdése
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-border text-foreground hover:bg-accent text-base px-8 bg-transparent"
-              >
-                Demó megtekintése
-              </Button>
-            </Link>
+        </div>
+
+        <div className="container mx-auto px-4 relative z-20">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-block mb-4 px-3 py-1 rounded-full border border-border text-xs text-muted-foreground bg-background/50 backdrop-blur-sm">
+              Most Bétában
+            </div>
+            <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6 text-balance leading-tight text-gradient">
+              Építse modern alkalmazását a Sycorddal
+            </h1>
+            <p className="text-lg md:text-xl text-muted-foreground mb-12 max-w-2xl mx-auto text-balance leading-relaxed">
+              A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és
+              tapasztalja meg a fejlesztés jövőjét.
+            </p>
+
+            <div className="mb-12">
+              <Countdown targetDate={new Date("2026-01-16T00:00:00")} />
+            </div>
           </div>
         </div>
       </section>
