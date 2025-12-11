@@ -48,7 +48,7 @@ export default function LandingPage() {
             {/* Gradient Overlay for bottom fade */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/20 to-background z-10" />
             <Image
-              src="/hero-mockup.jpg"
+              src="/hero-image.jpg"
               alt="Dashboard Mockup"
               fill
               className="object-contain object-top"
