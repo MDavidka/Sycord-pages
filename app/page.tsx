@@ -43,7 +43,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-[#0F1012]">
         {/* Background Mockup */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[65%] md:h-[75%] pointer-events-none">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90%] md:w-full max-w-2xl h-[65%] md:h-[75%] pointer-events-none">
           <Image
             src="/hero-image.jpg"
             alt="Dashboard Mockup"
