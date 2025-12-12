@@ -41,20 +41,23 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[800px] flex items-center">
+      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-[#0F1012]">
         {/* Background Mockup */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-full pointer-events-none -z-10 opacity-60">
-          <div className="relative w-full h-full">
-            {/* Gradient Overlay for bottom fade */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/20 to-background z-10" />
-            <Image
-              src="/hero-mockup.jpg"
-              alt="Dashboard Mockup"
-              fill
-              className="object-contain object-top"
-              priority
-            />
-          </div>
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[70%] md:w-full max-w-lg h-[65%] md:h-[75%] pointer-events-none"
+          style={{
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+          }}
+        >
+          <Image
+            src="/hero-image.jpg"
+            alt="Dashboard Mockup"
+            fill
+            className="object-cover object-top"
+            priority
+            sizes="100vw"
+          />
         </div>
 
         <div className="container mx-auto px-4 relative z-20 mt-20">
@@ -63,11 +66,10 @@ export default function LandingPage() {
               Most Bétában
             </div>
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 text-balance leading-tight drop-shadow-lg">
-              Építse modern alkalmazását a Sycorddal
+              Építse jövőjét
             </h1>
             <p className="text-lg md:text-xl text-gray-200 mb-12 max-w-2xl mx-auto text-balance leading-relaxed drop-shadow-md">
-              A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és
-              tapasztalja meg a fejlesztés jövőjét.
+              Biztonságos, skálázható és felhasználóbarát.
             </p>
 
             <div className="mb-12">
