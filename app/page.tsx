@@ -41,7 +41,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-[#0F1012]">
+      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-background">
         {/* Background Mockup */}
         <div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-[70%] md:w-full max-w-lg h-[65%] md:h-[75%] pointer-events-none"
