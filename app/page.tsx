@@ -43,17 +43,17 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[800px] flex items-center bg-[#0F1012]">
         {/* Background Mockup */}
-        <div className="absolute inset-0 w-full h-full pointer-events-none">
+        <div className="absolute top-0 inset-x-0 h-[60%] md:h-[70%] pointer-events-none">
           <Image
             src="/hero-image.jpg"
             alt="Dashboard Mockup"
             fill
-            className="object-cover object-center"
+            className="object-cover object-top"
             priority
             sizes="100vw"
           />
           {/* Gradient Overlay for bottom fade */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0F1012]/50 to-[#0F1012]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#0F1012]" />
         </div>
 
         <div className="container mx-auto px-4 relative z-20 mt-20">
