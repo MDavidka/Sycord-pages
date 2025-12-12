@@ -43,7 +43,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-[#0F1012]">
         {/* Background Mockup */}
-        <div className="absolute top-0 inset-x-0 h-[40%] md:h-[50%] pointer-events-none">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[65%] md:h-[75%] pointer-events-none">
           <Image
             src="/hero-image.jpg"
             alt="Dashboard Mockup"
@@ -58,16 +58,15 @@ export default function LandingPage() {
 
         <div className="container mx-auto px-4 relative z-20 mt-20">
           <div className="max-w-4xl mx-auto text-center">
-            {/* <div className="inline-block mb-4 px-3 py-1 rounded-full border border-white/20 text-xs text-white bg-black/40 backdrop-blur-md">
+            <div className="inline-block mb-4 px-3 py-1 rounded-full border border-white/20 text-xs text-white bg-black/40 backdrop-blur-md">
               Most Bétában
             </div>
             <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 text-balance leading-tight drop-shadow-lg">
-              Építse modern alkalmazását a Sycorddal
+              Építse jövőjét
             </h1>
             <p className="text-lg md:text-xl text-gray-200 mb-12 max-w-2xl mx-auto text-balance leading-relaxed drop-shadow-md">
-              A végső platform biztonságos, skálázható és felhasználóbarát alkalmazások készítéséhez. Kezdje el ma és
-              tapasztalja meg a fejlesztés jövőjét.
-            </p> */}
+              Biztonságos, skálázható és felhasználóbarát.
+            </p>
 
             <div className="mb-12">
               <Countdown targetDate={new Date("2026-01-16T00:00:00")} />
