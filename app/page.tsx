@@ -42,35 +42,18 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-background">
-        {/* Background Mockup */}
-        <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-[70%] md:w-full max-w-lg h-[65%] md:h-[75%] pointer-events-none"
-          style={{
-            maskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
-          }}
-        >
-          <Image
-            src="/hero-image.jpg"
-            alt="Dashboard Mockup"
-            fill
-            className="object-cover object-top"
-            priority
-            sizes="100vw"
-          />
-        </div>
-
         <div className="container mx-auto px-4 relative z-20 mt-20">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-block mb-4 px-3 py-1 rounded-full border border-white/20 text-xs text-white bg-black/40 backdrop-blur-md">
-              Most Bétában
+          <div className="max-w-5xl mx-auto text-center">
+            <div className="mb-12 w-full mx-auto">
+              <video
+                src="/hero-video.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-auto rounded-xl shadow-2xl"
+              />
             </div>
-            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 text-balance leading-tight drop-shadow-lg">
-              Építse jövőjét
-            </h1>
-            <p className="text-lg md:text-xl text-gray-200 mb-12 max-w-2xl mx-auto text-balance leading-relaxed drop-shadow-md">
-              Biztonságos, skálázható és felhasználóbarát.
-            </p>
 
             <div className="mb-12">
               <Countdown targetDate={new Date("2026-01-16T00:00:00")} />
