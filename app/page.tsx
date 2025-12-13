@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Zap, Globe, Shield } from "lucide-react"
+import { ArrowRight, Zap, Globe, Shield, Megaphone } from "lucide-react"
 import { Countdown } from "@/components/countdown"
 
 export default function LandingPage() {
@@ -44,6 +44,12 @@ export default function LandingPage() {
       <section className="relative pt-12 pb-12 md:pt-16 md:pb-16 overflow-hidden min-h-[500px] flex items-center bg-background">
         <div className="container mx-auto px-4 relative z-20 mt-10">
           <div className="max-w-5xl mx-auto text-center">
+            <Link href="/releases" className="inline-block mb-8">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/20 text-xs text-white bg-black/40 backdrop-blur-md hover:bg-black/60 transition-colors">
+                <Megaphone className="h-3 w-3" />
+                <span>What's new</span>
+              </div>
+            </Link>
             <div className="mb-12 w-full mx-auto">
               <video
                 src="/hero-video.mp4"
