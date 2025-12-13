@@ -536,7 +536,7 @@ export default function SiteSettingsPage() {
         </div>
       </header>
 
-      <div className="fixed top-20 left-4 z-30 md:hidden">
+      <div className="fixed top-24 left-4 z-30 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -547,7 +547,7 @@ export default function SiteSettingsPage() {
         </Button>
       </div>
 
-      <div className="fixed top-20 right-4 z-50 md:hidden">
+      <div className="fixed top-24 right-4 z-50 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -693,42 +693,142 @@ export default function SiteSettingsPage() {
           )}
         </div>
 
-        <div className="py-4 px-4 bg-background border-b">
+        <div className="py-6 px-4 bg-background border-b">
           <div className="container mx-auto max-w-7xl">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between gap-2">
-                {isFrozen && (
-                  <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
-                    <Lock className="h-3 w-3" />
-                    <span className="font-medium">Frozen</span>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Preview Box */}
+              <div className="relative w-full h-[400px] bg-card border border-border rounded-lg overflow-hidden shadow-lg">
+                {!deploymentLoading && previewUrl && (
+                  <iframe
+                    src={previewUrl}
+                    className="w-full h-full border-0"
+                    title="Live Preview"
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
+                  />
+                )}
+
+                {deploymentLoading && (
+                  <div className="flex items-center justify-center w-full h-full">
+                    <div className="text-center">
+                      <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
+                      <p className="text-sm text-muted-foreground">Loading preview...</p>
+                    </div>
                   </div>
                 )}
-                <div className="flex-1" />
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedPage}
-                    onChange={(e) => setSelectedPage(e.target.value)}
-                    className="px-2 py-1 border border-input rounded bg-background text-xs md:text-sm text-foreground"
-                  >
-                    {pages.map((page) => (
-                      <option key={page.id} value={page.id}>
-                        {page.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button asChild size="sm" variant="outline" className="h-8 px-2 bg-transparent">
-                    <a
-                      href={previewUrl || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        if (isFrozen || !previewUrl) e.preventDefault()
-                      }}
+
+                {!previewUrl && !deploymentLoading && (
+                  <div className="flex items-center justify-center w-full h-full">
+                    <div className="text-center px-4">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Preview not available. Deploy your website first.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Domain, Status, and Buttons */}
+              <div className="flex flex-col gap-4">
+                {/* Domain Info */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Website URL</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <a
+                        href={previewUrl || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-mono text-primary hover:underline truncate"
+                        onClick={(e) => {
+                          if (!previewUrl) e.preventDefault()
+                        }}
+                      >
+                        {previewUrl || "Not deployed yet"}
+                      </a>
+                    </div>
+
+                    {/* Status Indicator */}
+                    <div className="flex items-center gap-2 pt-2 border-t">
+                      <div
+                        className={`w-3 h-3 rounded-full flex-shrink-0 ${previewUrl ? "bg-green-500" : "bg-gray-400"}`}
+                      />
+                      <span className="text-sm font-medium">{previewUrl ? "Live" : "Not deployed"}</span>
+                    </div>
+
+                    {/* Frozen Status */}
+                    {isFrozen && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-md">
+                        <Lock className="h-4 w-4 text-red-500" />
+                        <span className="text-sm font-medium text-red-500">Site is frozen</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Action Buttons */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button
+                      onClick={() => setIsFrozen(!isFrozen)}
+                      variant={isFrozen ? "destructive" : "secondary"}
+                      className="w-full"
                     >
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </Button>
-                </div>
+                      {isFrozen ? (
+                        <>
+                          <Unlock className="h-4 w-4 mr-2" />
+                          Unfreeze Site
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="h-4 w-4 mr-2" />
+                          Freeze Site
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="w-full bg-transparent"
+                      disabled={!previewUrl || isFrozen}
+                    >
+                      <a
+                        href={previewUrl || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          if (isFrozen || !previewUrl) e.preventDefault()
+                        }}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in New Tab
+                      </a>
+                    </Button>
+
+                    <div className="pt-2">
+                      <Label htmlFor="page-select" className="text-sm mb-2 block">
+                        Select Page
+                      </Label>
+                      <select
+                        id="page-select"
+                        value={selectedPage}
+                        onChange={(e) => setSelectedPage(e.target.value)}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
+                      >
+                        {pages.map((page) => (
+                          <option key={page.id} value={page.id}>
+                            {page.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
           </div>
