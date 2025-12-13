@@ -36,7 +36,10 @@ import {
   History,
   FileText,
   CreditCard,
+  LogOut,
+  User,
 } from "lucide-react"
+import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -47,11 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useSession, signOut } from "next-auth/react"
-import { User, LogOut } from "lucide-react"
 import Image from "next/image"
-import Link from "next/link"
-
-import { currencySymbols } from "@/lib/webshop-types"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -78,7 +77,7 @@ const productComponents = {
 
 const paymentOptions = [
   { id: "stripe", name: "Stripe", description: "Credit cards and digital wallets" },
-  { id: "paypal", name: "PayPal", name: "PayPal payments" },
+  { id: "paypal", name: "PayPal", description: "PayPal payments" },
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
@@ -86,7 +85,6 @@ export default function SiteSettingsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
-  const { data: session } = useSession()
 
   const [project, setProject] = useState<any>(null)
   const [settings, setSettings] = useState<any>(null)
@@ -125,6 +123,7 @@ export default function SiteSettingsPage() {
   const [selectedPage, setSelectedPage] = useState<string>("landing")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
+  const { data: session } = useSession()
 
   // Settings State
   const [shopName, setShopName] = useState("")
@@ -459,10 +458,6 @@ export default function SiteSettingsPage() {
     { id: "pages", label: "Pages", icon: Layout },
   ]
 
-  // Construct preview URL safely - Prioritize Cloudflare Worker URL
-  const previewUrl =
-    project?.cloudflareUrl || deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
-
   const userInitials =
     session?.user?.name
       ?.split(" ")
@@ -470,38 +465,44 @@ export default function SiteSettingsPage() {
       .join("")
       .toUpperCase() || "U"
 
+  // Construct preview URL safely - Prioritize Cloudflare Worker URL
+  const previewUrl =
+    project?.cloudflareUrl || deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
+
   return (
     <div className="min-h-screen bg-background relative">
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-4 md:gap-6">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <Image src="/logo.png" alt="Logo" width={28} height={28} />
-              <span className="text-lg font-semibold text-foreground hidden sm:inline">Sycord</span>
-            </Link>
-            <div className="h-6 w-px bg-border hidden md:block" />
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="hidden md:inline">Project:</span>
-              <span className="font-medium text-foreground truncate max-w-[150px] md:max-w-[200px]">
-                {project?.businessName || "Loading..."}
-              </span>
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4 md:gap-8">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            >
+              <Image src="/logo.png" alt="Logo" width={32} height={32} />
+              <span className="text-xl font-semibold text-foreground">Sycord</span>
+            </button>
+            <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
+              <span>/</span>
+              <span className="font-medium text-foreground">{project?.businessName || "Settings"}</span>
             </div>
           </div>
-
           <div className="flex items-center gap-2 md:gap-3">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")} className="hidden sm:flex">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Dashboard
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/dashboard")}
+              className="hidden md:flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Dashboard
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                  <Avatar className="h-9 w-9">
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
+                  <Avatar className="h-10 w-10">
                     <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                      {userInitials}
-                    </AvatarFallback>
+                    <AvatarFallback className="bg-primary text-primary-foreground">{userInitials}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
@@ -513,34 +514,21 @@ export default function SiteSettingsPage() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-                  <Layout className="mr-2 h-4 w-4" />
-                  <span>Dashboard</span>
-                </DropdownMenuItem>
                 <DropdownMenuItem>
                   <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
+                  <span>Profil</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
+                  <span>Beállítások</span>
                 </DropdownMenuItem>
-                {session?.user?.email === "dmarton336@gmail.com" && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => router.push("/admin")}>
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span className="text-primary font-semibold">Admin Panel</span>
-                    </DropdownMenuItem>
-                  </>
-                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => signOut({ callbackUrl: "/" })}
                   className="text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign Out</span>
+                  <span>Kijelentkezés</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -548,7 +536,7 @@ export default function SiteSettingsPage() {
         </div>
       </header>
 
-      <div className="fixed top-4 left-4 z-30 md:hidden">
+      <div className="fixed top-20 left-4 z-30 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -559,7 +547,7 @@ export default function SiteSettingsPage() {
         </Button>
       </div>
 
-      <div className="fixed top-4 right-4 z-50 md:hidden">
+      <div className="fixed top-20 right-4 z-50 md:hidden">
         <Button
           variant="secondary"
           size="icon"
