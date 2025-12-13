@@ -61,7 +61,7 @@ export function ServerCard({
   }
 
   return (
-    <div className="rounded-xl overflow-hidden bg-card border border-border shadow-sm group">
+    <div className="rounded-xl overflow-hidden bg-white/5 backdrop-blur-lg border border-white/10 shadow-sm group">
       {/* Banner */}
       <div className="h-32 bg-gradient-to-r from-blue-600/20 to-purple-600/20 w-full" />
 
@@ -70,11 +70,11 @@ export function ServerCard({
         {/* Profile Circle */}
         <div className="absolute -top-12 left-6">
            <div className="relative">
-            <div className="w-24 h-24 rounded-full border-4 border-background bg-muted overflow-hidden">
+            <div className="w-24 h-24 rounded-full border-4 border-[#18191B] bg-white/5 backdrop-blur-md overflow-hidden">
               {profileImage ? (
                  <img src={profileImage} alt="Shop Profile" className="w-full h-full object-cover" />
               ) : (
-                 <div className="w-full h-full flex items-center justify-center bg-muted">
+                 <div className="w-full h-full flex items-center justify-center bg-white/5">
                    <Store className="h-8 w-8 text-muted-foreground/50" />
                  </div>
               )}
@@ -146,9 +146,9 @@ export function ServerCard({
         )}
 
         {/* Deployment Details & History */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-border/50">
-           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-              <div className="p-2 bg-background border rounded-md">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 py-4 border-t border-white/10">
+           <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
+              <div className="p-2 bg-black/20 border border-white/5 rounded-md">
                  <Clock className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
@@ -159,8 +159,8 @@ export function ServerCard({
               </div>
            </div>
 
-           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-              <div className="p-2 bg-background border rounded-md">
+           <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
+              <div className="p-2 bg-black/20 border border-white/5 rounded-md">
                  <Hash className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
@@ -171,8 +171,8 @@ export function ServerCard({
               </div>
            </div>
 
-           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
-              <div className="p-2 bg-background border rounded-md">
+           <div className="flex items-center gap-3 p-3 rounded-lg bg-white/5">
+              <div className="p-2 bg-black/20 border border-white/5 rounded-md">
                  <CheckCircle className="h-4 w-4 text-green-600" />
               </div>
               <div>
