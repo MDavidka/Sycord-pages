@@ -296,7 +296,7 @@ export default function SiteSettingsPage() {
       const response = await fetch(`/api/projects/${id}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newProduct),
+        body: JSON.JSON.stringify(newProduct),
       })
 
       if (!response.ok) {
@@ -535,7 +535,8 @@ export default function SiteSettingsPage() {
         </div>
       </header>
 
-      <div className="fixed top-24 left-4 z-30 md:hidden">
+      {/* Mobile Back Button */}
+      <div className="fixed top-28 left-4 z-50 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -546,7 +547,8 @@ export default function SiteSettingsPage() {
         </Button>
       </div>
 
-      <div className="fixed top-24 right-4 z-50 md:hidden">
+      {/* Mobile Menu Toggle */}
+      <div className="fixed top-28 right-4 z-50 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -557,160 +559,164 @@ export default function SiteSettingsPage() {
         </Button>
       </div>
 
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 w-56 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } backdrop-blur-xl bg-black/40 border-r border-white/10 flex flex-col`}
-      >
-        <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center gap-2 mb-8 text-foreground">
-            <WebsiteIcon className="h-6 w-6" />
-            <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
-          </div>
+      {activeTab !== "styles" && (
+        <aside
+          className={`fixed inset-y-0 left-0 z-40 w-56 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } backdrop-blur-xl bg-black/40 border-r border-white/10 flex flex-col`}
+        >
+          <div className="p-6 flex flex-col h-full">
+            <div className="flex items-center gap-2 mb-8 text-foreground">
+              <WebsiteIcon className="h-6 w-6" />
+              <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
+            </div>
 
-          <nav className="flex-1 space-y-6 overflow-y-auto pr-2">
-            {navGroups.map((group) => (
-              <div key={group.title}>
-                <h3 className="px-4 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {group.title}
-                </h3>
-                <div className="space-y-1">
-                  {group.items.map((item) => {
-                    const Icon = item.icon
-                    const isActive = activeTab === item.id
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id as any)
-                          setIsSidebarOpen(false)
-                        }}
-                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
-                          isActive
-                            ? "bg-white/10 text-foreground shadow-sm backdrop-blur-sm"
-                            : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4" />
-                        <span className="font-medium text-sm">{item.label}</span>
-                      </button>
-                    )
-                  })}
+            <nav className="flex-1 space-y-6 overflow-y-auto pr-2">
+              {navGroups.map((group) => (
+                <div key={group.title}>
+                  <h3 className="px-4 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {group.title}
+                  </h3>
+                  <div className="space-y-1">
+                    {group.items.map((item) => {
+                      const Icon = item.icon
+                      const isActive = activeTab === item.id
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id as any)
+                            setIsSidebarOpen(false)
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
+                            isActive
+                              ? "bg-white/10 text-foreground shadow-sm backdrop-blur-sm"
+                              : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          <span className="font-medium text-sm">{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </nav>
+              ))}
+            </nav>
 
-          <div className="mt-auto pt-6 border-t border-white/10">
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-white/5 gap-3 px-4"
-              onClick={() => router.push("/dashboard")}
-            >
-              <ArrowLeft className="h-5 w-5" />
-              <span className="font-medium text-sm">Back to Dashboard</span>
-            </Button>
+            <div className="mt-auto pt-6 border-t border-white/10">
+              <Button
+                variant="ghost"
+                className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-white/5 gap-3 px-4"
+                onClick={() => router.push("/dashboard")}
+              >
+                <ArrowLeft className="h-5 w-5" />
+                <span className="font-medium text-sm">Back to Dashboard</span>
+              </Button>
+            </div>
           </div>
-        </div>
-      </aside>
+        </aside>
+      )}
 
-      <main className="transition-all duration-300 md:ml-56 min-h-screen flex flex-col">
-        <div className="py-8 px-4 md:px-8 bg-background">
-          <div className="container mx-auto max-w-7xl">
-            <div className="flex flex-col lg:flex-row gap-8">
-              {/* Left side - Preview Box */}
-              <div className="relative w-full lg:w-[400px] xl:w-[480px] h-[280px] bg-card border-2 border-border rounded-3xl overflow-hidden shadow-xl flex-shrink-0">
-                {!deploymentLoading && previewUrl && (
-                  <iframe
-                    src={previewUrl}
-                    className="w-full h-full border-0"
-                    title="Live Preview"
-                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
-                  />
-                )}
-
-                {deploymentLoading && (
-                  <div className="flex items-center justify-center w-full h-full bg-background">
-                    <div className="text-center">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
-                      <p className="text-sm text-muted-foreground">Loading preview...</p>
-                    </div>
-                  </div>
-                )}
-
-                {!previewUrl && !deploymentLoading && (
-                  <div className="flex items-center justify-center w-full h-full bg-background">
-                    <div className="text-center px-4">
-                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Preview not available</p>
-                      <p className="text-xs text-muted-foreground mt-1">Deploy your website first</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Right side - Domain, Status, and Info */}
-              <div className="flex flex-col gap-6 flex-1">
-                {/* Domain and Status */}
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-                      {previewUrl || "Not deployed yet"}
-                    </h2>
-                    <div
-                      className={`w-3 h-3 rounded-full flex-shrink-0 ${previewUrl ? "bg-green-500" : "bg-gray-400"}`}
+      <main className={`flex-1 min-h-screen pt-16 ${activeTab !== "styles" ? "md:ml-56" : ""}`}>
+        {activeTab === "styles" && (
+          <div className="border-b border-border/30 bg-background/50 backdrop-blur-sm">
+            <div className="container mx-auto px-4 py-8 max-w-7xl">
+              <div className="flex flex-col lg:flex-row gap-8 items-start">
+                {/* Left side - Preview Box */}
+                <div className="relative w-full lg:w-[400px] xl:w-[480px] h-[280px] bg-card border-2 border-border rounded-3xl overflow-hidden shadow-xl flex-shrink-0">
+                  {!deploymentLoading && previewUrl && (
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-full border-0"
+                      title="Live Preview"
+                      sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
                     />
-                  </div>
+                  )}
 
-                  {/* Branch and Date */}
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <span className="text-sm font-medium">main</span>
-                    <span className="text-sm">•</span>
-                    <span className="text-sm">
-                      {new Date()
-                        .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                        .toLowerCase()}
-                    </span>
-                  </div>
+                  {deploymentLoading && (
+                    <div className="flex items-center justify-center w-full h-full bg-background">
+                      <div className="text-center">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
+                        <p className="text-sm text-muted-foreground">Loading preview...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!previewUrl && !deploymentLoading && (
+                    <div className="flex items-center justify-center w-full h-full bg-background">
+                      <div className="text-center px-4">
+                        <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Preview not available</p>
+                        <p className="text-xs text-muted-foreground mt-1">Deploy your website first</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-wrap gap-4 mt-4">
-                  <Button
-                    size="lg"
-                    variant="default"
-                    className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium"
-                    onClick={handleDeploy}
-                    disabled={isDeploying}
-                  >
-                    {isDeploying ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Deploying...
-                      </>
-                    ) : (
-                      <>
-                        <Rocket className="h-4 w-4 mr-2" />
-                        Deploy Now
-                      </>
-                    )}
-                  </Button>
+                {/* Right side - Domain, Status, and Info */}
+                <div className="flex flex-col gap-6 flex-1">
+                  {/* Domain and Status */}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-2xl md:text-3xl font-bold text-foreground">
+                        {previewUrl || "Not deployed yet"}
+                      </h2>
+                      <div
+                        className={`w-3 h-3 rounded-full flex-shrink-0 ${previewUrl ? "bg-green-500" : "bg-gray-400"}`}
+                      />
+                    </div>
 
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium bg-transparent"
-                    onClick={() => previewUrl && window.open(previewUrl, "_blank")}
-                    disabled={!previewUrl}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Visit Site
-                  </Button>
+                    {/* Branch and Date */}
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="text-sm font-medium">main</span>
+                      <span className="text-sm">•</span>
+                      <span className="text-sm">
+                        {new Date()
+                          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          .toLowerCase()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-4 mt-4">
+                    <Button
+                      size="lg"
+                      variant="default"
+                      className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium"
+                      onClick={handleDeploy}
+                      disabled={isDeploying}
+                    >
+                      {isDeploying ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Deploying...
+                        </>
+                      ) : (
+                        <>
+                          <Rocket className="h-4 w-4 mr-2" />
+                          Deploy Now
+                        </>
+                      )}
+                    </Button>
+
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium bg-transparent"
+                      onClick={() => previewUrl && window.open(previewUrl, "_blank")}
+                      disabled={!previewUrl}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Visit Site
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
           {activeTab === "styles" && (
