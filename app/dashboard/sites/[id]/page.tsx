@@ -23,8 +23,6 @@ import {
   Zap,
   Package,
   Sparkles,
-  Lock,
-  Unlock,
   Menu,
   X,
   Settings,
@@ -38,6 +36,7 @@ import {
   CreditCard,
   LogOut,
   User,
+  Rocket,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -77,7 +76,7 @@ const productComponents = {
 
 const paymentOptions = [
   { id: "stripe", name: "Stripe", description: "Credit cards and digital wallets" },
-  { id: "paypal", name: "PayPal", description: "PayPal payments" },
+  { id: "paypal", name: "PayPal", name: "PayPal payments" },
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
@@ -616,88 +615,11 @@ export default function SiteSettingsPage() {
       </aside>
 
       <main className="transition-all duration-300 md:ml-56 min-h-screen flex flex-col">
-        {/* Preview Area (Always Visible) */}
-        <div className="relative w-full h-[30vh] md:h-[50vh] bg-black overflow-hidden flex-shrink-0">
-          <div className="absolute top-4 left-4 z-30 hidden md:block">
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={() => router.push("/dashboard")}
-              className="shadow-lg bg-background/60 backdrop-blur-md border border-border text-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {!deploymentLoading && previewUrl && (
-            <>
-              <iframe
-                src={previewUrl}
-                className="w-full h-full border-0"
-                title="Live Preview"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-presentation"
-              />
-
-              <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black via-black/60 to-transparent z-10 pointer-events-none" />
-
-              <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs md:text-base font-bold text-white font-sans truncate">{previewUrl}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
-                    <span className="text-xs text-white/60 uppercase tracking-wider">Live</span>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsFrozen(!isFrozen)}
-                  className="bg-white/20 hover:bg-white/30 text-white flex-shrink-0"
-                >
-                  {isFrozen ? (
-                    <>
-                      <Lock className="h-3 w-3 mr-1" />
-                      <span className="text-xs">Frozen</span>
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="h-3 w-3 mr-1" />
-                      <span className="text-xs">Active</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </>
-          )}
-
-          {deploymentLoading && (
-            <div className="flex items-center justify-center w-full h-full bg-card">
-              <div className="text-center">
-                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
-                <p className="text-xs md:text-sm text-muted-foreground">Loading preview...</p>
-              </div>
-            </div>
-          )}
-
-          {!previewUrl && !deploymentLoading && (
-            <div className="flex items-center justify-center w-full h-full bg-card">
-              <div className="text-center px-4">
-                <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  Preview not available. Deploy your website first.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="py-6 px-4 bg-background border-b">
+        <div className="py-8 px-4 md:px-8 bg-background">
           <div className="container mx-auto max-w-7xl">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Preview Box */}
-              <div className="relative w-full h-[400px] bg-card border border-border rounded-lg overflow-hidden shadow-lg">
+            <div className="flex flex-col lg:flex-row gap-8">
+              {/* Left side - Preview Box */}
+              <div className="relative w-full lg:w-[400px] xl:w-[480px] h-[280px] bg-card border-2 border-border rounded-3xl overflow-hidden shadow-xl flex-shrink-0">
                 {!deploymentLoading && previewUrl && (
                   <iframe
                     src={previewUrl}
@@ -708,7 +630,7 @@ export default function SiteSettingsPage() {
                 )}
 
                 {deploymentLoading && (
-                  <div className="flex items-center justify-center w-full h-full">
+                  <div className="flex items-center justify-center w-full h-full bg-background">
                     <div className="text-center">
                       <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-foreground" />
                       <p className="text-sm text-muted-foreground">Loading preview...</p>
@@ -717,118 +639,74 @@ export default function SiteSettingsPage() {
                 )}
 
                 {!previewUrl && !deploymentLoading && (
-                  <div className="flex items-center justify-center w-full h-full">
+                  <div className="flex items-center justify-center w-full h-full bg-background">
                     <div className="text-center px-4">
                       <AlertCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Preview not available. Deploy your website first.</p>
+                      <p className="text-sm text-muted-foreground">Preview not available</p>
+                      <p className="text-xs text-muted-foreground mt-1">Deploy your website first</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Domain, Status, and Buttons */}
-              <div className="flex flex-col gap-4">
-                {/* Domain Info */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Website URL</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center gap-2">
-                      <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <a
-                        href={previewUrl || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-mono text-primary hover:underline truncate"
-                        onClick={(e) => {
-                          if (!previewUrl) e.preventDefault()
-                        }}
-                      >
-                        {previewUrl || "Not deployed yet"}
-                      </a>
-                    </div>
+              {/* Right side - Domain, Status, and Info */}
+              <div className="flex flex-col gap-6 flex-1">
+                {/* Domain and Status */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-2xl md:text-3xl font-bold text-foreground">
+                      {previewUrl || "Not deployed yet"}
+                    </h2>
+                    <div
+                      className={`w-3 h-3 rounded-full flex-shrink-0 ${previewUrl ? "bg-green-500" : "bg-gray-400"}`}
+                    />
+                  </div>
 
-                    {/* Status Indicator */}
-                    <div className="flex items-center gap-2 pt-2 border-t">
-                      <div
-                        className={`w-3 h-3 rounded-full flex-shrink-0 ${previewUrl ? "bg-green-500" : "bg-gray-400"}`}
-                      />
-                      <span className="text-sm font-medium">{previewUrl ? "Live" : "Not deployed"}</span>
-                    </div>
-
-                    {/* Frozen Status */}
-                    {isFrozen && (
-                      <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-md">
-                        <Lock className="h-4 w-4 text-red-500" />
-                        <span className="text-sm font-medium text-red-500">Site is frozen</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  {/* Branch and Date */}
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <span className="text-sm font-medium">main</span>
+                    <span className="text-sm">•</span>
+                    <span className="text-sm">
+                      {new Date()
+                        .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                        .toLowerCase()}
+                    </span>
+                  </div>
+                </div>
 
                 {/* Action Buttons */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Quick Actions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Button
-                      onClick={() => setIsFrozen(!isFrozen)}
-                      variant={isFrozen ? "destructive" : "secondary"}
-                      className="w-full"
-                    >
-                      {isFrozen ? (
-                        <>
-                          <Unlock className="h-4 w-4 mr-2" />
-                          Unfreeze Site
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="h-4 w-4 mr-2" />
-                          Freeze Site
-                        </>
-                      )}
-                    </Button>
+                <div className="flex flex-wrap gap-4 mt-4">
+                  <Button
+                    size="lg"
+                    variant="default"
+                    className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium"
+                    onClick={handleDeploy}
+                    disabled={isDeploying}
+                  >
+                    {isDeploying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deploying...
+                      </>
+                    ) : (
+                      <>
+                        <Rocket className="h-4 w-4 mr-2" />
+                        Deploy Now
+                      </>
+                    )}
+                  </Button>
 
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="w-full bg-transparent"
-                      disabled={!previewUrl || isFrozen}
-                    >
-                      <a
-                        href={previewUrl || "#"}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => {
-                          if (isFrozen || !previewUrl) e.preventDefault()
-                        }}
-                      >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Open in New Tab
-                      </a>
-                    </Button>
-
-                    <div className="pt-2">
-                      <Label htmlFor="page-select" className="text-sm mb-2 block">
-                        Select Page
-                      </Label>
-                      <select
-                        id="page-select"
-                        value={selectedPage}
-                        onChange={(e) => setSelectedPage(e.target.value)}
-                        className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
-                      >
-                        {pages.map((page) => (
-                          <option key={page.id} value={page.id}>
-                            {page.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </CardContent>
-                </Card>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium bg-transparent"
+                    onClick={() => previewUrl && window.open(previewUrl, "_blank")}
+                    disabled={!previewUrl}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Visit Site
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
