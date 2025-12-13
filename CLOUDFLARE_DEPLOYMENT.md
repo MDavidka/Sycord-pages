@@ -25,7 +25,7 @@ The Cloudflare Pages deployment feature allows users to deploy their AI-generate
 
 ### Flow Diagram
 
-```
+\`\`\`
 User provides API credentials (token + account ID)
   ↓
 Store credentials in MongoDB (cloudflare_tokens collection)
@@ -45,7 +45,7 @@ Upload files using Direct Upload
 Store deployment info in MongoDB
   ↓
 Return deployment URL to user
-```
+\`\`\`
 
 ### Components
 
@@ -64,13 +64,13 @@ Return deployment URL to user
 - **Purpose**: Store and validate Cloudflare API credentials
 - **Authentication**: Requires NextAuth session
 - **Request Body**:
-  ```json
+  \`\`\`json
   {
     "projectId": "mongodb_object_id",
     "apiToken": "cloudflare_api_token",
     "accountId": "cloudflare_account_id"
   }
-  ```
+  \`\`\`
 - **Validation**: Makes test API call to Cloudflare to verify credentials
 - **Storage**: Stores in `cloudflare_tokens` MongoDB collection
 
@@ -78,12 +78,12 @@ Return deployment URL to user
 - **Purpose**: Deploy project to Cloudflare Pages
 - **Authentication**: Requires NextAuth session
 - **Request Body**:
-  ```json
+  \`\`\`json
   {
     "projectId": "mongodb_object_id",
     "cloudflareProjectName": "optional-custom-name"
   }
-  ```
+  \`\`\`
 - **Process**:
   1. Retrieves credentials from database
   2. Fetches project pages from MongoDB
@@ -92,14 +92,14 @@ Return deployment URL to user
   5. Uploads files via Direct Upload API
   6. Updates project with deployment URL
 - **Response**:
-  ```json
+  \`\`\`json
   {
     "success": true,
     "url": "https://project-name.pages.dev",
     "deploymentId": "deployment_id",
     "projectName": "project-name"
   }
-  ```
+  \`\`\`
 
 ##### `/api/cloudflare/status` (GET)
 - **Purpose**: Get deployment status and debug information
@@ -112,22 +112,22 @@ Return deployment URL to user
 Two standalone deployment scripts are provided for use outside the web interface:
 
 ##### Node.js Script (`scripts/cloudflare-deploy.js`)
-```bash
+\`\`\`bash
 node scripts/cloudflare-deploy.js \
   --account=your_account_id \
   --token=your_api_token \
   --project=my-site \
   --dir=./out
-```
+\`\`\`
 
 ##### Python Script (`scripts/cloudflare-deploy.py`)
-```bash
+\`\`\`bash
 python3 scripts/cloudflare-deploy.py \
   --account=your_account_id \
   --token=your_api_token \
   --project=my-site \
   --dir=./out
-```
+\`\`\`
 
 Both scripts support environment variables:
 - `CLOUDFLARE_ACCOUNT_ID`
@@ -139,7 +139,7 @@ Both scripts support environment variables:
 ## Database Schema
 
 ### `cloudflare_tokens` Collection
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   projectId: ObjectId,        // Reference to projects collection
@@ -149,10 +149,10 @@ Both scripts support environment variables:
   createdAt: Date,
   updatedAt: Date
 }
-```
+\`\`\`
 
 ### `projects` Collection (Updated Fields)
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   userId: String,
@@ -163,15 +163,15 @@ Both scripts support environment variables:
   cloudflareDeployedAt: Date,        // Last deployment timestamp
   cloudflareDeploymentId: String     // Latest deployment ID
 }
-```
+\`\`\`
 
 ## Cloudflare Pages API Integration
 
 ### Authentication
 All API calls use Bearer token authentication:
-```
+\`\`\`
 Authorization: Bearer <CLOUDFLARE_API_TOKEN>
-```
+\`\`\`
 
 ### Required API Token Permissions
 Create a token with the following permission:
@@ -180,32 +180,32 @@ Create a token with the following permission:
 ### Key Endpoints Used
 
 #### 1. List Projects
-```
+\`\`\`
 GET /accounts/{account_id}/pages/projects
-```
+\`\`\`
 Lists all Pages projects (used for validation).
 
 #### 2. Get Project
-```
+\`\`\`
 GET /accounts/{account_id}/pages/projects/{project_name}
-```
+\`\`\`
 Checks if a specific project exists.
 
 #### 3. Create Project
-```
+\`\`\`
 POST /accounts/{account_id}/pages/projects
 Body: { "name": "project-name", "production_branch": "main" }
-```
+\`\`\`
 Creates a new Pages project.
 
 #### 4. Create Deployment
-```
+\`\`\`
 POST /accounts/{account_id}/pages/projects/{project_name}/deployments
 Body: {
   "branch": "main",
   "stage": "production"  // Required: "production" or "preview"
 }
-```
+\`\`\`
 Initiates a new deployment and returns an upload URL.
 
 **Important**: The `stage` parameter is required and must be set to either:
@@ -215,10 +215,10 @@ Initiates a new deployment and returns an upload URL.
 Reference: [Cloudflare API - Stage Schema](https://developers.cloudflare.com/api/operations/pages-deployment-create-deployment)
 
 #### 5. Upload Files
-```
+\`\`\`
 POST {upload_url}
 Body: { "manifest": { "/index.html": "base64_content", ... } }
-```
+\`\`\`
 Uploads files using Direct Upload manifest.
 
 ## How to Use
@@ -329,7 +329,7 @@ The deployment system now includes detailed debug logging to help diagnose issue
 - Look for `📊 DEBUG:` entries for detailed information
 
 **Example debug output**:
-```
+\`\`\`
 [Cloudflare] DEBUG: Creating deployment for project: my-site
 [Cloudflare] DEBUG: Branch: main, Stage: production
 [Cloudflare] DEBUG: API call attempt 1/3 to https://api.cloudflare.com/...
@@ -338,7 +338,7 @@ The deployment system now includes detailed debug logging to help diagnose issue
 [Cloudflare] ✅ Deployment created (ID: abc123, Stage: production)
 [Cloudflare] DEBUG: Adding file: /index.html (1024 bytes, 1368 base64 chars)
 [Cloudflare] DEBUG: Total files in manifest: 3
-```
+\`\`\`
 
 ### Getting Help
 

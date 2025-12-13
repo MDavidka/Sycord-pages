@@ -9,20 +9,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import AIWebsiteBuilder, { GeneratedPage } from "@/components/ai-website-builder"
+import AIWebsiteBuilder, { type GeneratedPage } from "@/components/ai-website-builder"
 import { CloudflareDeployment } from "@/components/cloudflare-deployment"
-import { CloudflareDomainManager } from "@/components/cloudflare-domain-manager"
 import { ServerCard } from "@/components/server-card"
 import {
   Trash2,
   Plus,
   ExternalLink,
   AlertCircle,
-  Info,
   Loader2,
   ArrowLeft,
-  Palette,
   ShoppingCart,
   Zap,
   Package,
@@ -34,16 +30,27 @@ import {
   Settings,
   Store,
   Layout,
-  Upload,
-  Check,
   Tag,
   BarChart3,
   Users,
   History,
   FileText,
   CreditCard,
-  Rocket
 } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { useSession, signOut } from "next-auth/react"
+import { User, LogOut } from "lucide-react"
+import Image from "next/image"
+import Link from "next/link"
+
 import { currencySymbols } from "@/lib/webshop-types"
 
 const headerComponents = {
@@ -71,7 +78,7 @@ const productComponents = {
 
 const paymentOptions = [
   { id: "stripe", name: "Stripe", description: "Credit cards and digital wallets" },
-  { id: "paypal", name: "PayPal", description: "PayPal payments" },
+  { id: "paypal", name: "PayPal", name: "PayPal payments" },
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
@@ -79,6 +86,7 @@ export default function SiteSettingsPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
+  const { data: session } = useSession()
 
   const [project, setProject] = useState<any>(null)
   const [settings, setSettings] = useState<any>(null)
@@ -108,7 +116,9 @@ export default function SiteSettingsPage() {
   const [isAddingProduct, setIsAddingProduct] = useState(false)
   const [productError, setProductError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState<"styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy">("styles")
+  const [activeTab, setActiveTab] = useState<
+    "styles" | "products" | "payments" | "ai" | "pages" | "orders" | "customers" | "analytics" | "discount" | "deploy"
+  >("styles")
   const [activeSubTab, setActiveSubTab] = useState<"settings" | "store" | "pages">("settings")
 
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
@@ -138,11 +148,13 @@ export default function SiteSettingsPage() {
             setShopName(data.businessName || "")
 
             if (data.pages && Array.isArray(data.pages)) {
-              setGeneratedPages(data.pages.map((p: any) => ({
-                name: p.name,
-                code: p.content,
-                timestamp: Date.now()
-              })))
+              setGeneratedPages(
+                data.pages.map((p: any) => ({
+                  name: p.name,
+                  code: p.content,
+                  timestamp: Date.now(),
+                })),
+              )
             }
             setProjectLoading(false)
           })
@@ -238,7 +250,7 @@ export default function SiteSettingsPage() {
       const updatedSettings = {
         ...settings,
         shopName: shopName,
-        profileImage: profileImage || settings.profileImage
+        profileImage: profileImage || settings.profileImage,
       }
 
       const response = await fetch(`/api/projects/${id}/settings`, {
@@ -425,13 +437,11 @@ export default function SiteSettingsPage() {
         { id: "pages", label: "Pages", icon: FileText },
         { id: "products", label: "Products", icon: ShoppingCart },
         { id: "payments", label: "Payments", icon: CreditCard },
-      ]
+      ],
     },
     {
       title: "Orders",
-      items: [
-        { id: "orders", label: "History", icon: History },
-      ]
+      items: [{ id: "orders", label: "History", icon: History }],
     },
     {
       title: "Management",
@@ -439,8 +449,8 @@ export default function SiteSettingsPage() {
         { id: "customers", label: "Customers", icon: Users },
         { id: "analytics", label: "Analytics", icon: BarChart3 },
         { id: "discount", label: "Discount", icon: Tag },
-      ]
-    }
+      ],
+    },
   ]
 
   const subTabs = [
@@ -450,10 +460,94 @@ export default function SiteSettingsPage() {
   ]
 
   // Construct preview URL safely - Prioritize Cloudflare Worker URL
-  const previewUrl = project?.cloudflareUrl || deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
+  const previewUrl =
+    project?.cloudflareUrl || deployment?.cloudflareUrl || (deployment?.domain ? `https://${deployment.domain}` : null)
+
+  const userInitials =
+    session?.user?.name
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase() || "U"
 
   return (
     <div className="min-h-screen bg-background relative">
+      <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4 md:gap-6">
+            <Link href="/dashboard" className="flex items-center gap-2">
+              <Image src="/logo.png" alt="Logo" width={28} height={28} />
+              <span className="text-lg font-semibold text-foreground hidden sm:inline">Sycord</span>
+            </Link>
+            <div className="h-6 w-px bg-border hidden md:block" />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="hidden md:inline">Project:</span>
+              <span className="font-medium text-foreground truncate max-w-[150px] md:max-w-[200px]">
+                {project?.businessName || "Loading..."}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 md:gap-3">
+            <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard")} className="hidden sm:flex">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{session?.user?.name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{session?.user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push("/dashboard")}>
+                  <Layout className="mr-2 h-4 w-4" />
+                  <span>Dashboard</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+                {session?.user?.email === "dmarton336@gmail.com" && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push("/admin")}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span className="text-primary font-semibold">Admin Panel</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </header>
+
       <div className="fixed top-4 left-4 z-30 md:hidden">
         <Button
           variant="secondary"
@@ -561,9 +655,7 @@ export default function SiteSettingsPage() {
               <div className="absolute bottom-6 left-6 right-6 z-20 flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs md:text-base font-bold text-white font-sans truncate">
-                      {previewUrl}
-                    </span>
+                    <span className="text-xs md:text-base font-bold text-white font-sans truncate">{previewUrl}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0" />
@@ -615,7 +707,7 @@ export default function SiteSettingsPage() {
 
         <div className="py-4 px-4 bg-background border-b">
           <div className="container mx-auto max-w-7xl">
-             <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-2">
                 {isFrozen && (
                   <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-500">
@@ -642,7 +734,7 @@ export default function SiteSettingsPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => {
-                          if (isFrozen || !previewUrl) e.preventDefault()
+                        if (isFrozen || !previewUrl) e.preventDefault()
                       }}
                     >
                       <ExternalLink className="h-3 w-3" />
@@ -655,7 +747,6 @@ export default function SiteSettingsPage() {
         </div>
 
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
-
           {activeTab === "styles" && (
             <div className="space-y-6">
               <ServerCard
@@ -674,22 +765,22 @@ export default function SiteSettingsPage() {
 
               {/* Sub-tabs Navigation */}
               <div className="flex border-b border-border/50">
-                {subTabs.map(tab => {
-                   const Icon = tab.icon
-                   return (
-                     <button
-                       key={tab.id}
-                       onClick={() => setActiveSubTab(tab.id as any)}
-                       className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                         activeSubTab === tab.id
-                           ? "border-primary text-primary"
-                           : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                       }`}
-                     >
-                       <Icon className="h-4 w-4" />
-                       {tab.label}
-                     </button>
-                   )
+                {subTabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveSubTab(tab.id as any)}
+                      className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                        activeSubTab === tab.id
+                          ? "border-primary text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {tab.label}
+                    </button>
+                  )
                 })}
               </div>
 
@@ -717,80 +808,80 @@ export default function SiteSettingsPage() {
 
               {/* Store Sub-tab */}
               {activeSubTab === "store" && (
-                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                   <div>
-                     <h3 className="text-lg font-medium mb-4">Product Layout</h3>
-                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                       {Object.entries(productComponents).map(([key, comp]) => (
-                         <div
-                           key={key}
-                           onClick={() => handleComponentSelect("productComponent", key)}
-                           className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
-                             settings?.productComponent === key
-                               ? "border-primary bg-primary/5 ring-1 ring-primary"
-                               : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
-                           }`}
-                         >
-                           <div className="mb-3 h-20 bg-black/20 rounded flex items-center justify-center">
-                             {/* Placeholder visual */}
-                             <div className="w-12 h-12 bg-black/30 rounded grid grid-cols-2 gap-1 p-1">
-                               <div className="bg-white/10 rounded" />
-                               <div className="bg-white/10 rounded" />
-                               <div className="bg-white/10 rounded" />
-                               <div className="bg-white/10 rounded" />
-                             </div>
-                           </div>
-                           <p className="font-medium text-sm">{comp.name}</p>
-                           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{comp.description}</p>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
-                 </div>
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Product Layout</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {Object.entries(productComponents).map(([key, comp]) => (
+                        <div
+                          key={key}
+                          onClick={() => handleComponentSelect("productComponent", key)}
+                          className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
+                            settings?.productComponent === key
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
+                          }`}
+                        >
+                          <div className="mb-3 h-20 bg-black/20 rounded flex items-center justify-center">
+                            {/* Placeholder visual */}
+                            <div className="w-12 h-12 bg-black/30 rounded grid grid-cols-2 gap-1 p-1">
+                              <div className="bg-white/10 rounded" />
+                              <div className="bg-white/10 rounded" />
+                              <div className="bg-white/10 rounded" />
+                              <div className="bg-white/10 rounded" />
+                            </div>
+                          </div>
+                          <p className="font-medium text-sm">{comp.name}</p>
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{comp.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* Pages Sub-tab */}
               {activeSubTab === "pages" && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                   <div>
-                     <h3 className="text-lg font-medium mb-4">Header Style</h3>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                       {Object.entries(headerComponents).map(([key, comp]) => (
-                         <div
-                           key={key}
-                           onClick={() => handleComponentSelect("headerComponent", key)}
-                           className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
-                             settings?.headerComponent === key
-                               ? "border-primary bg-primary/5 ring-1 ring-primary"
-                               : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
-                           }`}
-                         >
-                           <p className="font-medium text-sm mb-1">{comp.name}</p>
-                           <p className="text-xs text-muted-foreground">{comp.description}</p>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Header Style</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      {Object.entries(headerComponents).map(([key, comp]) => (
+                        <div
+                          key={key}
+                          onClick={() => handleComponentSelect("headerComponent", key)}
+                          className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                            settings?.headerComponent === key
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
+                          }`}
+                        >
+                          <p className="font-medium text-sm mb-1">{comp.name}</p>
+                          <p className="text-xs text-muted-foreground">{comp.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                   <div>
-                     <h3 className="text-lg font-medium mb-4">Hero Section</h3>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                       {Object.entries(heroComponents).map(([key, comp]) => (
-                         <div
-                           key={key}
-                           onClick={() => handleComponentSelect("heroComponent", key)}
-                           className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
-                             settings?.heroComponent === key
-                               ? "border-primary bg-primary/5 ring-1 ring-primary"
-                               : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
-                           }`}
-                         >
-                           <p className="font-medium text-sm mb-1">{comp.name}</p>
-                           <p className="text-xs text-muted-foreground">{comp.description}</p>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Hero Section</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      {Object.entries(heroComponents).map(([key, comp]) => (
+                        <div
+                          key={key}
+                          onClick={() => handleComponentSelect("heroComponent", key)}
+                          className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                            settings?.heroComponent === key
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
+                          }`}
+                        >
+                          <p className="font-medium text-sm mb-1">{comp.name}</p>
+                          <p className="text-xs text-muted-foreground">{comp.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -982,7 +1073,10 @@ export default function SiteSettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {paymentOptions.map((option) => (
-                  <Card key={option.id} className="cursor-pointer hover:border-primary hover:shadow-md transition-all bg-white/5 backdrop-blur-lg border-white/10">
+                  <Card
+                    key={option.id}
+                    className="cursor-pointer hover:border-primary hover:shadow-md transition-all bg-white/5 backdrop-blur-lg border-white/10"
+                  >
                     <CardHeader>
                       <CardTitle className="text-lg">{option.name}</CardTitle>
                       <CardDescription>{option.description}</CardDescription>
@@ -1019,7 +1113,9 @@ export default function SiteSettingsPage() {
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div>
                 <h2 className="text-2xl font-bold mb-2">Cloudflare Pages Deployment</h2>
-                <p className="text-muted-foreground mb-6">Deploy your website to Cloudflare Pages with automatic SSL and global CDN</p>
+                <p className="text-muted-foreground mb-6">
+                  Deploy your website to Cloudflare Pages with automatic SSL and global CDN
+                </p>
               </div>
               <CloudflareDeployment projectId={id} projectName={project?.businessName || "Site"} />
             </div>
@@ -1042,55 +1138,60 @@ export default function SiteSettingsPage() {
 
           {activeTab === "pages" && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               <div className="flex items-center justify-between">
-                 <div>
-                   <h2 className="text-2xl font-bold">Site Pages</h2>
-                   <p className="text-muted-foreground">Manage your AI-generated pages and content.</p>
-                 </div>
-                 <Button onClick={() => setActiveTab("ai")}>
-                   <Plus className="h-4 w-4 mr-2" /> Create New Page
-                 </Button>
-               </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold">Site Pages</h2>
+                  <p className="text-muted-foreground">Manage your AI-generated pages and content.</p>
+                </div>
+                <Button onClick={() => setActiveTab("ai")}>
+                  <Plus className="h-4 w-4 mr-2" /> Create New Page
+                </Button>
+              </div>
 
-               {generatedPages.length === 0 ? (
-                 <div className="flex flex-col items-center justify-center h-[40vh] text-center border-2 border-dashed border-white/10 rounded-xl bg-white/5">
-                   <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
-                     <FileText className="h-8 w-8 text-muted-foreground" />
-                   </div>
-                   <h3 className="text-xl font-semibold mb-2">No Pages Yet</h3>
-                   <p className="text-muted-foreground max-w-md mb-6">
-                     Use the AI Builder to generate your website structure and pages.
-                   </p>
-                   <Button onClick={() => setActiveTab("ai")}>Go to AI Builder</Button>
-                 </div>
-               ) : (
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                   {generatedPages.map((page, i) => (
-                     <Card key={i} className="overflow-hidden hover:border-primary/50 transition-all group bg-white/5 backdrop-blur-lg border-white/10">
-                       <CardHeader className="pb-3">
-                         <CardTitle className="flex items-center justify-between">
-                           <span className="flex items-center gap-2 truncate">
-                             <FileText className="h-4 w-4 text-primary"/>
-                             {page.name}
-                           </span>
-                         </CardTitle>
-                         <CardDescription className="text-xs">
-                           Generated {new Date(page.timestamp).toLocaleTimeString()}
-                         </CardDescription>
-                       </CardHeader>
-                       <CardContent className="pb-3">
-                         <div className="bg-black/20 rounded-md p-3 font-mono text-[10px] text-muted-foreground h-32 overflow-hidden relative border border-white/10">
-                           {page.code}
-                           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/20 to-transparent"/>
-                         </div>
-                       </CardContent>
-                       <CardFooter className="pt-0 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <Button size="sm" variant="outline" className="h-7 text-xs">View Code</Button>
-                       </CardFooter>
-                     </Card>
-                   ))}
-                 </div>
-               )}
+              {generatedPages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-[40vh] text-center border-2 border-dashed border-white/10 rounded-xl bg-white/5">
+                  <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
+                    <FileText className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-2">No Pages Yet</h3>
+                  <p className="text-muted-foreground max-w-md mb-6">
+                    Use the AI Builder to generate your website structure and pages.
+                  </p>
+                  <Button onClick={() => setActiveTab("ai")}>Go to AI Builder</Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {generatedPages.map((page, i) => (
+                    <Card
+                      key={i}
+                      className="overflow-hidden hover:border-primary/50 transition-all group bg-white/5 backdrop-blur-lg border-white/10"
+                    >
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 truncate">
+                            <FileText className="h-4 w-4 text-primary" />
+                            {page.name}
+                          </span>
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Generated {new Date(page.timestamp).toLocaleTimeString()}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pb-3">
+                        <div className="bg-black/20 rounded-md p-3 font-mono text-[10px] text-muted-foreground h-32 overflow-hidden relative border border-white/10">
+                          {page.code}
+                          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/20 to-transparent" />
+                        </div>
+                      </CardContent>
+                      <CardFooter className="pt-0 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button size="sm" variant="outline" className="h-7 text-xs bg-transparent">
+                          View Code
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

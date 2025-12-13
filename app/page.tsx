@@ -52,7 +52,7 @@ export default function LandingPage() {
             </Link>
             <div className="mb-12 w-full mx-auto">
               <video
-                src="/hero-video.mp4"
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/git-blob/prj_bWxAHpVzfcWBsKF4gKloSpnKnAKn/5fMm3-1m5lF9dVjpOwJyr8/public/hero-video.mp4"
                 autoPlay
                 loop
                 muted

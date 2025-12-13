@@ -11,22 +11,22 @@ This template demonstrates how to deploy a static site with an API using Cloudfl
 ## Deployment Instructions
 
 ### 1. Install Wrangler
-```bash
+\`\`\`bash
 npm install -g wrangler
-```
+\`\`\`
 
 ### 2. Local Development
 Preview the site and API locally:
-```bash
+\`\`\`bash
 wrangler dev
-```
+\`\`\`
 Visit `http://localhost:8787` (or the URL shown).
 
 ### 3. Production Deployment
 Deploy to Cloudflare:
-```bash
+\`\`\`bash
 wrangler deploy
-```
+\`\`\`
 
 ## How It Works
 

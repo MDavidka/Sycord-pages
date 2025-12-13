@@ -2,7 +2,7 @@
 
 ## Complete Deployment Flow
 
-```mermaid
+\`\`\`mermaid
 sequenceDiagram
     participant User
     participant App as Sycord Pages App
@@ -70,13 +70,13 @@ sequenceDiagram
             App->>User: Show success + live URL 🎉
         end
     end
-```
+\`\`\`
 
 ## API Call Sequence
 
 ### 1. Authentication (One-time setup)
 
-```
+\`\`\`
 1. User Action → Click "Authenticate with Google"
    ↓
 2. GET https://accounts.google.com/o/oauth2/v2/auth
@@ -88,22 +88,22 @@ sequenceDiagram
    - Exchange code for tokens
    ↓
 5. Store tokens in MongoDB
-```
+\`\`\`
 
 ### 2. Token Refresh (When expired)
 
-```
+\`\`\`
 1. Check token age in database
    ↓
 2. If expired → POST https://oauth2.googleapis.com/token
    - Use refresh_token grant type
    ↓
 3. Update access_token in database
-```
+\`\`\`
 
 ### 3. Deployment (Main flow)
 
-```
+\`\`\`
 1. User Action → Click "Deploy to Firebase"
    ↓
 2. Get valid access token (refresh if needed)
@@ -133,11 +133,11 @@ sequenceDiagram
 9. Update database with deployment info
    ↓
 10. Return success + URL to user
-```
+\`\`\`
 
 ## Error Handling Flow
 
-```mermaid
+\`\`\`mermaid
 flowchart TD
     Start[Start Deployment] --> GetToken[Get Access Token]
     GetToken --> CheckExpired{Token Expired?}
@@ -179,39 +179,39 @@ flowchart TD
     Error6 --> End
     Error7 --> End
     Success --> End
-```
+\`\`\`
 
 ## Channel-Specific Deployment
 
 ### Live Channel (Default)
 
-```
+\`\`\`
 POST /projects/{id}/sites/{siteId}/releases?versionName={version}
 ↓
 Site live at: https://{siteId}.web.app
-```
+\`\`\`
 
 ### Preview Channel
 
-```
+\`\`\`
 POST /projects/{id}/sites/{siteId}/channels/preview/releases?versionName={version}
 ↓
 Site live at: https://{siteId}--preview.web.app
-```
+\`\`\`
 
 ### Custom Channel
 
-```
+\`\`\`
 POST /projects/{id}/sites/{siteId}/channels/{channelId}/releases?versionName={version}
 ↓
 Site live at: https://{siteId}--{channelId}.web.app
-```
+\`\`\`
 
 ## Data Flow
 
 ### User Interaction → API → Database
 
-```
+\`\`\`
 ┌─────────────┐
 │    User     │
 └──────┬──────┘
@@ -247,11 +247,11 @@ Site live at: https://{siteId}--{channelId}.web.app
                      │   Hosting   │
                      │  REST API   │
                      └─────────────┘
-```
+\`\`\`
 
 ## Security Flow
 
-```
+\`\`\`
 1. OAuth Tokens
    ├─ Stored encrypted in MongoDB
    ├─ Access token: Short-lived (1 hour)
@@ -267,11 +267,11 @@ Site live at: https://{siteId}--{channelId}.web.app
    ├─ Session checked before deployment
    ├─ User can only deploy their own projects
    └─ Tokens tied to user + project in database
-```
+\`\`\`
 
 ## File Preparation
 
-```javascript
+\`\`\`javascript
 // Convert files for upload
 const files = {}
 for (const page of project.pages) {
@@ -283,11 +283,11 @@ for (const page of project.pages) {
 // Send to Firebase
 POST /{versionName}:populateFiles
 Body: { files: files }
-```
+\`\`\`
 
 ## Response Handling
 
-```javascript
+\`\`\`javascript
 // Success response
 {
   success: true,
@@ -309,4 +309,4 @@ Body: { files: files }
   ],
   helpUrl: "https://console.firebase.google.com/"
 }
-```
+\`\`\`
