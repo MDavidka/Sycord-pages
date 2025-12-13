@@ -230,7 +230,7 @@ function DashboardContent() {
             </div>
             <div className="flex items-center gap-2 md:gap-3">
               <MobileNav />
-              <ThemeToggle />
+              {/* ThemeToggle removed as we force dark mode */}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
