@@ -41,8 +41,8 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-12 md:pt-32 md:pb-16 overflow-hidden min-h-[600px] flex items-center bg-background">
-        <div className="container mx-auto px-4 relative z-20 mt-20">
+      <section className="relative pt-12 pb-12 md:pt-16 md:pb-16 overflow-hidden min-h-[500px] flex items-center bg-background">
+        <div className="container mx-auto px-4 relative z-20 mt-10">
           <div className="max-w-5xl mx-auto text-center">
             <div className="mb-12 w-full mx-auto">
               <video
@@ -51,7 +51,7 @@ export default function LandingPage() {
                 loop
                 muted
                 playsInline
-                className="w-full h-auto rounded-xl shadow-2xl"
+                className="w-full h-auto rounded-xl"
               />
             </div>
 
