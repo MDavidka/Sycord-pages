@@ -108,7 +108,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="border border-border rounded-lg p-8 bg-card hover:bg-accent transition-colors">
+            <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-lg p-8 hover:bg-white/10 transition-colors">
               <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center mb-4 text-white">
                 <Zap className="h-6 w-6" />
               </div>
@@ -117,7 +117,7 @@ export default function LandingPage() {
                 Platformunk a sebességre van optimalizálva, biztosítva a zökkenőmentes felhasználói élményt.
               </p>
             </div>
-            <div className="border border-border rounded-lg p-8 bg-card hover:bg-accent transition-colors">
+            <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-lg p-8 hover:bg-white/10 transition-colors">
               <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center mb-4 text-white">
                 <Globe className="h-6 w-6" />
               </div>
@@ -126,7 +126,7 @@ export default function LandingPage() {
                 Telepítse alkalmazását világszerte a robusztus infrastruktúránkkal.
               </p>
             </div>
-            <div className="border border-border rounded-lg p-8 bg-card hover:bg-accent transition-colors">
+            <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-lg p-8 hover:bg-white/10 transition-colors">
               <div className="w-12 h-12 rounded-lg bg-white/10 flex items-center justify-center mb-4 text-white">
                 <Shield className="h-6 w-6" />
               </div>

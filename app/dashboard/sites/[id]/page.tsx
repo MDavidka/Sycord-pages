@@ -45,6 +45,7 @@ import {
   Rocket
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
+import { DashboardHeader } from "@/components/dashboard-header"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -454,7 +455,9 @@ export default function SiteSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background relative">
-      <div className="fixed top-4 left-4 z-30 md:hidden">
+      <DashboardHeader />
+
+      <div className="fixed top-20 left-4 z-30 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -465,7 +468,7 @@ export default function SiteSettingsPage() {
         </Button>
       </div>
 
-      <div className="fixed top-4 right-4 z-50 md:hidden">
+      <div className="fixed top-20 right-4 z-50 md:hidden">
         <Button
           variant="secondary"
           size="icon"
@@ -477,12 +480,12 @@ export default function SiteSettingsPage() {
       </div>
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-56 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed top-[73px] bottom-0 left-0 z-40 w-56 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } backdrop-blur-xl bg-sidebar border-r border-sidebar-border flex flex-col`}
+        } backdrop-blur-xl bg-black/40 border-r border-white/10 flex flex-col`}
       >
         <div className="p-6 flex flex-col h-full">
-          <div className="flex items-center gap-2 mb-8 text-sidebar-foreground">
+          <div className="flex items-center gap-2 mb-8 text-foreground">
             <WebsiteIcon className="h-6 w-6" />
             <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
           </div>
@@ -490,7 +493,7 @@ export default function SiteSettingsPage() {
           <nav className="flex-1 space-y-6 overflow-y-auto pr-2">
             {navGroups.map((group) => (
               <div key={group.title}>
-                <h3 className="px-4 mb-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
+                <h3 className="px-4 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   {group.title}
                 </h3>
                 <div className="space-y-1">
@@ -506,8 +509,8 @@ export default function SiteSettingsPage() {
                         }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group ${
                           isActive
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            ? "bg-white/10 text-foreground shadow-sm backdrop-blur-sm"
+                            : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -520,10 +523,10 @@ export default function SiteSettingsPage() {
             ))}
           </nav>
 
-          <div className="mt-auto pt-6 border-t border-sidebar-border">
+          <div className="mt-auto pt-6 border-t border-white/10">
             <Button
               variant="ghost"
-              className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent gap-3 px-4"
+              className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-white/5 gap-3 px-4"
               onClick={() => router.push("/dashboard")}
             >
               <ArrowLeft className="h-5 w-5" />
@@ -696,7 +699,7 @@ export default function SiteSettingsPage() {
               {/* Settings Sub-tab */}
               {activeSubTab === "settings" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <Card>
+                  <Card className="bg-white/5 backdrop-blur-lg border-white/10">
                     <CardHeader>
                       <CardTitle>General Information</CardTitle>
                       <CardDescription>Update your shop's basic details</CardDescription>
@@ -728,16 +731,16 @@ export default function SiteSettingsPage() {
                            className={`cursor-pointer rounded-lg border-2 p-4 text-center transition-all ${
                              settings?.productComponent === key
                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                               : "border-transparent bg-card hover:bg-accent hover:border-border shadow-sm"
+                               : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
                            }`}
                          >
-                           <div className="mb-3 h-20 bg-muted/50 rounded flex items-center justify-center">
+                           <div className="mb-3 h-20 bg-black/20 rounded flex items-center justify-center">
                              {/* Placeholder visual */}
-                             <div className="w-12 h-12 bg-muted rounded grid grid-cols-2 gap-1 p-1">
-                               <div className="bg-foreground/10 rounded" />
-                               <div className="bg-foreground/10 rounded" />
-                               <div className="bg-foreground/10 rounded" />
-                               <div className="bg-foreground/10 rounded" />
+                             <div className="w-12 h-12 bg-black/30 rounded grid grid-cols-2 gap-1 p-1">
+                               <div className="bg-white/10 rounded" />
+                               <div className="bg-white/10 rounded" />
+                               <div className="bg-white/10 rounded" />
+                               <div className="bg-white/10 rounded" />
                              </div>
                            </div>
                            <p className="font-medium text-sm">{comp.name}</p>
@@ -762,7 +765,7 @@ export default function SiteSettingsPage() {
                            className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
                              settings?.headerComponent === key
                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                               : "border-transparent bg-card hover:bg-accent hover:border-border shadow-sm"
+                               : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
                            }`}
                          >
                            <p className="font-medium text-sm mb-1">{comp.name}</p>
@@ -782,7 +785,7 @@ export default function SiteSettingsPage() {
                            className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
                              settings?.heroComponent === key
                                ? "border-primary bg-primary/5 ring-1 ring-primary"
-                               : "border-transparent bg-card hover:bg-accent hover:border-border shadow-sm"
+                               : "border-white/10 bg-white/5 hover:bg-white/10 shadow-sm"
                            }`}
                          >
                            <p className="font-medium text-sm mb-1">{comp.name}</p>
@@ -799,7 +802,7 @@ export default function SiteSettingsPage() {
           {activeTab === "products" && (
             <div className="space-y-6">
               {productsLoading ? (
-                <Card>
+                <Card className="bg-white/5 backdrop-blur-lg border-white/10">
                   <CardContent className="py-12">
                     <div className="flex items-center justify-center">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -816,7 +819,7 @@ export default function SiteSettingsPage() {
                     </div>
                   )}
 
-                  <Card>
+                  <Card className="bg-white/5 backdrop-blur-lg border-white/10">
                     <CardHeader>
                       <CardTitle>Add New Product</CardTitle>
                       <CardDescription>Add products with price, description, and image</CardDescription>
@@ -902,7 +905,7 @@ export default function SiteSettingsPage() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="bg-white/5 backdrop-blur-lg border-white/10">
                     <CardHeader>
                       <CardTitle>Your Products ({products.length})</CardTitle>
                       <CardDescription>Manage all your products</CardDescription>
@@ -918,7 +921,7 @@ export default function SiteSettingsPage() {
                           {products.map((product) => (
                             <div
                               key={product._id}
-                              className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                              className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border border-white/10 rounded-lg hover:bg-white/5 transition-colors"
                             >
                               <div className="flex items-start gap-4 flex-1">
                                 {product.image && (
@@ -940,7 +943,7 @@ export default function SiteSettingsPage() {
                                       {product.price}
                                     </span>
                                     {product.category && (
-                                      <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-muted">
+                                      <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-white/10">
                                         {product.category}
                                       </span>
                                     )}
@@ -982,7 +985,7 @@ export default function SiteSettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {paymentOptions.map((option) => (
-                  <Card key={option.id} className="cursor-pointer hover:border-primary hover:shadow-md transition-all">
+                  <Card key={option.id} className="cursor-pointer hover:border-primary hover:shadow-md transition-all bg-white/5 backdrop-blur-lg border-white/10">
                     <CardHeader>
                       <CardTitle className="text-lg">{option.name}</CardTitle>
                       <CardDescription>{option.description}</CardDescription>
@@ -1026,8 +1029,8 @@ export default function SiteSettingsPage() {
           )}
 
           {["orders", "customers", "analytics", "discount"].includes(activeTab) && (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center border-2 border-dashed border-border rounded-xl bg-muted/20 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center border-2 border-dashed border-white/10 rounded-xl bg-white/5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
                 {activeTab === "orders" && <History className="h-8 w-8 text-muted-foreground" />}
                 {activeTab === "customers" && <Users className="h-8 w-8 text-muted-foreground" />}
                 {activeTab === "analytics" && <BarChart3 className="h-8 w-8 text-muted-foreground" />}
@@ -1053,8 +1056,8 @@ export default function SiteSettingsPage() {
                </div>
 
                {generatedPages.length === 0 ? (
-                 <div className="flex flex-col items-center justify-center h-[40vh] text-center border-2 border-dashed border-border rounded-xl bg-muted/20">
-                   <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+                 <div className="flex flex-col items-center justify-center h-[40vh] text-center border-2 border-dashed border-white/10 rounded-xl bg-white/5">
+                   <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4">
                      <FileText className="h-8 w-8 text-muted-foreground" />
                    </div>
                    <h3 className="text-xl font-semibold mb-2">No Pages Yet</h3>
@@ -1066,7 +1069,7 @@ export default function SiteSettingsPage() {
                ) : (
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                    {generatedPages.map((page, i) => (
-                     <Card key={i} className="overflow-hidden hover:border-primary/50 transition-all group">
+                     <Card key={i} className="overflow-hidden hover:border-primary/50 transition-all group bg-white/5 backdrop-blur-lg border-white/10">
                        <CardHeader className="pb-3">
                          <CardTitle className="flex items-center justify-between">
                            <span className="flex items-center gap-2 truncate">
@@ -1079,9 +1082,9 @@ export default function SiteSettingsPage() {
                          </CardDescription>
                        </CardHeader>
                        <CardContent className="pb-3">
-                         <div className="bg-muted rounded-md p-3 font-mono text-[10px] text-muted-foreground h-32 overflow-hidden relative border border-border/50">
+                         <div className="bg-black/20 rounded-md p-3 font-mono text-[10px] text-muted-foreground h-32 overflow-hidden relative border border-white/10">
                            {page.code}
-                           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-muted to-transparent"/>
+                           <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-black/20 to-transparent"/>
                          </div>
                        </CardContent>
                        <CardFooter className="pt-0 flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
