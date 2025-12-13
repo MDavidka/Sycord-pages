@@ -37,7 +37,11 @@ import {
   LogOut,
   User,
   Rocket,
+  Globe,
+  Save,
+  Upload,
 } from "lucide-react"
+import { CloudflareDomainManager } from "@/components/cloudflare-domain-manager"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -122,6 +126,7 @@ export default function SiteSettingsPage() {
   const [selectedPage, setSelectedPage] = useState<string>("landing")
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDeploying, setIsDeploying] = useState(false)
+  const [showDomainManager, setShowDomainManager] = useState(false)
   const { data: session } = useSession()
 
   // Settings State
@@ -473,6 +478,15 @@ export default function SiteSettingsPage() {
       <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4 md:gap-8">
+            {/* Mobile Back Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push("/dashboard")}
+              className="md:hidden"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <button
               onClick={() => router.push("/dashboard")}
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
@@ -486,6 +500,16 @@ export default function SiteSettingsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 md:gap-3">
+            {/* Mobile Menu Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="md:hidden"
+            >
+              {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+
             <Button
               variant="ghost"
               size="sm"
@@ -535,29 +559,6 @@ export default function SiteSettingsPage() {
         </div>
       </header>
 
-      {/* Mobile Back Button */}
-      <div className="fixed top-28 left-4 z-50 md:hidden">
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => router.push("/dashboard")}
-          className="shadow-lg bg-background/60 backdrop-blur-md border border-border text-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-      </div>
-
-      {/* Mobile Menu Toggle */}
-      <div className="fixed top-28 right-4 z-50 md:hidden">
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="shadow-lg bg-background/60 backdrop-blur-md border border-border text-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          {isSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
-      </div>
 
       {activeTab !== "styles" && (
         <aside
@@ -672,19 +673,23 @@ export default function SiteSettingsPage() {
                       <span className="text-sm font-medium">main</span>
                       <span className="text-sm">•</span>
                       <span className="text-sm">
-                        {new Date()
-                          .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                          .toLowerCase()}
+                        {project?.cloudflareDeployedAt
+                          ? new Date(project.cloudflareDeployedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            }).toLowerCase()
+                          : "Not deployed"}
                       </span>
                     </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-4 mt-4">
+                  <div className="grid grid-cols-2 lg:flex flex-wrap gap-4 mt-4">
                     <Button
                       size="lg"
                       variant="default"
-                      className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium"
+                      className="col-span-2 lg:flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium"
                       onClick={handleDeploy}
                       disabled={isDeploying}
                     >
@@ -704,12 +709,37 @@ export default function SiteSettingsPage() {
                     <Button
                       size="lg"
                       variant="outline"
-                      className="flex-1 min-w-[200px] h-14 rounded-2xl text-base font-medium bg-transparent"
+                      className="col-span-1 lg:flex-1 h-14 rounded-2xl text-base font-medium bg-transparent"
                       onClick={() => previewUrl && window.open(previewUrl, "_blank")}
                       disabled={!previewUrl}
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Visit Site
+                    </Button>
+
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="col-span-1 lg:flex-1 h-14 rounded-2xl text-base font-medium bg-transparent"
+                      onClick={() => setShowDomainManager(!showDomainManager)}
+                    >
+                      <Globe className="h-4 w-4 mr-2" />
+                      Domains
+                    </Button>
+
+                    <Button
+                      size="lg"
+                      variant="secondary"
+                      className="col-span-2 lg:flex-1 h-14 rounded-2xl text-base font-medium"
+                      onClick={handleSettingsUpdate}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                         <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save Changes
                     </Button>
                   </div>
                 </div>
@@ -721,19 +751,11 @@ export default function SiteSettingsPage() {
         <div className="container mx-auto px-4 py-8 max-w-7xl flex-1">
           {activeTab === "styles" && (
             <div className="space-y-6">
-              <ServerCard
-                project={project}
-                deployment={deployment}
-                deploymentLogs={deploymentLogs}
-                isDeploying={isDeploying}
-                onDeploy={handleDeploy}
-                settings={settings}
-                profileImage={profileImage}
-                onProfileImageChange={handleImageUpload}
-                onSettingsUpdate={handleSettingsUpdate}
-                isSaving={isSaving}
-                siteUrl={siteUrl}
-              />
+              {showDomainManager && (
+                 <div className="animate-in fade-in slide-in-from-top-4 mb-6">
+                    <CloudflareDomainManager projectId={id} />
+                 </div>
+              )}
 
               {/* Sub-tabs Navigation */}
               <div className="flex border-b border-border/50">
@@ -765,6 +787,35 @@ export default function SiteSettingsPage() {
                       <CardDescription>Update your shop's basic details</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      <div className="flex flex-col items-center sm:items-start gap-4 mb-6">
+                         <Label>Shop Logo</Label>
+                         <div className="flex items-center gap-4">
+                           <div className="relative h-20 w-20 rounded-full overflow-hidden bg-muted border border-border">
+                             {profileImage ? (
+                               <img src={profileImage} alt="Profile" className="h-full w-full object-cover" />
+                             ) : (
+                               <div className="h-full w-full flex items-center justify-center text-muted-foreground">
+                                 <Store className="h-8 w-8" />
+                               </div>
+                             )}
+                           </div>
+                           <div className="flex flex-col gap-2">
+                             <Label htmlFor="profile-upload" className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-4 py-2">
+                               <Upload className="mr-2 h-4 w-4" />
+                               Upload Logo
+                             </Label>
+                             <Input
+                               id="profile-upload"
+                               type="file"
+                               accept="image/*"
+                               className="hidden"
+                               onChange={handleImageUpload}
+                             />
+                             <p className="text-xs text-muted-foreground">Recommended: 200x200px</p>
+                           </div>
+                         </div>
+                      </div>
+
                       <div className="space-y-2">
                         <Label>Shop Name</Label>
                         <Input
