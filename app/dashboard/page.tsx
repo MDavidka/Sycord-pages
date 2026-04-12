@@ -25,6 +25,7 @@ function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [projects, setProjects] = useState([])
+  const [invites, setInvites] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [deletingDeployments, setDeletingDeployments] = useState<Set<string>>(new Set())
   const [flaggedDeployments, setFlaggedDeployments] = useState<Set<string>>(new Set())
@@ -53,24 +54,55 @@ function DashboardContent() {
   }, [searchParams, router])
 
   useEffect(() => {
-    async function fetchProjects() {
+    async function fetchData() {
       try {
-        const response = await fetch("/api/projects")
-        if (response.ok) {
-          const data = await response.json()
+        const [projectsRes, invitesRes] = await Promise.all([
+          fetch("/api/projects"),
+          fetch("/api/user/invites")
+        ]);
+
+        if (projectsRes.ok) {
+          const data = await projectsRes.json()
           setProjects(data)
         }
+
+        if (invitesRes.ok) {
+          const invitesData = await invitesRes.json()
+          setInvites(invitesData)
+        }
       } catch (error) {
-        console.error("Error fetching projects:", error)
+        console.error("Error fetching data:", error)
       } finally {
         setIsLoading(false)
       }
     }
 
     if (status === "authenticated") {
-      fetchProjects()
+      fetchData()
     }
   }, [status])
+
+  const handleInviteAction = async (projectId: string, action: "accept" | "deny") => {
+    try {
+      const res = await fetch("/api/user/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, action })
+      });
+      if (res.ok) {
+        setInvites(invites.filter((inv: any) => inv.projectId !== projectId));
+        if (action === "accept") {
+          // Refresh projects list if accepted
+          const projectsRes = await fetch("/api/projects");
+          if (projectsRes.ok) {
+            setProjects(await projectsRes.json());
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error responding to invite", e);
+    }
+  };
 
   useEffect(() => {
     async function checkUserStatus() {
@@ -258,6 +290,26 @@ function DashboardContent() {
             </div>
           </div>
 
+          {invites.length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-md font-semibold text-foreground mb-4">Pending Invites</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {invites.map((invite: any) => (
+                  <div key={invite.projectId} className="border border-border/50 bg-card/30 backdrop-blur-sm rounded-xl p-5 flex flex-col gap-3">
+                    <div>
+                      <h3 className="font-semibold text-foreground">{invite.businessName}</h3>
+                      <p className="text-xs text-muted-foreground">Invited by {invite.ownerName}</p>
+                    </div>
+                    <div className="flex gap-2 mt-auto pt-2">
+                      <Button onClick={() => handleInviteAction(invite.projectId, "accept")} className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90" size="sm">Accept</Button>
+                      <Button onClick={() => handleInviteAction(invite.projectId, "deny")} variant="outline" className="flex-1" size="sm">Decline</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
               {[1, 2, 3].map((i) => (
@@ -281,12 +333,15 @@ function DashboardContent() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-              {projects.map((project: any) => (
+              {projects.map((project: any) => {
+                const hasActualCode = project.pages && project.pages.some((p: any) => p.name === 'index.html' && !p.content.includes("Website in Progress"));
+
+                return (
                 <div
                   key={project._id}
                   className="group relative border border-border/50 bg-card/30 backdrop-blur-sm rounded-xl overflow-hidden flex flex-col hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
                 >
-                  {((project.domain && project.deploymentId) || (project.pages && project.pages.some((p: any) => p.name === 'index.html'))) ? (
+                  {((project.domain && project.deploymentId) || hasActualCode) ? (
                     <WebsitePreviewCard
                       domain={project.cloudflareUrl || project.domain || "example.com"}
                       isLive={!!project.deploymentId && !flaggedDeployments.has(project.deploymentId)}
@@ -297,6 +352,8 @@ function DashboardContent() {
                       style={project.style || "default"}
                       fallbackHtml={project.pages?.find((p: any) => p.name === 'index.html')?.content}
                       onDelete={() => handleDeleteProject(project._id)}
+                      isShared={project.isShared}
+                      ownerName={project.ownerName}
                     />
                   ) : (
                     <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors">
@@ -311,7 +368,7 @@ function DashboardContent() {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </main>

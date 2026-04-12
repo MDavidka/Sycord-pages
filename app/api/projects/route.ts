@@ -268,8 +268,31 @@ export async function GET() {
   const db = client.db()
 
   try {
+    // 1. Fetch user's own projects
     const userDoc = await db.collection("users").findOne({ id: session.user.id })
-    const projects = userDoc?.projects || []
+    let projects = userDoc?.projects || []
+
+    // 2. Fetch projects where user is an accepted collaborator
+    if (session.user.email) {
+      const usersWithSharedProjects = await db.collection("users").find({
+        "projects.collaborators": {
+          $elemMatch: { email: session.user.email, status: "accepted" }
+        }
+      }).toArray()
+
+      usersWithSharedProjects.forEach(user => {
+        if (user.id !== session.user?.id) { // Don't duplicate if they somehow invited themselves
+          const shared = user.projects?.filter((p: any) =>
+            p.collaborators?.some((c: any) => c.email === session.user?.email && c.status === "accepted")
+          ).map((p: any) => ({
+            ...p,
+            isShared: true,
+            ownerName: user.name || user.email
+          })) || []
+          projects = [...projects, ...shared]
+        }
+      })
+    }
 
     return NextResponse.json(projects)
   } catch (error: any) {

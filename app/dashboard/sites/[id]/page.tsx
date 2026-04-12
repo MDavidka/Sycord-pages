@@ -1656,7 +1656,7 @@ export default function SiteSettingsPage() {
                                   <h4 className="font-medium truncate">{product.name}</h4>
                                   <p className="text-sm text-muted-foreground truncate">{product.category || 'Uncategorized'}</p>
                                   <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-sm font-semibold">{currencySymbols[settings?.currency || "USD"]}{product.price}</span>
+                                    <span className="text-sm font-semibold">{currencySymbols[((settings?.currency as string) || "USD") as keyof typeof currencySymbols]}{product.price}</span>
                                     <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${product.inStock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                                       {product.inStock ? 'In Stock' : 'Out of Stock'}
                                     </span>
