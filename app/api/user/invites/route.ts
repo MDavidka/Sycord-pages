@@ -15,9 +15,13 @@ export async function GET(request: Request) {
 
   try {
     // Find projects where this user's email is in the collaborators array
-    const usersWithProjects = await db.collection("users").find({
-      "projects.collaborators.email": session.user.email
-    }).toArray()
+    const query = {
+      "projects.collaborators": {
+        $elemMatch: { email: session.user.email, status: "pending" }
+      }
+    };
+    const usersWithProjects = await db.collection("users").find(query).toArray()
+    console.log(`[API /api/user/invites] Searching for invites for email: ${session.user.email}. Found users: ${usersWithProjects.length}`);
 
     let invites: any[] = []
 
@@ -36,6 +40,8 @@ export async function GET(request: Request) {
         }
       })
     })
+
+    console.log(`[API /api/user/invites] Compiled ${invites.length} pending invites`);
 
     return NextResponse.json(invites)
   } catch (error) {
@@ -64,8 +70,7 @@ export async function POST(request: Request) {
       // Find the user who owns the project and update the collaborator status
       await db.collection("users").updateOne(
         {
-          "projects._id": new ObjectId(projectId),
-          "projects.collaborators.email": session.user.email
+          "projects._id": new ObjectId(projectId)
         },
         {
           $set: {

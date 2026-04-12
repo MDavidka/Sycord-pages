@@ -68,6 +68,7 @@ function DashboardContent() {
 
         if (invitesRes.ok) {
           const invitesData = await invitesRes.json()
+          console.log("[Dashboard] Pending invites:", invitesData)
           setInvites(invitesData)
         }
       } catch (error) {
