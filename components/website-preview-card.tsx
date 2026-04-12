@@ -23,6 +23,8 @@ interface WebsitePreviewCardProps {
   createdAt?: string
   onDelete?: (id: string) => void
   style?: string
+  isShared?: boolean
+  ownerName?: string
 }
 
 export function WebsitePreviewCard({
@@ -35,6 +37,8 @@ export function WebsitePreviewCard({
   createdAt = new Date().toISOString(),
   onDelete,
   style = "default",
+  isShared,
+  ownerName,
 }: WebsitePreviewCardProps) {
   const [frameLoading, setFrameLoading] = useState(true)
   const [frameError, setFrameError] = useState(false)
@@ -115,9 +119,18 @@ export function WebsitePreviewCard({
           >
             <IconComp className="h-4 w-4 text-zinc-500" />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-zinc-100 truncate">{businessName}</p>
-            <p className="text-[10px] text-zinc-600 mt-0.5">Created {formattedDate}</p>
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex items-center gap-2">
+              <p className="text-[13px] font-semibold text-zinc-100 truncate">{businessName}</p>
+              {isShared && (
+                <span className="text-[9px] font-medium bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase shrink-0">
+                  Shared
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-zinc-600 mt-0.5">
+              {isShared ? `Owned by ${ownerName}` : `Created ${formattedDate}`}
+            </p>
           </div>
           <Link href={`/dashboard/sites/${projectId}`}>
             <Button
@@ -268,8 +281,13 @@ export function WebsitePreviewCard({
 
       {/* ── Footer: name + live badge ── */}
       <div className="flex items-center justify-between px-4 pb-4 pt-0">
-        <p className="text-[11px] text-zinc-600">
-          {businessName} · {formattedDate}
+        <p className="text-[11px] text-zinc-600 flex items-center gap-2">
+          <span>{businessName} · {formattedDate}</span>
+          {isShared && (
+            <span className="text-[9px] font-medium bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase">
+              Shared by {ownerName}
+            </span>
+          )}
         </p>
         <div
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
