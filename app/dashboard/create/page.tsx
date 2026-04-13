@@ -51,7 +51,9 @@ export default function CreateProjectPage() {
     previouslyManaged: "",
     selectedStyle: "modern",
     status: "pending",
+    projectImage: "",
   })
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -177,6 +179,7 @@ export default function CreateProjectPage() {
           productsPerPage: 12,
           currency: "EUR",
           showPrices: true,
+          projectImage: formData.projectImage,
           layout: "grid",
         }),
       })
@@ -338,6 +341,34 @@ export default function CreateProjectPage() {
                   <span className="text-xs text-white/40">{selectedType.label}</span>
                 </div>
               )}
+              <div className="flex flex-col items-center gap-4 mb-6 relative group">
+                <div className="h-20 w-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  {formData.projectImage ? (
+                    <img src={formData.projectImage} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <ImageIcon className="h-8 w-8 text-white/30" />
+                  )}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full pointer-events-none">
+                    <span className="text-[10px] text-white">Upload</span>
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      const reader = new FileReader()
+                      reader.onloadend = () => {
+                        setFormData({ ...formData, projectImage: reader.result as string })
+                      }
+                      reader.readAsDataURL(file)
+                    }
+                  }}
+                />
+              </div>
               <input
                 type="text"
                 className="w-full max-w-lg bg-transparent border-0 text-white/50 text-2xl sm:text-3xl text-center focus:outline-none placeholder:text-white/20"
@@ -482,7 +513,7 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-[#101010] overflow-hidden">
+    <div className="fixed inset-0 bg-background overflow-hidden">
       {/* Minimalist gradient - subtle blue glow at bottom, matching mockup */}
       <div className="absolute bottom-0 left-0 right-0 h-[250px] bg-gradient-to-t from-[#0a1628]/40 via-[#0a1225]/15 to-transparent pointer-events-none" />
       <div className="absolute bottom-0 right-1/3 w-[500px] h-[150px] bg-blue-600/[0.03] rounded-full blur-[120px] pointer-events-none" />

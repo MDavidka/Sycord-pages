@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       businessDescription: (body.businessDescription || "").trim(),
       subdomain: body.subdomain,
       style: body.style,
+      projectImage: body.projectImage || "",
       // explicitly exclude fields that shouldn't be user-settable if any
   };
 
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Website in Progress</title>
+    <title>Not Yet Deployed</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         * {
@@ -166,8 +167,8 @@ export async function POST(request: Request) {
         <div class="logo"></div>
     </div>
     <div class="content">
-        <h1>Here is your site</h1>
-        <p>set up your website stile on the dasboard</p>
+        <h1>Not yet deployed</h1>
+        <p>Use the AI Website Builder to start creating your site.</p>
         <button class="return-btn" onclick="window.parent !== window ? window.parent.postMessage('returnToDashboard', '*') : window.location.href='/'">return</button>
     </div>
     <div class="footer">

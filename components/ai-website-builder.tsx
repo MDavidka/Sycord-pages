@@ -768,6 +768,38 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const [isDeploying, setIsDeploying] = useState(false)
   const [deploySuccess, setDeploySuccess] = useState(false)
+
+  // Fetch initial history
+  useEffect(() => {
+    async function fetchHistory() {
+      if (!projectId) return
+      try {
+        const res = await fetch(`/api/ai/history?projectId=${projectId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && data.length > 0) {
+            setMessages(data)
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load AI history", e)
+      }
+    }
+    fetchHistory()
+  }, [projectId])
+
+  const saveMessageToHistory = async (msg: Message) => {
+    if (!projectId) return
+    try {
+      await fetch('/api/ai/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, message: msg })
+      })
+    } catch (e) {
+      console.error("Failed to save message", e)
+    }
+  }
   const [deployResult, setDeployResult] = useState<{ url?: string; githubUrl?: string } | null>(null)
 
   const [instruction, setInstruction] = useState<string>("")
@@ -1076,6 +1108,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     }
 
     setMessages(prev => [...prev, userMessage])
+    saveMessageToHistory(userMessage)
     setError(null)
     setAutoDeployTriggered(false)
     setSitemap([])
@@ -1114,11 +1147,13 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       if (questionMatch) {
         setStep("clarifying")
         const questionText = questionMatch[1].trim()
-        setMessages(prev => [...prev, {
+        const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
           content: questionText,
-        }])
+        }
+        setMessages(prev => [...prev, assistantMessage])
+        saveMessageToHistory(assistantMessage)
         setInput("")
         return
       }
@@ -1235,6 +1270,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
 
       setMessages(prev => [...prev, assistantMessage])
+      saveMessageToHistory(assistantMessage)
 
       if (data.code && data.pageName) {
         setGeneratedPages(prev => {

@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
-      return NextResponse.json({ isBlocked: false, subscription: "Free", isPremium: false })
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
     }
 
     const client = await clientPromise
@@ -16,13 +16,10 @@ export async function GET() {
     const user = await db.collection("users").findOne({ id: session.user.id })
 
     return NextResponse.json({
-      isBlocked: user?.isBlocked || false,
-      subscription: user?.subscription || "Free",
-      isPremium: user?.isPremium || false,
-      creditBalance: user?.creditBalance ?? 0,
+      creditHistory: user?.creditHistory || []
     })
-  } catch (error) {
-    console.error("[v0] User status error:", error)
-    return NextResponse.json({ isBlocked: false, subscription: "Free", isPremium: false })
+  } catch (error: any) {
+    console.error("[v0] Fetch credit history error:", error)
+    return NextResponse.json({ message: error.message }, { status: 500 })
   }
 }
