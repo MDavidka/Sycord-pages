@@ -829,6 +829,26 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     return () => clearTimeout(timer)
   }, [messages, messagesLoaded, projectId])
 
+  // Save messages immediately on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (messages.length === 0 || !projectId) return
+      const payload = JSON.stringify({
+        projectId,
+        messages: messages.slice(-50).map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          pageName: m.pageName,
+          timestamp: new Date().toISOString(),
+        })),
+      })
+      navigator.sendBeacon("/api/ai/messages", payload)
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [messages, projectId])
+
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
     const nodes: SitemapNode[] = []

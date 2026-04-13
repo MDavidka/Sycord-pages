@@ -14,6 +14,9 @@ import { cacheGeneratedFile, getCachedFiles } from "@/lib/gemini-cache"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
+// Credit cost per generated file (in EUR)
+const CREDIT_PER_FILE = -0.20
+
 // API Configurations
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
@@ -248,18 +251,18 @@ CRITICAL MONGODB RULES:
       cacheGeneratedFile(projectId, currentTask.filename, extractedCode, currentTask.usedFor)
     }
 
-    // 5. Deduct credit for file generation (-0.20€ per file)
+    // 5. Deduct credit for file generation
     try {
       const mongo = await clientPromise
       const db = mongo.db()
       await db.collection("users").updateOne(
         { id: session.user.id },
         {
-          $inc: { credits: -0.20 },
+          $inc: { credits: CREDIT_PER_FILE },
           $push: {
             creditHistory: {
               $each: [{
-                amount: -0.20,
+                amount: CREDIT_PER_FILE,
                 reason: `Generated ${currentTask.filename}`,
                 projectId: projectId || null,
                 fileName: currentTask.filename,

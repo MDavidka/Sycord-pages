@@ -361,6 +361,14 @@ export default function CreateProjectPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
+                    if (file.size > 2 * 1024 * 1024) {
+                      toast.error("Image must be under 2MB")
+                      return
+                    }
+                    if (!file.type.startsWith("image/")) {
+                      toast.error("Please upload an image file")
+                      return
+                    }
                     const reader = new FileReader()
                     reader.onload = () => {
                       setFormData(prev => ({ ...prev, profileImage: reader.result as string }))

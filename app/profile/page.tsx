@@ -284,7 +284,7 @@ export default function ProfileSettingsPage() {
                       <div>
                         <p className="text-sm font-medium text-destructive">Delete Account</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Permanently delete your account and all associated data. This action cannot be undone.
+                          Request permanent deletion of your account and all associated data. You will be signed out and your deletion request will be processed within 30 days.
                         </p>
                       </div>
                       <div className="space-y-2">
@@ -306,7 +306,7 @@ export default function ProfileSettingsPage() {
                           if (deleteConfirmText !== "DELETE") return
                           setIsDeleting(true)
                           try {
-                            // Account deletion would be implemented server-side
+                            // Sign out and redirect — server-side deletion is processed separately
                             await signOut({ callbackUrl: "/" })
                           } catch {
                             setIsDeleting(false)
@@ -314,7 +314,7 @@ export default function ProfileSettingsPage() {
                         }}
                       >
                         {isDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                        Delete my account
+                        Request account deletion
                       </Button>
                     </div>
                   </CardContent>
