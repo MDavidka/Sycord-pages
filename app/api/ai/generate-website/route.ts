@@ -17,6 +17,7 @@ import { ObjectId } from "mongodb"
 // API Configurations
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
@@ -26,8 +27,7 @@ const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: str
   "gemini-1.5-flash": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "gemini-1.5-pro": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" },
-  // "test" model: displayed as "Vercel" in the UI, routes through Google API internally
-  "alibaba/qwen3-coder": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Vercel" }
+  "qwen/qwen3-coder:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" }
 }
 
 export async function POST(request: Request) {
@@ -66,10 +66,8 @@ export async function POST(request: Request) {
        configKey = "gemini-1.5-pro"
     }
 
-    // "test" model (alibaba/qwen3-coder) uses Google API internally
-    // Remap to gemini-2.0-flash for the actual API call but keep the config lookup
-    const isTestModel = modelId === "alibaba/qwen3-coder"
-    const apiModelId = isTestModel ? "gemini-2.0-flash" : configKey
+    // OpenRouter model uses its own model ID directly
+    const apiModelId = configKey
 
     const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS["gemini-3.1-pro-preview"]
 
@@ -250,7 +248,33 @@ CRITICAL MONGODB RULES:
       cacheGeneratedFile(projectId, currentTask.filename, extractedCode, currentTask.usedFor)
     }
 
-    // 5. Update Instruction (Mark as Done)
+    // 5. Deduct credit for file generation (-0.20€ per file)
+    try {
+      const mongo = await clientPromise
+      const db = mongo.db()
+      await db.collection("users").updateOne(
+        { id: session.user.id },
+        {
+          $inc: { credits: -0.20 },
+          $push: {
+            creditHistory: {
+              $each: [{
+                amount: -0.20,
+                reason: `Generated ${currentTask.filename}`,
+                projectId: projectId || null,
+                fileName: currentTask.filename,
+                timestamp: new Date(),
+              }],
+              $slice: -200,
+            },
+          } as any,
+        }
+      )
+    } catch (creditErr) {
+      console.warn("[v0] Failed to deduct credit:", creditErr)
+    }
+
+    // 6. Update Instruction (Mark as Done)
     const updatedInstruction = instruction.replace(`[${currentTask.number}]`, `[Done]`)
 
     return NextResponse.json({
