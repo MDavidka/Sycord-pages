@@ -19,6 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { WebsitePreviewCard } from "@/components/website-preview-card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
 function DashboardContent() {
   const { data: session, status } = useSession()
@@ -30,6 +31,7 @@ function DashboardContent() {
   const [flaggedDeployments, setFlaggedDeployments] = useState<Set<string>>(new Set())
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
+  const [pendingInvites, setPendingInvites] = useState<CollabInvite[]>([])
 
   // Check for auto-open modal query param and errors
   useEffect(() => {
@@ -87,6 +89,27 @@ function DashboardContent() {
 
     if (status === "authenticated") {
       checkUserStatus()
+    }
+  }, [status])
+
+  useEffect(() => {
+    async function fetchInvites() {
+      try {
+        const res = await fetch("/api/collab/invites")
+        if (res.ok) {
+          const data: CollabInvite[] = await res.json()
+          setPendingInvites(data)
+        }
+      } catch (error) {
+        console.error("Error fetching collaboration invites:", error)
+      }
+    }
+
+    if (status === "authenticated") {
+      fetchInvites()
+      // Poll every 20 seconds for new invites
+      const interval = setInterval(fetchInvites, 20000)
+      return () => clearInterval(interval)
     }
   }, [status])
 
@@ -316,6 +339,14 @@ function DashboardContent() {
           )}
         </main>
       </div>
+
+      {/* Collaboration Invite Popup — show one at a time */}
+      {pendingInvites.length > 0 && (
+        <CollabInvitePopup
+          invite={pendingInvites[0]}
+          onDismiss={() => setPendingInvites((prev) => prev.slice(1))}
+        />
+      )}
 
       {/* Debug Error Popup */}
       <Dialog open={!!debugError} onOpenChange={(open) => !open && setDebugError(null)}>
