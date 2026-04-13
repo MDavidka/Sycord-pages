@@ -222,7 +222,7 @@ function DashboardContent() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/dashboard/profile")}>
                     <User className="mr-2 h-4 w-4" />
                     <span>Profil</span>
                   </DropdownMenuItem>
@@ -230,7 +230,7 @@ function DashboardContent() {
                     <CreditCard className="mr-2 h-4 w-4" />
                     <span>Plans</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/dashboard/profile")}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Beállítások</span>
                   </DropdownMenuItem>

@@ -37,6 +37,18 @@ export async function POST(request: Request) {
   }
 
   try {
+    const client = await clientPromise
+    const db = client.db()
+    const user = await db.collection("users").findOne({ id: session.user.id })
+
+    // If credit balance doesn't exist, we assume they have some starting credits (e.g. from plan)
+    // For safety, initialize to 0 if totally missing, but ideally they have a balance.
+    // Ensure balance is >= 0.20
+    const currentBalance = user?.creditBalance ?? 0
+    if (currentBalance < 0.20) {
+      return NextResponse.json({ message: "Insufficient credits. Please top up your account to generate files." }, { status: 402 })
+    }
+
     const { messages, instruction, model, generatedPages, projectId } = await request.json()
 
     // Parse generatedPages from frontend (array of { name, code })
@@ -252,6 +264,21 @@ CRITICAL MONGODB RULES:
 
     // 5. Update Instruction (Mark as Done)
     const updatedInstruction = instruction.replace(`[${currentTask.number}]`, `[Done]`)
+
+    // 6. Deduct credits
+    await db.collection("users").updateOne(
+      { id: session.user.id },
+      {
+        $inc: { creditBalance: -0.20 },
+        $push: {
+          creditHistory: {
+            amount: -0.20,
+            description: `Generated ${currentTask.filename}`,
+            date: new Date(),
+          }
+        }
+      }
+    )
 
     return NextResponse.json({
         content: responseText,

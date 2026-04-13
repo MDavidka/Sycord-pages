@@ -284,6 +284,10 @@ const FileTreeView = ({
   }
   
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(getInitialExpandedFolders)
+
+  // Deploy History
+  const [deployHistory, setDeployHistory] = useState<Array<{versionId: string, message: string, date: string, isCurrent: boolean}>>([])
+  const [isReverting, setIsReverting] = useState(false)
   
   const toggleFolder = (path: string) => {
     setExpandedFolders(prev => {
@@ -568,6 +572,7 @@ export default function SiteSettingsPage() {
   >("overview")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isMenuFolded, setIsMenuFolded] = useState(false)
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop")
   const { data: session } = useSession()
 
@@ -576,6 +581,10 @@ export default function SiteSettingsPage() {
 
   // Payout balance (fetched or 0)
   const [payoutBalance, setPayoutBalance] = useState<number>(0)
+
+  // Credit history state
+  const [creditHistory, setCreditHistory] = useState<Array<{amount: number, description: string, date: string}>>([])
+  const [showCreditHistory, setShowCreditHistory] = useState(false)
 
   // Manage access dialog
   const [isManageAccessOpen, setIsManageAccessOpen] = useState(false)
@@ -650,6 +659,7 @@ export default function SiteSettingsPage() {
   const [newEnvValue, setNewEnvValue] = useState("")
   const [integrationCategory, setIntegrationCategory] = useState<string>("All")
   const [connectedIntegrations, setConnectedIntegrations] = useState<Set<string>>(new Set())
+  const [savedEnvVars, setSavedEnvVars] = useState<Array<{key: string, value: string, integration: string | null}>>([])
   const [showIntegrationToken, setShowIntegrationToken] = useState(false)
   const [integrationSaveError, setIntegrationSaveError] = useState<string | null>(null)
   const [domainSearch, setDomainSearch] = useState("")
@@ -774,7 +784,52 @@ export default function SiteSettingsPage() {
         if (data.subscription) setSubscription(data.subscription)
       })
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
+
+    fetch("/api/user/credits/history")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.creditHistory) {
+          // Sort descending by date
+          const sorted = data.creditHistory.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          setCreditHistory(sorted)
+        }
+      })
+      .catch(e => console.error("Could not fetch credit history", e))
   }, [])
+
+  // Fetch deploy history
+  useEffect(() => {
+    if (activeTab === "pages" && project?._id) {
+      fetch(`/api/deploy/history?projectId=${project._id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.history) {
+            setDeployHistory(data.history)
+          }
+        })
+        .catch(e => console.error("Failed to load deploy history", e))
+    }
+  }, [activeTab, project?._id])
+
+  const handleRevert = async (versionId: string) => {
+    if (!project?._id) return
+    setIsReverting(true)
+    try {
+      const res = await fetch("/api/deploy/revert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project._id, versionId })
+      })
+      if (!res.ok) throw new Error("Revert failed")
+      // Refetch history or trigger reload
+      toast.success("Successfully reverted version")
+    } catch (e) {
+      toast.error("Failed to revert")
+      console.error(e)
+    } finally {
+      setIsReverting(false)
+    }
+  }
 
   // Fetch already-connected integrations when the integrations tab becomes active
   useEffect(() => {
@@ -783,6 +838,7 @@ export default function SiteSettingsPage() {
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data.envVars)) {
+          setSavedEnvVars(data.envVars)
           const ids = data.envVars
             .filter((v: any) => v.integration)
             .map((v: any) => v.integration as string)
@@ -1432,14 +1488,15 @@ export default function SiteSettingsPage() {
                     >
                       {/* Live iframe preview */}
                       {previewUrl ? (
-                        <iframe
-                          src={previewUrl}
-                          title={`Preview of ${displayUrl}`}
-                          className="absolute inset-0 w-[1440px] h-[1080px] border-0 origin-top-left pointer-events-none select-none"
-                          style={{ transform: "scale(0.28)" }}
-                          sandbox="allow-same-origin allow-scripts allow-forms"
-                          tabIndex={-1}
-                        />
+                        <div className="absolute inset-0 flex justify-center items-start overflow-hidden">
+                          <iframe
+                            src={previewUrl}
+                            title={`Preview of ${displayUrl}`}
+                            className="w-[1440px] h-[1080px] border-0 origin-top-left pointer-events-none select-none transform scale-[0.22] sm:scale-[0.24] md:scale-[0.26] lg:scale-[0.20] xl:scale-[0.18]"
+                            sandbox="allow-same-origin allow-scripts allow-forms"
+                            tabIndex={-1}
+                          />
+                        </div>
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                           <div
@@ -1507,55 +1564,70 @@ export default function SiteSettingsPage() {
                     </div>
 
                     {/* QUICK ACTION BUTTONS */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        onClick={() => setActiveTab("ai")}
-                        className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <Sparkles className="h-4 w-4 text-zinc-400 shrink-0" />
-                        <div>
-                          <p className="text-[12px] font-semibold text-zinc-200">Syra</p>
-                          <p className="text-[10px] text-zinc-500">AI website builder</p>
-                        </div>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("pages")}
-                        className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                        <div>
-                          <p className="text-[12px] font-semibold text-zinc-200">Pages</p>
-                          <p className="text-[10px] text-zinc-500">Manage content</p>
-                        </div>
-                      </button>
-                      {(siteType === "shop" || databaseConnected) && (
-                        <>
-                          <button
-                            onClick={() => setActiveTab("items")}
-                            className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                          >
-                            <ShoppingCart className="h-4 w-4 text-zinc-400 shrink-0" />
-                            <div>
-                              <p className="text-[12px] font-semibold text-zinc-200">Products</p>
-                              <p className="text-[10px] text-zinc-500">Add or edit items</p>
-                            </div>
-                          </button>
-                          <button
-                            onClick={() => setActiveTab("payments")}
-                            className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                          >
-                            <Wallet className="h-4 w-4 text-zinc-400 shrink-0" />
-                            <div>
-                              <p className="text-[12px] font-semibold text-zinc-200">Payouts</p>
-                              <p className="text-[10px] text-zinc-500">Configure billing</p>
-                            </div>
-                          </button>
-                        </>
-                      )}
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-white/50 uppercase tracking-wide">Quick Actions</span>
+                        <button
+                          onClick={() => setIsMenuFolded(!isMenuFolded)}
+                          className="text-zinc-400 hover:text-white p-1 rounded-md transition-colors"
+                        >
+                          {isMenuFolded ? <FolderOpen className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
+                        </button>
+                      </div>
+
+                      <div className={cn(
+                        "grid grid-cols-2 gap-2.5 overflow-hidden transition-all duration-300 ease-in-out",
+                        isMenuFolded ? "max-h-0 opacity-0" : "max-h-[500px] opacity-100"
+                      )}>
+                        <button
+                          onClick={() => setActiveTab("ai")}
+                          className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <Sparkles className="h-4 w-4 text-zinc-400 shrink-0" />
+                          <div>
+                            <p className="text-[12px] font-semibold text-zinc-200">Syra</p>
+                            <p className="text-[10px] text-zinc-500">AI website builder</p>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
+                          <div>
+                            <p className="text-[12px] font-semibold text-zinc-200">Pages</p>
+                            <p className="text-[10px] text-zinc-500">Manage content</p>
+                          </div>
+                        </button>
+                        {(siteType === "shop" || databaseConnected) && (
+                          <>
+                            <button
+                              onClick={() => setActiveTab("items")}
+                              className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                              style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                            >
+                              <ShoppingCart className="h-4 w-4 text-zinc-400 shrink-0" />
+                              <div>
+                                <p className="text-[12px] font-semibold text-zinc-200">Products</p>
+                                <p className="text-[10px] text-zinc-500">Add or edit items</p>
+                              </div>
+                            </button>
+                            <button
+                              onClick={() => setActiveTab("payments")}
+                              className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                              style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                            >
+                              <Wallet className="h-4 w-4 text-zinc-400 shrink-0" />
+                              <div>
+                                <p className="text-[12px] font-semibold text-zinc-200">Payouts</p>
+                                <p className="text-[10px] text-zinc-500">Configure billing</p>
+                              </div>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                 </div>
@@ -1877,24 +1949,125 @@ export default function SiteSettingsPage() {
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* File Tree View */}
-                      <Card className="lg:col-span-1 bg-card/50 backdrop-blur-sm border-white/10">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <Folder className="h-4 w-4 text-primary" />
-                            Project Structure
-                          </CardTitle>
-                          <CardDescription className="text-xs">
-                            {generatedPages.length} files generated
-                          </CardDescription>
+                      {/* Left Column: File Tree & Deploy History */}
+                      <div className="lg:col-span-1 flex flex-col gap-6">
+                        {/* File Tree View */}
+                        <Card className="bg-card/50 backdrop-blur-sm border-white/10 flex-1">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Folder className="h-4 w-4 text-primary" />
+                              Project Structure
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                              {generatedPages.length} files generated
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="p-0">
+                            <FileTreeView
+                              pages={generatedPages}
+                              onSelectFile={(page) => setSelectedPage(page)}
+                              selectedFile={selectedPage?.name}
+                              onDeleteFile={async (pageName) => {
+                                if (!confirm(`Are you sure you want to delete ${pageName}?`)) return
+                                try {
+                                  const res = await fetch(`/api/projects/${id}/pages?name=${encodeURIComponent(pageName)}`, { method: "DELETE" })
+                                  if (res.ok) {
+                                    setGeneratedPages(prev => prev.filter(p => p.name !== pageName))
+                                    if (selectedPage?.name === pageName) setSelectedPage(null)
+                                  } else throw new Error("Delete failed")
+                                } catch(e: any) { alert(e.message) }
+                              }}
+                              expandedFolders={expandedFolders}
+                              toggleFolder={toggleFolder}
+                            />
+                          </CardContent>
+                        </Card>
+
+                        {/* Deploy History */}
+                        <Card className="bg-card/50 backdrop-blur-sm border-white/10">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <History className="h-4 w-4 text-primary" />
+                              Version History
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-4 space-y-3">
+                            {deployHistory.length === 0 ? (
+                              <p className="text-xs text-muted-foreground text-center py-2">No history available</p>
+                            ) : (
+                              deployHistory.map((v, i) => (
+                                <div key={i} className="p-3 rounded-lg border border-white/5 bg-black/20 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold">{v.message}</span>
+                                    {v.isCurrent && (
+                                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Current</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                    <span>{new Date(v.date).toLocaleDateString()}</span>
+                                    {!v.isCurrent && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-6 text-[10px] px-2"
+                                        onClick={() => handleRevert(v.versionId)}
+                                        disabled={isReverting}
+                                      >
+                                        Revert
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* File Editor/Preview */}
+                      <Card className="lg:col-span-2 bg-[#1e1e1e] border-white/10 overflow-hidden flex flex-col h-[600px]">
+                        <CardHeader className="bg-black/40 border-b border-white/5 py-3 px-4 flex-row items-center justify-between space-y-0">
+                          <div className="flex items-center gap-2">
+                            <FileCode className="h-4 w-4 text-zinc-400" />
+                            <CardTitle className="text-sm font-mono text-zinc-300">
+                              {selectedPage ? selectedPage.name : "No file selected"}
+                            </CardTitle>
+                          </div>
                         </CardHeader>
-                        <CardContent className="p-0">
-                          <FileTreeView
-                            pages={generatedPages}
-                            onSelectFile={(page) => setSelectedPage(page)}
-                            selectedPage={selectedPage}
-                            onDeleteFile={handleDeletePage}
-                          />
+                        <CardContent className="p-0 flex-1 relative flex flex-col">
+                          {selectedPage ? (
+                            <>
+                              <div className="absolute top-2 right-4 z-10 space-x-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs bg-black/50 border-white/10 hover:bg-white/10 text-white"
+                                  onClick={() => {
+                                    if (previewMode === "desktop") setPreviewMode("mobile")
+                                    else setPreviewMode("desktop")
+                                  }}
+                                >
+                                  {previewMode === "desktop" ? <Smartphone className="h-3 w-3 mr-1.5" /> : <Monitor className="h-3 w-3 mr-1.5" />}
+                                  {previewMode === "desktop" ? "Mobile View" : "Desktop View"}
+                                </Button>
+                              </div>
+                              <div className={cn(
+                                "flex-1 w-full bg-white relative transition-all duration-500 ease-in-out mx-auto",
+                                previewMode === "mobile" ? "max-w-[375px] h-[812px] border-[8px] border-zinc-900 rounded-[2rem] my-auto mt-4 overflow-hidden shadow-2xl" : "max-w-none h-full rounded-none"
+                              )}>
+                                <iframe
+                                  srcDoc={selectedPage.content || selectedPage.code}
+                                  className="w-full h-full border-0 bg-white"
+                                  sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                              <Code className="h-12 w-12 mb-4 opacity-20" />
+                              <p className="text-muted-foreground text-sm">Select a file from the tree to preview</p>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
 
@@ -2191,6 +2364,40 @@ export default function SiteSettingsPage() {
                         <Plus className="h-3.5 w-3.5" /> Add Custom Env
                       </button>
                     </div>
+
+                    {/* Render saved env vars */}
+                    {savedEnvVars.length > 0 && (
+                      <div className="mb-4 space-y-2">
+                        {savedEnvVars.filter(env => !env.integration).map((env, i) => (
+                          <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-mono font-bold text-zinc-300">{env.key}</span>
+                              <span className="text-[10px] font-mono text-zinc-500">{env.value || "********"}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-zinc-500 hover:text-red-400"
+                              onClick={async () => {
+                                try {
+                                  await fetch(`/api/projects/${project._id}/env?key=${env.key}`, { method: "DELETE" })
+                                  const refreshRes = await fetch(`/api/projects/${project._id}/env`)
+                                  const refreshData = await refreshRes.json()
+                                  if (Array.isArray(refreshData.envVars)) {
+                                    setSavedEnvVars(refreshData.envVars)
+                                  }
+                                } catch (e) {
+                                  console.error("Failed to delete env var", e)
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {showAddEnv && (
                       <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-3 animate-in fade-in duration-200">
                         <p className="text-xs font-medium text-white/60">Add Custom Environment Variable</p>
@@ -2220,6 +2427,14 @@ export default function SiteSettingsPage() {
                                   body: JSON.stringify({ key: newEnvKey.trim(), value: newEnvValue }),
                                 })
                                 if (!res.ok) throw new Error("Failed to save")
+
+                                // refresh list
+                                const refreshRes = await fetch(`/api/projects/${project._id}/env`)
+                                const refreshData = await refreshRes.json()
+                                if (Array.isArray(refreshData.envVars)) {
+                                  setSavedEnvVars(refreshData.envVars)
+                                }
+
                                 setNewEnvKey("")
                                 setNewEnvValue("")
                                 setShowAddEnv(false)
@@ -2289,6 +2504,35 @@ export default function SiteSettingsPage() {
                   </CardContent>
                 </Card>
 
+                {/* Credit History Modal */}
+                <Dialog open={showCreditHistory} onOpenChange={setShowCreditHistory}>
+                  <DialogContent className="sm:max-w-md bg-[#1c1c1e] border-white/10">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <History className="h-5 w-5" />
+                        Credit History
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="max-h-[300px] overflow-y-auto pr-2 custom-scrollbar space-y-3 mt-4">
+                      {creditHistory.length === 0 ? (
+                        <p className="text-sm text-zinc-500 text-center py-4">No credit history available yet.</p>
+                      ) : (
+                        creditHistory.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-3 rounded-lg bg-white/5">
+                            <div>
+                              <p className="text-sm font-medium text-zinc-200">{item.description}</p>
+                              <p className="text-xs text-zinc-500">{new Date(item.date).toLocaleString()}</p>
+                            </div>
+                            <span className={cn("text-sm font-bold", item.amount < 0 ? "text-red-400" : "text-emerald-400")}>
+                              {item.amount > 0 ? "+" : ""}{item.amount.toFixed(2)}€
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
                 <Card className="bg-card/50 backdrop-blur-sm border-white/10">
                   <CardHeader>
                     <CardTitle>Your Plan</CardTitle>
@@ -2304,15 +2548,20 @@ export default function SiteSettingsPage() {
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center gap-1.5"><Coins className="h-4 w-4" /> Monthly Credit</span>
+                        <span className="text-muted-foreground flex items-center gap-1.5"><Coins className="h-4 w-4" /> Monthly Credit Allocation</span>
                         <span className="font-semibold">{planCredit}€ / month</span>
                       </div>
                       <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                         <div className="h-full rounded-full bg-primary transition-all" style={{ width: "100%" }} />
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {planCredit}€ available this month
-                      </p>
+                      <div className="flex justify-between items-center mt-3">
+                         <p className="text-xs text-muted-foreground">
+                           {planCredit}€ available this month
+                         </p>
+                         <Button variant="outline" size="sm" onClick={() => setShowCreditHistory(true)}>
+                           View History
+                         </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
