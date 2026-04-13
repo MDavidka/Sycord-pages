@@ -341,3 +341,18 @@
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
 }
+
+/* ── Preview scale — smaller on larger screens ── */
+:root {
+  --preview-scale: 0.28;
+}
+@media (min-width: 1024px) {
+  :root {
+    --preview-scale: 0.38;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --preview-scale: 0.42;
+  }
+}

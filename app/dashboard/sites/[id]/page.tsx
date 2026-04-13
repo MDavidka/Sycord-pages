@@ -59,6 +59,10 @@ import {
   Github,
   ChevronDown,
   Shield,
+  GitBranch,
+  RotateCcw,
+  Clock,
+  Receipt,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -564,7 +568,7 @@ export default function SiteSettingsPage() {
   const [productError, setProductError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
+    "overview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations" | "credit-history" | "changes" | "env"
   >("overview")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -653,6 +657,19 @@ export default function SiteSettingsPage() {
   const [showIntegrationToken, setShowIntegrationToken] = useState(false)
   const [integrationSaveError, setIntegrationSaveError] = useState<string | null>(null)
   const [domainSearch, setDomainSearch] = useState("")
+
+  // Credit system state
+  const [credits, setCredits] = useState<number>(0)
+  const [creditHistory, setCreditHistory] = useState<any[]>([])
+
+  // Git changes/version state
+  const [gitCommits, setGitCommits] = useState<any[]>([])
+  const [deployedCommitSha, setDeployedCommitSha] = useState<string | null>(null)
+  const [isRevertingCommit, setIsRevertingCommit] = useState<string | null>(null)
+
+  // Saved env vars state for env page
+  const [savedEnvVars, setSavedEnvVars] = useState<any[]>([])
+  const [envLoading, setEnvLoading] = useState(false)
 
   const fetchLogs = async (repoIdOverride?: string) => {
     const targetId = repoIdOverride || project?.githubRepoId
@@ -766,7 +783,7 @@ export default function SiteSettingsPage() {
     fetchAllData()
   }, [id])
 
-  // Fetch subscription info
+  // Fetch subscription info + credits
   useEffect(() => {
     fetch("/api/user/status")
       .then((r) => r.json())
@@ -774,7 +791,40 @@ export default function SiteSettingsPage() {
         if (data.subscription) setSubscription(data.subscription)
       })
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
+
+    fetch("/api/credits")
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data.credits === "number") setCredits(data.credits)
+        if (Array.isArray(data.history)) setCreditHistory(data.history)
+      })
+      .catch(() => {})
   }, [])
+
+  // Fetch git commits when changes tab is active
+  useEffect(() => {
+    if (activeTab !== "changes" || !id) return
+    fetch(`/api/github/commits?projectId=${id}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data.commits)) setGitCommits(data.commits)
+        if (data.deployedCommitSha) setDeployedCommitSha(data.deployedCommitSha)
+      })
+      .catch(() => {})
+  }, [activeTab, id])
+
+  // Fetch env vars when env tab is active
+  useEffect(() => {
+    if (activeTab !== "env" || !project?._id) return
+    setEnvLoading(true)
+    fetch(`/api/projects/${project._id}/env`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data.envVars)) setSavedEnvVars(data.envVars)
+      })
+      .catch(() => {})
+      .finally(() => setEnvLoading(false))
+  }, [activeTab, project?._id])
 
   // Fetch already-connected integrations when the integrations tab becomes active
   useEffect(() => {
@@ -1172,7 +1222,10 @@ export default function SiteSettingsPage() {
       title: "Utility",
       defaultOpen: false,
       items: [
+        { id: "changes", label: "Changes", icon: GitBranch },
+        { id: "credit-history", label: "Credit History", icon: Receipt },
         { id: "integrations", label: "Integrations", icon: Database },
+        { id: "env", label: "Environment", icon: Key },
         { id: "settings", label: "Settings", icon: Settings },
       ],
     },
@@ -1425,21 +1478,32 @@ export default function SiteSettingsPage() {
               return (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
 
-                    {/* PRIMARY PREVIEW CARD (4:3) */}
+                    {/* PRIMARY PREVIEW CARD — smaller on large screens */}
                     <div
-                      className="relative w-full overflow-hidden rounded-[20px]"
-                      style={{ background: "#252527", aspectRatio: "4/3", border: "1px solid rgba(255,255,255,0.08)" }}
+                      className="relative w-full overflow-hidden rounded-[20px] lg:max-w-2xl"
+                      style={{ background: "#252527", aspectRatio: "16/9", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       {/* Live iframe preview */}
                       {previewUrl ? (
                         <iframe
                           src={previewUrl}
                           title={`Preview of ${displayUrl}`}
-                          className="absolute inset-0 w-[1440px] h-[1080px] border-0 origin-top-left pointer-events-none select-none"
-                          style={{ transform: "scale(0.28)" }}
+                          className="absolute inset-0 w-[1440px] h-[900px] border-0 origin-top-left pointer-events-none select-none"
+                          style={{ transform: "scale(var(--preview-scale, 0.28))" }}
                           sandbox="allow-same-origin allow-scripts allow-forms"
                           tabIndex={-1}
                         />
+                      ) : generatedPages.length === 0 ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div
+                            className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                            style={{ background: "#2e2e30" }}
+                          >
+                            <Rocket className="h-6 w-6 text-zinc-500" />
+                          </div>
+                          <p className="text-sm font-semibold text-zinc-300">Not yet deployed</p>
+                          <p className="text-xs text-zinc-600 max-w-[200px] text-center">Use Syra AI builder to generate your site, then deploy</p>
+                        </div>
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                           <div
@@ -1448,8 +1512,12 @@ export default function SiteSettingsPage() {
                           >
                             <Globe className="h-6 w-6 text-zinc-500" />
                           </div>
-                          <p className="text-sm font-semibold text-zinc-300">No deployment yet</p>
-                          <p className="text-xs text-zinc-600 max-w-[200px] text-center">Deploy your site to see a live preview</p>
+                          <p className="text-sm font-semibold text-zinc-300">Ready to deploy</p>
+                          <p className="text-xs text-zinc-600 max-w-[200px] text-center">{generatedPages.length} files generated — deploy to see a live preview</p>
+                          <Button size="sm" onClick={handleDeploy} disabled={isDeploying} className="mt-1">
+                            {isDeploying ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5 mr-1.5" />}
+                            Deploy now
+                          </Button>
                         </div>
                       )}
 
@@ -1959,17 +2027,22 @@ export default function SiteSettingsPage() {
                 { id: "supabase", name: "Supabase", envKey: "SUPABASE_URL", placeholder: "https://abc.supabase.co", category: "Database", free: true, description: "Free Postgres database with realtime & auth", iconColor: "#3ECF8E", iconBg: "#3ECF8E22" },
                 { id: "firebase", name: "Firebase", envKey: "FIREBASE_API_KEY", placeholder: "AIzaSy...", category: "Database", free: true, description: "Google cloud database with free Spark plan", iconColor: "#FFCA28", iconBg: "#FFCA2822" },
                 { id: "upstash", name: "Upstash Redis", envKey: "UPSTASH_REDIS_REST_URL", placeholder: "https://...-upstash.io", category: "Database", free: true, description: "Serverless Redis with 10K requests/day free", iconColor: "#00E9A3", iconBg: "#00E9A322" },
+                { id: "planetscale", name: "PlanetScale", envKey: "DATABASE_URL", placeholder: "mysql://...", category: "Database", free: true, description: "Serverless MySQL with branching & scaling", iconColor: "#000000", iconBg: "#FFFFFF11" },
                 // Auth
                 { id: "nextauth", name: "NextAuth.js", envKey: "NEXTAUTH_SECRET", placeholder: "your-nextauth-secret", category: "Auth", free: true, description: "Complete authentication solution for Next.js", iconColor: "#8B5CF6", iconBg: "#8B5CF622" },
                 { id: "clerk", name: "Clerk", envKey: "CLERK_SECRET_KEY", placeholder: "sk_live_...", category: "Auth", free: true, description: "Drop-in auth with up to 10K monthly users free", iconColor: "#6C47FF", iconBg: "#6C47FF22" },
                 { id: "supabase-auth", name: "Supabase Auth", envKey: "SUPABASE_ANON_KEY", placeholder: "eyJhbGciOi...", category: "Auth", free: true, description: "Secure authentication built on Postgres", iconColor: "#3ECF8E", iconBg: "#3ECF8E22" },
+                { id: "auth0", name: "Auth0", envKey: "AUTH0_SECRET", placeholder: "your-auth0-secret", category: "Auth", free: true, description: "Flexible authentication for any application", iconColor: "#EB5424", iconBg: "#EB542422" },
                 // Payments
                 { id: "stripe", name: "Stripe", envKey: "STRIPE_SECRET_KEY", placeholder: "sk_live_...", category: "Payments", free: false, description: "The world's most powerful payments platform", iconColor: "#635BFF", iconBg: "#635BFF22" },
                 { id: "paypal", name: "PayPal", envKey: "PAYPAL_CLIENT_SECRET", placeholder: "your-paypal-client-secret", category: "Payments", free: false, description: "Accept PayPal and major credit cards globally", iconColor: "#009CDE", iconBg: "#00308722" },
+                { id: "lemonsqueezy", name: "Lemon Squeezy", envKey: "LEMONSQUEEZY_API_KEY", placeholder: "your-api-key", category: "Payments", free: false, description: "Payments, tax & subscriptions for SaaS", iconColor: "#FFC233", iconBg: "#FFC23322" },
                 // Services
                 { id: "openai", name: "OpenAI", envKey: "OPENAI_API_KEY", placeholder: "sk-...", category: "Services", free: false, description: "Access GPT-4, DALL·E and Whisper APIs", iconColor: "#10A37F", iconBg: "#10A37F22" },
                 { id: "resend", name: "Resend", envKey: "RESEND_API_KEY", placeholder: "re_...", category: "Services", free: true, description: "3,000 free emails/month with a modern API", iconColor: "#FFFFFF", iconBg: "#FFFFFF11" },
                 { id: "github", name: "GitHub", envKey: "GITHUB_TOKEN", placeholder: "ghp_...", category: "Services", free: true, description: "Automate workflows and connect repositories", iconColor: "#FFFFFF", iconBg: "#FFFFFF11" },
+                { id: "cloudflare", name: "Cloudflare", envKey: "CLOUDFLARE_API_TOKEN", placeholder: "your-cloudflare-token", category: "Services", free: true, description: "CDN, DNS and security for your domain", iconColor: "#F6821F", iconBg: "#F6821F22" },
+                { id: "vercel", name: "Vercel", envKey: "VERCEL_TOKEN", placeholder: "your-vercel-token", category: "Services", free: true, description: "Deploy and host frontend applications", iconColor: "#FFFFFF", iconBg: "#FFFFFF11" },
               ]
 
               const filtered = integrationCategory === "All" ? allIntegrations : allIntegrations.filter((i) => i.category === integrationCategory)
@@ -2368,6 +2441,235 @@ export default function SiteSettingsPage() {
                 <p className="text-muted-foreground max-w-md">
                   Organize your blog content into segments. Coming soon.
                 </p>
+              </div>
+            )}
+
+            {/* TAB CONTENT: CREDIT HISTORY */}
+            {activeTab === "credit-history" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 max-w-3xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold">Credit History</h2>
+                    <p className="text-muted-foreground text-sm">Track your AI generation usage</p>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1C1C1E] border border-white/[0.06]">
+                    <Coins className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">{credits.toFixed(2)}€</span>
+                    <span className="text-xs text-muted-foreground">balance</span>
+                  </div>
+                </div>
+
+                <Card className="bg-card/50 backdrop-blur-sm border-white/10">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Receipt className="h-4 w-4 text-primary" />
+                      Recent Transactions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {creditHistory.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Coins className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-20" />
+                        <p className="text-sm text-muted-foreground">No transactions yet</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">Credits are deducted when AI generates files (-0.20€ per file)</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {creditHistory.map((entry: any, i: number) => (
+                          <div key={i} className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/[0.03] transition-colors">
+                            <div className={cn(
+                              "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
+                              entry.amount < 0 ? "bg-red-500/10" : "bg-emerald-500/10"
+                            )}>
+                              {entry.amount < 0 ? (
+                                <FileCode className="h-4 w-4 text-red-400" />
+                              ) : (
+                                <Coins className="h-4 w-4 text-emerald-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{entry.reason}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {entry.timestamp ? new Date(entry.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                              </p>
+                            </div>
+                            <span className={cn(
+                              "text-sm font-semibold shrink-0",
+                              entry.amount < 0 ? "text-red-400" : "text-emerald-400"
+                            )}>
+                              {entry.amount > 0 ? "+" : ""}{entry.amount.toFixed(2)}€
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* TAB CONTENT: CHANGES (GitHub Branch History) */}
+            {activeTab === "changes" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 max-w-3xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold">Previous Changes</h2>
+                    <p className="text-muted-foreground text-sm">Deployments from the main branch</p>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.06] border border-white/[0.06]">
+                    <GitBranch className="h-3.5 w-3.5 text-zinc-400" />
+                    <span className="text-xs font-mono text-zinc-400">main</span>
+                  </div>
+                </div>
+
+                {gitCommits.length === 0 ? (
+                  <div className="border-2 border-dashed border-white/10 rounded-xl p-12 text-center bg-white/5">
+                    <GitBranch className="h-10 w-10 mx-auto text-muted-foreground mb-4 opacity-40" />
+                    <h3 className="text-base font-medium mb-2">No changes yet</h3>
+                    <p className="text-sm text-muted-foreground">Deploy your site to see commit history</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {gitCommits.map((commit: any) => (
+                      <div
+                        key={commit.sha}
+                        className={cn(
+                          "flex items-center gap-3 p-4 rounded-2xl border transition-colors",
+                          commit.isDeployed
+                            ? "bg-emerald-500/5 border-emerald-500/20"
+                            : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.12]"
+                        )}
+                      >
+                        {/* Timeline dot */}
+                        <div className={cn(
+                          "h-3 w-3 rounded-full shrink-0 border-2",
+                          commit.isDeployed ? "bg-emerald-500 border-emerald-400" : "bg-zinc-700 border-zinc-600"
+                        )} />
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate">{commit.message}</p>
+                            {commit.isDeployed && (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full shrink-0">
+                                <CheckCircle2 className="h-3 w-3" /> Deployed
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <code className="text-[11px] font-mono text-zinc-500">{commit.shortSha}</code>
+                            <span className="text-[11px] text-zinc-600">{commit.author}</span>
+                            <span className="text-[11px] text-zinc-600">
+                              {commit.date ? new Date(commit.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                            </span>
+                          </div>
+                        </div>
+
+                        {!commit.isDeployed && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs text-zinc-500 hover:text-foreground shrink-0"
+                            disabled={isRevertingCommit === commit.sha}
+                            onClick={async () => {
+                              if (!confirm(`Revert to commit ${commit.shortSha}? This will redeploy an older version.`)) return
+                              setIsRevertingCommit(commit.sha)
+                              try {
+                                // Trigger a deploy that references this commit (simplified)
+                                await fetch("/api/deploy", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ projectId: id, commitSha: commit.sha }),
+                                })
+                                setDeployedCommitSha(commit.sha)
+                                setGitCommits(prev => prev.map(c => ({ ...c, isDeployed: c.sha === commit.sha })))
+                              } catch (e) {
+                                console.error("Revert failed:", e)
+                              } finally {
+                                setIsRevertingCommit(null)
+                              }
+                            }}
+                          >
+                            {isRevertingCommit === commit.sha ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <RotateCcw className="h-3.5 w-3.5 mr-1" /> Revert
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB CONTENT: ENVIRONMENT VARIABLES */}
+            {activeTab === "env" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 max-w-3xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold">Environment Variables</h2>
+                    <p className="text-muted-foreground text-sm">Saved env vars for this project</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={() => setActiveTab("integrations")}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                    Add via Integrations
+                  </Button>
+                </div>
+
+                <Card className="bg-card/50 backdrop-blur-sm border-white/10">
+                  <CardContent className="p-0">
+                    {envLoading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : savedEnvVars.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Key className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-20" />
+                        <p className="text-sm text-muted-foreground">No environment variables saved</p>
+                        <p className="text-xs text-muted-foreground/60 mt-1">Add them from the Integrations page</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-white/[0.06]">
+                        {savedEnvVars.map((env: any, i: number) => (
+                          <div key={i} className="flex items-center gap-3 px-4 py-3">
+                            <Key className="h-4 w-4 text-zinc-500 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-mono font-medium truncate">{env.key}</p>
+                              <p className="text-[11px] text-muted-foreground font-mono truncate">{env.value}</p>
+                            </div>
+                            {env.integration && (
+                              <span className="text-[10px] font-medium text-zinc-400 bg-white/[0.06] px-2 py-0.5 rounded-full shrink-0">
+                                {env.integration}
+                              </span>
+                            )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                              onClick={async () => {
+                                if (!confirm(`Delete ${env.key}?`)) return
+                                try {
+                                  await fetch(`/api/projects/${project._id}/env?key=${encodeURIComponent(env.key)}`, { method: "DELETE" })
+                                  setSavedEnvVars(prev => prev.filter(v => v.key !== env.key))
+                                } catch {}
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
 

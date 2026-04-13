@@ -762,6 +762,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [step, setStep] = useState<GenerationPhase>("idle")
   const [currentPlan, setCurrentPlan] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [messagesLoaded, setMessagesLoaded] = useState(false)
 
   const [activeFile, setActiveFile] = useState<string | undefined>(undefined)
   const [activeFileUsedFor, setActiveFileUsedFor] = useState<string | undefined>(undefined)
@@ -783,6 +784,50 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
+
+  // Load saved messages on mount
+  useEffect(() => {
+    if (!projectId || messagesLoaded) return
+    fetch(`/api/ai/messages?projectId=${projectId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data.messages) && data.messages.length > 0) {
+          const restored: Message[] = data.messages.map((m: any) => ({
+            id: m.id || Date.now().toString(),
+            role: m.role as "user" | "assistant" | "system",
+            content: m.content || "",
+            pageName: m.pageName,
+          }))
+          setMessages(restored)
+          // Show chat state if there are messages
+          if (restored.length > 0) setStep("done")
+        }
+        setMessagesLoaded(true)
+      })
+      .catch(() => setMessagesLoaded(true))
+  }, [projectId, messagesLoaded])
+
+  // Save messages when they change (debounced)
+  useEffect(() => {
+    if (!messagesLoaded || messages.length === 0 || !projectId) return
+    const timer = setTimeout(() => {
+      fetch("/api/ai/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          messages: messages.slice(-50).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            pageName: m.pageName,
+            timestamp: new Date().toISOString(),
+          })),
+        }),
+      }).catch(() => {})
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [messages, messagesLoaded, projectId])
 
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {

@@ -51,7 +51,11 @@ export default function CreateProjectPage() {
     previouslyManaged: "",
     selectedStyle: "modern",
     status: "pending",
+    profileImage: "",
   })
+
+  // Profile image handling
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -178,6 +182,7 @@ export default function CreateProjectPage() {
           currency: "EUR",
           showPrices: true,
           layout: "grid",
+          profileImage: formData.profileImage || "",
         }),
       })
 
@@ -332,8 +337,41 @@ export default function CreateProjectPage() {
             )}
 
             <div className="flex-1 flex flex-col items-center justify-center -mt-20">
+              {/* Project Profile Picture Chooser */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="relative mb-6 group"
+              >
+                <div className="h-20 w-20 rounded-2xl bg-white/[0.07] border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden transition-all group-hover:border-white/40 group-hover:bg-white/10">
+                  {formData.profileImage ? (
+                    <img src={formData.profileImage} alt="Project icon" className="h-full w-full object-cover rounded-2xl" />
+                  ) : (
+                    <ImageIcon className="h-7 w-7 text-white/30 group-hover:text-white/50 transition-colors" />
+                  )}
+                </div>
+                <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-white/30 whitespace-nowrap">
+                  {formData.profileImage ? "Change icon" : "Add project icon"}
+                </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                      setFormData(prev => ({ ...prev, profileImage: reader.result as string }))
+                    }
+                    reader.readAsDataURL(file)
+                  }}
+                />
+              </button>
+
               {selectedType && TypeIcon && (
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.07] mb-4">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.07] mb-4 mt-4">
                   <TypeIcon className="h-3.5 w-3.5 text-white/40" />
                   <span className="text-xs text-white/40">{selectedType.label}</span>
                 </div>
@@ -482,10 +520,10 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-[#101010] overflow-hidden">
-      {/* Minimalist gradient - subtle blue glow at bottom, matching mockup */}
-      <div className="absolute bottom-0 left-0 right-0 h-[250px] bg-gradient-to-t from-[#0a1628]/40 via-[#0a1225]/15 to-transparent pointer-events-none" />
-      <div className="absolute bottom-0 right-1/3 w-[500px] h-[150px] bg-blue-600/[0.03] rounded-full blur-[120px] pointer-events-none" />
+    <div className="fixed inset-0 bg-background overflow-hidden">
+      {/* Subtle accent glow matching main app */}
+      <div className="absolute bottom-0 left-0 right-0 h-[250px] bg-gradient-to-t from-primary/[0.03] via-transparent to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 right-1/3 w-[500px] h-[150px] bg-primary/[0.02] rounded-full blur-[120px] pointer-events-none" />
 
       {/* Main content */}
       <div className="relative h-full flex flex-col">
