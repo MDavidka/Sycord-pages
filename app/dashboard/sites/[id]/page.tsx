@@ -59,6 +59,7 @@ import {
   Github,
   ChevronDown,
   Shield,
+  Search,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -324,33 +325,25 @@ const PLAN_CREDITS: Record<string, number> = {
 }
 const DEFAULT_PLAN_CREDIT = 2
 
-const DOMAIN_TLD_OPTIONS = [
-  { tld: ".com", price: "$10.44/yr" },
-  { tld: ".net", price: "$11.44/yr" },
-  { tld: ".org", price: "$11.44/yr" },
-  { tld: ".co",  price: "$28.98/yr" },
-  { tld: ".io",  price: "$32.94/yr" },
-  { tld: ".dev", price: "$14.28/yr" },
-  { tld: ".app", price: "$14.28/yr" },
-  { tld: ".store", price: "$5.00/yr" },
-  { tld: ".online", price: "$3.98/yr" },
+// Fallback TLD options (replaced by real Cloudflare API prices when available)
+const FALLBACK_TLD_OPTIONS = [
+  { tld: ".com", price: 10.44 },
+  { tld: ".net", price: 11.44 },
+  { tld: ".org", price: 11.44 },
+  { tld: ".co",  price: 28.98 },
+  { tld: ".io",  price: 32.94 },
+  { tld: ".dev", price: 14.28 },
+  { tld: ".app", price: 14.28 },
+  { tld: ".store", price: 5.00 },
+  { tld: ".online", price: 3.98 },
 ] as const
 
-const CloudflareIcon = () => (
-  <svg viewBox="0 0 100 100" className="h-6 w-6 shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M86.5 55.5c-.4-1.4-1.7-2.3-3.1-2.3H23.2l-.5 1.6-.5 1.6h60.7c1.2 0 2.2.8 2.5 1.9l.1.4.6-1.6.4-1.6z" fill="#F6821F"/>
-    <path d="M71.3 66.5c.3-1 .2-2.1-.4-3-1-1.4-2.9-2.2-5-2.2H16.4l-.4 1.6-.5 1.6h49.3c1.5 0 2.8.7 3.2 1.8.2.5.2 1.1 0 1.6l.6-1.4h2.7z" fill="#F6821F"/>
-    <path d="M76.6 59.8c.2-.7.2-1.4 0-2.1-.5-1.5-2-2.6-3.8-2.6H23.2l-.5 1.7-.5 1.7h49.6c1 0 1.9.5 2.3 1.3.2.5.2 1 0 1.6l.6-1.6h1.9z" fill="#FBAD41"/>
-    <ellipse cx="65" cy="68" rx="18" ry="18" fill="#F6821F"/>
-    <ellipse cx="65" cy="68" rx="12" ry="12" fill="#FBAD41"/>
-    <path d="M47 68a18 18 0 1036 0 18 18 0 00-36 0z" fill="url(#cf-grad)"/>
-    <defs>
-      <radialGradient id="cf-grad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(65 68) scale(18)">
-        <stop stopColor="#FBAD41"/>
-        <stop offset="1" stopColor="#F6821F"/>
-      </radialGradient>
-    </defs>
-  </svg>
+const CloudflareProviderIcon = () => (
+  <img
+    src="/cloudflare-icon.svg"
+    alt="Cloudflare"
+    className="h-6 w-6 shrink-0 rounded-md"
+  />
 )
 
 const PLAN_LABELS: Record<string, string> = {
@@ -653,6 +646,74 @@ export default function SiteSettingsPage() {
   const [showIntegrationToken, setShowIntegrationToken] = useState(false)
   const [integrationSaveError, setIntegrationSaveError] = useState<string | null>(null)
   const [domainSearch, setDomainSearch] = useState("")
+  const [domainTldPrices, setDomainTldPrices] = useState<Array<{ tld: string; price: number; currency: string }>>([])
+  const [domainChecks, setDomainChecks] = useState<Record<string, { available: boolean | null; purchaseUrl: string; loading: boolean }>>({})
+  const [isDomainCheckLoading, setIsDomainCheckLoading] = useState(false)
+  const [tldPricesLoaded, setTldPricesLoaded] = useState(false)
+
+  // Fetch real TLD prices from Cloudflare (via our API)
+  const fetchTldPrices = async () => {
+    if (tldPricesLoaded) return
+    try {
+      const res = await fetch("/api/domains/tlds")
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && Array.isArray(data.tlds)) {
+          setDomainTldPrices(data.tlds)
+          setTldPricesLoaded(true)
+          return
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch TLD prices:", e)
+    }
+    // Fallback
+    setDomainTldPrices(FALLBACK_TLD_OPTIONS.map(t => ({ tld: t.tld, price: t.price, currency: "USD" })))
+    setTldPricesLoaded(true)
+  }
+
+  // Check if a specific domain is available via Cloudflare
+  const checkDomainAvailability = async (slug: string, tld: string) => {
+    const fullDomain = `${slug}${tld}`
+    setDomainChecks(prev => ({ ...prev, [fullDomain]: { available: null, purchaseUrl: "", loading: true } }))
+    try {
+      const res = await fetch(`/api/domains/check?domain=${encodeURIComponent(fullDomain)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setDomainChecks(prev => ({
+          ...prev,
+          [fullDomain]: {
+            available: data.available,
+            purchaseUrl: data.purchaseUrl || `https://www.cloudflare.com/products/registrar/`,
+            loading: false,
+          }
+        }))
+        return
+      }
+    } catch (e) {
+      console.error(`Failed to check domain ${fullDomain}:`, e)
+    }
+    setDomainChecks(prev => ({
+      ...prev,
+      [fullDomain]: { available: null, purchaseUrl: `https://www.cloudflare.com/products/registrar/`, loading: false }
+    }))
+  }
+
+  // Check all TLDs at once for the current slug
+  const checkAllDomains = async (slug: string) => {
+    if (!slug) return
+    setIsDomainCheckLoading(true)
+    const tlds = domainTldPrices.length > 0
+      ? domainTldPrices.map(t => t.tld)
+      : FALLBACK_TLD_OPTIONS.map(t => t.tld)
+    await Promise.allSettled(tlds.map(tld => checkDomainAvailability(slug, tld)))
+    setIsDomainCheckLoading(false)
+  }
+
+  // The effective TLD list to display (real prices or fallback)
+  const effectiveTldOptions = domainTldPrices.length > 0
+    ? domainTldPrices
+    : FALLBACK_TLD_OPTIONS.map(t => ({ tld: t.tld, price: t.price, currency: "USD" }))
 
   const fetchLogs = async (repoIdOverride?: string) => {
     const targetId = repoIdOverride || project?.githubRepoId
@@ -791,6 +852,13 @@ export default function SiteSettingsPage() {
       })
       .catch((err) => { console.error("[Integrations] Failed to load connected integrations:", err) })
   }, [activeTab, project?._id])
+
+  // Fetch real TLD prices when the domain tab is opened
+  useEffect(() => {
+    if (activeTab === "domain") {
+      fetchTldPrices()
+    }
+  }, [activeTab])
 
   const handleStyleSelect = (style: string) => {
     console.log("[v0] Selected style:", style)
@@ -1567,7 +1635,7 @@ export default function SiteSettingsPage() {
               const slug = domainSearch.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "") || ""
 
               return (
-                <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 max-w-2xl">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 max-w-2xl font-[Inter,system-ui,sans-serif]">
                   {/* Video preview */}
                   <div className="relative rounded-2xl overflow-hidden bg-black/30 border border-white/[0.06]">
                     <video
@@ -1582,11 +1650,11 @@ export default function SiteSettingsPage() {
                   </div>
 
                   {/* Included free subdomain */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-white/50 uppercase tracking-wide px-1">Included with your plan</p>
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]">
+                  <div className="space-y-2.5">
+                    <p className="text-[11px] font-semibold text-white/40 uppercase tracking-widest px-1">Included with your plan</p>
+                    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]">
                       <Globe className="h-5 w-5 text-zinc-400 shrink-0" />
-                      <span className="flex-1 text-sm font-mono text-white truncate">
+                      <span className="flex-1 text-sm font-mono text-white truncate tracking-tight">
                         {displayUrl || `${project?.businessName?.toLowerCase().replace(/[^a-z0-9]/g, "") || "yoursite"}.sycord.com`}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1599,42 +1667,100 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
-                  {/* Domain search */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-white/50 uppercase tracking-wide px-1">Find a custom domain</p>
+                  {/* Domain search — modernized */}
+                  <div className="space-y-2.5">
+                    <p className="text-[11px] font-semibold text-white/40 uppercase tracking-widest px-1">Find a custom domain</p>
                     <div className="relative">
-                      <Globe className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
                       <input
                         type="text"
                         value={domainSearch}
-                        onChange={(e) => setDomainSearch(e.target.value)}
-                        placeholder="type your business name"
-                        className="w-full h-12 pl-10 pr-4 rounded-2xl bg-[#2C2C2E] border border-white/[0.06] text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/20 transition-colors"
+                        onChange={(e) => {
+                          setDomainSearch(e.target.value)
+                          // Reset checks when search changes
+                          setDomainChecks({})
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && slug) checkAllDomains(slug)
+                        }}
+                        placeholder="Search for a domain name…"
+                        className="w-full h-12 pl-11 pr-28 rounded-2xl bg-[#1F1F23] border border-white/[0.08] text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/40 transition-all font-[Inter,system-ui,sans-serif] tracking-tight"
                       />
+                      <button
+                        onClick={() => slug && checkAllDomains(slug)}
+                        disabled={!slug || isDomainCheckLoading}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-8 px-4 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-xs font-semibold text-zinc-300 hover:text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        {isDomainCheckLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Search className="h-3.5 w-3.5" />
+                        )}
+                        Check
+                      </button>
                     </div>
                   </div>
 
-                  {/* TLD results */}
+                  {/* TLD results — with real pricing and availability */}
                   <div className="space-y-2">
-                    {slug.length > 0 ? DOMAIN_TLD_OPTIONS.map(({ tld, price }) => (
+                    {slug.length > 0 ? effectiveTldOptions.map(({ tld, price }) => {
+                      const fullDomain = `${slug}${tld}`
+                      const check = domainChecks[fullDomain]
+                      const isAvailable = check?.available
+                      const isUnavailable = check?.available === false
+                      const isChecking = check?.loading
+                      const purchaseUrl = check?.purchaseUrl || `https://dash.cloudflare.com/?to=/:account/domains/register/${encodeURIComponent(fullDomain)}`
+
+                      return (
+                        <div
+                          key={tld}
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3.5 rounded-2xl border transition-all",
+                            isUnavailable
+                              ? "bg-[#1C1C1E] border-red-500/20 opacity-60"
+                              : isAvailable
+                                ? "bg-[#1C1C1E] border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
+                                : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
+                          )}
+                          onClick={() => {
+                            if (!isUnavailable) {
+                              window.open(purchaseUrl, "_blank", "noopener,noreferrer")
+                            }
+                          }}
+                        >
+                          <CloudflareProviderIcon />
+                          <span className="flex-1 text-sm font-medium text-white tracking-tight">{fullDomain}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isChecking ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
+                            ) : isAvailable ? (
+                              <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">available</span>
+                            ) : isUnavailable ? (
+                              <span className="text-[10px] font-semibold bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">taken</span>
+                            ) : null}
+                            <span className="text-sm font-semibold text-white/60 tabular-nums">${price.toFixed(2)}/yr</span>
+                            {!isUnavailable && (
+                              <ExternalLink className="h-3.5 w-3.5 text-zinc-600" />
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }) : effectiveTldOptions.map(({ tld }) => (
                       <div
                         key={tld}
-                        className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#1C1C1E] border border-white/[0.06] hover:border-white/[0.14] transition-colors cursor-pointer"
+                        className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]"
                       >
-                        <CloudflareIcon />
-                        <span className="flex-1 text-sm font-medium text-white">{slug}{tld}</span>
-                        <span className="text-sm font-semibold text-white/70 shrink-0">{price}</span>
-                      </div>
-                    )) : DOMAIN_TLD_OPTIONS.map(({ tld }) => (
-                      <div
-                        key={tld}
-                        className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]"
-                      >
-                        <div className="h-6 w-6 rounded-md bg-white/[0.06] shrink-0" />
-                        <div className="flex-1 h-3 rounded-full bg-white/[0.06]" />
-                        <div className="h-3 w-10 rounded-full bg-white/[0.06] shrink-0" />
+                        <div className="h-6 w-6 rounded-md bg-white/[0.06] shrink-0 animate-pulse" />
+                        <div className="flex-1 h-3.5 rounded-full bg-white/[0.06] animate-pulse" />
+                        <div className="h-3.5 w-14 rounded-full bg-white/[0.06] shrink-0 animate-pulse" />
                       </div>
                     ))}
+                  </div>
+
+                  {/* Powered by Cloudflare badge */}
+                  <div className="flex items-center justify-center gap-2 pt-2 pb-4">
+                    <CloudflareProviderIcon />
+                    <span className="text-[11px] text-zinc-600 font-medium">Powered by Cloudflare Registrar</span>
                   </div>
                 </div>
               )

@@ -93,10 +93,11 @@ const tabs = [
   { id: "server" as const, label: "Server", icon: Server },
   { id: "vps" as const, label: "VPS Runner", icon: Activity },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
+  { id: "models" as const, label: "Model Config", icon: Settings },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "paptos"
+type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "models" | "paptos"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -123,6 +124,11 @@ export default function AdminPage() {
   // PAP & TOS State
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
   const [termsOfService, setTermsOfService] = useState("Edit your terms of service here...")
+
+  // Model Config State
+  const [thinkerModel, setThinkerModel] = useState("nvidia/nemotron-3-super-120b-a12b:free")
+  const [coderModel, setCoderModel] = useState("minimax/minimax-m2.5:free")
+  const [modelConfigLoading, setModelConfigLoading] = useState(false)
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -380,6 +386,50 @@ export default function AdminPage() {
       setVpsAction(null)
     }
   }
+
+  // Model Config functions
+  const fetchModelConfig = async () => {
+    setModelConfigLoading(true)
+    try {
+      const res = await fetch("/api/admin/model-config")
+      if (res.ok) {
+        const data = await res.json()
+        if (data.thinkerModel) setThinkerModel(data.thinkerModel)
+        if (data.coderModel) setCoderModel(data.coderModel)
+      }
+    } catch (err) {
+      console.error("Failed to fetch model config:", err)
+    } finally {
+      setModelConfigLoading(false)
+    }
+  }
+
+  const saveModelConfig = async () => {
+    setModelConfigLoading(true)
+    try {
+      const res = await fetch("/api/admin/model-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thinkerModel, coderModel }),
+      })
+      if (res.ok) {
+        toast.success("Model configuration saved successfully")
+      } else {
+        toast.error("Failed to save model configuration")
+      }
+    } catch (err) {
+      console.error("Failed to save model config:", err)
+      toast.error("Failed to save model configuration")
+    } finally {
+      setModelConfigLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === "models") {
+      fetchModelConfig()
+    }
+  }, [activeTab])
 
   return (
     <div className="min-h-screen bg-[#101010]">
@@ -1120,6 +1170,106 @@ export default function AdminPage() {
               <AlertCircle className="h-10 w-10 text-white/10 mb-3" />
               <p className="text-sm font-medium text-white/60">Coming soon</p>
               <p className="text-xs text-white/30 mt-1">Support ticket system is under development</p>
+            </div>
+          </div>
+        )}
+
+        {/* Model Config Tab */}
+        {activeTab === "models" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-lg font-semibold text-white">AI Model Configuration</h2>
+              <p className="text-sm text-white/40">Configure test model provider settings for thinker and coder models</p>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Thinker Model (Plan Generator)
+                  </h3>
+                  <p className="text-xs text-white/30 mt-1">Model used for generating architectural plans via OpenRouter</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50">Model Identifier</label>
+                  <Input
+                    className="font-mono text-xs bg-white/[0.02] border-white/[0.06] text-white/70 rounded-xl"
+                    value={thinkerModel}
+                    onChange={(e) => setThinkerModel(e.target.value)}
+                    placeholder="e.g., nvidia/nemotron-3-super-120b-a12b:free"
+                  />
+                  <p className="text-[10px] text-white/20">
+                    Current: {thinkerModel || "Not configured"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Coder Model (Code Generator)
+                  </h3>
+                  <p className="text-xs text-white/30 mt-1">Model used for generating website code via OpenRouter</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50">Model Identifier</label>
+                  <Input
+                    className="font-mono text-xs bg-white/[0.02] border-white/[0.06] text-white/70 rounded-xl"
+                    value={coderModel}
+                    onChange={(e) => setCoderModel(e.target.value)}
+                    placeholder="e.g., minimax/minimax-m2.5:free"
+                  />
+                  <p className="text-[10px] text-white/20">
+                    Current: {coderModel || "Not configured"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={saveModelConfig}
+                disabled={modelConfigLoading}
+                className="bg-white/5 text-white/80 hover:bg-white/10 border border-white/[0.06] rounded-xl"
+              >
+                {modelConfigLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Configuration
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={fetchModelConfig}
+                disabled={modelConfigLoading}
+                variant="outline"
+                className="bg-white/[0.02] text-white/60 hover:bg-white/5 border-white/[0.06] rounded-xl"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reload
+              </Button>
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+                <div className="space-y-2 text-xs text-white/50">
+                  <p className="font-medium text-white/70">Configuration Notes:</p>
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>These models are used when the "test" model (openrouter/test) is selected in the AI Builder</li>
+                    <li>Thinker model handles architectural planning and question generation</li>
+                    <li>Coder model handles actual website code generation</li>
+                    <li>Changes take effect immediately for new generation requests</li>
+                    <li>Make sure the model IDs are valid OpenRouter model identifiers</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         )}
