@@ -1,7 +1,6 @@
 import type React from "react"
 import AuthProvider from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
-import { HeroUIProvider } from "@heroui/react"
 import { Toaster } from "sonner"
 import "./globals.css"
 import { Inter } from 'next/font/google'
@@ -16,14 +15,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="bg-[#18191B] dark">
       <body className={`${inter.className} font-sans antialiased bg-[#18191B]`}>
-        <HeroUIProvider>
-          <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
-            <AuthProvider>
-              {children}
-            </AuthProvider>
-            <Toaster />
-          </ThemeProvider>
-        </HeroUIProvider>
+        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )

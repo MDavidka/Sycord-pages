@@ -2,16 +2,15 @@
 
 import React, { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import {
-  Button,
-  Card,
-  CardBody,
-  Dropdown,
-  DropdownTrigger,
   DropdownMenu,
-  DropdownItem,
-  Textarea,
-} from "@heroui/react"
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Loader2,
   Bot,
@@ -53,16 +52,16 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is Qwen3-Coder via OpenRouter (free)
-const DEFAULT_MODEL_ID = "qwen/qwen3-coder:free"
+// Default model is NVIDIA via uploaded text attachment
+const DEFAULT_MODEL_ID = "nvidia-uploaded-text-model"
 
 const MODELS: ModelOption[] = [
+  { id: "nvidia-uploaded-text-model", name: "NVIDIA Uploaded Text Model", provider: "NVIDIA", fast: true },
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
   { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "qwen/qwen3-coder:free", name: "Qwen3 Coder", provider: "OpenRouter", fast: true },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -232,7 +231,7 @@ const StepIndicator = ({ phase, progress, currentFile }: {
   const prevPhaseRef = useRef<string | null>(null)
 
   const phaseConfig: Record<string, { icon: React.ReactNode; label: string }> = {
-    planning:    { icon: <Brain className="h-4 w-4" />,    label: "Thinking..." },
+    planning:    { icon: <Brain className="h-4 w-4" />,    label: "Processing with NVIDIA model..." },
     searching:   { icon: <Globe className="h-4 w-4" />,    label: "Searching web..." },
     clarifying:  { icon: <Info className="h-4 w-4" />,     label: "Asking a question..." },
     structuring: { icon: <Layout className="h-4 w-4" />,   label: "Creating sitemap..." },
@@ -525,27 +524,26 @@ const InputBar = ({
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
       <Card
         className={cn(
-          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-[1.25rem] sm:rounded-[1.5rem] transition-all duration-300",
+          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-lg sm:rounded-xl transition-all duration-300",
           disabled ? "opacity-70 pointer-events-none" : ""
         )}
       >
-        <CardBody className="p-2.5 sm:p-3 flex flex-col gap-1.5">
+        <div className="p-2 sm:p-3 flex flex-col gap-1.5">
           {/* Multiline textarea */}
-          <Textarea
+          <textarea
             value={input}
-            onValueChange={setInput}
-            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend() }
             }}
             placeholder="Describe the website you want"
-            minRows={1}
-            maxRows={6}
-            isDisabled={disabled}
+            disabled={disabled}
             autoFocus={!disabled}
-            classNames={{
-              base: "w-full",
-              inputWrapper: "bg-transparent shadow-none border-none px-2 pt-1 min-h-[40px]",
-              input: "text-[15px] sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent",
+            className="text-sm sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent border-none outline-none px-2 pt-1 min-h-[36px] w-full"
+            style={{ 
+              minHeight: '36px',
+              maxHeight: '120px',
+              overflow: 'auto'
             }}
           />
 
@@ -553,79 +551,69 @@ const InputBar = ({
           <div className="flex items-center justify-between px-0.5">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <Button
-                isIconOnly
-                variant="light"
-                size="sm"
-                radius="full"
-                className="h-8 w-8 sm:h-9 sm:w-9 text-zinc-500 hover:text-zinc-300"
-                isDisabled={disabled}
+                onClick={() => {}}
+                className="h-8 w-8 sm:h-9 sm:w-9 text-zinc-500 hover:text-zinc-300 rounded-full p-0"
+                disabled={disabled}
               >
                 <span className="text-base sm:text-lg leading-none">+</span>
               </Button>
 
-              <Dropdown placement="bottom-start">
-                <DropdownTrigger>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
-                    variant="bordered"
-                    size="sm"
-                    radius="full"
-                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 border-white/[0.06] px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0"
-                    startContent={
-                      selectedModel.fast
-                        ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
-                        : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
-                    }
-                    endContent={<ChevronDown className="h-3 w-3 shrink-0" />}
-                    isDisabled={disabled}
+                    variant="outline"
+                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 border border-white/[0.06] px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0 rounded-full"
+                    disabled={disabled}
                   >
+                    {selectedModel.fast
+                      ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
+                      : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
+                    }
                     <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
+                    <ChevronDown className="h-3 w-3 shrink-0 ml-auto" />
                   </Button>
-                </DropdownTrigger>
-                <DropdownMenu
-                  aria-label="Select AI model"
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
                   className="bg-[#1c1c1c] border border-white/10 min-w-[220px] rounded-xl"
-                  onAction={(key) => {
-                    const m = MODELS.find(m => m.id === key)
-                    if (m) setSelectedModel(m)
-                  }}
                 >
                   {MODELS.map(m => (
-                    <DropdownItem
+                    <DropdownMenuItem
                       key={m.id}
                       className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
-                      startContent={
-                        m.fast
-                          ? <Zap className="h-3 w-3 text-yellow-500" />
-                          : <Sparkles className="h-3 w-3 text-zinc-600" />
-                      }
+                      onClick={() => {
+                        const model = MODELS.find(model => model.id === m.id)
+                        if (model) setSelectedModel(model)
+                      }}
                     >
+                      {m.fast
+                        ? <Zap className="h-3 w-3 text-yellow-500 mr-2" />
+                        : <Sparkles className="h-3 w-3 text-zinc-600 mr-2" />
+                      }
                       {m.name}
-                    </DropdownItem>
+                    </DropdownMenuItem>
                   ))}
-                </DropdownMenu>
-              </Dropdown>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <Button
-              isIconOnly
-              size="md"
-              radius="lg"
+              onClick={onSend}
               className={cn(
-                "h-9 w-9 sm:h-10 sm:w-10 transition-all active:scale-95 shrink-0 shadow-none",
+                "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded p-0",
                 input.trim() && !disabled
                   ? "bg-zinc-700 text-white hover:bg-zinc-600"
                   : "bg-zinc-800/50 text-zinc-700"
               )}
-              onPress={onSend}
-              isDisabled={!input.trim() || disabled}
+              disabled={!input.trim() || disabled}
             >
               {disabled
-                ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-zinc-700" />
-                : <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+                ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-zinc-700" />
+                : <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               }
             </Button>
           </div>
-        </CardBody>
+        </div>
       </Card>
     </div>
   )
@@ -812,6 +800,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
+
+  // Track question count to limit to 2 questions before auto-proceeding
+  const [questionCount, setQuestionCount] = useState(0)
 
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
@@ -1108,6 +1099,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setError(null)
     setAutoDeployTriggered(false)
     setSitemap([])
+    setQuestionCount(0) // Reset question count for new generation
 
     // ── Phase 1: Planning ──
     setStep("planning")
@@ -1140,7 +1132,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       // ── Phase 3: Clarifying ──
       const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      if (questionMatch) {
+      // Only ask questions if we haven't reached the limit of 2
+      if (questionMatch && questionCount < 2) {
         setStep("clarifying")
         const questionText = questionMatch[1].trim()
         setMessages(prev => [...prev, {
@@ -1149,6 +1142,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           content: questionText,
         }])
         setInput("")
+        setQuestionCount(prev => prev + 1)
         return
       }
 
@@ -1419,12 +1413,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                     {msg.role === 'user' ? (
                                         <>
                                             <Card
-                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%]"
-                                                radius="lg"
+                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%] rounded"
                                             >
-                                                <CardBody className="px-4 sm:px-5 py-2.5 sm:py-3">
-                                                    <p className="text-sm leading-relaxed text-zinc-200">{msg.content}</p>
-                                                </CardBody>
+                                                <div className="px-3 sm:px-4 py-2 sm:py-2.5">
+                                                    <p className="text-xs sm:text-sm leading-relaxed text-zinc-200">{msg.content}</p>
+                                                </div>
                                             </Card>
                                             <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 pr-1">
                                                 {new Date(parseInt(msg.id) || Date.now()).toISOString().split('T')[0].replace(/-/g, '.')}
@@ -1435,14 +1428,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                             <p className="text-sm leading-relaxed max-w-[88%] sm:max-w-[82%] text-zinc-400">{msg.content}</p>
                                             <div className="flex items-center gap-2 mt-1.5">
                                                 <Button
-                                                    isIconOnly
-                                                    variant="light"
-                                                    size="sm"
-                                                    radius="full"
+                                                    onClick={() => giveFeedback(msg.id, 'like')}
                                                     title="Like"
-                                                    onPress={() => giveFeedback(msg.id, 'like')}
                                                     className={cn(
-                                                        "h-6 w-6 min-w-0",
+                                                        "h-6 w-6 min-w-0 p-0 rounded-full",
                                                         messageFeedback[msg.id] === 'like'
                                                             ? "text-zinc-200"
                                                             : "text-zinc-700 hover:text-zinc-400"
@@ -1451,14 +1440,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                                     <ThumbsUp className="h-3.5 w-3.5" />
                                                 </Button>
                                                 <Button
-                                                    isIconOnly
-                                                    variant="light"
-                                                    size="sm"
-                                                    radius="full"
+                                                    onClick={() => giveFeedback(msg.id, 'dislike')}
                                                     title="Dislike"
-                                                    onPress={() => giveFeedback(msg.id, 'dislike')}
                                                     className={cn(
-                                                        "h-6 w-6 min-w-0",
+                                                        "h-6 w-6 min-w-0 p-0 rounded-full",
                                                         messageFeedback[msg.id] === 'dislike'
                                                             ? "text-zinc-200"
                                                             : "text-zinc-700 hover:text-zinc-400"
@@ -1467,14 +1452,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                                     <ThumbsDown className="h-3.5 w-3.5" />
                                                 </Button>
                                                 <Button
-                                                    isIconOnly
-                                                    variant="light"
-                                                    size="sm"
-                                                    radius="full"
+                                                    onClick={() => giveFeedback(msg.id, 'report')}
                                                     title="Report problem"
-                                                    onPress={() => giveFeedback(msg.id, 'report')}
                                                     className={cn(
-                                                        "h-6 w-6 min-w-0",
+                                                        "h-6 w-6 min-w-0 p-0 rounded-full",
                                                         messageFeedback[msg.id] === 'report'
                                                             ? "text-red-400"
                                                             : "text-zinc-700 hover:text-zinc-400"
@@ -1518,11 +1499,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                         {step === 'done' && (
                             <div className="mt-4 sm:mt-6 step-enter">
                                 <Button
-                                    size="lg"
-                                    variant="bordered"
-                                    radius="lg"
-                                    className="w-full sm:w-auto h-10 sm:h-12 text-sm font-medium border-zinc-800 text-zinc-400 hover:bg-zinc-800/50 hover:text-white px-8"
-                                    onPress={() => {
+                                    className="w-full sm:w-auto h-10 sm:h-12 text-sm font-medium border border-zinc-800 text-zinc-400 hover:bg-zinc-800/50 hover:text-white px-8 rounded-lg"
+                                    onClick={() => {
                                         setStep('idle')
                                         setInput("")
                                         setMessages([])
@@ -1541,10 +1519,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                 <div>
                                     <p className="text-sm text-red-400">{error}</p>
                                     <Button
-                                        variant="light"
-                                        size="sm"
                                         className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline underline-offset-2 h-auto p-0 min-w-0"
-                                        onPress={() => setStep('idle')}
+                                        onClick={() => setStep('idle')}
                                     >
                                         Reset
                                     </Button>
