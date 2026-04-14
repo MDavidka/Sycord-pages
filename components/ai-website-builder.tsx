@@ -3,8 +3,14 @@
 import React, { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Loader2,
   Bot,
@@ -35,20 +41,7 @@ import {
   ThumbsUp,
   ThumbsDown,
   Flag,
-  Trash2,
-  AlertTriangle,
 } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 
 // Model type for the chooser
@@ -59,19 +52,16 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is the "test" model via OpenRouter (thinker + coder)
-const DEFAULT_MODEL_ID = "openrouter/test"
-
-// Maximum number of clarification questions the thinker model can ask before proceeding
-const MAX_QUESTIONS = 2
+// Default model is NVIDIA via uploaded text attachment
+const DEFAULT_MODEL_ID = "nvidia-uploaded-text-model"
 
 const MODELS: ModelOption[] = [
+  { id: "nvidia-uploaded-text-model", name: "NVIDIA Uploaded Text Model", provider: "NVIDIA", fast: true },
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
   { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "openrouter/test", name: "test", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -92,7 +82,6 @@ type GenerationPhase =
   | "deploying"      // Step 7: Review & Deploy
   | "done"
   | "fixing"         // Auto-fix compatibility
-  | "investigating"  // Inline auto-fix: investigating file structure
 
 interface Message {
   id: string
@@ -242,19 +231,17 @@ const StepIndicator = ({ phase, progress, currentFile }: {
   const prevPhaseRef = useRef<string | null>(null)
 
   const phaseConfig: Record<string, { icon: React.ReactNode; label: string }> = {
-    planning:       { icon: <Brain className="h-4 w-4" />,    label: "Thinking..." },
-    searching:      { icon: <Globe className="h-4 w-4" />,    label: "Searching web..." },
-    clarifying:     { icon: <Info className="h-4 w-4" />,     label: "Asking a question..." },
-    structuring:    { icon: <Layout className="h-4 w-4" />,   label: "Creating sitemap..." },
-    integrating:    { icon: <Database className="h-4 w-4" />, label: "Integrating services..." },
-    building:       { icon: <Code className="h-4 w-4" />,     label: "Building..." },
-    deploying:      { icon: <Rocket className="h-4 w-4" />,   label: "Deploying..." },
-    investigating:  { icon: <FolderOpen className="h-4 w-4" />, label: "Investigating file structure..." },
-    fixing:         { icon: <Bug className="h-4 w-4" />,      label: "Fixing code..." },
+    planning:    { icon: <Brain className="h-4 w-4" />,    label: "Processing with NVIDIA model..." },
+    searching:   { icon: <Globe className="h-4 w-4" />,    label: "Searching web..." },
+    clarifying:  { icon: <Info className="h-4 w-4" />,     label: "Asking a question..." },
+    structuring: { icon: <Layout className="h-4 w-4" />,   label: "Creating sitemap..." },
+    integrating: { icon: <Database className="h-4 w-4" />, label: "Integrating services..." },
+    building:    { icon: <Code className="h-4 w-4" />,     label: "Building..." },
+    deploying:   { icon: <Rocket className="h-4 w-4" />,   label: "Deploying..." },
   }
 
   useEffect(() => {
-    const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying", "investigating", "fixing"]
+    const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying"]
     if (!displayable.includes(phase)) {
       if (displayedPhase) {
         setExiting(true)
@@ -518,7 +505,7 @@ const GeminiIcon = ({ className }: { className?: string }) => (
 
 const GeminiBadge = () => (
     <div className="absolute top-0 left-0 right-0 flex items-center justify-center animate-in fade-in zoom-in duration-700 delay-100 z-50 pt-6">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 shadow-sm transition-all hover:bg-zinc-800/80 cursor-default">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 shadow-sm transition-all hover:bg-zinc-800/80 cursor-default select-none">
             <GeminiIcon className="h-4 w-4" />
             <span className="text-xs font-medium text-zinc-300">State of the Art</span>
             <Info className="h-3 w-3 text-zinc-600 ml-1" />
@@ -533,79 +520,101 @@ const InputBar = ({
   input: string; setInput: (v: string) => void; onSend: () => void; disabled: boolean
   selectedModel: ModelOption; setSelectedModel: (m: ModelOption) => void
 }) => {
-  const taRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    if (taRef.current) {
-      taRef.current.style.height = "auto"
-      taRef.current.style.height = Math.min(taRef.current.scrollHeight, 200) + "px"
-    }
-  }, [input])
-
   return (
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
-      <div className={cn(
-        "rounded-[1.25rem] sm:rounded-[1.5rem] p-2.5 sm:p-3 relative transition-all duration-300 frosted-input flex flex-col gap-1.5",
-        disabled ? "opacity-70 pointer-events-none" : ""
-      )}>
-        {/* Multiline textarea */}
-        <textarea
-          ref={taRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend() } }}
-          placeholder="Describe the website you want"
-          rows={1}
-          className="w-full border-none bg-transparent resize-none text-[15px] sm:text-base text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-0 px-2 pt-1 min-h-[40px] max-h-[200px]"
-          disabled={disabled}
-          autoFocus={!disabled}
-        />
+      <Card
+        className={cn(
+          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-lg sm:rounded-xl transition-all duration-300",
+          disabled ? "opacity-70 pointer-events-none" : ""
+        )}
+      >
+        <div className="p-2 sm:p-3 flex flex-col gap-1.5">
+          {/* Multiline textarea */}
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend() }
+            }}
+            placeholder="Describe the website you want"
+            disabled={disabled}
+            autoFocus={!disabled}
+            className="text-sm sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent border-none outline-none px-2 pt-1 min-h-[36px] w-full"
+            style={{ 
+              minHeight: '36px',
+              maxHeight: '120px',
+              overflow: 'auto'
+            }}
+          />
 
-        {/* Bottom row: + button | model pill | send */}
-        <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all shrink-0" disabled={disabled}>
-              <span className="text-base sm:text-lg leading-none">+</span>
-            </Button>
+          {/* Bottom row: model pill | send */}
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Button
+                onClick={() => {}}
+                className="h-8 w-8 sm:h-9 sm:w-9 text-zinc-500 hover:text-zinc-300 rounded-full p-0"
+                disabled={disabled}
+              >
+                <span className="text-base sm:text-lg leading-none">+</span>
+              </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 sm:h-8 rounded-full text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-white/5 px-2.5 sm:px-3 gap-1 sm:gap-1.5 border border-white/[0.06]">
-                  {selectedModel.fast ? <Zap className="h-3 w-3 text-yellow-500" /> : <Sparkles className="h-3 w-3 text-zinc-600" />}
-                  <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
-                  <ChevronDown className="h-3 w-3 ml-0.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="bg-[#1c1c1c] border-white/10 min-w-[220px]">
-                {MODELS.map(m => (
-                  <DropdownMenuItem
-                    key={m.id}
-                    onClick={() => setSelectedModel(m)}
-                    className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 border border-white/[0.06] px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0 rounded-full"
+                    disabled={disabled}
                   >
-                    <span className="flex items-center gap-2">
-                      {m.fast ? <Zap className="h-3 w-3 text-yellow-500" /> : <Sparkles className="h-3 w-3 text-zinc-600" />}
+                    {selectedModel.fast
+                      ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
+                      : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
+                    }
+                    <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
+                    <ChevronDown className="h-3 w-3 shrink-0 ml-auto" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  className="bg-[#1c1c1c] border border-white/10 min-w-[220px] rounded-xl"
+                >
+                  {MODELS.map(m => (
+                    <DropdownMenuItem
+                      key={m.id}
+                      className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
+                      onClick={() => {
+                        const model = MODELS.find(model => model.id === m.id)
+                        if (model) setSelectedModel(model)
+                      }}
+                    >
+                      {m.fast
+                        ? <Zap className="h-3 w-3 text-yellow-500 mr-2" />
+                        : <Sparkles className="h-3 w-3 text-zinc-600 mr-2" />
+                      }
                       {m.name}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-          <Button
-            size="icon"
-            className={cn(
-              "h-9 w-9 sm:h-10 sm:w-10 rounded-xl transition-all active:scale-95 shrink-0 flex items-center justify-center shadow-none",
-              input.trim() && !disabled ? "bg-zinc-700 text-white hover:bg-zinc-600" : "bg-zinc-800/50 text-zinc-700 hover:bg-zinc-800/50"
-            )}
-            onClick={onSend}
-            disabled={!input.trim() || disabled}
-          >
-            {disabled ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-zinc-700" /> : <Send className="h-4 w-4 sm:h-5 sm:w-5" />}
-          </Button>
+            <Button
+              onClick={onSend}
+              className={cn(
+                "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded p-0",
+                input.trim() && !disabled
+                  ? "bg-zinc-700 text-white hover:bg-zinc-600"
+                  : "bg-zinc-800/50 text-zinc-700"
+              )}
+              disabled={!input.trim() || disabled}
+            >
+              {disabled
+                ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-zinc-700" />
+                : <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              }
+            </Button>
+          </div>
         </div>
-      </div>
+      </Card>
     </div>
   )
 }
@@ -792,13 +801,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
 
-  // Track how many clarification questions the thinker model has asked (use ref to avoid stale closures)
-  const questionCountRef = useRef(0)
-
-  // "Existing codebase" prompt — shown when user starts generation but project already has files
-  const [showFreshStartPrompt, setShowFreshStartPrompt] = useState(false)
-  const [pendingInput, setPendingInput] = useState("")
-  const [isDeletingAll, setIsDeletingAll] = useState(false)
+  // Track question count to limit to 2 questions before auto-proceeding
+  const [questionCount, setQuestionCount] = useState(0)
 
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
@@ -1079,304 +1083,33 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     }
   }
 
-  /** Inline auto-fix: investigate existing code, find issues, fix them, and deploy */
-  const startInlineAutoFix = async (userPrompt: string) => {
-    setShowFreshStartPrompt(false)
-    setPendingInput("")
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: userPrompt,
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setError(null)
-    setFixHistory([])
-
-    // ── Phase 1: Investigating file structure ──
-    setStep("investigating")
-    setCurrentPlan("Investigating file structure...")
-
-    const fileStructure = generatedPages.map(p => p.name).join('\n')
-
-    setMessages(prev => [...prev, {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: `Investigating ${generatedPages.length} file${generatedPages.length !== 1 ? 's' : ''} in your project...`,
-    }])
-
-    await phaseDelay(800)
-
-    // ── Phase 2: Iterative fix loop ──
-    let history: any[] = []
-    let fileContent: { filename: string; code: string } | null = null
-    let lastAction: string | null = null
-    let iteration = 0
-    const maxIterations = 15
-
-    while (iteration < maxIterations) {
-      iteration++
-
-      try {
-        setStep("fixing")
-        setCurrentPlan(iteration === 1 ? "Analyzing codebase..." : `Fixing (step ${iteration})...`)
-
-        const fixedFiles = history
-          .filter(h => h.action === 'write' || h.action === 'fix')
-          .map(h => h.target)
-          .filter((v, i, a) => a.indexOf(v) === i)
-
-        const response: Response = await fetch('/api/ai/auto-fix-inline', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userPrompt,
-            fileStructure,
-            fileContent,
-            lastAction,
-            history: history.map(h => ({
-              action: h.action,
-              target: h.target,
-              result: h.action === 'read' ? 'read_success' : (h.result?.status || 'done'),
-              summary: h.summary
-            })),
-            fixedFiles
-          })
-        })
-
-        if (!response.ok) throw new Error("AI Fix request failed")
-        const result: any = await response.json()
-
-        // Show AI's explanation
-        if (result.explanation) {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: result.explanation,
-          }])
-        }
-
-        // ── Handle "done" ──
-        if (result.action === 'done') {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: "All issues resolved. Deploying your fixed code..."
-          }])
-
-          // Auto-deploy
-          setStep("deploying")
-          setCurrentPlan("Deploying fixed code...")
-          try {
-            const res = await fetch("/api/deploy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId })
-            })
-            const deployData = await res.json()
-            if (deployData.success) {
-              setDeploySuccess(true)
-              setDeployResult(deployData)
-              if (deployData.repoId) {
-                setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
-              }
-            }
-          } catch { /* deploy error is non-blocking */ }
-
-          setStep("done")
-          return
-        }
-
-        let actionResult: any = { status: 'success' }
-        let actionSummary = ""
-
-        // ── Handle "read" — investigate a file ──
-        if (result.action === 'read') {
-          setStep("investigating")
-          setCurrentPlan(`Checking ${result.targetFile}...`)
-
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: `Issues found on: ${result.targetFile}`,
-            isErrorLog: true,
-          }])
-
-          const page: GeneratedPage | undefined = generatedPages.find(p => p.name === result.targetFile)
-          if (page) {
-            fileContent = { filename: page.name, code: page.code }
-            actionResult = { status: 'success', code: page.code }
-            actionSummary = `Read ${result.targetFile} (${page.code.length} bytes)`
-          } else {
-            fileContent = null
-            actionResult = { status: 'error', message: 'File not found' }
-            actionSummary = `Failed to read ${result.targetFile}`
-          }
-          lastAction = 'take a look'
-        }
-        // ── Handle "write" — fix a file ──
-        else if (result.action === 'write') {
-          setStep("fixing")
-          setCurrentPlan(`Fixing ${result.targetFile}...`)
-
-          // Update file in state and DB
-          setGeneratedPages(prev => {
-            const exists = prev.find(p => p.name === result.targetFile)
-            if (exists) {
-              return prev.map(p => p.name === result.targetFile
-                ? { ...p, code: result.code, timestamp: Date.now() } : p)
-            } else {
-              return [...prev, { name: result.targetFile, code: result.code, timestamp: Date.now(), usedFor: 'Auto-fix' }]
-            }
-          })
-          await fetch(`/api/projects/${projectId}/pages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: result.targetFile, content: result.code, usedFor: 'Auto-fix' })
-          })
-
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: `Fixed ${result.targetFile}`,
-            code: result.code,
-            pageName: result.targetFile
-          }])
-          actionSummary = `Wrote to ${result.targetFile}`
-          fileContent = null
-          lastAction = 'fix'
-        }
-        // ── Handle "move" ──
-        else if (result.action === 'move') {
-          setStep("fixing")
-          setCurrentPlan(`Moving ${result.targetFile}...`)
-
-          const page = generatedPages.find(p => p.name === result.targetFile)
-          if (page) {
-            const newName = result.newPath
-            // Create new file
-            setGeneratedPages(prev => {
-              const filtered = prev.filter(p => p.name !== result.targetFile)
-              return [...filtered, { name: newName, code: page.code, timestamp: Date.now(), usedFor: page.usedFor }]
-            })
-            await fetch(`/api/projects/${projectId}/pages`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: newName, content: page.code, usedFor: page.usedFor || '' })
-            })
-            await fetch(`/api/projects/${projectId}/pages?name=${encodeURIComponent(result.targetFile)}`, { method: "DELETE" })
-
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              role: "assistant",
-              content: `Moved ${result.targetFile} to ${result.newPath}`
-            }])
-            actionSummary = `Moved ${result.targetFile} to ${result.newPath}`
-          }
-          fileContent = null
-          lastAction = 'move'
-        }
-        // ── Handle "delete" ──
-        else if (result.action === 'delete') {
-          setStep("fixing")
-          setCurrentPlan(`Deleting ${result.targetFile}...`)
-
-          setGeneratedPages(prev => prev.filter(p => p.name !== result.targetFile))
-          await fetch(`/api/projects/${projectId}/pages?name=${encodeURIComponent(result.targetFile)}`, { method: "DELETE" })
-
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: `Deleted ${result.targetFile}`
-          }])
-          actionSummary = `Deleted ${result.targetFile}`
-          fileContent = null
-          lastAction = 'delete'
-        }
-
-        history = [...history, {
-          action: result.action,
-          target: result.targetFile,
-          result: actionResult,
-          summary: actionSummary
-        }]
-
-        setFixHistory(history)
-
-      } catch (e: any) {
-        console.error("Inline auto-fix loop error", e)
-        setError(e.message)
-        setStep("idle")
-        return
-      }
-    }
-
-    // Exhausted iterations
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: "system",
-      content: "Auto-fix session stopped after maximum attempts. Please review manually."
-    }])
-    setStep("idle")
-  }
-
   /** Small delay helper for smooth phase transitions */
   const phaseDelay = (ms = 500) => new Promise<void>(r => setTimeout(r, ms))
 
   const startGeneration = async () => {
     if (!input.trim()) return
 
-    // If currently clarifying, route the answer through the planner without resetting
-    if (step === 'clarifying') {
-      startGenerationDirect(input.trim(), true)
-      return
-    }
-
-    // If project already has existing pages, show the fresh-start prompt
-    if (generatedPages.length > 0 && !showFreshStartPrompt) {
-      setPendingInput(input.trim())
-      setShowFreshStartPrompt(true)
-      return
-    }
-
-    startGenerationDirect(input.trim(), false)
-  }
-
-  const startGenerationDirect = async (inputText: string, isClarificationAnswer = false) => {
-    if (!inputText.trim()) return
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: inputText,
+      content: input,
     }
 
     setMessages(prev => [...prev, userMessage])
     setError(null)
     setAutoDeployTriggered(false)
-    // Only reset question count on brand-new generations, not clarification answers
-    if (!isClarificationAnswer) {
-      questionCountRef.current = 0
-      setSitemap([])
-    }
+    setSitemap([])
+    setQuestionCount(0) // Reset question count for new generation
 
     // ── Phase 1: Planning ──
     setStep("planning")
     setCurrentPlan("Architecting solution...")
 
     try {
-      const questionsAsked = questionCountRef.current
-      const questionsRemaining = Math.max(0, MAX_QUESTIONS - questionsAsked)
-
       const planResponse = await fetch("/api/ai/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-          model: selectedModel.id,
-          questionsRemaining,
-        }),
+        body: JSON.stringify({ messages: [...messages, userMessage] }),
       })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
@@ -1391,17 +1124,17 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         await fetch("/api/ai/web-search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: inputText.trim(), type: "general" }),
+          body: JSON.stringify({ query: input.trim(), type: "general" }),
         })
       } catch { /* non-critical */ }
 
       await phaseDelay()
 
-      // ── Phase 3: Clarifying (max 2 questions before proceeding) ──
+      // ── Phase 3: Clarifying ──
       const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      if (questionMatch && questionCountRef.current < MAX_QUESTIONS) {
+      // Only ask questions if we haven't reached the limit of 2
+      if (questionMatch && questionCount < 2) {
         setStep("clarifying")
-        questionCountRef.current += 1
         const questionText = questionMatch[1].trim()
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
@@ -1409,6 +1142,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           content: questionText,
         }])
         setInput("")
+        setQuestionCount(prev => prev + 1)
         return
       }
 
@@ -1439,38 +1173,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     }
   }
 
-  /** Delete all existing pages from the project (frontend + DB) */
-  const handleDeleteAllPages = async () => {
-    setIsDeletingAll(true)
-    try {
-      // Clear from DB
-      await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
-      // Clear frontend state
-      setGeneratedPages([])
-      setShowFreshStartPrompt(false)
-      // Now start generation with the pending input
-      const inputToUse = pendingInput
-      setPendingInput("")
-      setInput(inputToUse)
-      // startGenerationDirect uses its parameter directly, not React state
-      startGenerationDirect(inputToUse)
-    } catch (e: any) {
-      setError("Failed to delete existing pages: " + e.message)
-    } finally {
-      setIsDeletingAll(false)
-    }
-  }
-
-  /** Proceed with overwrite — keep existing code, AI will overwrite files as needed */
-  const handleOverwrite = () => {
-    setShowFreshStartPrompt(false)
-    const inputToUse = pendingInput
-    setPendingInput("")
-    setInput(inputToUse)
-    // startGenerationDirect uses its parameter directly, not React state
-    startGenerationDirect(inputToUse)
-  }
-
   const processNextStep = async (currentInstruction: string, currentHistory: Message[]) => {
     setStep("building")
     setCurrentPlan("Generating next file...")
@@ -1495,10 +1197,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           generatedPages: generatedPages.map(p => ({ name: p.name, code: p.code })),
         }),
       })
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-        throw new Error(errBody.message || `Generation failed (HTTP ${response.status})`)
-      }
+      if (!response.ok) throw new Error("Generation failed")
       return response.json()
     }
 
@@ -1507,16 +1206,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       try {
         data = await attemptGenerate(modelId)
       } catch (primaryErr: any) {
-        // "test" model (OpenRouter or Vercel AI Gateway) should NEVER fall back — show detailed error
-        if (selectedModel.provider === "OpenRouter" || selectedModel.provider === "Vercel") {
-          const errMsg = primaryErr?.message || String(primaryErr) || "Unknown error"
-          console.error(`[AI Builder] ${selectedModel.provider} model error:`, primaryErr)
-          setError(
-            `Model "${selectedModel.name}" (${selectedModel.id}) failed.\n` +
-            `Provider: ${selectedModel.provider}\n` +
-            `Debug: ${errMsg}\n` +
-            `Possible causes: ${selectedModel.provider === "OpenRouter" ? "OPENROUTER_API_KEY not configured" : "AI_GATEWAY_API_KEY not configured"}, model unavailable, or rate limit exceeded.`
-          )
+        // OpenRouter model should NEVER fall back — show error
+        if (selectedModel.provider === "OpenRouter") {
+          console.error("[AI Builder] OpenRouter model error:", primaryErr)
+          setError(`Failed to connect to OpenRouter model (${selectedModel.name}). The service may be temporarily unavailable. Please try again later.`)
           setStep("idle")
           setActiveFile(undefined)
           setActiveFileUsedFor(undefined)
@@ -1702,154 +1395,79 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                     </div>
                 )}
 
-                {/* EXISTING CODEBASE PROMPT — red warning when project has files and user wants to generate new */}
-                {showFreshStartPrompt && (
-                    <div className="flex-1 flex flex-col items-center justify-center py-12 sm:py-16 animate-in fade-in zoom-in-95 duration-500 relative">
-                        <div className="w-full max-w-md mx-auto">
-                            <div className="rounded-2xl border border-red-500/30 bg-red-500/[0.06] p-6 sm:p-8 backdrop-blur-sm">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                                        <AlertTriangle className="h-5 w-5 text-red-400" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-base font-semibold text-red-300">Existing Codebase Detected</h3>
-                                        <p className="text-xs text-red-400/70">{generatedPages.length} file{generatedPages.length !== 1 ? 's' : ''} found</p>
-                                    </div>
-                                </div>
-
-                                <p className="text-sm text-red-200/80 leading-relaxed mb-6">
-                                    This project already has generated code that may not match your new requirements.
-                                    You can <span className="font-medium text-red-200">delete everything</span> for a clean start, 
-                                    <span className="font-medium text-red-200">fix existing code</span> to let the AI diagnose and repair issues,
-                                    or <span className="font-medium text-red-200">overwrite</span> to let the AI update existing files.
-                                </p>
-
-                                <div className="space-y-2.5">
-                                    <Button
-                                        onClick={handleDeleteAllPages}
-                                        disabled={isDeletingAll}
-                                        className="w-full h-11 bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-500/30 hover:border-red-500/50 rounded-xl font-medium text-sm transition-all"
-                                    >
-                                        {isDeletingAll ? (
-                                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                        ) : (
-                                            <Trash2 className="h-4 w-4 mr-2" />
-                                        )}
-                                        Delete Everything & Start Fresh
-                                    </Button>
-
-                                    <Button
-                                        onClick={() => startInlineAutoFix(pendingInput)}
-                                        variant="outline"
-                                        className="w-full h-11 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:border-blue-500/50 rounded-xl font-medium text-sm transition-all"
-                                    >
-                                        <Bug className="h-4 w-4 mr-2" />
-                                        Fix Existing Code
-                                    </Button>
-
-                                    <Button
-                                        onClick={handleOverwrite}
-                                        variant="outline"
-                                        className="w-full h-11 bg-transparent hover:bg-white/5 text-zinc-300 border-zinc-700 hover:border-zinc-600 rounded-xl font-medium text-sm transition-all"
-                                    >
-                                        <Wrench className="h-4 w-4 mr-2" />
-                                        Overwrite Existing Code
-                                    </Button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowFreshStartPrompt(false)
-                                            setPendingInput("")
-                                        }}
-                                        className="w-full text-xs text-zinc-600 hover:text-zinc-400 mt-2 py-1 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {/* CHAT / GENERATING STATE */}
                 {step !== 'idle' && (
                     <div className="flex flex-col pt-6 sm:pt-8 pb-4">
 
-                        {/* Messages — user messages in rounded pill */}
+                        {/* Messages */}
                         {messages
-                            .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.plan && !m.isIntermediate) || (m.role === 'system' && m.isErrorLog))
+                            .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.plan && !m.isIntermediate))
                             .map((msg, i) => (
                                 <div
                                     key={msg.id || i}
                                     className={cn(
-                                        "py-2 sm:py-2.5",
-                                        msg.role === 'user' ? "flex flex-col items-end" : "flex flex-col items-start"
+                                        "py-2 sm:py-2.5 flex flex-col",
+                                        msg.role === 'user' ? "items-end" : "items-start"
                                     )}
                                 >
                                     {msg.role === 'user' ? (
-                                        <div className="bg-white/[0.08] rounded-[1.25rem] sm:rounded-[1.5rem] px-4 sm:px-5 py-2.5 sm:py-3 max-w-[88%] sm:max-w-[82%]">
-                                            <p className="text-sm leading-relaxed text-zinc-200">{msg.content}</p>
-                                        </div>
-                                    ) : msg.isErrorLog ? (
-                                        <div className="flex items-center gap-2.5 max-w-[88%] sm:max-w-[82%]">
-                                            <div className="h-7 w-7 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0">
-                                                <Bug className="h-4 w-4 text-zinc-400" />
-                                            </div>
-                                            <p className="text-sm leading-relaxed text-zinc-400">{msg.content}</p>
-                                        </div>
+                                        <>
+                                            <Card
+                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%] rounded"
+                                            >
+                                                <div className="px-3 sm:px-4 py-2 sm:py-2.5">
+                                                    <p className="text-xs sm:text-sm leading-relaxed text-zinc-200">{msg.content}</p>
+                                                </div>
+                                            </Card>
+                                            <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 pr-1">
+                                                {new Date(parseInt(msg.id) || Date.now()).toISOString().split('T')[0].replace(/-/g, '.')}
+                                            </p>
+                                        </>
                                     ) : (
-                                        <p className="text-sm leading-relaxed max-w-[88%] sm:max-w-[82%] text-zinc-400">{msg.content}</p>
-                                    )}
-
-                                    {msg.role === 'user' && (
-                                        <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 text-right w-full">
-                                            {new Date(parseInt(msg.id) || Date.now()).toISOString().split('T')[0].replace(/-/g, '.')}
-                                        </p>
-                                    )}
-
-                                    {msg.role === 'assistant' && (
-                                        <div className="flex items-center gap-3 mt-1.5">
-                                            <button
-                                                onClick={() => giveFeedback(msg.id, 'like')}
-                                                title="Like"
-                                                className={cn(
-                                                    "transition-colors",
-                                                    messageFeedback[msg.id] === 'like'
-                                                        ? "text-zinc-200"
-                                                        : "text-zinc-700 hover:text-zinc-400"
+                                        <>
+                                            <p className="text-sm leading-relaxed max-w-[88%] sm:max-w-[82%] text-zinc-400">{msg.content}</p>
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                <Button
+                                                    onClick={() => giveFeedback(msg.id, 'like')}
+                                                    title="Like"
+                                                    className={cn(
+                                                        "h-6 w-6 min-w-0 p-0 rounded-full",
+                                                        messageFeedback[msg.id] === 'like'
+                                                            ? "text-zinc-200"
+                                                            : "text-zinc-700 hover:text-zinc-400"
+                                                    )}
+                                                >
+                                                    <ThumbsUp className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    onClick={() => giveFeedback(msg.id, 'dislike')}
+                                                    title="Dislike"
+                                                    className={cn(
+                                                        "h-6 w-6 min-w-0 p-0 rounded-full",
+                                                        messageFeedback[msg.id] === 'dislike'
+                                                            ? "text-zinc-200"
+                                                            : "text-zinc-700 hover:text-zinc-400"
+                                                    )}
+                                                >
+                                                    <ThumbsDown className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    onClick={() => giveFeedback(msg.id, 'report')}
+                                                    title="Report problem"
+                                                    className={cn(
+                                                        "h-6 w-6 min-w-0 p-0 rounded-full",
+                                                        messageFeedback[msg.id] === 'report'
+                                                            ? "text-red-400"
+                                                            : "text-zinc-700 hover:text-zinc-400"
+                                                    )}
+                                                >
+                                                    <Flag className="h-3.5 w-3.5" />
+                                                </Button>
+                                                {messageFeedback[msg.id] === 'report' && (
+                                                    <span className="text-[11px] text-zinc-600">Reported</span>
                                                 )}
-                                            >
-                                                <ThumbsUp className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => giveFeedback(msg.id, 'dislike')}
-                                                title="Dislike"
-                                                className={cn(
-                                                    "transition-colors",
-                                                    messageFeedback[msg.id] === 'dislike'
-                                                        ? "text-zinc-200"
-                                                        : "text-zinc-700 hover:text-zinc-400"
-                                                )}
-                                            >
-                                                <ThumbsDown className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => giveFeedback(msg.id, 'report')}
-                                                title="Report problem"
-                                                className={cn(
-                                                    "transition-colors",
-                                                    messageFeedback[msg.id] === 'report'
-                                                        ? "text-red-400"
-                                                        : "text-zinc-700 hover:text-zinc-400"
-                                                )}
-                                            >
-                                                <Flag className="h-3.5 w-3.5" />
-                                            </button>
-                                            {messageFeedback[msg.id] === 'report' && (
-                                                <span className="text-[11px] text-zinc-600">Reported</span>
-                                            )}
-                                        </div>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             ))
@@ -1881,9 +1499,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                         {step === 'done' && (
                             <div className="mt-4 sm:mt-6 step-enter">
                                 <Button
-                                    size="lg"
-                                    variant="outline"
-                                    className="w-full sm:w-auto h-10 sm:h-12 text-sm font-medium bg-transparent border-zinc-800 text-zinc-400 hover:bg-zinc-800/50 hover:text-white rounded-xl px-8"
+                                    className="w-full sm:w-auto h-10 sm:h-12 text-sm font-medium border border-zinc-800 text-zinc-400 hover:bg-zinc-800/50 hover:text-white px-8 rounded-lg"
                                     onClick={() => {
                                         setStep('idle')
                                         setInput("")
@@ -1902,12 +1518,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                 <Bug className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
                                 <div>
                                     <p className="text-sm text-red-400">{error}</p>
-                                    <button
-                                        className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline-offset-2 underline"
+                                    <Button
+                                        className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline underline-offset-2 h-auto p-0 min-w-0"
                                         onClick={() => setStep('idle')}
                                     >
                                         Reset
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}

@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="bg-[#18191B]">
+    <html lang="en" suppressHydrationWarning className="bg-[#18191B] dark">
       <body className={`${inter.className} font-sans antialiased bg-[#18191B]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
           <AuthProvider>

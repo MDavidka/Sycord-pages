@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getSystemPrompts } from "@/lib/ai-prompts"
-import clientPromise from "@/lib/mongodb"
 
-const PLAN_MODEL = "gemini-3.1-pro-preview"
-const VERCEL_AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
+// Thinking/planning phase — OpenRouter free tier
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-const DEFAULT_OPENROUTER_THINKER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+const PLAN_MODEL = "openai/gpt-oss-120b:free"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -17,145 +14,52 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, model: requestedModel, questionsRemaining } = await request.json()
+    const { messages } = await request.json()
 
-    const isVercelGatewayModel = requestedModel === "anthropic/claude-haiku-4.5"
-    const isOpenRouterModel = requestedModel === "openrouter/test"
+    const apiKey = process.env.OPENROUTER_API_KEY
+    if (!apiKey) {
+      console.error("[v0] OPENROUTER_API_KEY not configured")
+      return NextResponse.json({ message: "AI service not configured (OpenRouter)" }, { status: 500 })
+    }
+
+    const lastUserMessage = messages[messages.length - 1]
 
     // Fetch Global Prompt
     const { builderPlan: systemContextTemplate } = await getSystemPrompts()
 
-    const lastUserMessage = messages[messages.length - 1]
-
     // Combine history for context
     const historyText = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")
 
-    // Build the question-limit directive based on how many questions remain
-    // Default to 2 (MAX_QUESTIONS) for the initial request when no value is provided
-    const qRemaining = typeof questionsRemaining === "number" ? questionsRemaining : 2
-    let questionDirective = ""
-    if (qRemaining <= 0) {
-      questionDirective = "\n\nIMPORTANT: You have already asked the maximum number of clarification questions. Do NOT ask any more questions. You MUST proceed and generate the full architectural plan NOW using your best judgment for any missing details.\n"
-    } else {
-      questionDirective = `\n\nIMPORTANT: You may ask at most ${qRemaining} more clarification question(s). If you have enough information, skip questions and generate the plan directly. Only ask a question if truly critical information is missing.\n`
-    }
-
     const finalPrompt = systemContextTemplate
         .replace("{{HISTORY}}", historyText)
-        .replace("{{REQUEST}}", lastUserMessage.content) + questionDirective
+        .replace("{{REQUEST}}", lastUserMessage.content)
 
-    // Route "test" model through OpenRouter (thinker model from database or default)
-    if (isOpenRouterModel) {
-      const openRouterKey = process.env.OPENROUTER_API_KEY
-      if (!openRouterKey) {
-        console.error("[v0] OPENROUTER_API_KEY not configured for test model plan generation")
-        return NextResponse.json({ message: "AI service not configured (OpenRouter). Set OPENROUTER_API_KEY env var." }, { status: 500 })
-      }
+    console.log(`[v0] Generating plan with OpenRouter model: ${PLAN_MODEL}`)
 
-      // Fetch thinker model from database
-      let thinkerModel = DEFAULT_OPENROUTER_THINKER_MODEL
-      try {
-        const client = await clientPromise
-        const db = client.db()
-        const config = await db.collection("modelConfig").findOne({ _id: "test-models" })
-        if (config?.thinkerModel) {
-          thinkerModel = config.thinkerModel
-        }
-      } catch (err) {
-        console.error("[v0] Error fetching thinker model from database, using default:", err)
-      }
-
-      console.log(`[v0] Generating plan with thinker model via OpenRouter: ${thinkerModel}`)
-
-      const response = await fetch(OPENROUTER_API_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${openRouterKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": process.env.NEXTAUTH_URL || "https://sycord.com",
-          "X-Title": "Sycord AI Builder",
-        },
-        body: JSON.stringify({
-          model: thinkerModel,
-          messages: [
-            { role: "system", content: finalPrompt },
-            { role: "user", content: lastUserMessage.content },
-          ],
-          temperature: 0.2,
-        }),
-      })
-
-      if (!response.ok) {
-        let errorBody = ""
-        try { errorBody = await response.text() } catch { /* ignore */ }
-        const debugInfo = `OpenRouter API error: HTTP ${response.status} | Model: ${thinkerModel} | Response: ${errorBody.slice(0, 300)}`
-        console.error("[v0] " + debugInfo)
-        return NextResponse.json({ message: debugInfo }, { status: 500 })
-      }
-
-      const data = await response.json()
-      const responseText = data.choices?.[0]?.message?.content || ""
-
-      return NextResponse.json({ instruction: responseText })
-    }
-
-    // Route test model through Vercel AI Gateway (uses Vercel credits)
-    if (isVercelGatewayModel) {
-      const gatewayKey = process.env.AI_GATEWAY_API_KEY
-      if (!gatewayKey) {
-        console.error("[v0] AI_GATEWAY_API_KEY not configured for test model plan generation")
-        return NextResponse.json({ message: "AI service not configured (Vercel AI Gateway). Set AI_GATEWAY_API_KEY env var." }, { status: 500 })
-      }
-
-      console.log(`[v0] Generating plan with test model via Vercel AI Gateway: ${requestedModel}`)
-
-      const response = await fetch(VERCEL_AI_GATEWAY_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${gatewayKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: requestedModel,
-          messages: [
-            { role: "system", content: finalPrompt },
-            { role: "user", content: lastUserMessage.content },
-          ],
-          temperature: 0.2,
-        }),
-      })
-
-      if (!response.ok) {
-        let errorBody = ""
-        try { errorBody = await response.text() } catch { /* ignore */ }
-        const debugInfo = `Vercel AI Gateway error: HTTP ${response.status} | Model: ${requestedModel} | Response: ${errorBody.slice(0, 300)}`
-        console.error("[v0] " + debugInfo)
-        return NextResponse.json({ message: debugInfo }, { status: 500 })
-      }
-
-      const data = await response.json()
-      const responseText = data.choices?.[0]?.message?.content || ""
-
-      return NextResponse.json({ instruction: responseText })
-    }
-
-    // Default: Google Generative AI path
-    const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
-    if (!apiKey) {
-      console.error("[v0] GOOGLE_AI_API (or GOOGLE_API_KEY) not configured")
-      return NextResponse.json({ message: "AI service not configured (Google)" }, { status: 500 })
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const genModel = genAI.getGenerativeModel({
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXTAUTH_URL || "https://sycord.pages.dev",
+        "X-Title": "Sycord AI Builder",
+      },
+      body: JSON.stringify({
         model: PLAN_MODEL,
+        messages: [
+          { role: "user", content: finalPrompt },
+        ],
+        temperature: 0.6,
+      }),
     })
 
-    console.log(`[v0] Generating plan with Google model: ${PLAN_MODEL}`)
+    if (!response.ok) {
+      const errText = await response.text()
+      throw new Error(`OpenRouter API error ${response.status}: ${errText}`)
+    }
 
-    const result = await genModel.generateContent(finalPrompt)
-    const response = await result.response
-    const responseText = response.text()
+    const data = await response.json()
+    const responseText = data.choices?.[0]?.message?.content || ""
 
     // Return the raw instruction text
     return NextResponse.json({

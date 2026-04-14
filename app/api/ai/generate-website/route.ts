@@ -17,7 +17,6 @@ import { ObjectId } from "mongodb"
 // API Configurations
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-const VERCEL_AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
@@ -28,10 +27,8 @@ const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: str
   "gemini-1.5-flash": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "gemini-1.5-pro": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" },
-  // "test" model: Claude Haiku 4.5 via Vercel AI Gateway (uses Vercel credits)
-  "anthropic/claude-haiku-4.5": { url: VERCEL_AI_GATEWAY_URL, envVar: "AI_GATEWAY_API_KEY", provider: "Vercel" },
-  // OpenRouter test model: minimax/minimax-m2.5:free for code generation
-  "openrouter/test": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" },
+  // OpenRouter: qwen3-coder for code generation
+  "qwen/qwen3-coder:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" }
 }
 
 export async function POST(request: Request) {
@@ -58,8 +55,8 @@ export async function POST(request: Request) {
     frontendFiles.forEach((f) => cachedMap.set(f.name, f)) // frontend data takes precedence
     const previousFiles: GeneratedFile[] = Array.from(cachedMap.values())
 
-    // Default to gemini-3.1-pro-preview
-    const modelId = model || "gemini-3.1-pro-preview"
+    // Default to qwen/qwen3-coder:free (OpenRouter)
+    const modelId = model || "qwen/qwen3-coder:free"
 
     // Map "gemini-3-flash" or similar user requests to actual model
     let configKey = modelId
@@ -70,23 +67,8 @@ export async function POST(request: Request) {
        configKey = "gemini-1.5-pro"
     }
 
-    // Use the resolved config key as the actual model ID for the API call
-    // For OpenRouter, fetch the actual coder model from database or use default
-    let apiModelId = configKey
-    if (configKey === "openrouter/test") {
-      let coderModel = "minimax/minimax-m2.5:free"
-      try {
-        const client = await clientPromise
-        const db = client.db()
-        const modelConfig = await db.collection("modelConfig").findOne({ _id: "test-models" })
-        if (modelConfig?.coderModel) {
-          coderModel = modelConfig.coderModel
-        }
-      } catch (err) {
-        console.error("[v0] Error fetching coder model from database, using default:", err)
-      }
-      apiModelId = coderModel
-    }
+    const isOpenRouterModel = configKey === "qwen/qwen3-coder:free"
+    const apiModelId = configKey
 
     const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS["gemini-3.1-pro-preview"]
 
@@ -96,7 +78,7 @@ export async function POST(request: Request) {
     }
 
     if (!apiKey) {
-      return NextResponse.json({ message: `AI service not configured (${config.provider}). Missing env var: ${config.envVar}` }, { status: 500 })
+      return NextResponse.json({ message: `AI service not configured (${config.provider})` }, { status: 500 })
     }
 
     // 1. Parse Instruction to find next task
@@ -214,40 +196,39 @@ CRITICAL MONGODB RULES:
         content: msg.content
     }))
 
-    const payload = {
+    // For OpenRouter (qwen3-coder): use prompt caching on the system prompt
+    // by marking it with cache_control so repeated calls share the KV cache.
+    const systemMessage = isOpenRouterModel
+      ? { role: "system", content: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] }
+      : { role: "system", content: systemPrompt }
+
+    const payload: Record<string, any> = {
       model: apiModelId,
       messages: [
-          { role: "system", content: systemPrompt },
+          systemMessage,
           ...conversationHistory,
           { role: "user", content: `Generate the full content for ${currentTask.filename}.` }
       ],
-      temperature: 0.2
+      temperature: 0.2,
     }
 
-    const headers: Record<string, string> = {
+    // OpenRouter-specific: request prompt caching and pass referer
+    const fetchHeaders: Record<string, string> = {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     }
-
-    // OpenRouter requires additional headers
-    if (config.provider === "OpenRouter") {
-      headers["HTTP-Referer"] = process.env.NEXTAUTH_URL || "https://sycord.com"
-      headers["X-Title"] = "Sycord AI Builder"
+    if (isOpenRouterModel) {
+      fetchHeaders["HTTP-Referer"] = process.env.NEXTAUTH_URL || "https://sycord.pages.dev"
+      fetchHeaders["X-Title"] = "Sycord AI Builder"
     }
 
     const response = await fetch(config.url, {
       method: "POST",
-      headers,
+      headers: fetchHeaders,
       body: JSON.stringify(payload),
     })
 
-    if (!response.ok) {
-      let errorBody = ""
-      try { errorBody = await response.text() } catch { /* ignore */ }
-      const debugInfo = `${config.provider} API error: HTTP ${response.status} | Model: ${apiModelId} | URL: ${config.url} | Response: ${errorBody.slice(0, 300)}`
-      console.error("[v0] " + debugInfo)
-      throw new Error(debugInfo)
-    }
+    if (!response.ok) throw new Error(`${config.provider} API error: ${response.status}`)
     const data = await response.json()
     const responseText = data.choices?.[0]?.message?.content || ""
 
@@ -295,6 +276,6 @@ CRITICAL MONGODB RULES:
 
   } catch (error: any) {
     console.error("[v0] Generation error:", error)
-    return NextResponse.json({ message: error.message || "Unknown generation error" }, { status: 500 })
+    return NextResponse.json({ message: error.message }, { status: 500 })
   }
 }

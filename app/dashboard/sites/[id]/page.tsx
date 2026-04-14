@@ -575,6 +575,8 @@ export default function SiteSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteSent, setInviteSent] = useState(false)
   const [inviteRole, setInviteRole] = useState<"Editor" | "Viewer">("Editor")
+  const [isSendingInvite, setIsSendingInvite] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
   const isValidInviteEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)
 
   // Renamed to match the button name and be consistent
@@ -1383,7 +1385,7 @@ export default function SiteSettingsPage() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 z-50 bg-black/50 backdrop-blur-md"
-                onClick={() => { setIsManageAccessOpen(false); setInviteSent(false); setInviteEmail(""); setInviteRole("Editor") }}
+                onClick={() => { setIsManageAccessOpen(false); setInviteSent(false); setInviteEmail(""); setInviteRole("Editor"); setInviteError(null) }}
               />
               {/* Dialog card */}
               <motion.div
@@ -1407,7 +1409,7 @@ export default function SiteSettingsPage() {
                       <p className="text-xs text-muted-foreground">{inviteEmail} will receive an email shortly.</p>
                       <button
                         className="mt-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={() => { setInviteSent(false); setInviteEmail(""); setInviteRole("Editor") }}
+                        onClick={() => { setInviteSent(false); setInviteEmail(""); setInviteRole("Editor"); setInviteError(null) }}
                       >
                         Invite another
                       </button>
@@ -1440,14 +1442,39 @@ export default function SiteSettingsPage() {
                       </p>
 
                       {/* Action button */}
+                      {inviteError && (
+                        <p className="text-xs text-red-400 text-center mb-2">{inviteError}</p>
+                      )}
                       <button
-                        disabled={!isValidInviteEmail}
-                        onClick={() => {
-                          if (isValidInviteEmail) setInviteSent(true)
+                        disabled={!isValidInviteEmail || isSendingInvite}
+                        onClick={async () => {
+                          if (!isValidInviteEmail || isSendingInvite) return
+                          setIsSendingInvite(true)
+                          setInviteError(null)
+                          try {
+                            const res = await fetch("/api/collab/invite", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                projectId: project?._id?.toString(),
+                                inviteeEmail: inviteEmail,
+                              }),
+                            })
+                            const data = await res.json()
+                            if (!res.ok) {
+                              setInviteError(data.message || "Failed to send invite")
+                            } else {
+                              setInviteSent(true)
+                            }
+                          } catch {
+                            setInviteError("Network error. Please try again.")
+                          } finally {
+                            setIsSendingInvite(false)
+                          }
                         }}
                         className="w-full py-3 rounded-full bg-[#3a3a3c] hover:bg-[#4a4a4c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm font-medium text-foreground"
                       >
-                        Send invite
+                        {isSendingInvite ? "Sending..." : "Send invite"}
                       </button>
                     </>
                   )}
