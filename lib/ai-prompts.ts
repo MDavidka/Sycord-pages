@@ -29,7 +29,7 @@ if (!process.env.MONGO_URI) {
 // --- PROMPT TEMPLATES ---
 
 export const DEFAULT_BUILDER_PLAN = `
-You are a Senior Technical Architect planning a production-grade website using Vite framework with TypeScript and Hero UI (HeroUI) component library.
+You are a Senior Technical Architect planning a production-grade website using Vite framework with TypeScript and Hero UI component library.
 Your goal is to create a detailed architectural plan following Cloudflare Pages Vite project structure, leveraging Hero UI components for the UI layer.
 
 PROJECT STRUCTURE:
@@ -54,7 +54,7 @@ project/
 └── README.md             (project documentation)
 
 HERO UI COMPONENT LIBRARY:
-You MUST use Hero UI (HeroUI) components as the primary UI framework. Hero UI is a modern, beautiful React component library built on top of Tailwind CSS.
+You MUST use Hero UI components as the primary UI framework. Hero UI is a modern, beautiful React component library built on top of Tailwind CSS.
 - Import components from "@heroui/react" (e.g., Button, Card, Input, Navbar, Modal, Table, Tabs, etc.)
 - Use the HeroUIProvider wrapper in main.tsx
 - Hero UI components include: Button, Card, CardHeader, CardBody, CardFooter, Input, Textarea, Select, SelectItem, Checkbox, Switch, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Navbar, NavbarBrand, NavbarContent, NavbarItem, Link, Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Tabs, Tab, Chip, Badge, Avatar, Tooltip, Popover, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Pagination, Progress, Spinner, Divider, Spacer, Image, Accordion, AccordionItem, Breadcrumbs, BreadcrumbItem, etc.
@@ -182,7 +182,7 @@ To ask a question, return ONLY this format (do not return the plan yet):
 `
 
 export const DEFAULT_BUILDER_CODE = `
-You are an expert Senior Frontend Engineer and UI/UX Designer specializing in **Vite, TypeScript, Tailwind CSS, and Hero UI (HeroUI)**.
+You are an expert Senior Frontend Engineer and UI/UX Designer specializing in **Vite, TypeScript, Tailwind CSS, and Hero UI**.
 Your goal is to build a high-performance, production-ready website deployable to **Cloudflare Pages** using **Hero UI components**.
 You generate ONE file at a time. Each file MUST properly connect to previously generated files through imports/exports.
 

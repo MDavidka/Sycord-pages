@@ -62,6 +62,9 @@ interface ModelOption {
 // Default model is the "test" model via OpenRouter (thinker + coder)
 const DEFAULT_MODEL_ID = "openrouter/test"
 
+// Maximum number of clarification questions the thinker model can ask before proceeding
+const MAX_QUESTIONS = 2
+
 const MODELS: ModelOption[] = [
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
@@ -789,9 +792,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
 
-  // Track how many clarification questions the thinker model has asked (max 2)
+  // Track how many clarification questions the thinker model has asked
   const [questionCount, setQuestionCount] = useState(0)
-  const MAX_QUESTIONS = 2
 
   // "Existing codebase" prompt — shown when user starts generation but project already has files
   const [showFreshStartPrompt, setShowFreshStartPrompt] = useState(false)
