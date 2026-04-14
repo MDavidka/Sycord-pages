@@ -2,9 +2,16 @@
 
 import React, { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
+import {
+  Button,
+  Card,
+  CardBody,
+  Dropdown,
+  DropdownTrigger,
+  DropdownMenu,
+  DropdownItem,
+  Textarea,
+} from "@heroui/react"
 import {
   Loader2,
   Bot,
@@ -36,17 +43,6 @@ import {
   ThumbsDown,
   Flag,
 } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 
 // Model type for the chooser
@@ -510,7 +506,7 @@ const GeminiIcon = ({ className }: { className?: string }) => (
 
 const GeminiBadge = () => (
     <div className="absolute top-0 left-0 right-0 flex items-center justify-center animate-in fade-in zoom-in duration-700 delay-100 z-50 pt-6">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 shadow-sm transition-all hover:bg-zinc-800/80 cursor-default">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 shadow-sm transition-all hover:bg-zinc-800/80 cursor-default select-none">
             <GeminiIcon className="h-4 w-4" />
             <span className="text-xs font-medium text-zinc-300">State of the Art</span>
             <Info className="h-3 w-3 text-zinc-600 ml-1" />
@@ -525,79 +521,112 @@ const InputBar = ({
   input: string; setInput: (v: string) => void; onSend: () => void; disabled: boolean
   selectedModel: ModelOption; setSelectedModel: (m: ModelOption) => void
 }) => {
-  const taRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    if (taRef.current) {
-      taRef.current.style.height = "auto"
-      taRef.current.style.height = Math.min(taRef.current.scrollHeight, 200) + "px"
-    }
-  }, [input])
-
   return (
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
-      <div className={cn(
-        "rounded-[1.25rem] sm:rounded-[1.5rem] p-2.5 sm:p-3 relative transition-all duration-300 frosted-input flex flex-col gap-1.5",
-        disabled ? "opacity-70 pointer-events-none" : ""
-      )}>
-        {/* Multiline textarea */}
-        <textarea
-          ref={taRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend() } }}
-          placeholder="Describe the website you want"
-          rows={1}
-          className="w-full border-none bg-transparent resize-none text-[15px] sm:text-base text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-0 px-2 pt-1 min-h-[40px] max-h-[200px]"
-          disabled={disabled}
-          autoFocus={!disabled}
-        />
+      <Card
+        className={cn(
+          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-[1.25rem] sm:rounded-[1.5rem] transition-all duration-300",
+          disabled ? "opacity-70 pointer-events-none" : ""
+        )}
+      >
+        <CardBody className="p-2.5 sm:p-3 flex flex-col gap-1.5">
+          {/* Multiline textarea */}
+          <Textarea
+            value={input}
+            onValueChange={setInput}
+            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend() }
+            }}
+            placeholder="Describe the website you want"
+            minRows={1}
+            maxRows={6}
+            isDisabled={disabled}
+            autoFocus={!disabled}
+            classNames={{
+              base: "w-full",
+              inputWrapper: "bg-transparent shadow-none border-none px-2 pt-1 min-h-[40px]",
+              input: "text-[15px] sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent",
+            }}
+          />
 
-        {/* Bottom row: + button | model pill | send */}
-        <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full text-zinc-500 hover:text-zinc-300 hover:bg-white/5 transition-all shrink-0" disabled={disabled}>
-              <span className="text-base sm:text-lg leading-none">+</span>
-            </Button>
+          {/* Bottom row: model pill | send */}
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Button
+                isIconOnly
+                variant="light"
+                size="sm"
+                radius="full"
+                className="h-8 w-8 sm:h-9 sm:w-9 text-zinc-500 hover:text-zinc-300"
+                isDisabled={disabled}
+              >
+                <span className="text-base sm:text-lg leading-none">+</span>
+              </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 sm:h-8 rounded-full text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-white/5 px-2.5 sm:px-3 gap-1 sm:gap-1.5 border border-white/[0.06]">
-                  {selectedModel.fast ? <Zap className="h-3 w-3 text-yellow-500" /> : <Sparkles className="h-3 w-3 text-zinc-600" />}
-                  <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
-                  <ChevronDown className="h-3 w-3 ml-0.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="bg-[#1c1c1c] border-white/10 min-w-[220px]">
-                {MODELS.map(m => (
-                  <DropdownMenuItem
-                    key={m.id}
-                    onClick={() => setSelectedModel(m)}
-                    className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
+              <Dropdown placement="bottom-start">
+                <DropdownTrigger>
+                  <Button
+                    variant="bordered"
+                    size="sm"
+                    radius="full"
+                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 border-white/[0.06] px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0"
+                    startContent={
+                      selectedModel.fast
+                        ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
+                        : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
+                    }
+                    endContent={<ChevronDown className="h-3 w-3 shrink-0" />}
+                    isDisabled={disabled}
                   >
-                    <span className="flex items-center gap-2">
-                      {m.fast ? <Zap className="h-3 w-3 text-yellow-500" /> : <Sparkles className="h-3 w-3 text-zinc-600" />}
+                    <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
+                  </Button>
+                </DropdownTrigger>
+                <DropdownMenu
+                  aria-label="Select AI model"
+                  className="bg-[#1c1c1c] border border-white/10 min-w-[220px] rounded-xl"
+                  onAction={(key) => {
+                    const m = MODELS.find(m => m.id === key)
+                    if (m) setSelectedModel(m)
+                  }}
+                >
+                  {MODELS.map(m => (
+                    <DropdownItem
+                      key={m.id}
+                      className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
+                      startContent={
+                        m.fast
+                          ? <Zap className="h-3 w-3 text-yellow-500" />
+                          : <Sparkles className="h-3 w-3 text-zinc-600" />
+                      }
+                    >
                       {m.name}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                    </DropdownItem>
+                  ))}
+                </DropdownMenu>
+              </Dropdown>
+            </div>
 
-          <Button
-            size="icon"
-            className={cn(
-              "h-9 w-9 sm:h-10 sm:w-10 rounded-xl transition-all active:scale-95 shrink-0 flex items-center justify-center shadow-none",
-              input.trim() && !disabled ? "bg-zinc-700 text-white hover:bg-zinc-600" : "bg-zinc-800/50 text-zinc-700 hover:bg-zinc-800/50"
-            )}
-            onClick={onSend}
-            disabled={!input.trim() || disabled}
-          >
-            {disabled ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-zinc-700" /> : <Send className="h-4 w-4 sm:h-5 sm:w-5" />}
-          </Button>
-        </div>
-      </div>
+            <Button
+              isIconOnly
+              size="md"
+              radius="lg"
+              className={cn(
+                "h-9 w-9 sm:h-10 sm:w-10 transition-all active:scale-95 shrink-0 shadow-none",
+                input.trim() && !disabled
+                  ? "bg-zinc-700 text-white hover:bg-zinc-600"
+                  : "bg-zinc-800/50 text-zinc-700"
+              )}
+              onPress={onSend}
+              isDisabled={!input.trim() || disabled}
+            >
+              {disabled
+                ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-zinc-700" />
+                : <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+              }
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
     </div>
   )
 }
@@ -1376,73 +1405,88 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 {step !== 'idle' && (
                     <div className="flex flex-col pt-6 sm:pt-8 pb-4">
 
-                        {/* Messages — user messages in rounded pill */}
+                        {/* Messages */}
                         {messages
                             .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.plan && !m.isIntermediate))
                             .map((msg, i) => (
                                 <div
                                     key={msg.id || i}
                                     className={cn(
-                                        "py-2 sm:py-2.5",
-                                        msg.role === 'user' ? "flex justify-end" : "flex flex-col items-start"
+                                        "py-2 sm:py-2.5 flex flex-col",
+                                        msg.role === 'user' ? "items-end" : "items-start"
                                     )}
                                 >
                                     {msg.role === 'user' ? (
-                                        <div className="bg-white/[0.08] rounded-[1.25rem] sm:rounded-[1.5rem] px-4 sm:px-5 py-2.5 sm:py-3 max-w-[88%] sm:max-w-[82%]">
-                                            <p className="text-sm leading-relaxed text-zinc-200">{msg.content}</p>
-                                        </div>
+                                        <>
+                                            <Card
+                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%]"
+                                                radius="lg"
+                                            >
+                                                <CardBody className="px-4 sm:px-5 py-2.5 sm:py-3">
+                                                    <p className="text-sm leading-relaxed text-zinc-200">{msg.content}</p>
+                                                </CardBody>
+                                            </Card>
+                                            <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 pr-1">
+                                                {new Date(parseInt(msg.id) || Date.now()).toISOString().split('T')[0].replace(/-/g, '.')}
+                                            </p>
+                                        </>
                                     ) : (
-                                        <p className="text-sm leading-relaxed max-w-[88%] sm:max-w-[82%] text-zinc-400">{msg.content}</p>
-                                    )}
-
-                                    {msg.role === 'user' && (
-                                        <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 text-right w-full">
-                                            {new Date(parseInt(msg.id) || Date.now()).toISOString().split('T')[0].replace(/-/g, '.')}
-                                        </p>
-                                    )}
-
-                                    {msg.role === 'assistant' && (
-                                        <div className="flex items-center gap-3 mt-1.5">
-                                            <button
-                                                onClick={() => giveFeedback(msg.id, 'like')}
-                                                title="Like"
-                                                className={cn(
-                                                    "transition-colors",
-                                                    messageFeedback[msg.id] === 'like'
-                                                        ? "text-zinc-200"
-                                                        : "text-zinc-700 hover:text-zinc-400"
+                                        <>
+                                            <p className="text-sm leading-relaxed max-w-[88%] sm:max-w-[82%] text-zinc-400">{msg.content}</p>
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                <Button
+                                                    isIconOnly
+                                                    variant="light"
+                                                    size="sm"
+                                                    radius="full"
+                                                    title="Like"
+                                                    onPress={() => giveFeedback(msg.id, 'like')}
+                                                    className={cn(
+                                                        "h-6 w-6 min-w-0",
+                                                        messageFeedback[msg.id] === 'like'
+                                                            ? "text-zinc-200"
+                                                            : "text-zinc-700 hover:text-zinc-400"
+                                                    )}
+                                                >
+                                                    <ThumbsUp className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    isIconOnly
+                                                    variant="light"
+                                                    size="sm"
+                                                    radius="full"
+                                                    title="Dislike"
+                                                    onPress={() => giveFeedback(msg.id, 'dislike')}
+                                                    className={cn(
+                                                        "h-6 w-6 min-w-0",
+                                                        messageFeedback[msg.id] === 'dislike'
+                                                            ? "text-zinc-200"
+                                                            : "text-zinc-700 hover:text-zinc-400"
+                                                    )}
+                                                >
+                                                    <ThumbsDown className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    isIconOnly
+                                                    variant="light"
+                                                    size="sm"
+                                                    radius="full"
+                                                    title="Report problem"
+                                                    onPress={() => giveFeedback(msg.id, 'report')}
+                                                    className={cn(
+                                                        "h-6 w-6 min-w-0",
+                                                        messageFeedback[msg.id] === 'report'
+                                                            ? "text-red-400"
+                                                            : "text-zinc-700 hover:text-zinc-400"
+                                                    )}
+                                                >
+                                                    <Flag className="h-3.5 w-3.5" />
+                                                </Button>
+                                                {messageFeedback[msg.id] === 'report' && (
+                                                    <span className="text-[11px] text-zinc-600">Reported</span>
                                                 )}
-                                            >
-                                                <ThumbsUp className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => giveFeedback(msg.id, 'dislike')}
-                                                title="Dislike"
-                                                className={cn(
-                                                    "transition-colors",
-                                                    messageFeedback[msg.id] === 'dislike'
-                                                        ? "text-zinc-200"
-                                                        : "text-zinc-700 hover:text-zinc-400"
-                                                )}
-                                            >
-                                                <ThumbsDown className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={() => giveFeedback(msg.id, 'report')}
-                                                title="Report problem"
-                                                className={cn(
-                                                    "transition-colors",
-                                                    messageFeedback[msg.id] === 'report'
-                                                        ? "text-red-400"
-                                                        : "text-zinc-700 hover:text-zinc-400"
-                                                )}
-                                            >
-                                                <Flag className="h-3.5 w-3.5" />
-                                            </button>
-                                            {messageFeedback[msg.id] === 'report' && (
-                                                <span className="text-[11px] text-zinc-600">Reported</span>
-                                            )}
-                                        </div>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             ))
@@ -1475,9 +1519,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                             <div className="mt-4 sm:mt-6 step-enter">
                                 <Button
                                     size="lg"
-                                    variant="outline"
-                                    className="w-full sm:w-auto h-10 sm:h-12 text-sm font-medium bg-transparent border-zinc-800 text-zinc-400 hover:bg-zinc-800/50 hover:text-white rounded-xl px-8"
-                                    onClick={() => {
+                                    variant="bordered"
+                                    radius="lg"
+                                    className="w-full sm:w-auto h-10 sm:h-12 text-sm font-medium border-zinc-800 text-zinc-400 hover:bg-zinc-800/50 hover:text-white px-8"
+                                    onPress={() => {
                                         setStep('idle')
                                         setInput("")
                                         setMessages([])
@@ -1495,12 +1540,14 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                 <Bug className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
                                 <div>
                                     <p className="text-sm text-red-400">{error}</p>
-                                    <button
-                                        className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline-offset-2 underline"
-                                        onClick={() => setStep('idle')}
+                                    <Button
+                                        variant="light"
+                                        size="sm"
+                                        className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline underline-offset-2 h-auto p-0 min-w-0"
+                                        onPress={() => setStep('idle')}
                                     >
                                         Reset
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         )}
