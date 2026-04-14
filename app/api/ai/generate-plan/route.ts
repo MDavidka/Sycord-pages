@@ -6,6 +6,8 @@ import { getSystemPrompts } from "@/lib/ai-prompts"
 
 const PLAN_MODEL = "gemini-3.1-pro-preview"
 const VERCEL_AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+const OPENROUTER_THINKER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -17,6 +19,7 @@ export async function POST(request: Request) {
     const { messages, model: requestedModel } = await request.json()
 
     const isVercelGatewayModel = requestedModel === "anthropic/claude-haiku-4.5"
+    const isOpenRouterModel = requestedModel === "openrouter/test"
 
     // Fetch Global Prompt
     const { builderPlan: systemContextTemplate } = await getSystemPrompts()
@@ -29,6 +32,48 @@ export async function POST(request: Request) {
     const finalPrompt = systemContextTemplate
         .replace("{{HISTORY}}", historyText)
         .replace("{{REQUEST}}", lastUserMessage.content)
+
+    // Route "test" model through OpenRouter (thinker: nvidia/nemotron-3-super-120b-a12b:free)
+    if (isOpenRouterModel) {
+      const openRouterKey = process.env.OPENROUTER_API_KEY
+      if (!openRouterKey) {
+        console.error("[v0] OPENROUTER_API_KEY not configured for test model plan generation")
+        return NextResponse.json({ message: "AI service not configured (OpenRouter). Set OPENROUTER_API_KEY env var." }, { status: 500 })
+      }
+
+      console.log(`[v0] Generating plan with thinker model via OpenRouter: ${OPENROUTER_THINKER_MODEL}`)
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${openRouterKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.NEXTAUTH_URL || "https://sycord.com",
+          "X-Title": "Sycord AI Builder",
+        },
+        body: JSON.stringify({
+          model: OPENROUTER_THINKER_MODEL,
+          messages: [
+            { role: "system", content: finalPrompt },
+            { role: "user", content: lastUserMessage.content },
+          ],
+          temperature: 0.2,
+        }),
+      })
+
+      if (!response.ok) {
+        let errorBody = ""
+        try { errorBody = await response.text() } catch { /* ignore */ }
+        const debugInfo = `OpenRouter API error: HTTP ${response.status} | Model: ${OPENROUTER_THINKER_MODEL} | Response: ${errorBody.slice(0, 300)}`
+        console.error("[v0] " + debugInfo)
+        return NextResponse.json({ message: debugInfo }, { status: 500 })
+      }
+
+      const data = await response.json()
+      const responseText = data.choices?.[0]?.message?.content || ""
+
+      return NextResponse.json({ instruction: responseText })
+    }
 
     // Route test model through Vercel AI Gateway (uses Vercel credits)
     if (isVercelGatewayModel) {

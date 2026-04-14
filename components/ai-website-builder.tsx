@@ -59,8 +59,8 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is the "test" model (anthropic/claude-haiku-4.5) via Vercel AI Gateway
-const DEFAULT_MODEL_ID = "anthropic/claude-haiku-4.5"
+// Default model is the "test" model via OpenRouter (thinker + coder)
+const DEFAULT_MODEL_ID = "openrouter/test"
 
 const MODELS: ModelOption[] = [
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
@@ -68,7 +68,7 @@ const MODELS: ModelOption[] = [
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
   { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "anthropic/claude-haiku-4.5", name: "test", provider: "Vercel" },
+  { id: "openrouter/test", name: "test", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -789,6 +789,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
 
+  // Track how many clarification questions the thinker model has asked (max 2)
+  const [questionCount, setQuestionCount] = useState(0)
+  const MAX_QUESTIONS = 2
+
   // "Existing codebase" prompt — shown when user starts generation but project already has files
   const [showFreshStartPrompt, setShowFreshStartPrompt] = useState(false)
   const [pendingInput, setPendingInput] = useState("")
@@ -1343,6 +1347,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setMessages(prev => [...prev, userMessage])
     setError(null)
     setAutoDeployTriggered(false)
+    setQuestionCount(0)
     setSitemap([])
 
     // ── Phase 1: Planning ──
@@ -1374,10 +1379,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       await phaseDelay()
 
-      // ── Phase 3: Clarifying ──
+      // ── Phase 3: Clarifying (max 2 questions before proceeding) ──
       const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      if (questionMatch) {
+      if (questionMatch && questionCount < MAX_QUESTIONS) {
         setStep("clarifying")
+        setQuestionCount(prev => prev + 1)
         const questionText = questionMatch[1].trim()
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
@@ -1483,15 +1489,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       try {
         data = await attemptGenerate(modelId)
       } catch (primaryErr: any) {
-        // "test" model (Claude Haiku 4.5 / Vercel AI Gateway) should NEVER fall back — show detailed error
-        if (selectedModel.provider === "Vercel") {
+        // "test" model (OpenRouter or Vercel AI Gateway) should NEVER fall back — show detailed error
+        if (selectedModel.provider === "OpenRouter" || selectedModel.provider === "Vercel") {
           const errMsg = primaryErr?.message || String(primaryErr) || "Unknown error"
-          console.error("[AI Builder] Vercel AI Gateway model error:", primaryErr)
+          console.error(`[AI Builder] ${selectedModel.provider} model error:`, primaryErr)
           setError(
             `Model "${selectedModel.name}" (${selectedModel.id}) failed.\n` +
-            `Provider: ${selectedModel.provider} AI Gateway\n` +
+            `Provider: ${selectedModel.provider}\n` +
             `Debug: ${errMsg}\n` +
-            `Possible causes: AI_GATEWAY_API_KEY not configured, insufficient Vercel credits, model unavailable, or rate limit exceeded.`
+            `Possible causes: ${selectedModel.provider === "OpenRouter" ? "OPENROUTER_API_KEY not configured" : "AI_GATEWAY_API_KEY not configured"}, model unavailable, or rate limit exceeded.`
           )
           setStep("idle")
           setActiveFile(undefined)

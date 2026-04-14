@@ -18,6 +18,7 @@ import { ObjectId } from "mongodb"
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 const VERCEL_AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
@@ -28,7 +29,9 @@ const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: str
   "gemini-1.5-pro": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" },
   // "test" model: Claude Haiku 4.5 via Vercel AI Gateway (uses Vercel credits)
-  "anthropic/claude-haiku-4.5": { url: VERCEL_AI_GATEWAY_URL, envVar: "AI_GATEWAY_API_KEY", provider: "Vercel" }
+  "anthropic/claude-haiku-4.5": { url: VERCEL_AI_GATEWAY_URL, envVar: "AI_GATEWAY_API_KEY", provider: "Vercel" },
+  // OpenRouter test model: qwen/qwen3-coder:free for code generation
+  "openrouter/test": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" },
 }
 
 export async function POST(request: Request) {
@@ -68,7 +71,8 @@ export async function POST(request: Request) {
     }
 
     // Use the resolved config key as the actual model ID for the API call
-    const apiModelId = configKey
+    // For OpenRouter, map to the actual coder model
+    const apiModelId = configKey === "openrouter/test" ? "qwen/qwen3-coder:free" : configKey
 
     const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS["gemini-3.1-pro-preview"]
 
@@ -206,12 +210,20 @@ CRITICAL MONGODB RULES:
       temperature: 0.2
     }
 
+    const headers: Record<string, string> = {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    }
+
+    // OpenRouter requires additional headers
+    if (config.provider === "OpenRouter") {
+      headers["HTTP-Referer"] = process.env.NEXTAUTH_URL || "https://sycord.com"
+      headers["X-Title"] = "Sycord AI Builder"
+    }
+
     const response = await fetch(config.url, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
     })
 
