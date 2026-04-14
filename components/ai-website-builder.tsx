@@ -50,18 +50,16 @@ interface ModelOption {
   name: string
   provider: string
   fast?: boolean
+  icon: React.ElementType
 }
 
 // Default model is NVIDIA via uploaded text attachment
 const DEFAULT_MODEL_ID = "nvidia-uploaded-text-model"
 
 const MODELS: ModelOption[] = [
-  { id: "nvidia-uploaded-text-model", name: "NVIDIA Uploaded Text Model", provider: "NVIDIA", fast: true },
-  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
-  { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
-  { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
+  { id: "nvidia-uploaded-text-model", name: "Test", provider: "NVIDIA", fast: true, icon: Brain },
+  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google", icon: Rocket },
+  { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true, icon: Wrench },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -565,10 +563,7 @@ const InputBar = ({
                     className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 border border-white/[0.06] px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0 rounded-full"
                     disabled={disabled}
                   >
-                    {selectedModel.fast
-                      ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
-                      : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
-                    }
+                    {selectedModel.icon && <selectedModel.icon className={cn("h-3 w-3 shrink-0", selectedModel.fast ? "text-yellow-500" : "text-zinc-600")} />}
                     <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
                     <ChevronDown className="h-3 w-3 shrink-0 ml-auto" />
                   </Button>
@@ -586,10 +581,7 @@ const InputBar = ({
                         if (model) setSelectedModel(model)
                       }}
                     >
-                      {m.fast
-                        ? <Zap className="h-3 w-3 text-yellow-500 mr-2" />
-                        : <Sparkles className="h-3 w-3 text-zinc-600 mr-2" />
-                      }
+                      {m.icon && <m.icon className={cn("h-3 w-3 mr-2", m.fast ? "text-yellow-500" : "text-zinc-600")} />}
                       {m.name}
                     </DropdownMenuItem>
                   ))}
