@@ -66,8 +66,8 @@ const MODELS: ModelOption[] = [
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
   { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "qwen/qwen3-coder:free", name: "Qwen3 Coder", provider: "OpenRouter" },
-  { id: "liquid/lfm-2.5-1.2b-thinking:free", name: "Liquid LFM Thinking 🧠", provider: "OpenRouter" },
+  { id: "qwen/qwen3-coder:free", name: "Coder model", provider: "OpenRouter" },
+  { id: "liquid/lfm-2.5-1.2b-thinking:free", name: "Thinking model", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
