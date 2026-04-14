@@ -175,10 +175,13 @@ CONVERSATION HISTORY:
 Request: {{REQUEST}}
 
 MISSING INFORMATION & CLARIFICATIONS:
-If the user's request is too vague, lacks detail, or you need more specific information about the design, layout, or features to build a high-quality site, you MUST ask a question.
+You may ask a MAXIMUM of 2 clarification questions total across the entire conversation. After 2 questions, you MUST proceed with the plan using reasonable assumptions.
+If the user's request is too vague and you still have questions remaining, you may ask ONE question at a time.
 Write the question in the same language the user used.
 To ask a question, return ONLY this format (do not return the plan yet):
 [QUESTION] <Your specific question here>
+
+If you have already asked questions or the request has enough detail, DO NOT ask another question — generate the full plan immediately.
 `
 
 export const DEFAULT_BUILDER_CODE = `

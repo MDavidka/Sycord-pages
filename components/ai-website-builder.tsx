@@ -792,8 +792,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
 
-  // Track how many clarification questions the thinker model has asked
-  const [questionCount, setQuestionCount] = useState(0)
+  // Track how many clarification questions the thinker model has asked (use ref to avoid stale closures)
+  const questionCountRef = useRef(0)
 
   // "Existing codebase" prompt — shown when user starts generation but project already has files
   const [showFreshStartPrompt, setShowFreshStartPrompt] = useState(false)
@@ -1327,6 +1327,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const startGeneration = async () => {
     if (!input.trim()) return
 
+    // If currently clarifying, route the answer through the planner without resetting
+    if (step === 'clarifying') {
+      startGenerationDirect(input.trim(), true)
+      return
+    }
+
     // If project already has existing pages, show the fresh-start prompt
     if (generatedPages.length > 0 && !showFreshStartPrompt) {
       setPendingInput(input.trim())
@@ -1334,10 +1340,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       return
     }
 
-    startGenerationDirect(input.trim())
+    startGenerationDirect(input.trim(), false)
   }
 
-  const startGenerationDirect = async (inputText: string) => {
+  const startGenerationDirect = async (inputText: string, isClarificationAnswer = false) => {
     if (!inputText.trim()) return
 
     const userMessage: Message = {
@@ -1349,18 +1355,28 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setMessages(prev => [...prev, userMessage])
     setError(null)
     setAutoDeployTriggered(false)
-    setQuestionCount(0)
-    setSitemap([])
+    // Only reset question count on brand-new generations, not clarification answers
+    if (!isClarificationAnswer) {
+      questionCountRef.current = 0
+      setSitemap([])
+    }
 
     // ── Phase 1: Planning ──
     setStep("planning")
     setCurrentPlan("Architecting solution...")
 
     try {
+      const questionsAsked = questionCountRef.current
+      const questionsRemaining = Math.max(0, MAX_QUESTIONS - questionsAsked)
+
       const planResponse = await fetch("/api/ai/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, userMessage], model: selectedModel.id }),
+        body: JSON.stringify({
+          messages: [...messages, userMessage],
+          model: selectedModel.id,
+          questionsRemaining,
+        }),
       })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
@@ -1383,9 +1399,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       // ── Phase 3: Clarifying (max 2 questions before proceeding) ──
       const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      if (questionMatch && questionCount < MAX_QUESTIONS) {
+      if (questionMatch && questionCountRef.current < MAX_QUESTIONS) {
         setStep("clarifying")
-        setQuestionCount(prev => prev + 1)
+        questionCountRef.current += 1
         const questionText = questionMatch[1].trim()
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),

@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, model: requestedModel } = await request.json()
+    const { messages, model: requestedModel, questionsRemaining } = await request.json()
 
     const isVercelGatewayModel = requestedModel === "anthropic/claude-haiku-4.5"
     const isOpenRouterModel = requestedModel === "openrouter/test"
@@ -29,9 +29,18 @@ export async function POST(request: Request) {
     // Combine history for context
     const historyText = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")
 
+    // Build the question-limit directive based on how many questions remain
+    const qRemaining = typeof questionsRemaining === "number" ? questionsRemaining : 0
+    let questionDirective = ""
+    if (qRemaining <= 0) {
+      questionDirective = "\n\nIMPORTANT: You have already asked the maximum number of clarification questions. Do NOT ask any more questions. You MUST proceed and generate the full architectural plan NOW using your best judgment for any missing details.\n"
+    } else {
+      questionDirective = `\n\nIMPORTANT: You may ask at most ${qRemaining} more clarification question(s). If you have enough information, skip questions and generate the plan directly. Only ask a question if truly critical information is missing.\n`
+    }
+
     const finalPrompt = systemContextTemplate
         .replace("{{HISTORY}}", historyText)
-        .replace("{{REQUEST}}", lastUserMessage.content)
+        .replace("{{REQUEST}}", lastUserMessage.content) + questionDirective
 
     // Route "test" model through OpenRouter (thinker: nvidia/nemotron-3-super-120b-a12b:free)
     if (isOpenRouterModel) {
