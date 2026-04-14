@@ -3,11 +3,12 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getSystemPrompts } from "@/lib/ai-prompts"
+import clientPromise from "@/lib/mongodb"
 
 const PLAN_MODEL = "gemini-3.1-pro-preview"
 const VERCEL_AI_GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-const OPENROUTER_THINKER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+const DEFAULT_OPENROUTER_THINKER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
         .replace("{{HISTORY}}", historyText)
         .replace("{{REQUEST}}", lastUserMessage.content) + questionDirective
 
-    // Route "test" model through OpenRouter (thinker: nvidia/nemotron-3-super-120b-a12b:free)
+    // Route "test" model through OpenRouter (thinker model from database or default)
     if (isOpenRouterModel) {
       const openRouterKey = process.env.OPENROUTER_API_KEY
       if (!openRouterKey) {
@@ -51,7 +52,20 @@ export async function POST(request: Request) {
         return NextResponse.json({ message: "AI service not configured (OpenRouter). Set OPENROUTER_API_KEY env var." }, { status: 500 })
       }
 
-      console.log(`[v0] Generating plan with thinker model via OpenRouter: ${OPENROUTER_THINKER_MODEL}`)
+      // Fetch thinker model from database
+      let thinkerModel = DEFAULT_OPENROUTER_THINKER_MODEL
+      try {
+        const client = await clientPromise
+        const db = client.db()
+        const config = await db.collection("modelConfig").findOne({ _id: "test-models" })
+        if (config?.thinkerModel) {
+          thinkerModel = config.thinkerModel
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching thinker model from database, using default:", err)
+      }
+
+      console.log(`[v0] Generating plan with thinker model via OpenRouter: ${thinkerModel}`)
 
       const response = await fetch(OPENROUTER_API_URL, {
         method: "POST",
@@ -62,7 +76,7 @@ export async function POST(request: Request) {
           "X-Title": "Sycord AI Builder",
         },
         body: JSON.stringify({
-          model: OPENROUTER_THINKER_MODEL,
+          model: thinkerModel,
           messages: [
             { role: "system", content: finalPrompt },
             { role: "user", content: lastUserMessage.content },
@@ -74,7 +88,7 @@ export async function POST(request: Request) {
       if (!response.ok) {
         let errorBody = ""
         try { errorBody = await response.text() } catch { /* ignore */ }
-        const debugInfo = `OpenRouter API error: HTTP ${response.status} | Model: ${OPENROUTER_THINKER_MODEL} | Response: ${errorBody.slice(0, 300)}`
+        const debugInfo = `OpenRouter API error: HTTP ${response.status} | Model: ${thinkerModel} | Response: ${errorBody.slice(0, 300)}`
         console.error("[v0] " + debugInfo)
         return NextResponse.json({ message: debugInfo }, { status: 500 })
       }

@@ -71,8 +71,22 @@ export async function POST(request: Request) {
     }
 
     // Use the resolved config key as the actual model ID for the API call
-    // For OpenRouter, map to the actual coder model
-    const apiModelId = configKey === "openrouter/test" ? "minimax/minimax-m2.5:free" : configKey
+    // For OpenRouter, fetch the actual coder model from database or use default
+    let apiModelId = configKey
+    if (configKey === "openrouter/test") {
+      let coderModel = "minimax/minimax-m2.5:free"
+      try {
+        const client = await clientPromise
+        const db = client.db()
+        const modelConfig = await db.collection("modelConfig").findOne({ _id: "test-models" })
+        if (modelConfig?.coderModel) {
+          coderModel = modelConfig.coderModel
+        }
+      } catch (err) {
+        console.error("[v0] Error fetching coder model from database, using default:", err)
+      }
+      apiModelId = coderModel
+    }
 
     const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS["gemini-3.1-pro-preview"]
 
