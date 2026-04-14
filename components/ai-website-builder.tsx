@@ -844,7 +844,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           timestamp: new Date().toISOString(),
         })),
       })
-      navigator.sendBeacon("/api/ai/messages", payload)
+      navigator.sendBeacon("/api/ai/messages", new Blob([payload], { type: "application/json" }))
     }
     window.addEventListener("beforeunload", handleBeforeUnload)
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
