@@ -52,16 +52,16 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is Qwen3-Coder via OpenRouter (free)
-const DEFAULT_MODEL_ID = "qwen/qwen3-coder:free"
+// Default model is NVIDIA via uploaded text attachment
+const DEFAULT_MODEL_ID = "nvidia-uploaded-text-model"
 
 const MODELS: ModelOption[] = [
+  { id: "nvidia-uploaded-text-model", name: "NVIDIA Uploaded Text Model", provider: "NVIDIA", fast: true },
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
   { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
   { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "qwen/qwen3-coder:free", name: "Qwen3 Coder", provider: "OpenRouter", fast: true },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -231,7 +231,7 @@ const StepIndicator = ({ phase, progress, currentFile }: {
   const prevPhaseRef = useRef<string | null>(null)
 
   const phaseConfig: Record<string, { icon: React.ReactNode; label: string }> = {
-    planning:    { icon: <Brain className="h-4 w-4" />,    label: "Thinking..." },
+    planning:    { icon: <Brain className="h-4 w-4" />,    label: "Processing with NVIDIA model..." },
     searching:   { icon: <Globe className="h-4 w-4" />,    label: "Searching web..." },
     clarifying:  { icon: <Info className="h-4 w-4" />,     label: "Asking a question..." },
     structuring: { icon: <Layout className="h-4 w-4" />,   label: "Creating sitemap..." },
@@ -524,11 +524,11 @@ const InputBar = ({
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
       <Card
         className={cn(
-          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-[1.25rem] sm:rounded-[1.5rem] transition-all duration-300",
+          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-lg sm:rounded-xl transition-all duration-300",
           disabled ? "opacity-70 pointer-events-none" : ""
         )}
       >
-        <div className="p-2.5 sm:p-3 flex flex-col gap-1.5">
+        <div className="p-2 sm:p-3 flex flex-col gap-1.5">
           {/* Multiline textarea */}
           <textarea
             value={input}
@@ -539,10 +539,10 @@ const InputBar = ({
             placeholder="Describe the website you want"
             disabled={disabled}
             autoFocus={!disabled}
-            className="text-[15px] sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent border-none outline-none px-2 pt-1 min-h-[40px] w-full"
+            className="text-sm sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent border-none outline-none px-2 pt-1 min-h-[36px] w-full"
             style={{ 
-              minHeight: '40px',
-              maxHeight: '180px',
+              minHeight: '36px',
+              maxHeight: '120px',
               overflow: 'auto'
             }}
           />
@@ -600,7 +600,7 @@ const InputBar = ({
             <Button
               onClick={onSend}
               className={cn(
-                "h-9 w-9 sm:h-10 sm:w-10 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0",
+                "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded p-0",
                 input.trim() && !disabled
                   ? "bg-zinc-700 text-white hover:bg-zinc-600"
                   : "bg-zinc-800/50 text-zinc-700"
@@ -608,8 +608,8 @@ const InputBar = ({
               disabled={!input.trim() || disabled}
             >
               {disabled
-                ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-zinc-700" />
-                : <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+                ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-zinc-700" />
+                : <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               }
             </Button>
           </div>
@@ -800,6 +800,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
+
+  // Track question count to limit to 2 questions before auto-proceeding
+  const [questionCount, setQuestionCount] = useState(0)
 
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
@@ -1096,6 +1099,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setError(null)
     setAutoDeployTriggered(false)
     setSitemap([])
+    setQuestionCount(0) // Reset question count for new generation
 
     // ── Phase 1: Planning ──
     setStep("planning")
@@ -1128,7 +1132,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       // ── Phase 3: Clarifying ──
       const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      if (questionMatch) {
+      // Only ask questions if we haven't reached the limit of 2
+      if (questionMatch && questionCount < 2) {
         setStep("clarifying")
         const questionText = questionMatch[1].trim()
         setMessages(prev => [...prev, {
@@ -1137,6 +1142,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           content: questionText,
         }])
         setInput("")
+        setQuestionCount(prev => prev + 1)
         return
       }
 
@@ -1407,10 +1413,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                     {msg.role === 'user' ? (
                                         <>
                                             <Card
-                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%] rounded-lg"
+                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%] rounded"
                                             >
-                                                <div className="px-4 sm:px-5 py-2.5 sm:py-3">
-                                                    <p className="text-sm leading-relaxed text-zinc-200">{msg.content}</p>
+                                                <div className="px-3 sm:px-4 py-2 sm:py-2.5">
+                                                    <p className="text-xs sm:text-sm leading-relaxed text-zinc-200">{msg.content}</p>
                                                 </div>
                                             </Card>
                                             <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 pr-1">
