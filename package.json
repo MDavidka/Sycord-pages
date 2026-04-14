@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@heroui/react": "latest",
     "@auth/core": "latest",
     "@aws-sdk/credential-providers": "latest",
     "@cfworker/json-schema": "latest",
