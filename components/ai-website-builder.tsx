@@ -57,8 +57,8 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is the Vercel "test" model (alibaba/qwen3-coder)
-const DEFAULT_MODEL_ID = "alibaba/qwen3-coder"
+// Default model is Qwen3-Coder via OpenRouter (free)
+const DEFAULT_MODEL_ID = "qwen/qwen3-coder:free"
 
 const MODELS: ModelOption[] = [
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
@@ -66,7 +66,7 @@ const MODELS: ModelOption[] = [
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
   { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
-  { id: "alibaba/qwen3-coder", name: "test", provider: "Vercel" },
+  { id: "qwen/qwen3-coder:free", name: "Qwen3 Coder", provider: "OpenRouter", fast: true },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -1183,10 +1183,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       try {
         data = await attemptGenerate(modelId)
       } catch (primaryErr: any) {
-        // "test" model (Vercel) should NEVER fall back — show error
-        if (selectedModel.provider === "Vercel") {
-          console.error("[AI Builder] Vercel model error:", primaryErr)
-          setError(`Failed to connect to Vercel model (${selectedModel.name}). The service may be temporarily unavailable. Please try again later.`)
+        // OpenRouter model should NEVER fall back — show error
+        if (selectedModel.provider === "OpenRouter") {
+          console.error("[AI Builder] OpenRouter model error:", primaryErr)
+          setError(`Failed to connect to OpenRouter model (${selectedModel.name}). The service may be temporarily unavailable. Please try again later.`)
           setStep("idle")
           setActiveFile(undefined)
           setActiveFileUsedFor(undefined)
