@@ -30,7 +30,7 @@ const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: str
   "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" },
   // "test" model: Claude Haiku 4.5 via Vercel AI Gateway (uses Vercel credits)
   "anthropic/claude-haiku-4.5": { url: VERCEL_AI_GATEWAY_URL, envVar: "AI_GATEWAY_API_KEY", provider: "Vercel" },
-  // OpenRouter test model: qwen/qwen3-coder:free for code generation
+  // OpenRouter test model: minimax/minimax-m2.5:free for code generation
   "openrouter/test": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" },
 }
 
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
     // Use the resolved config key as the actual model ID for the API call
     // For OpenRouter, map to the actual coder model
-    const apiModelId = configKey === "openrouter/test" ? "qwen/qwen3-coder:free" : configKey
+    const apiModelId = configKey === "openrouter/test" ? "minimax/minimax-m2.5:free" : configKey
 
     const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS["gemini-3.1-pro-preview"]
 
