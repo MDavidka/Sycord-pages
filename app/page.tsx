@@ -5,7 +5,6 @@ import Image from "next/image"
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Check, Zap, Sparkles } from "lucide-react"
 
 /* ─────────────────────── Scroll hooks ─────────────────────── */
@@ -166,67 +165,55 @@ export default function LandingPage() {
   ]
   const { scrollRef: featuresScrollRef, activeIndex: featuresActiveIndex } = useCarouselIndex(featureImages.length)
 
-  // User initials for the avatar pill
-  const userInitial = session?.user?.name?.[0]?.toUpperCase() || ""
-
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center overflow-x-hidden font-sans">
 
       {/* ─────────── Header ─────────── */}
       <header className="flex w-full px-5 md:px-8 py-4 items-center justify-between z-30 sticky top-0 frosted-header">
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/logo.png" alt="Sycord" width={30} height={30} className="opacity-80" priority />
+          <Image src="/logo.png" alt="Sycord" width={36} height={36} className="opacity-90" priority />
         </Link>
 
-        {/* Right side: user pill or login */}
-        {session?.user ? (
-          <Link href="/dashboard" className="flex items-center gap-2 bg-[#1C1C1E] hover:bg-[#252527] border border-white/[0.06] rounded-full pl-4 pr-1.5 py-1.5 transition-colors">
-            <span className="text-white/50 text-xs font-medium hidden sm:inline">{session.user.name?.split(" ")[0]}</span>
-            <Avatar className="h-7 w-7">
-              <AvatarImage src={session.user.image || ""} />
-              <AvatarFallback className="bg-[#2A2A2C] text-white text-xs font-semibold">{userInitial}</AvatarFallback>
-            </Avatar>
-          </Link>
-        ) : (
-          <Button asChild className="bg-white text-[#0A0A0A] hover:bg-white/90 text-xs font-semibold px-5 h-8 rounded-full">
-            <Link href="/login">Sign in</Link>
-          </Button>
-        )}
+        {/* Right side: pill with M icon */}
+        <Link 
+          href={session ? "/dashboard" : "/login"} 
+          className="flex items-center justify-center bg-[#1C1C1E] hover:bg-[#252527] border border-white/[0.08] rounded-full w-12 h-9 transition-colors backdrop-blur-md"
+        >
+          <span className="text-white text-sm font-bold">M</span>
+        </Link>
       </header>
 
       {/* ─────────── Main ─────────── */}
       <main className="w-full flex-1 flex flex-col" ref={parallaxRef}>
 
-        {/* ── HERO — black→navy gradient, Apple-style parallax ── */}
+        {/* ── HERO — radial gradient, Apple-style parallax ── */}
         <section className="relative w-full min-h-[100svh] flex flex-col items-center justify-center px-6">
-          {/* Background gradient: black top → dark navy bottom */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#080C14] to-[#0A1628] z-0" />
+          {/* Background: radial gradient midnight-to-black */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#0f1729_0%,_#000000_100%)] z-0" />
 
           {/* Hero content */}
-          <div className="relative z-10 flex flex-col items-center text-center max-w-2xl mx-auto -mt-16">
+          <div className="relative z-10 flex flex-col items-center text-center max-w-3xl mx-auto -mt-16">
             <h1
               data-hero-text
-              className="text-[clamp(2rem,8vw,3.5rem)] font-bold leading-[1.1] tracking-tight text-white mb-3 will-change-transform"
+              className="text-[clamp(2.5rem,9vw,4.5rem)] font-bold leading-[1.05] tracking-tight text-[#c5c5c5] mb-4 will-change-transform"
             >
               Build your project
             </h1>
 
             <div
               data-hero-sub
-              className="flex items-center gap-2.5 mb-8 will-change-transform"
+              className="flex items-center gap-3 mb-10 will-change-transform"
             >
-              <span className="text-[clamp(1.5rem,5vw,2.25rem)] font-medium text-white/40">with</span>
-              <SparkleIcon className="w-6 h-6 md:w-7 md:h-7 text-white/30" />
-              <span className="text-[clamp(1.5rem,5vw,2.25rem)] font-medium text-white/40">syra</span>
+              <span className="text-[clamp(1.75rem,6vw,3rem)] font-medium text-[#6b6b6b]">with</span>
+              <SparkleIcon className="w-7 h-7 md:w-8 md:h-8 text-[#6b6b6b]" />
+              <span className="text-[clamp(1.75rem,6vw,3rem)] font-medium text-[#6b6b6b]">syra</span>
             </div>
 
-            <div data-hero-cta className="will-change-transform">
-              <Button
-                asChild
-                className="bg-white/[0.08] hover:bg-white/[0.14] text-white/60 text-sm font-medium px-8 h-11 rounded-full border border-white/[0.06] backdrop-blur-sm transition-all duration-300"
-              >
-                <Link href={session ? "/dashboard" : "/login"}>Get started</Link>
-              </Button>
+            {/* Glassmorphic search/input pill */}
+            <div data-hero-cta className="w-full max-w-md mb-12 will-change-transform">
+              <div className="relative w-full h-14 bg-white/[0.05] hover:bg-white/[0.08] backdrop-blur-md border border-white/10 rounded-full flex items-center px-6 transition-all duration-300 cursor-text">
+                <span className="text-white/30 text-sm font-medium">Search or start typing...</span>
+              </div>
             </div>
           </div>
 
@@ -234,11 +221,11 @@ export default function LandingPage() {
           <div
             ref={cardsProgressRef}
             className="absolute bottom-0 left-0 right-0 z-10 overflow-visible"
-            style={{ height: "40vh" }}
+            style={{ height: "42vh" }}
           >
             <div
               ref={featuresScrollRef}
-              className="flex items-end justify-center gap-4 md:gap-6 w-full h-full overflow-x-auto md:overflow-x-visible scrollbar-hide px-6 md:px-0 pb-20"
+              className="flex items-end justify-center gap-5 md:gap-6 w-full h-full overflow-x-auto md:overflow-x-visible scrollbar-hide px-6 md:px-0 pb-24"
               style={{ scrollSnapType: "x mandatory", scrollBehavior: "smooth" }}
             >
               {featureImages.map((img, i) => {
@@ -253,7 +240,7 @@ export default function LandingPage() {
                   <div
                     key={i}
                     data-carousel-card
-                    className="relative flex-shrink-0 w-[42vw] md:w-[220px] aspect-[3/4] rounded-2xl overflow-hidden border border-white/[0.06] bg-[#0D1117]"
+                    className="relative flex-shrink-0 w-[44vw] md:w-[240px] aspect-[3/4] rounded-3xl overflow-hidden border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.4)]"
                     style={{
                       scrollSnapAlign: "center",
                       transform: `translateY(${yShift}px) scale(${scaleVal})`,
@@ -267,20 +254,22 @@ export default function LandingPage() {
                       fill
                       className="object-cover"
                       loading="lazy"
-                      sizes="(max-width: 768px) 42vw, 220px"
+                      sizes="(max-width: 768px) 44vw, 240px"
                     />
                   </div>
                 )
               })}
             </div>
 
-            {/* Dot indicators */}
-            <div className="flex md:hidden items-center justify-center gap-2.5 absolute bottom-6 left-0 right-0">
+            {/* Dot indicators - visible on all viewports */}
+            <div className="flex items-center justify-center gap-2 absolute bottom-8 left-0 right-0">
               {featureImages.map((_, i) => (
                 <div
                   key={i}
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    i === featuresActiveIndex ? "w-7 bg-white/50" : "w-2.5 bg-white/15"
+                    i === featuresActiveIndex
+                      ? "w-8 bg-[#888]"
+                      : "w-2 bg-[#444]"
                   }`}
                 />
               ))}
