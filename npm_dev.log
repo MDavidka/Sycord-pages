@@ -1,0 +1,163 @@
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+   ▲ Next.js 16.0.10 (Turbopack)
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.0.2:3000
+
+ ✓ Starting...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+ ✓ Ready in 1452ms
+ ○ Compiling /login ...
+ GET /login 200 in 4.5s (compile: 4.0s, proxy.ts: 5ms, render: 520ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+[NextAuth-WARN][NEXTAUTH_URL]
+[NextAuth-WARN][NO_SECRET]
+[NextAuth-WARN][DEBUG_ENABLED]
+ GET /api/auth/session 200 in 3.4s (compile: 3.4s, proxy.ts: 47ms, render: 41ms)
+MongoServerSelectionError: getaddrinfo ENOTFOUND dummy
+    at ignore-listed frames {
+  errorLabelSet: Set(0) {},
+  reason: [TopologyDescription],
+  code: undefined,
+  [cause]: MongoNetworkError: getaddrinfo ENOTFOUND dummy
+      at ignore-listed frames {
+    errorLabelSet: Set(1) { 'ResetPool' },
+    beforeHandshake: false,
+    [cause]: Error: getaddrinfo ENOTFOUND dummy
+        at ignore-listed frames {
+      errno: -3008,
+      code: 'ENOTFOUND',
+      syscall: 'getaddrinfo',
+      hostname: 'dummy'
+    }
+  }
+}
+ ⨯ unhandledRejection: MongoServerSelectionError: getaddrinfo ENOTFOUND dummy
+    at ignore-listed frames {
+  errorLabelSet: Set(0) {},
+  reason: [TopologyDescription],
+  code: undefined,
+  [cause]: MongoNetworkError: getaddrinfo ENOTFOUND dummy
+      at ignore-listed frames {
+    errorLabelSet: Set(1) { 'ResetPool' },
+    beforeHandshake: false,
+    [cause]: Error: getaddrinfo ENOTFOUND dummy
+        at ignore-listed frames {
+      errno: -3008,
+      code: 'ENOTFOUND',
+      syscall: 'getaddrinfo',
+      hostname: 'dummy'
+    }
+  }
+}
+ ⨯ unhandledRejection:  MongoServerSelectionError: getaddrinfo ENOTFOUND dummy
+    at ignore-listed frames {
+  errorLabelSet: Set(0) {},
+  reason: [TopologyDescription],
+  code: undefined,
+  [cause]: MongoNetworkError: getaddrinfo ENOTFOUND dummy
+      at ignore-listed frames {
+    errorLabelSet: Set(1) { 'ResetPool' },
+    beforeHandshake: false,
+    [cause]: Error: getaddrinfo ENOTFOUND dummy
+        at ignore-listed frames {
+      errno: -3008,
+      code: 'ENOTFOUND',
+      syscall: 'getaddrinfo',
+      hostname: 'dummy'
+    }
+  }
+}
+ GET /login 200 in 114ms (compile: 8ms, proxy.ts: 14ms, render: 91ms)
+ GET /api/auth/session 200 in 118ms (compile: 98ms, proxy.ts: 8ms, render: 12ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET / 200 in 893ms (compile: 699ms, proxy.ts: 5ms, render: 188ms)
+ GET /api/auth/session 200 in 148ms (compile: 86ms, proxy.ts: 17ms, render: 45ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /login 200 in 112ms (compile: 5ms, proxy.ts: 5ms, render: 102ms)
+ GET /api/auth/session 200 in 49ms (compile: 31ms, proxy.ts: 5ms, render: 13ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /test-ai-builder 404 in 649ms (compile: 529ms, proxy.ts: 6ms, render: 115ms)
+ GET /api/auth/session 200 in 50ms (compile: 33ms, proxy.ts: 5ms, render: 11ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ ⨯ ./app/test-ai-builder/page.tsx:2:1
+Export AIWebsiteBuilder doesn't exist in target module
+[0m [90m 1 |[39m [32m"use client"[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { [33mAIWebsiteBuilder[39m } [36mfrom[39m [32m"@/components/ai-website-builder"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mexport[39m [36mdefault[39m [36mfunction[39m [33mTestPage[39m() {
+ [90m 5 |[39m   [36mreturn[39m ([0m
+
+The export AIWebsiteBuilder was not found in module [project]/components/ai-website-builder.tsx [app-client] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./app/test-ai-builder/page.tsx [Client Component Browser]
+    ./app/test-ai-builder/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./app/test-ai-builder/page.tsx [Client Component SSR]
+    ./app/test-ai-builder/page.tsx [Server Component]
+
+
+
+./app/test-ai-builder/page.tsx:2:1
+Export AIWebsiteBuilder doesn't exist in target module
+[0m [90m 1 |[39m [32m"use client"[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { [33mAIWebsiteBuilder[39m } [36mfrom[39m [32m"@/components/ai-website-builder"[39m[33m;[39m
+ [90m   |[39m [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 3 |[39m
+ [90m 4 |[39m [36mexport[39m [36mdefault[39m [36mfunction[39m [33mTestPage[39m() {
+ [90m 5 |[39m   [36mreturn[39m ([0m
+
+The export AIWebsiteBuilder was not found in module [project]/components/ai-website-builder.tsx [app-ssr] (ecmascript).
+Did you mean to import default?
+All exports of the module are statically known (It doesn't have dynamic exports). So it's known statically that the requested export doesn't exist.
+
+Import traces:
+  Client Component Browser:
+    ./app/test-ai-builder/page.tsx [Client Component Browser]
+    ./app/test-ai-builder/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./app/test-ai-builder/page.tsx [Client Component SSR]
+    ./app/test-ai-builder/page.tsx [Server Component]
+
+
+ GET /test-ai-builder 500 in 2.6s (compile: 2.4s, proxy.ts: 73ms, render: 177ms)
+ ✓ Compiled in 105ms
+ GET /test-ai-builder 200 in 370ms (compile: 133ms, proxy.ts: 6ms, render: 232ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+[NextAuth-WARN][NEXTAUTH_URL]
+[NextAuth-WARN][NO_SECRET]
+[NextAuth-WARN][DEBUG_ENABLED]
+ GET /api/auth/session 200 in 204ms (compile: 160ms, proxy.ts: 5ms, render: 40ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /test-ai-builder 200 in 174ms (compile: 8ms, proxy.ts: 11ms, render: 155ms)
+ GET /api/auth/session 200 in 74ms (compile: 57ms, proxy.ts: 5ms, render: 12ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
