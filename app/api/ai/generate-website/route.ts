@@ -30,7 +30,8 @@ const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: str
   "gemini-1.5-flash": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "gemini-1.5-pro": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
   "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" },
-  "qwen/qwen3-coder:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" }
+  "qwen/qwen3-coder:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" },
+  "liquid/lfm-2.5-1.2b-thinking:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" },
 }
 
 export async function POST(request: Request) {
@@ -208,17 +209,29 @@ CRITICAL MONGODB RULES:
       temperature: 0.2
     }
 
+    // Build headers — OpenRouter requires HTTP-Referer and X-Title
+    const headers: Record<string, string> = {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    }
+    if (config.provider === "OpenRouter") {
+      headers["HTTP-Referer"] = process.env.NEXTAUTH_URL || "https://sycord.com"
+      headers["X-Title"] = "Sycord"
+    }
+
     const response = await fetch(config.url, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
     })
 
-    if (!response.ok) throw new Error(`${config.provider} API error: ${response.status}`)
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "")
+      console.error(`[v0] ${config.provider} API error ${response.status}:`, errorBody)
+      throw new Error(`${config.provider} API error: ${response.status}`)
+    }
     const data = await response.json()
+    // OpenRouter thinking models may return content in message.content or after reasoning
     const responseText = data.choices?.[0]?.message?.content || ""
 
     // 4. Robust Parsing

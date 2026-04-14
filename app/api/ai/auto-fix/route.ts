@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 
-const FIX_MODEL = "gemini-2.0-flash"
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+const FIX_MODEL = "qwen/qwen3-coder:free"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -15,17 +15,14 @@ export async function POST(request: Request) {
   try {
     const { logs, fileStructure, fileContent, lastAction, history, fixedFiles } = await request.json()
 
-    // Use GOOGLE_AI_API by default, fallback to GOOGLE_API_KEY
-    const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
+    // Use OpenRouter API key
+    const apiKey = process.env.OPENROUTER_API_KEY
     if (!apiKey) {
-      return NextResponse.json({ message: "AI service not configured" }, { status: 500 })
+      return NextResponse.json({ message: "AI service not configured (OpenRouter)" }, { status: 500 })
     }
 
     // Fetch Global Prompts
     const { autoFixDiagnosis, autoFixResolution } = await getSystemPrompts()
-
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: FIX_MODEL })
 
     let memorySection = ""
     if (fixedFiles && fixedFiles.length > 0) {
@@ -68,9 +65,32 @@ export async function POST(request: Request) {
             .replace("{{MEMORY_SECTION}}", memorySection)
     }
 
-    const result = await model.generateContent(systemPrompt)
-    const response = await result.response
-    const responseText = response.text()
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.NEXTAUTH_URL || "https://sycord.com",
+        "X-Title": "Sycord",
+      },
+      body: JSON.stringify({
+        model: FIX_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: "Analyze and fix the issues described above." },
+        ],
+        temperature: 0.2,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "")
+      console.error(`[v0] Auto-fix API error ${response.status}:`, errorBody)
+      throw new Error(`Auto-fix failed (OpenRouter ${response.status})`)
+    }
+
+    const data = await response.json()
+    const responseText = data.choices?.[0]?.message?.content || ""
 
     // Parse the response
     let action = null
