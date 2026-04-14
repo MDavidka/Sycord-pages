@@ -30,7 +30,8 @@ export async function POST(request: Request) {
     const historyText = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")
 
     // Build the question-limit directive based on how many questions remain
-    const qRemaining = typeof questionsRemaining === "number" ? questionsRemaining : 0
+    // Default to 2 (MAX_QUESTIONS) for the initial request when no value is provided
+    const qRemaining = typeof questionsRemaining === "number" ? questionsRemaining : 2
     let questionDirective = ""
     if (qRemaining <= 0) {
       questionDirective = "\n\nIMPORTANT: You have already asked the maximum number of clarification questions. Do NOT ask any more questions. You MUST proceed and generate the full architectural plan NOW using your best judgment for any missing details.\n"
