@@ -521,6 +521,7 @@ const InputBar = ({
 
             <Button
               onClick={onSend}
+              aria-label="Send message"
               className={cn(
                 "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0",
                 input.trim() && !disabled

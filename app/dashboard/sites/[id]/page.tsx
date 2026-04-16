@@ -1583,7 +1583,7 @@ export default function SiteSettingsPage() {
                           {displayUrl || "Not deployed"}
                         </span>
                         <button
-                          onClick={() => previewUrl && window.open(previewUrl, "_blank")}
+                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                           disabled={!previewUrl}
                           className="h-9 px-5 rounded-full text-[12px] font-semibold text-white shrink-0 transition-opacity hover:opacity-85 active:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ background: "#2e2e30" }}
