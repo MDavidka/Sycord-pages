@@ -264,6 +264,8 @@ const SidebarBottom = ({
 )
 
 // ── Mobile overlay sidebar ──────────────────────────────────────────────────
+// Animation: The main content panel (with curved left edge) slides LEFT to reveal
+// the flat sidebar underneath — creating the "begördülő" rolling effect
 export function AnimatedRollingSidebar({
   isOpen,
   onClose,
@@ -283,41 +285,34 @@ export function AnimatedRollingSidebar({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Full-screen backdrop — pure black underneath */}
+          {/* Layer 1: Dark background that appears behind everything */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.2 }}
             className="fixed inset-0 z-40"
-            style={{ backgroundColor: "#000000" }}
+            style={{ backgroundColor: "#121212" }}
             onClick={onClose}
           />
 
-          {/* Sidebar panel — flat, no rounded right edge */}
-          <motion.aside
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
-            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.9 }}
-            className="fixed inset-y-0 left-0 z-50 flex flex-col"
+          {/* Layer 2: Flat sidebar panel — revealed as main content slides away */}
+          <div
+            className="fixed inset-y-0 left-0 z-40 flex flex-col"
             style={{
-              width: "76%",
-              maxWidth: 320,
-              backgroundColor: "rgba(22, 22, 24, 0.96)",
-              backdropFilter: "blur(32px) saturate(1.6)",
-              WebkitBackdropFilter: "blur(32px) saturate(1.6)",
+              width: "68%",
+              maxWidth: 300,
+              backgroundColor: "#161618",
             }}
           >
             {/* Logo */}
             <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)" }}
+                style={{ backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.10)" }}
               >
-                {/* Sycord "S" logo mark */}
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.9" />
+                  <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.85" />
                 </svg>
               </div>
               <span className="text-white font-semibold text-[15px] tracking-tight">sycord</span>
@@ -339,24 +334,39 @@ export function AnimatedRollingSidebar({
               onManageAccess={onManageAccess}
               onClose={onClose}
             />
-          </motion.aside>
+          </div>
 
-          {/* Main content peek — this is the panel with the curved LEFT edge
-              that visually "rolls over" and sits on top of the sidebar */}
+          {/* Layer 3: Main content panel with curved left edge — 
+              This slides LEFT to reveal sidebar, creating the "rolling over" effect */}
           <motion.div
-            initial={{ x: "100%" }}
-            animate={{ x: "76%" }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.9 }}
-            className="fixed inset-y-0 right-0 z-50 pointer-events-none"
+            initial={{ x: 0 }}
+            animate={{ x: "68%" }}
+            exit={{ x: 0 }}
+            transition={{ 
+              type: "spring", 
+              stiffness: 280, 
+              damping: 30, 
+              mass: 0.9 
+            }}
+            className="fixed inset-0 z-50"
             style={{
-              width: "100%",
-              backgroundColor: "#080808",
+              backgroundColor: "#0a0a0a",
               borderTopLeftRadius: 28,
               borderBottomLeftRadius: 28,
-              boxShadow: "-8px 0 40px rgba(0,0,0,0.8)",
+              boxShadow: "-12px 0 50px rgba(0,0,0,0.9)",
             }}
-          />
+            onClick={onClose}
+          >
+            {/* Hamburger menu indicator on the content panel */}
+            <div className="flex items-center gap-3 px-5 pt-5">
+              <button className="p-2 -ml-2 rounded-lg hover:bg-white/5 transition-colors">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-white/70">
+                  <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+              <span className="text-white/80 font-medium text-sm">{project?.businessName || "Project"}</span>
+            </div>
+          </motion.div>
         </>
       )}
     </AnimatePresence>
