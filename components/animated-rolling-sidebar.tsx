@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import {
-  ChevronRight,
   ChevronDown,
   Lock,
   Coins,
@@ -36,14 +35,14 @@ interface AnimatedRollingSidebarProps {
   navGroups: NavGroup[]
   getWebsiteIcon: () => React.ComponentType<{ className?: string }>
   databaseConnected: boolean
-  session?: { user?: { name?: string; image?: string } }
+  session?: { user?: { name?: string; image?: string; email?: string } }
   subscription?: string
   planCredit?: number
   userInitials: string
   onManageAccess?: () => void
 }
 
-// Sidebar navigation content
+// Shared sidebar navigation content
 const SidebarNavContent = ({
   navGroups,
   activeTab,
@@ -57,7 +56,6 @@ const SidebarNavContent = ({
   onClose: () => void
   databaseConnected: boolean
 }) => {
-  // Initialize open groups from defaultOpen
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>()
     for (const g of navGroups) {
@@ -75,7 +73,6 @@ const SidebarNavContent = ({
     })
   }
 
-  // Auto-open group containing active tab
   useEffect(() => {
     for (const g of navGroups) {
       if (g.items.some((i) => i.id === activeTab)) {
@@ -91,10 +88,9 @@ const SidebarNavContent = ({
   }, [activeTab, navGroups])
 
   return (
-    <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar px-3 py-4">
-      {/* Platform label */}
-      <div className="px-3 pb-2">
-        <span className="text-xs font-medium text-[#6b6b6b] uppercase tracking-wider">
+    <nav className="flex-1 overflow-y-auto custom-scrollbar px-3 py-2">
+      <div className="px-3 pb-2 pt-1">
+        <span className="text-[11px] font-semibold text-white/30 uppercase tracking-widest">
           Platform
         </span>
       </div>
@@ -105,59 +101,54 @@ const SidebarNavContent = ({
         const isPinned = group.pinned
 
         return (
-          <div key={group.key} className="mb-1">
-            {/* Folder header */}
+          <div key={group.key} className="mb-0.5">
             <button
               onClick={() => toggleGroup(group.key)}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200",
                 isOpen && groupHasActive
-                  ? "bg-[#2a2a2c]"
+                  ? "bg-white/[0.07]"
                   : "hover:bg-white/[0.04]"
               )}
             >
-              {/* Group icon placeholder */}
               <div className={cn(
-                "w-5 h-5 rounded-md flex items-center justify-center border border-white/10",
-                groupHasActive ? "bg-white/10" : "bg-transparent"
+                "w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold border",
+                groupHasActive
+                  ? "bg-white/10 border-white/20 text-white"
+                  : "bg-white/[0.04] border-white/[0.08] text-white/50"
               )}>
-                <span className="text-[10px] text-white/60">
-                  {group.title.charAt(0)}
-                </span>
+                {group.title.charAt(0)}
               </div>
-              
+
               <span className={cn(
-                "flex-1 text-left text-sm font-medium",
-                groupHasActive ? "text-white" : "text-white/70"
+                "flex-1 text-left text-sm font-semibold",
+                groupHasActive ? "text-white" : "text-white/60"
               )}>
                 {group.title}
               </span>
 
-              {/* Pin icon for pinned groups */}
               {isPinned && (
-                <Pin className="h-3.5 w-3.5 text-white/30 shrink-0" />
+                <Pin className="h-3 w-3 text-white/25 shrink-0" />
               )}
 
-              {/* Chevron */}
               <ChevronDown
                 className={cn(
-                  "h-4 w-4 text-white/40 transition-transform duration-200",
+                  "h-3.5 w-3.5 text-white/30 transition-transform duration-200",
                   !isOpen && "-rotate-90"
                 )}
               />
             </button>
 
-            {/* Folder items with animated expand */}
             <AnimatePresence initial={false}>
               {isOpen && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  transition={{ duration: 0.18, ease: "easeInOut" }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-1 ml-3 pl-4 border-l border-white/[0.06] space-y-0.5">
+                  <div className="mt-0.5 ml-4 pl-3.5 border-l border-white/[0.07] space-y-0.5 pb-1">
                     {group.items.map((item) => {
                       const Icon = item.icon
                       const isActive = activeTab === item.id
@@ -174,32 +165,29 @@ const SidebarNavContent = ({
                           disabled={isLocked}
                           title={isLocked ? "Connect a database to unlock" : undefined}
                           className={cn(
-                            "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 text-sm font-medium text-left relative",
+                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all duration-200 text-sm text-left relative",
                             isActive
-                              ? "text-white"
+                              ? "text-white font-semibold"
                               : isLocked
                               ? "text-white/20 cursor-not-allowed"
-                              : "text-white/50 hover:text-white/80 hover:bg-white/[0.04]"
+                              : "text-white/50 font-medium hover:text-white/80 hover:bg-white/[0.04]"
                           )}
                         >
-                          {/* Active indicator line */}
                           {isActive && (
                             <motion.div
                               layoutId="activeIndicator"
-                              className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-white rounded-full"
-                              transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                              className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[18px] bg-white rounded-full"
+                              transition={{ type: "spring", bounce: 0.2, duration: 0.35 }}
                             />
                           )}
-
                           <Icon className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate flex-1 text-left">{item.label}</span>
-                          
+                          <span className="truncate flex-1">{item.label}</span>
                           {item.badge && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/5 text-white/60 shrink-0">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-white/[0.07] text-white/50 shrink-0">
                               {item.badge}
                             </span>
                           )}
-                          {isLocked && <Lock className="h-3 w-3 shrink-0 opacity-50" />}
+                          {isLocked && <Lock className="h-3 w-3 shrink-0 opacity-40" />}
                         </button>
                       )
                     })}
@@ -214,6 +202,68 @@ const SidebarNavContent = ({
   )
 }
 
+// Shared bottom section
+const SidebarBottom = ({
+  userInitials,
+  session,
+  subscription,
+  planCredit,
+  onManageAccess,
+  onClose,
+}: {
+  userInitials: string
+  session?: { user?: { name?: string } }
+  subscription?: string
+  planCredit?: number
+  onManageAccess?: () => void
+  onClose: () => void
+}) => (
+  <div className="mt-auto border-t border-white/[0.06] p-3 space-y-2">
+    {onManageAccess && (
+      <button
+        onClick={() => { onClose(); onManageAccess() }}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] transition-colors"
+      >
+        <span className="h-7 w-7 rounded-full bg-purple-500 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+          {userInitials.charAt(0)}
+        </span>
+        <span className="text-sm font-medium text-white/80">Manage access</span>
+      </button>
+    )}
+
+    <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.03]">
+      <div className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+        {userInitials}
+      </div>
+      <span className="flex-1 text-xs font-medium truncate text-white/70">
+        {session?.user?.name || "User"}
+      </span>
+      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.07] text-white/50">
+        {subscription}
+      </span>
+    </div>
+
+    <div className="px-3 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-white/35 flex items-center gap-1.5">
+          <Coins className="h-3 w-3" />
+          Monthly Credit
+        </span>
+        <span className="text-[11px] font-semibold text-white/60">{planCredit}€</span>
+      </div>
+      <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
+        <motion.div
+          className="h-full rounded-full bg-white/25"
+          initial={{ width: 0 }}
+          animate={{ width: "100%" }}
+          transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
+        />
+      </div>
+    </div>
+  </div>
+)
+
+// ── Mobile overlay sidebar ──────────────────────────────────────────────────
 export function AnimatedRollingSidebar({
   isOpen,
   onClose,
@@ -229,66 +279,50 @@ export function AnimatedRollingSidebar({
   userInitials,
   onManageAccess,
 }: AnimatedRollingSidebarProps) {
-  const WebsiteIcon = getWebsiteIcon()
-
   return (
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Background layer - deep dark gray canvas */}
+          {/* Full-screen backdrop — pure black underneath */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: 0.25 }}
             className="fixed inset-0 z-40"
-            style={{ backgroundColor: "#121212" }}
+            style={{ backgroundColor: "#000000" }}
             onClick={onClose}
           />
 
-          {/* Navigation Panel - the "rolling" layer with straight edge */}
+          {/* Sidebar panel — flat, no rounded right edge */}
           <motion.aside
-            initial={{ x: "-100%", opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "-100%", opacity: 0 }}
-            transition={{
-              type: "spring",
-              stiffness: 300,
-              damping: 30,
-              mass: 0.8,
-            }}
-            className="fixed inset-y-0 left-0 z-50 w-[72%] max-w-[320px] flex flex-col"
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.9 }}
+            className="fixed inset-y-0 left-0 z-50 flex flex-col"
             style={{
-              backgroundColor: "rgba(28, 28, 30, 0.92)",
-              backdropFilter: "blur(40px) saturate(1.8)",
-              WebkitBackdropFilter: "blur(40px) saturate(1.8)",
-              boxShadow: `
-                0 0 0 1px rgba(255,255,255,0.06),
-                20px 0 60px -10px rgba(0,0,0,0.6),
-                40px 0 100px -20px rgba(0,0,0,0.4)
-              `,
+              width: "76%",
+              maxWidth: 320,
+              backgroundColor: "rgba(22, 22, 24, 0.96)",
+              backdropFilter: "blur(32px) saturate(1.6)",
+              WebkitBackdropFilter: "blur(32px) saturate(1.6)",
             }}
           >
-            {/* The "Shadow" Segment - pitch-black bar curving into the panel */}
-            <div
-              className="absolute right-0 top-0 bottom-0 w-[35%] pointer-events-none"
-              style={{
-                backgroundColor: "#000000",
-                borderTopLeftRadius: "40px",
-                borderBottomLeftRadius: "40px",
-              }}
-            />
-            {/* Logo header - Sycord branding */}
-            <div className="relative z-10 flex items-center gap-2 px-5 pt-6 pb-4">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center flex-shrink-0">
-                <div className="w-5 h-5 bg-white rounded-sm" />
+            {/* Logo */}
+            <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)" }}
+              >
+                {/* Sycord "S" logo mark */}
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.9" />
+                </svg>
               </div>
-              <span className="font-semibold text-white text-base tracking-tight">
-                sycord
-              </span>
+              <span className="text-white font-semibold text-[15px] tracking-tight">sycord</span>
             </div>
 
-            {/* Navigation content */}
             <SidebarNavContent
               navGroups={navGroups}
               activeTab={activeTab}
@@ -297,66 +331,39 @@ export function AnimatedRollingSidebar({
               databaseConnected={databaseConnected}
             />
 
-            {/* Bottom section - Manage access & Account */}
-            <div className="mt-auto border-t border-white/[0.06] p-4 space-y-3">
-              {/* Manage Access button */}
-              {onManageAccess && (
-                <button
-                  onClick={() => {
-                    onClose()
-                    onManageAccess()
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition-colors"
-                >
-                  <span className="h-7 w-7 rounded-full bg-purple-500/80 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-                    {userInitials.charAt(0)}
-                  </span>
-                  <span className="text-sm font-medium text-white/80">Manage access</span>
-                </button>
-              )}
-
-              {/* Account row */}
-              <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.03]">
-                <div className="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-                  {userInitials}
-                </div>
-                <span className="flex-1 text-xs font-medium truncate text-white/70">
-                  {session?.user?.name || "User"}
-                </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.08] text-white/60">
-                  {subscription}
-                </span>
-              </div>
-
-              {/* Credit bar */}
-              <div className="px-3 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-white/40 flex items-center gap-1">
-                    <Coins className="h-3 w-3" />
-                    Monthly Credit
-                  </span>
-                  <span className="text-[11px] font-semibold text-white/70">{planCredit}€</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
-                  <motion.div 
-                    className="h-full rounded-full bg-white/30"
-                    initial={{ width: 0 }}
-                    animate={{ width: "100%" }}
-                    transition={{ duration: 0.8, ease: "easeOut", delay: 0.3 }}
-                  />
-                </div>
-              </div>
-            </div>
+            <SidebarBottom
+              userInitials={userInitials}
+              session={session}
+              subscription={subscription}
+              planCredit={planCredit}
+              onManageAccess={onManageAccess}
+              onClose={onClose}
+            />
           </motion.aside>
 
-
+          {/* Main content peek — this is the panel with the curved LEFT edge
+              that visually "rolls over" and sits on top of the sidebar */}
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: "76%" }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.9 }}
+            className="fixed inset-y-0 right-0 z-50 pointer-events-none"
+            style={{
+              width: "100%",
+              backgroundColor: "#080808",
+              borderTopLeftRadius: 28,
+              borderBottomLeftRadius: 28,
+              boxShadow: "-8px 0 40px rgba(0,0,0,0.8)",
+            }}
+          />
         </>
       )}
     </AnimatePresence>
   )
 }
 
-// Desktop version with permanent visibility and hover expand
+// ── Desktop permanent sidebar ───────────────────────────────────────────────
 export function AnimatedRollingSidebarDesktop({
   isExpanded,
   onExpandChange,
@@ -372,199 +379,121 @@ export function AnimatedRollingSidebarDesktop({
   userInitials,
   onManageAccess,
 }: AnimatedRollingSidebarProps & { isExpanded: boolean; onExpandChange: (expanded: boolean) => void }) {
-  const WebsiteIcon = getWebsiteIcon()
-
   return (
-    <div className="relative h-full flex">
-      {/* Background layer - deep dark gray */}
-      <div 
-        className="absolute inset-0"
-        style={{ backgroundColor: "#121212" }}
-      />
-
-      {/* The navigation panel */}
-      <motion.aside
-        initial={false}
-        animate={{ width: isExpanded ? 280 : 72 }}
-        transition={{ type: "spring", stiffness: 400, damping: 35 }}
-        onMouseEnter={() => onExpandChange(true)}
-        onMouseLeave={() => onExpandChange(false)}
-        className="relative z-10 flex flex-col h-full"
-        style={{
-          backgroundColor: "rgba(28, 28, 30, 0.95)",
-          backdropFilter: "blur(40px) saturate(1.8)",
-          WebkitBackdropFilter: "blur(40px) saturate(1.8)",
-          boxShadow: isExpanded
-            ? `
-              0 0 0 1px rgba(255,255,255,0.06),
-              12px 0 40px -8px rgba(0,0,0,0.5)
-            `
-            : "none",
-        }}
-      >
-        {/* Black segment curving into the panel from right */}
+    <motion.aside
+      initial={false}
+      animate={{ width: isExpanded ? 272 : 68 }}
+      transition={{ type: "spring", stiffness: 380, damping: 36 }}
+      onMouseEnter={() => onExpandChange(true)}
+      onMouseLeave={() => onExpandChange(false)}
+      className="relative flex flex-col h-full overflow-hidden"
+      style={{
+        backgroundColor: "rgba(20, 20, 22, 0.97)",
+        backdropFilter: "blur(32px) saturate(1.6)",
+        WebkitBackdropFilter: "blur(32px) saturate(1.6)",
+      }}
+    >
+      {/* Logo */}
+      <div className="flex items-center gap-2.5 px-4 pt-5 pb-5 overflow-hidden">
         <div
-          className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none"
-          style={{
-            backgroundColor: "#000000",
-            borderTopLeftRadius: "32px",
-            borderBottomLeftRadius: "32px",
-          }}
-        />
-
-        {/* Logo header - Sycord branding */}
-        <div className="relative z-20 flex items-center gap-2 px-4 pt-5 pb-4 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center flex-shrink-0">
-            <div className="w-5 h-5 bg-white rounded-sm" />
-          </div>
-          <motion.span
-            initial={false}
-            animate={{ opacity: isExpanded ? 1 : 0, x: isExpanded ? 0 : -10 }}
-            transition={{ duration: 0.2 }}
-            className="font-semibold text-white text-base tracking-tight whitespace-nowrap"
-          >
-            sycord
-          </motion.span>
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)" }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.9" />
+          </svg>
         </div>
-
-        {/* Navigation - collapsed shows only icons */}
-        <div className="flex-1 overflow-hidden">
-          {isExpanded ? (
-            <SidebarNavContent
-              navGroups={navGroups}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              onClose={() => {}}
-              databaseConnected={databaseConnected}
-            />
-          ) : (
-            <nav className="px-3 py-4 space-y-2">
-              {navGroups.flatMap((group) =>
-                group.items.map((item) => {
-                  const Icon = item.icon
-                  const isActive = activeTab === item.id
-                  const isLocked = item.requiresDatabase && !databaseConnected
-
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        if (!isLocked) setActiveTab(item.id)
-                      }}
-                      disabled={isLocked}
-                      className={cn(
-                        "w-full flex items-center justify-center p-3 rounded-xl transition-all duration-200 relative",
-                        isActive
-                          ? "bg-white/10 text-white"
-                          : isLocked
-                          ? "text-white/20 cursor-not-allowed"
-                          : "text-white/50 hover:text-white/80 hover:bg-white/[0.06]"
-                      )}
-                    >
-                      <Icon className="h-5 w-5" />
-                      {isActive && (
-                        <motion.div
-                          layoutId="desktopActiveIndicator"
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-white rounded-full"
-                        />
-                      )}
-                    </button>
-                  )
-                })
-              )}
-            </nav>
-          )}
-        </div>
-
-        {/* Bottom section - collapsed shows only avatar */}
-        <div className="mt-auto border-t border-white/[0.06] p-3">
-          <AnimatePresence mode="wait">
-            {isExpanded ? (
-              <motion.div
-                key="expanded"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="space-y-3"
-              >
-                {onManageAccess && (
-                  <button
-                    onClick={onManageAccess}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] transition-colors"
-                  >
-                    <span className="h-7 w-7 rounded-full bg-purple-500/80 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-                      {userInitials.charAt(0)}
-                    </span>
-                    <span className="text-sm font-medium text-white/80">Manage access</span>
-                  </button>
-                )}
-
-                <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.03]">
-                  <div className="h-6 w-6 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-                    {userInitials}
-                  </div>
-                  <span className="flex-1 text-xs font-medium truncate text-white/70">
-                    {session?.user?.name || "User"}
-                  </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.08] text-white/60">
-                    {subscription}
-                  </span>
-                </div>
-
-                <div className="px-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-white/40 flex items-center gap-1">
-                      <Coins className="h-3 w-3" />
-                      Monthly Credit
-                    </span>
-                    <span className="text-[11px] font-semibold text-white/70">{planCredit}€</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
-                    <div className="h-full w-full rounded-full bg-white/30" />
-                  </div>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="collapsed"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex justify-center"
-              >
-                <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-white">
-                  {userInitials}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </motion.aside>
-
-      {/* The "Shadow" Segment - pitch-black area on the right */}
-      <div
-        className="flex-1 relative"
-        style={{ backgroundColor: "#000000" }}
-      >
-        {/* Curved overlap effect from the sidebar */}
-        <motion.div
+        <motion.span
           initial={false}
-          animate={{ 
-            opacity: isExpanded ? 1 : 0,
-            x: isExpanded ? 0 : -20 
-          }}
-          className="absolute left-0 top-0 bottom-0 w-12 pointer-events-none"
-          style={{
-            background: `linear-gradient(to right, 
-              rgba(28, 28, 30, 0.4) 0%, 
-              transparent 100%
-            )`,
-            borderTopLeftRadius: "32px",
-            borderBottomLeftRadius: "32px",
-          }}
-        />
+          animate={{ opacity: isExpanded ? 1 : 0, x: isExpanded ? 0 : -8 }}
+          transition={{ duration: 0.18 }}
+          className="text-white font-semibold text-[15px] tracking-tight whitespace-nowrap"
+        >
+          sycord
+        </motion.span>
       </div>
-    </div>
+
+      {/* Nav — icons only when collapsed */}
+      <div className="flex-1 overflow-hidden">
+        {isExpanded ? (
+          <SidebarNavContent
+            navGroups={navGroups}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onClose={() => {}}
+            databaseConnected={databaseConnected}
+          />
+        ) : (
+          <nav className="px-2.5 py-2 space-y-1">
+            {navGroups.flatMap((group) =>
+              group.items.map((item) => {
+                const Icon = item.icon
+                const isActive = activeTab === item.id
+                const isLocked = item.requiresDatabase && !databaseConnected
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { if (!isLocked) setActiveTab(item.id) }}
+                    disabled={isLocked}
+                    className={cn(
+                      "w-full flex items-center justify-center p-2.5 rounded-xl transition-all duration-200 relative",
+                      isActive
+                        ? "bg-white/10 text-white"
+                        : isLocked
+                        ? "text-white/20 cursor-not-allowed"
+                        : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px]" />
+                    {isActive && (
+                      <motion.div
+                        layoutId="desktopActiveBar"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-white rounded-full"
+                      />
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </nav>
+        )}
+      </div>
+
+      {/* Bottom */}
+      <AnimatePresence mode="wait">
+        {isExpanded ? (
+          <motion.div
+            key="expanded-bottom"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <SidebarBottom
+              userInitials={userInitials}
+              session={session}
+              subscription={subscription}
+              planCredit={planCredit}
+              onManageAccess={onManageAccess}
+              onClose={() => {}}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="collapsed-bottom"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="p-3 flex justify-center border-t border-white/[0.06]"
+          >
+            <div className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white">
+              {userInitials}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.aside>
   )
 }
 

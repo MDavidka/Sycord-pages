@@ -1286,8 +1286,17 @@ export default function SiteSettingsPage() {
         />
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main Content — curved left edge rolls over the sidebar */}
+      <div
+        className="flex-1 flex flex-col min-w-0 relative z-10"
+        style={{
+          backgroundColor: "#0a0a0a",
+          borderTopLeftRadius: 28,
+          borderBottomLeftRadius: 28,
+          boxShadow: "-8px 0 32px rgba(0,0,0,0.7)",
+          overflow: "hidden",
+        }}
+      >
         {/* Header */}
         <header className={cn("border-b border-white/10 bg-background/50 backdrop-blur-sm z-20 shrink-0")}>
           <div className="flex items-center justify-between h-14 px-4 md:px-6">
