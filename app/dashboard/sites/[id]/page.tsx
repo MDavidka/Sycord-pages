@@ -60,6 +60,7 @@ import {
   ChevronDown,
   Shield,
   Search,
+  Send,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -652,6 +653,9 @@ export default function SiteSettingsPage() {
   const [domainChecks, setDomainChecks] = useState<Record<string, { available: boolean | null; purchaseUrl: string; loading: boolean }>>({})
   const [isDomainCheckLoading, setIsDomainCheckLoading] = useState(false)
   const [tldPricesLoaded, setTldPricesLoaded] = useState(false)
+
+  // Overview mini AI chat state
+  const [overviewChatInput, setOverviewChatInput] = useState("")
 
   // Fetch real TLD prices from Cloudflare (via our API)
   const fetchTldPrices = async () => {
@@ -1498,233 +1502,191 @@ export default function SiteSettingsPage() {
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
               return (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-5">
 
-                  {/* Desktop: two-column grid / Mobile: single column */}
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
+                  {/* ── TOP ROW: Preview + Domain info ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-                    {/* LEFT COLUMN — Preview + Domain (spans 3 cols on desktop) */}
-                    <div className="lg:col-span-3 space-y-4">
-
-                      {/* PRIMARY PREVIEW CARD */}
-                      <div
-                        className="relative w-full overflow-hidden rounded-[20px]"
-                        style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        {/* Live iframe preview */}
-                        {previewUrl ? (
-                          <iframe
-                            src={previewUrl}
-                            title={`Preview of ${displayUrl}`}
-                            className="absolute inset-0 w-[1440px] h-[900px] border-0 origin-top-left pointer-events-none select-none"
-                            sandbox="allow-same-origin allow-scripts allow-forms"
-                            tabIndex={-1}
-                            ref={(el) => {
-                              if (el && el.parentElement) {
-                                const scale = el.parentElement.offsetWidth / 1440
-                                el.style.transform = `scale(${scale})`
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                            <div
-                              className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                              style={{ background: "#2e2e30" }}
-                            >
-                              <Globe className="h-6 w-6 text-zinc-500" />
-                            </div>
-                            <p className="text-sm font-semibold text-zinc-300">No deployment yet</p>
-                            <p className="text-xs text-zinc-600 max-w-[200px] text-center">Deploy your site to see a live preview</p>
-                          </div>
-                        )}
-
-                        {/* Vignette overlay */}
-                        <div
-                          aria-hidden="true"
-                          className="absolute inset-0 pointer-events-none"
-                          style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(28,28,30,0.7) 100%)" }}
+                    {/* Preview box (left — 7 cols on desktop) */}
+                    <div
+                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[20px]"
+                      style={{ background: "#252527", aspectRatio: "4/3", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      {previewUrl ? (
+                        <iframe
+                          src={previewUrl}
+                          title={`Preview of ${displayUrl}`}
+                          className="absolute inset-0 w-[1440px] h-[1080px] border-0 origin-top-left pointer-events-none select-none"
+                          sandbox="allow-same-origin allow-scripts allow-forms"
+                          tabIndex={-1}
+                          ref={(el) => {
+                            if (el && el.parentElement) {
+                              const scale = el.parentElement.offsetWidth / 1440
+                              el.style.transform = `scale(${scale})`
+                            }
+                          }}
                         />
-
-                        {/* "Your site is now live!" banner */}
-                        {previewUrl && (
-                          <div className="absolute bottom-0 left-0" style={{ zIndex: 10 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                padding: "10px 16px",
-                                borderTopRightRadius: "18px",
-                                background: "#22a846",
-                              }}
-                            >
-                              <CheckCircle2
-                                aria-hidden="true"
-                                style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.85)", flexShrink: 0 }}
-                              />
-                              <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#ffffff", lineHeight: 1.2, whiteSpace: "nowrap" }}>
-                                Your site is now live!
-                              </span>
-                            </div>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "#2e2e30" }}>
+                            <Globe className="h-6 w-6 text-zinc-500" />
                           </div>
-                        )}
-                      </div>
+                          <p className="text-sm font-semibold text-zinc-300">No deployment yet</p>
+                          <p className="text-xs text-zinc-600 max-w-[200px] text-center">Deploy your site to see a live preview</p>
+                        </div>
+                      )}
 
-                      {/* DOMAIN ROW */}
-                      <div className="flex items-center gap-3 px-1 py-1">
-                        <div
-                          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                          style={{ background: "#2e2e30" }}
-                        >
+                      {/* Vignette overlay */}
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(28,28,30,0.7) 100%)" }}
+                      />
+
+                      {/* "Your site is now live!" banner */}
+                      {previewUrl && (
+                        <div className="absolute bottom-0 left-0" style={{ zIndex: 10 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "10px 16px",
+                              borderTopRightRadius: "18px",
+                              background: "#22a846",
+                            }}
+                          >
+                            <CheckCircle2 aria-hidden="true" style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.85)", flexShrink: 0 }} />
+                            <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#ffffff", lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                              Your site is now live!
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Domain info + Visit (right — 5 cols on desktop) */}
+                    <div className="lg:col-span-5 flex flex-col justify-center gap-5 py-2 lg:py-4">
+
+                      {/* Domain name + status */}
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
                           <Globe className="h-4 w-4 text-zinc-500" />
                         </div>
-                        <span className="flex-1 text-[14px] font-semibold text-zinc-100 truncate min-w-0">
+                        <span className="text-lg lg:text-xl font-bold text-zinc-100 truncate min-w-0">
                           {displayUrl || "Not deployed"}
                         </span>
-                        <button
-                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                          disabled={!previewUrl}
-                          className="h-9 px-5 rounded-full text-[12px] font-semibold text-white shrink-0 transition-opacity hover:opacity-85 active:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ background: "#2e2e30" }}
-                        >
-                          Visit Site
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* RIGHT COLUMN — Stats + Quick Actions (spans 2 cols on desktop) */}
-                    <div className="lg:col-span-2 space-y-4">
-
-                      {/* STAT CARDS */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div
-                          className="rounded-2xl p-4"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <FileText className="h-4 w-4 text-zinc-500" />
-                            <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Pages</span>
-                          </div>
-                          <p className="text-2xl font-bold text-zinc-100">{generatedPages.length}</p>
-                          <p className="text-[11px] text-zinc-600 mt-0.5">Generated files</p>
-                        </div>
-                        <div
-                          className="rounded-2xl p-4"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <Globe className="h-4 w-4 text-zinc-500" />
-                            <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Status</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={cn("w-2.5 h-2.5 rounded-full", previewUrl ? "bg-emerald-400" : "bg-zinc-600")} />
-                            <p className="text-sm font-semibold text-zinc-100">{previewUrl ? "Live" : "Offline"}</p>
-                          </div>
-                          <p className="text-[11px] text-zinc-600 mt-0.5">Deployment</p>
-                        </div>
-                        <div
-                          className="rounded-2xl p-4"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <Layers className="h-4 w-4 text-zinc-500" />
-                            <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Type</span>
-                          </div>
-                          <p className="text-sm font-semibold text-zinc-100 capitalize">{siteType === "shop" ? "Webshop" : "Website"}</p>
-                          <p className="text-[11px] text-zinc-600 mt-0.5">Site category</p>
-                        </div>
-                        <div
-                          className="rounded-2xl p-4"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <div className="flex items-center gap-2 mb-2">
-                            <Database className="h-4 w-4 text-zinc-500" />
-                            <span className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Database</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={cn("w-2.5 h-2.5 rounded-full", databaseConnected ? "bg-emerald-400" : "bg-zinc-600")} />
-                            <p className="text-sm font-semibold text-zinc-100">{databaseConnected ? "Connected" : "None"}</p>
-                          </div>
-                          <p className="text-[11px] text-zinc-600 mt-0.5">Integration</p>
-                        </div>
-                      </div>
-
-                      {/* QUICK ACTION BUTTONS */}
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <button
-                          onClick={() => setActiveTab("ai")}
-                          className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <Sparkles className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <div>
-                            <p className="text-[12px] font-semibold text-zinc-200">Syra</p>
-                            <p className="text-[10px] text-zinc-500">AI website builder</p>
-                          </div>
-                        </button>
-                        <button
-                          onClick={() => setActiveTab("pages")}
-                          className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <div>
-                            <p className="text-[12px] font-semibold text-zinc-200">Pages</p>
-                            <p className="text-[10px] text-zinc-500">Manage content</p>
-                          </div>
-                        </button>
-                        {(siteType === "shop" || databaseConnected) && (
-                          <>
-                            <button
-                              onClick={() => setActiveTab("items")}
-                              className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                              style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                            >
-                              <ShoppingCart className="h-4 w-4 text-zinc-400 shrink-0" />
-                              <div>
-                                <p className="text-[12px] font-semibold text-zinc-200">Products</p>
-                                <p className="text-[10px] text-zinc-500">Add or edit items</p>
-                              </div>
-                            </button>
-                            <button
-                              onClick={() => setActiveTab("payments")}
-                              className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                              style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                            >
-                              <Wallet className="h-4 w-4 text-zinc-400 shrink-0" />
-                              <div>
-                                <p className="text-[12px] font-semibold text-zinc-200">Payouts</p>
-                                <p className="text-[10px] text-zinc-500">Configure billing</p>
-                              </div>
-                            </button>
-                          </>
+                        {previewUrl && (
+                          <div className="w-3 h-3 rounded-full bg-emerald-400 shrink-0" title="Live" />
                         )}
                       </div>
 
-                      {/* QUICK INFO CARD — desktop only */}
-                      <div
-                        className="hidden lg:block rounded-2xl p-4"
-                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <h3 className="text-[12px] font-semibold text-zinc-300 mb-3">Site Details</h3>
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12px] text-zinc-500">Project name</span>
-                            <span className="text-[12px] font-medium text-zinc-200 truncate max-w-[160px]">{project?.businessName || "—"}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12px] text-zinc-500">Subscription</span>
-                            <span className="text-[12px] font-medium text-zinc-200">{subscription}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[12px] text-zinc-500">Domain</span>
-                            <span className="text-[12px] font-medium text-zinc-200 truncate max-w-[160px]">{displayUrl || "Not set"}</span>
-                          </div>
+                      {/* Site type icon */}
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
+                          <Layers className="h-3.5 w-3.5 text-zinc-500" />
                         </div>
+                        <span className="text-sm text-zinc-400 capitalize">{siteType === "shop" ? "Webshop" : "Website"}</span>
                       </div>
 
+                      {/* Visit button */}
+                      <button
+                        onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                        disabled={!previewUrl}
+                        className="w-fit h-11 px-8 rounded-full text-[14px] font-semibold text-white transition-all hover:opacity-85 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: "#2e2e30" }}
+                      >
+                        Visit
+                      </button>
                     </div>
+                  </div>
+
+                  {/* ── BOTTOM ROW: Latest changes + AI chatbox ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+                    {/* Latest changes (left — 8 cols on desktop) */}
+                    <div
+                      className="lg:col-span-8 rounded-[20px] p-5 lg:p-6 min-h-[220px] flex flex-col"
+                      style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      <h3 className="text-sm font-semibold text-zinc-300 mb-4">Latest Changes</h3>
+                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2.5">
+                        {generatedPages.length > 0 ? (
+                          generatedPages
+                            .slice()
+                            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                            .slice(0, 8)
+                            .map((page, idx) => (
+                              <div
+                                key={page.name + idx}
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-white/[0.04]"
+                              >
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
+                                  <FileCode className="h-3.5 w-3.5 text-zinc-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[13px] font-medium text-zinc-200 truncate">{page.name}</p>
+                                  <p className="text-[11px] text-zinc-600">
+                                    {page.timestamp ? new Date(page.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] text-zinc-600 shrink-0">{page.usedFor || "page"}</span>
+                              </div>
+                            ))
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8">
+                            <History className="h-8 w-8 text-zinc-700" />
+                            <p className="text-sm text-zinc-600">No changes yet</p>
+                            <p className="text-xs text-zinc-700 text-center max-w-[200px]">Use Syra to generate pages and they&apos;ll show up here</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* AI chatbox (right — 4 cols on desktop) */}
+                    <div
+                      className="lg:col-span-4 rounded-[20px] p-5 lg:p-6 min-h-[220px] flex flex-col"
+                      style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      <h3 className="text-sm font-semibold text-zinc-300 mb-3">AI Chatbox</h3>
+
+                      <div className="flex-1 flex flex-col justify-end gap-3">
+                        <p className="text-xs text-zinc-600 text-center">Ask Syra to edit or build pages</p>
+
+                        {/* Input row */}
+                        <div
+                          className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                          style={{ background: "#1e1e20", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <input
+                            type="text"
+                            placeholder="Ask Syra..."
+                            value={overviewChatInput}
+                            onChange={(e) => setOverviewChatInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && overviewChatInput.trim()) {
+                                setActiveTab("ai")
+                                setOverviewChatInput("")
+                              }
+                            }}
+                            className="flex-1 bg-transparent text-sm text-zinc-200 placeholder:text-zinc-600 outline-none"
+                          />
+                          <button
+                            onClick={() => {
+                              if (overviewChatInput.trim()) {
+                                setActiveTab("ai")
+                                setOverviewChatInput("")
+                              }
+                            }}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-white/[0.08]"
+                            style={{ background: overviewChatInput.trim() ? "#fff" : "#2e2e30" }}
+                          >
+                            <Send className={cn("h-3.5 w-3.5", overviewChatInput.trim() ? "text-black" : "text-zinc-600")} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
 
                 </div>
