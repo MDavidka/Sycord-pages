@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils"
 import {
   ChevronDown,
   Lock,
-  Coins,
   Pin,
+  ChevronsUpDown,
 } from "lucide-react"
 
 interface NavItem {
@@ -232,28 +232,19 @@ const SidebarBottom = ({
       </button>
     )}
 
-    <div className="flex items-center gap-3 px-3 py-2">
-      <div className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04] transition-colors">
+      <div className="h-8 w-8 rounded-lg bg-white/[0.08] flex items-center justify-center text-[11px] font-bold text-white/70 shrink-0">
         {userInitials}
       </div>
-      <span className="flex-1 text-xs font-medium truncate text-white/70">
-        {session?.user?.name || "User"}
-      </span>
-    </div>
-
-    <div className="px-3 space-y-1.5">
-      <span className="text-[10px] text-white/35 flex items-center gap-1.5">
-        <Coins className="h-3 w-3" />
-        Monthly Credit
-      </span>
-      <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
-        <motion.div
-          className="h-full rounded-full bg-white/25"
-          initial={{ width: 0 }}
-          animate={{ width: "100%" }}
-          transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
-        />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white/90 truncate leading-tight">
+          {session?.user?.name || "User"}
+        </p>
+        <p className="text-xs text-white/40 leading-tight mt-0.5">
+          {planCredit} credits
+        </p>
       </div>
+      <ChevronsUpDown className="h-4 w-4 text-white/30 shrink-0" />
     </div>
   </div>
 )
@@ -286,7 +277,7 @@ export function AnimatedRollingSidebar({
           transition={{ duration: 0.2 }}
           className="absolute inset-0 flex flex-col"
           style={{
-            backgroundColor: "#121212",
+            backgroundColor: "#18191B",
           }}
         >
           {/* Logo */}
@@ -342,9 +333,7 @@ export function AnimatedRollingSidebarDesktop({
       onMouseLeave={() => onExpandChange(false)}
       className="relative flex flex-col h-full overflow-hidden"
       style={{
-        backgroundColor: "rgba(20, 20, 22, 0.97)",
-        backdropFilter: "blur(32px) saturate(1.6)",
-        WebkitBackdropFilter: "blur(32px) saturate(1.6)",
+        backgroundColor: "#18191B",
       }}
     >
       {/* Logo */}
