@@ -316,7 +316,7 @@ export function AnimatedRollingSidebar({
           >
             {/* Logo */}
             <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
-              <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" />
+              <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" priority />
               <span className="text-white font-semibold text-[15px] tracking-tight">Sycord</span>
             </div>
 
@@ -375,7 +375,7 @@ export function AnimatedRollingSidebarDesktop({
     >
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 pt-5 pb-5 overflow-hidden">
-        <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" />
+        <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" priority />
         <motion.span
           initial={false}
           animate={{ opacity: isExpanded ? 1 : 0, x: isExpanded ? 0 : -8 }}
