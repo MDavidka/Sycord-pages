@@ -244,19 +244,9 @@ export function AnimatedRollingSidebar({
             className="fixed inset-0 z-40"
             style={{ backgroundColor: "#121212" }}
             onClick={onClose}
-          >
-            {/* The "Shadow" Segment - fixed pitch-black bar on far right */}
-            <div
-              className="absolute right-0 top-0 bottom-0 w-[35%]"
-              style={{
-                backgroundColor: "#000000",
-                borderTopLeftRadius: "32px",
-                borderBottomLeftRadius: "32px",
-              }}
-            />
-          </motion.div>
+          />
 
-          {/* Navigation Panel - the "rolling" layer with curved edge */}
+          {/* Navigation Panel - the "rolling" layer with straight edge */}
           <motion.aside
             initial={{ x: "-100%", opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
@@ -272,8 +262,6 @@ export function AnimatedRollingSidebar({
               backgroundColor: "rgba(28, 28, 30, 0.92)",
               backdropFilter: "blur(40px) saturate(1.8)",
               WebkitBackdropFilter: "blur(40px) saturate(1.8)",
-              borderTopRightRadius: "40px",
-              borderBottomRightRadius: "40px",
               boxShadow: `
                 0 0 0 1px rgba(255,255,255,0.06),
                 20px 0 60px -10px rgba(0,0,0,0.6),
@@ -281,13 +269,22 @@ export function AnimatedRollingSidebar({
               `,
             }}
           >
-            {/* Logo header */}
-            <div className="flex items-center gap-3 px-5 pt-6 pb-4">
-              <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center">
-                <WebsiteIcon className="h-5 w-5 text-white/80" />
+            {/* The "Shadow" Segment - pitch-black bar curving into the panel */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-[35%] pointer-events-none"
+              style={{
+                backgroundColor: "#000000",
+                borderTopLeftRadius: "40px",
+                borderBottomLeftRadius: "40px",
+              }}
+            />
+            {/* Logo header - Sycord branding */}
+            <div className="relative z-10 flex items-center gap-2 px-5 pt-6 pb-4">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center flex-shrink-0">
+                <div className="w-5 h-5 bg-white rounded-sm" />
               </div>
-              <span className="font-semibold text-white text-lg tracking-tight">
-                {project?.businessName || "sycord"}
+              <span className="font-semibold text-white text-base tracking-tight">
+                sycord
               </span>
             </div>
 
@@ -352,29 +349,7 @@ export function AnimatedRollingSidebar({
             </div>
           </motion.aside>
 
-          {/* Curved edge overlay for depth effect */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.4, delay: 0.1 }}
-            className="fixed z-45 pointer-events-none"
-            style={{
-              top: 0,
-              bottom: 0,
-              left: "72%",
-              maxWidth: "320px",
-              width: "60px",
-              marginLeft: "-30px",
-              background: `linear-gradient(to right, 
-                rgba(28, 28, 30, 0.5) 0%, 
-                rgba(18, 18, 18, 0.3) 50%,
-                transparent 100%
-              )`,
-              borderTopRightRadius: "40px",
-              borderBottomRightRadius: "40px",
-            }}
-          />
+
         </>
       )}
     </AnimatePresence>
@@ -407,7 +382,7 @@ export function AnimatedRollingSidebarDesktop({
         style={{ backgroundColor: "#121212" }}
       />
 
-      {/* The navigation panel with curved edge */}
+      {/* The navigation panel */}
       <motion.aside
         initial={false}
         animate={{ width: isExpanded ? 280 : 72 }}
@@ -419,8 +394,6 @@ export function AnimatedRollingSidebarDesktop({
           backgroundColor: "rgba(28, 28, 30, 0.95)",
           backdropFilter: "blur(40px) saturate(1.8)",
           WebkitBackdropFilter: "blur(40px) saturate(1.8)",
-          borderTopRightRadius: isExpanded ? "32px" : "0",
-          borderBottomRightRadius: isExpanded ? "32px" : "0",
           boxShadow: isExpanded
             ? `
               0 0 0 1px rgba(255,255,255,0.06),
@@ -429,18 +402,28 @@ export function AnimatedRollingSidebarDesktop({
             : "none",
         }}
       >
-        {/* Logo header */}
-        <div className="flex items-center gap-3 px-4 pt-5 pb-4 overflow-hidden">
-          <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0">
-            <WebsiteIcon className="h-5 w-5 text-white/80" />
+        {/* Black segment curving into the panel from right */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-12 pointer-events-none"
+          style={{
+            backgroundColor: "#000000",
+            borderTopLeftRadius: "32px",
+            borderBottomLeftRadius: "32px",
+          }}
+        />
+
+        {/* Logo header - Sycord branding */}
+        <div className="relative z-20 flex items-center gap-2 px-4 pt-5 pb-4 overflow-hidden">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center flex-shrink-0">
+            <div className="w-5 h-5 bg-white rounded-sm" />
           </div>
           <motion.span
             initial={false}
             animate={{ opacity: isExpanded ? 1 : 0, x: isExpanded ? 0 : -10 }}
             transition={{ duration: 0.2 }}
-            className="font-semibold text-white text-lg tracking-tight whitespace-nowrap"
+            className="font-semibold text-white text-base tracking-tight whitespace-nowrap"
           >
-            {project?.businessName || "sycord"}
+            sycord
           </motion.span>
         </div>
 
