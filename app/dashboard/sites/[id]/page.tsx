@@ -1286,9 +1286,30 @@ export default function SiteSettingsPage() {
         />
       </aside>
 
-      {/* Main Content */}
-      <div
-        className="flex-1 flex flex-col min-w-0 relative z-10 main-content-panel"
+      {/* Mobile Sidebar — sits behind main content, revealed when content slides right */}
+      <div className="md:hidden absolute inset-y-0 left-0 z-0" style={{ width: "60%" }}>
+        <AnimatedRollingSidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          project={project}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          navGroups={navGroups}
+          getWebsiteIcon={getWebsiteIcon}
+          databaseConnected={databaseConnected}
+          session={session}
+          subscription={subscription}
+          planCredit={planCredit}
+          userInitials={userInitials}
+          onManageAccess={() => { setIsSidebarOpen(false); setIsManageAccessOpen(true) }}
+        />
+      </div>
+
+      {/* Main Content — slides right on mobile to reveal sidebar */}
+      <motion.div
+        className={cn("flex-1 flex flex-col min-w-0 relative z-10 main-content-panel", isSidebarOpen && "sidebar-open")}
+        animate={{ x: isSidebarOpen ? "60%" : 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.9 }}
         style={{
           backgroundColor: "#0a0a0a",
           overflow: "hidden",
@@ -1352,24 +1373,13 @@ export default function SiteSettingsPage() {
           </div>
         </header>
 
-        {/* Mobile Rolling Sidebar with layered animation */}
-        <div className="md:hidden">
-          <AnimatedRollingSidebar
-            isOpen={isSidebarOpen}
-            onClose={() => setIsSidebarOpen(false)}
-            project={project}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            navGroups={navGroups}
-            getWebsiteIcon={getWebsiteIcon}
-            databaseConnected={databaseConnected}
-            session={session}
-            subscription={subscription}
-            planCredit={planCredit}
-            userInitials={userInitials}
-            onManageAccess={() => { setIsSidebarOpen(false); setIsManageAccessOpen(true) }}
+        {/* Tap overlay to close sidebar on mobile */}
+        {isSidebarOpen && (
+          <div
+            className="absolute inset-0 z-[60] md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
           />
-        </div>
+        )}
 
         {/* Manage Access — sycord connect dialog */}
         <AnimatePresence>
@@ -2495,7 +2505,7 @@ export default function SiteSettingsPage() {
 
           </div>
         </main>
-      </div>
+      </motion.div>
 
     </div>
   )

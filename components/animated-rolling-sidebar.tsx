@@ -264,9 +264,9 @@ const SidebarBottom = ({
   </div>
 )
 
-// ── Mobile overlay sidebar ──────────────────────────────────────────────────
-// Animation: The main content panel (with curved left edge) slides LEFT to reveal
-// the flat sidebar underneath — creating the "begördülő" rolling effect
+// ── Mobile sidebar panel ────────────────────────────────────────────────────
+// Positioned absolutely behind the main content. The main content slides right
+// to reveal this sidebar, creating the "merge into menubar" effect.
 export function AnimatedRollingSidebar({
   isOpen,
   onClose,
@@ -285,59 +285,39 @@ export function AnimatedRollingSidebar({
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
-          {/* Layer 1: Tap-to-close overlay — transparent, no fading */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-40"
-            onClick={onClose}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="absolute inset-0 flex flex-col"
+          style={{
+            backgroundColor: "#161618",
+          }}
+        >
+          {/* Logo */}
+          <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
+            <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" priority />
+            <span className="text-white font-semibold text-[15px] tracking-tight">Sycord</span>
+          </div>
+
+          <SidebarNavContent
+            navGroups={navGroups}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onClose={onClose}
+            databaseConnected={databaseConnected}
           />
 
-          {/* Layer 2: Sidebar panel that slides in from left */}
-          <motion.div
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
-            transition={{
-              type: "spring",
-              stiffness: 300,
-              damping: 30,
-              mass: 0.9,
-            }}
-            className="fixed inset-y-0 left-0 z-50 flex flex-col"
-            style={{
-              width: "75%",
-              maxWidth: 300,
-              backgroundColor: "#161618",
-            }}
-          >
-            {/* Logo */}
-            <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
-              <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" priority />
-              <span className="text-white font-semibold text-[15px] tracking-tight">Sycord</span>
-            </div>
-
-            <SidebarNavContent
-              navGroups={navGroups}
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              onClose={onClose}
-              databaseConnected={databaseConnected}
-            />
-
-            <SidebarBottom
-              userInitials={userInitials}
-              session={session}
-              subscription={subscription}
-              planCredit={planCredit}
-              onManageAccess={onManageAccess}
-              onClose={onClose}
-            />
-          </motion.div>
-        </>
+          <SidebarBottom
+            userInitials={userInitials}
+            session={session}
+            subscription={subscription}
+            planCredit={planCredit}
+            onManageAccess={onManageAccess}
+            onClose={onClose}
+          />
+        </motion.div>
       )}
     </AnimatePresence>
   )

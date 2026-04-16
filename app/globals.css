@@ -405,3 +405,15 @@
     box-shadow: -8px 0 32px rgba(0,0,0,0.7);
   }
 }
+
+/* Mobile: curved left edge + shadow when sidebar is open */
+@media (max-width: 767px) {
+  .main-content-panel {
+    transition: border-radius 0.3s ease, box-shadow 0.3s ease;
+  }
+  .main-content-panel.sidebar-open {
+    border-top-left-radius: 28px;
+    border-bottom-left-radius: 28px;
+    box-shadow: -12px 0 50px rgba(0,0,0,0.9);
+  }
+}
