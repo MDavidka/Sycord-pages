@@ -341,3 +341,58 @@
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
 }
+
+/* ── Rolling Sidebar Styles ── */
+.rolling-sidebar {
+  background: rgba(28, 28, 30, 0.92);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+}
+
+.rolling-sidebar-shadow {
+  box-shadow: 
+    0 0 0 1px rgba(255,255,255,0.06),
+    20px 0 60px -10px rgba(0,0,0,0.6),
+    40px 0 100px -20px rgba(0,0,0,0.4);
+}
+
+.sidebar-nav-item-active {
+  position: relative;
+}
+
+.sidebar-nav-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: white;
+  border-radius: 9999px;
+}
+
+/* Sidebar curved edge overlay for depth */
+.sidebar-curve-overlay {
+  background: linear-gradient(to right, 
+    rgba(28, 28, 30, 0.5) 0%, 
+    rgba(18, 18, 18, 0.3) 50%,
+    transparent 100%
+  );
+}
+
+/* Desktop sidebar expansion animation */
+@keyframes sidebar-expand {
+  from {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  to {
+    border-top-right-radius: 32px;
+    border-bottom-right-radius: 32px;
+  }
+}
+
+.sidebar-expanding {
+  animation: sidebar-expand 0.3s ease-out forwards;
+}

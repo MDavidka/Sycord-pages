@@ -75,6 +75,7 @@ import { useSession, signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
+import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -561,6 +562,7 @@ export default function SiteSettingsPage() {
   >("overview")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isDesktopSidebarExpanded, setIsDesktopSidebarExpanded] = useState(false)
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop")
   const { data: session } = useSession()
 
@@ -1253,20 +1255,27 @@ export default function SiteSettingsPage() {
   const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : null
 
   return (
-    <div className="flex h-[100dvh] bg-background overflow-hidden relative"
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+    <div 
+      className="flex h-[100dvh] overflow-hidden relative"
+      style={{ backgroundColor: "#121212" }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
     >
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-white/10 bg-black/40 backdrop-blur-xl shrink-0">
-        <SidebarContent
+      {/* Desktop Sidebar - Rolling Animation Style */}
+      <aside 
+        className="hidden md:block shrink-0 transition-[width] duration-300 ease-out" 
+        style={{ width: isDesktopSidebarExpanded ? 280 : 72 }}
+      >
+        <AnimatedRollingSidebarDesktop
+          isOpen={true}
+          onClose={() => {}}
+          isExpanded={isDesktopSidebarExpanded}
+          onExpandChange={setIsDesktopSidebarExpanded}
           project={project}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          setIsSidebarOpen={setIsSidebarOpen}
           navGroups={navGroups}
-          router={router}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
           session={session}
@@ -1337,43 +1346,24 @@ export default function SiteSettingsPage() {
           </div>
         </header>
 
-        {/* Mobile slide-over sidebar (for shop/blog extra tabs on mobile) */}
-        <AnimatePresence>
-          {isSidebarOpen && (
-            <>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 md:hidden"
-                onClick={() => setIsSidebarOpen(false)}
-              />
-              <motion.aside
-                initial={{ x: "-100%" }}
-                animate={{ x: 0 }}
-                exit={{ x: "-100%" }}
-                transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-                className="fixed inset-y-0 left-0 z-50 w-64 bg-background border-r border-border md:hidden"
-              >
-                <SidebarContent
-                  project={project}
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                  setIsSidebarOpen={setIsSidebarOpen}
-                  navGroups={navGroups}
-                  router={router}
-                  getWebsiteIcon={getWebsiteIcon}
-                  databaseConnected={databaseConnected}
-                  session={session}
-                  subscription={subscription}
-                  planCredit={planCredit}
-                  userInitials={userInitials}
-                  onManageAccess={() => { setIsSidebarOpen(false); setIsManageAccessOpen(true) }}
-                />
-              </motion.aside>
-            </>
-          )}
-        </AnimatePresence>
+        {/* Mobile Rolling Sidebar with layered animation */}
+        <div className="md:hidden">
+          <AnimatedRollingSidebar
+            isOpen={isSidebarOpen}
+            onClose={() => setIsSidebarOpen(false)}
+            project={project}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            navGroups={navGroups}
+            getWebsiteIcon={getWebsiteIcon}
+            databaseConnected={databaseConnected}
+            session={session}
+            subscription={subscription}
+            planCredit={planCredit}
+            userInitials={userInitials}
+            onManageAccess={() => { setIsSidebarOpen(false); setIsManageAccessOpen(true) }}
+          />
+        </div>
 
         {/* Manage Access — sycord connect dialog */}
         <AnimatePresence>
