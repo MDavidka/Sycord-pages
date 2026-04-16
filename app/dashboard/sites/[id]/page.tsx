@@ -1510,13 +1510,13 @@ export default function SiteSettingsPage() {
                     {/* Preview box (left — 7 cols on desktop) */}
                     <div
                       className="lg:col-span-7 relative w-full overflow-hidden rounded-[20px]"
-                      style={{ background: "#252527", aspectRatio: "4/3", border: "1px solid rgba(255,255,255,0.08)" }}
+                      style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       {previewUrl ? (
                         <iframe
                           src={previewUrl}
                           title={`Preview of ${displayUrl}`}
-                          className="absolute inset-0 w-[1440px] h-[1080px] border-0 origin-top-left pointer-events-none select-none"
+                          className="absolute inset-0 w-[1440px] h-[900px] border-0 origin-top-left pointer-events-none select-none"
                           sandbox="allow-same-origin allow-scripts allow-forms"
                           tabIndex={-1}
                           ref={(el) => {
@@ -1586,14 +1586,13 @@ export default function SiteSettingsPage() {
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
                           <Layers className="h-3.5 w-3.5 text-zinc-500" />
                         </div>
-                        <span className="text-sm text-zinc-400 capitalize">{siteType === "shop" ? "Webshop" : "Website"}</span>
                       </div>
 
                       {/* Visit button */}
                       <button
                         onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                         disabled={!previewUrl}
-                        className="w-fit h-11 px-8 rounded-full text-[14px] font-semibold text-white transition-all hover:opacity-85 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="w-fit h-12 px-10 rounded-full text-[15px] font-semibold text-white transition-all hover:opacity-85 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                         style={{ background: "#2e2e30" }}
                       >
                         Visit
@@ -1604,9 +1603,9 @@ export default function SiteSettingsPage() {
                   {/* ── BOTTOM ROW: Latest changes + AI chatbox ── */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-                    {/* Latest changes (left — 8 cols on desktop) */}
+                    {/* Latest changes (left — 9 cols on desktop) */}
                     <div
-                      className="lg:col-span-8 rounded-[20px] p-5 lg:p-6 min-h-[220px] flex flex-col"
+                      className="lg:col-span-9 rounded-[20px] p-5 lg:p-6 min-h-[240px] flex flex-col"
                       style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       <h3 className="text-sm font-semibold text-zinc-300 mb-4">Latest Changes</h3>
@@ -1643,9 +1642,9 @@ export default function SiteSettingsPage() {
                       </div>
                     </div>
 
-                    {/* AI chatbox (right — 4 cols on desktop) */}
+                    {/* AI chatbox (right — 3 cols on desktop) */}
                     <div
-                      className="lg:col-span-4 rounded-[20px] p-5 lg:p-6 min-h-[220px] flex flex-col"
+                      className="lg:col-span-3 rounded-[20px] p-5 lg:p-6 min-h-[240px] flex flex-col"
                       style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       <h3 className="text-sm font-semibold text-zinc-300 mb-3">AI Chatbox</h3>
