@@ -297,7 +297,7 @@ export function AnimatedRollingSidebar({
         >
           {/* Logo */}
           <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
-            <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" priority />
+            <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" />
             <span className="text-white font-semibold text-[15px] tracking-tight">Sycord</span>
           </div>
 

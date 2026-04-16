@@ -1286,7 +1286,8 @@ export default function SiteSettingsPage() {
         />
       </aside>
 
-      {/* Mobile Sidebar — sits behind main content, revealed when content slides right */}
+      {/* Mobile Sidebar — sits behind main content, revealed when content slides right
+           z-index stacking: sidebar container z-0 < main content z-10 < close overlay z-[60] */}
       <div className="md:hidden absolute inset-y-0 left-0 z-0" style={{ width: "60%" }}>
         <AnimatedRollingSidebar
           isOpen={isSidebarOpen}
