@@ -1286,14 +1286,11 @@ export default function SiteSettingsPage() {
         />
       </aside>
 
-      {/* Main Content — curved left edge rolls over the sidebar */}
+      {/* Main Content */}
       <div
-        className="flex-1 flex flex-col min-w-0 relative z-10"
+        className="flex-1 flex flex-col min-w-0 relative z-10 main-content-panel"
         style={{
           backgroundColor: "#0a0a0a",
-          borderTopLeftRadius: 28,
-          borderBottomLeftRadius: 28,
-          boxShadow: "-8px 0 32px rgba(0,0,0,0.7)",
           overflow: "hidden",
         }}
       >

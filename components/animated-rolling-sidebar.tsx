@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import Image from "next/image"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import {
@@ -285,37 +286,38 @@ export function AnimatedRollingSidebar({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Layer 1: Dark background that appears behind everything */}
+          {/* Layer 1: Tap-to-close overlay — transparent, no fading */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.15 }}
             className="fixed inset-0 z-40"
-            style={{ backgroundColor: "#121212" }}
             onClick={onClose}
           />
 
-          {/* Layer 2: Flat sidebar panel — revealed as main content slides away */}
-          <div
-            className="fixed inset-y-0 left-0 z-40 flex flex-col"
+          {/* Layer 2: Sidebar panel that slides in from left */}
+          <motion.div
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 30,
+              mass: 0.9,
+            }}
+            className="fixed inset-y-0 left-0 z-50 flex flex-col"
             style={{
-              width: "68%",
+              width: "75%",
               maxWidth: 300,
               backgroundColor: "#161618",
             }}
           >
             {/* Logo */}
             <div className="flex items-center gap-2.5 px-5 pt-6 pb-5">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.10)" }}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.85" />
-                </svg>
-              </div>
-              <span className="text-white font-semibold text-[15px] tracking-tight">sycord</span>
+              <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" />
+              <span className="text-white font-semibold text-[15px] tracking-tight">Sycord</span>
             </div>
 
             <SidebarNavContent
@@ -334,38 +336,6 @@ export function AnimatedRollingSidebar({
               onManageAccess={onManageAccess}
               onClose={onClose}
             />
-          </div>
-
-          {/* Layer 3: Main content panel with curved left edge — 
-              This slides LEFT to reveal sidebar, creating the "rolling over" effect */}
-          <motion.div
-            initial={{ x: 0 }}
-            animate={{ x: "68%" }}
-            exit={{ x: 0 }}
-            transition={{ 
-              type: "spring", 
-              stiffness: 280, 
-              damping: 30, 
-              mass: 0.9 
-            }}
-            className="fixed inset-0 z-50"
-            style={{
-              backgroundColor: "#0a0a0a",
-              borderTopLeftRadius: 28,
-              borderBottomLeftRadius: 28,
-              boxShadow: "-12px 0 50px rgba(0,0,0,0.9)",
-            }}
-            onClick={onClose}
-          >
-            {/* Hamburger menu indicator on the content panel */}
-            <div className="flex items-center gap-3 px-5 pt-5">
-              <button className="p-2 -ml-2 rounded-lg hover:bg-white/5 transition-colors">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-white/70">
-                  <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
-              <span className="text-white/80 font-medium text-sm">{project?.businessName || "Project"}</span>
-            </div>
           </motion.div>
         </>
       )}
@@ -405,21 +375,14 @@ export function AnimatedRollingSidebarDesktop({
     >
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-4 pt-5 pb-5 overflow-hidden">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.12)" }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="12" height="12" rx="2" fill="white" fillOpacity="0.9" />
-          </svg>
-        </div>
+        <Image src="/logo.png" alt="Sycord Logo" width={32} height={32} className="opacity-90 flex-shrink-0" />
         <motion.span
           initial={false}
           animate={{ opacity: isExpanded ? 1 : 0, x: isExpanded ? 0 : -8 }}
           transition={{ duration: 0.18 }}
           className="text-white font-semibold text-[15px] tracking-tight whitespace-nowrap"
         >
-          sycord
+          Sycord
         </motion.span>
       </div>
 
