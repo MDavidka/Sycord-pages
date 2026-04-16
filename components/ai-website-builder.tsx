@@ -215,9 +215,9 @@ const StepIndicator = ({ phase, progress, currentFile }: {
   currentFile?: string
 }) => {
   const phaseConfig: Record<string, { label: string }> = {
-    planning:    { label: "Thinking" },
+    planning:    { label: "Planning" },
     searching:   { label: "Searching" },
-    clarifying:  { label: "Thinking" },
+    clarifying:  { label: "Clarifying" },
     structuring: { label: "Structuring" },
     integrating: { label: "Integrating" },
     building:    { label: "Building" },
