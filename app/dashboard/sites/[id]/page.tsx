@@ -1251,13 +1251,13 @@ export default function SiteSettingsPage() {
   const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : null
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden relative" style={{ background: '#1e1e20' }}
+    <div className="flex h-[100dvh] overflow-hidden relative" style={{ background: 'var(--editor-sidebar-bg)' }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
     >
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 shrink-0" style={{ background: '#1e1e20' }}>
+      <aside className="hidden md:flex flex-col w-64 shrink-0" style={{ background: 'var(--editor-sidebar-bg)' }}>
         <SidebarContent
           project={project}
           activeTab={activeTab}
@@ -1276,7 +1276,7 @@ export default function SiteSettingsPage() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 md:my-2 md:mr-2 md:rounded-2xl md:overflow-hidden" style={{ background: '#111113' }}>
+      <div className="flex-1 flex flex-col min-w-0 md:my-2 md:mr-2 md:rounded-2xl md:overflow-hidden" style={{ background: 'var(--editor-content-bg)' }}>
         {/* Header */}
         <header className={cn("border-b border-white/[0.06] bg-transparent backdrop-blur-sm z-20 shrink-0")}>
           <div className="flex items-center justify-between h-14 px-4 md:px-6">
@@ -1352,7 +1352,7 @@ export default function SiteSettingsPage() {
                 exit={{ x: "-100%" }}
                 transition={{ type: "spring", bounce: 0, duration: 0.3 }}
                 className="fixed inset-y-0 left-0 z-50 w-64 border-r border-border md:hidden"
-                style={{ background: '#1e1e20' }}
+                style={{ background: 'var(--editor-sidebar-bg)' }}
               >
                 <SidebarContent
                   project={project}
