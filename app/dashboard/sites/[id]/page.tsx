@@ -61,6 +61,8 @@ import {
   Shield,
   Search,
   Send,
+  AlertTriangle,
+  MoreHorizontal,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -1501,15 +1503,27 @@ export default function SiteSettingsPage() {
 
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
+              const hasPendingChanges = generatedPages.length > 0
+              const lastUpdated = (() => {
+                if (generatedPages.length > 0) {
+                  const sorted = generatedPages.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                  if (sorted[0]?.timestamp) return new Date(sorted[0].timestamp)
+                }
+                return null
+              })()
+              const lastUpdatedStr = lastUpdated
+                ? `${lastUpdated.getFullYear()}/${lastUpdated.getMonth() + 1}/${lastUpdated.getDate()}`
+                : "—"
+
               return (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-5">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-6 lg:space-y-8">
 
-                  {/* ── TOP ROW: Preview + Domain info ── */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* ── TOP SECTION: Preview + Domain info ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-center">
 
-                    {/* Preview box (left — 7 cols on desktop) */}
+                    {/* Preview box (left — 5 cols on desktop) */}
                     <div
-                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[20px]"
+                      className="lg:col-span-5 relative w-full overflow-hidden rounded-[20px]"
                       style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       {previewUrl ? (
@@ -1565,124 +1579,155 @@ export default function SiteSettingsPage() {
                       )}
                     </div>
 
-                    {/* Domain info + Visit (right — 5 cols on desktop) */}
-                    <div className="lg:col-span-5 flex flex-col justify-center gap-5 py-2 lg:py-4">
+                    {/* Domain info + action buttons (right — 7 cols) */}
+                    <div className="lg:col-span-7 flex flex-col gap-4 py-2 lg:py-0">
 
-                      {/* Domain name + status */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
-                          <Globe className="h-4 w-4 text-zinc-500" />
-                        </div>
-                        <span className="text-lg lg:text-xl font-bold text-zinc-100 truncate min-w-0">
+                      {/* Domain name + live dot */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h2 className="text-2xl sm:text-3xl lg:text-[32px] font-bold text-zinc-100 truncate min-w-0">
                           {displayUrl || "Not deployed"}
-                        </span>
+                        </h2>
                         {previewUrl && (
-                          <div className="w-3 h-3 rounded-full bg-emerald-400 shrink-0" title="Live" />
+                          <div className="w-4 h-4 rounded-full bg-emerald-400 shrink-0" title="Live" />
                         )}
                       </div>
 
-                      {/* Site type icon */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
-                          <Layers className="h-3.5 w-3.5 text-zinc-500" />
-                        </div>
-                      </div>
+                      {/* Last updated */}
+                      <p className="text-base sm:text-lg text-zinc-400">
+                        last updated {lastUpdatedStr}
+                      </p>
 
-                      {/* Visit button */}
-                      <button
-                        onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                        disabled={!previewUrl}
-                        className="w-fit h-12 px-10 rounded-full text-[15px] font-semibold text-white transition-all hover:opacity-85 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ background: "#2e2e30" }}
-                      >
-                        Visit
-                      </button>
+                      {/* Three action buttons */}
+                      <div className="flex items-center gap-3 flex-wrap pt-1">
+                        <button
+                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                          disabled={!previewUrl}
+                          className="h-11 sm:h-12 px-6 sm:px-8 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                          visit
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="h-11 sm:h-12 px-6 sm:px-8 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97]"
+                          style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
+                        >
+                          <History className="h-4 w-4" />
+                          changes
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("settings")}
+                          className="h-11 sm:h-12 px-6 sm:px-8 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97]"
+                          style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                          settings
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  {/* ── BOTTOM ROW: Latest changes + AI chatbox ── */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  {/* ── BOTTOM SECTION: Warning / actions + AI chatbox ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
 
-                    {/* Latest changes (left — 9 cols on desktop) */}
-                    <div
-                      className="lg:col-span-9 rounded-[20px] p-5 lg:p-6 min-h-[240px] flex flex-col"
-                      style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                    >
-                      <h3 className="text-sm font-semibold text-zinc-300 mb-4">Latest Changes</h3>
-                      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2.5">
-                        {generatedPages.length > 0 ? (
-                          generatedPages
-                            .slice()
-                            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                            .slice(0, 8)
-                            .map((page, idx) => (
-                              <div
-                                key={page.name + idx}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-white/[0.04]"
+                    {/* Left: Warning banner + preview/accept (8 cols) */}
+                    <div className="lg:col-span-8 flex flex-col gap-4">
+
+                      {/* Warning banner */}
+                      <div
+                        className="flex items-center gap-3.5 rounded-[18px] px-5 py-4 sm:px-6 sm:py-5"
+                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
+                        <p className="text-[14px] sm:text-[15px] text-zinc-300">
+                          {hasPendingChanges ? (
+                            <>
+                              Your made some changes,{" "}
+                              <button
+                                onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                                className="text-amber-400 font-semibold hover:underline"
                               >
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#2e2e30" }}>
-                                  <FileCode className="h-3.5 w-3.5 text-zinc-500" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[13px] font-medium text-zinc-200 truncate">{page.name}</p>
-                                  <p className="text-[11px] text-zinc-600">
-                                    {page.timestamp ? new Date(page.timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
-                                  </p>
-                                </div>
-                                <span className="text-[10px] text-zinc-600 shrink-0">{page.usedFor || "page"}</span>
-                              </div>
-                            ))
-                        ) : (
-                          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8">
-                            <History className="h-8 w-8 text-zinc-700" />
-                            <p className="text-sm text-zinc-600">No changes yet</p>
-                            <p className="text-xs text-zinc-700 text-center max-w-[200px]">Use Syra to generate pages and they&apos;ll show up here</p>
-                          </div>
-                        )}
+                                preview
+                              </button>{" "}
+                              it to see live
+                            </>
+                          ) : (
+                            "No pending changes"
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Preview + Accept buttons */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                          disabled={!previewUrl}
+                          className="h-11 sm:h-12 px-7 sm:px-9 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                          preview
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!project?.githubRepoId) return
+                            await handleDeploy()
+                          }}
+                          disabled={!hasPendingChanges || isDeploying}
+                          className="h-11 sm:h-12 px-7 sm:px-9 rounded-full text-[14px] sm:text-[15px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ background: "#3b3b3f" }}
+                        >
+                          {isDeploying ? "deploying..." : "accept!"}
+                        </button>
                       </div>
                     </div>
 
-                    {/* AI chatbox (right — 3 cols on desktop) */}
+                    {/* Right: AI chatbox card (4 cols) */}
                     <div
-                      className="lg:col-span-3 rounded-[20px] p-5 lg:p-6 min-h-[240px] flex flex-col"
-                      style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                      className="lg:col-span-4 rounded-[20px] p-5 lg:p-6 flex flex-col justify-between"
+                      style={{
+                        background: "linear-gradient(145deg, #252527 0%, #1e1e22 60%, #1a1a2e 100%)",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        minHeight: "200px",
+                      }}
                     >
-                      <h3 className="text-sm font-semibold text-zinc-300 mb-3">AI Chatbox</h3>
+                      {/* Title text */}
+                      <p className="text-xl sm:text-2xl font-semibold text-zinc-200 leading-snug">
+                        Ask syra to<br />make changes
+                      </p>
 
-                      <div className="flex-1 flex flex-col justify-end gap-3">
-                        <p className="text-xs text-zinc-600 text-center">Ask Syra to edit or build pages</p>
-
-                        {/* Input row */}
-                        <div
-                          className="flex items-center gap-2 rounded-xl px-3 py-2.5"
-                          style={{ background: "#1e1e20", border: "1px solid rgba(255,255,255,0.08)" }}
+                      {/* Chat input */}
+                      <div
+                        className="flex items-center gap-2 rounded-xl px-3 py-2.5 mt-4"
+                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      >
+                        <input
+                          type="text"
+                          placeholder="Ask Syra..."
+                          value={overviewChatInput}
+                          onChange={(e) => setOverviewChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && overviewChatInput.trim()) {
+                              setActiveTab("ai")
+                              setOverviewChatInput("")
+                            }
+                          }}
+                          className="flex-1 bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none"
+                        />
+                        <button
+                          onClick={() => {
+                            if (overviewChatInput.trim()) {
+                              setActiveTab("ai")
+                              setOverviewChatInput("")
+                            }
+                          }}
+                          aria-label="Send message"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-white/[0.08]"
+                          style={{ background: overviewChatInput.trim() ? "#fff" : "#2e2e30" }}
                         >
-                          <input
-                            type="text"
-                            placeholder="Ask Syra..."
-                            value={overviewChatInput}
-                            onChange={(e) => setOverviewChatInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && overviewChatInput.trim()) {
-                                setActiveTab("ai")
-                                setOverviewChatInput("")
-                              }
-                            }}
-                            className="flex-1 bg-transparent text-sm text-zinc-200 placeholder:text-zinc-600 outline-none"
-                          />
-                          <button
-                            onClick={() => {
-                              if (overviewChatInput.trim()) {
-                                setActiveTab("ai")
-                                setOverviewChatInput("")
-                              }
-                            }}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-white/[0.08]"
-                            style={{ background: overviewChatInput.trim() ? "#fff" : "#2e2e30" }}
-                          >
-                            <Send className={cn("h-3.5 w-3.5", overviewChatInput.trim() ? "text-black" : "text-zinc-600")} />
-                          </button>
-                        </div>
+                          <Send className={cn("h-3.5 w-3.5", overviewChatInput.trim() ? "text-black" : "text-zinc-600")} />
+                        </button>
                       </div>
                     </div>
 
