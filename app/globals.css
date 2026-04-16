@@ -406,14 +406,13 @@
   }
 }
 
-/* Mobile: curved left edge + shadow when sidebar is open */
+/* Mobile: curved left edge when sidebar is open (no dark shadow) */
 @media (max-width: 767px) {
   .main-content-panel {
-    transition: border-radius 0.3s ease, box-shadow 0.3s ease;
+    transition: border-radius 0.3s ease;
   }
   .main-content-panel.sidebar-open {
     border-top-left-radius: 28px;
     border-bottom-left-radius: 28px;
-    box-shadow: -12px 0 50px rgba(0,0,0,0.9);
   }
 }

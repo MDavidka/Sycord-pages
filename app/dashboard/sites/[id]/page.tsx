@@ -1288,7 +1288,7 @@ export default function SiteSettingsPage() {
 
       {/* Mobile Sidebar — sits behind main content, revealed when content slides right
            z-index stacking: sidebar container z-0 < main content z-10 < close overlay z-[60] */}
-      <div className="md:hidden absolute inset-y-0 left-0 z-0" style={{ width: "60%" }}>
+      <div className="md:hidden absolute inset-y-0 left-0 z-0" style={{ width: "70%" }}>
         <AnimatedRollingSidebar
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
@@ -1309,7 +1309,7 @@ export default function SiteSettingsPage() {
       {/* Main Content — slides right on mobile to reveal sidebar */}
       <motion.div
         className={cn("flex-1 flex flex-col min-w-0 relative z-10 main-content-panel", isSidebarOpen && "sidebar-open")}
-        animate={{ x: isSidebarOpen ? "60%" : 0 }}
+        animate={{ x: isSidebarOpen ? "70%" : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.9 }}
         style={{
           backgroundColor: "#0a0a0a",

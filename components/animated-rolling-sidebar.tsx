@@ -232,26 +232,20 @@ const SidebarBottom = ({
       </button>
     )}
 
-    <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/[0.03]">
+    <div className="flex items-center gap-3 px-3 py-2">
       <div className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
         {userInitials}
       </div>
       <span className="flex-1 text-xs font-medium truncate text-white/70">
         {session?.user?.name || "User"}
       </span>
-      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/[0.07] text-white/50">
-        {subscription}
-      </span>
     </div>
 
     <div className="px-3 space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-white/35 flex items-center gap-1.5">
-          <Coins className="h-3 w-3" />
-          Monthly Credit
-        </span>
-        <span className="text-[11px] font-semibold text-white/60">{planCredit}€</span>
-      </div>
+      <span className="text-[10px] text-white/35 flex items-center gap-1.5">
+        <Coins className="h-3 w-3" />
+        Monthly Credit
+      </span>
       <div className="h-1 rounded-full bg-white/[0.08] overflow-hidden">
         <motion.div
           className="h-full rounded-full bg-white/25"
@@ -292,7 +286,7 @@ export function AnimatedRollingSidebar({
           transition={{ duration: 0.2 }}
           className="absolute inset-0 flex flex-col"
           style={{
-            backgroundColor: "#161618",
+            backgroundColor: "#121212",
           }}
         >
           {/* Logo */}
