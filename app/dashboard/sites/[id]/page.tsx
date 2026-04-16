@@ -410,10 +410,8 @@ const SidebarContent = ({
   return (
     <div className="flex flex-col h-full p-4">
       <div className="flex items-center gap-3 mb-6 px-2 text-foreground">
-        <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
-          <WebsiteIcon className="h-5 w-5 text-primary" />
-        </div>
-        <span className="font-bold text-lg truncate">{project?.businessName || "Site Settings"}</span>
+        <BookOpen className="h-6 w-6 text-muted-foreground/70 flex-shrink-0" />
+        <span className="font-bold text-lg truncate text-foreground/90">sycord</span>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
@@ -433,8 +431,8 @@ const SidebarContent = ({
                 )}
               >
                 {isOpen
-                  ? <ChevronDown className="h-3.5 w-3.5 shrink-0 transition-transform" />
-                  : <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform" />
+                  ? <FolderOpen className="h-3.5 w-3.5 shrink-0 transition-transform text-muted-foreground/60" />
+                  : <Folder className="h-3.5 w-3.5 shrink-0 transition-transform text-muted-foreground/60" />
                 }
                 <span className="flex-1 text-left">{group.title}</span>
               </button>
@@ -1253,13 +1251,13 @@ export default function SiteSettingsPage() {
   const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : null
 
   return (
-    <div className="flex h-[100dvh] bg-background overflow-hidden relative"
+    <div className="flex h-[100dvh] overflow-hidden relative" style={{ background: '#1e1e20' }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
     >
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-white/10 bg-black/40 backdrop-blur-xl shrink-0">
+      <aside className="hidden md:flex flex-col w-64 shrink-0" style={{ background: '#1e1e20' }}>
         <SidebarContent
           project={project}
           activeTab={activeTab}
@@ -1278,9 +1276,9 @@ export default function SiteSettingsPage() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 md:my-2 md:mr-2 md:rounded-2xl md:overflow-hidden" style={{ background: '#111113' }}>
         {/* Header */}
-        <header className={cn("border-b border-white/10 bg-background/50 backdrop-blur-sm z-20 shrink-0")}>
+        <header className={cn("border-b border-white/[0.06] bg-transparent backdrop-blur-sm z-20 shrink-0")}>
           <div className="flex items-center justify-between h-14 px-4 md:px-6">
             {/* Mobile: hamburger + site name */}
             <div className="flex items-center gap-2 md:hidden">
@@ -1353,7 +1351,8 @@ export default function SiteSettingsPage() {
                 animate={{ x: 0 }}
                 exit={{ x: "-100%" }}
                 transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-                className="fixed inset-y-0 left-0 z-50 w-64 bg-background border-r border-border md:hidden"
+                className="fixed inset-y-0 left-0 z-50 w-64 border-r border-border md:hidden"
+                style={{ background: '#1e1e20' }}
               >
                 <SidebarContent
                   project={project}
