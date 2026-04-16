@@ -328,6 +328,46 @@
   animation: step-typewriter 0.6s steps(30, end) forwards;
 }
 
+/* ── Rolling Sidebar Animation ── */
+@keyframes sidebar-roll-in {
+  0% {
+    transform: translateX(-101%);
+    border-top-right-radius: 0px;
+    border-bottom-right-radius: 0px;
+  }
+  60% {
+    border-top-right-radius: 44px;
+    border-bottom-right-radius: 44px;
+  }
+  100% {
+    transform: translateX(0);
+    border-top-right-radius: 36px;
+    border-bottom-right-radius: 36px;
+  }
+}
+
+@keyframes sidebar-roll-out {
+  0% {
+    transform: translateX(0);
+    border-top-right-radius: 36px;
+    border-bottom-right-radius: 36px;
+  }
+  100% {
+    transform: translateX(-101%);
+    border-top-right-radius: 0px;
+    border-bottom-right-radius: 0px;
+  }
+}
+
+@keyframes nav-item-stagger {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.sidebar-nav-item {
+  animation: nav-item-stagger 0.3s ease-out both;
+}
+
 /* ── Frosted Input Bar ── */
 .frosted-input {
   background: rgba(28, 28, 30, 0.65);
