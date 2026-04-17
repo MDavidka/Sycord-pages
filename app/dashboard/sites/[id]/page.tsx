@@ -63,6 +63,7 @@ import {
   Send,
   AlertTriangle,
   MoreHorizontal,
+  ArrowUpRight,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -1503,27 +1504,39 @@ export default function SiteSettingsPage() {
 
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
-              const hasPendingChanges = generatedPages.length > 0
-              const lastUpdated = (() => {
-                if (generatedPages.length > 0) {
-                  const sorted = generatedPages.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                  if (sorted[0]?.timestamp) return new Date(sorted[0].timestamp)
-                }
-                return null
-              })()
-              const lastUpdatedStr = lastUpdated
-                ? `${lastUpdated.getFullYear()}/${lastUpdated.getMonth() + 1}/${lastUpdated.getDate()}`
-                : "—"
+              const recentChanges = generatedPages
+                .slice()
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .slice(0, 6)
+              const authorName =
+                (session?.user?.name as string | undefined) ||
+                (session?.user?.email as string | undefined)?.split("@")[0] ||
+                "you"
+              const authorInitial = authorName.charAt(0).toUpperCase()
+
+              // Visitor stats (fake trend for now — 7-day sparkline)
+              const visitorCount = (project as any)?.visitorCount7d ?? 10
+              const sparkPoints = (project as any)?.visitorTrend7d || [4, 5, 4, 6, 7, 9, 10]
+              const sparkMax = Math.max(...sparkPoints, 1)
+              const sparkW = 260
+              const sparkH = 70
+              const sparkPath = sparkPoints
+                .map((v: number, i: number) => {
+                  const x = (i / (sparkPoints.length - 1)) * sparkW
+                  const y = sparkH - (v / sparkMax) * (sparkH - 8) - 4
+                  return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`
+                })
+                .join(" ")
 
               return (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-6 lg:space-y-8">
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-6 lg:space-y-7">
 
-                  {/* ── TOP SECTION: Preview + Domain info ── */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-center">
+                  {/* ── ROW 1: Preview (left) + Domain info & buttons (right, only on lg) ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
 
-                    {/* Preview box (left — 5 cols on desktop) */}
+                    {/* Preview box */}
                     <div
-                      className="lg:col-span-5 relative w-full overflow-hidden rounded-[20px]"
+                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px]"
                       style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       {previewUrl ? (
@@ -1564,14 +1577,14 @@ export default function SiteSettingsPage() {
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: "6px",
-                              padding: "10px 16px",
-                              borderTopRightRadius: "18px",
+                              gap: "8px",
+                              padding: "12px 20px",
+                              borderTopRightRadius: "22px",
                               background: "#22a846",
                             }}
                           >
-                            <CheckCircle2 aria-hidden="true" style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.85)", flexShrink: 0 }} />
-                            <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#ffffff", lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                            <CheckCircle2 aria-hidden="true" style={{ width: "15px", height: "15px", color: "rgba(255,255,255,0.95)", flexShrink: 0 }} />
+                            <span style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", lineHeight: 1.2, whiteSpace: "nowrap" }}>
                               Your site is now live!
                             </span>
                           </div>
@@ -1579,163 +1592,143 @@ export default function SiteSettingsPage() {
                       )}
                     </div>
 
-                    {/* Domain info + action buttons (right — 7 cols) */}
-                    <div className="lg:col-span-7 flex flex-col gap-4 py-2 lg:py-0">
-
+                    {/* Domain + buttons */}
+                    <div className="lg:col-span-5 flex flex-col gap-5">
                       {/* Domain name + live dot */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h2 className="text-2xl sm:text-3xl lg:text-[32px] font-bold text-zinc-100 truncate min-w-0">
+                      <div className="flex items-center gap-3.5">
+                        <div
+                          className={cn(
+                            "w-4 h-4 rounded-full shrink-0",
+                            previewUrl ? "bg-emerald-500" : "bg-zinc-600"
+                          )}
+                          title={previewUrl ? "Live" : "Not deployed"}
+                        />
+                        <h2 className="text-[26px] sm:text-[30px] lg:text-[32px] leading-tight font-bold text-zinc-100 truncate min-w-0">
                           {displayUrl || "Not deployed"}
                         </h2>
-                        {previewUrl && (
-                          <div className="w-4 h-4 rounded-full bg-emerald-400 shrink-0" title="Live" />
-                        )}
                       </div>
 
-                      {/* Last updated */}
-                      <p className="text-base sm:text-lg text-zinc-400">
-                        last updated {lastUpdatedStr}
-                      </p>
-
-                      {/* Three action buttons */}
-                      <div className="flex items-center gap-3 flex-wrap pt-1">
+                      {/* Two visit pill buttons */}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {/* visit [live] */}
                         <button
                           onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                           disabled={!previewUrl}
-                          className="h-11 sm:h-12 px-6 sm:px-8 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
+                          className="h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.04] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                         >
-                          <RefreshCw className="h-4 w-4" />
-                          visit
+                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300" />
+                          <span>visit</span>
+                          <span
+                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold text-white"
+                            style={{ background: "#1f7a3a" }}
+                          >
+                            live
+                          </span>
                         </button>
+
+                        {/* visit [preview] */}
                         <button
-                          onClick={() => setActiveTab("pages")}
-                          className="h-11 sm:h-12 px-6 sm:px-8 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97]"
-                          style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
+                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                          disabled={!previewUrl}
+                          className="h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.04] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                         >
-                          <History className="h-4 w-4" />
-                          changes
-                        </button>
-                        <button
-                          onClick={() => setActiveTab("settings")}
-                          className="h-11 sm:h-12 px-6 sm:px-8 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97]"
-                          style={{ border: "1.5px solid rgba(255,255,255,0.15)" }}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                          settings
+                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300" />
+                          <span>visit</span>
+                          <span
+                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold"
+                            style={{ background: "#a37a34", color: "#ffffff" }}
+                          >
+                            preview
+                          </span>
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  {/* ── BOTTOM SECTION: Warning / actions + AI chatbox ── */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+                  {/* ── ROW 2: Changes list ── */}
+                  <div className="space-y-3.5">
+                    {recentChanges.length > 0 ? (
+                      recentChanges.map((page, idx) => (
+                        <div key={(page.name || "page") + idx} className="flex items-center gap-3.5">
+                          <div
+                            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-[13px] font-bold text-zinc-300"
+                            style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
+                          >
+                            {authorInitial}
+                          </div>
+                          <p className="text-[15px] sm:text-[16px] text-zinc-300 truncate min-w-0">
+                            <span className="text-zinc-400">changes made by </span>
+                            <span className="font-semibold text-zinc-200">{authorName}</span>
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex items-center gap-3.5">
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                          style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <History className="h-4 w-4 text-zinc-500" />
+                        </div>
+                        <p className="text-[15px] text-zinc-500">No changes yet — use Syra to build your site</p>
+                      </div>
+                    )}
+                  </div>
 
-                    {/* Left: Warning banner + preview/accept (8 cols) */}
-                    <div className="lg:col-span-8 flex flex-col gap-4">
+                  {/* ── ROW 3: Stat cards ── */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5 pt-2">
 
-                      {/* Warning banner */}
-                      <div
-                        className="flex items-center gap-3.5 rounded-[18px] px-5 py-4 sm:px-6 sm:py-5"
-                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0" />
-                        <p className="text-[14px] sm:text-[15px] text-zinc-300">
-                          {hasPendingChanges ? (
-                            <>
-                              Your made some changes,{" "}
-                              <button
-                                onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                                className="text-amber-400 font-semibold hover:underline"
-                              >
-                                preview
-                              </button>{" "}
-                              it to see live
-                            </>
-                          ) : (
-                            "No pending changes"
-                          )}
+                    {/* Visitors card with sparkline */}
+                    <div
+                      className="rounded-[22px] p-5 lg:p-6 flex flex-col gap-4 min-h-[180px]"
+                      style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-7 h-7 rounded-full shrink-0"
+                          style={{ background: "#3a3a3d", border: "1px solid rgba(255,255,255,0.08)" }}
+                        />
+                        <p className="text-[15px] sm:text-[16px] text-zinc-200">
+                          <span className="font-bold">{visitorCount} visitor</span>
+                          <span className="text-zinc-400"> in 7 days</span>
                         </p>
                       </div>
 
-                      {/* Preview + Accept buttons */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <button
-                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                          disabled={!previewUrl}
-                          className="h-11 sm:h-12 px-7 sm:px-9 rounded-full text-[14px] sm:text-[15px] font-semibold text-zinc-200 flex items-center gap-2.5 transition-all hover:bg-white/[0.08] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
+                      {/* Sparkline */}
+                      <div className="flex-1 flex items-end min-h-[70px]">
+                        <svg
+                          viewBox={`0 0 ${sparkW} ${sparkH}`}
+                          className="w-full h-full"
+                          preserveAspectRatio="none"
+                          aria-hidden="true"
                         >
-                          <RefreshCw className="h-4 w-4" />
-                          preview
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!project?.githubRepoId) return
-                            await handleDeploy()
-                          }}
-                          disabled={!hasPendingChanges || isDeploying}
-                          className="h-11 sm:h-12 px-7 sm:px-9 rounded-full text-[14px] sm:text-[15px] font-bold text-white transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ background: "#3b3b3f" }}
-                        >
-                          {isDeploying ? "deploying..." : "accept!"}
-                        </button>
+                          <path
+                            d={sparkPath}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.45)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
                       </div>
                     </div>
 
-                    {/* Right: AI chatbox card (4 cols) */}
+                    {/* Secondary empty card */}
                     <div
-                      className="lg:col-span-4 rounded-[20px] p-5 lg:p-6 flex flex-col justify-between"
-                      style={{
-                        background: "linear-gradient(145deg, #252527 0%, #1e1e22 60%, #1a1a2e 100%)",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        minHeight: "200px",
-                      }}
+                      className="rounded-[22px] p-5 lg:p-6 min-h-[180px] flex items-center justify-center"
+                      style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
                     >
-                      {/* Title text */}
-                      <p className="text-xl sm:text-2xl font-semibold text-zinc-200 leading-snug">
-                        Ask syra to<br />make changes
-                      </p>
-
-                      {/* Chat input */}
-                      <div
-                        className="flex items-center gap-2 rounded-xl px-3 py-2.5 mt-4"
-                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <input
-                          type="text"
-                          placeholder="Ask Syra..."
-                          value={overviewChatInput}
-                          onChange={(e) => setOverviewChatInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && overviewChatInput.trim()) {
-                              setActiveTab("ai")
-                              setOverviewChatInput("")
-                            }
-                          }}
-                          className="flex-1 bg-transparent text-sm text-zinc-200 placeholder:text-zinc-500 outline-none"
-                        />
-                        <button
-                          onClick={() => {
-                            if (overviewChatInput.trim()) {
-                              setActiveTab("ai")
-                              setOverviewChatInput("")
-                            }
-                          }}
-                          aria-label="Send message"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-white/[0.08]"
-                          style={{ background: overviewChatInput.trim() ? "#fff" : "#2e2e30" }}
-                        >
-                          <Send className={cn("h-3.5 w-3.5", overviewChatInput.trim() ? "text-black" : "text-zinc-600")} />
-                        </button>
-                      </div>
+                      <p className="text-[13px] text-zinc-600">More stats coming soon</p>
                     </div>
-
                   </div>
 
                 </div>
               )
             })()}
+
 
             {/* TAB CONTENT: DOMAIN */}
             {activeTab === "domain" && (() => {
