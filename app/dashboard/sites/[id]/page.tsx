@@ -1662,13 +1662,13 @@ export default function SiteSettingsPage() {
                     </div>
 
                     {/* Domain + buttons */}
-                    <div className="lg:col-span-5 flex flex-col gap-5">
+                    <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-5">
                       {/* Domain name + live dot (pulsing when live) */}
-                      <div className="flex items-center gap-3.5">
-                        <div className="relative shrink-0 w-4 h-4">
+                      <div className="flex items-center gap-2.5 sm:gap-3.5">
+                        <div className="relative shrink-0 w-3 h-3 sm:w-4 sm:h-4">
                           <div
                             className={cn(
-                              "w-4 h-4 rounded-full",
+                              "w-3 h-3 sm:w-4 sm:h-4 rounded-full",
                               previewUrl ? "bg-emerald-500" : "bg-zinc-600"
                             )}
                             title={previewUrl ? "Live" : "Not deployed"}
@@ -1685,41 +1685,41 @@ export default function SiteSettingsPage() {
                           type="button"
                           onClick={copyDomain}
                           disabled={!displayUrl}
-                          className="group/dom flex items-center gap-2 min-w-0 text-left disabled:cursor-default"
+                          className="group/dom flex items-center gap-1.5 sm:gap-2 min-w-0 text-left disabled:cursor-default"
                           title={displayUrl ? "Click to copy" : undefined}
                         >
-                          <h2 className="text-[24px] sm:text-[28px] lg:text-[30px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
+                          <h2 className="text-[18px] sm:text-[24px] lg:text-[28px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
                             {displayUrl || "Not deployed"}
                           </h2>
                           {displayUrl && (
                             <span
                               className={cn(
-                                "shrink-0 h-7 w-7 rounded-lg flex items-center justify-center transition-all",
+                                "shrink-0 h-6 w-6 sm:h-7 sm:w-7 rounded-lg flex items-center justify-center transition-all",
                                 copiedDomain
                                   ? "bg-emerald-500/20 text-emerald-400"
-                                  : "text-zinc-500 opacity-0 group-hover/dom:opacity-100 hover:bg-white/[0.06] hover:text-zinc-200"
+                                  : "text-zinc-500 opacity-70 sm:opacity-0 sm:group-hover/dom:opacity-100 hover:bg-white/[0.06] hover:text-zinc-200"
                               )}
                               aria-hidden="true"
                             >
-                              {copiedDomain ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                              {copiedDomain ? <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                             </span>
                           )}
                         </button>
                       </div>
 
-                      {/* Two visit pill buttons */}
-                      <div className="flex items-center gap-3 flex-wrap">
+                      {/* Visit pill buttons (primary) */}
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                         {/* visit [live] */}
                         <button
                           onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                           disabled={!previewUrl}
-                          className="group/btn h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="group/btn h-10 sm:h-12 pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 rounded-full flex items-center gap-2 sm:gap-3 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                         >
-                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+                          <ArrowUpRight className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
                           <span>visit</span>
                           <span
-                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold text-white shadow-[0_2px_10px_rgba(31,122,58,0.35)]"
+                            className="h-7 sm:h-9 px-3 sm:px-4 rounded-full flex items-center text-[11px] sm:text-[13px] font-semibold text-white shadow-[0_2px_10px_rgba(31,122,58,0.35)]"
                             style={{ background: "#1f7a3a" }}
                           >
                             live
@@ -1730,17 +1730,42 @@ export default function SiteSettingsPage() {
                         <button
                           onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                           disabled={!previewUrl}
-                          className="group/btn h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="group/btn h-10 sm:h-12 pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 rounded-full flex items-center gap-2 sm:gap-3 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                         >
-                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+                          <ArrowUpRight className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
                           <span>visit</span>
                           <span
-                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold shadow-[0_2px_10px_rgba(163,122,52,0.3)]"
+                            className="h-7 sm:h-9 px-3 sm:px-4 rounded-full flex items-center text-[11px] sm:text-[13px] font-semibold shadow-[0_2px_10px_rgba(163,122,52,0.3)]"
                             style={{ background: "#a37a34", color: "#ffffff" }}
                           >
                             preview
                           </span>
+                        </button>
+                      </div>
+
+                      {/* Secondary quick-actions: Changes + Settings */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="group/qa h-9 sm:h-10 px-3.5 sm:px-4 rounded-full flex items-center gap-2 text-[12px] sm:text-[13px] font-semibold text-zinc-300 hover:text-zinc-100 transition-all hover:bg-white/[0.04] active:scale-[0.97]"
+                          style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                        >
+                          <History className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-zinc-400 group-hover/qa:text-zinc-200 transition-colors" />
+                          <span>Changes</span>
+                          {generatedPages.length > 0 && (
+                            <span className="min-w-[18px] h-[18px] px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold tabular-nums bg-white/[0.08] text-zinc-300">
+                              {generatedPages.length}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("settings")}
+                          className="group/qa h-9 sm:h-10 px-3.5 sm:px-4 rounded-full flex items-center gap-2 text-[12px] sm:text-[13px] font-semibold text-zinc-300 hover:text-zinc-100 transition-all hover:bg-white/[0.04] active:scale-[0.97]"
+                          style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                        >
+                          <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-zinc-400 group-hover/qa:text-zinc-200 transition-colors" />
+                          <span>Settings</span>
                         </button>
                       </div>
                     </div>
@@ -1768,28 +1793,28 @@ export default function SiteSettingsPage() {
                         {visibleChanges.map((page, idx) => (
                           <li
                             key={(page.name || "page") + idx}
-                            className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
+                            className="flex items-center gap-2.5 sm:gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
                           >
-                            <Avatar className="h-9 w-9 shrink-0 border border-white/[0.08]">
+                            <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 border border-white/[0.08]">
                               {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
-                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[13px] font-bold">
+                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[12px] sm:text-[13px] font-bold">
                                 {authorInitial}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[15px] text-zinc-300 truncate">
+                              <p className="text-[13px] sm:text-[15px] text-zinc-300 truncate">
                                 <span className="text-zinc-400">changes made by </span>
                                 <span className="font-semibold text-zinc-100">{authorName}</span>
                               </p>
                               {page.name && (
-                                <p className="text-[12px] text-zinc-500 truncate mt-0.5">
+                                <p className="text-[11px] sm:text-[12px] text-zinc-500 truncate mt-0.5">
                                   <FileText className="inline h-3 w-3 mr-1 -mt-0.5" />
                                   {page.name}
                                 </p>
                               )}
                             </div>
                             {page.timestamp && (
-                              <span className="shrink-0 text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
+                              <span className="shrink-0 text-[11px] sm:text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
                                 <Clock className="h-3 w-3" />
                                 {relTime(page.timestamp)}
                               </span>
@@ -1815,7 +1840,7 @@ export default function SiteSettingsPage() {
 
                     {/* Visitors card with sparkline + delta */}
                     <div
-                      className="relative overflow-hidden rounded-[22px] p-5 lg:p-6 flex flex-col gap-4 min-h-[190px] transition-colors hover:bg-white/[0.02]"
+                      className="relative overflow-hidden rounded-[18px] sm:rounded-[22px] p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 min-h-[160px] sm:min-h-[190px] transition-colors hover:bg-white/[0.02]"
                       style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
                     >
                       <div className="flex items-center justify-between gap-3">
@@ -1901,7 +1926,7 @@ export default function SiteSettingsPage() {
 
                     {/* Pages card */}
                     <div
-                      className="relative overflow-hidden rounded-[22px] p-5 lg:p-6 flex flex-col gap-4 min-h-[190px] transition-colors hover:bg-white/[0.02]"
+                      className="relative overflow-hidden rounded-[18px] sm:rounded-[22px] p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 min-h-[160px] sm:min-h-[190px] transition-colors hover:bg-white/[0.02]"
                       style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
                     >
                       <div className="flex items-center gap-3">
