@@ -27,7 +27,8 @@ const MAX_FREE_PROJECTS = 3
 function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const searchParams = useSearchParams()  const [projects, setProjects] = useState([])
+  const searchParams = useSearchParams()
+  const [projects, setProjects] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [deletingDeployments, setDeletingDeployments] = useState<Set<string>>(new Set())
