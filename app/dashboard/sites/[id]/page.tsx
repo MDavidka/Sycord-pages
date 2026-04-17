@@ -573,6 +573,10 @@ export default function SiteSettingsPage() {
   const [isDesktopSidebarExpanded, setIsDesktopSidebarExpanded] = useState(false)
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop")
   const [copiedDomain, setCopiedDomain] = useState(false)
+  const copyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+  }, [])
   const { data: session } = useSession()
 
   // Subscription / plan
@@ -1557,12 +1561,14 @@ export default function SiteSettingsPage() {
                 .join(" ")
               const sparkArea = `${sparkLine} L${sparkW},${sparkH} L0,${sparkH} Z`
 
-              // Week-over-week delta
+              // Week-over-week delta — treat "0 baseline" as a "new" pill instead of false 100%
               const firstHalf = sparkPoints.slice(0, Math.floor(sparkPoints.length / 2))
               const secondHalf = sparkPoints.slice(Math.floor(sparkPoints.length / 2))
               const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
-              const deltaPct = avg(firstHalf) === 0 ? 100 : Math.round(((avg(secondHalf) - avg(firstHalf)) / avg(firstHalf)) * 100)
-              const isUp = deltaPct >= 0
+              const firstAvg = avg(firstHalf)
+              const secondAvg = avg(secondHalf)
+              const deltaPct = firstAvg === 0 ? null : Math.round(((secondAvg - firstAvg) / firstAvg) * 100)
+              const isUp = deltaPct === null ? secondAvg > 0 : deltaPct >= 0
 
               const pagesCount = generatedPages.length
               const lastUpdateTs = recentChanges[0]?.timestamp
@@ -1572,7 +1578,8 @@ export default function SiteSettingsPage() {
                 try {
                   await navigator.clipboard.writeText(displayUrl)
                   setCopiedDomain(true)
-                  setTimeout(() => setCopiedDomain(false), 1800)
+                  if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+                  copyTimeoutRef.current = setTimeout(() => setCopiedDomain(false), 1800)
                 } catch { /* ignore */ }
               }
 
@@ -1827,12 +1834,25 @@ export default function SiteSettingsPage() {
                         <span
                           className={cn(
                             "shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-full text-[11px] font-semibold tabular-nums",
-                            isUp ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+                            deltaPct === null
+                              ? "bg-sky-500/10 text-sky-400"
+                              : isUp
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-rose-500/10 text-rose-400"
                           )}
                         >
-                          {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                          {isUp ? "+" : ""}
-                          {deltaPct}%
+                          {deltaPct === null ? (
+                            <>
+                              <TrendingUp className="h-3 w-3" />
+                              new
+                            </>
+                          ) : (
+                            <>
+                              {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                              {isUp ? "+" : ""}
+                              {deltaPct}%
+                            </>
+                          )}
                         </span>
                       </div>
 
