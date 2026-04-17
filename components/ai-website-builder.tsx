@@ -29,8 +29,14 @@ import {
   ThumbsUp,
   ThumbsDown,
   Flag,
+  Plus,
+  Paperclip,
+  X,
+  Coins,
+  Gem,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
 
 // Model type for the chooser
 interface ModelOption {
@@ -446,10 +452,39 @@ const INTEGRATION_OPTIONS = [
 const InputBar = ({
   input, setInput, onSend, disabled,
   selectedModel, setSelectedModel,
+  attachments, setAttachments,
+  credits, bestCost, fastCost,
 }: {
   input: string; setInput: (v: string) => void; onSend: () => void; disabled: boolean
   selectedModel: ModelOption; setSelectedModel: (m: ModelOption) => void
+  attachments: File[]; setAttachments: React.Dispatch<React.SetStateAction<File[]>>
+  credits: number | null; bestCost: number; fastCost: number
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const selectedTier: ModelTier = tierOf(selectedModel)
+  const selectedCost = selectedTier === "best" ? bestCost : fastCost
+
+  // Group models into tiers for the chooser
+  const bestModels = MODELS.filter(m => tierOf(m) === "best")
+  const fastModels = MODELS.filter(m => tierOf(m) === "fast")
+
+  const insufficient = typeof credits === "number" && credits < selectedCost
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    // Accept up to 5 attachments, 10 MB each.
+    const MAX = 5
+    const MAX_BYTES = 10 * 1024 * 1024
+    setAttachments(prev => {
+      const next = [...prev]
+      for (let i = 0; i < files.length && next.length < MAX; i++) {
+        const f = files[i]
+        if (f.size <= MAX_BYTES) next.push(f)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
       <div
@@ -459,6 +494,29 @@ const InputBar = ({
         )}
       >
         <div className="p-2.5 sm:p-3 flex flex-col gap-1.5">
+          {/* Attachment chips (if any) */}
+          {attachments.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap px-0.5 pb-0.5">
+              {attachments.map((f, i) => (
+                <div
+                  key={i}
+                  className="h-6 pl-2 pr-1 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center gap-1.5 text-[11px] text-zinc-300 max-w-[180px]"
+                >
+                  <Paperclip className="h-3 w-3 text-zinc-500 shrink-0" />
+                  <span className="truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                    className="h-4 w-4 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-white/10 transition-colors"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Multiline textarea */}
           <textarea
             value={input}
@@ -470,65 +528,138 @@ const InputBar = ({
             disabled={disabled}
             autoFocus={!disabled}
             className="text-sm sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent border-none outline-none px-2 pt-1 min-h-[36px] w-full"
-            style={{ 
+            style={{
               minHeight: '36px',
               maxHeight: '120px',
               overflow: 'auto'
             }}
           />
 
-          {/* Bottom row: model pill | send */}
-          <div className="flex items-center justify-between px-0.5">
-            <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Bottom row: attach | model pill | credits | send */}
+          <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-0.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-1">
+              {/* File attach (+) button */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handleFiles(e.target.files)
+                  if (fileInputRef.current) fileInputRef.current.value = ""
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach files"
+                title="Attach files"
+                disabled={disabled}
+                className="h-7 w-7 sm:h-8 sm:w-8 rounded-full p-0 text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.06] shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </Button>
+
+              {/* Model chooser */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0 rounded-full"
+                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] px-2 sm:px-2.5 gap-1 sm:gap-1.5 min-w-0 rounded-full"
                     disabled={disabled}
                   >
-                    {selectedModel.fast
-                      ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
-                      : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
+                    {selectedTier === "fast"
+                      ? <Zap className="h-3 w-3 text-yellow-400 shrink-0" />
+                      : <Gem className="h-3 w-3 text-violet-400 shrink-0" />
                     }
-                    <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
-                    <ChevronDown className="h-3 w-3 shrink-0 ml-auto" />
+                    <span className="max-w-[80px] sm:max-w-[140px] truncate">{selectedModel.name}</span>
+                    <span
+                      className={cn(
+                        "hidden sm:inline-flex items-center h-4 px-1.5 rounded-full text-[9px] font-bold uppercase tracking-wide tabular-nums",
+                        selectedTier === "fast"
+                          ? "bg-yellow-400/10 text-yellow-300"
+                          : "bg-violet-400/10 text-violet-300"
+                      )}
+                    >
+                      −{formatCredits(selectedCost)}/file
+                    </span>
+                    <ChevronDown className="h-3 w-3 shrink-0" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="bg-[#1c1c1c] border border-white/10 min-w-[220px] rounded-xl"
+                  className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
                 >
-                  {MODELS.map(m => (
-                    <DropdownMenuItem
-                      key={m.id}
-                      className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
-                      onClick={() => {
-                        const model = MODELS.find(model => model.id === m.id)
-                        if (model) setSelectedModel(model)
-                      }}
-                    >
-                      {m.fast
-                        ? <Zap className="h-3 w-3 text-yellow-500 mr-2" />
-                        : <Sparkles className="h-3 w-3 text-zinc-600 mr-2" />
-                      }
-                      {m.name}
-                    </DropdownMenuItem>
-                  ))}
+                  {bestModels.length > 0 && (
+                    <>
+                      <div className="px-2 pt-1.5 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
+                        <Gem className="h-3 w-3" />
+                        Best
+                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">
+                          −{formatCredits(bestCost)}/file
+                        </span>
+                      </div>
+                      {bestModels.map(m => (
+                        <ModelRow
+                          key={m.id}
+                          model={m}
+                          selected={selectedModel.id === m.id}
+                          onSelect={() => setSelectedModel(m)}
+                          tier="best"
+                        />
+                      ))}
+                    </>
+                  )}
+                  {fastModels.length > 0 && (
+                    <>
+                      <div className="px-2 pt-2 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-yellow-300/80">
+                        <Zap className="h-3 w-3" />
+                        Fast
+                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">
+                          −{formatCredits(fastCost)}/file
+                        </span>
+                      </div>
+                      {fastModels.map(m => (
+                        <ModelRow
+                          key={m.id}
+                          model={m}
+                          selected={selectedModel.id === m.id}
+                          onSelect={() => setSelectedModel(m)}
+                          tier="fast"
+                        />
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+
+            {/* Credits chip */}
+            {credits !== null && (
+              <div
+                className={cn(
+                  "hidden sm:inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold tabular-nums shrink-0",
+                  insufficient ? "bg-rose-500/10 text-rose-300" : "bg-white/[0.04] text-zinc-400"
+                )}
+                title={`${formatCredits(credits)} credits remaining`}
+              >
+                <Coins className="h-3 w-3" />
+                {formatCredits(credits)}
+              </div>
+            )}
 
             <Button
               onClick={onSend}
               aria-label="Send message"
               className={cn(
                 "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0",
-                input.trim() && !disabled
+                input.trim() && !disabled && !insufficient
                   ? "bg-white text-black hover:bg-zinc-200"
                   : "bg-zinc-800/50 text-zinc-700"
               )}
-              disabled={!input.trim() || disabled}
+              disabled={!input.trim() || disabled || insufficient}
+              title={insufficient ? "Not enough credits for this model" : undefined}
             >
               {disabled
                 ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-zinc-700" />
@@ -541,6 +672,35 @@ const InputBar = ({
     </div>
   )
 }
+
+/** Single model row inside the model-chooser dropdown. */
+const ModelRow = ({
+  model,
+  selected,
+  onSelect,
+  tier,
+}: {
+  model: ModelOption
+  selected: boolean
+  onSelect: () => void
+  tier: ModelTier
+}) => (
+  <DropdownMenuItem
+    onClick={onSelect}
+    className={cn(
+      "text-xs rounded-lg px-2 py-1.5 flex items-center gap-2",
+      selected ? "text-white bg-white/[0.08]" : "text-zinc-300 hover:bg-white/[0.04]"
+    )}
+  >
+    {tier === "fast"
+      ? <Zap className="h-3 w-3 text-yellow-400 shrink-0" />
+      : <Gem className="h-3 w-3 text-violet-400 shrink-0" />
+    }
+    <span className="flex-1 min-w-0 truncate">{model.name}</span>
+    <span className="text-[10px] text-zinc-500 shrink-0">{model.provider}</span>
+    {selected && <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />}
+  </DropdownMenuItem>
+)
 
 // ThinkingCard, ProgressCard, SavingCard replaced by StepIndicator above
 
@@ -712,6 +872,34 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const [instruction, setInstruction] = useState<string>("")
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
+
+  // Attachments staged for the current prompt (file metadata is included in the
+  // user-visible message; full upload/processing is handled by the backend).
+  const [attachments, setAttachments] = useState<File[]>([])
+
+  // User credit balance (fetched lazily; null until first fetch returns).
+  const [credits, setCredits] = useState<number | null>(null)
+  const [bestCost, setBestCost] = useState<number>(BEST_COST_PER_FILE)
+  const [fastCost, setFastCost] = useState<number>(FAST_COST_PER_FILE)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadCredits = async () => {
+      try {
+        const res = await fetch("/api/user/credits")
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (cancelled) return
+        if (typeof data?.credits === "number") setCredits(data.credits)
+        if (typeof data?.bestCost === "number") setBestCost(data.bestCost)
+        if (typeof data?.fastCost === "number") setFastCost(data.fastCost)
+      } catch {
+        // Silent fail — credits chip simply stays hidden.
+      }
+    }
+    loadCredits()
+    return () => { cancelled = true }
+  }, [])
 
   const [fixHistory, setFixHistory] = useState<any[]>([])
 
@@ -1012,13 +1200,20 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const startGeneration = async () => {
     if (!input.trim()) return
 
+    // Include attachment filenames in the prompt so the plan generator is
+    // aware of them. The backend can choose to ignore or process them further.
+    const attachmentNote = attachments.length > 0
+      ? `\n\n[Attached files: ${attachments.map(f => f.name).join(", ")}]`
+      : ""
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: input + attachmentNote,
     }
 
     setMessages(prev => [...prev, userMessage])
+    setAttachments([])
     setError(null)
     setAutoDeployTriggered(false)
     setSitemap([])
@@ -1461,6 +1656,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 disabled={step !== 'idle' && step !== 'clarifying'}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                credits={credits}
+                bestCost={bestCost}
+                fastCost={fastCost}
             />
         </div>
     </div>

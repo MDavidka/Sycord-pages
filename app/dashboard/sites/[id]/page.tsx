@@ -2048,51 +2048,72 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
-                  {/* TLD results — with real pricing and availability */}
+                  {/* TLD results — sorted: available (cheapest first) → unknown → taken */}
                   <div className="space-y-2">
-                    {slug.length > 0 ? effectiveTldOptions.map(({ tld, price }) => {
-                      const fullDomain = `${slug}${tld}`
-                      const check = domainChecks[fullDomain]
-                      const isAvailable = check?.available
-                      const isUnavailable = check?.available === false
-                      const isChecking = check?.loading
-                      const purchaseUrl = check?.purchaseUrl || `https://dash.cloudflare.com/?to=/:account/domains/register/${encodeURIComponent(fullDomain)}`
+                    {slug.length > 0 ? (() => {
+                      const rank = (avail: boolean | null | undefined) =>
+                        avail === true ? 0 : avail === undefined || avail === null ? 1 : 2
+                      const sorted = [...effectiveTldOptions].sort((a, b) => {
+                        const ra = rank(domainChecks[`${slug}${a.tld}`]?.available)
+                        const rb = rank(domainChecks[`${slug}${b.tld}`]?.available)
+                        if (ra !== rb) return ra - rb
+                        return a.price - b.price
+                      })
+                      // Best-match = first available (cheapest, already sorted)
+                      const bestMatchTld = sorted.find(
+                        ({ tld }) => domainChecks[`${slug}${tld}`]?.available === true
+                      )?.tld
 
-                      return (
-                        <div
-                          key={tld}
-                          className={cn(
-                            "flex items-center gap-3 px-4 py-3.5 rounded-2xl border transition-all",
-                            isUnavailable
-                              ? "bg-[#1C1C1E] border-red-500/20 opacity-60"
-                              : isAvailable
-                                ? "bg-[#1C1C1E] border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
-                                : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
-                          )}
-                          onClick={() => {
-                            if (!isUnavailable) {
-                              window.open(purchaseUrl, "_blank", "noopener,noreferrer")
-                            }
-                          }}
-                        >
-                          <CloudflareProviderIcon />
-                          <span className="flex-1 text-sm font-medium text-white tracking-tight">{fullDomain}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {isChecking ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
-                            ) : isAvailable ? (
-                              <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">available</span>
-                            ) : isUnavailable ? (
-                              <span className="text-[10px] font-semibold bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">taken</span>
-                            ) : null}
-                            <span className="text-sm font-semibold text-white/60 tabular-nums">${price.toFixed(2)}/yr</span>
-                            {!isUnavailable && (
-                              <ExternalLink className="h-3.5 w-3.5 text-zinc-600" />
+                      return sorted.map(({ tld, price }) => {
+                        const fullDomain = `${slug}${tld}`
+                        const check = domainChecks[fullDomain]
+                        const isAvailable = check?.available
+                        const isUnavailable = check?.available === false
+                        const isChecking = check?.loading
+                        const isBestMatch = tld === bestMatchTld
+                        const purchaseUrl = check?.purchaseUrl || `https://dash.cloudflare.com/?to=/:account/domains/register/${encodeURIComponent(fullDomain)}`
+
+                        return (
+                          <div
+                            key={tld}
+                            className={cn(
+                              "flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 rounded-2xl border transition-all",
+                              isUnavailable
+                                ? "bg-[#1C1C1E] border-red-500/20 opacity-60"
+                                : isBestMatch
+                                  ? "bg-[#1C1C1E] border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
+                                  : isAvailable
+                                    ? "bg-[#1C1C1E] border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
+                                    : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
                             )}
+                            onClick={() => {
+                              if (!isUnavailable) {
+                                window.open(purchaseUrl, "_blank", "noopener,noreferrer")
+                              }
+                            }}
+                          >
+                            <CloudflareProviderIcon />
+                            <span className="flex-1 text-[13px] sm:text-sm font-medium text-white tracking-tight truncate">{fullDomain}</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              {isBestMatch && (
+                                <span className="hidden sm:inline-flex text-[10px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">best match</span>
+                              )}
+                              {isChecking ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
+                              ) : isAvailable ? (
+                                <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">available</span>
+                              ) : isUnavailable ? (
+                                <span className="text-[10px] font-semibold bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">taken</span>
+                              ) : null}
+                              <span className="text-[13px] sm:text-sm font-semibold text-white/60 tabular-nums">${price.toFixed(2)}/yr</span>
+                              {!isUnavailable && (
+                                <ExternalLink className="hidden sm:block h-3.5 w-3.5 text-zinc-600" />
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    }) : effectiveTldOptions.map(({ tld }) => (
+                        )
+                      })
+                    })() : effectiveTldOptions.map(({ tld }) => (
                       <div
                         key={tld}
                         className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]"
