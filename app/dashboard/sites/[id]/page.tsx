@@ -796,6 +796,7 @@ export default function SiteSettingsPage() {
             if (data.message) throw new Error(data.message)
             setProject(data)
             setShopName(data.businessName || "")
+            setProfileImage(data.profileImage || "")
             if (data.firebaseConnected) setDatabaseConnected(true)
 
             if (data.pages && Array.isArray(data.pages)) {
@@ -915,20 +916,18 @@ export default function SiteSettingsPage() {
     setSaveSuccess(false)
 
     try {
-      // Update project details if business name changed
+      // Update project details if business name or profile image changed
       let projectUpdateNeeded = false
       const updatedProjectData = { ...project }
       if (project?.businessName !== shopName) {
         updatedProjectData.businessName = shopName
         projectUpdateNeeded = true
       }
-
-      if (profileImage && !profileImage.startsWith("http") && !profileImage.startsWith("data:image")) {
-        console.warn("Image upload not fully implemented in this example. Placeholder logic used.")
-        if (profileImage.startsWith("data:image")) {
-          updatedProjectData.profileImage = profileImage
-          projectUpdateNeeded = true
-        }
+      
+      // Update profile image if changed
+      if (project?.profileImage !== profileImage) {
+        updatedProjectData.profileImage = profileImage
+        projectUpdateNeeded = true
       }
 
       if (projectUpdateNeeded) {
@@ -1676,7 +1675,7 @@ export default function SiteSettingsPage() {
                         <div className="relative shrink-0">
                           <div
                             className={cn(
-                              "h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center text-[16px] sm:text-[18px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]",
+                              "h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center text-[16px] sm:text-[18px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] overflow-hidden",
                               previewUrl
                                 ? "bg-gradient-to-br from-violet-500 to-fuchsia-600"
                                 : "bg-zinc-700"
@@ -1684,7 +1683,19 @@ export default function SiteSettingsPage() {
                             role="status"
                             aria-label={previewUrl ? "Site is live" : "Site not deployed"}
                           >
-                            {(project?.businessName?.[0] || "S").toUpperCase()}
+                            {profileImage ? (
+                              <img 
+                                src={profileImage} 
+                                alt="Site logo" 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  // Fallback to first letter if image fails to load
+                                  e.currentTarget.style.display = 'none'
+                                }}
+                              />
+                            ) : (
+                              (project?.businessName?.[0] || "S").toUpperCase()
+                            )}
                           </div>
                           {previewUrl && (
                             <span
@@ -1797,71 +1808,7 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
-                  {/* ── ROW 2: Recent activity ── */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <History className="h-4 w-4 text-zinc-500" />
-                        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Recent activity</h3>
-                      </div>
-                      {recentChanges.length > 4 && (
-                        <button
-                          onClick={() => setActiveTab("pages")}
-                          className="text-[12px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
-                        >
-                          View all ({recentChanges.length})
-                        </button>
-                      )}
-                    </div>
-
-                    {visibleChanges.length > 0 ? (
-                      <ul className="space-y-1">
-                        {visibleChanges.map((page, idx) => (
-                          <li
-                            key={(page.name || "page") + idx}
-                            className="flex items-center gap-2.5 sm:gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
-                          >
-                            <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 border border-white/[0.08]">
-                              {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
-                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[12px] sm:text-[13px] font-bold">
-                                {authorInitial}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] sm:text-[15px] text-zinc-300 truncate">
-                                <span className="text-zinc-400">changes made by </span>
-                                <span className="font-semibold text-zinc-100">{authorName}</span>
-                              </p>
-                              {page.name && (
-                                <p className="text-[11px] sm:text-[12px] text-zinc-500 truncate mt-0.5">
-                                  <FileText className="inline h-3 w-3 mr-1 -mt-0.5" />
-                                  {page.name}
-                                </p>
-                              )}
-                            </div>
-                            {page.timestamp && (
-                              <span className="shrink-0 text-[11px] sm:text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
-                                <Clock className="h-3 w-3" />
-                                {relTime(page.timestamp)}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="flex items-center gap-3 py-4 px-4 rounded-2xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                          style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <History className="h-4 w-4 text-zinc-500" />
-                        </div>
-                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── ROW 3: Stat cards ── */}
+                  {/* ── ROW 2: Stat cards ── */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5 pt-2">
 
                     {/* Visitors card with sparkline + delta */}
@@ -1995,6 +1942,70 @@ export default function SiteSettingsPage() {
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* ── ROW 3: Recent activity ── */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-zinc-500" />
+                        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Recent activity</h3>
+                      </div>
+                      {recentChanges.length > 4 && (
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="text-[12px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                        >
+                          View all ({recentChanges.length})
+                        </button>
+                      )}
+                    </div>
+
+                    {visibleChanges.length > 0 ? (
+                      <ul className="space-y-1">
+                        {visibleChanges.map((page, idx) => (
+                          <li
+                            key={(page.name || "page") + idx}
+                            className="flex items-center gap-2.5 sm:gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
+                          >
+                            <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 border border-white/[0.08]">
+                              {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
+                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[12px] sm:text-[13px] font-bold">
+                                {authorInitial}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] sm:text-[15px] text-zinc-300 truncate">
+                                <span className="text-zinc-400">changes made by </span>
+                                <span className="font-semibold text-zinc-100">{authorName}</span>
+                              </p>
+                              {page.name && (
+                                <p className="text-[11px] sm:text-[12px] text-zinc-500 truncate mt-0.5">
+                                  <FileText className="inline h-3 w-3 mr-1 -mt-0.5" />
+                                  {page.name}
+                                </p>
+                              )}
+                            </div>
+                            {page.timestamp && (
+                              <span className="shrink-0 text-[11px] sm:text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
+                                <Clock className="h-3 w-3" />
+                                {relTime(page.timestamp)}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="flex items-center gap-3 py-4 px-4 rounded-2xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                          style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <History className="h-4 w-4 text-zinc-500" />
+                        </div>
+                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
+                      </div>
+                    )}
                   </div>
 
                 </div>
@@ -2778,6 +2789,19 @@ export default function SiteSettingsPage() {
                         placeholder="My Website"
                         className="bg-black/20"
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="site-logo">Site Logo URL</Label>
+                      <Input
+                        id="site-logo"
+                        value={profileImage}
+                        onChange={(e) => setProfileImage(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="bg-black/20"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter a URL for your site logo. This will appear in the overview and as your site icon.
+                      </p>
                     </div>
                     {displayUrl && (
                       <div className="space-y-2">
