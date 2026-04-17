@@ -64,6 +64,10 @@ import {
   AlertTriangle,
   MoreHorizontal,
   ArrowUpRight,
+  Copy,
+  Check,
+  Clock,
+  TrendingDown,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -568,6 +572,7 @@ export default function SiteSettingsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDesktopSidebarExpanded, setIsDesktopSidebarExpanded] = useState(false)
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop")
+  const [copiedDomain, setCopiedDomain] = useState(false)
   const { data: session } = useSession()
 
   // Subscription / plan
@@ -1507,26 +1512,69 @@ export default function SiteSettingsPage() {
               const recentChanges = generatedPages
                 .slice()
                 .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                .slice(0, 6)
+              const visibleChanges = recentChanges.slice(0, 4)
+
               const authorName =
                 (session?.user?.name as string | undefined) ||
                 (session?.user?.email as string | undefined)?.split("@")[0] ||
                 "you"
               const authorInitial = authorName.charAt(0).toUpperCase()
+              const authorImage = (session?.user?.image as string | undefined) || undefined
 
-              // Visitor stats (fake trend for now — 7-day sparkline)
+              // Relative time formatter (e.g., "2h ago", "yesterday", "3d ago")
+              const relTime = (ts?: number) => {
+                if (!ts) return ""
+                const diff = Date.now() - ts
+                const mins = Math.floor(diff / 60000)
+                if (mins < 1) return "just now"
+                if (mins < 60) return `${mins}m ago`
+                const hrs = Math.floor(mins / 60)
+                if (hrs < 24) return `${hrs}h ago`
+                const days = Math.floor(hrs / 24)
+                if (days === 1) return "yesterday"
+                if (days < 7) return `${days}d ago`
+                const weeks = Math.floor(days / 7)
+                if (weeks < 4) return `${weeks}w ago`
+                const d = new Date(ts)
+                return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(2)}`
+              }
+
+              // Visitor stats — 7-day sparkline
               const visitorCount = (project as any)?.visitorCount7d ?? 10
-              const sparkPoints = (project as any)?.visitorTrend7d || [4, 5, 4, 6, 7, 9, 10]
+              const sparkPoints: number[] = (project as any)?.visitorTrend7d || [4, 5, 4, 6, 7, 9, 10]
               const sparkMax = Math.max(...sparkPoints, 1)
+              const sparkMin = Math.min(...sparkPoints, 0)
               const sparkW = 260
-              const sparkH = 70
-              const sparkPath = sparkPoints
-                .map((v: number, i: number) => {
-                  const x = (i / (sparkPoints.length - 1)) * sparkW
-                  const y = sparkH - (v / sparkMax) * (sparkH - 8) - 4
-                  return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`
-                })
+              const sparkH = 80
+              const sparkPathPoints = sparkPoints.map((v, i) => {
+                const x = (i / (sparkPoints.length - 1)) * sparkW
+                const range = Math.max(sparkMax - sparkMin, 1)
+                const y = sparkH - ((v - sparkMin) / range) * (sparkH - 12) - 6
+                return { x, y }
+              })
+              const sparkLine = sparkPathPoints
+                .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
                 .join(" ")
+              const sparkArea = `${sparkLine} L${sparkW},${sparkH} L0,${sparkH} Z`
+
+              // Week-over-week delta
+              const firstHalf = sparkPoints.slice(0, Math.floor(sparkPoints.length / 2))
+              const secondHalf = sparkPoints.slice(Math.floor(sparkPoints.length / 2))
+              const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
+              const deltaPct = avg(firstHalf) === 0 ? 100 : Math.round(((avg(secondHalf) - avg(firstHalf)) / avg(firstHalf)) * 100)
+              const isUp = deltaPct >= 0
+
+              const pagesCount = generatedPages.length
+              const lastUpdateTs = recentChanges[0]?.timestamp
+
+              const copyDomain = async () => {
+                if (!displayUrl) return
+                try {
+                  await navigator.clipboard.writeText(displayUrl)
+                  setCopiedDomain(true)
+                  setTimeout(() => setCopiedDomain(false), 1800)
+                } catch { /* ignore */ }
+              }
 
               return (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-6 lg:space-y-7">
@@ -1536,7 +1584,7 @@ export default function SiteSettingsPage() {
 
                     {/* Preview box */}
                     <div
-                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px]"
+                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px] group/preview"
                       style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       {previewUrl ? (
@@ -1570,6 +1618,20 @@ export default function SiteSettingsPage() {
                         style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(28,28,30,0.7) 100%)" }}
                       />
 
+                      {/* Open-in-new hover affordance */}
+                      {previewUrl && (
+                        <button
+                          type="button"
+                          onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                          className="absolute top-3 right-3 h-9 w-9 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-md text-zinc-100 opacity-0 group-hover/preview:opacity-100 transition-all hover:scale-110 hover:bg-black/70 z-10"
+                          style={{ border: "1px solid rgba(255,255,255,0.15)" }}
+                          aria-label="Open site in new tab"
+                          title="Open site"
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </button>
+                      )}
+
                       {/* "Your site is now live!" banner */}
                       {previewUrl && (
                         <div className="absolute bottom-0 left-0" style={{ zIndex: 10 }}>
@@ -1594,18 +1656,48 @@ export default function SiteSettingsPage() {
 
                     {/* Domain + buttons */}
                     <div className="lg:col-span-5 flex flex-col gap-5">
-                      {/* Domain name + live dot */}
+                      {/* Domain name + live dot (pulsing when live) */}
                       <div className="flex items-center gap-3.5">
-                        <div
-                          className={cn(
-                            "w-4 h-4 rounded-full shrink-0",
-                            previewUrl ? "bg-emerald-500" : "bg-zinc-600"
+                        <div className="relative shrink-0 w-4 h-4">
+                          <div
+                            className={cn(
+                              "w-4 h-4 rounded-full",
+                              previewUrl ? "bg-emerald-500" : "bg-zinc-600"
+                            )}
+                            title={previewUrl ? "Live" : "Not deployed"}
+                          />
+                          {previewUrl && (
+                            <div
+                              aria-hidden="true"
+                              className="absolute inset-0 rounded-full bg-emerald-500/70 animate-ping"
+                              style={{ animationDuration: "2s" }}
+                            />
                           )}
-                          title={previewUrl ? "Live" : "Not deployed"}
-                        />
-                        <h2 className="text-[26px] sm:text-[30px] lg:text-[32px] leading-tight font-bold text-zinc-100 truncate min-w-0">
-                          {displayUrl || "Not deployed"}
-                        </h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={copyDomain}
+                          disabled={!displayUrl}
+                          className="group/dom flex items-center gap-2 min-w-0 text-left disabled:cursor-default"
+                          title={displayUrl ? "Click to copy" : undefined}
+                        >
+                          <h2 className="text-[24px] sm:text-[28px] lg:text-[30px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
+                            {displayUrl || "Not deployed"}
+                          </h2>
+                          {displayUrl && (
+                            <span
+                              className={cn(
+                                "shrink-0 h-7 w-7 rounded-lg flex items-center justify-center transition-all",
+                                copiedDomain
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : "text-zinc-500 opacity-0 group-hover/dom:opacity-100 hover:bg-white/[0.06] hover:text-zinc-200"
+                              )}
+                              aria-hidden="true"
+                            >
+                              {copiedDomain ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            </span>
+                          )}
+                        </button>
                       </div>
 
                       {/* Two visit pill buttons */}
@@ -1614,13 +1706,13 @@ export default function SiteSettingsPage() {
                         <button
                           onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                           disabled={!previewUrl}
-                          className="h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.04] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="group/btn h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                         >
-                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300" />
+                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
                           <span>visit</span>
                           <span
-                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold text-white"
+                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold text-white shadow-[0_2px_10px_rgba(31,122,58,0.35)]"
                             style={{ background: "#1f7a3a" }}
                           >
                             live
@@ -1631,13 +1723,13 @@ export default function SiteSettingsPage() {
                         <button
                           onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                           disabled={!previewUrl}
-                          className="h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.04] active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="group/btn h-12 pl-5 pr-1.5 rounded-full flex items-center gap-3 text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                         >
-                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300" />
+                          <ArrowUpRight className="h-[18px] w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
                           <span>visit</span>
                           <span
-                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold"
+                            className="h-9 px-4 rounded-full flex items-center text-[13px] font-semibold shadow-[0_2px_10px_rgba(163,122,52,0.3)]"
                             style={{ background: "#a37a34", color: "#ffffff" }}
                           >
                             preview
@@ -1647,32 +1739,66 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
-                  {/* ── ROW 2: Changes list ── */}
-                  <div className="space-y-3.5">
-                    {recentChanges.length > 0 ? (
-                      recentChanges.map((page, idx) => (
-                        <div key={(page.name || "page") + idx} className="flex items-center gap-3.5">
-                          <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-[13px] font-bold text-zinc-300"
-                            style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
+                  {/* ── ROW 2: Recent activity ── */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-zinc-500" />
+                        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Recent activity</h3>
+                      </div>
+                      {recentChanges.length > 4 && (
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="text-[12px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                        >
+                          View all ({recentChanges.length})
+                        </button>
+                      )}
+                    </div>
+
+                    {visibleChanges.length > 0 ? (
+                      <ul className="space-y-1">
+                        {visibleChanges.map((page, idx) => (
+                          <li
+                            key={(page.name || "page") + idx}
+                            className="flex items-center gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
                           >
-                            {authorInitial}
-                          </div>
-                          <p className="text-[15px] sm:text-[16px] text-zinc-300 truncate min-w-0">
-                            <span className="text-zinc-400">changes made by </span>
-                            <span className="font-semibold text-zinc-200">{authorName}</span>
-                          </p>
-                        </div>
-                      ))
+                            <Avatar className="h-9 w-9 shrink-0 border border-white/[0.08]">
+                              {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
+                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[13px] font-bold">
+                                {authorInitial}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[15px] text-zinc-300 truncate">
+                                <span className="text-zinc-400">changes made by </span>
+                                <span className="font-semibold text-zinc-100">{authorName}</span>
+                              </p>
+                              {page.name && (
+                                <p className="text-[12px] text-zinc-500 truncate mt-0.5">
+                                  <FileText className="inline h-3 w-3 mr-1 -mt-0.5" />
+                                  {page.name}
+                                </p>
+                              )}
+                            </div>
+                            {page.timestamp && (
+                              <span className="shrink-0 text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
+                                <Clock className="h-3 w-3" />
+                                {relTime(page.timestamp)}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     ) : (
-                      <div className="flex items-center gap-3.5">
+                      <div className="flex items-center gap-3 py-4 px-4 rounded-2xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
                         <div
                           className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
                           style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
                         >
                           <History className="h-4 w-4 text-zinc-500" />
                         </div>
-                        <p className="text-[15px] text-zinc-500">No changes yet — use Syra to build your site</p>
+                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
                       </div>
                     )}
                   </div>
@@ -1680,54 +1806,130 @@ export default function SiteSettingsPage() {
                   {/* ── ROW 3: Stat cards ── */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5 pt-2">
 
-                    {/* Visitors card with sparkline */}
+                    {/* Visitors card with sparkline + delta */}
                     <div
-                      className="rounded-[22px] p-5 lg:p-6 flex flex-col gap-4 min-h-[180px]"
+                      className="relative overflow-hidden rounded-[22px] p-5 lg:p-6 flex flex-col gap-4 min-h-[190px] transition-colors hover:bg-white/[0.02]"
+                      style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                          >
+                            <Eye className="h-4 w-4 text-zinc-400" />
+                          </div>
+                          <p className="text-[15px] sm:text-[16px] text-zinc-200 min-w-0 truncate">
+                            <span className="font-bold">{visitorCount} visitor{visitorCount !== 1 ? "s" : ""}</span>
+                            <span className="text-zinc-400"> in 7 days</span>
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-full text-[11px] font-semibold tabular-nums",
+                            isUp ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+                          )}
+                        >
+                          {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                          {isUp ? "+" : ""}
+                          {deltaPct}%
+                        </span>
+                      </div>
+
+                      {/* Sparkline with area fill */}
+                      <div className="flex-1 flex items-end min-h-[80px]">
+                        <svg
+                          viewBox={`0 0 ${sparkW} ${sparkH}`}
+                          className="w-full h-full overflow-visible"
+                          preserveAspectRatio="none"
+                          aria-hidden="true"
+                        >
+                          <defs>
+                            <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+                              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                            </linearGradient>
+                          </defs>
+                          <path d={sparkArea} fill="url(#sparkFill)" />
+                          <path
+                            d={sparkLine}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.6)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          {/* Last-point dot */}
+                          {sparkPathPoints.length > 0 && (
+                            <circle
+                              cx={sparkPathPoints[sparkPathPoints.length - 1].x}
+                              cy={sparkPathPoints[sparkPathPoints.length - 1].y}
+                              r="3"
+                              fill="#ffffff"
+                            />
+                          )}
+                        </svg>
+                      </div>
+
+                      {/* Axis labels */}
+                      <div className="flex items-center justify-between text-[11px] text-zinc-600 -mt-1 tabular-nums">
+                        <span>7d ago</span>
+                        <span>Today</span>
+                      </div>
+                    </div>
+
+                    {/* Pages card */}
+                    <div
+                      className="relative overflow-hidden rounded-[22px] p-5 lg:p-6 flex flex-col gap-4 min-h-[190px] transition-colors hover:bg-white/[0.02]"
                       style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-7 h-7 rounded-full shrink-0"
-                          style={{ background: "#3a3a3d", border: "1px solid rgba(255,255,255,0.08)" }}
-                        />
+                          className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
+                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <FileText className="h-4 w-4 text-zinc-400" />
+                        </div>
                         <p className="text-[15px] sm:text-[16px] text-zinc-200">
-                          <span className="font-bold">{visitorCount} visitor{visitorCount !== 1 ? "s" : ""}</span>
-                          <span className="text-zinc-400"> in 7 days</span>
+                          <span className="font-bold">{pagesCount} page{pagesCount !== 1 ? "s" : ""}</span>
+                          <span className="text-zinc-400"> on this site</span>
                         </p>
                       </div>
 
-                      {/* Sparkline */}
-                      <div className="flex-1 flex items-end min-h-[70px]">
-                        <svg
-                          viewBox={`0 0 ${sparkW} ${sparkH}`}
-                          className="w-full h-full"
-                          preserveAspectRatio="none"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d={sparkPath}
-                            fill="none"
-                            stroke="rgba(255,255,255,0.45)"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-
-                    {/* Secondary empty card */}
-                    <div
-                      className="rounded-[22px] p-5 lg:p-6 min-h-[180px] flex items-center justify-center"
-                      style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
-                    >
-                      <p className="text-[13px] text-zinc-600">More stats coming soon</p>
+                      {pagesCount > 0 ? (
+                        <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+                          {generatedPages.slice(0, 3).map((p, i) => (
+                            <div
+                              key={(p.name || "p") + i}
+                              className="flex items-center gap-2 text-[13px] text-zinc-400 truncate"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-zinc-600 shrink-0" />
+                              <span className="truncate">{p.name || "untitled"}</span>
+                            </div>
+                          ))}
+                          {pagesCount > 3 && (
+                            <div className="text-[12px] text-zinc-600 pl-3.5">+ {pagesCount - 3} more</div>
+                          )}
+                          {lastUpdateTs && (
+                            <div className="mt-auto pt-2 text-[11px] text-zinc-600 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Last updated {relTime(lastUpdateTs)}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center">
+                          <p className="text-[13px] text-zinc-600">Generate a page to get started</p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                 </div>
               )
             })()}
+
 
 
             {/* TAB CONTENT: DOMAIN */}
