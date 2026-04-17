@@ -334,6 +334,13 @@ const PLAN_CREDITS: Record<string, number> = {
 }
 const DEFAULT_PLAN_CREDIT = 2
 
+// Visit-dropdown pill colors. Kept as constants so the "live" and "preview"
+// accents remain consistent if the overview visit dropdown is reused/extended.
+const VISIT_PILL_LIVE_BG = "#1f7a3a"
+const VISIT_PILL_LIVE_SHADOW = "0 2px 10px rgba(31,122,58,0.35)"
+const VISIT_PILL_PREVIEW_BG = "#a37a34"
+const VISIT_PILL_PREVIEW_SHADOW = "0 2px 10px rgba(163,122,52,0.3)"
+
 // Fallback TLD options (replaced by real Cloudflare API prices when available)
 const FALLBACK_TLD_OPTIONS = [
   { tld: ".com", price: 10.44 },
@@ -1738,8 +1745,8 @@ export default function SiteSettingsPage() {
                               className="rounded-full p-0 focus:bg-transparent data-[highlighted]:bg-transparent"
                             >
                               <div
-                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white shadow-[0_2px_10px_rgba(31,122,58,0.35)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                                style={{ background: "#1f7a3a" }}
+                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ background: VISIT_PILL_LIVE_BG, boxShadow: VISIT_PILL_LIVE_SHADOW }}
                               >
                                 <ArrowUpRight className="h-4 w-4" />
                                 <span>live</span>
@@ -1752,8 +1759,8 @@ export default function SiteSettingsPage() {
                               className="rounded-full p-0 mt-1.5 focus:bg-transparent data-[highlighted]:bg-transparent"
                             >
                               <div
-                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white shadow-[0_2px_10px_rgba(163,122,52,0.3)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                                style={{ background: "#a37a34" }}
+                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ background: VISIT_PILL_PREVIEW_BG, boxShadow: VISIT_PILL_PREVIEW_SHADOW }}
                               >
                                 <ArrowUpRight className="h-4 w-4" />
                                 <span>preview</span>
