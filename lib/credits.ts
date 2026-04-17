@@ -19,6 +19,11 @@ export const FAST_COST_PER_FILE = 0.1
 export const DEFAULT_CREDITS_FREE = 10
 export const DEFAULT_CREDITS_PREMIUM = 200
 
+// Model-name patterns that mark a model as "fast" tier. The explicit
+// `model.fast === true` property still takes priority; this pattern is
+// only consulted when a model doesn't declare its tier.
+const FAST_MODEL_PATTERN = /flash|lite|mini|nvidia/
+
 /**
  * Classify a model id/name into a tier.
  *
@@ -29,7 +34,7 @@ export const DEFAULT_CREDITS_PREMIUM = 200
 export function tierOf(model: { id?: string; name?: string; fast?: boolean }): ModelTier {
   if (model.fast) return "fast"
   const hay = `${model.id ?? ""} ${model.name ?? ""}`.toLowerCase()
-  if (/flash|lite|mini|nvidia/.test(hay)) return "fast"
+  if (FAST_MODEL_PATTERN.test(hay)) return "fast"
   return "best"
 }
 

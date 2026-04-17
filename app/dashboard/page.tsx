@@ -21,11 +21,13 @@ import { WebsitePreviewCard } from "@/components/website-preview-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
+// Maximum number of projects a user can have on the free plan.
+const MAX_FREE_PROJECTS = 3
+
 function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [projects, setProjects] = useState([])
+  const searchParams = useSearchParams()  const [projects, setProjects] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [deletingDeployments, setDeletingDeployments] = useState<Set<string>>(new Set())
@@ -279,7 +281,7 @@ function DashboardContent() {
                 />
               </div>
               <div className="px-4 py-3 border border-input rounded-xl bg-muted/50 backdrop-blur-sm text-sm font-medium whitespace-nowrap">
-                {projects.length}/3
+                {projects.length}/{MAX_FREE_PROJECTS}
               </div>
             </div>
           </div>
@@ -314,7 +316,7 @@ function DashboardContent() {
                   return name.includes(q) || domain.includes(q)
                 })
               : projects
-            const canCreateMore = projects.length < 3
+            const canCreateMore = projects.length < MAX_FREE_PROJECTS
 
             if (q && filtered.length === 0) {
               return (
@@ -350,7 +352,7 @@ function DashboardContent() {
                       Hozzon létre egy új webhelyet pár kattintással
                     </p>
                     <span className="mt-3 text-[11px] text-muted-foreground/70 tabular-nums">
-                      {projects.length}/3 használatban
+                      {projects.length}/{MAX_FREE_PROJECTS} használatban
                     </span>
                   </button>
                 )}
