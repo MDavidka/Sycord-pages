@@ -21,13 +21,15 @@ export const DEFAULT_CREDITS_PREMIUM = 200
 
 /**
  * Classify a model id/name into a tier.
- * Any model advertising itself as "fast", "flash", "lite" or using the
- * NVIDIA uploaded-text model is treated as fast-tier.
+ *
+ * Priority: an explicit `fast: true` on the model wins. Otherwise we inspect
+ * the id/name for well-known "lightweight" markers. If nothing matches we
+ * default to the higher-quality "best" tier.
  */
 export function tierOf(model: { id?: string; name?: string; fast?: boolean }): ModelTier {
   if (model.fast) return "fast"
   const hay = `${model.id ?? ""} ${model.name ?? ""}`.toLowerCase()
-  if (/flash|lite|fast|mini|nvidia/.test(hay)) return "fast"
+  if (/flash|lite|mini|nvidia/.test(hay)) return "fast"
   return "best"
 }
 

@@ -449,6 +449,10 @@ const INTEGRATION_OPTIONS = [
   },
 ]
 
+// Attachment limits for the AI prompt input.
+const ATTACHMENT_MAX_COUNT = 5
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024 // 10 MB
+
 const InputBar = ({
   input, setInput, onSend, disabled,
   selectedModel, setSelectedModel,
@@ -472,14 +476,11 @@ const InputBar = ({
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return
-    // Accept up to 5 attachments, 10 MB each.
-    const MAX = 5
-    const MAX_BYTES = 10 * 1024 * 1024
     setAttachments(prev => {
       const next = [...prev]
-      for (let i = 0; i < files.length && next.length < MAX; i++) {
+      for (let i = 0; i < files.length && next.length < ATTACHMENT_MAX_COUNT; i++) {
         const f = files[i]
-        if (f.size <= MAX_BYTES) next.push(f)
+        if (f.size <= ATTACHMENT_MAX_BYTES) next.push(f)
       }
       return next
     })
@@ -651,7 +652,11 @@ const InputBar = ({
 
             <Button
               onClick={onSend}
-              aria-label="Send message"
+              aria-label={
+                insufficient
+                  ? "Send disabled — not enough credits for this model"
+                  : "Send message"
+              }
               className={cn(
                 "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0",
                 input.trim() && !disabled && !insufficient
@@ -1200,8 +1205,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const startGeneration = async () => {
     if (!input.trim()) return
 
-    // Include attachment filenames in the prompt so the plan generator is
-    // aware of them. The backend can choose to ignore or process them further.
+    // Attachment filenames are appended to the user-visible prompt as plain
+    // text metadata so downstream plan-generation/model endpoints are aware
+    // of them. Full file upload / processing is handled server-side when
+    // the backend chooses to consume this metadata — the raw File objects
+    // themselves are not shipped with this request.
     const attachmentNote = attachments.length > 0
       ? `\n\n[Attached files: ${attachments.map(f => f.name).join(", ")}]`
       : ""

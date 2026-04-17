@@ -30,12 +30,29 @@ export async function GET() {
       credits = user.credits
     } else {
       // Lazy-seed new users (or users missing the field).
-      credits = seedBalance(!!user?.isPremium)
+      //
+      // Race-safe: we first upsert the user record with `$setOnInsert` so an
+      // initial seed is written atomically iff a brand-new document is
+      // created. If another concurrent request already created the record,
+      // that seed is discarded. A subsequent conditional `$set` handles the
+      // case where the record already existed but was missing the field
+      // (e.g. legacy users created before this feature). Finally we re-read
+      // to return whatever is actually persisted.
+      const seed = seedBalance(!!user?.isPremium)
       await users.updateOne(
         { id: session.user.id },
-        { $set: { credits } },
+        { $setOnInsert: { id: session.user.id, credits: seed } },
         { upsert: true },
       )
+      await users.updateOne(
+        { id: session.user.id, credits: { $exists: false } },
+        { $set: { credits: seed } },
+      )
+      const after = await users.findOne(
+        { id: session.user.id },
+        { projection: { credits: 1 } },
+      )
+      credits = typeof after?.credits === "number" ? after.credits : seed
     }
 
     return NextResponse.json({

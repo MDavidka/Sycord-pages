@@ -1665,13 +1665,16 @@ export default function SiteSettingsPage() {
                     <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-5">
                       {/* Domain name + live dot (pulsing when live) */}
                       <div className="flex items-center gap-2.5 sm:gap-3.5">
-                        <div className="relative shrink-0 w-3 h-3 sm:w-4 sm:h-4">
+                        <div
+                          className="relative shrink-0 w-3 h-3 sm:w-4 sm:h-4"
+                          role="status"
+                          aria-label={previewUrl ? "Site is live" : "Site not deployed"}
+                        >
                           <div
                             className={cn(
                               "w-3 h-3 sm:w-4 sm:h-4 rounded-full",
                               previewUrl ? "bg-emerald-500" : "bg-zinc-600"
                             )}
-                            title={previewUrl ? "Live" : "Not deployed"}
                           />
                           {previewUrl && (
                             <div
