@@ -1663,35 +1663,39 @@ export default function SiteSettingsPage() {
 
                     {/* Domain + buttons */}
                     <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-5">
-                      {/* Domain name + live dot (pulsing when live) */}
-                      <div className="flex items-center gap-2.5 sm:gap-3.5">
-                        <div
-                          className="relative shrink-0 w-3 h-3 sm:w-4 sm:h-4"
-                          role="status"
-                          aria-label={previewUrl ? "Site is live" : "Site not deployed"}
-                        >
+                      {/* Project profile row: [logo] domain  +  [visit ▾] */}
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        {/* Logo / status square (subtly pulses when live) */}
+                        <div className="relative shrink-0">
                           <div
                             className={cn(
-                              "w-3 h-3 sm:w-4 sm:h-4 rounded-full",
-                              previewUrl ? "bg-emerald-500" : "bg-zinc-600"
+                              "h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center text-[16px] sm:text-[18px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]",
+                              previewUrl
+                                ? "bg-gradient-to-br from-violet-500 to-fuchsia-600"
+                                : "bg-zinc-700"
                             )}
-                          />
+                            role="status"
+                            aria-label={previewUrl ? "Site is live" : "Site not deployed"}
+                          >
+                            {(project?.businessName?.[0] || "S").toUpperCase()}
+                          </div>
                           {previewUrl && (
-                            <div
+                            <span
                               aria-hidden="true"
-                              className="absolute inset-0 rounded-full bg-emerald-500/70 animate-ping"
-                              style={{ animationDuration: "2s" }}
+                              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#1C1C1E]"
                             />
                           )}
                         </div>
+
+                        {/* Domain name (copyable) */}
                         <button
                           type="button"
                           onClick={copyDomain}
                           disabled={!displayUrl}
-                          className="group/dom flex items-center gap-1.5 sm:gap-2 min-w-0 text-left disabled:cursor-default"
+                          className="group/dom flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 text-left disabled:cursor-default"
                           title={displayUrl ? "Click to copy" : undefined}
                         >
-                          <h2 className="text-[18px] sm:text-[24px] lg:text-[28px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
+                          <h2 className="text-[18px] sm:text-[22px] lg:text-[26px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
                             {displayUrl || "Not deployed"}
                           </h2>
                           {displayUrl && (
@@ -1708,43 +1712,55 @@ export default function SiteSettingsPage() {
                             </span>
                           )}
                         </button>
-                      </div>
 
-                      {/* Visit pill buttons (primary) */}
-                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                        {/* visit [live] */}
-                        <button
-                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                          disabled={!previewUrl}
-                          className="group/btn h-10 sm:h-12 pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 rounded-full flex items-center gap-2 sm:gap-3 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
-                        >
-                          <ArrowUpRight className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
-                          <span>visit</span>
-                          <span
-                            className="h-7 sm:h-9 px-3 sm:px-4 rounded-full flex items-center text-[11px] sm:text-[13px] font-semibold text-white shadow-[0_2px_10px_rgba(31,122,58,0.35)]"
-                            style={{ background: "#1f7a3a" }}
+                        {/* Visit dropdown (trigger) — opens a scrollable panel with live + preview pills */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              disabled={!previewUrl}
+                              aria-label="Open visit options"
+                              className="group/visit shrink-0 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-2.5 sm:pr-3 rounded-full flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
+                            >
+                              <span>visit</span>
+                              <ChevronDown className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-zinc-400 transition-transform group-data-[state=open]/visit:rotate-180" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            sideOffset={8}
+                            className="bg-[#1c1c1c] border border-white/[0.08] rounded-2xl p-1.5 min-w-[180px] max-h-[260px] overflow-y-auto custom-scrollbar"
                           >
-                            live
-                          </span>
-                        </button>
-
-                        {/* visit [preview] */}
-                        <button
-                          onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                          disabled={!previewUrl}
-                          className="group/btn h-10 sm:h-12 pl-3.5 sm:pl-5 pr-1 sm:pr-1.5 rounded-full flex items-center gap-2 sm:gap-3 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
-                        >
-                          <ArrowUpRight className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-zinc-300 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
-                          <span>visit</span>
-                          <span
-                            className="h-7 sm:h-9 px-3 sm:px-4 rounded-full flex items-center text-[11px] sm:text-[13px] font-semibold shadow-[0_2px_10px_rgba(163,122,52,0.3)]"
-                            style={{ background: "#a37a34", color: "#ffffff" }}
-                          >
-                            preview
-                          </span>
-                        </button>
+                            {/* live */}
+                            <DropdownMenuItem
+                              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                              disabled={!previewUrl}
+                              className="rounded-full p-0 focus:bg-transparent data-[highlighted]:bg-transparent"
+                            >
+                              <div
+                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white shadow-[0_2px_10px_rgba(31,122,58,0.35)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ background: "#1f7a3a" }}
+                              >
+                                <ArrowUpRight className="h-4 w-4" />
+                                <span>live</span>
+                              </div>
+                            </DropdownMenuItem>
+                            {/* preview */}
+                            <DropdownMenuItem
+                              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                              disabled={!previewUrl}
+                              className="rounded-full p-0 mt-1.5 focus:bg-transparent data-[highlighted]:bg-transparent"
+                            >
+                              <div
+                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white shadow-[0_2px_10px_rgba(163,122,52,0.3)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ background: "#a37a34" }}
+                              >
+                                <ArrowUpRight className="h-4 w-4" />
+                                <span>preview</span>
+                              </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
 
                       {/* Secondary quick-actions: Changes + Settings */}
