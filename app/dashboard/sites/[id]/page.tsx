@@ -1691,7 +1691,7 @@ export default function SiteSettingsPage() {
                           style={{ background: "#3a3a3d", border: "1px solid rgba(255,255,255,0.08)" }}
                         />
                         <p className="text-[15px] sm:text-[16px] text-zinc-200">
-                          <span className="font-bold">{visitorCount} visitor</span>
+                          <span className="font-bold">{visitorCount} visitor{visitorCount !== 1 ? "s" : ""}</span>
                           <span className="text-zinc-400"> in 7 days</span>
                         </p>
                       </div>
