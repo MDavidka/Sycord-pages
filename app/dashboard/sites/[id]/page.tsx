@@ -635,6 +635,7 @@ export default function SiteSettingsPage() {
   // Settings State
   const [shopName, setShopName] = useState("")
   const [profileImage, setProfileImage] = useState("")
+  const [logoLoadError, setLogoLoadError] = useState(false)
 
   // AI Generated Pages State (Lifted)
   const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([])
@@ -797,6 +798,7 @@ export default function SiteSettingsPage() {
             setProject(data)
             setShopName(data.businessName || "")
             setProfileImage(data.profileImage || "")
+            setLogoLoadError(false) // Reset error state when loading new data
             if (data.firebaseConnected) setDatabaseConnected(true)
 
             if (data.pages && Array.isArray(data.pages)) {
@@ -885,6 +887,11 @@ export default function SiteSettingsPage() {
       fetchTldPrices()
     }
   }, [activeTab])
+
+  // Reset logo load error when profile image changes
+  useEffect(() => {
+    setLogoLoadError(false)
+  }, [profileImage])
 
   const handleStyleSelect = (style: string) => {
     console.log("[v0] Selected style:", style)
@@ -1683,18 +1690,17 @@ export default function SiteSettingsPage() {
                             role="status"
                             aria-label={previewUrl ? "Site is live" : "Site not deployed"}
                           >
-                            {profileImage ? (
+                            {profileImage && !logoLoadError ? (
                               <img 
                                 src={profileImage} 
                                 alt="Site logo" 
                                 className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  // Fallback to first letter if image fails to load
-                                  e.currentTarget.style.display = 'none'
-                                }}
+                                onError={() => setLogoLoadError(true)}
                               />
                             ) : (
-                              (project?.businessName?.[0] || "S").toUpperCase()
+                              <span className="text-[16px] sm:text-[18px] font-bold">
+                                {(project?.businessName?.[0] || "S").toUpperCase()}
+                              </span>
                             )}
                           </div>
                           {previewUrl && (
