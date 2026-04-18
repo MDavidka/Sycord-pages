@@ -45,8 +45,9 @@ export async function POST(request: Request) {
       if (typeof body.profileImage !== 'string') {
           return NextResponse.json({ message: "profileImage must be a string" }, { status: 400 });
       }
+      // A 2MB image encoded as base64 data URL is ~2.8MB; allow some headroom.
       if (body.profileImage.length > 3_500_000) {
-          return NextResponse.json({ message: "profileImage is too large (max ~2MB)" }, { status: 400 });
+          return NextResponse.json({ message: "profileImage is too large (max 2MB image)" }, { status: 400 });
       }
       const isDataUrl = /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(body.profileImage);
       const isHttpUrl = /^https?:\/\//i.test(body.profileImage);
