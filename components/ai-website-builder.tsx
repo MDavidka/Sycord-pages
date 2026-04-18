@@ -590,7 +590,7 @@ const InputBar = ({
                   className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
                 >
                   <div className="px-2 pt-1 pb-1 text-[10px] text-zinc-500 leading-relaxed">
-                    Planning always runs on <span className="text-zinc-300">openai/gpt-oss-120b:free</span> (OpenRouter) for deep reasoning. Pick Gemini for generation quality vs. speed.
+                    Planning always runs on <span className="text-zinc-300">Gemini 3.1 Flash-Lite</span> for fast reasoning. Pick Gemini Pro for quality or Flash for speed when generating code.
                   </div>
                   {bestModels.length > 0 && (
                     <>
