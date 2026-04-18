@@ -3,26 +3,18 @@
 import React, { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Loader2,
-  Bot,
-  Check,
   ChevronDown,
   Sparkles,
   FileCode,
   ArrowRight,
-  Rocket,
-  Brain,
-  Hammer,
-  Wrench,
   CheckCircle2,
   Folder,
   FolderOpen,
@@ -30,19 +22,21 @@ import {
   Code,
   Bug,
   Layout,
-  Paperclip,
   Send,
-  Info,
-  Circle,
   Zap,
-  Cloud,
   Globe,
   Database,
   ThumbsUp,
   ThumbsDown,
   Flag,
+  Plus,
+  Paperclip,
+  X,
+  Coins,
+  Gem,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
 
 // Model type for the chooser
 interface ModelOption {
@@ -220,68 +214,41 @@ const FileTreeVisualizer = ({ pages, currentFile }: { pages: GeneratedPage[], cu
 // --- GENERATION STEP ICONS (matching the reference UI) ---
 // Using lucide-react icons for a modern, clean look
 
-/** Small inline step indicator — shows 1 step at a time with typing + slide-out animation */
+/** Small inline step indicator — shows thinking bubble with animated dots */
 const StepIndicator = ({ phase, progress, currentFile }: {
   phase: GenerationPhase
   progress: { percent: number; done: number; total: number }
   currentFile?: string
 }) => {
-  const [displayedPhase, setDisplayedPhase] = useState<string | null>(null)
-  const [exiting, setExiting] = useState(false)
-  const prevPhaseRef = useRef<string | null>(null)
-
-  const phaseConfig: Record<string, { icon: React.ReactNode; label: string }> = {
-    planning:    { icon: <Brain className="h-4 w-4" />,    label: "Processing with NVIDIA model..." },
-    searching:   { icon: <Globe className="h-4 w-4" />,    label: "Searching web..." },
-    clarifying:  { icon: <Info className="h-4 w-4" />,     label: "Asking a question..." },
-    structuring: { icon: <Layout className="h-4 w-4" />,   label: "Creating sitemap..." },
-    integrating: { icon: <Database className="h-4 w-4" />, label: "Integrating services..." },
-    building:    { icon: <Code className="h-4 w-4" />,     label: "Building..." },
-    deploying:   { icon: <Rocket className="h-4 w-4" />,   label: "Deploying..." },
+  const phaseConfig: Record<string, { label: string }> = {
+    planning:    { label: "Planning" },
+    searching:   { label: "Searching" },
+    clarifying:  { label: "Clarifying" },
+    structuring: { label: "Structuring" },
+    integrating: { label: "Integrating" },
+    building:    { label: "Building" },
+    deploying:   { label: "Deploying" },
+    fixing:      { label: "Fixing" },
   }
 
-  useEffect(() => {
-    const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying"]
-    if (!displayable.includes(phase)) {
-      if (displayedPhase) {
-        setExiting(true)
-        const t = setTimeout(() => { setDisplayedPhase(null); setExiting(false) }, 350)
-        return () => clearTimeout(t)
-      }
-      return
-    }
+  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying", "fixing"]
+  if (!displayable.includes(phase)) return null
 
-    if (phase !== prevPhaseRef.current) {
-      if (prevPhaseRef.current && displayedPhase) {
-        // Slide old step out first
-        setExiting(true)
-        const t = setTimeout(() => {
-          setExiting(false)
-          setDisplayedPhase(phase)
-          prevPhaseRef.current = phase
-        }, 350)
-        return () => clearTimeout(t)
-      } else {
-        setDisplayedPhase(phase)
-        prevPhaseRef.current = phase
-      }
-    }
-  }, [phase, displayedPhase])
-
-  if (!displayedPhase) return null
-  const config = phaseConfig[displayedPhase]
+  const config = phaseConfig[phase]
   if (!config) return null
 
   return (
-    <div className="py-3">
-      <div className={cn("flex items-center gap-2.5", exiting ? "step-exit" : "step-enter")}>
-        <div className="h-7 w-7 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-zinc-400 shrink-0">
-          {config.icon}
+    <div className="py-2 sm:py-2.5 flex flex-col items-start">
+      <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-bl-md bg-white/[0.06] border border-white/[0.06] max-w-[88%] sm:max-w-[82%]">
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-1" />
+          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
+          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
         </div>
-        <span className={cn("text-sm text-zinc-400", !exiting && "step-typewriter")}>{config.label}</span>
+        <span className="text-xs text-zinc-500 ml-1">{config.label}</span>
       </div>
-      {displayedPhase === "building" && progress.total > 0 && !exiting && (
-        <div className="ml-9 mt-2 space-y-1.5 max-w-xs step-enter">
+      {phase === "building" && progress.total > 0 && (
+        <div className="mt-2 ml-1 space-y-1.5 max-w-xs">
           {currentFile && (
             <p className="text-xs text-zinc-500 font-mono truncate">{currentFile}</p>
           )}
@@ -482,53 +449,75 @@ const INTEGRATION_OPTIONS = [
   },
 ]
 
-const GeminiIcon = ({ className }: { className?: string }) => (
-    <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className={className}
-    >
-        <path
-            d="M12 2C13.5 6.5 17.5 10.5 22 12C17.5 13.5 13.5 17.5 12 22C10.5 17.5 6.5 13.5 2 12C6.5 10.5 10.5 6.5 12 2Z"
-            fill="url(#gemini-gradient)"
-        />
-        <defs>
-            <linearGradient id="gemini-gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#4facfe" />
-                <stop offset="50%" stopColor="#00f2fe" />
-                <stop offset="100%" stopColor="#4facfe" />
-            </linearGradient>
-        </defs>
-    </svg>
-)
-
-const GeminiBadge = () => (
-    <div className="absolute top-0 left-0 right-0 flex items-center justify-center animate-in fade-in zoom-in duration-700 delay-100 z-50 pt-6">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900 border border-zinc-800 shadow-sm transition-all hover:bg-zinc-800/80 cursor-default select-none">
-            <GeminiIcon className="h-4 w-4" />
-            <span className="text-xs font-medium text-zinc-300">State of the Art</span>
-            <Info className="h-3 w-3 text-zinc-600 ml-1" />
-        </div>
-    </div>
-)
+// Attachment limits for the AI prompt input.
+const ATTACHMENT_MAX_COUNT = 5
+const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 
 const InputBar = ({
   input, setInput, onSend, disabled,
   selectedModel, setSelectedModel,
+  attachments, setAttachments,
+  credits, bestCost, fastCost,
 }: {
   input: string; setInput: (v: string) => void; onSend: () => void; disabled: boolean
   selectedModel: ModelOption; setSelectedModel: (m: ModelOption) => void
+  attachments: File[]; setAttachments: React.Dispatch<React.SetStateAction<File[]>>
+  credits: number | null; bestCost: number; fastCost: number
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const selectedTier: ModelTier = tierOf(selectedModel)
+  const selectedCost = selectedTier === "best" ? bestCost : fastCost
+
+  // Group models into tiers for the chooser
+  const bestModels = MODELS.filter(m => tierOf(m) === "best")
+  const fastModels = MODELS.filter(m => tierOf(m) === "fast")
+
+  const insufficient = typeof credits === "number" && credits < selectedCost
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setAttachments(prev => {
+      const next = [...prev]
+      for (let i = 0; i < files.length && next.length < ATTACHMENT_MAX_COUNT; i++) {
+        const f = files[i]
+        if (f.size <= ATTACHMENT_MAX_BYTES) next.push(f)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
-      <Card
+      <div
         className={cn(
-          "frosted-input border-white/[0.08] bg-transparent shadow-none rounded-lg sm:rounded-xl transition-all duration-300",
+          "frosted-input rounded-2xl transition-all duration-300",
           disabled ? "opacity-70 pointer-events-none" : ""
         )}
       >
-        <div className="p-2 sm:p-3 flex flex-col gap-1.5">
+        <div className="p-2.5 sm:p-3 flex flex-col gap-1.5">
+          {/* Attachment chips (if any) */}
+          {attachments.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap px-0.5 pb-0.5">
+              {attachments.map((f, i) => (
+                <div
+                  key={i}
+                  className="h-6 pl-2 pr-1 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center gap-1.5 text-[11px] text-zinc-300 max-w-[180px]"
+                >
+                  <Paperclip className="h-3 w-3 text-zinc-500 shrink-0" />
+                  <span className="truncate">{f.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                    className="h-4 w-4 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-200 hover:bg-white/10 transition-colors"
+                    aria-label={`Remove ${f.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Multiline textarea */}
           <textarea
             value={input}
@@ -540,72 +529,142 @@ const InputBar = ({
             disabled={disabled}
             autoFocus={!disabled}
             className="text-sm sm:text-base text-zinc-200 placeholder:text-zinc-600 resize-none bg-transparent border-none outline-none px-2 pt-1 min-h-[36px] w-full"
-            style={{ 
+            style={{
               minHeight: '36px',
               maxHeight: '120px',
               overflow: 'auto'
             }}
           />
 
-          {/* Bottom row: model pill | send */}
-          <div className="flex items-center justify-between px-0.5">
-            <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Bottom row: attach | model pill | credits | send */}
+          <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-0.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-1">
+              {/* File attach (+) button */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  handleFiles(e.target.files)
+                  if (fileInputRef.current) fileInputRef.current.value = ""
+                }}
+              />
               <Button
-                onClick={() => {}}
-                className="h-8 w-8 sm:h-9 sm:w-9 text-zinc-500 hover:text-zinc-300 rounded-full p-0"
+                type="button"
+                variant="ghost"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach files"
+                title="Attach files"
                 disabled={disabled}
+                className="h-7 w-7 sm:h-8 sm:w-8 rounded-full p-0 text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.06] shrink-0"
               >
-                <span className="text-base sm:text-lg leading-none">+</span>
+                <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </Button>
 
+              {/* Model chooser */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
-                    variant="outline"
-                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-500 hover:text-zinc-300 border border-white/[0.06] px-2.5 sm:px-3 gap-1 sm:gap-1.5 min-w-0 rounded-full"
+                    variant="ghost"
+                    className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] px-2 sm:px-2.5 gap-1 sm:gap-1.5 min-w-0 rounded-full"
                     disabled={disabled}
                   >
-                    {selectedModel.fast
-                      ? <Zap className="h-3 w-3 text-yellow-500 shrink-0" />
-                      : <Sparkles className="h-3 w-3 text-zinc-600 shrink-0" />
+                    {selectedTier === "fast"
+                      ? <Zap className="h-3 w-3 text-yellow-400 shrink-0" />
+                      : <Gem className="h-3 w-3 text-violet-400 shrink-0" />
                     }
-                    <span className="max-w-[80px] sm:max-w-none truncate">{selectedModel.name}</span>
-                    <ChevronDown className="h-3 w-3 shrink-0 ml-auto" />
+                    <span className="max-w-[80px] sm:max-w-[140px] truncate">{selectedModel.name}</span>
+                    <span
+                      className={cn(
+                        "hidden sm:inline-flex items-center h-4 px-1.5 rounded-full text-[9px] font-bold uppercase tracking-wide tabular-nums",
+                        selectedTier === "fast"
+                          ? "bg-yellow-400/10 text-yellow-300"
+                          : "bg-violet-400/10 text-violet-300"
+                      )}
+                    >
+                      −{formatCredits(selectedCost)}/file
+                    </span>
+                    <ChevronDown className="h-3 w-3 shrink-0" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="bg-[#1c1c1c] border border-white/10 min-w-[220px] rounded-xl"
+                  className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
                 >
-                  {MODELS.map(m => (
-                    <DropdownMenuItem
-                      key={m.id}
-                      className={cn("text-xs", selectedModel.id === m.id ? "text-white bg-white/10" : "text-zinc-400")}
-                      onClick={() => {
-                        const model = MODELS.find(model => model.id === m.id)
-                        if (model) setSelectedModel(model)
-                      }}
-                    >
-                      {m.fast
-                        ? <Zap className="h-3 w-3 text-yellow-500 mr-2" />
-                        : <Sparkles className="h-3 w-3 text-zinc-600 mr-2" />
-                      }
-                      {m.name}
-                    </DropdownMenuItem>
-                  ))}
+                  {bestModels.length > 0 && (
+                    <>
+                      <div className="px-2 pt-1.5 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
+                        <Gem className="h-3 w-3" />
+                        Best
+                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">
+                          −{formatCredits(bestCost)}/file
+                        </span>
+                      </div>
+                      {bestModels.map(m => (
+                        <ModelRow
+                          key={m.id}
+                          model={m}
+                          selected={selectedModel.id === m.id}
+                          onSelect={() => setSelectedModel(m)}
+                          tier="best"
+                        />
+                      ))}
+                    </>
+                  )}
+                  {fastModels.length > 0 && (
+                    <>
+                      <div className="px-2 pt-2 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-yellow-300/80">
+                        <Zap className="h-3 w-3" />
+                        Fast
+                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">
+                          −{formatCredits(fastCost)}/file
+                        </span>
+                      </div>
+                      {fastModels.map(m => (
+                        <ModelRow
+                          key={m.id}
+                          model={m}
+                          selected={selectedModel.id === m.id}
+                          onSelect={() => setSelectedModel(m)}
+                          tier="fast"
+                        />
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
 
+            {/* Credits chip */}
+            {credits !== null && (
+              <div
+                className={cn(
+                  "hidden sm:inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold tabular-nums shrink-0",
+                  insufficient ? "bg-rose-500/10 text-rose-300" : "bg-white/[0.04] text-zinc-400"
+                )}
+                title={`${formatCredits(credits)} credits remaining`}
+              >
+                <Coins className="h-3 w-3" />
+                {formatCredits(credits)}
+              </div>
+            )}
+
             <Button
               onClick={onSend}
+              aria-label={
+                insufficient
+                  ? "Send disabled — not enough credits for this model"
+                  : "Send message"
+              }
               className={cn(
-                "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded p-0",
-                input.trim() && !disabled
-                  ? "bg-zinc-700 text-white hover:bg-zinc-600"
+                "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0",
+                input.trim() && !disabled && !insufficient
+                  ? "bg-white text-black hover:bg-zinc-200"
                   : "bg-zinc-800/50 text-zinc-700"
               )}
-              disabled={!input.trim() || disabled}
+              disabled={!input.trim() || disabled || insufficient}
+              title={insufficient ? "Not enough credits for this model" : undefined}
             >
               {disabled
                 ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-zinc-700" />
@@ -614,10 +673,39 @@ const InputBar = ({
             </Button>
           </div>
         </div>
-      </Card>
+      </div>
     </div>
   )
 }
+
+/** Single model row inside the model-chooser dropdown. */
+const ModelRow = ({
+  model,
+  selected,
+  onSelect,
+  tier,
+}: {
+  model: ModelOption
+  selected: boolean
+  onSelect: () => void
+  tier: ModelTier
+}) => (
+  <DropdownMenuItem
+    onClick={onSelect}
+    className={cn(
+      "text-xs rounded-lg px-2 py-1.5 flex items-center gap-2",
+      selected ? "text-white bg-white/[0.08]" : "text-zinc-300 hover:bg-white/[0.04]"
+    )}
+  >
+    {tier === "fast"
+      ? <Zap className="h-3 w-3 text-yellow-400 shrink-0" />
+      : <Gem className="h-3 w-3 text-violet-400 shrink-0" />
+    }
+    <span className="flex-1 min-w-0 truncate">{model.name}</span>
+    <span className="text-[10px] text-zinc-500 shrink-0">{model.provider}</span>
+    {selected && <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />}
+  </DropdownMenuItem>
+)
 
 // ThinkingCard, ProgressCard, SavingCard replaced by StepIndicator above
 
@@ -789,6 +877,34 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const [instruction, setInstruction] = useState<string>("")
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
+
+  // Attachments staged for the current prompt (file metadata is included in the
+  // user-visible message; full upload/processing is handled by the backend).
+  const [attachments, setAttachments] = useState<File[]>([])
+
+  // User credit balance (fetched lazily; null until first fetch returns).
+  const [credits, setCredits] = useState<number | null>(null)
+  const [bestCost, setBestCost] = useState<number>(BEST_COST_PER_FILE)
+  const [fastCost, setFastCost] = useState<number>(FAST_COST_PER_FILE)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadCredits = async () => {
+      try {
+        const res = await fetch("/api/user/credits")
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (cancelled) return
+        if (typeof data?.credits === "number") setCredits(data.credits)
+        if (typeof data?.bestCost === "number") setBestCost(data.bestCost)
+        if (typeof data?.fastCost === "number") setFastCost(data.fastCost)
+      } catch {
+        // Silent fail — credits chip simply stays hidden.
+      }
+    }
+    loadCredits()
+    return () => { cancelled = true }
+  }, [])
 
   const [fixHistory, setFixHistory] = useState<any[]>([])
 
@@ -1089,13 +1205,23 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const startGeneration = async () => {
     if (!input.trim()) return
 
+    // Attachment filenames are appended to the user-visible prompt as plain
+    // text metadata so downstream plan-generation/model endpoints are aware
+    // of them. Full file upload / processing is handled server-side when
+    // the backend chooses to consume this metadata — the raw File objects
+    // themselves are not shipped with this request.
+    const attachmentNote = attachments.length > 0
+      ? `\n\n[Attached files: ${attachments.map(f => f.name).join(", ")}]`
+      : ""
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: input + attachmentNote,
     }
 
     setMessages(prev => [...prev, userMessage])
+    setAttachments([])
     setError(null)
     setAutoDeployTriggered(false)
     setSitemap([])
@@ -1383,8 +1509,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 {/* IDLE STATE */}
                 {step === 'idle' && (
                     <div className="flex-1 flex flex-col items-center justify-center text-center py-16 sm:py-20 animate-in fade-in slide-in-from-bottom-8 duration-700 relative">
-                        <GeminiBadge />
-                        <div className="mt-4 space-y-1">
+                        <div className="space-y-1">
                             <h1 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-white">
                                 Hi {userName},
                             </h1>
@@ -1412,21 +1537,16 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                 >
                                     {msg.role === 'user' ? (
                                         <>
-                                            <Card
-                                                className="bg-white/[0.08] border-none shadow-none max-w-[88%] sm:max-w-[82%] rounded"
-                                            >
-                                                <div className="px-3 sm:px-4 py-2 sm:py-2.5">
-                                                    <p className="text-xs sm:text-sm leading-relaxed text-zinc-200">{msg.content}</p>
-                                                </div>
-                                            </Card>
-                                            <p className="text-[10px] sm:text-[11px] text-zinc-600 mt-1.5 pr-1">
-                                                {new Date(parseInt(msg.id) || Date.now()).toISOString().split('T')[0].replace(/-/g, '.')}
-                                            </p>
+                                            <div className="max-w-[88%] sm:max-w-[82%] px-4 py-2.5 rounded-2xl rounded-br-md bg-white/[0.10] backdrop-blur-sm">
+                                                <p className="text-sm leading-relaxed text-zinc-100">{msg.content}</p>
+                                            </div>
                                         </>
                                     ) : (
                                         <>
-                                            <p className="text-sm leading-relaxed max-w-[88%] sm:max-w-[82%] text-zinc-400">{msg.content}</p>
-                                            <div className="flex items-center gap-2 mt-1.5">
+                                            <div className="max-w-[88%] sm:max-w-[82%] px-4 py-2.5 rounded-2xl rounded-bl-md bg-white/[0.06] border border-white/[0.06]">
+                                                <p className="text-sm leading-relaxed text-zinc-300">{msg.content}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1.5 ml-1">
                                                 <Button
                                                     onClick={() => giveFeedback(msg.id, 'like')}
                                                     title="Like"
@@ -1544,6 +1664,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 disabled={step !== 'idle' && step !== 'clarifying'}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
+                attachments={attachments}
+                setAttachments={setAttachments}
+                credits={credits}
+                bestCost={bestCost}
+                fastCost={fastCost}
             />
         </div>
     </div>

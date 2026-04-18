@@ -48,10 +48,13 @@ export default function CreateProjectPage() {
   const [formData, setFormData] = useState({
     websiteType: "",
     businessName: "",
+    profileImage: "",
     previouslyManaged: "",
     selectedStyle: "modern",
     status: "pending",
   })
+  const [iconError, setIconError] = useState<string | null>(null)
+  const iconInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -139,10 +142,38 @@ export default function CreateProjectPage() {
     setCurrentStep(3)
   }
 
+  const handleIconFile = (file: File | null) => {
+    setIconError(null)
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      setIconError("Please choose an image file.")
+      return
+    }
+    // Limit to 2MB to keep payload reasonable for the project document
+    if (file.size > 2 * 1024 * 1024) {
+      setIconError("Image is too large. Max size is 2MB.")
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setFormData((prev) => ({ ...prev, profileImage: reader.result as string }))
+    }
+    reader.onerror = () => setIconError("Failed to read file. Please try another image.")
+    reader.readAsDataURL(file)
+  }
+
+  const handleIconSubmit = () => {
+    if (!formData.profileImage) {
+      setIconError("An icon is required to continue.")
+      return
+    }
+    setCurrentStep(4)
+  }
+
   const handleExperienceSelect = (optionId: string) => {
     setFormData({ ...formData, previouslyManaged: optionId })
     setTimeout(() => {
-      setCurrentStep(4)
+      setCurrentStep(5)
       handleSubmit()
     }, 350)
   }
@@ -168,6 +199,7 @@ export default function CreateProjectPage() {
         body: JSON.stringify({
           businessName: formData.businessName,
           websiteType: formData.websiteType,
+          profileImage: formData.profileImage,
           domain: null,
           subdomain: subdomain,
           theme: formData.selectedStyle,
@@ -202,7 +234,7 @@ export default function CreateProjectPage() {
       console.error("Project creation error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create project")
       setIsLoading(false)
-      setCurrentStep(3)
+      setCurrentStep(4)
     }
   }
 
@@ -381,6 +413,68 @@ export default function CreateProjectPage() {
         return (
           <div className="flex flex-col h-full">
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight mb-4">
+              Upload an icon
+              <br />
+              for your project
+            </h1>
+            <p className="text-sm text-white/40 mb-10 md:mb-16">
+              This icon represents your site in the dashboard and before your domain
+            </p>
+
+            <div className="flex-1 flex flex-col items-center justify-center -mt-10">
+              <button
+                type="button"
+                onClick={() => iconInputRef.current?.click()}
+                className="group relative h-32 w-32 sm:h-40 sm:w-40 rounded-3xl overflow-hidden bg-white/[0.07] hover:bg-white/10 transition-all duration-300 flex items-center justify-center"
+                aria-label="Upload icon"
+              >
+                {formData.profileImage ? (
+                  <img
+                    src={formData.profileImage}
+                    alt="Project icon"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon className="h-10 w-10 text-white/40 group-hover:text-white/60 transition-colors" />
+                )}
+              </button>
+              <input
+                ref={iconInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleIconFile(e.target.files?.[0] || null)}
+              />
+
+              <button
+                type="button"
+                onClick={() => iconInputRef.current?.click()}
+                className="mt-5 text-xs text-white/40 hover:text-white/70 transition-colors"
+              >
+                {formData.profileImage ? "Change icon" : "Choose an image"}
+              </button>
+
+              {iconError && (
+                <p className="mt-3 text-xs text-red-400/80">{iconError}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleIconSubmit}
+                disabled={!formData.profileImage}
+                className="mt-10 px-8 py-3 rounded-xl text-sm font-medium bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10 transition-all duration-300 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                Continue
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )
+
+      case 4:
+        return (
+          <div className="flex flex-col h-full">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight mb-4">
               Have you previously
               <br />
               managed a website?
@@ -414,7 +508,7 @@ export default function CreateProjectPage() {
           </div>
         )
 
-      case 4:
+      case 5:
         return (
           <div className="flex flex-col items-center justify-center h-full text-center">
             {isLoading && !isSubmitted ? (
@@ -466,7 +560,7 @@ export default function CreateProjectPage() {
                   There was an issue creating your project. Please try again.
                 </p>
                 <button
-                  onClick={() => setCurrentStep(3)}
+                  onClick={() => setCurrentStep(4)}
                   className="px-8 py-3 rounded-xl text-sm font-medium bg-white text-black hover:bg-white/90 transition-all"
                 >
                   Go back
@@ -490,7 +584,7 @@ export default function CreateProjectPage() {
       {/* Main content */}
       <div className="relative h-full flex flex-col">
         {/* Top bar - minimal, just back button */}
-        {currentStep < 4 && (
+        {currentStep < 5 && (
           <div className="flex items-center px-6 sm:px-10 py-6">
             <button
               onClick={() => {

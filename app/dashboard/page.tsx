@@ -21,12 +21,16 @@ import { WebsitePreviewCard } from "@/components/website-preview-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
+// Maximum number of projects a user can have on the free plan.
+const MAX_FREE_PROJECTS = 3
+
 function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [projects, setProjects] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
   const [deletingDeployments, setDeletingDeployments] = useState<Set<string>>(new Set())
   const [flaggedDeployments, setFlaggedDeployments] = useState<Set<string>>(new Set())
   const [debugError, setDebugError] = useState<string | null>(null)
@@ -271,12 +275,14 @@ function DashboardContent() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Keresés a webhelyek között..."
                   className="w-full pl-10 pr-4 py-3 border border-input rounded-xl bg-background/50 backdrop-blur-sm text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
                 />
               </div>
               <div className="px-4 py-3 border border-input rounded-xl bg-muted/50 backdrop-blur-sm text-sm font-medium whitespace-nowrap">
-                {projects.length}/3
+                {projects.length}/{MAX_FREE_PROJECTS}
               </div>
             </div>
           </div>
@@ -302,41 +308,90 @@ function DashboardContent() {
                 </Button>
               </div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
-              {projects.map((project: any) => (
-                <div
-                  key={project._id}
-                  className="group relative border border-border/50 bg-card/30 backdrop-blur-sm rounded-xl overflow-hidden flex flex-col hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
-                >
-                  {((project.domain && project.deploymentId) || (project.pages && project.pages.some((p: any) => p.name === 'index.html'))) ? (
-                    <WebsitePreviewCard
-                      domain={project.cloudflareUrl || project.domain || "example.com"}
-                      isLive={!!project.deploymentId && !flaggedDeployments.has(project.deploymentId)}
-                      deploymentId={project.deploymentId}
-                      projectId={project._id}
-                      businessName={project.businessName}
-                      createdAt={project.createdAt}
-                      style={project.style || "default"}
-                      fallbackHtml={project.pages?.find((p: any) => p.name === 'index.html')?.content}
-                      onDelete={() => handleDeleteProject(project._id)}
-                    />
-                  ) : (
-                    <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors">
-                      <div className="h-16 w-16 rounded-full bg-background/50 flex items-center justify-center mb-4 shadow-sm border border-border/50">
-                        <LayoutTemplate className="h-8 w-8 text-muted-foreground/50" />
-                      </div>
-                      <h3 className="font-medium text-foreground mb-1">{project.businessName}</h3>
-                      <p className="text-xs text-muted-foreground mb-4">Még nincs publikálva</p>
-                      <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/sites/${project._id}`)}>
-                        Szerkesztés
-                      </Button>
+          ) : (() => {
+            const q = searchQuery.trim().toLowerCase()
+            const filtered = q
+              ? projects.filter((p: any) => {
+                  const name = (p.businessName || "").toLowerCase()
+                  const domain = (p.cloudflareUrl || p.domain || "").toLowerCase()
+                  return name.includes(q) || domain.includes(q)
+                })
+              : projects
+            const canCreateMore = projects.length < MAX_FREE_PROJECTS
+
+            if (q && filtered.length === 0) {
+              return (
+                <div className="border border-dashed border-border rounded-lg p-12 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                      <Search className="h-5 w-5 text-muted-foreground" />
                     </div>
-                  )}
+                    <h3 className="text-base font-semibold text-foreground mb-1">Nincs találat</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Nincs &quot;{searchQuery}&quot; nevű projekt.
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              )
+            }
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                {/* Inline "Create new" tile — only when under quota and not actively searching */}
+                {canCreateMore && !q && (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard/create")}
+                    className="group relative h-64 sm:h-80 md:h-96 border border-dashed border-border/60 hover:border-primary/50 rounded-xl flex flex-col items-center justify-center p-6 text-center bg-card/10 hover:bg-card/30 transition-all duration-300"
+                    aria-label="Új projekt létrehozása"
+                  >
+                    <div className="h-14 w-14 rounded-full bg-background/70 border border-border/50 flex items-center justify-center mb-4 group-hover:border-primary/40 group-hover:bg-primary/10 transition-all">
+                      <Plus className="h-6 w-6 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
+                    <h3 className="font-semibold text-foreground mb-1">Új Projekt</h3>
+                    <p className="text-xs text-muted-foreground max-w-[240px]">
+                      Hozzon létre egy új webhelyet pár kattintással
+                    </p>
+                    <span className="mt-3 text-[11px] text-muted-foreground/70 tabular-nums">
+                      {projects.length}/{MAX_FREE_PROJECTS} használatban
+                    </span>
+                  </button>
+                )}
+
+                {filtered.map((project: any) => (
+                  <div
+                    key={project._id}
+                    className="group relative border border-border/50 bg-card/30 backdrop-blur-sm rounded-xl overflow-hidden flex flex-col hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+                  >
+                    {((project.domain && project.deploymentId) || (project.pages && project.pages.some((p: any) => p.name === 'index.html'))) ? (
+                      <WebsitePreviewCard
+                        domain={project.cloudflareUrl || project.domain || "example.com"}
+                        isLive={!!project.deploymentId && !flaggedDeployments.has(project.deploymentId)}
+                        deploymentId={project.deploymentId}
+                        projectId={project._id}
+                        businessName={project.businessName}
+                        createdAt={project.createdAt}
+                        style={project.style || "default"}
+                        fallbackHtml={project.pages?.find((p: any) => p.name === 'index.html')?.content}
+                        onDelete={() => handleDeleteProject(project._id)}
+                      />
+                    ) : (
+                      <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors">
+                        <div className="h-16 w-16 rounded-full bg-background/50 flex items-center justify-center mb-4 shadow-sm border border-border/50">
+                          <LayoutTemplate className="h-8 w-8 text-muted-foreground/50" />
+                        </div>
+                        <h3 className="font-medium text-foreground mb-1">{project.businessName}</h3>
+                        <p className="text-xs text-muted-foreground mb-4">Még nincs publikálva</p>
+                        <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/sites/${project._id}`)}>
+                          Szerkesztés
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </main>
       </div>
 

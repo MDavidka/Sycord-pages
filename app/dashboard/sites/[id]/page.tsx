@@ -60,6 +60,14 @@ import {
   ChevronDown,
   Shield,
   Search,
+  Send,
+  AlertTriangle,
+  MoreHorizontal,
+  ArrowUpRight,
+  Copy,
+  Check,
+  Clock,
+  TrendingDown,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -326,6 +334,13 @@ const PLAN_CREDITS: Record<string, number> = {
 }
 const DEFAULT_PLAN_CREDIT = 2
 
+// Visit-dropdown pill colors. Kept as constants so the "live" and "preview"
+// accents remain consistent if the overview visit dropdown is reused/extended.
+const VISIT_PILL_LIVE_BG = "#1f7a3a"
+const VISIT_PILL_LIVE_SHADOW = "0 2px 10px rgba(31,122,58,0.35)"
+const VISIT_PILL_PREVIEW_BG = "#a37a34"
+const VISIT_PILL_PREVIEW_SHADOW = "0 2px 10px rgba(163,122,52,0.3)"
+
 // Fallback TLD options (replaced by real Cloudflare API prices when available)
 const FALLBACK_TLD_OPTIONS = [
   { tld: ".com", price: 10.44 },
@@ -564,6 +579,11 @@ export default function SiteSettingsPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDesktopSidebarExpanded, setIsDesktopSidebarExpanded] = useState(false)
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop")
+  const [copiedDomain, setCopiedDomain] = useState(false)
+  const copyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+  }, [])
   const { data: session } = useSession()
 
   // Subscription / plan
@@ -615,6 +635,7 @@ export default function SiteSettingsPage() {
   // Settings State
   const [shopName, setShopName] = useState("")
   const [profileImage, setProfileImage] = useState("")
+  const [logoLoadError, setLogoLoadError] = useState(false)
 
   // AI Generated Pages State (Lifted)
   const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([])
@@ -652,6 +673,9 @@ export default function SiteSettingsPage() {
   const [domainChecks, setDomainChecks] = useState<Record<string, { available: boolean | null; purchaseUrl: string; loading: boolean }>>({})
   const [isDomainCheckLoading, setIsDomainCheckLoading] = useState(false)
   const [tldPricesLoaded, setTldPricesLoaded] = useState(false)
+
+  // Overview mini AI chat state
+  const [overviewChatInput, setOverviewChatInput] = useState("")
 
   // Fetch real TLD prices from Cloudflare (via our API)
   const fetchTldPrices = async () => {
@@ -773,6 +797,8 @@ export default function SiteSettingsPage() {
             if (data.message) throw new Error(data.message)
             setProject(data)
             setShopName(data.businessName || "")
+            setProfileImage(data.profileImage || "")
+            setLogoLoadError(false) // Reset error state when loading new data
             if (data.firebaseConnected) setDatabaseConnected(true)
 
             if (data.pages && Array.isArray(data.pages)) {
@@ -862,6 +888,11 @@ export default function SiteSettingsPage() {
     }
   }, [activeTab])
 
+  // Reset logo load error when profile image changes
+  useEffect(() => {
+    setLogoLoadError(false)
+  }, [profileImage])
+
   const handleStyleSelect = (style: string) => {
     console.log("[v0] Selected style:", style)
     setSelectedStyle(style)
@@ -892,20 +923,18 @@ export default function SiteSettingsPage() {
     setSaveSuccess(false)
 
     try {
-      // Update project details if business name changed
+      // Update project details if business name or profile image changed
       let projectUpdateNeeded = false
       const updatedProjectData = { ...project }
       if (project?.businessName !== shopName) {
         updatedProjectData.businessName = shopName
         projectUpdateNeeded = true
       }
-
-      if (profileImage && !profileImage.startsWith("http") && !profileImage.startsWith("data:image")) {
-        console.warn("Image upload not fully implemented in this example. Placeholder logic used.")
-        if (profileImage.startsWith("data:image")) {
-          updatedProjectData.profileImage = profileImage
-          projectUpdateNeeded = true
-        }
+      
+      // Update profile image if changed
+      if (project?.profileImage !== profileImage) {
+        updatedProjectData.profileImage = profileImage
+        projectUpdateNeeded = true
       }
 
       if (projectUpdateNeeded) {
@@ -1257,7 +1286,7 @@ export default function SiteSettingsPage() {
   return (
     <div 
       className="flex h-[100dvh] overflow-hidden relative"
-      style={{ backgroundColor: "#121212" }}
+      style={{ backgroundColor: "#18191B" }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -1286,14 +1315,33 @@ export default function SiteSettingsPage() {
         />
       </aside>
 
-      {/* Main Content — curved left edge rolls over the sidebar */}
-      <div
-        className="flex-1 flex flex-col min-w-0 relative z-10"
+      {/* Mobile Sidebar — sits behind main content, revealed when content slides right
+           z-index stacking: sidebar container z-0 < main content z-10 < close overlay z-[60] */}
+      <div className="md:hidden absolute inset-y-0 left-0 z-0" style={{ width: "70%" }}>
+        <AnimatedRollingSidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          project={project}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          navGroups={navGroups}
+          getWebsiteIcon={getWebsiteIcon}
+          databaseConnected={databaseConnected}
+          session={session}
+          subscription={subscription}
+          planCredit={planCredit}
+          userInitials={userInitials}
+          onManageAccess={() => { setIsSidebarOpen(false); setIsManageAccessOpen(true) }}
+        />
+      </div>
+
+      {/* Main Content — slides right on mobile to reveal sidebar */}
+      <motion.div
+        className={cn("flex-1 flex flex-col min-w-0 relative z-10 main-content-panel", isSidebarOpen && "sidebar-open")}
+        animate={{ x: isSidebarOpen ? "70%" : 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.9 }}
         style={{
-          backgroundColor: "#0a0a0a",
-          borderTopLeftRadius: 28,
-          borderBottomLeftRadius: 28,
-          boxShadow: "-8px 0 32px rgba(0,0,0,0.7)",
+          backgroundColor: "#18191B",
           overflow: "hidden",
         }}
       >
@@ -1355,24 +1403,13 @@ export default function SiteSettingsPage() {
           </div>
         </header>
 
-        {/* Mobile Rolling Sidebar with layered animation */}
-        <div className="md:hidden">
-          <AnimatedRollingSidebar
-            isOpen={isSidebarOpen}
-            onClose={() => setIsSidebarOpen(false)}
-            project={project}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            navGroups={navGroups}
-            getWebsiteIcon={getWebsiteIcon}
-            databaseConnected={databaseConnected}
-            session={session}
-            subscription={subscription}
-            planCredit={planCredit}
-            userInitials={userInitials}
-            onManageAccess={() => { setIsSidebarOpen(false); setIsManageAccessOpen(true) }}
+        {/* Tap overlay to close sidebar on mobile */}
+        {isSidebarOpen && (
+          <div
+            className="absolute inset-0 z-[60] md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
           />
-        </div>
+        )}
 
         {/* Manage Access — sycord connect dialog */}
         <AnimatePresence>
@@ -1489,30 +1526,104 @@ export default function SiteSettingsPage() {
 
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
-              return (
-                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              const recentChanges = generatedPages
+                .slice()
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+              const visibleChanges = recentChanges.slice(0, 4)
 
-                    {/* PRIMARY PREVIEW CARD (4:3) */}
+              const authorName =
+                (session?.user?.name as string | undefined) ||
+                (session?.user?.email as string | undefined)?.split("@")[0] ||
+                "you"
+              const authorInitial = authorName.charAt(0).toUpperCase()
+              const authorImage = (session?.user?.image as string | undefined) || undefined
+
+              // Relative time formatter (e.g., "2h ago", "yesterday", "3d ago")
+              const relTime = (ts?: number) => {
+                if (!ts) return ""
+                const diff = Date.now() - ts
+                const mins = Math.floor(diff / 60000)
+                if (mins < 1) return "just now"
+                if (mins < 60) return `${mins}m ago`
+                const hrs = Math.floor(mins / 60)
+                if (hrs < 24) return `${hrs}h ago`
+                const days = Math.floor(hrs / 24)
+                if (days === 1) return "yesterday"
+                if (days < 7) return `${days}d ago`
+                const weeks = Math.floor(days / 7)
+                if (weeks < 4) return `${weeks}w ago`
+                const d = new Date(ts)
+                return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(2)}`
+              }
+
+              // Visitor stats — 7-day sparkline
+              const visitorCount = (project as any)?.visitorCount7d ?? 10
+              const sparkPoints: number[] = (project as any)?.visitorTrend7d || [4, 5, 4, 6, 7, 9, 10]
+              const sparkMax = Math.max(...sparkPoints, 1)
+              const sparkMin = Math.min(...sparkPoints, 0)
+              const sparkW = 260
+              const sparkH = 80
+              const sparkPathPoints = sparkPoints.map((v, i) => {
+                const x = (i / (sparkPoints.length - 1)) * sparkW
+                const range = Math.max(sparkMax - sparkMin, 1)
+                const y = sparkH - ((v - sparkMin) / range) * (sparkH - 12) - 6
+                return { x, y }
+              })
+              const sparkLine = sparkPathPoints
+                .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+                .join(" ")
+              const sparkArea = `${sparkLine} L${sparkW},${sparkH} L0,${sparkH} Z`
+
+              // Week-over-week delta — treat "0 baseline" as a "new" pill instead of false 100%
+              const firstHalf = sparkPoints.slice(0, Math.floor(sparkPoints.length / 2))
+              const secondHalf = sparkPoints.slice(Math.floor(sparkPoints.length / 2))
+              const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
+              const firstAvg = avg(firstHalf)
+              const secondAvg = avg(secondHalf)
+              const deltaPct = firstAvg === 0 ? null : Math.round(((secondAvg - firstAvg) / firstAvg) * 100)
+              const isUp = deltaPct === null ? secondAvg > 0 : deltaPct >= 0
+
+              const pagesCount = generatedPages.length
+              const lastUpdateTs = recentChanges[0]?.timestamp
+
+              const copyDomain = async () => {
+                if (!displayUrl) return
+                try {
+                  await navigator.clipboard.writeText(displayUrl)
+                  setCopiedDomain(true)
+                  if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current)
+                  copyTimeoutRef.current = setTimeout(() => setCopiedDomain(false), 1800)
+                } catch { /* ignore */ }
+              }
+
+              return (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-6 lg:space-y-7">
+
+                  {/* ── ROW 1: Preview (left) + Domain info & buttons (right, only on lg) ── */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+
+                    {/* Preview box */}
                     <div
-                      className="relative w-full overflow-hidden rounded-[20px]"
-                      style={{ background: "#252527", aspectRatio: "4/3", border: "1px solid rgba(255,255,255,0.08)" }}
+                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px] group/preview"
+                      style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
-                      {/* Live iframe preview */}
                       {previewUrl ? (
                         <iframe
                           src={previewUrl}
                           title={`Preview of ${displayUrl}`}
-                          className="absolute inset-0 w-[1440px] h-[1080px] border-0 origin-top-left pointer-events-none select-none"
-                          style={{ transform: "scale(0.28)" }}
+                          className="absolute inset-0 w-[1440px] h-[900px] border-0 origin-top-left pointer-events-none select-none"
                           sandbox="allow-same-origin allow-scripts allow-forms"
                           tabIndex={-1}
+                          ref={(el) => {
+                            if (el && el.parentElement) {
+                              const scale = el.parentElement.offsetWidth / 1440
+                              el.style.transform = `scale(${scale})`
+                            }
+                          }}
                         />
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                          <div
-                            className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                            style={{ background: "#2e2e30" }}
-                          >
+                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "#2e2e30" }}>
                             <Globe className="h-6 w-6 text-zinc-500" />
                           </div>
                           <p className="text-sm font-semibold text-zinc-300">No deployment yet</p>
@@ -1527,6 +1638,20 @@ export default function SiteSettingsPage() {
                         style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(28,28,30,0.7) 100%)" }}
                       />
 
+                      {/* Open-in-new hover affordance */}
+                      {previewUrl && (
+                        <button
+                          type="button"
+                          onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                          className="absolute top-3 right-3 h-9 w-9 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-md text-zinc-100 opacity-0 group-hover/preview:opacity-100 transition-all hover:scale-110 hover:bg-black/70 z-10"
+                          style={{ border: "1px solid rgba(255,255,255,0.15)" }}
+                          aria-label="Open site in new tab"
+                          title="Open site"
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </button>
+                      )}
+
                       {/* "Your site is now live!" banner */}
                       {previewUrl && (
                         <div className="absolute bottom-0 left-0" style={{ zIndex: 10 }}>
@@ -1534,17 +1659,14 @@ export default function SiteSettingsPage() {
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: "6px",
-                              padding: "10px 16px",
-                              borderTopRightRadius: "18px",
+                              gap: "8px",
+                              padding: "12px 20px",
+                              borderTopRightRadius: "22px",
                               background: "#22a846",
                             }}
                           >
-                            <CheckCircle2
-                              aria-hidden="true"
-                              style={{ width: "13px", height: "13px", color: "rgba(255,255,255,0.85)", flexShrink: 0 }}
-                            />
-                            <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#ffffff", lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                            <CheckCircle2 aria-hidden="true" style={{ width: "15px", height: "15px", color: "rgba(255,255,255,0.95)", flexShrink: 0 }} />
+                            <span style={{ fontSize: "14px", fontWeight: 700, color: "#ffffff", lineHeight: 1.2, whiteSpace: "nowrap" }}>
                               Your site is now live!
                             </span>
                           </div>
@@ -1552,82 +1674,342 @@ export default function SiteSettingsPage() {
                       )}
                     </div>
 
-                    {/* DOMAIN ROW */}
-                    <div className="flex items-center gap-3 px-1 py-1">
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                        style={{ background: "#2e2e30" }}
-                      >
-                        <Globe className="h-4 w-4 text-zinc-500" />
+                    {/* Domain + buttons */}
+                    <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-5">
+                      {/* Project profile row: [logo] domain  +  [visit ▾] */}
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        {/* Logo / status square (subtly pulses when live) */}
+                        <div className="relative shrink-0">
+                          <div
+                            className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center overflow-hidden"
+                            role="status"
+                            aria-label={previewUrl ? "Site is live" : "Site not deployed"}
+                          >
+                            {profileImage && !logoLoadError ? (
+                              <img
+                                src={profileImage}
+                                alt="Site logo"
+                                className="w-full h-full object-cover"
+                                onError={() => setLogoLoadError(true)}
+                              />
+                            ) : null}
+                          </div>
+                          {previewUrl && (
+                            <span
+                              aria-hidden="true"
+                              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#1C1C1E]"
+                            />
+                          )}
+                        </div>
+
+                        {/* Domain name (copyable) */}
+                        <button
+                          type="button"
+                          onClick={copyDomain}
+                          disabled={!displayUrl}
+                          className="group/dom flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 text-left disabled:cursor-default"
+                          title={displayUrl ? "Click to copy" : undefined}
+                        >
+                          <h2 className="text-[18px] sm:text-[22px] lg:text-[26px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
+                            {displayUrl || "Not deployed"}
+                          </h2>
+                          {displayUrl && (
+                            <span
+                              className={cn(
+                                "shrink-0 h-6 w-6 sm:h-7 sm:w-7 rounded-lg flex items-center justify-center transition-all",
+                                copiedDomain
+                                  ? "bg-emerald-500/20 text-emerald-400"
+                                  : "text-zinc-500 opacity-70 sm:opacity-0 sm:group-hover/dom:opacity-100 hover:bg-white/[0.06] hover:text-zinc-200"
+                              )}
+                              aria-hidden="true"
+                            >
+                              {copiedDomain ? <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Visit dropdown (trigger) — opens a scrollable panel with live + preview pills */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              disabled={!previewUrl}
+                              aria-label="Open visit options"
+                              className="group/visit shrink-0 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-2.5 sm:pr-3 rounded-full flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
+                            >
+                              <span>visit</span>
+                              <ChevronDown className="h-4 w-4 sm:h-[18px] sm:w-[18px] text-zinc-400 transition-transform group-data-[state=open]/visit:rotate-180" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            sideOffset={8}
+                            className="bg-[#1c1c1c] border border-white/[0.08] rounded-2xl p-1.5 min-w-[180px] max-h-[260px] overflow-y-auto custom-scrollbar"
+                          >
+                            {/* live */}
+                            <DropdownMenuItem
+                              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                              disabled={!previewUrl}
+                              className="rounded-full p-0 focus:bg-transparent data-[highlighted]:bg-transparent"
+                            >
+                              <div
+                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ background: VISIT_PILL_LIVE_BG, boxShadow: VISIT_PILL_LIVE_SHADOW }}
+                              >
+                                <ArrowUpRight className="h-4 w-4" />
+                                <span>live</span>
+                              </div>
+                            </DropdownMenuItem>
+                            {/* preview */}
+                            <DropdownMenuItem
+                              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                              disabled={!previewUrl}
+                              className="rounded-full p-0 mt-1.5 focus:bg-transparent data-[highlighted]:bg-transparent"
+                            >
+                              <div
+                                className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                style={{ background: VISIT_PILL_PREVIEW_BG, boxShadow: VISIT_PILL_PREVIEW_SHADOW }}
+                              >
+                                <ArrowUpRight className="h-4 w-4" />
+                                <span>preview</span>
+                              </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
-                      <span className="flex-1 text-[14px] font-semibold text-zinc-100 truncate min-w-0">
-                        {displayUrl || "Not deployed"}
-                      </span>
-                      <button
-                        onClick={() => previewUrl && window.open(previewUrl, "_blank")}
-                        disabled={!previewUrl}
-                        className="h-9 px-5 rounded-full text-[12px] font-semibold text-white shrink-0 transition-opacity hover:opacity-85 active:opacity-70 disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ background: "#2e2e30" }}
-                      >
-                        Visit Site
-                      </button>
+
+                      {/* Secondary quick-actions: Changes + Settings */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="group/qa h-9 sm:h-10 px-3.5 sm:px-4 rounded-full flex items-center gap-2 text-[12px] sm:text-[13px] font-semibold text-zinc-300 hover:text-zinc-100 transition-all hover:bg-white/[0.04] active:scale-[0.97]"
+                          style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                        >
+                          <History className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-zinc-400 group-hover/qa:text-zinc-200 transition-colors" />
+                          <span>Changes</span>
+                          {generatedPages.length > 0 && (
+                            <span className="min-w-[18px] h-[18px] px-1.5 rounded-full flex items-center justify-center text-[10px] font-bold tabular-nums bg-white/[0.08] text-zinc-300">
+                              {generatedPages.length}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("settings")}
+                          className="group/qa h-9 sm:h-10 px-3.5 sm:px-4 rounded-full flex items-center gap-2 text-[12px] sm:text-[13px] font-semibold text-zinc-300 hover:text-zinc-100 transition-all hover:bg-white/[0.04] active:scale-[0.97]"
+                          style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                        >
+                          <Settings className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-zinc-400 group-hover/qa:text-zinc-200 transition-colors" />
+                          <span>Settings</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── ROW 2: Stat cards ── */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5 pt-2">
+
+                    {/* Visitors card with sparkline + delta */}
+                    <div
+                      className="relative overflow-hidden rounded-[18px] sm:rounded-[22px] p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 min-h-[160px] sm:min-h-[190px] transition-colors hover:bg-white/[0.02]"
+                      style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                          >
+                            <Eye className="h-4 w-4 text-zinc-400" />
+                          </div>
+                          <p className="text-[15px] sm:text-[16px] text-zinc-200 min-w-0 truncate">
+                            <span className="font-bold">{visitorCount} visitor{visitorCount !== 1 ? "s" : ""}</span>
+                            <span className="text-zinc-400"> in 7 days</span>
+                          </p>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-full text-[11px] font-semibold tabular-nums",
+                            deltaPct === null
+                              ? "bg-sky-500/10 text-sky-400"
+                              : isUp
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-rose-500/10 text-rose-400"
+                          )}
+                        >
+                          {deltaPct === null ? (
+                            <>
+                              <TrendingUp className="h-3 w-3" />
+                              new
+                            </>
+                          ) : (
+                            <>
+                              {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                              {isUp ? "+" : ""}
+                              {deltaPct}%
+                            </>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Sparkline with area fill */}
+                      <div className="flex-1 flex items-end min-h-[80px]">
+                        <svg
+                          viewBox={`0 0 ${sparkW} ${sparkH}`}
+                          className="w-full h-full overflow-visible"
+                          preserveAspectRatio="none"
+                          aria-hidden="true"
+                        >
+                          <defs>
+                            <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+                              <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                            </linearGradient>
+                          </defs>
+                          <path d={sparkArea} fill="url(#sparkFill)" />
+                          <path
+                            d={sparkLine}
+                            fill="none"
+                            stroke="rgba(255,255,255,0.6)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          {/* Last-point dot */}
+                          {sparkPathPoints.length > 0 && (
+                            <circle
+                              cx={sparkPathPoints[sparkPathPoints.length - 1].x}
+                              cy={sparkPathPoints[sparkPathPoints.length - 1].y}
+                              r="3"
+                              fill="#ffffff"
+                            />
+                          )}
+                        </svg>
+                      </div>
+
+                      {/* Axis labels */}
+                      <div className="flex items-center justify-between text-[11px] text-zinc-600 -mt-1 tabular-nums">
+                        <span>7d ago</span>
+                        <span>Today</span>
+                      </div>
                     </div>
 
-                    {/* QUICK ACTION BUTTONS */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        onClick={() => setActiveTab("ai")}
-                        className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <Sparkles className="h-4 w-4 text-zinc-400 shrink-0" />
-                        <div>
-                          <p className="text-[12px] font-semibold text-zinc-200">Syra</p>
-                          <p className="text-[10px] text-zinc-500">AI website builder</p>
+                    {/* Pages card */}
+                    <div
+                      className="relative overflow-hidden rounded-[18px] sm:rounded-[22px] p-4 sm:p-5 lg:p-6 flex flex-col gap-3 sm:gap-4 min-h-[160px] sm:min-h-[190px] transition-colors hover:bg-white/[0.02]"
+                      style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)" }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center"
+                          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <FileText className="h-4 w-4 text-zinc-400" />
                         </div>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab("pages")}
-                        className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                      >
-                        <FileText className="h-4 w-4 text-zinc-400 shrink-0" />
-                        <div>
-                          <p className="text-[12px] font-semibold text-zinc-200">Pages</p>
-                          <p className="text-[10px] text-zinc-500">Manage content</p>
+                        <p className="text-[15px] sm:text-[16px] text-zinc-200">
+                          <span className="font-bold">{pagesCount} page{pagesCount !== 1 ? "s" : ""}</span>
+                          <span className="text-zinc-400"> on this site</span>
+                        </p>
+                      </div>
+
+                      {pagesCount > 0 ? (
+                        <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+                          {generatedPages.slice(0, 3).map((p, i) => (
+                            <div
+                              key={(p.name || "p") + i}
+                              className="flex items-center gap-2 text-[13px] text-zinc-400 truncate"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-zinc-600 shrink-0" />
+                              <span className="truncate">{p.name || "untitled"}</span>
+                            </div>
+                          ))}
+                          {pagesCount > 3 && (
+                            <div className="text-[12px] text-zinc-600 pl-3.5">+ {pagesCount - 3} more</div>
+                          )}
+                          {lastUpdateTs && (
+                            <div className="mt-auto pt-2 text-[11px] text-zinc-600 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Last updated {relTime(lastUpdateTs)}
+                            </div>
+                          )}
                         </div>
-                      </button>
-                      {(siteType === "shop" || databaseConnected) && (
-                        <>
-                          <button
-                            onClick={() => setActiveTab("items")}
-                            className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                          >
-                            <ShoppingCart className="h-4 w-4 text-zinc-400 shrink-0" />
-                            <div>
-                              <p className="text-[12px] font-semibold text-zinc-200">Products</p>
-                              <p className="text-[10px] text-zinc-500">Add or edit items</p>
-                            </div>
-                          </button>
-                          <button
-                            onClick={() => setActiveTab("payments")}
-                            className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            style={{ background: "#252527", border: "1px solid rgba(255,255,255,0.08)" }}
-                          >
-                            <Wallet className="h-4 w-4 text-zinc-400 shrink-0" />
-                            <div>
-                              <p className="text-[12px] font-semibold text-zinc-200">Payouts</p>
-                              <p className="text-[10px] text-zinc-500">Configure billing</p>
-                            </div>
-                          </button>
-                        </>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center">
+                          <p className="text-[13px] text-zinc-600">Generate a page to get started</p>
+                        </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* ── ROW 3: Recent activity ── */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-zinc-500" />
+                        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Recent activity</h3>
+                      </div>
+                      {recentChanges.length > 4 && (
+                        <button
+                          onClick={() => setActiveTab("pages")}
+                          className="text-[12px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                        >
+                          View all ({recentChanges.length})
+                        </button>
+                      )}
+                    </div>
+
+                    {visibleChanges.length > 0 ? (
+                      <ul className="space-y-1">
+                        {visibleChanges.map((page, idx) => (
+                          <li
+                            key={(page.name || "page") + idx}
+                            className="flex items-center gap-2.5 sm:gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
+                          >
+                            <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 border border-white/[0.08]">
+                              {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
+                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[12px] sm:text-[13px] font-bold">
+                                {authorInitial}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] sm:text-[15px] text-zinc-300 truncate">
+                                <span className="text-zinc-400">changes made by </span>
+                                <span className="font-semibold text-zinc-100">{authorName}</span>
+                              </p>
+                              {page.name && (
+                                <p className="text-[11px] sm:text-[12px] text-zinc-500 truncate mt-0.5">
+                                  <FileText className="inline h-3 w-3 mr-1 -mt-0.5" />
+                                  {page.name}
+                                </p>
+                              )}
+                            </div>
+                            {page.timestamp && (
+                              <span className="shrink-0 text-[11px] sm:text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
+                                <Clock className="h-3 w-3" />
+                                {relTime(page.timestamp)}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="flex items-center gap-3 py-4 px-4 rounded-2xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                          style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
+                        >
+                          <History className="h-4 w-4 text-zinc-500" />
+                        </div>
+                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
+                      </div>
+                    )}
+                  </div>
 
                 </div>
               )
             })()}
+
+
 
             {/* TAB CONTENT: DOMAIN */}
             {activeTab === "domain" && (() => {
@@ -1700,51 +2082,72 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
-                  {/* TLD results — with real pricing and availability */}
+                  {/* TLD results — sorted: available (cheapest first) → unknown → taken */}
                   <div className="space-y-2">
-                    {slug.length > 0 ? effectiveTldOptions.map(({ tld, price }) => {
-                      const fullDomain = `${slug}${tld}`
-                      const check = domainChecks[fullDomain]
-                      const isAvailable = check?.available
-                      const isUnavailable = check?.available === false
-                      const isChecking = check?.loading
-                      const purchaseUrl = check?.purchaseUrl || `https://dash.cloudflare.com/?to=/:account/domains/register/${encodeURIComponent(fullDomain)}`
+                    {slug.length > 0 ? (() => {
+                      const rank = (avail: boolean | null | undefined) =>
+                        avail === true ? 0 : avail === undefined || avail === null ? 1 : 2
+                      const sorted = [...effectiveTldOptions].sort((a, b) => {
+                        const ra = rank(domainChecks[`${slug}${a.tld}`]?.available)
+                        const rb = rank(domainChecks[`${slug}${b.tld}`]?.available)
+                        if (ra !== rb) return ra - rb
+                        return a.price - b.price
+                      })
+                      // Best-match = first available (cheapest, already sorted)
+                      const bestMatchTld = sorted.find(
+                        ({ tld }) => domainChecks[`${slug}${tld}`]?.available === true
+                      )?.tld
 
-                      return (
-                        <div
-                          key={tld}
-                          className={cn(
-                            "flex items-center gap-3 px-4 py-3.5 rounded-2xl border transition-all",
-                            isUnavailable
-                              ? "bg-[#1C1C1E] border-red-500/20 opacity-60"
-                              : isAvailable
-                                ? "bg-[#1C1C1E] border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
-                                : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
-                          )}
-                          onClick={() => {
-                            if (!isUnavailable) {
-                              window.open(purchaseUrl, "_blank", "noopener,noreferrer")
-                            }
-                          }}
-                        >
-                          <CloudflareProviderIcon />
-                          <span className="flex-1 text-sm font-medium text-white tracking-tight">{fullDomain}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {isChecking ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
-                            ) : isAvailable ? (
-                              <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">available</span>
-                            ) : isUnavailable ? (
-                              <span className="text-[10px] font-semibold bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">taken</span>
-                            ) : null}
-                            <span className="text-sm font-semibold text-white/60 tabular-nums">${price.toFixed(2)}/yr</span>
-                            {!isUnavailable && (
-                              <ExternalLink className="h-3.5 w-3.5 text-zinc-600" />
+                      return sorted.map(({ tld, price }) => {
+                        const fullDomain = `${slug}${tld}`
+                        const check = domainChecks[fullDomain]
+                        const isAvailable = check?.available
+                        const isUnavailable = check?.available === false
+                        const isChecking = check?.loading
+                        const isBestMatch = tld === bestMatchTld
+                        const purchaseUrl = check?.purchaseUrl || `https://dash.cloudflare.com/?to=/:account/domains/register/${encodeURIComponent(fullDomain)}`
+
+                        return (
+                          <div
+                            key={tld}
+                            className={cn(
+                              "flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 rounded-2xl border transition-all",
+                              isUnavailable
+                                ? "bg-[#1C1C1E] border-red-500/20 opacity-60"
+                                : isBestMatch
+                                  ? "bg-[#1C1C1E] border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
+                                  : isAvailable
+                                    ? "bg-[#1C1C1E] border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
+                                    : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
                             )}
+                            onClick={() => {
+                              if (!isUnavailable) {
+                                window.open(purchaseUrl, "_blank", "noopener,noreferrer")
+                              }
+                            }}
+                          >
+                            <CloudflareProviderIcon />
+                            <span className="flex-1 text-[13px] sm:text-sm font-medium text-white tracking-tight truncate">{fullDomain}</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              {isBestMatch && (
+                                <span className="hidden sm:inline-flex text-[10px] font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">best match</span>
+                              )}
+                              {isChecking ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
+                              ) : isAvailable ? (
+                                <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">available</span>
+                              ) : isUnavailable ? (
+                                <span className="text-[10px] font-semibold bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">taken</span>
+                              ) : null}
+                              <span className="text-[13px] sm:text-sm font-semibold text-white/60 tabular-nums">${price.toFixed(2)}/yr</span>
+                              {!isUnavailable && (
+                                <ExternalLink className="hidden sm:block h-3.5 w-3.5 text-zinc-600" />
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )
-                    }) : effectiveTldOptions.map(({ tld }) => (
+                        )
+                      })
+                    })() : effectiveTldOptions.map(({ tld }) => (
                       <div
                         key={tld}
                         className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]"
@@ -2384,6 +2787,19 @@ export default function SiteSettingsPage() {
                         className="bg-black/20"
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="site-logo">Site Logo URL</Label>
+                      <Input
+                        id="site-logo"
+                        value={profileImage}
+                        onChange={(e) => setProfileImage(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="bg-black/20"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter a URL for your site logo. This will appear in the overview and as your site icon.
+                      </p>
+                    </div>
                     {displayUrl && (
                       <div className="space-y-2">
                         <Label>Site URL</Label>
@@ -2498,7 +2914,7 @@ export default function SiteSettingsPage() {
 
           </div>
         </main>
-      </div>
+      </motion.div>
 
     </div>
   )
