@@ -77,7 +77,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, instruction, model, generatedPages, projectId } = await request.json()
+    const { messages, instruction, model, generatedPages, projectId, implementation } = await request.json()
     const normalizedInstruction = typeof instruction === "string" ? instruction : ""
 
     // Parse generatedPages from frontend (array of { name, code })
@@ -162,6 +162,9 @@ export async function POST(request: Request) {
 
     const memoryDigest = formatMemoryDigest(previousFiles)
     const planProgress = summarizeInstructionProgress(normalizedInstruction)
+    const implementationBlock = implementation
+      ? `\n\n[IMPLEMENTATION JSON]\n${typeof implementation === "string" ? implementation : JSON.stringify(implementation, null, 2)}\n`
+      : ""
 
     // Fetch Database credentials for this project (if connected)
     let databaseContext = "Not applicable — this project does not use an external database."
@@ -243,6 +246,7 @@ HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
 ${HERO_UI_GUARDRAILS}
 ${planProgress}
 ${memoryDigest}
+${implementationBlock}
 
 ${basePrompt}
 `

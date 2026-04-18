@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages } = await request.json()
+    const { messages, implementation } = await request.json()
 
     const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
     if (!apiKey) {
@@ -23,6 +23,9 @@ export async function POST(request: Request) {
     }
 
     const lastUserMessage = messages[messages.length - 1]
+    const implementationBlock = implementation
+      ? `\n\n[IMPLEMENTATION JSON]\n${typeof implementation === "string" ? implementation : JSON.stringify(implementation, null, 2)}\n`
+      : ""
 
     // Fetch Global Prompt
     const { builderPlan: systemContextTemplate } = await getSystemPrompts()
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
 
     const finalPrompt = systemContextTemplate
         .replace("{{HISTORY}}", historyText)
-        .replace("{{REQUEST}}", lastUserMessage.content)
+        .replace("{{REQUEST}}", `${lastUserMessage.content}${implementationBlock}`)
 
     console.log(`[v0] Generating plan with Gemini model: ${PLAN_MODEL}`)
 

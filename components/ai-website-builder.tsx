@@ -455,11 +455,13 @@ const InputBar = ({
   selectedModel, setSelectedModel,
   attachments, setAttachments,
   credits, bestCost, fastCost,
+  implementationText, setImplementationText,
 }: {
   input: string; setInput: (v: string) => void; onSend: () => void; disabled: boolean
   selectedModel: ModelOption; setSelectedModel: (m: ModelOption) => void
   attachments: File[]; setAttachments: React.Dispatch<React.SetStateAction<File[]>>
   credits: number | null; bestCost: number; fastCost: number
+  implementationText: string; setImplementationText: (v: string) => void
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const selectedTier: ModelTier = tierOf(selectedModel)
@@ -532,6 +534,20 @@ const InputBar = ({
               overflow: 'auto'
             }}
           />
+
+          {/* Optional implementation JSON (for providing concrete data/contracts) */}
+          <div className="px-0.5">
+            <textarea
+              value={implementationText}
+              onChange={(e) => setImplementationText(e.target.value)}
+              placeholder='Optional: paste implementation JSON (pages, routes, data, design tokens)'
+              disabled={disabled}
+              className="w-full text-[11px] text-zinc-300 placeholder:text-zinc-600 bg-white/[0.03] border border-white/[0.06] rounded-lg p-2 font-mono resize-y min-h-[70px] focus:outline-none focus:ring-1 focus:ring-white/15"
+            />
+            <p className="mt-1 text-[10px] text-zinc-600">
+              If provided, the AI will use this JSON instead of leaving APIs empty and will create distinct pages from it.
+            </p>
+          </div>
 
           {/* Bottom row: attach | model pill | credits | send */}
           <div className="flex items-center justify-between gap-1.5 sm:gap-2 px-0.5">
@@ -864,6 +880,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
+  const [implementationText, setImplementationText] = useState("")
   const [step, setStep] = useState<GenerationPhase>("idle")
   const [currentPlan, setCurrentPlan] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -1232,11 +1249,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setCurrentPlan("Architecting solution...")
 
     try {
-      const planResponse = await fetch("/api/ai/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
-      })
+          const planResponse = await fetch("/api/ai/generate-plan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: [...messages, userMessage], implementation: parsedImplementation }),
+          })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
       const planData = await planResponse.json()
@@ -1312,6 +1329,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     const modelId = selectedModel.id
 
     const attemptGenerate = async (model: string): Promise<any> => {
+      let parsedImplementation: any = null
+      if (implementationText.trim()) {
+        try {
+          parsedImplementation = JSON.parse(implementationText)
+        } catch {
+          // If parsing fails here (should not, we validate earlier), fall back to null.
+          parsedImplementation = null
+        }
+      }
       const response = await fetch("/api/ai/generate-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1326,6 +1352,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
             usedFor: p.usedFor,
             timestamp: p.timestamp,
           })),
+          implementation: parsedImplementation,
         }),
       })
       if (!response.ok) throw new Error("Generation failed")
@@ -1674,6 +1701,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 credits={credits}
                 bestCost={bestCost}
                 fastCost={fastCost}
+                implementationText={implementationText}
+                setImplementationText={setImplementationText}
             />
         </div>
     </div>
