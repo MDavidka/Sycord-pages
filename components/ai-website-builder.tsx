@@ -46,16 +46,13 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is NVIDIA via uploaded text attachment
-const DEFAULT_MODEL_ID = "nvidia-uploaded-text-model"
+// Default to highest-quality Gemini; only three curated options are exposed.
+const DEFAULT_MODEL_ID = "gemini-3.1-pro-preview"
 
 const MODELS: ModelOption[] = [
-  { id: "nvidia-uploaded-text-model", name: "NVIDIA Uploaded Text Model", provider: "NVIDIA", fast: true },
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
-  { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
-  { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
+  { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash ⚡", provider: "Google", fast: true },
+  { id: "openai/gpt-oss-120b:free", name: "GPT-OSS 120B (Thinker)", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -592,6 +589,9 @@ const InputBar = ({
                   align="start"
                   className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
                 >
+                  <div className="px-2 pt-1 pb-1 text-[10px] text-zinc-500 leading-relaxed">
+                    Planning always runs on <span className="text-zinc-300">openai/gpt-oss-120b:free</span> (OpenRouter) for deep reasoning. Pick Gemini for generation quality vs. speed.
+                  </div>
                   {bestModels.length > 0 && (
                     <>
                       <div className="px-2 pt-1.5 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
@@ -1320,7 +1320,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           messages: currentHistory,
           instruction: currentInstruction,
           model,
-          generatedPages: generatedPages.map(p => ({ name: p.name, code: p.code })),
+          generatedPages: generatedPages.map(p => ({
+            name: p.name,
+            code: p.code,
+            usedFor: p.usedFor,
+            timestamp: p.timestamp,
+          })),
         }),
       })
       if (!response.ok) throw new Error("Generation failed")

@@ -16,19 +16,58 @@ import { ObjectId } from "mongodb"
 
 // API Configurations
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 // Map models to their specific endpoints and Env Vars
 const MODEL_CONFIGS: Record<string, { url: string, envVar: string, provider: string }> = {
   "gemini-3.1-pro-preview": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
-  "gemini-3.1-flash-lite-preview": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
-  "gemini-2.0-flash": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
-  "gemini-1.5-flash": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
-  "gemini-1.5-pro": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
-  "deepseek-v3.2-exp": { url: DEEPSEEK_API_URL, envVar: "DEEPSEEK_API", provider: "DeepSeek" },
-  // OpenRouter: qwen3-coder for code generation
-  "qwen/qwen3-coder:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" }
+  "gemini-3.1-flash": { url: GOOGLE_API_URL, envVar: "GOOGLE_AI_API", provider: "Google" },
+  // OpenRouter thinker/backup model for heavy reasoning
+  "openai/gpt-oss-120b:free": { url: OPENROUTER_API_URL, envVar: "OPENROUTER_API_KEY", provider: "OpenRouter" },
+}
+
+const MODEL_ALIASES: Record<string, string> = {
+  "gemini-3.1-flash-lite-preview": "gemini-3.1-flash",
+  "gemini-2.0-flash": "gemini-3.1-flash",
+  "gemini-1.5-pro": "gemini-3.1-pro-preview",
+  "gemini-1.5-flash": "gemini-3.1-flash",
+  "qwen/qwen3-coder:free": "gemini-3.1-pro-preview",
+  "gemini-3-flash": "gemini-3.1-flash",
+  "gemini-3.0-flash": "gemini-3.1-flash",
+  "gemini-3-pro": "gemini-3.1-pro-preview",
+  "gemini-3.0-pro": "gemini-3.1-pro-preview",
+}
+
+const DEFAULT_MODEL_ID = "gemini-3.1-pro-preview"
+
+const HERO_UI_GUARDRAILS = `
+ABSOLUTE UI GUARDRAILS:
+- The entire UI must use @heroui/react primitives (Button, Card, Input, Navbar, Modal, Table, Tabs, Select, Chip, etc.).
+- Prefer HeroUI variants/props over raw HTML. Use Tailwind utilities only to complement layout and spacing.
+- Keep components composable, typed, and data-driven. Avoid hardcoded DOM nodes when a HeroUI component exists.
+`
+
+function formatMemoryDigest(files: GeneratedFile[]): string {
+  if (!files.length) return "No cached files are available yet.";
+  const recent = [...files]
+    .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+    .slice(0, 6)
+    .map((f) => {
+      const parts = [f.name];
+      if (f.usedFor) parts.push(`for ${f.usedFor}`);
+      if (f.timestamp) parts.push(`updated ${new Date(f.timestamp).toISOString()}`);
+      return `- ${parts.join(" • ")}`;
+    })
+    .join("\n");
+  return `Recent file memory:\n${recent}`;
+}
+
+function summarizeInstructionProgress(instruction: string): string {
+  const text = instruction || "";
+  const done = (text.match(/\[Done\]/gi) || []).length;
+  const total = (text.match(/\[\d+\]/g) || []).length + done;
+  const pending = Math.max(total - done, 0);
+  return `Plan progress: ${done}/${total || "?"} steps complete${pending ? `, ${pending} remaining` : ""}.`;
 }
 
 export async function POST(request: Request) {
@@ -39,38 +78,35 @@ export async function POST(request: Request) {
 
   try {
     const { messages, instruction, model, generatedPages, projectId } = await request.json()
+    const normalizedInstruction = typeof instruction === "string" ? instruction : ""
 
     // Parse generatedPages from frontend (array of { name, code })
     const frontendFiles: GeneratedFile[] = Array.isArray(generatedPages)
-      ? generatedPages.map((p: { name: string; code: string }) => ({
+      ? generatedPages.map((p: { name: string; code: string; usedFor?: string; timestamp?: number }) => ({
           name: p.name,
           code: p.code,
+          usedFor: p.usedFor,
+          timestamp: typeof p.timestamp === "number" ? p.timestamp : undefined,
         }))
       : []
 
     // Merge with server-side cache so the AI retains context across calls
     // even if the frontend doesn't re-send every previously generated file.
     const cachedFiles = projectId ? getCachedFiles(projectId) : []
-    const cachedMap = new Map<string, GeneratedFile>(cachedFiles.map((f) => [f.name, { name: f.name, code: f.code }]))
-    frontendFiles.forEach((f) => cachedMap.set(f.name, f)) // frontend data takes precedence
-    const previousFiles: GeneratedFile[] = Array.from(cachedMap.values())
-
-    // Default to qwen/qwen3-coder:free (OpenRouter)
-    const modelId = model || "qwen/qwen3-coder:free"
-
-    // Map "gemini-3-flash" or similar user requests to actual model
-    let configKey = modelId
-    if (modelId === "gemini-3-flash" || modelId === "gemini-3.0-flash") {
-       configKey = "gemini-2.0-flash"
+    const mergedMap = new Map<string, GeneratedFile>()
+    const orderedCandidates = [...cachedFiles, ...frontendFiles].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
+    for (const f of orderedCandidates) {
+      mergedMap.set(f.name, { name: f.name, code: f.code, usedFor: f.usedFor, timestamp: f.timestamp })
     }
-    if (modelId === "gemini-3-pro" || modelId === "gemini-3.0-pro") {
-       configKey = "gemini-1.5-pro"
-    }
+    const previousFiles: GeneratedFile[] = Array.from(mergedMap.values())
 
-    const isOpenRouterModel = configKey === "qwen/qwen3-coder:free"
+    // Default to Gemini 3.1 Pro (best) unless explicitly overridden
+    const modelId = model || DEFAULT_MODEL_ID
+    const canonicalModelId = MODEL_ALIASES[modelId] || modelId
+    const configKey = MODEL_CONFIGS[canonicalModelId] ? canonicalModelId : DEFAULT_MODEL_ID
     const apiModelId = configKey
-
-    const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS["gemini-3.1-pro-preview"]
+    const config = MODEL_CONFIGS[configKey] || MODEL_CONFIGS[DEFAULT_MODEL_ID]
+    const isOpenRouterModel = config.provider === "OpenRouter" || configKey.startsWith("openai/")
 
     let apiKey = process.env[config.envVar]
     if (config.provider === "Google" && !apiKey) {
@@ -88,7 +124,7 @@ export async function POST(request: Request) {
     let match
     let currentTask = null
 
-    while ((match = taskRegex.exec(instruction)) !== null) {
+    while ((match = taskRegex.exec(normalizedInstruction)) !== null) {
         if (match[1] === "0") continue;
         currentTask = {
             fullMatch: match[0],
@@ -102,7 +138,7 @@ export async function POST(request: Request) {
     if (!currentTask) {
         return NextResponse.json({
             isComplete: true,
-            updatedInstruction: instruction
+            updatedInstruction: normalizedInstruction
         })
     }
 
@@ -123,6 +159,9 @@ export async function POST(request: Request) {
           projectMemory = `\n\n[PROJECT MEMORY]\n${memory}\n`;
        }
     }
+
+    const memoryDigest = formatMemoryDigest(previousFiles)
+    const planProgress = summarizeInstructionProgress(normalizedInstruction)
 
     // Fetch Database credentials for this project (if connected)
     let databaseContext = "Not applicable — this project does not use an external database."
@@ -168,7 +207,7 @@ CRITICAL MONGODB RULES:
     const fileContext = getSmartContext(previousFiles, currentTask.filename)
     const designSystem = extractDesignSystem(previousFiles)
     // Keep legacy memory as fallback / additional signal
-    const shortTermMemory = getShortTermMemory(instruction)
+    const shortTermMemory = getShortTermMemory(normalizedInstruction)
     
     let fileRules = ""
     if (isHTML) fileRules = `- Use <!DOCTYPE html>. Include <script src="https://cdn.tailwindcss.com"></script>. Include <script type="module" src="/src/main.ts"></script>.`
@@ -176,7 +215,7 @@ CRITICAL MONGODB RULES:
     if (isJSON) fileRules = `- Return valid JSON only.`
     if (fileExt === 'css') fileRules = `- Write valid CSS. Define CSS custom properties in :root for design tokens. Use @tailwind directives if applicable.`
 
-    let systemPrompt = promptTemplate
+    const basePrompt = promptTemplate
         .replace("{{FILENAME}}", currentTask.filename)
         .replace("{{USEDFOR}}", currentTask.usedFor)
         .replace("{{FILE_STRUCTURE}}", FILE_STRUCTURE)
@@ -189,6 +228,14 @@ CRITICAL MONGODB RULES:
         .replace("{{APPWRITE_CONTEXT}}", databaseContext)
         // Legacy fallback -- if the prompt still has {{MEMORY}}, fill it
         .replace("{{MEMORY}}", shortTermMemory) + projectMemory
+
+    const systemPrompt = `
+${HERO_UI_GUARDRAILS}
+${planProgress}
+${memoryDigest}
+
+${basePrompt}
+`
 
     // 3. Call AI
     const conversationHistory = messages.map((msg: any) => ({
@@ -263,7 +310,7 @@ CRITICAL MONGODB RULES:
     }
 
     // 5. Update Instruction (Mark as Done)
-    const updatedInstruction = instruction.replace(`[${currentTask.number}]`, `[Done]`)
+    const updatedInstruction = normalizedInstruction.replace(`[${currentTask.number}]`, `[Done]`)
 
     return NextResponse.json({
         content: responseText,

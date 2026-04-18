@@ -25,6 +25,10 @@ export const CORE_FILES = ['src/types.ts', 'src/style.css', 'package.json'] as c
 export interface GeneratedFile {
   name: string;
   code: string;
+  /** Optional purpose tag to help the model understand intent. */
+  usedFor?: string;
+  /** Milliseconds since epoch when this file was last generated. */
+  timestamp?: number;
 }
 
 export interface ContextOptions {
@@ -155,8 +159,10 @@ export function extractExportSummary(code: string): string {
  */
 function formatFullFileBlock(file: GeneratedFile, includeLangHint = false): string {
   const langHint = includeLangHint ? file.name.split('.').pop() || '' : '';
+  const purpose = file.usedFor ? ` | Purpose: ${file.usedFor}` : '';
+  const updated = file.timestamp ? ` | Updated: ${new Date(file.timestamp).toISOString()}` : '';
   return `
---- FILE: ${file.name} (FULL) ---
+--- FILE: ${file.name} (FULL${purpose}${updated}) ---
 \`\`\`${langHint}
 ${file.code}
 \`\`\`
@@ -167,8 +173,12 @@ ${file.code}
  * Formats a file with only its export summary for context.
  */
 function formatSummaryFileBlock(file: GeneratedFile): string {
+  const meta: string[] = [];
+  if (file.usedFor) meta.push(`Purpose: ${file.usedFor}`);
+  if (file.timestamp) meta.push(`Updated: ${new Date(file.timestamp).toISOString()}`);
   return `
 --- FILE: ${file.name} (EXPORTS ONLY) ---
+${meta.length ? meta.join(' | ') + '\n' : ''}
 ${extractExportSummary(file.code)}
 `;
 }
@@ -237,22 +247,29 @@ export function getFileContext(files: GeneratedFile[]): string {
     return 'No files generated yet. You are generating the first file.';
   }
 
-  const useFullForAll = files.length < FULL_CONTENT_THRESHOLD;
+  const ordered = [...files].sort((a, b) => {
+    const aTime = a.timestamp ?? 0;
+    const bTime = b.timestamp ?? 0;
+    if (aTime === bTime) return a.name.localeCompare(b.name);
+    return aTime - bTime;
+  });
+
+  const useFullForAll = ordered.length < FULL_CONTENT_THRESHOLD;
 
   if (useFullForAll) {
-    const blocks = files.map((f) => formatFullFileBlock(f));
+    const blocks = ordered.map((f) => formatFullFileBlock(f, true));
     return `
-PREVIOUSLY GENERATED FILES (${files.length} files -- FULL CONTENT):
+PREVIOUSLY GENERATED FILES (${ordered.length} files -- FULL CONTENT):
 ${blocks.join('\n')}
 ${CONTEXT_FOOTER}`;
   }
 
   // Hybrid: full content for recent files, summary for the rest
-  const recentFiles = files.slice(-RECENT_FILES_COUNT);
-  const olderFiles = files.slice(0, -RECENT_FILES_COUNT);
+  const recentFiles = ordered.slice(-RECENT_FILES_COUNT);
+  const olderFiles = ordered.slice(0, -RECENT_FILES_COUNT);
 
   const summaryBlocks = olderFiles.map((f) => formatSummaryFileBlock(f));
-  const fullBlocks = recentFiles.map((f) => formatFullFileBlock(f));
+  const fullBlocks = recentFiles.map((f) => formatFullFileBlock(f, true));
 
   return `
 PREVIOUSLY GENERATED FILES (${files.length} total):
@@ -305,9 +322,11 @@ export function getSmartContext(files: GeneratedFile[], currentTask: string): st
     return 'No files generated yet. You are generating the first file.';
   }
 
+  const ordered = [...files].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+
   // For smaller projects, use standard file context
-  if (files.length < SMART_CONTEXT_THRESHOLD) {
-    return getFileContext(files);
+  if (ordered.length < SMART_CONTEXT_THRESHOLD) {
+    return getFileContext(ordered);
   }
 
   const fullContentFiles: GeneratedFile[] = [];
@@ -321,7 +340,7 @@ export function getSmartContext(files: GeneratedFile[], currentTask: string): st
   };
 
   // Categorize files
-  for (const file of files) {
+  for (const file of ordered) {
     const isCoreFile = CORE_FILES.some((core) => file.name.endsWith(core));
     const isTaskRelevant = isRelevantForTask(file.name, currentTask);
 
@@ -333,7 +352,7 @@ export function getSmartContext(files: GeneratedFile[], currentTask: string): st
   }
 
   // Apply recency bias: ensure most recent files are always in full content
-  const recentFiles = files.slice(-RECENT_FILES_COUNT);
+  const recentFiles = ordered.slice(0, RECENT_FILES_COUNT);
   for (const recentFile of recentFiles) {
     const summaryIndex = summaryFiles.findIndex((f) => f.name === recentFile.name);
     if (summaryIndex !== -1) {

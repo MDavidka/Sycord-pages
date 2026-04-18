@@ -47,7 +47,7 @@ export function getCachedFiles(projectId: string): CachedFile[] {
     projectCaches.delete(projectId)
     return []
   }
-  return cache.files
+  return [...cache.files].sort((a, b) => b.timestamp - a.timestamp)
 }
 
 /**
