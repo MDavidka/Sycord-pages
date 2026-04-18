@@ -174,7 +174,9 @@ export async function POST(request: Request) {
           { projection: { "projects.$": 1 } }
         )
         const project = user?.projects?.[0]
-        if (project?.databaseConnected && project?.mongoEndpoint && project?.mongoDataSource && project?.mongoDatabase && project?.mongoApiKey) {
+        const hasDbConnection = project?.databaseConnected && project?.mongoEndpoint && project?.mongoDataSource && project?.mongoDatabase && project?.mongoApiKey
+
+        if (hasDbConnection) {
           databaseContext = `This project uses MongoDB Atlas Data API as its backend database. The user has connected their MongoDB Atlas account.
 MONGODB ENDPOINT: ${project.mongoEndpoint}
 DATA SOURCE: ${project.mongoDataSource}
@@ -196,6 +198,14 @@ CRITICAL MONGODB RULES:
 6. Components that display or manage data MUST import the fetch wrappers from '../db.ts' (or './db.ts') and use them to fetch real data.
 7. Do NOT use mock/hardcoded data. ALL data operations MUST use real MongoDB Data API calls.
 8. The user will create the collections in their MongoDB Atlas UI matching the collection names you use in the code.`
+        } else {
+          databaseContext = `No database or third-party integration is connected (Integrations tab not configured).
+
+HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
+- DO NOT generate any database code, MongoDB Data API calls, fetch/CRUD helpers, or db.ts.
+- If the feature would normally need data, render a HeroUI modal or inline banner prompting the user to connect a database/integration from the Integrations tab. Include a clear CTA button like "Connect database to enable data".
+- Use static UI copy only for placeholders; never hardcode secrets or fake API keys.
+- Keep code structured so that once a connection exists, data wiring can be added cleanly (no dead-end mocks).`
         }
       } catch (e) {
         console.warn("[v0] Failed to fetch Database credentials:", e)
