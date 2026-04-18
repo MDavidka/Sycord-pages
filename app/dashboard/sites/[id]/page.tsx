@@ -1681,27 +1681,18 @@ export default function SiteSettingsPage() {
                         {/* Logo / status square (subtly pulses when live) */}
                         <div className="relative shrink-0">
                           <div
-                            className={cn(
-                              "h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center text-[16px] sm:text-[18px] font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] overflow-hidden",
-                              previewUrl
-                                ? "bg-gradient-to-br from-violet-500 to-fuchsia-600"
-                                : "bg-zinc-700"
-                            )}
+                            className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center overflow-hidden"
                             role="status"
                             aria-label={previewUrl ? "Site is live" : "Site not deployed"}
                           >
                             {profileImage && !logoLoadError ? (
-                              <img 
-                                src={profileImage} 
-                                alt="Site logo" 
+                              <img
+                                src={profileImage}
+                                alt="Site logo"
                                 className="w-full h-full object-cover"
                                 onError={() => setLogoLoadError(true)}
                               />
-                            ) : (
-                              <span className="text-[16px] sm:text-[18px] font-bold">
-                                {(project?.businessName?.[0] || "S").toUpperCase()}
-                              </span>
-                            )}
+                            ) : null}
                           </div>
                           {previewUrl && (
                             <span

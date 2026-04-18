@@ -39,6 +39,23 @@ export async function POST(request: Request) {
        return NextResponse.json({ message: "Business description is invalid or too long" }, { status: 400 });
   }
 
+  // Validate profileImage if present (data URL or http(s) URL). Cap size to protect DB docs.
+  let safeProfileImage = "";
+  if (body.profileImage !== undefined && body.profileImage !== null && body.profileImage !== "") {
+      if (typeof body.profileImage !== 'string') {
+          return NextResponse.json({ message: "profileImage must be a string" }, { status: 400 });
+      }
+      if (body.profileImage.length > 3_500_000) {
+          return NextResponse.json({ message: "profileImage is too large (max ~2MB)" }, { status: 400 });
+      }
+      const isDataUrl = /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(body.profileImage);
+      const isHttpUrl = /^https?:\/\//i.test(body.profileImage);
+      if (!isDataUrl && !isHttpUrl) {
+          return NextResponse.json({ message: "profileImage must be an image data URL or http(s) URL" }, { status: 400 });
+      }
+      safeProfileImage = body.profileImage;
+  }
+
   // Fetch user doc to check limits and existing projects
   const userDoc = await db.collection("users").findOne({ id: session.user.id })
   const userProjects = userDoc?.projects || []
@@ -64,6 +81,7 @@ export async function POST(request: Request) {
       businessDescription: (body.businessDescription || "").trim(),
       subdomain: body.subdomain,
       style: body.style,
+      profileImage: safeProfileImage,
       // explicitly exclude fields that shouldn't be user-settable if any
   };
 
