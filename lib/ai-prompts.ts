@@ -169,7 +169,7 @@ REQUIREMENTS:
 4.  **Components**: Create modular React components in src/components/ directory. Each component MUST import its types from ../types and use Hero UI components.
 5.  **Tailwind CSS + Hero UI**: Use Tailwind CSS classes alongside Hero UI components. Include CDN in index.html for simplicity.
 6.  **Strict Syntax**: Use brackets [1], [2], etc. for file steps. Include [usedfor]...[usedfor] markers.
-7.  **Scale**: Plan for a COMPLETE experience (15-24 files typically) with multiple route-level page components; this higher range reflects extra route components and shared navigation/state wiring required for true multi-page UX.
+7.  **Scale**: Plan for a COMPLETE multi-page experience with enough files to cover route-level pages, shared UI, and routing/state wiring (not a minimal one-page scaffold).
 8.  **Cloudflare Pages Ready**: Structure must be deployable to Cloudflare Pages with Vite.
 9.  **Configuration**:
     - package.json MUST include "build": "vite build" and dependencies: react, react-dom, @heroui/react, @heroui/theme, framer-motion, tailwindcss
@@ -344,7 +344,7 @@ Purpose: **{{USEDFOR}}**
     - MUST import and render ALL components from ./components/*.
     - MUST be the orchestrator that ties everything together.
     - IMPORTANT: Since this is a SPA, implement true multi-route behavior with distinct route-level page components (e.g., Home, About, Services, Contact) using \`window.location.pathname\`, \`history.pushState\`, and popstate handling (or equivalent route state).
-    - Unless the user explicitly requests a one-page landing site, there MUST be at least 4 distinct routes with different page content and navigation between them.
+    - Unless the user explicitly requests a one-page landing site, implement all planned sitemap routes as distinct page components with different page content and navigation between them.
     - Ensure the Header and Footer are always visible, and only the main page body changes per route.
 - **index.html**:
     - Must be in the **ROOT** directory (not public/).
