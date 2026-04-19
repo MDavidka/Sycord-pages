@@ -91,12 +91,16 @@ interface SystemPromptsState {
   builderPlan: string
   builderCode: string
   builderBuild: string
+  builderFunction: string
+  builderCheatSheet: string
 }
 
 const SYSTEM_PROMPT_KEYS: (keyof SystemPromptsState)[] = [
   "builderPlan",
   "builderCode",
   "builderBuild",
+  "builderFunction",
+  "builderCheatSheet",
 ]
 
 const tabs = [
@@ -145,6 +149,8 @@ export default function AdminPage() {
     builderPlan: "",
     builderCode: "",
     builderBuild: "",
+    builderFunction: "",
+    builderCheatSheet: "",
   })
   const [promptsLoading, setPromptsLoading] = useState(false)
 
@@ -1338,12 +1344,12 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-sm font-semibold text-white">AI Builder Step Prompts (Editable)</h3>
                 <p className="text-xs text-white/30 mt-1">
-                  These are the real generation prompts used by the AI builder in 3 steps: Plan → Code → Build (shadcn/ui + dark/white themes).
+                  These prompts power the new pipeline: Plan JSON → Function JSON → Orchestration (non-AI) → Build.
                 </p>
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs text-white/50">Step 1 — Planning Prompt (builderPlan)</p>
+                <p className="text-xs text-white/50">Step 1 — Style JSON Planning Prompt (builderPlan)</p>
                 <Textarea
                   id="prompt-builder-plan"
                   className="font-mono text-xs min-h-[180px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
@@ -1353,17 +1359,37 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs text-white/50">Step 2 — Code Generation Prompt (builderCode)</p>
+                <p className="text-xs text-white/50">Step 2 — Function JSON Prompt (builderFunction)</p>
+                <Textarea
+                  id="prompt-builder-function"
+                  className="font-mono text-xs min-h-[220px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                  value={systemPrompts.builderFunction}
+                  onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderFunction: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs text-white/50">Step 2.5 — Cheat Sheet (builderCheatSheet)</p>
+                <Textarea
+                  id="prompt-builder-cheat-sheet"
+                  className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                  value={systemPrompts.builderCheatSheet}
+                  onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderCheatSheet: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs text-white/50">Legacy Code Prompt (builderCode)</p>
                 <Textarea
                   id="prompt-builder-code"
-                  className="font-mono text-xs min-h-[220px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                  className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                   value={systemPrompts.builderCode}
                   onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderCode: e.target.value }))}
                 />
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs text-white/50">Step 3 — Build Prompt (builderBuild)</p>
+                <p className="text-xs text-white/50">Step 4 — Build Prompt (builderBuild)</p>
                 <Textarea
                   id="prompt-builder-build"
                   className="font-mono text-xs min-h-[160px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"

@@ -397,6 +397,35 @@ Return plain text only, maximum 6 lines:
 - Remaining lines: short bullet points.
 `
 
+export const DEFAULT_BUILDER_FUNCTION = `
+You are an expert TypeScript logic planner.
+Your input is a STYLE JSON that describes layout/component structure for a page.
+Generate ONLY raw FUNCTION JSON for orchestration.
+
+REQUIREMENTS:
+- Output valid JSON only (no markdown, no explanation).
+- Keep target ids/events aligned with STYLE JSON ids.
+- Reuse the provided blank function names from style JSON placeholders (do not rename).
+- Generate realistic TypeScript snippets for state/effect/handlers.
+- Handlers must be provided as full declarations (e.g. "const handleMainClick = () => { ... }").
+- Ensure handlers are unique and deterministic.
+
+FORMAT:
+{
+  "targetPage": "<pageId>",
+  "logicBlocks": [
+    { "type": "state", "code": "..." },
+    { "targetId": "<componentId>", "event": "onClick", "handler": "const handleX = () => { ... };" },
+    { "type": "effect", "code": "..." }
+  ]
+}
+
+CHEAT_SHEET:
+{{CHEAT_SHEET}}
+`
+
+export const DEFAULT_BUILDER_CHEAT_SHEET = `Use shadcn/ui component patterns and deterministic TypeScript handlers.`
+
 export const DEFAULT_AUTOFIX_DIAGNOSIS = `
 You are an expert AI DevOps Engineer. Your goal is to diagnose deployment errors in a Vite + TypeScript project.
 
@@ -540,6 +569,8 @@ export const EDITABLE_PROMPT_KEYS = [
   "builderPlan",
   "builderCode",
   "builderBuild",
+  "builderFunction",
+  "builderCheatSheet",
   "autoFixDiagnosis",
   "autoFixResolution",
   "inlineFixDiagnosis",
@@ -555,6 +586,8 @@ export async function getSystemPrompts() {
     builderPlan: DEFAULT_BUILDER_PLAN,
     builderCode: DEFAULT_BUILDER_CODE,
     builderBuild: DEFAULT_BUILDER_BUILD,
+    builderFunction: DEFAULT_BUILDER_FUNCTION,
+    builderCheatSheet: DEFAULT_BUILDER_CHEAT_SHEET,
     autoFixDiagnosis: DEFAULT_AUTOFIX_DIAGNOSIS,
     autoFixResolution: DEFAULT_AUTOFIX_RESOLUTION,
     inlineFixDiagnosis: DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -573,6 +606,8 @@ export async function getSystemPrompts() {
             builderPlan: data.prompts.builderPlan || DEFAULT_BUILDER_PLAN,
             builderCode: data.prompts.builderCode || DEFAULT_BUILDER_CODE,
             builderBuild: data.prompts.builderBuild || DEFAULT_BUILDER_BUILD,
+            builderFunction: data.prompts.builderFunction || DEFAULT_BUILDER_FUNCTION,
+            builderCheatSheet: data.prompts.builderCheatSheet || DEFAULT_BUILDER_CHEAT_SHEET,
             autoFixDiagnosis: data.prompts.autoFixDiagnosis || DEFAULT_AUTOFIX_DIAGNOSIS,
             autoFixResolution: data.prompts.autoFixResolution || DEFAULT_AUTOFIX_RESOLUTION,
             inlineFixDiagnosis: data.prompts.inlineFixDiagnosis || DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -587,6 +622,8 @@ export async function getSystemPrompts() {
     builderPlan: DEFAULT_BUILDER_PLAN,
     builderCode: DEFAULT_BUILDER_CODE,
     builderBuild: DEFAULT_BUILDER_BUILD,
+    builderFunction: DEFAULT_BUILDER_FUNCTION,
+    builderCheatSheet: DEFAULT_BUILDER_CHEAT_SHEET,
     autoFixDiagnosis: DEFAULT_AUTOFIX_DIAGNOSIS,
     autoFixResolution: DEFAULT_AUTOFIX_RESOLUTION,
     inlineFixDiagnosis: DEFAULT_INLINE_FIX_DIAGNOSIS,

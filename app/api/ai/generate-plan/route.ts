@@ -9,6 +9,29 @@ import { ObjectId } from "mongodb"
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 const PLAN_MODEL = "gemini-3.1-flash-lite-preview"
 
+function tryParseJson(text: string): any {
+  const trimmed = (text || "").trim()
+  if (!trimmed) return null
+  try {
+    return JSON.parse(trimmed)
+  } catch {}
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fenced?.[1]) {
+    try {
+      return JSON.parse(fenced[1].trim())
+    } catch {}
+  }
+
+  const objectMatch = trimmed.match(/\{[\s\S]*\}/)
+  if (objectMatch?.[0]) {
+    try {
+      return JSON.parse(objectMatch[0])
+    } catch {}
+  }
+  return null
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user) {
@@ -69,7 +92,7 @@ export async function POST(request: Request) {
       : ""
 
     // Fetch Global Prompt
-    const { builderPlan: systemContextTemplate } = await getSystemPrompts()
+    const { builderPlan: systemContextTemplate, builderCheatSheet } = await getSystemPrompts()
 
     // Combine history for context
     const historyText = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")
@@ -77,6 +100,17 @@ export async function POST(request: Request) {
     const finalPrompt = systemContextTemplate
         .replace("{{HISTORY}}", historyText)
         .replace("{{REQUEST}}", `${lastUserMessage.content}${implementationBlock}`)
+      + `
+
+You MUST output STYLE JSON ONLY (no markdown, no explanation).
+STYLE JSON rules:
+- include pageId, path, layout[]
+- each interactive block must include unique id
+- add blank function placeholders in props as string names where logic is needed (example: "__FN_handleMainClick__")
+
+CHEAT_SHEET:
+${builderCheatSheet || ""}
+`
 
     console.log(`[v0] Generating plan with Gemini model: ${PLAN_MODEL}`)
 
@@ -102,10 +136,16 @@ export async function POST(request: Request) {
 
     const data = await response.json()
     const responseText = data.choices?.[0]?.message?.content || ""
+    const styleJson = tryParseJson(responseText)
+    if (!styleJson) {
+      throw new Error("Plan model did not return valid style JSON")
+    }
 
-    // Return the raw instruction text
+    // Keep `instruction` for downstream compatibility.
     return NextResponse.json({
-      instruction: responseText,
+      instruction: JSON.stringify(styleJson, null, 2),
+      styleJson,
+      raw: responseText,
     })
   } catch (error: any) {
     console.error("[v0] Plan generation error:", error)

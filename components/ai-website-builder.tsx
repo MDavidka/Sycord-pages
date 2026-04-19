@@ -1269,9 +1269,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       console.warn(`Failed to clear existing pages for project ${projectId}. Old pages may persist in this generation.`, e)
     }
 
-    // ── Step 1: Plan ──
     setStep("planning")
-    setCurrentPlan("Architecting solution...")
+    setCurrentPlan("Generating style JSON...")
 
     try {
       const implementationContext = await buildImplementationContext()
@@ -1280,28 +1279,128 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, messages: [...messages, userMessage], implementation: implementationContext }),
       })
-
-      if (!planResponse.ok) throw new Error("Failed to generate plan")
+      if (!planResponse.ok) throw new Error("Failed to generate style JSON")
       const planData = await planResponse.json()
-      const generatedInstruction = planData.instruction
+      const styleJson = planData.styleJson || {}
+      const styleText = JSON.stringify(styleJson, null, 2)
+      setInstruction(styleText)
+      parseSitemap(styleText)
 
-      parseSitemap(generatedInstruction)
-      setInstruction(generatedInstruction)
-
-      const planMessage: Message = {
+      const styleMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: generatedInstruction,
-        plan: "Architectural Strategy",
+        content: `STYLE JSON\n\`\`\`json\n${styleText}\n\`\`\``,
+        plan: "Style Plan",
       }
-      setMessages(prev => [...prev, planMessage])
-
+      const historyAfterStyle = [...messages, userMessage, styleMessage]
+      setMessages(prev => [...prev, styleMessage])
       await phaseDelay()
 
-      // ── Step 2: Code (delegated to processNextStep) ──
-      processNextStep(generatedInstruction, [...messages, userMessage, planMessage], [], implementationContext)
+      setStep("coding")
+      setCurrentPlan("Generating function JSON...")
+      const functionResponse = await fetch("/api/ai/generate-functions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, messages: historyAfterStyle, styleJson }),
+      })
+      if (!functionResponse.ok) throw new Error("Failed to generate function JSON")
+      const functionData = await functionResponse.json()
+      const functionJson = functionData.functionJson || {}
+      const functionText = JSON.stringify(functionJson, null, 2)
+
+      const functionMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
+        content: `FUNCTION JSON\n\`\`\`json\n${functionText}\n\`\`\``,
+        plan: "Logic Plan",
+      }
+      setMessages(prev => [...prev, functionMessage])
+      await phaseDelay()
+
+      setCurrentPlan("Orchestrating TypeScript files...")
+      const orchestrationResponse = await fetch("/api/ai/orchestrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ styleJson, functionJson }),
+      })
+      if (!orchestrationResponse.ok) throw new Error("Failed to orchestrate files")
+      const orchestrationData = await orchestrationResponse.json()
+      const files = Array.isArray(orchestrationData.files) ? orchestrationData.files : []
+      if (files.length === 0) throw new Error("No files were orchestrated")
+
+      const nextFilesSnapshot: GeneratedPage[] = files.map((f: any) => ({
+        name: f.name,
+        code: f.content || "",
+        timestamp: Date.now(),
+        usedFor: f.usedFor || "Generated file",
+      }))
+
+      setGeneratedPages(nextFilesSnapshot)
+      await Promise.all(
+        nextFilesSnapshot.map((file) =>
+          fetch(`/api/projects/${projectId}/pages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: file.name,
+              content: file.code,
+              usedFor: file.usedFor || "",
+            }),
+          }),
+        ),
+      )
+
+      setStep("building")
+      setCurrentPlan("Running build review and deploying...")
+      setActiveFile(undefined)
+      setActiveFileUsedFor(undefined)
+
+      try {
+        const buildReviewResponse = await fetch("/api/ai/generate-build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instruction: JSON.stringify({ styleJson, functionJson }, null, 2),
+            generatedPages: nextFilesSnapshot.map((p) => ({ name: p.name, usedFor: p.usedFor })),
+          }),
+        })
+        if (buildReviewResponse.ok) {
+          const buildData = await buildReviewResponse.json()
+          if (buildData.review) {
+            setMessages(prev => [...prev, {
+              id: (Date.now() + 3).toString(),
+              role: "assistant",
+              content: buildData.review,
+            }])
+          }
+        }
+      } catch {
+        // Non-blocking: deploy still proceeds.
+      }
+
+      if (!autoDeployTriggered) {
+        setAutoDeployTriggered(true)
+        try {
+          const res = await fetch("/api/deploy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId })
+          })
+          const deployData = await res.json()
+          if (deployData.success) {
+            setDeploySuccess(true)
+            setDeployResult(deployData)
+            if (deployData.repoId) {
+              setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
+            }
+          }
+        } catch { /* deploy error is non-blocking */ }
+      }
+
+      await new Promise(r => setTimeout(r, 800))
+      setStep("done")
     } catch (err: any) {
-      setError(err.message || "Planning failed")
+      setError(err.message || "Generation failed")
       setStep("idle")
     }
   }
