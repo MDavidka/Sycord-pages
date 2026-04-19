@@ -92,6 +92,12 @@ export async function POST(request: Request) {
 
     // Merge with server-side cache so the AI retains context across calls
     // even if the frontend doesn't re-send every previously generated file.
+    const isFirstTask = normalizedInstruction.includes("[1]") && !normalizedInstruction.includes("[Done] src/types.ts") && !normalizedInstruction.includes("[Done] package.json")
+    if (isFirstTask && projectId) {
+      const { clearProjectCache } = require("@/lib/gemini-cache")
+      clearProjectCache(projectId)
+    }
+
     const cachedFiles = projectId ? getCachedFiles(projectId) : []
     const mergedMap = new Map<string, GeneratedFile>()
     const orderedCandidates = [...cachedFiles, ...frontendFiles].sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
@@ -136,6 +142,17 @@ export async function POST(request: Request) {
     }
 
     if (!currentTask) {
+        // Double check if there are REALLY no tasks left
+        const anyTaskLeft = /\[\d+\]/.test(instruction)
+        if (!anyTaskLeft) {
+            return NextResponse.json({
+                isComplete: true,
+                updatedInstruction: instruction
+            })
+        }
+        // If there's a task but regex failed, it might be a formatting issue.
+        // We'll return isComplete: true as a safety measure to avoid infinite loops,
+        // but in a real scenario we might want to try a more aggressive regex.
         return NextResponse.json({
             isComplete: true,
             updatedInstruction: normalizedInstruction

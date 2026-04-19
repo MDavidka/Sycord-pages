@@ -942,12 +942,20 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     }
     // Fallback: extract from [N] file markers that look like pages
     if (nodes.length === 0) {
-      const fileMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/[\w-]+\.ts)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
+      // Look for components that are likely pages (not header/footer/utils)
+      const fileMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
       for (const m of fileMatches) {
-        const name = m[1].replace('src/components/', '').replace('.ts', '')
-        const desc = m[2]
-        if (name !== 'header' && name !== 'footer') {
-          nodes.push({ page: name.charAt(0).toUpperCase() + name.slice(1), path: '/' + name, description: desc })
+        const fullPath = m[1]
+        const name = m[2]
+        const desc = m[3]
+        
+        const skipList = ['header', 'footer', 'layout', 'navbar', 'sidebar', 'utils', 'db', 'types']
+        if (!skipList.includes(name.toLowerCase())) {
+          nodes.push({ 
+            page: name.charAt(0).toUpperCase() + name.slice(1), 
+            path: name.toLowerCase() === 'home' ? '/' : '/' + name.toLowerCase(), 
+            description: desc 
+          })
         }
       }
     }
@@ -1226,6 +1234,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setAutoDeployTriggered(false)
     setSitemap([])
     setQuestionCount(0) // Reset question count for new generation
+
+    // Clear existing pages from the database and local state before starting a new generation
+    // to prevent "leaking" old pages into the new build.
+    try {
+      await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
+      setGeneratedPages([])
+    } catch (e) {
+      console.warn("Failed to clear existing pages:", e)
+    }
 
     // ── Phase 1: Planning ──
     setStep("planning")

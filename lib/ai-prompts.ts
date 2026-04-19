@@ -83,9 +83,9 @@ Follow this order strictly:
 5. src/style.css        (design tokens -- imported by main.tsx)
 6. src/utils.ts         (helpers -- may import types.ts)
 6b. src/db.ts     (MongoDB client -- ONLY when REQUIRES_DATABASE is true, generated right after utils.ts)
-7. src/components/*.tsx  (React components using Hero UI -- import types, utils, db; order simple to complex)
-8. src/main.tsx          (React entry -- imports everything above, wraps in HeroUIProvider, MUST BE SECOND TO LAST src file)
-9. index.html           (shell -- references /src/main.tsx, includes <div id="root">)
+	7. src/components/*.tsx  (React components using Hero UI -- import types, utils, db; order simple to complex)
+	8. src/main.tsx          (React entry -- imports everything above, wraps in HeroUIProvider, MUST BE SECOND TO LAST src file. It MUST render the Header, Footer, and the main page content based on simple routing or conditional rendering.)
+	9. index.html           (shell -- references /src/main.tsx, includes <div id="root">)
 10. .gitignore          (housekeeping)
 11. README.md           (docs)
 
@@ -334,12 +334,14 @@ Purpose: **{{USEDFOR}}**
     - SHOULD import helpers from '../utils' when relevant.
     - When REQUIRES_DATABASE is true: components that display or manage data MUST import the \`fetch\` wrapper functions from '../db' and use them. Do NOT use hardcoded mock data.
 - **src/main.tsx**:
-    - MUST include \`import './style.css'\` at the top.
-    - MUST import React and ReactDOM.
-    - MUST import \`{ HeroUIProvider }\` from '@heroui/react'.
-    - MUST wrap the app root in \`<HeroUIProvider>\`.
-    - MUST import and render ALL component from ./components/*.
-    - MUST be the orchestrator that ties everything together.
+	    - MUST include \`import './style.css'\` at the top.
+	    - MUST import React and ReactDOM.
+	    - MUST import \`{ HeroUIProvider }\` from '@heroui/react'.
+	    - MUST wrap the app root in \`<HeroUIProvider>\`.
+	    - MUST import and render ALL components from ./components/*.
+	    - MUST be the orchestrator that ties everything together.
+	    - IMPORTANT: Since this is a SPA, use a simple state-based router or conditional rendering to switch between pages (e.g., Home, About, Contact) based on \`window.location.pathname\` or a state variable.
+	    - Ensure the Header and Footer are always visible, and the page content changes.
 - **index.html**:
     - Must be in the **ROOT** directory (not public/).
     - Must include \`<script type="module" src="/src/main.tsx"></script>\`.
