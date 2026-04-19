@@ -84,7 +84,7 @@ Follow this order strictly:
 6. src/utils.ts         (helpers -- may import types.ts)
 6b. src/db.ts     (MongoDB client -- ONLY when REQUIRES_DATABASE is true, generated right after utils.ts)
 7. src/components/*.tsx  (React components using Hero UI -- import types, utils, db; order simple to complex)
-8. src/main.tsx          (React entry -- imports everything above, wraps in HeroUIProvider, MUST BE SECOND TO LAST src file. It MUST render the Header, Footer, and the main page content based on simple routing or conditional rendering.)
+8. src/main.tsx          (React entry -- imports everything above, wraps in HeroUIProvider, MUST BE THE LAST src/ file. It MUST render the Header, Footer, and the main page content based on simple routing or conditional rendering.)
 9. index.html           (shell -- references /src/main.tsx, includes <div id="root">)
 10. .gitignore          (housekeeping)
 11. README.md           (docs)

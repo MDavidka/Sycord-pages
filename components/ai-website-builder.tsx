@@ -58,6 +58,7 @@ const MODELS: ModelOption[] = [
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
 const LOG_SUCCESS_PATTERNS = ['take a peek over at', 'deployment complete', 'pages.dev']
 const LOG_ERROR_PATTERNS   = ['error', 'fail', 'exception']
+const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar', 'sidebar', 'utils', 'db', 'types'])
 
 // How long to wait after deploy before the first log check (build pipeline startup time)
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
@@ -943,14 +944,13 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     // Fallback: extract from [N] file markers that look like pages
     if (nodes.length === 0) {
       // Look for components that are likely pages (not header/footer/utils)
-      const pageComponentMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
-      for (const m of pageComponentMatches) {
+      const componentMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
+      for (const m of componentMatches) {
         const fullPath = m[1]
         const name = m[2]
         const desc = m[3]
         
-        const skipList = ['header', 'footer', 'layout', 'navbar', 'sidebar', 'utils', 'db', 'types']
-        if (!skipList.includes(name.toLowerCase())) {
+        if (!INFRASTRUCTURE_COMPONENTS.has(name.toLowerCase())) {
           nodes.push({ 
             page: name.charAt(0).toUpperCase() + name.slice(1), 
             path: name.toLowerCase() === 'home' ? '/' : '/' + name.toLowerCase(), 
