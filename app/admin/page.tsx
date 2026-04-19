@@ -87,6 +87,15 @@ interface User {
   websites: Array<{ id: string; businessName: string; subdomain: string }>
 }
 
+interface SystemPromptsState {
+  builderPlan: string
+  builderCode: string
+  autoFixDiagnosis: string
+  autoFixResolution: string
+  inlineFixDiagnosis: string
+  inlineFixResolution: string
+}
+
 const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
@@ -129,6 +138,15 @@ export default function AdminPage() {
   const [thinkerModel, setThinkerModel] = useState("nvidia/nemotron-3-super-120b-a12b:free")
   const [coderModel, setCoderModel] = useState("minimax/minimax-m2.5:free")
   const [modelConfigLoading, setModelConfigLoading] = useState(false)
+  const [systemPrompts, setSystemPrompts] = useState<SystemPromptsState>({
+    builderPlan: "",
+    builderCode: "",
+    autoFixDiagnosis: "",
+    autoFixResolution: "",
+    inlineFixDiagnosis: "",
+    inlineFixResolution: "",
+  })
+  const [promptsLoading, setPromptsLoading] = useState(false)
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -425,9 +443,56 @@ export default function AdminPage() {
     }
   }
 
+  const fetchSystemPrompts = async () => {
+    setPromptsLoading(true)
+    try {
+      const res = await fetch("/api/admin/prompts")
+      if (!res.ok) {
+        toast.error("Failed to load AI prompts")
+        return
+      }
+      const data = await res.json()
+      setSystemPrompts({
+        builderPlan: data.builderPlan || "",
+        builderCode: data.builderCode || "",
+        autoFixDiagnosis: data.autoFixDiagnosis || "",
+        autoFixResolution: data.autoFixResolution || "",
+        inlineFixDiagnosis: data.inlineFixDiagnosis || "",
+        inlineFixResolution: data.inlineFixResolution || "",
+      })
+    } catch (err) {
+      console.error("Failed to fetch AI prompts:", err)
+      toast.error("Failed to load AI prompts")
+    } finally {
+      setPromptsLoading(false)
+    }
+  }
+
+  const saveSystemPrompts = async () => {
+    setPromptsLoading(true)
+    try {
+      const res = await fetch("/api/admin/prompts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(systemPrompts),
+      })
+      if (res.ok) {
+        toast.success("AI prompts saved successfully")
+      } else {
+        toast.error("Failed to save AI prompts")
+      }
+    } catch (err) {
+      console.error("Failed to save AI prompts:", err)
+      toast.error("Failed to save AI prompts")
+    } finally {
+      setPromptsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === "models") {
       fetchModelConfig()
+      fetchSystemPrompts()
     }
   }, [activeTab])
 
@@ -1269,6 +1334,100 @@ export default function AdminPage() {
                     <li>Make sure the model IDs are valid OpenRouter model identifiers</li>
                   </ul>
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">AI Builder Step Prompts (Editable)</h3>
+                <p className="text-xs text-white/30 mt-1">
+                  These prompts define each AI builder step. Hero UI component usage is expected in generated React code.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs text-white/50">Step 1 — Planning Prompt (builderPlan)</label>
+                <Textarea
+                  className="font-mono text-xs min-h-[180px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                  value={systemPrompts.builderPlan}
+                  onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderPlan: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs text-white/50">Step 2 — Code Generation Prompt (builderCode)</label>
+                <Textarea
+                  className="font-mono text-xs min-h-[220px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                  value={systemPrompts.builderCode}
+                  onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderCode: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50">Step 3 — Auto-Fix Diagnosis</label>
+                  <Textarea
+                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                    value={systemPrompts.autoFixDiagnosis}
+                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, autoFixDiagnosis: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50">Step 4 — Auto-Fix Resolution</label>
+                  <Textarea
+                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                    value={systemPrompts.autoFixResolution}
+                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, autoFixResolution: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50">Step 5 — Inline-Fix Diagnosis</label>
+                  <Textarea
+                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                    value={systemPrompts.inlineFixDiagnosis}
+                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, inlineFixDiagnosis: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-white/50">Step 6 — Inline-Fix Resolution</label>
+                  <Textarea
+                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                    value={systemPrompts.inlineFixResolution}
+                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, inlineFixResolution: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={saveSystemPrompts}
+                  disabled={promptsLoading}
+                  className="bg-white/5 text-white/80 hover:bg-white/10 border border-white/[0.06] rounded-xl"
+                >
+                  {promptsLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving prompts...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Prompt Steps
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={fetchSystemPrompts}
+                  disabled={promptsLoading}
+                  variant="outline"
+                  className="bg-white/[0.02] text-white/60 hover:bg-white/5 border-white/[0.06] rounded-xl"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reload Prompts
+                </Button>
               </div>
             </div>
           </div>

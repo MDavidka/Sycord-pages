@@ -164,8 +164,11 @@ export async function POST(request: Request) {
     // Determine file type
     const fileExt = currentTask.filename.split('.').pop() || ''
     const isTS = fileExt === 'ts' || fileExt === 'tsx'
+    const isTSX = fileExt === 'tsx'
     const isHTML = fileExt === 'html'
     const isJSON = fileExt === 'json'
+    const isComponentTSX = isTSX && currentTask.filename.startsWith("src/components/")
+    const isMainEntryTSX = currentTask.filename === "src/main.tsx"
 
     // Fetch Prompts (Global)
     const { builderCode: promptTemplate } = await getSystemPrompts()
@@ -240,8 +243,11 @@ HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
     const shortTermMemory = getShortTermMemory(normalizedInstruction)
     
     let fileRules = ""
-    if (isHTML) fileRules = `- Use <!DOCTYPE html>. Include <script src="https://cdn.tailwindcss.com"></script>. Include <script type="module" src="/src/main.ts"></script>.`
+    if (isHTML) fileRules = `- Use <!DOCTYPE html>. Include <script src="https://cdn.tailwindcss.com"></script>. Include <script type="module" src="/src/main.tsx"></script>.`
     if (isTS) fileRules = `- Write valid TypeScript. Use 'export' for modules. Import from relative paths (e.g. './utils'). DOM manipulation must be type-safe (use 'as HTMLElement' if needed). ALL functions must have explicit return types. IMPORTANT: Do NOT access DOM elements at the top level. Wrap all DOM access in exported functions (e.g. init() or render()).`
+    if (isComponentTSX || isMainEntryTSX) {
+      fileRules += ` - This React file MUST use Hero UI components from '@heroui/react' as primary UI primitives. Include at least one import from '@heroui/react'. Do NOT build forms/tables/actions with raw HTML controls like <button>, <input>, <select>, <textarea>, or <table> when Hero UI equivalents exist (Button, Input, Select, Textarea, Table, etc.).`
+    }
     if (isJSON) fileRules = `- Return valid JSON only.`
     if (fileExt === 'css') fileRules = `- Write valid CSS. Define CSS custom properties in :root for design tokens. Use @tailwind directives if applicable.`
 

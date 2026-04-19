@@ -552,15 +552,26 @@ export async function getSystemPrompts() {
   }
 }
 
-export async function saveSystemPrompts(prompts: { builderPlan?: string, builderCode?: string, autoFixDiagnosis?: string, autoFixResolution?: string }) {
+export async function saveSystemPrompts(prompts: {
+  builderPlan?: string
+  builderCode?: string
+  autoFixDiagnosis?: string
+  autoFixResolution?: string
+  inlineFixDiagnosis?: string
+  inlineFixResolution?: string
+}) {
     if (!clientPromise) throw new Error("Database not connected")
 
     const mongo = await clientPromise
     const db = mongo.db()
 
+    const existing = await db.collection("system_prompts").findOne({ type: "global_prompts" })
+    const existingPrompts = existing?.prompts || {}
+    const mergedPrompts = { ...existingPrompts, ...prompts }
+
     await db.collection("system_prompts").updateOne(
         { type: "global_prompts" },
-        { $set: { prompts } },
+        { $set: { prompts: mergedPrompts } },
         { upsert: true }
     )
 }
