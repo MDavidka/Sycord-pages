@@ -530,6 +530,18 @@ import { x } from './y'
 [/code]
 `
 
+export const EDITABLE_PROMPT_KEYS = [
+  "builderPlan",
+  "builderCode",
+  "builderBuild",
+  "autoFixDiagnosis",
+  "autoFixResolution",
+  "inlineFixDiagnosis",
+  "inlineFixResolution",
+] as const
+
+type EditablePromptKey = (typeof EDITABLE_PROMPT_KEYS)[number]
+
 // --- PROMPT FETCHING LOGIC ---
 
 export async function getSystemPrompts() {
@@ -576,28 +588,12 @@ export async function getSystemPrompts() {
   }
 }
 
-export async function saveSystemPrompts(prompts: {
-  builderPlan?: string
-  builderCode?: string
-  builderBuild?: string
-  autoFixDiagnosis?: string
-  autoFixResolution?: string
-  inlineFixDiagnosis?: string
-  inlineFixResolution?: string
-}) {
+export async function saveSystemPrompts(prompts: Partial<Record<EditablePromptKey, string>>) {
     if (!clientPromise) throw new Error("Database not connected")
 
     const mongo = await clientPromise
     const db = mongo.db()
-    const allowedPromptKeys = new Set([
-      "builderPlan",
-      "builderCode",
-      "builderBuild",
-      "autoFixDiagnosis",
-      "autoFixResolution",
-      "inlineFixDiagnosis",
-      "inlineFixResolution",
-    ])
+    const allowedPromptKeys = new Set<string>(EDITABLE_PROMPT_KEYS)
 
     const promptEntries = Object.entries(prompts).filter(
       ([key, value]) => allowedPromptKeys.has(key) && typeof value === "string",

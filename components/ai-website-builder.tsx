@@ -1261,14 +1261,18 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       await phaseDelay()
 
       // ── Step 2: Code (delegated to processNextStep) ──
-      processNextStep(generatedInstruction, [...messages, userMessage, planMessage])
+      processNextStep(generatedInstruction, [...messages, userMessage, planMessage], [])
     } catch (err: any) {
       setError(err.message || "Planning failed")
       setStep("idle")
     }
   }
 
-  const processNextStep = async (currentInstruction: string, currentHistory: Message[]) => {
+  const processNextStep = async (
+    currentInstruction: string,
+    currentHistory: Message[],
+    filesSnapshot: GeneratedPage[],
+  ) => {
     setStep("coding")
     setCurrentPlan("Generating next file...")
 
@@ -1331,7 +1335,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               instruction: data.updatedInstruction || currentInstruction,
-              generatedPages: generatedPages.map((p) => ({ name: p.name, usedFor: p.usedFor })),
+              generatedPages: filesSnapshot.map((p) => ({ name: p.name, usedFor: p.usedFor })),
             }),
           })
           if (buildReviewResponse.ok) {
@@ -1383,7 +1387,18 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       setMessages(prev => [...prev, assistantMessage])
 
+      let nextFilesSnapshot = filesSnapshot
       if (data.code && data.pageName) {
+        nextFilesSnapshot = [
+          ...filesSnapshot.filter((p) => p.name !== data.pageName),
+          {
+            name: data.pageName,
+            code: data.code,
+            timestamp: Date.now(),
+            usedFor: data.usedFor,
+          },
+        ]
+
         setGeneratedPages(prev => {
           const filtered = prev.filter(p => p.name !== data.pageName)
           return [...filtered, {
@@ -1406,7 +1421,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
 
       setInstruction(data.updatedInstruction)
-      processNextStep(data.updatedInstruction, [...currentHistory, assistantMessage])
+      processNextStep(data.updatedInstruction, [...currentHistory, assistantMessage], nextFilesSnapshot)
 
     } catch (err: any) {
       setError(err.message)
