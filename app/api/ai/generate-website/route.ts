@@ -93,7 +93,8 @@ export async function POST(request: Request) {
     // Merge with server-side cache so the AI retains context across calls
     // even if the frontend doesn't re-send every previously generated file.
     const firstTaskPattern = /^\s*\[1\]\s+[^\n]+/m
-    const isFirstTask = firstTaskPattern.test(normalizedInstruction) && !normalizedInstruction.includes("[Done] src/types.ts") && !normalizedInstruction.includes("[Done] package.json")
+    const hasAnyCompletedTask = /^\s*\[Done\]\s+[^\n]+/m.test(normalizedInstruction)
+    const isFirstTask = firstTaskPattern.test(normalizedInstruction) && !hasAnyCompletedTask
     if (isFirstTask && projectId) {
       const { clearProjectCache } = require("@/lib/gemini-cache")
       clearProjectCache(projectId)
@@ -151,9 +152,6 @@ export async function POST(request: Request) {
                 updatedInstruction: instruction
             })
         }
-        // If there's a task but regex failed, it might be a formatting issue.
-        // We'll return isComplete: true as a safety measure to avoid infinite loops,
-        // but in a real scenario we might want to try a more aggressive regex.
         return NextResponse.json({
             isComplete: true,
             updatedInstruction: normalizedInstruction
