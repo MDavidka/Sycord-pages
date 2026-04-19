@@ -46,21 +46,19 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default model is NVIDIA via uploaded text attachment
-const DEFAULT_MODEL_ID = "nvidia-uploaded-text-model"
+// Default to highest-quality Gemini; only three curated options are exposed.
+const DEFAULT_MODEL_ID = "gemini-3.1-pro-preview"
 
 const MODELS: ModelOption[] = [
-  { id: "nvidia-uploaded-text-model", name: "NVIDIA Uploaded Text Model", provider: "NVIDIA", fast: true },
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
-  { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite ⚡", provider: "Google", fast: true },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "Google" },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", provider: "Google" },
-  { id: "deepseek-v3.2-exp", name: "DeepSeek V3", provider: "DeepSeek" },
+  { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash ⚡", provider: "Google", fast: true },
+  { id: "openai/gpt-oss-120b:free", name: "GPT-OSS 120B (Thinker)", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
 const LOG_SUCCESS_PATTERNS = ['take a peek over at', 'deployment complete', 'pages.dev']
 const LOG_ERROR_PATTERNS   = ['error', 'fail', 'exception']
+const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar', 'sidebar', 'utils', 'db', 'types'])
 
 // How long to wait after deploy before the first log check (build pipeline startup time)
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
@@ -592,6 +590,9 @@ const InputBar = ({
                   align="start"
                   className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
                 >
+                  <div className="px-2 pt-1 pb-1 text-[10px] text-zinc-500 leading-relaxed">
+                    Planning always runs on <span className="text-zinc-300">Gemini 3.1 Flash-Lite</span> for fast reasoning. Pick Gemini Pro for quality or Flash for speed when generating code.
+                  </div>
                   {bestModels.length > 0 && (
                     <>
                       <div className="px-2 pt-1.5 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
@@ -943,14 +944,13 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     // Fallback: extract from [N] file markers that look like pages
     if (nodes.length === 0) {
       // Look for components that are likely pages (not header/footer/utils)
-      const fileMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
-      for (const m of fileMatches) {
+      const componentMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
+      for (const m of componentMatches) {
         const fullPath = m[1]
         const name = m[2]
         const desc = m[3]
         
-        const skipList = ['header', 'footer', 'layout', 'navbar', 'sidebar', 'utils', 'db', 'types']
-        if (!skipList.includes(name.toLowerCase())) {
+        if (!INFRASTRUCTURE_COMPONENTS.has(name.toLowerCase())) {
           nodes.push({ 
             page: name.charAt(0).toUpperCase() + name.slice(1), 
             path: name.toLowerCase() === 'home' ? '/' : '/' + name.toLowerCase(), 
@@ -1241,7 +1241,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
       setGeneratedPages([])
     } catch (e) {
-      console.warn("Failed to clear existing pages:", e)
+      console.warn(`Failed to clear existing pages for project ${projectId}. Old pages may persist in this generation.`, e)
     }
 
     // ── Phase 1: Planning ──
@@ -1249,11 +1249,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setCurrentPlan("Architecting solution...")
 
     try {
-      const planResponse = await fetch("/api/ai/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
-      })
+          const planResponse = await fetch("/api/ai/generate-plan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: [...messages, userMessage] }),
+          })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
       const planData = await planResponse.json()
@@ -1337,7 +1337,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           messages: currentHistory,
           instruction: currentInstruction,
           model,
-          generatedPages: generatedPages.map(p => ({ name: p.name, code: p.code })),
+          generatedPages: generatedPages.map(p => ({
+            name: p.name,
+            code: p.code,
+            usedFor: p.usedFor,
+            timestamp: p.timestamp,
+          })),
         }),
       })
       if (!response.ok) throw new Error("Generation failed")

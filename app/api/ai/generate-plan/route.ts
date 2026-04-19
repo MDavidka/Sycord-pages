@@ -3,9 +3,9 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 
-// Thinking/planning phase — OpenRouter free tier
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-const PLAN_MODEL = "openai/gpt-oss-120b:free"
+// Thinking/planning phase — fast path on Gemini Flash-Lite for all models
+const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+const PLAN_MODEL = "gemini-3.1-flash-lite-preview"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -14,15 +14,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages } = await request.json()
+    const { messages, implementation } = await request.json()
 
-    const apiKey = process.env.OPENROUTER_API_KEY
+    const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
     if (!apiKey) {
-      console.error("[v0] OPENROUTER_API_KEY not configured")
-      return NextResponse.json({ message: "AI service not configured (OpenRouter)" }, { status: 500 })
+      console.error("[v0] GOOGLE_AI_API / GOOGLE_API_KEY not configured")
+      return NextResponse.json({ message: "AI service not configured (Gemini)" }, { status: 500 })
     }
 
     const lastUserMessage = messages[messages.length - 1]
+    const implementationBlock = implementation
+      ? `\n\n[IMPLEMENTATION JSON]\n${typeof implementation === "string" ? implementation : JSON.stringify(implementation, null, 2)}\n`
+      : ""
 
     // Fetch Global Prompt
     const { builderPlan: systemContextTemplate } = await getSystemPrompts()
@@ -32,24 +35,22 @@ export async function POST(request: Request) {
 
     const finalPrompt = systemContextTemplate
         .replace("{{HISTORY}}", historyText)
-        .replace("{{REQUEST}}", lastUserMessage.content)
+        .replace("{{REQUEST}}", `${lastUserMessage.content}${implementationBlock}`)
 
-    console.log(`[v0] Generating plan with OpenRouter model: ${PLAN_MODEL}`)
+    console.log(`[v0] Generating plan with Gemini model: ${PLAN_MODEL}`)
 
-    const response = await fetch(OPENROUTER_API_URL, {
+    const response = await fetch(GOOGLE_API_URL, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": process.env.NEXTAUTH_URL || "https://sycord.pages.dev",
-        "X-Title": "Sycord AI Builder",
       },
       body: JSON.stringify({
         model: PLAN_MODEL,
         messages: [
           { role: "user", content: finalPrompt },
         ],
-        temperature: 0.6,
+        temperature: 0.45,
       }),
     })
 
