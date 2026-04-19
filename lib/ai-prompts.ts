@@ -424,7 +424,14 @@ CHEAT_SHEET:
 {{CHEAT_SHEET}}
 `
 
-export const DEFAULT_BUILDER_CHEAT_SHEET = `Use shadcn/ui component patterns and deterministic TypeScript handlers.`
+export const DEFAULT_BUILDER_CHEAT_SHEET = `
+Use deterministic shadcn/ui + TypeScript logic conventions:
+- State names: noun + setNoun (example: count / setCount).
+- Handler names: handle<Action><Target> (example: handleMainClick, handleSubmitForm).
+- Effects: keep side effects in useEffect with explicit dependency arrays.
+- Event mapping: bind handlers by target id in function JSON (targetId + event).
+- Prefer simple, composable logic blocks over nested inline callbacks.
+`
 
 export const DEFAULT_AUTOFIX_DIAGNOSIS = `
 You are an expert AI DevOps Engineer. Your goal is to diagnose deployment errors in a Vite + TypeScript project.

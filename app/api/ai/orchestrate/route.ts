@@ -69,6 +69,13 @@ function toAttr(key: string, value: JsonValue): string {
   return `${key}={${JSON.stringify(value)}}`
 }
 
+function isSafePropKey(key: string): boolean {
+  if (!/^[a-zA-Z][\w:-]*$/.test(key)) return false
+  if (/^on[A-Z]/.test(key)) return false
+  if (key === "dangerouslySetInnerHTML") return false
+  return true
+}
+
 function renderNode(
   node: StyleNode,
   indent = 2,
@@ -81,6 +88,7 @@ function renderNode(
 
   for (const [key, val] of Object.entries(props)) {
     if (key === "children") continue
+    if (!isSafePropKey(key)) continue
     attrs.push(toAttr(key, val))
   }
 
@@ -378,4 +386,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: error.message || "Failed to orchestrate files" }, { status: 500 })
   }
 }
-

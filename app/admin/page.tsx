@@ -1369,7 +1369,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-3">
-                <p className="text-xs text-white/50">Step 2.5 — Cheat Sheet (builderCheatSheet)</p>
+                <p className="text-xs text-white/50">Shared Configuration — Cheat Sheet (builderCheatSheet)</p>
                 <Textarea
                   id="prompt-builder-cheat-sheet"
                   className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"

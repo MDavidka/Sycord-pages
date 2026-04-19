@@ -112,7 +112,7 @@ CHEAT_SHEET:
 ${builderCheatSheet || ""}
 `
 
-    console.log(`[v0] Generating plan with Gemini model: ${PLAN_MODEL}`)
+    console.log(`[AI Plan Generation] Generating style JSON with model: ${PLAN_MODEL}`)
 
     const response = await fetch(GOOGLE_API_URL, {
       method: "POST",
