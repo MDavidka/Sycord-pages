@@ -13,7 +13,7 @@ interface BuildFile {
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ review })
   } catch (error: any) {
-    console.error("[v0] Build review generation error:", error)
+    console.error("[AI Build Review] Generation error:", error)
     return NextResponse.json({ message: error.message || "Failed to generate build review" }, { status: 500 })
   }
 }
