@@ -1346,8 +1346,9 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-3">
-                <label className="text-xs text-white/50">Step 1 — Planning Prompt (builderPlan)</label>
+                <label htmlFor="prompt-builder-plan" className="text-xs text-white/50">Step 1 — Planning Prompt (builderPlan)</label>
                 <Textarea
+                  id="prompt-builder-plan"
                   className="font-mono text-xs min-h-[180px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                   value={systemPrompts.builderPlan}
                   onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderPlan: e.target.value }))}
@@ -1355,8 +1356,9 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-3">
-                <label className="text-xs text-white/50">Step 2 — Code Generation Prompt (builderCode)</label>
+                <label htmlFor="prompt-builder-code" className="text-xs text-white/50">Step 2 — Code Generation Prompt (builderCode)</label>
                 <Textarea
+                  id="prompt-builder-code"
                   className="font-mono text-xs min-h-[220px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                   value={systemPrompts.builderCode}
                   onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderCode: e.target.value }))}
@@ -1365,16 +1367,18 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-white/50">Step 3 — Auto-Fix Diagnosis</label>
+                  <label htmlFor="prompt-autofix-diagnosis" className="text-xs text-white/50">Step 3 — Auto-Fix Diagnosis</label>
                   <Textarea
+                    id="prompt-autofix-diagnosis"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                     value={systemPrompts.autoFixDiagnosis}
                     onChange={(e) => setSystemPrompts(prev => ({ ...prev, autoFixDiagnosis: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/50">Step 4 — Auto-Fix Resolution</label>
+                  <label htmlFor="prompt-autofix-resolution" className="text-xs text-white/50">Step 4 — Auto-Fix Resolution</label>
                   <Textarea
+                    id="prompt-autofix-resolution"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                     value={systemPrompts.autoFixResolution}
                     onChange={(e) => setSystemPrompts(prev => ({ ...prev, autoFixResolution: e.target.value }))}
@@ -1384,16 +1388,18 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs text-white/50">Step 5 — Inline-Fix Diagnosis</label>
+                  <label htmlFor="prompt-inlinefix-diagnosis" className="text-xs text-white/50">Step 5 — Inline-Fix Diagnosis</label>
                   <Textarea
+                    id="prompt-inlinefix-diagnosis"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                     value={systemPrompts.inlineFixDiagnosis}
                     onChange={(e) => setSystemPrompts(prev => ({ ...prev, inlineFixDiagnosis: e.target.value }))}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-white/50">Step 6 — Inline-Fix Resolution</label>
+                  <label htmlFor="prompt-inlinefix-resolution" className="text-xs text-white/50">Step 6 — Inline-Fix Resolution</label>
                   <Textarea
+                    id="prompt-inlinefix-resolution"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
                     value={systemPrompts.inlineFixResolution}
                     onChange={(e) => setSystemPrompts(prev => ({ ...prev, inlineFixResolution: e.target.value }))}
