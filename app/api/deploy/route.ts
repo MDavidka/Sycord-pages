@@ -179,7 +179,8 @@ async function deployViaGitTree(
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userId = (session?.user as { id?: string } | undefined)?.id
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { projectId } = await request.json()
     if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
@@ -195,7 +196,7 @@ export async function POST(request: Request) {
     const { token, owner } = envCredentials
 
     // 2. Project Data
-    const userDoc = await db.collection("users").findOne({ id: session.user.id })
+    const userDoc = await db.collection("users").findOne({ id: userId })
     const project = userDoc?.projects?.find((p: any) => p._id.toString() === projectId)
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
 
@@ -238,7 +239,7 @@ export async function POST(request: Request) {
 
     // Update User/Project DB
     await db.collection("users").updateOne(
-        { id: session.user.id, "projects._id": new ObjectId(projectId) },
+        { id: userId, "projects._id": new ObjectId(projectId) },
         {
             $set: {
                 "projects.$.githubOwner": owner,
@@ -261,7 +262,7 @@ export async function POST(request: Request) {
     }
 
     // Save Git Connection for Sycord Deployer
-    await db.collection("users").updateOne({ id: session.user.id }, {
+    await db.collection("users").updateOne({ id: userId }, {
         $set: { [`git_connection.${repoId}`]: {
             username: owner,
             repo_id: repoId.toString(),
@@ -319,7 +320,7 @@ export async function POST(request: Request) {
         if (vpsUrl) {
             deployMessage = "Deployed to Sycord VPS!"
             await db.collection("users").updateOne(
-                { id: session.user.id, "projects._id": new ObjectId(projectId) },
+                { id: userId, "projects._id": new ObjectId(projectId) },
                 { $set: { "projects.$.cloudflareUrl": vpsUrl } } // Using cloudflareUrl for backward compatibility in DB schema
             )
         }
