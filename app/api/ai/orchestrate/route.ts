@@ -70,7 +70,7 @@ function toAttr(key: string, value: JsonValue): string {
 }
 
 function isSafePropKey(key: string): boolean {
-  if (!/^[a-zA-Z][\w:-]*$/.test(key)) return false
+  if (!/^[a-zA-Z][A-Za-z0-9_]*$/.test(key)) return false
   if (/^on[A-Z]/.test(key)) return false
   if (key === "dangerouslySetInnerHTML") return false
   return true
