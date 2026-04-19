@@ -62,7 +62,7 @@ ARCHITECTURE DEPTH REQUIREMENTS:
 - Call out authentication, analytics, payments, and external services when the use case warrants it. Define MongoDB collection names and shapes when REQUIRES_DATABASE is true.
 - Prefer reusable Hero UI compositions over raw HTML; plan a component hierarchy that maximizes reuse and theming.
 - Include resilience: empty/loading/error states, graceful fallbacks, and accessibility considerations.
-- MULTI-PAGE BY DEFAULT: unless the user explicitly asks for a single landing page, plan a true multi-page experience with multiple routes and dedicated page components (not one long scrolling page pretending to be multiple sections).
+- MULTI-PAGE BY DEFAULT: unless the user explicitly asks for a single landing page, plan a true multi-page experience with multiple routes and dedicated route components with separate navigation paths.
 
 HERO UI COMPONENT LIBRARY:
 You MUST use Hero UI components as the primary UI framework. Hero UI is a modern, beautiful React component library built on top of Tailwind CSS.
@@ -120,7 +120,7 @@ Generate a REAL sitemap — not just file names. List every page/route the user'
 - What the page does (description)
 - Which other pages it links to (navigation)
 Every page must link to at least one other page. No empty or dummy entries.
-Unless the user explicitly asks for a one-page/landing site, include at least 4 distinct routes (for example Home, About, Services or Products, Contact or Pricing) and make sure each has a dedicated route-level component planned.
+Unless the user explicitly asks for a single-page landing site, include at least 4 distinct routes (for example Home, About, Services or Products, Contact or Pricing) and make sure each has a dedicated route-level component planned.
 Example:
 - **Home/**: Landing page with hero, value proposition, and CTA → leads to Pricing, About
 - **Pricing/**: Tiered pricing cards with FAQ → leads to Home, Contact
@@ -169,7 +169,7 @@ REQUIREMENTS:
 4.  **Components**: Create modular React components in src/components/ directory. Each component MUST import its types from ../types and use Hero UI components.
 5.  **Tailwind CSS + Hero UI**: Use Tailwind CSS classes alongside Hero UI components. Include CDN in index.html for simplicity.
 6.  **Strict Syntax**: Use brackets [1], [2], etc. for file steps. Include [usedfor]...[usedfor] markers.
-7.  **Scale**: Plan for a COMPLETE experience (12-20 files typically) with multiple route-level page components.
+7.  **Scale**: Plan for a COMPLETE experience (15-24 files typically) with multiple route-level page components.
 8.  **Cloudflare Pages Ready**: Structure must be deployable to Cloudflare Pages with Vite.
 9.  **Configuration**:
     - package.json MUST include "build": "vite build" and dependencies: react, react-dom, @heroui/react, @heroui/theme, framer-motion, tailwindcss
