@@ -120,7 +120,7 @@ Generate a REAL sitemap — not just file names. List every page/route the user'
 - What the page does (description)
 - Which other pages it links to (navigation)
 Every page must link to at least one other page. No empty or dummy entries.
-Unless the user explicitly asks for a one-page/landing site, include at least 4 distinct routes (for example Home, About, Services/Products, Contact/Pricing) and make sure each has a dedicated route-level component planned.
+Unless the user explicitly asks for a one-page/landing site, include at least 4 distinct routes (for example Home, About, Services or Products, Contact or Pricing) and make sure each has a dedicated route-level component planned.
 Example:
 - **Home/**: Landing page with hero, value proposition, and CTA → leads to Pricing, About
 - **Pricing/**: Tiered pricing cards with FAQ → leads to Home, Contact
@@ -343,7 +343,7 @@ Purpose: **{{USEDFOR}}**
     - MUST wrap the app root in \`<HeroUIProvider>\`.
     - MUST import and render ALL components from ./components/*.
     - MUST be the orchestrator that ties everything together.
-    - IMPORTANT: Since this is a SPA, implement true multi-route behavior with distinct route-level page components (e.g., Home, About, Services/Products, Contact) using \`window.location.pathname\`, \`history.pushState\`, and popstate handling (or equivalent route state).
+    - IMPORTANT: Since this is a SPA, implement true multi-route behavior with distinct route-level page components (e.g., Home, About, Services, Contact) using \`window.location.pathname\`, \`history.pushState\`, and popstate handling (or equivalent route state).
     - Unless the user explicitly requests a one-page landing site, there MUST be at least 4 distinct routes with different page content and navigation between them.
     - Ensure the Header and Footer are always visible, and only the main page body changes per route.
 - **index.html**:
