@@ -40,14 +40,16 @@ const MODEL_ALIASES: Record<string, string> = {
 
 const DEFAULT_MODEL_ID = "gemini-3.1-pro-preview"
 
-const HERO_UI_GUARDRAILS = `
+const SHADCN_UI_GUARDRAILS = `
 ABSOLUTE UI GUARDRAILS:
-- The entire UI must use @heroui/react primitives (Button, Card, Input, Navbar, Modal, Table, Tabs, Select, Chip, etc.).
-- Prefer HeroUI variants/props over raw HTML. Use Tailwind utilities only to complement layout and spacing.
-- Keep components composable, typed, and data-driven. Avoid hardcoded DOM nodes when a HeroUI component exists.
+- The entire UI must use shadcn/ui primitives from local component paths (e.g. "@/components/ui/button", "@/components/ui/card", "@/components/ui/input").
+- Prefer shadcn/ui component composition over raw HTML controls. Use Tailwind utilities only to complement layout and spacing.
+- Keep components composable, typed, and data-driven. Avoid hardcoded DOM nodes when a shadcn/ui component exists.
+- Generated UI must support dark and white themes.
+- Avoid custom complex CSS; rely on shadcn/ui + Tailwind classes to reduce CSS hallucination.
 `
 
-const HERO_UI_TSX_RULE = `- This React file MUST use Hero UI components from '@heroui/react' as primary UI primitives. Include at least one import from '@heroui/react'. Do NOT build forms/tables/actions with raw HTML controls like <button>, <input>, <select>, <textarea>, or <table> when Hero UI equivalents exist (Button, Input, Select, Textarea, Table, etc.).`
+const SHADCN_UI_TSX_RULE = `- This React file MUST use shadcn/ui components from local ui modules (e.g. '@/components/ui/button', '@/components/ui/input', '@/components/ui/dialog', '@/components/ui/table') as primary UI primitives. Do NOT build forms/tables/actions with raw HTML controls when shadcn/ui equivalents exist.`
 
 function formatMemoryDigest(files: GeneratedFile[]): string {
   if (!files.length) return "No cached files are available yet.";
@@ -228,7 +230,7 @@ CRITICAL MONGODB RULES:
 
 HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
 - DO NOT generate any database code, MongoDB Data API calls, fetch/CRUD helpers, or db.ts.
-- If the feature would normally need data, render a HeroUI modal or inline banner prompting the user to connect a database/integration from the Integrations tab. Include a clear CTA button like "Connect database to enable data".
+- If the feature would normally need data, render a shadcn/ui dialog or inline banner prompting the user to connect a database/integration from the Integrations tab. Include a clear CTA button like "Connect database to enable data".
 - Use static UI copy only for placeholders; never hardcode secrets or fake API keys.
 - Keep code structured so that once a connection exists, data wiring can be added cleanly (no dead-end mocks).`
         }
@@ -248,7 +250,7 @@ HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
     if (isHTML) fileRules = `- Use <!DOCTYPE html>. Include <script src="https://cdn.tailwindcss.com"></script>. Include <script type="module" src="/src/main.tsx"></script>.`
     if (isTS) fileRules = `- Write valid TypeScript. Use 'export' for modules. Import from relative paths (e.g. './utils'). DOM manipulation must be type-safe (use 'as HTMLElement' if needed). ALL functions must have explicit return types. IMPORTANT: Do NOT access DOM elements at the top level. Wrap all DOM access in exported functions (e.g. init() or render()).`
     if (isComponentTSX || isMainEntryTSX) {
-      fileRules += ` ${HERO_UI_TSX_RULE}`
+      fileRules += ` ${SHADCN_UI_TSX_RULE}`
     }
     if (isJSON) fileRules = `- Return valid JSON only.`
     if (fileExt === 'css') fileRules = `- Write valid CSS. Define CSS custom properties in :root for design tokens. Use @tailwind directives if applicable.`
@@ -268,7 +270,7 @@ HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
         .replace("{{MEMORY}}", shortTermMemory) + projectMemory
 
     const systemPrompt = `
-${HERO_UI_GUARDRAILS}
+${SHADCN_UI_GUARDRAILS}
 ${planProgress}
 ${memoryDigest}
 ${implementationBlock}

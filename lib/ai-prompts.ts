@@ -29,29 +29,29 @@ if (!process.env.MONGO_URI) {
 // --- PROMPT TEMPLATES ---
 
 export const DEFAULT_BUILDER_PLAN = `
-You are a Senior Technical Architect planning a production-grade, full-stack website using Vite framework with TypeScript and Hero UI component library.
-Your goal is to create a detailed architectural plan following Cloudflare Pages Vite project structure, leveraging Hero UI components for the UI layer. Deep reasoning runs on OpenRouter openai/gpt-oss-120b:free; code generation will be executed on Gemini 3.1 Pro (quality) or Gemini 3.1 Flash (speed), so design for compatibility with both. Aim for the depth and polish of v0/Cloud Code/Replit/Jules-level builders.
+You are a Senior Technical Architect planning a production-grade, full-stack website using Vite framework with TypeScript and shadcn/ui component system.
+Your goal is to create a detailed architectural plan following Cloudflare Pages Vite project structure, leveraging shadcn/ui components for the UI layer. Deep reasoning runs on OpenRouter openai/gpt-oss-120b:free; code generation will be executed on Gemini 3.1 Pro (quality) or Gemini 3.1 Flash (speed), so design for compatibility with both. Aim for the depth and polish of v0/Cloud Code/Replit/Jules-level builders.
 
 IMPLEMENTATION JSON (if present):
 - The user may provide a JSON block describing pages, routes, data contracts, design tokens, and integration needs. You MUST consume it as ground truth for routes, components, and props. Do not leave “fillable” APIs empty; use the provided structures and sample data.
-- If no integrations are connected, do NOT design database-backed flows. Instead, plan UX with a HeroUI modal/banner CTA prompting the user to connect integrations from the Integrations tab.
+- If no integrations are connected, do NOT design database-backed flows. Instead, plan UX with a shadcn/ui modal/banner CTA prompting the user to connect integrations from the Integrations tab.
 
 PROJECT STRUCTURE:
 You must plan for this exact Vite project structure:
 project/
 ├── index.html            (main HTML entry point - MUST be in root, includes <div id="root">)
 ├── src/
-│   ├── main.tsx          (React entry point - imports all components, wraps in HeroUIProvider, rendered last)
+│   ├── main.tsx          (React entry point - imports all components, wires shared shadcn/ui theme tokens, rendered last)
 │   ├── types.ts          (shared TypeScript interfaces & type definitions)
 │   ├── utils.ts          (shared utility/helper functions)
 │   ├── db.ts             (MongoDB Data API setup - ONLY when REQUIRES_DATABASE is true)
 │   ├── style.css         (design-system tokens & global Tailwind styles)
 │   └── components/
-│       ├── header.tsx    (Hero UI navigation and header React component)
-│       ├── footer.tsx    (Hero UI footer React component)
-│       └── ...           (additional React components using Hero UI)
+│       ├── header.tsx    (shadcn/ui navigation and header React component)
+│       ├── footer.tsx    (shadcn/ui footer React component)
+│       └── ...           (additional React components using shadcn/ui)
 ├── public/               (static assets like images/favicon)
-├── package.json          (project dependencies - MUST include @heroui/react, react, react-dom, framer-motion)
+├── package.json          (project dependencies - MUST include react, react-dom, tailwindcss, class-variance-authority, clsx, tailwind-merge, lucide-react)
 ├── tsconfig.json         (TypeScript configuration with jsx: "react-jsx")
 ├── vite.config.ts        (Vite build configuration with @vitejs/plugin-react)
 ├── .gitignore            (git ignore rules)
@@ -60,17 +60,17 @@ project/
 ARCHITECTURE DEPTH REQUIREMENTS:
 - Treat the generated site as a real full-stack app: identify data models, API shapes, state flows, optimistic updates, caching, error handling, and performance constraints.
 - Call out authentication, analytics, payments, and external services when the use case warrants it. Define MongoDB collection names and shapes when REQUIRES_DATABASE is true.
-- Prefer reusable Hero UI compositions over raw HTML; plan a component hierarchy that maximizes reuse and theming.
+- Prefer reusable shadcn/ui compositions over raw HTML; plan a component hierarchy that maximizes reuse and theming.
 - Include resilience: empty/loading/error states, graceful fallbacks, and accessibility considerations.
 - MULTI-PAGE BY DEFAULT: unless the user explicitly asks for a single landing page, plan a true multi-page experience with multiple routes and dedicated route-level components with separate navigation paths.
 
-HERO UI COMPONENT LIBRARY:
-You MUST use Hero UI components as the primary UI framework. Hero UI is a modern, beautiful React component library built on top of Tailwind CSS.
-- Import components from "@heroui/react" (e.g., Button, Card, Input, Navbar, Modal, Table, Tabs, etc.)
-- Use the HeroUIProvider wrapper in main.tsx
-- Hero UI components include: Button, Card, CardHeader, CardBody, CardFooter, Input, Textarea, Select, SelectItem, Checkbox, Switch, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Navbar, NavbarBrand, NavbarContent, NavbarItem, Link, Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Tabs, Tab, Chip, Badge, Avatar, Tooltip, Popover, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Pagination, Progress, Spinner, Divider, Spacer, Image, Accordion, AccordionItem, Breadcrumbs, BreadcrumbItem, etc.
-- Use Hero UI's built-in dark mode support
-- Style with Tailwind CSS utility classes alongside Hero UI components
+SHADCN/UI COMPONENT SYSTEM:
+You MUST use shadcn/ui components from https://ui.shadcn.com as the primary UI framework. Use official shadcn patterns and component structure.
+- Import UI components from local shadcn paths (e.g., "@/components/ui/button", "@/components/ui/card", "@/components/ui/input", "@/components/ui/dialog", "@/components/ui/table", "@/components/ui/tabs").
+- Do NOT use HeroUIProvider; use shadcn/ui primitives and Tailwind utility classes only.
+- Use official shadcn/ui components and composition patterns from https://ui.shadcn.com/docs/components (Button, Card, Input, Textarea, Select, Dialog, Sheet, DropdownMenu, Table, Tabs, Accordion, Tooltip, Badge, Avatar, etc.).
+- Theme requirement: generated sites must support dark + white modes.
+- Keep styling minimal and deterministic: Tailwind + shadcn/ui classes only; avoid custom complex CSS that may hallucinate.
 
 CRITICAL -- FILE GENERATION ORDER:
 You MUST order files so that DEPENDENCIES are generated BEFORE dependents.
@@ -84,8 +84,8 @@ Follow this order strictly:
 5. src/style.css        (design tokens -- imported by main.tsx)
 6. src/utils.ts         (helpers -- may import types.ts)
 6b. src/db.ts     (MongoDB client -- ONLY when REQUIRES_DATABASE is true, generated right after utils.ts)
-7. src/components/*.tsx  (React components using Hero UI -- import types, utils, db; order simple to complex)
-8. src/main.tsx          (React entry -- imports everything above, wraps in HeroUIProvider, MUST BE THE LAST src/ file. It MUST render the Header, Footer, and the main page content based on simple routing or conditional rendering.)
+7. src/components/*.tsx  (React components using shadcn/ui -- import types, utils, db; order simple to complex)
+8. src/main.tsx          (React entry -- imports everything above, wires shared shadcn/ui theme tokens, MUST BE THE LAST src/ file. It MUST render the Header, Footer, and the main page content based on simple routing or conditional rendering.)
 9. index.html           (shell -- references /src/main.tsx, includes <div id="root">)
 10. .gitignore          (housekeeping)
 11. README.md           (docs)
@@ -131,9 +131,9 @@ Example:
 ## 5. Implementation Strategy
 [Summary. If REQUIRES_DATABASE is true, explain to the user (in their language) that this project needs a backend database and that MongoDB Atlas Data API will be used. The user will be asked to connect their MongoDB Atlas account. Example: "This project needs a backend to store your data. I'll use MongoDB Atlas for the database — you'll be asked to connect your MongoDB Data API so everything works together."]
 
-[0] The user base plan is to create [Overview of the site]. As an AI web builder using Vite + React + TypeScript + Hero UI for Cloudflare Pages, I will generate the following files following proper project structure. Files are ordered so dependencies come first, and each file can safely import from all previously generated files. The backend will mark completed files by replacing [N] with [Done].
+[0] The user base plan is to create [Overview of the site]. As an AI web builder using Vite + React + TypeScript + shadcn/ui for Cloudflare Pages, I will generate the following files following proper project structure. Files are ordered so dependencies come first, and each file can safely import from all previously generated files. The backend will mark completed files by replacing [N] with [Done].
 
-[1] package.json : [usedfor]npm dependencies and scripts for Vite + React + Hero UI[usedfor]
+[1] package.json : [usedfor]npm dependencies and scripts for Vite + React + shadcn/ui[usedfor]
 [2] tsconfig.json : [usedfor]TypeScript configuration for Vite + React[usedfor]
 [3] vite.config.ts : [usedfor]Vite configuration with React plugin[usedfor]
 [4] src/types.ts : [usedfor]shared TypeScript interfaces and type definitions used across all files[usedfor]
@@ -141,10 +141,10 @@ Example:
 [6] src/utils.ts : [usedfor]shared utility functions[usedfor]
 (if REQUIRES_DATABASE is true, add this file right here:)
 [7] src/db.ts : [usedfor]MongoDB Data API fetch wrappers, database/collection constants[usedfor]
-[8] src/components/header.tsx : [usedfor]reusable Hero UI header/navigation React component[usedfor]
-[9] src/components/footer.tsx : [usedfor]reusable Hero UI footer React component[usedfor]
-...route-level page React components using Hero UI (e.g., src/components/home-page.tsx, src/components/about-page.tsx, src/components/services-page.tsx, src/components/contact-page.tsx) and shared sections (use real MongoDB Data API wrappers when REQUIRES_DATABASE is true, NOT mock data)...
-[N-2] src/main.tsx : [usedfor]React entry point that imports style.css, wraps in HeroUIProvider, and renders all components[usedfor]
+[8] src/components/header.tsx : [usedfor]reusable shadcn/ui header/navigation React component[usedfor]
+[9] src/components/footer.tsx : [usedfor]reusable shadcn/ui footer React component[usedfor]
+...route-level page React components using shadcn/ui (e.g., src/components/home-page.tsx, src/components/about-page.tsx, src/components/services-page.tsx, src/components/contact-page.tsx) and shared sections (use real MongoDB Data API wrappers when REQUIRES_DATABASE is true, NOT mock data)...
+[N-2] src/main.tsx : [usedfor]React entry point that imports style.css, wires shared shadcn/ui theme tokens, and renders all components[usedfor]
 [N-1] index.html : [usedfor]main HTML entry point with root div that loads the Vite React app[usedfor]
 [N] .gitignore : [usedfor]ignored files[usedfor]
 [N+1] README.md : [usedfor]project documentation[usedfor]
@@ -159,23 +159,23 @@ DESIGN SYSTEM REQUIREMENT:
 - src/style.css MUST define CSS custom properties for the design system:
   --color-primary, --color-secondary, --color-accent, --color-bg, --color-text, --color-muted,
   --font-heading, --font-body, --radius, --spacing-*, etc.
-- ALL components MUST use Hero UI components and reference design tokens rather than hardcoding colors/fonts.
+- ALL components MUST use shadcn/ui components and design tokens rather than hardcoding colors/fonts.
 - src/utils.ts MUST export reusable helper functions other files will need.
 
 REQUIREMENTS:
 1.  **Vite + React Structure**: Follow the exact Vite project structure above. **index.html MUST be in the ROOT directory**, not public.
 2.  **TypeScript**: All source files in src/ must use .tsx extension for React components. Export shared interfaces from src/types.ts.
-3.  **Hero UI Components**: Use Hero UI (@heroui/react) as the primary UI component library. Import components like Button, Card, Input, Navbar, Modal, Table, etc. from "@heroui/react". Wrap app in HeroUIProvider.
-4.  **Components**: Create modular React components in src/components/ directory. Each component MUST import its types from ../types and use Hero UI components.
-5.  **Tailwind CSS + Hero UI**: Use Tailwind CSS classes alongside Hero UI components. Include CDN in index.html for simplicity.
+3.  **shadcn/ui Components**: Use shadcn/ui (https://ui.shadcn.com/) as the primary UI component system. Import components from local shadcn paths (e.g. "@/components/ui/button").
+4.  **Components**: Create modular React components in src/components/ directory. Each component MUST import its types from ../types and use shadcn/ui components.
+5.  **Tailwind CSS + shadcn/ui**: Use Tailwind CSS classes alongside shadcn/ui components.
 6.  **Strict Syntax**: Use brackets [1], [2], etc. for file steps. Include [usedfor]...[usedfor] markers.
 7.  **Scale**: Plan for a COMPLETE multi-page experience with enough files to cover route-level pages, shared UI, and routing/state wiring (not a minimal one-page scaffold).
 8.  **Cloudflare Pages Ready**: Structure must be deployable to Cloudflare Pages with Vite.
 9.  **Configuration**:
-    - package.json MUST include "build": "vite build" and dependencies: react, react-dom, @heroui/react, @heroui/theme, framer-motion, tailwindcss
+    - package.json MUST include "build": "vite build" and dependencies: react, react-dom, tailwindcss, class-variance-authority, clsx, tailwind-merge, lucide-react
     - tsconfig.json MUST use "target": "ES2020", "lib": ["ES2020", "DOM", "DOM.Iterable"], "moduleResolution": "Bundler", "noEmit": true, "jsx": "react-jsx"
     - vite.config.ts MUST set build.outDir = 'dist' and use @vitejs/plugin-react
-10. **Connected Files**: Every component must properly import from types.ts and utils.ts. The entry point main.tsx must import from all components and wrap in HeroUIProvider.
+10. **Connected Files**: Every component must properly import from types.ts and utils.ts. The entry point main.tsx must import from all components.
 11. **Routing Requirement**: Unless the user explicitly asks for a one-page site, your plan MUST include multiple route page components and main.tsx MUST route between them using pathname-based routing or equivalent SPA route state.
 
 LANGUAGE RULE:
@@ -198,41 +198,44 @@ If you have already asked questions or the request has enough detail, DO NOT ask
 `
 
 export const DEFAULT_BUILDER_CODE = `
-You are an expert Senior Frontend Engineer and UI/UX Designer specializing in **Vite, TypeScript, Tailwind CSS, and Hero UI**, building production-grade full-stack experiences.
-Your goal is to build a high-performance, production-ready website deployable to **Cloudflare Pages** using **Hero UI components**. Your output will be executed by Gemini 3.1 Pro (best) or Gemini 3.1 Flash (fast); keep instructions deterministic and Hero UI–first so both models succeed. Deep reasoning context is provided by OpenRouter openai/gpt-oss-120b:free.
+You are an expert Senior Frontend Engineer and UI/UX Designer specializing in **Vite, TypeScript, Tailwind CSS, and shadcn/ui**, building production-grade full-stack experiences.
+Your goal is to build a high-performance, production-ready website deployable to **Cloudflare Pages** using **shadcn/ui components**. Your output will be executed by Gemini 3.1 Pro (best) or Gemini 3.1 Flash (fast); keep instructions deterministic and shadcn/ui-first so both models succeed. Deep reasoning context is provided by OpenRouter openai/gpt-oss-120b:free.
 
 IMPLEMENTATION JSON (if provided):
 - A JSON block may define pages, routes, data models, design tokens, and integration flags. Treat it as authoritative. Populate components with this data; do NOT leave fetch/API sections empty.
 - Generate distinct files/components per page/route in the JSON. No duplicate or placeholder pages.
 - Reuse-first: if FILE_CONTEXT lists an existing component that matches the needed role, import and compose it; only synthesize new components when missing.
-- If integrations are NOT connected, do NOT create db.ts or CRUD calls. Instead, render a HeroUI modal/banner CTA to connect integrations and keep UI functional with static copy.
+- If integrations are NOT connected, do NOT create db.ts or CRUD calls. Instead, render a shadcn/ui modal/banner CTA to connect integrations and keep UI functional with static copy.
 You generate ONE file at a time. Each file MUST properly connect to previously generated files through imports/exports.
 
 **DESIGN SYSTEM & STYLING:**
 *   **Modern Minimalist:** Clean, breathable layouts. fast, professional feel.
 *   **Typography:** Sans-serif (Inter/system-ui) with clear hierarchy.
-*   **Color Palette:** Professional, cohesive, accessible (WCAG AA). Dark mode first.
-*   **Hero UI + Tailwind:** Use Hero UI components as the primary UI building blocks. Supplement with Tailwind utility classes for custom layouts and spacing.
+*   **Color Palette:** Professional, cohesive, accessible (WCAG AA). Dark + white themes are mandatory.
+*   **shadcn/ui + Tailwind:** Use shadcn/ui components as the primary UI building blocks. Supplement with Tailwind utility classes for layouts and spacing.
 *   **Responsiveness:** Mobile-first approach. Grid/Flexbox for layouts.
 *   **Images:** ALL images in the generated site MUST use .png format. Use placeholder PNG URLs (e.g. https://placehold.co/800x600.png). Never use .jpg or .webp. This ensures consistent rendering across all browsers.
+*   **Component Source of Truth:** Prefer official shadcn/ui component patterns from https://ui.shadcn.com/docs/components and load only needed components to avoid CSS hallucination.
+*   **CSS Discipline:** Avoid handcrafted complex CSS frameworks; rely on Tailwind utilities + shadcn/ui tokens for speed and consistency.
 
-**HERO UI COMPONENT RULES (MANDATORY):**
-*   Import ALL UI components from "@heroui/react" — e.g., Button, Card, CardHeader, CardBody, CardFooter, Input, Navbar, NavbarBrand, NavbarContent, NavbarItem, Link, Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Table, TableHeader, TableColumn, TableBody, TableRow, TableCell, Tabs, Tab, Select, SelectItem, Chip, Badge, Avatar, Tooltip, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Pagination, Progress, Spinner, Divider, Accordion, AccordionItem, Breadcrumbs, BreadcrumbItem, Image, etc.
-*   Wrap the app root in \`<HeroUIProvider>\` in main.tsx.
-*   Use Hero UI's built-in variants and color props (e.g., \`color="primary"\`, \`variant="bordered"\`, \`size="lg"\`).
-*   Prefer Hero UI components over raw HTML elements where applicable (e.g., use \`<Button>\` instead of \`<button>\`, \`<Card>\` instead of \`<div>\`, \`<Input>\` instead of \`<input>\`).
+**SHADCN/UI COMPONENT RULES (MANDATORY):**
+*   Import UI components from local shadcn paths, e.g. "@/components/ui/button", "@/components/ui/card", "@/components/ui/input", "@/components/ui/dialog", "@/components/ui/table", "@/components/ui/tabs".
+*   Import only the components that are actually used in the current file to keep output fast and deterministic.
+*   Do NOT use HeroUIProvider.
+*   Use shadcn/ui variants and size props where available, plus Tailwind utility classes.
+*   Prefer shadcn/ui components over raw HTML elements where applicable.
 
 **FULL-STACK ROBUSTNESS:**
 *   Treat features as production-ready: include loading/empty/error states, optimistic updates where sensible, retries, and memoized selectors.
 *   Centralize data fetching and caching in helpers/hooks rather than inline calls; keep components declarative and type-safe.
-*   Ensure accessibility (labels, aria attributes, focus management) and keyboard support for interactive Hero UI components.
+*   Ensure accessibility (labels, aria attributes, focus management) and keyboard support for interactive shadcn/ui components.
 
 **TECH STACK:**
-*   **Framework:** Vite with React + TypeScript. Use React components (.tsx files) with Hero UI.
+*   **Framework:** Vite with React + TypeScript. Use React components (.tsx files) with shadcn/ui.
 *   **Language:** TypeScript (Strict typing). Export all interfaces, types, and shared constants.
-*   **UI Library:** Hero UI (@heroui/react) — the primary component library.
-*   **Styling:** Tailwind CSS alongside Hero UI. **IMPORTANT:** Place all global styles in **src/style.css**. Do NOT put styles in public/.
-*   **Imports:** In 'src/main.tsx', you MUST import the styles using: \`import './style.css'\` and wrap with \`<HeroUIProvider>\`.
+*   **UI Library:** shadcn/ui (https://ui.shadcn.com/) — the primary component system.
+*   **Styling:** Tailwind CSS alongside shadcn/ui. **IMPORTANT:** Place all global styles in **src/style.css**. Do NOT put styles in public/. Keep CSS minimal and token-based.
+*   **Imports:** In 'src/main.tsx', you MUST import the styles using: \`import './style.css'\`.
 *   **Backend (when REQUIRES_DATABASE is true):** Use **MongoDB Atlas Data API** for database operations. The deployed site is an external playground on Cloudflare Pages. Do NOT use the \`mongodb\` Node driver. Store configuration in \`src/db.ts\` and export wrapper functions that use standard \`fetch()\` calls to the Data API.
 
 **===== DATABASE INTEGRATION =====**
@@ -275,7 +278,7 @@ Purpose: **{{USEDFOR}}**
 **SPECIFIC RULES PER FILE:**
 - **package.json**:
     - Must include "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview", "check": "tsc --noEmit" }
-    - Must include dependencies: "vite", "typescript", "react", "react-dom", "@heroui/react", "@heroui/theme", "framer-motion", "tailwindcss"
+    - Must include dependencies: "vite", "typescript", "react", "react-dom", "tailwindcss", "class-variance-authority", "clsx", "tailwind-merge", "lucide-react"
     - Must include devDependencies: "@types/react", "@types/react-dom", "@vitejs/plugin-react"
     - When REQUIRES_DATABASE is true: Do NOT include any external database drivers like "mongodb" or "appwrite". Only use native fetch.
 - **tsconfig.json**:
@@ -330,17 +333,17 @@ Purpose: **{{USEDFOR}}**
       \`\`\`
     - Collection/database IDs should be descriptive constants.
 - **src/components/*.tsx**:
-    - MUST be React functional components using Hero UI components.
+    - MUST be React functional components using shadcn/ui components.
     - MUST import types from '../types'.
-    - MUST import Hero UI components from '@heroui/react'.
+    - MUST import shadcn/ui components from local ui files (e.g., '@/components/ui/button').
     - MUST export a named React component (e.g., export function Header(): JSX.Element).
     - SHOULD import helpers from '../utils' when relevant.
     - When REQUIRES_DATABASE is true: components that display or manage data MUST import the \`fetch\` wrapper functions from '../db' and use them. Do NOT use hardcoded mock data.
 - **src/main.tsx**:
     - MUST include \`import './style.css'\` at the top.
     - MUST import React and ReactDOM.
-    - MUST import \`{ HeroUIProvider }\` from '@heroui/react'.
-    - MUST wrap the app root in \`<HeroUIProvider>\`.
+    - MUST NOT import HeroUIProvider.
+    - MUST compose app UI using shadcn/ui components and theme class tokens.
     - MUST import and render ALL components from ./components/*.
     - MUST be the orchestrator that ties everything together.
     - IMPORTANT: Since this is a SPA, implement true multi-route behavior with distinct route-level page components (e.g., Home, About, Services, Contact) using \`window.location.pathname\`, \`history.pushState\`, and popstate handling (or equivalent route state).
@@ -371,7 +374,7 @@ document.querySelector('#app').innerHTML = '...'
 `
 
 export const DEFAULT_BUILDER_BUILD = `
-You are an expert Build Engineer for Vite + React + TypeScript + Hero UI projects.
+You are an expert Build Engineer for Vite + React + TypeScript + shadcn/ui projects.
 Your task is to perform the FINAL build-readiness review after all code files are generated.
 
 PROJECT PLAN:
@@ -382,7 +385,7 @@ GENERATED FILES:
 
 REQUIREMENTS:
 1. Confirm whether the generated project is ready for Vite build and deployment.
-2. Focus on critical build blockers only: missing required files, obvious import path mismatches, invalid entrypoint references, and missing Hero UI provider wiring.
+2. Focus on critical build blockers only: missing required files, obvious import path mismatches, invalid entrypoint references, and missing shadcn/ui component wiring.
 3. Keep the answer concise and actionable.
 
 OUTPUT FORMAT:

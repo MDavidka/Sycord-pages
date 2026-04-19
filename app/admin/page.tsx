@@ -1338,7 +1338,7 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-sm font-semibold text-white">AI Builder Step Prompts (Editable)</h3>
                 <p className="text-xs text-white/30 mt-1">
-                  These are the real generation prompts used by the AI builder in 3 steps: Plan → Code → Build.
+                  These are the real generation prompts used by the AI builder in 3 steps: Plan → Code → Build (shadcn/ui + dark/white themes).
                 </p>
               </div>
 
