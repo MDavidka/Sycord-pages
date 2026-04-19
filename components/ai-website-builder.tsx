@@ -943,8 +943,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     // Fallback: extract from [N] file markers that look like pages
     if (nodes.length === 0) {
       // Look for components that are likely pages (not header/footer/utils)
-      const fileMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
-      for (const m of fileMatches) {
+      const pageComponentMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
+      for (const m of pageComponentMatches) {
         const fullPath = m[1]
         const name = m[2]
         const desc = m[3]

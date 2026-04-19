@@ -92,7 +92,8 @@ export async function POST(request: Request) {
 
     // Merge with server-side cache so the AI retains context across calls
     // even if the frontend doesn't re-send every previously generated file.
-    const isFirstTask = normalizedInstruction.includes("[1]") && !normalizedInstruction.includes("[Done] src/types.ts") && !normalizedInstruction.includes("[Done] package.json")
+    const firstTaskPattern = /^\s*\[1\]\s+[^\n]+/m
+    const isFirstTask = firstTaskPattern.test(normalizedInstruction) && !normalizedInstruction.includes("[Done] src/types.ts") && !normalizedInstruction.includes("[Done] package.json")
     if (isFirstTask && projectId) {
       const { clearProjectCache } = require("@/lib/gemini-cache")
       clearProjectCache(projectId)
