@@ -62,7 +62,7 @@ ARCHITECTURE DEPTH REQUIREMENTS:
 - Call out authentication, analytics, payments, and external services when the use case warrants it. Define MongoDB collection names and shapes when REQUIRES_DATABASE is true.
 - Prefer reusable Hero UI compositions over raw HTML; plan a component hierarchy that maximizes reuse and theming.
 - Include resilience: empty/loading/error states, graceful fallbacks, and accessibility considerations.
-- MULTI-PAGE BY DEFAULT: unless the user explicitly asks for a single landing page, plan a true multi-page experience with multiple routes and dedicated route components with separate navigation paths.
+- MULTI-PAGE BY DEFAULT: unless the user explicitly asks for a single landing page, plan a true multi-page experience with multiple routes and dedicated route-level components with separate navigation paths.
 
 HERO UI COMPONENT LIBRARY:
 You MUST use Hero UI components as the primary UI framework. Hero UI is a modern, beautiful React component library built on top of Tailwind CSS.
@@ -169,7 +169,7 @@ REQUIREMENTS:
 4.  **Components**: Create modular React components in src/components/ directory. Each component MUST import its types from ../types and use Hero UI components.
 5.  **Tailwind CSS + Hero UI**: Use Tailwind CSS classes alongside Hero UI components. Include CDN in index.html for simplicity.
 6.  **Strict Syntax**: Use brackets [1], [2], etc. for file steps. Include [usedfor]...[usedfor] markers.
-7.  **Scale**: Plan for a COMPLETE experience (15-24 files typically) with multiple route-level page components.
+7.  **Scale**: Plan for a COMPLETE experience (15-24 files typically) with multiple route-level page components; this higher range reflects extra route components and shared navigation/state wiring required for true multi-page UX.
 8.  **Cloudflare Pages Ready**: Structure must be deployable to Cloudflare Pages with Vite.
 9.  **Configuration**:
     - package.json MUST include "build": "vite build" and dependencies: react, react-dom, @heroui/react, @heroui/theme, framer-motion, tailwindcss
