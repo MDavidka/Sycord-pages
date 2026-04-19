@@ -1352,7 +1352,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-3">
-                <label htmlFor="prompt-builder-plan" className="text-xs text-white/50">Step 1 — Planning Prompt (builderPlan)</label>
+                <p className="text-xs text-white/50">Step 1 — Planning Prompt (builderPlan)</p>
                 <Textarea
                   id="prompt-builder-plan"
                   className="font-mono text-xs min-h-[180px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
@@ -1362,7 +1362,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-3">
-                <label htmlFor="prompt-builder-code" className="text-xs text-white/50">Step 2 — Code Generation Prompt (builderCode)</label>
+                <p className="text-xs text-white/50">Step 2 — Code Generation Prompt (builderCode)</p>
                 <Textarea
                   id="prompt-builder-code"
                   className="font-mono text-xs min-h-[220px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
@@ -1373,7 +1373,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label htmlFor="prompt-autofix-diagnosis" className="text-xs text-white/50">Step 3 — Auto-Fix Diagnosis</label>
+                  <p className="text-xs text-white/50">Step 3 — Auto-Fix Diagnosis</p>
                   <Textarea
                     id="prompt-autofix-diagnosis"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
@@ -1382,7 +1382,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label htmlFor="prompt-autofix-resolution" className="text-xs text-white/50">Step 4 — Auto-Fix Resolution</label>
+                  <p className="text-xs text-white/50">Step 4 — Auto-Fix Resolution</p>
                   <Textarea
                     id="prompt-autofix-resolution"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
@@ -1394,7 +1394,7 @@ export default function AdminPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label htmlFor="prompt-inlinefix-diagnosis" className="text-xs text-white/50">Step 5 — Inline-Fix Diagnosis</label>
+                  <p className="text-xs text-white/50">Step 5 — Inline-Fix Diagnosis</p>
                   <Textarea
                     id="prompt-inlinefix-diagnosis"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
@@ -1403,7 +1403,7 @@ export default function AdminPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label htmlFor="prompt-inlinefix-resolution" className="text-xs text-white/50">Step 6 — Inline-Fix Resolution</label>
+                  <p className="text-xs text-white/50">Step 6 — Inline-Fix Resolution</p>
                   <Textarea
                     id="prompt-inlinefix-resolution"
                     className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"

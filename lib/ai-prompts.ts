@@ -576,7 +576,9 @@ export async function saveSystemPrompts(prompts: {
     const promptEntries = Object.entries(prompts).filter(
       ([key, value]) => allowedPromptKeys.has(key) && typeof value === "string",
     )
-    if (promptEntries.length === 0) return
+    if (promptEntries.length === 0) {
+      throw new Error("At least one prompt field is required")
+    }
     const promptFieldUpdates = Object.fromEntries(
       promptEntries.map(([key, value]) => [`prompts.${key}`, value]),
     )
