@@ -45,14 +45,17 @@ export const FILE_STRUCTURE = `
 project/
 ├── index.html
 ├── src/
-│   ├── main.ts          (entry point - imports all components)
+│   ├── main.tsx          (entry point - imports all components and routes pages)
 │   ├── types.ts          (shared TypeScript interfaces & types)
 │   ├── utils.ts          (shared helper functions)
 │   ├── style.css         (design-system tokens & global styles)
 │   └── components/
-│       ├── header.ts
-│       ├── footer.ts
-│       └── ...
+│       ├── header.tsx
+│       ├── footer.tsx
+│       ├── home-page.tsx
+│       ├── about-page.tsx
+│       ├── contact-page.tsx
+│       └── ... (additional route-level page components)
 ├── public/
 ├── package.json
 ├── tsconfig.json
@@ -73,9 +76,9 @@ export const GENERATION_ORDER = [
   'src/types.ts',
   'src/style.css',
   'src/utils.ts',
-  // components in simple → complex order
+  // components in simple → complex order, including route-level pages
   'src/components/',
-  'src/main.ts',
+  'src/main.tsx',
   'index.html',
   '.gitignore',
   'README.md',

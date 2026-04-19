@@ -62,6 +62,7 @@ ARCHITECTURE DEPTH REQUIREMENTS:
 - Call out authentication, analytics, payments, and external services when the use case warrants it. Define MongoDB collection names and shapes when REQUIRES_DATABASE is true.
 - Prefer reusable Hero UI compositions over raw HTML; plan a component hierarchy that maximizes reuse and theming.
 - Include resilience: empty/loading/error states, graceful fallbacks, and accessibility considerations.
+- MULTI-PAGE BY DEFAULT: unless the user explicitly asks for a single landing page, plan a true multi-page experience with multiple routes and dedicated page components (not one long scrolling page pretending to be multiple sections).
 
 HERO UI COMPONENT LIBRARY:
 You MUST use Hero UI components as the primary UI framework. Hero UI is a modern, beautiful React component library built on top of Tailwind CSS.
@@ -119,6 +120,7 @@ Generate a REAL sitemap — not just file names. List every page/route the user'
 - What the page does (description)
 - Which other pages it links to (navigation)
 Every page must link to at least one other page. No empty or dummy entries.
+Unless the user explicitly asks for a one-page/landing site, include at least 4 distinct routes (for example Home, About, Services/Products, Contact/Pricing) and make sure each has a dedicated route-level component planned.
 Example:
 - **Home/**: Landing page with hero, value proposition, and CTA → leads to Pricing, About
 - **Pricing/**: Tiered pricing cards with FAQ → leads to Home, Contact
@@ -141,7 +143,7 @@ Example:
 [7] src/db.ts : [usedfor]MongoDB Data API fetch wrappers, database/collection constants[usedfor]
 [8] src/components/header.tsx : [usedfor]reusable Hero UI header/navigation React component[usedfor]
 [9] src/components/footer.tsx : [usedfor]reusable Hero UI footer React component[usedfor]
-...additional React components using Hero UI (use real MongoDB SDK calls, NOT mock data)...
+...route-level page React components using Hero UI (e.g., src/components/home-page.tsx, src/components/about-page.tsx, src/components/services-page.tsx, src/components/contact-page.tsx) and shared sections (use real MongoDB Data API wrappers when REQUIRES_DATABASE is true, NOT mock data)...
 [N-2] src/main.tsx : [usedfor]React entry point that imports style.css, wraps in HeroUIProvider, and renders all components[usedfor]
 [N-1] index.html : [usedfor]main HTML entry point with root div that loads the Vite React app[usedfor]
 [N] .gitignore : [usedfor]ignored files[usedfor]
@@ -167,13 +169,14 @@ REQUIREMENTS:
 4.  **Components**: Create modular React components in src/components/ directory. Each component MUST import its types from ../types and use Hero UI components.
 5.  **Tailwind CSS + Hero UI**: Use Tailwind CSS classes alongside Hero UI components. Include CDN in index.html for simplicity.
 6.  **Strict Syntax**: Use brackets [1], [2], etc. for file steps. Include [usedfor]...[usedfor] markers.
-7.  **Scale**: Plan for a COMPLETE experience (10-15 files typically).
+7.  **Scale**: Plan for a COMPLETE experience (12-20 files typically) with multiple route-level page components.
 8.  **Cloudflare Pages Ready**: Structure must be deployable to Cloudflare Pages with Vite.
 9.  **Configuration**:
     - package.json MUST include "build": "vite build" and dependencies: react, react-dom, @heroui/react, @heroui/theme, framer-motion, tailwindcss
     - tsconfig.json MUST use "target": "ES2020", "lib": ["ES2020", "DOM", "DOM.Iterable"], "moduleResolution": "Bundler", "noEmit": true, "jsx": "react-jsx"
     - vite.config.ts MUST set build.outDir = 'dist' and use @vitejs/plugin-react
 10. **Connected Files**: Every component must properly import from types.ts and utils.ts. The entry point main.tsx must import from all components and wrap in HeroUIProvider.
+11. **Routing Requirement**: Unless the user explicitly asks for a one-page site, your plan MUST include multiple route page components and main.tsx MUST route between them using pathname-based routing or equivalent SPA route state.
 
 LANGUAGE RULE:
 Detect the language the user writes in and respond in that same language for all natural-language text (questions, business goal descriptions, design descriptions, user flow, implementation strategy, clarification questions).
@@ -340,8 +343,9 @@ Purpose: **{{USEDFOR}}**
     - MUST wrap the app root in \`<HeroUIProvider>\`.
     - MUST import and render ALL components from ./components/*.
     - MUST be the orchestrator that ties everything together.
-    - IMPORTANT: Since this is a SPA, use a simple state-based router or conditional rendering to switch between pages (e.g., Home, About, Contact) based on \`window.location.pathname\` or a state variable.
-    - Ensure the Header and Footer are always visible, and the page content changes.
+    - IMPORTANT: Since this is a SPA, implement true multi-route behavior with distinct route-level page components (e.g., Home, About, Services/Products, Contact) using \`window.location.pathname\`, \`history.pushState\`, and popstate handling (or equivalent route state).
+    - Unless the user explicitly requests a one-page landing site, there MUST be at least 4 distinct routes with different page content and navigation between them.
+    - Ensure the Header and Footer are always visible, and only the main page body changes per route.
 - **index.html**:
     - Must be in the **ROOT** directory (not public/).
     - Must include \`<script type="module" src="/src/main.tsx"></script>\`.
