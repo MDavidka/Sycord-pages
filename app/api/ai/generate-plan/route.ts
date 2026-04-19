@@ -138,7 +138,7 @@ ${builderCheatSheet || ""}
     const responseText = data.choices?.[0]?.message?.content || ""
     const styleJson = tryParseJson(responseText)
     if (!styleJson) {
-      throw new Error("Plan model did not return valid style JSON")
+      throw new Error(`Plan model did not return valid style JSON. Raw: ${responseText.slice(0, 400)}`)
     }
 
     // Keep `instruction` for downstream compatibility.
@@ -148,7 +148,7 @@ ${builderCheatSheet || ""}
       raw: responseText,
     })
   } catch (error: any) {
-    console.error("[v0] Plan generation error:", error)
+    console.error("[AI Plan Generation] Error:", error)
     return NextResponse.json({ message: error.message || "Failed to generate plan" }, { status: 500 })
   }
 }

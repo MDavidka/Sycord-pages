@@ -76,6 +76,18 @@ function isSafePropKey(key: string): boolean {
   return true
 }
 
+function isSafeEventName(eventName: string): boolean {
+  return /^on[A-Z][A-Za-z0-9]*$/.test(eventName)
+}
+
+function sanitizeHandlerDeclaration(handlerCode: string): string | null {
+  const code = decodeHtmlArrows(handlerCode).trim()
+  if (!/^const\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*\([^)]*\)\s*=>[\s\S]*;?$/.test(code)) return null
+  if (/(^|\W)(import|export|require)\b/.test(code)) return null
+  if (/(process\.|globalThis|window\.)/.test(code)) return null
+  return code
+}
+
 function renderNode(
   node: StyleNode,
   indent = 2,
@@ -128,10 +140,12 @@ function buildPageComponent(styleJson: StyleJson, functionJson: FunctionJson): {
   const handlerCode: string[] = []
 
   for (const block of handlerBlocks) {
-    const handler = decodeHtmlArrows(String(block.handler))
+    const handler = sanitizeHandlerDeclaration(String(block.handler))
+    if (!handler) continue
     const nameMatch = handler.match(/const\s+([A-Za-z_][A-Za-z0-9_]*)/)
     const handlerName = nameMatch?.[1]
     if (!handlerName || !block.targetId || !block.event) continue
+    if (!isSafeEventName(String(block.event))) continue
     handlerCode.push(handler)
     eventHandlers[String(block.targetId)] = { event: String(block.event), handlerName }
   }

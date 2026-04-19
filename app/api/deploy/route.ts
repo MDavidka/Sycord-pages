@@ -256,6 +256,9 @@ export async function POST(request: Request) {
     if (Array.isArray(project.envVars)) {
       for (const ev of project.envVars) {
         if (typeof ev?.key === "string" && ev.key.trim()) {
+          if (typeof ev?.value !== "string") {
+            console.warn(`[Deploy] Env key "${ev.key.trim()}" has non-string value; defaulting to empty string`)
+          }
           envVars[ev.key.trim()] = typeof ev?.value === "string" ? ev.value : ""
         }
       }
