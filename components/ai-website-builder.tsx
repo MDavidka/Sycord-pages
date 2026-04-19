@@ -66,12 +66,8 @@ const DEPLOY_LOG_CHECK_DELAY_MS = 8000
 type GenerationPhase =
   | "idle"
   | "planning"       // Step 1: Plan
-  | "searching"      // Step 2: Web Search
-  | "clarifying"     // Step 3: Optional Questions
-  | "structuring"    // Step 4: Structure / sitemap
-  | "integrating"    // Step 5: Integration check
-  | "building"       // Step 6: Content & Build
-  | "deploying"      // Step 7: Review & Deploy
+  | "coding"         // Step 2: Code
+  | "building"       // Step 3: Build + Deploy
   | "done"
   | "fixing"         // Auto-fix compatibility
 
@@ -220,16 +216,12 @@ const StepIndicator = ({ phase, progress, currentFile }: {
 }) => {
   const phaseConfig: Record<string, { label: string }> = {
     planning:    { label: "Planning" },
-    searching:   { label: "Searching" },
-    clarifying:  { label: "Clarifying" },
-    structuring: { label: "Structuring" },
-    integrating: { label: "Integrating" },
+    coding:      { label: "Coding" },
     building:    { label: "Building" },
-    deploying:   { label: "Deploying" },
     fixing:      { label: "Fixing" },
   }
 
-  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying", "fixing"]
+  const displayable = ["planning", "coding", "building", "fixing"]
   if (!displayable.includes(phase)) return null
 
   const config = phaseConfig[phase]
@@ -918,9 +910,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
 
-  // Track question count to limit to 2 questions before auto-proceeding
-  const [questionCount, setQuestionCount] = useState(0)
-
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
     const nodes: SitemapNode[] = []
@@ -1090,7 +1079,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
             content: "I have fixed the issues. Deploying automatically..."
           }])
           // Auto-deploy after fix
-          setStep("deploying")
+          setStep("building")
           try {
             const res = await fetch("/api/deploy", {
               method: "POST",
@@ -1233,7 +1222,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setError(null)
     setAutoDeployTriggered(false)
     setSitemap([])
-    setQuestionCount(0) // Reset question count for new generation
 
     // Clear existing pages from the database and local state before starting a new generation
     // to prevent "leaking" old pages into the new build.
@@ -1244,61 +1232,23 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       console.warn(`Failed to clear existing pages for project ${projectId}. Old pages may persist in this generation.`, e)
     }
 
-    // ── Phase 1: Planning ──
+    // ── Step 1: Plan ──
     setStep("planning")
     setCurrentPlan("Architecting solution...")
 
     try {
-          const planResponse = await fetch("/api/ai/generate-plan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: [...messages, userMessage] }),
-          })
+      const planResponse = await fetch("/api/ai/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [...messages, userMessage] }),
+      })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
       const planData = await planResponse.json()
       const generatedInstruction = planData.instruction
 
-      await phaseDelay()
-
-      // ── Phase 2: Searching ──
-      setStep("searching")
-      try {
-        await fetch("/api/ai/web-search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: input.trim(), type: "general" }),
-        })
-      } catch { /* non-critical */ }
-
-      await phaseDelay()
-
-      // ── Phase 3: Clarifying ──
-      const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      // Only ask questions if we haven't reached the limit of 2
-      if (questionMatch && questionCount < 2) {
-        setStep("clarifying")
-        const questionText = questionMatch[1].trim()
-        setMessages(prev => [...prev, {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: questionText,
-        }])
-        setInput("")
-        setQuestionCount(prev => prev + 1)
-        return
-      }
-
-      // ── Phase 4: Structuring ──
-      setStep("structuring")
       parseSitemap(generatedInstruction)
       setInstruction(generatedInstruction)
-
-      await phaseDelay()
-
-      // ── Phase 5: Integrating ──
-      setStep("integrating")
-      await phaseDelay(800)
 
       const planMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -1308,7 +1258,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
       setMessages(prev => [...prev, planMessage])
 
-      // ── Phase 6: Building (delegated to processNextStep) ──
+      await phaseDelay()
+
+      // ── Step 2: Code (delegated to processNextStep) ──
       processNextStep(generatedInstruction, [...messages, userMessage, planMessage])
     } catch (err: any) {
       setError(err.message || "Planning failed")
@@ -1317,7 +1269,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   }
 
   const processNextStep = async (currentInstruction: string, currentHistory: Message[]) => {
-    setStep("building")
+    setStep("coding")
     setCurrentPlan("Generating next file...")
 
     const nextFileMatch = /\[\d+\]\s*([^\s:]+)(?:[:\-]?\s*\[usedfor\](.*?)\[usedfor\])?/.exec(currentInstruction)
@@ -1367,11 +1319,35 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
 
       if (data.isComplete) {
-        // ── Phase 7: Auto-Deploy ──
-        setStep("deploying")
-        setCurrentPlan("All files generated. Deploying...")
+        // ── Step 3: Build ──
+        setStep("building")
+        setCurrentPlan("All files generated. Running build review and deploying...")
         setActiveFile(undefined)
         setActiveFileUsedFor(undefined)
+
+        try {
+          const buildReviewResponse = await fetch("/api/ai/generate-build", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              instruction: data.updatedInstruction || currentInstruction,
+              generatedPages: generatedPages.map((p) => ({ name: p.name, usedFor: p.usedFor })),
+            }),
+          })
+          if (buildReviewResponse.ok) {
+            const buildData = await buildReviewResponse.json()
+            if (buildData.review) {
+              setMessages(prev => [...prev, {
+                id: (Date.now() + 2).toString(),
+                role: "assistant",
+                content: buildData.review,
+              }])
+            }
+          }
+        } catch {
+          // Non-blocking: deploy still proceeds.
+        }
+
         // Auto-deploy immediately
         if (!autoDeployTriggered) {
           setAutoDeployTriggered(true)
@@ -1619,7 +1595,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                         <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
 
                         {/* Sitemap visualization (parsed from plan) */}
-                        {sitemap.length > 0 && (step === 'building' || step === 'done') && (
+                        {sitemap.length > 0 && (step === 'coding' || step === 'building' || step === 'done') && (
                             <SitemapVisualizer nodes={sitemap} />
                         )}
 
@@ -1683,7 +1659,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 input={input}
                 setInput={setInput}
                 onSend={startGeneration}
-                disabled={step !== 'idle' && step !== 'clarifying'}
+                disabled={step !== 'idle'}
                 selectedModel={selectedModel}
                 setSelectedModel={setSelectedModel}
                 attachments={attachments}

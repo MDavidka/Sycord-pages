@@ -370,6 +370,27 @@ document.querySelector('#app').innerHTML = '...'
 4. VERIFY your imports match the exact exports from FILE_CONTEXT before outputting.
 `
 
+export const DEFAULT_BUILDER_BUILD = `
+You are an expert Build Engineer for Vite + React + TypeScript + Hero UI projects.
+Your task is to perform the FINAL build-readiness review after all code files are generated.
+
+PROJECT PLAN:
+{{INSTRUCTION}}
+
+GENERATED FILES:
+{{FILES_SUMMARY}}
+
+REQUIREMENTS:
+1. Confirm whether the generated project is ready for Vite build and deployment.
+2. Focus on critical build blockers only: missing required files, obvious import path mismatches, invalid entrypoint references, and missing Hero UI provider wiring.
+3. Keep the answer concise and actionable.
+
+OUTPUT FORMAT:
+Return plain text only, maximum 6 lines:
+- Line 1: "Build review: READY" or "Build review: NEEDS_FIX"
+- Remaining lines: short bullet points.
+`
+
 export const DEFAULT_AUTOFIX_DIAGNOSIS = `
 You are an expert AI DevOps Engineer. Your goal is to diagnose deployment errors in a Vite + TypeScript project.
 
@@ -515,6 +536,7 @@ export async function getSystemPrompts() {
   if (!clientPromise) return {
     builderPlan: DEFAULT_BUILDER_PLAN,
     builderCode: DEFAULT_BUILDER_CODE,
+    builderBuild: DEFAULT_BUILDER_BUILD,
     autoFixDiagnosis: DEFAULT_AUTOFIX_DIAGNOSIS,
     autoFixResolution: DEFAULT_AUTOFIX_RESOLUTION,
     inlineFixDiagnosis: DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -532,6 +554,7 @@ export async function getSystemPrompts() {
         return {
             builderPlan: data.prompts.builderPlan || DEFAULT_BUILDER_PLAN,
             builderCode: data.prompts.builderCode || DEFAULT_BUILDER_CODE,
+            builderBuild: data.prompts.builderBuild || DEFAULT_BUILDER_BUILD,
             autoFixDiagnosis: data.prompts.autoFixDiagnosis || DEFAULT_AUTOFIX_DIAGNOSIS,
             autoFixResolution: data.prompts.autoFixResolution || DEFAULT_AUTOFIX_RESOLUTION,
             inlineFixDiagnosis: data.prompts.inlineFixDiagnosis || DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -545,6 +568,7 @@ export async function getSystemPrompts() {
   return {
     builderPlan: DEFAULT_BUILDER_PLAN,
     builderCode: DEFAULT_BUILDER_CODE,
+    builderBuild: DEFAULT_BUILDER_BUILD,
     autoFixDiagnosis: DEFAULT_AUTOFIX_DIAGNOSIS,
     autoFixResolution: DEFAULT_AUTOFIX_RESOLUTION,
     inlineFixDiagnosis: DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -555,6 +579,7 @@ export async function getSystemPrompts() {
 export async function saveSystemPrompts(prompts: {
   builderPlan?: string
   builderCode?: string
+  builderBuild?: string
   autoFixDiagnosis?: string
   autoFixResolution?: string
   inlineFixDiagnosis?: string
@@ -567,6 +592,7 @@ export async function saveSystemPrompts(prompts: {
     const allowedPromptKeys = new Set([
       "builderPlan",
       "builderCode",
+      "builderBuild",
       "autoFixDiagnosis",
       "autoFixResolution",
       "inlineFixDiagnosis",

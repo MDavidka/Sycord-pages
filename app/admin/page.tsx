@@ -90,19 +90,13 @@ interface User {
 interface SystemPromptsState {
   builderPlan: string
   builderCode: string
-  autoFixDiagnosis: string
-  autoFixResolution: string
-  inlineFixDiagnosis: string
-  inlineFixResolution: string
+  builderBuild: string
 }
 
 const SYSTEM_PROMPT_KEYS: (keyof SystemPromptsState)[] = [
   "builderPlan",
   "builderCode",
-  "autoFixDiagnosis",
-  "autoFixResolution",
-  "inlineFixDiagnosis",
-  "inlineFixResolution",
+  "builderBuild",
 ]
 
 const tabs = [
@@ -150,10 +144,7 @@ export default function AdminPage() {
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptsState>({
     builderPlan: "",
     builderCode: "",
-    autoFixDiagnosis: "",
-    autoFixResolution: "",
-    inlineFixDiagnosis: "",
-    inlineFixResolution: "",
+    builderBuild: "",
   })
   const [promptsLoading, setPromptsLoading] = useState(false)
 
@@ -1347,7 +1338,7 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-sm font-semibold text-white">AI Builder Step Prompts (Editable)</h3>
                 <p className="text-xs text-white/30 mt-1">
-                  These prompts define each AI builder step. Hero UI component usage is expected in generated React code.
+                  These are the real generation prompts used by the AI builder in 3 steps: Plan → Code → Build.
                 </p>
               </div>
 
@@ -1371,46 +1362,14 @@ export default function AdminPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-xs text-white/50">Step 3 — Auto-Fix Diagnosis</p>
-                  <Textarea
-                    id="prompt-autofix-diagnosis"
-                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
-                    value={systemPrompts.autoFixDiagnosis}
-                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, autoFixDiagnosis: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-white/50">Step 4 — Auto-Fix Resolution</p>
-                  <Textarea
-                    id="prompt-autofix-resolution"
-                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
-                    value={systemPrompts.autoFixResolution}
-                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, autoFixResolution: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <p className="text-xs text-white/50">Step 5 — Inline-Fix Diagnosis</p>
-                  <Textarea
-                    id="prompt-inlinefix-diagnosis"
-                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
-                    value={systemPrompts.inlineFixDiagnosis}
-                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, inlineFixDiagnosis: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-white/50">Step 6 — Inline-Fix Resolution</p>
-                  <Textarea
-                    id="prompt-inlinefix-resolution"
-                    className="font-mono text-xs min-h-[140px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
-                    value={systemPrompts.inlineFixResolution}
-                    onChange={(e) => setSystemPrompts(prev => ({ ...prev, inlineFixResolution: e.target.value }))}
-                  />
-                </div>
+              <div className="space-y-3">
+                <p className="text-xs text-white/50">Step 3 — Build Prompt (builderBuild)</p>
+                <Textarea
+                  id="prompt-builder-build"
+                  className="font-mono text-xs min-h-[160px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed rounded-xl"
+                  value={systemPrompts.builderBuild}
+                  onChange={(e) => setSystemPrompts(prev => ({ ...prev, builderBuild: e.target.value }))}
+                />
               </div>
 
               <div className="flex items-center gap-3">
