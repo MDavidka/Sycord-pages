@@ -400,6 +400,15 @@ interface EnvVar {
   integration?: string | null
 }
 
+interface ImplementationIntegrationContext {
+  env_file: ".env"
+  env_keys: string[]
+  integration_bindings: Array<{
+    integration: string
+    env_key: string
+  }>
+}
+
 const INTEGRATION_OPTIONS = [
   {
     id: "mongodb",
@@ -910,6 +919,34 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Whether auto-deploy has been triggered for this generation
   const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
 
+  const buildImplementationContext = async (): Promise<ImplementationIntegrationContext | null> => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/env`)
+      if (!res.ok) return null
+      const data = await res.json()
+      if (!Array.isArray(data?.envVars)) return null
+
+      const envKeys = data.envVars
+        .map((v: EnvVar) => (typeof v?.key === "string" ? v.key.trim() : ""))
+        .filter(Boolean)
+
+      const integrationBindings = data.envVars
+        .filter((v: EnvVar) => typeof v?.integration === "string" && typeof v?.key === "string" && v.key.trim())
+        .map((v: EnvVar) => ({
+          integration: String(v.integration),
+          env_key: v.key.trim(),
+        }))
+
+      return {
+        env_file: ".env",
+        env_keys: Array.from(new Set(envKeys)),
+        integration_bindings: integrationBindings,
+      }
+    } catch {
+      return null
+    }
+  }
+
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
     const nodes: SitemapNode[] = []
@@ -1237,10 +1274,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setCurrentPlan("Architecting solution...")
 
     try {
+      const implementationContext = await buildImplementationContext()
       const planResponse = await fetch("/api/ai/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        body: JSON.stringify({ projectId, messages: [...messages, userMessage], implementation: implementationContext }),
       })
 
       if (!planResponse.ok) throw new Error("Failed to generate plan")
@@ -1261,7 +1299,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       await phaseDelay()
 
       // ── Step 2: Code (delegated to processNextStep) ──
-      processNextStep(generatedInstruction, [...messages, userMessage, planMessage], [])
+      processNextStep(generatedInstruction, [...messages, userMessage, planMessage], [], implementationContext)
     } catch (err: any) {
       setError(err.message || "Planning failed")
       setStep("idle")
@@ -1272,6 +1310,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     currentInstruction: string,
     currentHistory: Message[],
     filesSnapshot: GeneratedPage[],
+    implementationContext?: ImplementationIntegrationContext | null,
   ) => {
     setStep("coding")
     setCurrentPlan("Generating next file...")
@@ -1299,6 +1338,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
             usedFor: p.usedFor,
             timestamp: p.timestamp,
           })),
+          implementation: implementationContext || undefined,
         }),
       })
       if (!response.ok) throw new Error("Generation failed")
@@ -1421,7 +1461,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
 
       setInstruction(data.updatedInstruction)
-      processNextStep(data.updatedInstruction, [...currentHistory, assistantMessage], nextFilesSnapshot)
+      processNextStep(data.updatedInstruction, [...currentHistory, assistantMessage], nextFilesSnapshot, implementationContext)
 
     } catch (err: any) {
       setError(err.message)

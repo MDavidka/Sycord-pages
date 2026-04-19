@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 
 // Thinking/planning phase — fast path on Gemini Flash-Lite for all models
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
@@ -9,12 +11,12 @@ const PLAN_MODEL = "gemini-3.1-flash-lite-preview"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    const { messages, implementation } = await request.json()
+    const { messages, implementation, projectId } = await request.json()
 
     const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
     if (!apiKey) {
@@ -23,8 +25,47 @@ export async function POST(request: Request) {
     }
 
     const lastUserMessage = messages[messages.length - 1]
-    const implementationBlock = implementation
-      ? `\n\n[IMPLEMENTATION JSON]\n${typeof implementation === "string" ? implementation : JSON.stringify(implementation, null, 2)}\n`
+
+    let integrationImplementation: any = null
+    if (projectId) {
+      try {
+        const mongo = await clientPromise
+        const db = mongo.db()
+        const user = await db.collection("users").findOne(
+          { "projects._id": new ObjectId(projectId) },
+          { projection: { "projects.$": 1 } }
+        )
+        const project = user?.projects?.[0]
+        if (Array.isArray(project?.envVars)) {
+          const envVars = project.envVars
+            .filter((v: any) => typeof v?.key === "string" && v.key.trim())
+            .map((v: any) => ({
+              env_key: v.key.trim(),
+              integration: typeof v?.integration === "string" ? v.integration : null,
+            }))
+          integrationImplementation = {
+            env_file: ".env",
+            env_keys: Array.from(new Set(envVars.map((v: any) => v.env_key))),
+            integration_bindings: envVars.filter((v: any) => !!v.integration),
+          }
+        }
+      } catch (err) {
+        console.warn("[v0] Failed to load project env context for planning:", err)
+      }
+    }
+
+    const mergedImplementation = (() => {
+      if (implementation && integrationImplementation) {
+        if (typeof implementation === "object") {
+          return { ...implementation, ...integrationImplementation }
+        }
+        return { user_implementation: implementation, ...integrationImplementation }
+      }
+      return implementation || integrationImplementation || null
+    })()
+
+    const implementationBlock = mergedImplementation
+      ? `\n\n[IMPLEMENTATION JSON]\n${typeof mergedImplementation === "string" ? mergedImplementation : JSON.stringify(mergedImplementation, null, 2)}\n`
       : ""
 
     // Fetch Global Prompt

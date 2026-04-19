@@ -72,17 +72,10 @@ except ImportError:
 # Configuration
 # ---------------------------------------------------------------------------
 
-def _load_env_server() -> None:
-    """Load key=value pairs from ``.env.server`` (next to this script) into
-    ``os.environ`` so that Cloudflare / GitHub credentials are available even
-    when the process is started via plain ``nohup``.
-
-    Lines starting with ``#`` and empty lines are silently skipped.
-    Existing env vars take precedence (won't be overwritten).
-    """
-    env_file = Path(__file__).resolve().parent / ".env.server"
+def _read_dotenv_pairs(env_file: Path) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
     if not env_file.is_file():
-        return
+        return pairs
     for line in env_file.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -92,8 +85,23 @@ def _load_env_server() -> None:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip()
+        if key:
+            pairs.append((key, value))
+    return pairs
+
+
+def _load_env_server() -> None:
+    """Load key=value pairs from ``.env.server`` (next to this script) into
+    ``os.environ`` so that Cloudflare / GitHub credentials are available even
+    when the process is started via plain ``nohup``.
+
+    Lines starting with ``#`` and empty lines are silently skipped.
+    Existing env vars take precedence (won't be overwritten).
+    """
+    env_file = Path(__file__).resolve().parent / ".env.server"
+    for key, value in _read_dotenv_pairs(env_file):
         # Don't overwrite env vars that are already set
-        if key and key not in os.environ:
+        if key not in os.environ:
             os.environ[key] = value
 
 _load_env_server()
@@ -233,6 +241,9 @@ def _build_project(project_id: str, project_dir: Path) -> dict:
     build_env = os.environ.copy()
     node_bin = str(project_dir / "node_modules" / ".bin")
     build_env["PATH"] = node_bin + os.pathsep + build_env.get("PATH", "")
+    for key, value in _read_dotenv_pairs(project_dir / ".env"):
+        # Project-level .env should be available during install/build on runner.
+        build_env[key] = value
 
     build_logs: list[str] = []
     error_msg: str | None = None

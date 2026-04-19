@@ -254,8 +254,8 @@ export async function POST(request: Request) {
     const envVars: Record<string, string> = {}
     if (Array.isArray(project.envVars)) {
       for (const ev of project.envVars) {
-        if (ev.key && ev.value) {
-          envVars[ev.key] = ev.value
+        if (typeof ev?.key === "string" && ev.key.trim()) {
+          envVars[ev.key.trim()] = typeof ev?.value === "string" ? ev.value : ""
         }
       }
     }

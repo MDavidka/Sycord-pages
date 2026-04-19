@@ -34,6 +34,7 @@ Your goal is to create a detailed architectural plan following Cloudflare Pages 
 
 IMPLEMENTATION JSON (if present):
 - The user may provide a JSON block describing pages, routes, data contracts, design tokens, and integration needs. You MUST consume it as ground truth for routes, components, and props. Do not leave “fillable” APIs empty; use the provided structures and sample data.
+- If IMPLEMENTATION JSON includes \`env_file\`, \`env_keys\`, or \`integration_bindings\`, treat them as authoritative integration contracts. Use the EXACT env key names (for example \`STRIPE_SECRET_KEY\`) in plan/code references and do not invent alternate names.
 - If no integrations are connected, do NOT design database-backed flows. Instead, plan UX with a shadcn/ui modal/banner CTA prompting the user to connect integrations from the Integrations tab.
 
 PROJECT STRUCTURE:
@@ -203,6 +204,7 @@ Your goal is to build a high-performance, production-ready website deployable to
 
 IMPLEMENTATION JSON (if provided):
 - A JSON block may define pages, routes, data models, design tokens, and integration flags. Treat it as authoritative. Populate components with this data; do NOT leave fetch/API sections empty.
+- If the JSON includes \`env_file\`, \`env_keys\`, or \`integration_bindings\`, you MUST reference those exact env key names and avoid renamed or guessed key variants.
 - Generate distinct files/components per page/route in the JSON. No duplicate or placeholder pages.
 - Reuse-first: if FILE_CONTEXT lists an existing component that matches the needed role, import and compose it; only synthesize new components when missing.
 - If integrations are NOT connected, do NOT create db.ts or CRUD calls. Instead, render a shadcn/ui modal/banner CTA to connect integrations and keep UI functional with static copy.
@@ -237,6 +239,7 @@ You generate ONE file at a time. Each file MUST properly connect to previously g
 *   **Styling:** Tailwind CSS alongside shadcn/ui. **IMPORTANT:** Place all global styles in **src/style.css**. Do NOT put styles in public/. Keep CSS minimal and token-based.
 *   **Imports:** In 'src/main.tsx', you MUST import the styles using: \`import './style.css'\`.
 *   **Backend (when REQUIRES_DATABASE is true):** Use **MongoDB Atlas Data API** for database operations. The deployed site is an external playground on Cloudflare Pages. Do NOT use the \`mongodb\` Node driver. Store configuration in \`src/db.ts\` and export wrapper functions that use standard \`fetch()\` calls to the Data API.
+*   **Integration env keys:** The deploy runner writes project env vars into \`.env\`. When implementation context provides env key names, use those exact names in the generated code.
 
 **===== DATABASE INTEGRATION =====**
 {{DATABASE_CONTEXT}}
