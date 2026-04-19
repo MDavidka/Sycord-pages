@@ -96,6 +96,15 @@ interface SystemPromptsState {
   inlineFixResolution: string
 }
 
+const SYSTEM_PROMPT_KEYS: (keyof SystemPromptsState)[] = [
+  "builderPlan",
+  "builderCode",
+  "autoFixDiagnosis",
+  "autoFixResolution",
+  "inlineFixDiagnosis",
+  "inlineFixResolution",
+]
+
 const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
@@ -452,14 +461,18 @@ export default function AdminPage() {
         return
       }
       const data = await res.json()
-      setSystemPrompts({
-        builderPlan: data.builderPlan || "",
-        builderCode: data.builderCode || "",
-        autoFixDiagnosis: data.autoFixDiagnosis || "",
-        autoFixResolution: data.autoFixResolution || "",
-        inlineFixDiagnosis: data.inlineFixDiagnosis || "",
-        inlineFixResolution: data.inlineFixResolution || "",
+      const nextPrompts = SYSTEM_PROMPT_KEYS.reduce<SystemPromptsState>((acc, key) => {
+        acc[key] = typeof data[key] === "string" ? data[key] : ""
+        return acc
+      }, {
+        builderPlan: "",
+        builderCode: "",
+        autoFixDiagnosis: "",
+        autoFixResolution: "",
+        inlineFixDiagnosis: "",
+        inlineFixResolution: "",
       })
+      setSystemPrompts(nextPrompts)
     } catch (err) {
       console.error("Failed to fetch AI prompts:", err)
       toast.error("Failed to load AI prompts")

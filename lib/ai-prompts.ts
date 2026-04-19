@@ -565,13 +565,15 @@ export async function saveSystemPrompts(prompts: {
     const mongo = await clientPromise
     const db = mongo.db()
 
-    const existing = await db.collection("system_prompts").findOne({ type: "global_prompts" })
-    const existingPrompts = existing?.prompts || {}
-    const mergedPrompts = { ...existingPrompts, ...prompts }
+    const promptEntries = Object.entries(prompts).filter(([, value]) => typeof value === "string")
+    if (promptEntries.length === 0) return
+    const promptFieldUpdates = Object.fromEntries(
+      promptEntries.map(([key, value]) => [`prompts.${key}`, value]),
+    )
 
     await db.collection("system_prompts").updateOne(
         { type: "global_prompts" },
-        { $set: { prompts: mergedPrompts } },
+        { $set: { ...promptFieldUpdates, updatedAt: new Date() } },
         { upsert: true }
     )
 }

@@ -47,6 +47,8 @@ ABSOLUTE UI GUARDRAILS:
 - Keep components composable, typed, and data-driven. Avoid hardcoded DOM nodes when a HeroUI component exists.
 `
 
+const HERO_UI_TSX_RULE = `- This React file MUST use Hero UI components from '@heroui/react' as primary UI primitives. Include at least one import from '@heroui/react'. Do NOT build forms/tables/actions with raw HTML controls like <button>, <input>, <select>, <textarea>, or <table> when Hero UI equivalents exist (Button, Input, Select, Textarea, Table, etc.).`
+
 function formatMemoryDigest(files: GeneratedFile[]): string {
   if (!files.length) return "No cached files are available yet.";
   const recent = [...files]
@@ -246,7 +248,7 @@ HARD REQUIREMENTS WHEN NO INTEGRATION IS CONNECTED:
     if (isHTML) fileRules = `- Use <!DOCTYPE html>. Include <script src="https://cdn.tailwindcss.com"></script>. Include <script type="module" src="/src/main.tsx"></script>.`
     if (isTS) fileRules = `- Write valid TypeScript. Use 'export' for modules. Import from relative paths (e.g. './utils'). DOM manipulation must be type-safe (use 'as HTMLElement' if needed). ALL functions must have explicit return types. IMPORTANT: Do NOT access DOM elements at the top level. Wrap all DOM access in exported functions (e.g. init() or render()).`
     if (isComponentTSX || isMainEntryTSX) {
-      fileRules += ` - This React file MUST use Hero UI components from '@heroui/react' as primary UI primitives. Include at least one import from '@heroui/react'. Do NOT build forms/tables/actions with raw HTML controls like <button>, <input>, <select>, <textarea>, or <table> when Hero UI equivalents exist (Button, Input, Select, Textarea, Table, etc.).`
+      fileRules += ` ${HERO_UI_TSX_RULE}`
     }
     if (isJSON) fileRules = `- Return valid JSON only.`
     if (fileExt === 'css') fileRules = `- Write valid CSS. Define CSS custom properties in :root for design tokens. Use @tailwind directives if applicable.`
