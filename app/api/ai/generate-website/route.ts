@@ -76,7 +76,7 @@ function summarizeInstructionProgress(instruction: string): string {
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
