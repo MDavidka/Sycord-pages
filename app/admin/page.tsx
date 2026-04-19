@@ -464,14 +464,7 @@ export default function AdminPage() {
       const nextPrompts = SYSTEM_PROMPT_KEYS.reduce<SystemPromptsState>((acc, key) => {
         acc[key] = typeof data[key] === "string" ? data[key] : ""
         return acc
-      }, {
-        builderPlan: "",
-        builderCode: "",
-        autoFixDiagnosis: "",
-        autoFixResolution: "",
-        inlineFixDiagnosis: "",
-        inlineFixResolution: "",
-      })
+      }, {} as SystemPromptsState)
       setSystemPrompts(nextPrompts)
     } catch (err) {
       console.error("Failed to fetch AI prompts:", err)

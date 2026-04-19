@@ -564,8 +564,18 @@ export async function saveSystemPrompts(prompts: {
 
     const mongo = await clientPromise
     const db = mongo.db()
+    const allowedPromptKeys = new Set([
+      "builderPlan",
+      "builderCode",
+      "autoFixDiagnosis",
+      "autoFixResolution",
+      "inlineFixDiagnosis",
+      "inlineFixResolution",
+    ])
 
-    const promptEntries = Object.entries(prompts).filter(([, value]) => typeof value === "string")
+    const promptEntries = Object.entries(prompts).filter(
+      ([key, value]) => allowedPromptKeys.has(key) && typeof value === "string",
+    )
     if (promptEntries.length === 0) return
     const promptFieldUpdates = Object.fromEntries(
       promptEntries.map(([key, value]) => [`prompts.${key}`, value]),
