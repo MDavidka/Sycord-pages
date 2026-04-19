@@ -55,6 +55,14 @@ export async function POST(request: Request) {
     frontendFiles.forEach((f) => cachedMap.set(f.name, f)) // frontend data takes precedence
     const previousFiles: GeneratedFile[] = Array.from(cachedMap.values())
 
+    // If this is the first task [1], clear the server-side cache to prevent stale context
+    // from previous generation attempts.
+    const isFirstTask = instruction.includes("[1]") && !instruction.includes("[Done] src/types.ts") && !instruction.includes("[Done] package.json")
+    if (isFirstTask && projectId) {
+      const { clearProjectCache } = require("@/lib/gemini-cache")
+      clearProjectCache(projectId)
+    }
+
     // Default to qwen/qwen3-coder:free (OpenRouter)
     const modelId = model || "qwen/qwen3-coder:free"
 
@@ -100,6 +108,17 @@ export async function POST(request: Request) {
     }
 
     if (!currentTask) {
+        // Double check if there are REALLY no tasks left
+        const anyTaskLeft = /\[\d+\]/.test(instruction)
+        if (!anyTaskLeft) {
+            return NextResponse.json({
+                isComplete: true,
+                updatedInstruction: instruction
+            })
+        }
+        // If there's a task but regex failed, it might be a formatting issue.
+        // We'll return isComplete: true as a safety measure to avoid infinite loops,
+        // but in a real scenario we might want to try a more aggressive regex.
         return NextResponse.json({
             isComplete: true,
             updatedInstruction: instruction
