@@ -1237,7 +1237,7 @@ export default function SiteSettingsPage() {
         { id: "domain", label: "Domain", icon: Globe },
         { id: "pages", label: "Pages", icon: FileText },
         { id: "ai", label: "Syra", icon: Zap },
-        { id: "syra-builder", label: "Syra Builder", icon: Code },
+        { id: "syra-builder", label: "Syra", icon: Code },
       ],
     },
     ...(siteType === "blog"
