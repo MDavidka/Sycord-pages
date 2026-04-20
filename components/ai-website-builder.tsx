@@ -1270,7 +1270,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setGeneratedPages([])
     } catch (e) {
       console.warn(
-        `Unable to clear old pages for project ${projectId}. Please delete existing pages from the project editor before retrying generation.`,
+        `Unable to clear old pages for project ${projectId}. Please delete existing pages from the project editor (Pages tab) before retrying generation.`,
         e,
       )
     }
