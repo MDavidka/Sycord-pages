@@ -366,6 +366,39 @@ document.querySelector('#app').innerHTML = '...'
 4. VERIFY your imports match the exact exports from FILE_CONTEXT before outputting.
 `
 
+export const DEFAULT_BUILDER_CHEATSHEET = `
+You are a UI layout architect. Given a user prompt and a component cheatsheet, output a VALID Style JSON tree.
+
+Rules:
+- Use ONLY component names from the cheatsheet array.
+- Every node must have: id, component.
+- id format: lowercase_component_000 (e.g. card_001, button_001).
+- onClick values must be handler IDs in the format: handleAction_001.
+- DO NOT write any JavaScript logic, state, or imports.
+- Output ONLY valid JSON, no markdown, no explanation.
+`
+
+export const DEFAULT_BUILDER_FUNCTION = `
+You are a React logic developer. You receive:
+1. A Style JSON tree describing the component structure.
+2. The actual source code of each used component.
+
+Your job is to write ONLY the React logic needed to make the app work.
+
+Rules:
+- state[]: valid useState hook declarations as strings.
+- handlers: object, keys = onClick IDs from Style JSON.
+- render_injections: object, keys = node IDs. Override props for that node.
+- DO NOT redesign the layout. DO NOT add components.
+- Output ONLY valid JSON.
+`
+
+export const DEFAULT_BUILDER_BUILD = `
+You are a strict build-fix assistant.
+Given a generated TSX and build/type errors, return ONLY JSON with the minimal fix plan.
+Do not redesign the UI; only fix compile/runtime issues.
+`
+
 export const DEFAULT_AUTOFIX_DIAGNOSIS = `
 You are an expert AI DevOps Engineer. Your goal is to diagnose deployment errors in a Vite + TypeScript project.
 
@@ -511,6 +544,9 @@ export async function getSystemPrompts() {
   if (!clientPromise) return {
     builderPlan: DEFAULT_BUILDER_PLAN,
     builderCode: DEFAULT_BUILDER_CODE,
+    builderCheatSheet: DEFAULT_BUILDER_CHEATSHEET,
+    builderFunction: DEFAULT_BUILDER_FUNCTION,
+    builderBuild: DEFAULT_BUILDER_BUILD,
     autoFixDiagnosis: DEFAULT_AUTOFIX_DIAGNOSIS,
     autoFixResolution: DEFAULT_AUTOFIX_RESOLUTION,
     inlineFixDiagnosis: DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -528,6 +564,9 @@ export async function getSystemPrompts() {
         return {
             builderPlan: data.prompts.builderPlan || DEFAULT_BUILDER_PLAN,
             builderCode: data.prompts.builderCode || DEFAULT_BUILDER_CODE,
+            builderCheatSheet: data.prompts.builderCheatSheet || DEFAULT_BUILDER_CHEATSHEET,
+            builderFunction: data.prompts.builderFunction || DEFAULT_BUILDER_FUNCTION,
+            builderBuild: data.prompts.builderBuild || DEFAULT_BUILDER_BUILD,
             autoFixDiagnosis: data.prompts.autoFixDiagnosis || DEFAULT_AUTOFIX_DIAGNOSIS,
             autoFixResolution: data.prompts.autoFixResolution || DEFAULT_AUTOFIX_RESOLUTION,
             inlineFixDiagnosis: data.prompts.inlineFixDiagnosis || DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -541,6 +580,9 @@ export async function getSystemPrompts() {
   return {
     builderPlan: DEFAULT_BUILDER_PLAN,
     builderCode: DEFAULT_BUILDER_CODE,
+    builderCheatSheet: DEFAULT_BUILDER_CHEATSHEET,
+    builderFunction: DEFAULT_BUILDER_FUNCTION,
+    builderBuild: DEFAULT_BUILDER_BUILD,
     autoFixDiagnosis: DEFAULT_AUTOFIX_DIAGNOSIS,
     autoFixResolution: DEFAULT_AUTOFIX_RESOLUTION,
     inlineFixDiagnosis: DEFAULT_INLINE_FIX_DIAGNOSIS,
@@ -548,7 +590,7 @@ export async function getSystemPrompts() {
   }
 }
 
-export async function saveSystemPrompts(prompts: { builderPlan?: string, builderCode?: string, autoFixDiagnosis?: string, autoFixResolution?: string }) {
+export async function saveSystemPrompts(prompts: { builderPlan?: string, builderCode?: string, builderCheatSheet?: string, builderFunction?: string, builderBuild?: string, autoFixDiagnosis?: string, autoFixResolution?: string, inlineFixDiagnosis?: string, inlineFixResolution?: string }) {
     if (!clientPromise) throw new Error("Database not connected")
 
     const mongo = await clientPromise
