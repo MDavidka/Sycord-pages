@@ -1305,7 +1305,7 @@ export default function SiteSettingsPage() {
           onExpandChange={setIsDesktopSidebarExpanded}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab: string) => setActiveTab(tab as any)}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
@@ -1325,7 +1325,7 @@ export default function SiteSettingsPage() {
           onClose={() => setIsSidebarOpen(false)}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab: string) => setActiveTab(tab as any)}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}

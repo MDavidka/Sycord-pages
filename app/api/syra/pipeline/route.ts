@@ -73,7 +73,7 @@ async function callGemini(apiKey: string, prompt: string): Promise<string> {
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  if (!(session?.user as any)?.id) {
     return new Response(JSON.stringify({ message: "Unauthorized" }), { status: 401 })
   }
 

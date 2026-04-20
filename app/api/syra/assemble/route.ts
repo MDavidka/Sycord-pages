@@ -10,7 +10,7 @@ import { assemble, validateTsx } from "@/lib/syra/orchestrator"
  */
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  if (!(session?.user as any)?.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
