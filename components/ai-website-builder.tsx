@@ -62,7 +62,6 @@ const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar
 
 // How long to wait after deploy before the first log check (build pipeline startup time)
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
-
 type GenerationPhase =
   | "idle"
   | "planning"       // Step 1: Plan
@@ -1207,9 +1206,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     }
   }
 
-  /** Small delay helper for smooth phase transitions */
-  const phaseDelay = (ms = 500) => new Promise<void>(r => setTimeout(r, ms))
-
   const startGeneration = async () => {
     if (!input.trim()) return
 
@@ -1231,213 +1227,19 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setMessages(prev => [...prev, userMessage])
     setAttachments([])
     setError(null)
-    setAutoDeployTriggered(false)
     setSitemap([])
-    setQuestionCount(0) // Reset question count for new generation
-
-    // Clear existing pages from the database and local state before starting a new generation
-    // to prevent "leaking" old pages into the new build.
-    try {
-      await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
-      setGeneratedPages([])
-    } catch (e) {
-      console.warn(`Failed to clear existing pages for project ${projectId}. Old pages may persist in this generation.`, e)
-    }
-
-    // ── Phase 1: Planning ──
-    setStep("planning")
-    setCurrentPlan("Architecting solution...")
-
-    try {
-          const planResponse = await fetch("/api/ai/generate-plan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: [...messages, userMessage] }),
-          })
-
-      if (!planResponse.ok) throw new Error("Failed to generate plan")
-      const planData = await planResponse.json()
-      const generatedInstruction = planData.instruction
-
-      await phaseDelay()
-
-      // ── Phase 2: Searching ──
-      setStep("searching")
-      try {
-        await fetch("/api/ai/web-search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: input.trim(), type: "general" }),
-        })
-      } catch { /* non-critical */ }
-
-      await phaseDelay()
-
-      // ── Phase 3: Clarifying ──
-      const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      // Only ask questions if we haven't reached the limit of 2
-      if (questionMatch && questionCount < 2) {
-        setStep("clarifying")
-        const questionText = questionMatch[1].trim()
-        setMessages(prev => [...prev, {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: questionText,
-        }])
-        setInput("")
-        setQuestionCount(prev => prev + 1)
-        return
-      }
-
-      // ── Phase 4: Structuring ──
-      setStep("structuring")
-      parseSitemap(generatedInstruction)
-      setInstruction(generatedInstruction)
-
-      await phaseDelay()
-
-      // ── Phase 5: Integrating ──
-      setStep("integrating")
-      await phaseDelay(800)
-
-      const planMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: generatedInstruction,
-        plan: "Architectural Strategy",
-      }
-      setMessages(prev => [...prev, planMessage])
-
-      // ── Phase 6: Building (delegated to processNextStep) ──
-      processNextStep(generatedInstruction, [...messages, userMessage, planMessage])
-    } catch (err: any) {
-      setError(err.message || "Planning failed")
-      setStep("idle")
-    }
-  }
-
-  const processNextStep = async (currentInstruction: string, currentHistory: Message[]) => {
-    setStep("building")
-    setCurrentPlan("Generating next file...")
-
-    const nextFileMatch = /\[\d+\]\s*([^\s:]+)(?:[:\-]?\s*\[usedfor\](.*?)\[usedfor\])?/.exec(currentInstruction)
-    if (nextFileMatch) {
-      setActiveFile(nextFileMatch[1])
-      setActiveFileUsedFor(nextFileMatch[2]?.trim() || undefined)
-    }
-
-    const modelId = selectedModel.id
-
-    const attemptGenerate = async (model: string): Promise<any> => {
-      const response = await fetch("/api/ai/generate-website", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId,
-          messages: currentHistory,
-          instruction: currentInstruction,
-          model,
-          generatedPages: generatedPages.map(p => ({
-            name: p.name,
-            code: p.code,
-            usedFor: p.usedFor,
-            timestamp: p.timestamp,
-          })),
-        }),
-      })
-      if (!response.ok) throw new Error("Generation failed")
-      return response.json()
-    }
-
-    try {
-      let data: any
-      try {
-        data = await attemptGenerate(modelId)
-      } catch (primaryErr: any) {
-        // OpenRouter model should NEVER fall back — show error
-        if (selectedModel.provider === "OpenRouter") {
-          console.error("[AI Builder] OpenRouter model error:", primaryErr)
-          setError(`Failed to connect to OpenRouter model (${selectedModel.name}). The service may be temporarily unavailable. Please try again later.`)
-          setStep("idle")
-          setActiveFile(undefined)
-          setActiveFileUsedFor(undefined)
-          return
-        }
-        throw primaryErr
-      }
-
-      if (data.isComplete) {
-        // ── Phase 7: Auto-Deploy ──
-        setStep("deploying")
-        setCurrentPlan("All files generated. Deploying...")
-        setActiveFile(undefined)
-        setActiveFileUsedFor(undefined)
-        // Auto-deploy immediately
-        if (!autoDeployTriggered) {
-          setAutoDeployTriggered(true)
-          try {
-            const res = await fetch("/api/deploy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId })
-            })
-            const deployData = await res.json()
-            if (deployData.success) {
-              setDeploySuccess(true)
-              setDeployResult(deployData)
-              if (deployData.repoId) {
-                setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
-              }
-            }
-          } catch { /* deploy error is non-blocking */ }
-        }
-        await new Promise(r => setTimeout(r, 800))
-        setStep("done")
-        return
-      }
-
-      const assistantMessage: Message = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: `Generated ${data.pageName}`,
-        code: data.code,
-        pageName: data.pageName,
-        isIntermediate: true,
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
-
-      if (data.code && data.pageName) {
-        setGeneratedPages(prev => {
-          const filtered = prev.filter(p => p.name !== data.pageName)
-          return [...filtered, {
-            name: data.pageName,
-            code: data.code,
-            timestamp: Date.now(),
-            usedFor: data.usedFor,
-          }]
-        })
-
-        await fetch(`/api/projects/${projectId}/pages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: data.pageName,
-            content: data.code,
-            usedFor: data.usedFor || "",
-          }),
-        })
-      }
-
-      setInstruction(data.updatedInstruction)
-      processNextStep(data.updatedInstruction, [...currentHistory, assistantMessage])
-
-    } catch (err: any) {
-      setError(err.message)
-      setStep("idle")
-      setActiveFile(undefined)
-      setActiveFileUsedFor(undefined)
-    }
+    setQuestionCount(0)
+    setGeneratedPages([])
+    setInstruction("")
+    setCurrentPlan("Generation logic has been removed. Syra UI remains active.")
+    setStep("done")
+    setMessages(prev => [...prev, {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: "Generation is disabled for now. Syra UI is still available, but no code/style prompting or file generation logic runs.",
+    }])
+    setActiveFile(undefined)
+    setActiveFileUsedFor(undefined)
   }
 
   const checkDeployLogs = async (repoId: string, attempt = 0) => {

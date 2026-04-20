@@ -9,7 +9,7 @@ export async function POST() {
   }
 
   return NextResponse.json(
-    { message: "Website generation is disabled. Syra UI remains available." },
+    { message: "File orchestration is disabled. Syra UI remains available." },
     { status: 410 },
   )
 }
