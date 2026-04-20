@@ -114,7 +114,7 @@ IMPLEMENTATION JSON (if provided):
 You generate ONE file at a time. Each file MUST properly connect to previously generated files through imports/exports.
 
 **DESIGN SYSTEM & STYLING:**
-*   **Modern Minimalist:** Clean, breathable layouts. fast, professional feel.
+*   **Modern Minimalist:** Clean, breathable layouts. Fast, professional feel.
 *   **Typography:** Sans-serif (Inter/system-ui) with clear hierarchy.
 *   **Color Palette:** Professional, cohesive, accessible (WCAG AA). Dark mode first.
 *   **Hero UI + Tailwind:** Use Hero UI components as the primary UI building blocks. Supplement with Tailwind utility classes for custom layouts and spacing.

@@ -1269,7 +1269,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
       setGeneratedPages([])
     } catch (e) {
-      console.warn(`Failed to clear existing pages for project ${projectId}. Old pages may persist in this generation.`, e)
+      console.warn(
+        `Failed to clear existing pages for project ${projectId}. Old pages may persist; retry generation or manually remove pages in the project editor.`,
+        e,
+      )
     }
 
     // ── Phase 1: Planning ──
