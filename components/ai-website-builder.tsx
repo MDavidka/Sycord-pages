@@ -62,6 +62,34 @@ const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar
 
 // How long to wait after deploy before the first log check (build pipeline startup time)
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
+const AI_BUILDER_CHEATSHEET = [
+  "Button",
+  "Card",
+  "CardHeader",
+  "CardTitle",
+  "CardDescription",
+  "CardContent",
+  "CardFooter",
+  "Input",
+  "Label",
+  "Badge",
+  "Textarea",
+  "Avatar",
+  "Alert",
+  "AlertTitle",
+  "AlertDescription",
+  "Dialog",
+  "DialogContent",
+  "DialogHeader",
+  "DialogTitle",
+  "DialogDescription",
+  "DialogFooter",
+  "Sheet",
+  "SheetContent",
+  "SheetHeader",
+  "SheetTitle",
+  "SheetDescription",
+]
 
 type GenerationPhase =
   | "idle"
@@ -1249,19 +1277,19 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setCurrentPlan("Architecting solution...")
 
     try {
-          const planResponse = await fetch("/api/ai/generate-plan", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ messages: [...messages, userMessage] }),
-          })
-
-      if (!planResponse.ok) throw new Error("Failed to generate plan")
+      const history = [...messages, userMessage]
+      const planResponse = await fetch("/api/ai/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, cheatsheet: AI_BUILDER_CHEATSHEET }),
+      })
+      if (!planResponse.ok) throw new Error("Failed to generate style JSON")
       const planData = await planResponse.json()
-      const generatedInstruction = planData.instruction
+      const style = planData.style
 
       await phaseDelay()
 
-      // ── Phase 2: Searching ──
+      // ── Phase 2: Searching (non-blocking context enrichment) ──
       setStep("searching")
       try {
         await fetch("/api/ai/web-search", {
@@ -1273,167 +1301,117 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       await phaseDelay()
 
-      // ── Phase 3: Clarifying ──
-      const questionMatch = generatedInstruction.match(/\[QUESTION\]\s*(.*)/i)
-      // Only ask questions if we haven't reached the limit of 2
-      if (questionMatch && questionCount < 2) {
-        setStep("clarifying")
-        const questionText = questionMatch[1].trim()
-        setMessages(prev => [...prev, {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: questionText,
-        }])
-        setInput("")
-        setQuestionCount(prev => prev + 1)
-        return
-      }
-
-      // ── Phase 4: Structuring ──
       setStep("structuring")
-      parseSitemap(generatedInstruction)
-      setInstruction(generatedInstruction)
-
-      await phaseDelay()
-
-      // ── Phase 5: Integrating ──
-      setStep("integrating")
-      await phaseDelay(800)
-
+      setCurrentPlan("Designing component structure...")
       const planMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: generatedInstruction,
-        plan: "Architectural Strategy",
+        content: `Style JSON generated:\n${JSON.stringify(style, null, 2)}`,
+        plan: "Style JSON",
       }
       setMessages(prev => [...prev, planMessage])
 
-      // ── Phase 6: Building (delegated to processNextStep) ──
-      processNextStep(generatedInstruction, [...messages, userMessage, planMessage])
-    } catch (err: any) {
-      setError(err.message || "Planning failed")
-      setStep("idle")
-    }
-  }
+      await phaseDelay()
 
-  const processNextStep = async (currentInstruction: string, currentHistory: Message[]) => {
-    setStep("building")
-    setCurrentPlan("Generating next file...")
-
-    const nextFileMatch = /\[\d+\]\s*([^\s:]+)(?:[:\-]?\s*\[usedfor\](.*?)\[usedfor\])?/.exec(currentInstruction)
-    if (nextFileMatch) {
-      setActiveFile(nextFileMatch[1])
-      setActiveFileUsedFor(nextFileMatch[2]?.trim() || undefined)
-    }
-
-    const modelId = selectedModel.id
-
-    const attemptGenerate = async (model: string): Promise<any> => {
-      const response = await fetch("/api/ai/generate-website", {
+      setStep("integrating")
+      setCurrentPlan("Generating component logic...")
+      const functionResponse = await fetch("/api/ai/generate-functions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId,
-          messages: currentHistory,
-          instruction: currentInstruction,
-          model,
-          generatedPages: generatedPages.map(p => ({
-            name: p.name,
-            code: p.code,
-            usedFor: p.usedFor,
-            timestamp: p.timestamp,
-          })),
-        }),
+        body: JSON.stringify({ style, messages: history }),
       })
-      if (!response.ok) throw new Error("Generation failed")
-      return response.json()
-    }
+      if (!functionResponse.ok) throw new Error("Failed to generate function JSON")
+      const functionData = await functionResponse.json()
+      const functions = functionData.functions
 
-    try {
-      let data: any
-      try {
-        data = await attemptGenerate(modelId)
-      } catch (primaryErr: any) {
-        // OpenRouter model should NEVER fall back — show error
-        if (selectedModel.provider === "OpenRouter") {
-          console.error("[AI Builder] OpenRouter model error:", primaryErr)
-          setError(`Failed to connect to OpenRouter model (${selectedModel.name}). The service may be temporarily unavailable. Please try again later.`)
-          setStep("idle")
-          setActiveFile(undefined)
-          setActiveFileUsedFor(undefined)
-          return
-        }
-        throw primaryErr
-      }
-
-      if (data.isComplete) {
-        // ── Phase 7: Auto-Deploy ──
-        setStep("deploying")
-        setCurrentPlan("All files generated. Deploying...")
-        setActiveFile(undefined)
-        setActiveFileUsedFor(undefined)
-        // Auto-deploy immediately
-        if (!autoDeployTriggered) {
-          setAutoDeployTriggered(true)
-          try {
-            const res = await fetch("/api/deploy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId })
-            })
-            const deployData = await res.json()
-            if (deployData.success) {
-              setDeploySuccess(true)
-              setDeployResult(deployData)
-              if (deployData.repoId) {
-                setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
-              }
-            }
-          } catch { /* deploy error is non-blocking */ }
-        }
-        await new Promise(r => setTimeout(r, 800))
-        setStep("done")
-        return
-      }
-
-      const assistantMessage: Message = {
-        id: Date.now().toString(),
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 2).toString(),
         role: "assistant",
-        content: `Generated ${data.pageName}`,
-        code: data.code,
-        pageName: data.pageName,
-        isIntermediate: true,
-      }
+        content: `Function JSON generated:\n${JSON.stringify(functions, null, 2)}`,
+        plan: "Function JSON",
+      }])
 
-      setMessages(prev => [...prev, assistantMessage])
+      await phaseDelay(800)
 
-      if (data.code && data.pageName) {
-        setGeneratedPages(prev => {
-          const filtered = prev.filter(p => p.name !== data.pageName)
-          return [...filtered, {
-            name: data.pageName,
-            code: data.code,
-            timestamp: Date.now(),
-            usedFor: data.usedFor,
-          }]
-        })
+      setStep("building")
+      setCurrentPlan("Orchestrating files...")
+      const orchestrationResponse = await fetch("/api/ai/orchestrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ style, functions }),
+      })
+      if (!orchestrationResponse.ok) throw new Error("Failed to orchestrate files")
+      const orchestrationData = await orchestrationResponse.json()
+      const files: Array<{ name: string; content: string; usedFor?: string }> = orchestrationData.files || []
+      if (!files.length) throw new Error("No files were generated")
+
+      const initialInstruction = files.map((file, i) => `[${i + 1}] ${file.name}`).join("\n")
+      let rollingInstruction = initialInstruction
+      setInstruction(initialInstruction)
+      parseSitemap(initialInstruction)
+
+      const generated: GeneratedPage[] = []
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setActiveFile(file.name)
+        setActiveFileUsedFor(file.usedFor)
+        setCurrentPlan(`Saving ${file.name}...`)
 
         await fetch(`/api/projects/${projectId}/pages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: data.pageName,
-            content: data.code,
-            usedFor: data.usedFor || "",
+            name: file.name,
+            content: file.content,
+            usedFor: file.usedFor || "",
           }),
         })
+
+        generated.push({
+          name: file.name,
+          code: file.content,
+          usedFor: file.usedFor,
+          timestamp: Date.now() + i,
+        })
+
+        rollingInstruction = rollingInstruction.replace(`[${i + 1}]`, "[Done]")
+        setInstruction(rollingInstruction)
       }
 
-      setInstruction(data.updatedInstruction)
-      processNextStep(data.updatedInstruction, [...currentHistory, assistantMessage])
+      setGeneratedPages(generated)
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 3).toString(),
+        role: "assistant",
+        content: `Generated ${files.length} files via Style → Function → Orchestration pipeline.`,
+      }])
 
+      // ── Phase 7: Auto-Deploy ──
+      setStep("deploying")
+      setCurrentPlan("All files generated. Deploying...")
+      setActiveFile(undefined)
+      setActiveFileUsedFor(undefined)
+      if (!autoDeployTriggered) {
+        setAutoDeployTriggered(true)
+        try {
+          const res = await fetch("/api/deploy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId })
+          })
+          const deployData = await res.json()
+          if (deployData.success) {
+            setDeploySuccess(true)
+            setDeployResult(deployData)
+            if (deployData.repoId) {
+              setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
+            }
+          }
+        } catch {}
+      }
+      await new Promise(r => setTimeout(r, 800))
+      setStep("done")
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || "Generation failed")
       setStep("idle")
       setActiveFile(undefined)
       setActiveFileUsedFor(undefined)

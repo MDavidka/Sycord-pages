@@ -2,10 +2,10 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
-import { BUILDER_COMPONENT_CHEATSHEET, safeParseJsonBlock } from "@/lib/ai-builder"
+import { extractStyleComponents, readComponentSources, safeParseJsonBlock, type StyleJson } from "@/lib/ai-builder"
 
 const GOOGLE_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-const PLAN_MODEL = "gemini-3.1-flash-lite-preview"
+const FUNCTION_MODEL = "gemini-3.1-pro-preview"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -14,19 +14,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { messages, cheatsheet } = await request.json()
+    const { style, messages } = await request.json() as { style: StyleJson; messages?: Array<{ content?: string }> }
+    if (!style?.root) {
+      return NextResponse.json({ message: "Missing style.root" }, { status: 400 })
+    }
+
     const apiKey = process.env.GOOGLE_AI_API || process.env.GOOGLE_API_KEY
     if (!apiKey) {
       return NextResponse.json({ message: "AI service not configured (Gemini)" }, { status: 500 })
     }
 
-    const finalCheatsheet = Array.isArray(cheatsheet) && cheatsheet.length > 0 ? cheatsheet : BUILDER_COMPONENT_CHEATSHEET
-    const lastUserMessage = Array.isArray(messages) ? messages[messages.length - 1] : { content: "" }
-    const { builderPlan, builderCheatSheet } = await getSystemPrompts()
+    const componentNames = Array.from(extractStyleComponents(style.root))
+    const componentSources = await readComponentSources(componentNames)
+    const { builderFunction } = await getSystemPrompts()
+    const userRequest = Array.isArray(messages) ? messages[messages.length - 1]?.content || "" : ""
 
-    const finalPrompt = `${builderCheatSheet}\n\n${builderPlan}`
-      .replace("{{REQUEST}}", lastUserMessage?.content || "")
-      .replace("{{CHEATSHEET}}", JSON.stringify(finalCheatsheet))
+    const finalPrompt = builderFunction
+      .replace("{{STYLE_JSON}}", JSON.stringify(style, null, 2))
+      .replace("{{COMPONENT_SOURCES}}", JSON.stringify(componentSources, null, 2))
+      .replace("{{REQUEST}}", userRequest)
 
     const response = await fetch(GOOGLE_API_URL, {
       method: "POST",
@@ -35,9 +41,9 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: PLAN_MODEL,
+        model: FUNCTION_MODEL,
         messages: [{ role: "user", content: finalPrompt }],
-        temperature: 0.25,
+        temperature: 0.2,
       }),
     })
 
@@ -48,15 +54,14 @@ export async function POST(request: Request) {
 
     const data = await response.json()
     const responseText = data.choices?.[0]?.message?.content || ""
-    const style = safeParseJsonBlock(responseText)
+    const functions = safeParseJsonBlock(responseText)
 
     return NextResponse.json({
-      style,
-      instruction: JSON.stringify(style, null, 2),
-      cheatsheet: finalCheatsheet,
+      functions,
+      componentSources,
     })
   } catch (error: any) {
-    console.error("[AI builder] Style generation error:", error)
-    return NextResponse.json({ message: error.message || "Failed to generate style JSON" }, { status: 500 })
+    console.error("[AI builder] Function generation error:", error)
+    return NextResponse.json({ message: error.message || "Failed to generate function JSON" }, { status: 500 })
   }
 }
