@@ -11,8 +11,8 @@ const NodeSchema: z.ZodType<any> = z.lazy(() =>
       id: z
         .string()
         .regex(
-          /^[a-z]+_[0-9]{3}$/,
-          "Node id must match pattern: lowercase_000  (e.g. card_001)",
+          /^[a-z][a-z_]*[a-z]_[0-9]{3}$|^[a-z]+_[0-9]{3}$/,
+          "Node id must match pattern: word_000  (e.g. card_001, card_header_001)",
         ),
       component: z.enum(allowedComponentNames),
       label:     z.string().optional(),
@@ -21,7 +21,7 @@ const NodeSchema: z.ZodType<any> = z.lazy(() =>
       onClick:   z
         .string()
         .regex(
-          /^handle[A-Z][a-zA-Z]+_[0-9]{3}$/,
+          /^handle[A-Za-z]+_[0-9]{3}$/,
           "onClick must match pattern: handleXxx_000  (e.g. handleClick_001)",
         )
         .optional(),

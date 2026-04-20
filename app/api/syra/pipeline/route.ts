@@ -142,13 +142,21 @@ export async function POST(request: Request) {
         // ----------------------------------------------------------------
         emit({ type: "stage", id: 2, name: "Manifest Resolver", status: "running" })
 
-        const usedComponents  = extractUsedComponents(styleJson.root)
-        const componentSources = [...new Set(usedComponents)].map((name) => ({
-          name,
-          source: componentManifest[name] ?? "// source not available",
-        }))
-
-        emit({ type: "stage", id: 2, name: "Manifest Resolver", status: "done", detail: `${componentSources.length} component source(s) loaded` })
+        let componentSources: { name: string; source: string }[] = []
+        try {
+          const usedComponents = extractUsedComponents(styleJson.root)
+          componentSources = [...new Set(usedComponents)].map((name) => ({
+            name,
+            source: componentManifest[name] ?? "// source not available",
+          }))
+          emit({ type: "stage", id: 2, name: "Manifest Resolver", status: "done", detail: `${componentSources.length} component source(s) loaded` })
+        } catch (manifestErr: any) {
+          const detail = manifestErr?.message ?? "Manifest resolution failed"
+          emit({ type: "stage", id: 2, name: "Manifest Resolver", status: "error", detail })
+          emit({ type: "error", message: `Manifest Resolver failed: ${detail}` })
+          controller.close()
+          return
+        }
 
         // ----------------------------------------------------------------
         // STAGE 3 — Developer AI (Function JSON)
