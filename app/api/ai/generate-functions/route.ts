@@ -33,7 +33,7 @@ function validateHandlerCoverage(styleJson: StyleJson, functionJson: FunctionJso
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  if (!session?.user?.email) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
