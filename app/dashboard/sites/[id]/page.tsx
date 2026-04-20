@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import AIWebsiteBuilder, { type GeneratedPage } from "@/components/ai-website-builder"
+import SyraBuilder from "@/components/syra-builder"
 import {
   Trash2,
   Plus,
@@ -573,7 +574,7 @@ export default function SiteSettingsPage() {
   const [productError, setProductError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
+    "overview" | "domain" | "pages" | "ai" | "syra-builder" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
   >("overview")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -1236,6 +1237,7 @@ export default function SiteSettingsPage() {
         { id: "domain", label: "Domain", icon: Globe },
         { id: "pages", label: "Pages", icon: FileText },
         { id: "ai", label: "Syra", icon: Zap },
+        { id: "syra-builder", label: "Syra Builder", icon: Code },
       ],
     },
     ...(siteType === "blog"
@@ -1521,8 +1523,8 @@ export default function SiteSettingsPage() {
         </AnimatePresence>
 
 
-        <main className={cn("flex-1 relative", activeTab === "ai" ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
-          <div className={cn("mx-auto", activeTab === "ai" ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : "max-w-6xl space-y-8 pb-8")}>
+        <main className={cn("flex-1 relative", activeTab === "ai" || activeTab === "syra-builder" ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
+          <div className={cn("mx-auto", activeTab === "ai" || activeTab === "syra-builder" ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : "max-w-6xl space-y-8 pb-8")}>
 
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
@@ -2311,6 +2313,28 @@ export default function SiteSettingsPage() {
                         generatedPages={generatedPages}
                         setGeneratedPages={setGeneratedPages}
                         autoFixLogs={autoFixLogs}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <AlertCircle className="h-6 w-6 text-destructive mr-2" />
+                      <span className="text-destructive">Project ID error</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: SYRA BUILDER (structured pipeline) */}
+            {activeTab === "syra-builder" && (
+              <div className="h-full w-full flex flex-col">
+                <div className="flex-1 bg-background overflow-hidden relative">
+                  {id ? (
+                    <div className="absolute inset-0 overflow-hidden">
+                      <SyraBuilder
+                        projectId={id}
+                        generatedPages={generatedPages}
+                        setGeneratedPages={setGeneratedPages}
                       />
                     </div>
                   ) : (
