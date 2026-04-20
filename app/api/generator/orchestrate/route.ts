@@ -17,13 +17,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<Orchestra
       }, { status: 400 });
     }
 
-    // Orchestration is non-AI - direct code transformation
+    // Orchestration is non-AI - direct code transformation with error handling
     const result = orchestrate(styleJSON, functionJSON, cheatSheet);
 
+    // Return errors even if transformation succeeded (validation warnings)
     return NextResponse.json({
-      success: true,
+      success: result.errors.length === 0,
       outputTSX: result.tsx,
-      imports: result.imports
+      imports: result.imports,
+      error: result.errors.length > 0 ? result.errors.join("; ") : undefined
     });
 
   } catch (error) {

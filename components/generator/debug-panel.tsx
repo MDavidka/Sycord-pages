@@ -214,6 +214,15 @@ export function DebugPanel({ debugState, isExpanded, onToggle }: DebugPanelProps
                   </div>
                 )}
 
+                {debugState.steps.find(s => s.step === "style")?.error && (
+                  <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3">
+                    <p className="text-xs text-red-400 font-medium">⚠️ Style Error</p>
+                    <p className="text-xs text-red-300 mt-1 font-mono">
+                      {debugState.steps.find(s => s.step === "style")?.error}
+                    </p>
+                  </div>
+                )}
+
                 {getStepDuration("style") && (
                   <p className="text-[10px] text-white/30 text-right">
                     Generated in {getStepDuration("style")}
@@ -252,6 +261,15 @@ export function DebugPanel({ debugState, isExpanded, onToggle }: DebugPanelProps
                   </div>
                 )}
 
+                {debugState.steps.find(s => s.step === "functions")?.error && (
+                  <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3">
+                    <p className="text-xs text-red-400 font-medium">⚠️ Functions Error</p>
+                    <p className="text-xs text-red-300 mt-1 font-mono">
+                      {debugState.steps.find(s => s.step === "functions")?.error}
+                    </p>
+                  </div>
+                )}
+
                 {getStepDuration("functions") && (
                   <p className="text-[10px] text-white/30 text-right">
                     Generated in {getStepDuration("functions")}
@@ -287,6 +305,15 @@ export function DebugPanel({ debugState, isExpanded, onToggle }: DebugPanelProps
                     ) : (
                       "No output generated yet"
                     )}
+                  </div>
+                )}
+
+                {debugState.steps.find(s => s.step === "orchestrate")?.error && (
+                  <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3">
+                    <p className="text-xs text-red-400 font-medium">⚠️ Orchestration Error</p>
+                    <p className="text-xs text-red-300 mt-1 font-mono">
+                      {debugState.steps.find(s => s.step === "orchestrate")?.error}
+                    </p>
                   </div>
                 )}
 

@@ -56,17 +56,11 @@ export interface ComponentProp {
   description: string;
 }
 
-export interface ComponentExample {
-  name: string;
-  code: string;
-}
-
 export interface CheatSheetComponent {
   name: string;
   importPath: string;
   description: string;
   props: ComponentProp[];
-  examples: ComponentExample[];
   children?: string; // "none" | "text" | "components"
 }
 
@@ -129,7 +123,8 @@ export interface OrchestrateResponse {
   success: boolean;
   outputTSX?: string;
   imports?: string[];
-  error?: string;
+  error?: string; // Can contain multiple errors joined by semicolons
+  validationErrors?: string[]; // Individual validation errors
 }
 
 // --- Debug Panel Types ---

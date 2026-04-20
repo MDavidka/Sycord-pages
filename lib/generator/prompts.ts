@@ -6,7 +6,7 @@ export function buildStylePrompt(userPrompt: string, cheatSheet: CheatSheet): st
     return `- ${c.name}: ${c.description} | Props: { ${propsStr} }`;
   }).join("\n");
 
-  return `You are a UI structure generator. Create a style JSON that defines a page layout using ONLY these shadcn/ui components.
+  return `You are a semantic UI structure generator. Create a style JSON that defines a page layout using ONLY these shadcn/ui components.
 
 AVAILABLE COMPONENTS:
 ${componentList}
@@ -14,13 +14,16 @@ ${componentList}
 USER REQUEST:
 ${userPrompt}
 
-RULES:
-1. Output ONLY valid JSON, no markdown, no explanation
-2. Every interactive element (Button, Input, etc.) MUST have a unique "id" field
-3. Use unique, descriptive IDs like "hero_cta_button", "email_input", "submit_form_btn"
-4. IDs should indicate purpose: "newsletter_submit", "theme_toggle", "nav_login"
-5. Only use components from the list above
-6. Use reasonable Tailwind classes in className props
+CRITICAL RULES:
+1. Output ONLY valid JSON, no markdown, no explanation, no code examples
+2. This JSON is SEMANTIC - it only defines component names and props structure
+3. The transformer will load actual component implementations from disk
+4. Every interactive element (Button, Input, etc.) MUST have a unique "id" field
+5. Use unique, descriptive IDs like "hero_cta_button", "email_input", "submit_form_btn"
+6. IDs should indicate purpose: "newsletter_submit", "theme_toggle", "nav_login"
+7. Only use components from the list above - do NOT invent new components
+8. Use reasonable Tailwind classes in className props
+9. Do NOT include any code, JSX, or implementation details
 
 OUTPUT FORMAT:
 {
@@ -29,15 +32,17 @@ OUTPUT FORMAT:
   "layout": [
     {
       "id": "section_id",
-      "component": "ComponentName",
-      "props": { "className": "tailwind classes" },
+      "component": "CardHeader",
+      "props": { "className": "space-y-2" },
       "children": [
-        { "id": "unique_id", "component": "Button", "props": { "variant": "default" } }
+        { "id": "title", "component": "CardTitle", "props": { "children": "Welcome" } },
+        { "id": "submit_btn", "component": "Button", "props": { "variant": "default", "className": "w-full" } }
       ]
     }
   ]
 }
 
+IMPORTANT: Do NOT add any implementation code. Only specify component names and their semantic prop values.
 Generate the style JSON now:`;
 }
 

@@ -168,13 +168,21 @@ export function AIGenerator({ onGenerated }: AIGeneratorProps) {
 
       const orchestrateData = await orchestrateRes.json()
 
-      if (!orchestrateData.success) {
-        throw new Error(orchestrateData.error || "Orchestration failed")
+      // Orchestration can partially succeed - it generates TSX but may have validation errors
+      const outputTSX: string = orchestrateData.outputTSX || ""
+      const orchestrateErrors = orchestrateData.error ? [orchestrateData.error] : []
+      
+      if (!outputTSX) {
+        throw new Error(orchestrateData.error || "Orchestration failed to generate output")
       }
 
-      const outputTSX: string = orchestrateData.outputTSX
-
-      updateStep("orchestrate", { status: "complete", endTime: Date.now(), data: outputTSX })
+      // Mark step as complete, but include validation errors if any
+      updateStep("orchestrate", { 
+        status: "complete", 
+        endTime: Date.now(), 
+        data: outputTSX,
+        error: orchestrateErrors.length > 0 ? orchestrateErrors.join("; ") : undefined
+      })
       setDebugState(prev => ({ 
         ...prev, 
         outputTSX,

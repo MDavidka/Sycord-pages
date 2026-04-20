@@ -1,5 +1,10 @@
 import type { CheatSheet } from "./types";
 
+/**
+ * Semantic component reference for AI generator
+ * Contains only component names, prop schemas, and import paths
+ * NO code examples - transformer loads actual component files from disk
+ */
 export const defaultCheatSheet: CheatSheet = {
   version: "1.0.0",
   updatedAt: new Date().toISOString(),
@@ -15,10 +20,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "className", type: "string", required: false, description: "Additional CSS classes" },
         { name: "onClick", type: "() => void", required: false, description: "Click handler function" }
       ],
-      examples: [
-        { name: "Primary", code: '<Button variant="default">Click me</Button>' },
-        { name: "Destructive", code: '<Button variant="destructive" size="lg">Delete</Button>' }
-      ],
       children: "text"
     },
     {
@@ -27,9 +28,6 @@ export const defaultCheatSheet: CheatSheet = {
       description: "Container card with optional header, content, and footer",
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
-      ],
-      examples: [
-        { name: "Basic", code: '<Card className="p-6"><CardContent>Content here</CardContent></Card>' }
       ],
       children: "components"
     },
@@ -40,7 +38,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "components"
     },
     {
@@ -50,9 +47,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" },
         { name: "children", type: "string", required: true, description: "Title text content" }
-      ],
-      examples: [
-        { name: "Basic", code: "<CardTitle>Welcome</CardTitle>" }
       ],
       children: "text"
     },
@@ -64,7 +58,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "className", type: "string", required: false, description: "Additional CSS classes" },
         { name: "children", type: "string", required: true, description: "Description text" }
       ],
-      examples: [],
       children: "text"
     },
     {
@@ -74,7 +67,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "components"
     },
     {
@@ -84,7 +76,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "components"
     },
     {
@@ -99,10 +90,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "disabled", type: "boolean", required: false, description: "Disable input" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [
-        { name: "Basic", code: '<Input placeholder="Enter text..." />' },
-        { name: "Email", code: '<Input type="email" placeholder="email@example.com" />' }
-      ],
       children: "none"
     },
     {
@@ -112,9 +99,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "htmlFor", type: "string", required: false, description: "ID of associated input" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
-      ],
-      examples: [
-        { name: "Basic", code: '<Label htmlFor="email">Email</Label>' }
       ],
       children: "text"
     },
@@ -129,9 +113,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "rows", type: "number", required: false, description: "Number of visible rows" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [
-        { name: "Basic", code: '<Textarea placeholder="Enter message..." rows={4} />' }
-      ],
       children: "none"
     },
     {
@@ -142,10 +123,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "variant", type: '"default" | "secondary" | "destructive" | "outline"', required: false, default: "default", description: "Visual variant" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [
-        { name: "Default", code: "<Badge>New</Badge>" },
-        { name: "Destructive", code: '<Badge variant="destructive">Error</Badge>' }
-      ],
       children: "text"
     },
     {
@@ -154,9 +131,6 @@ export const defaultCheatSheet: CheatSheet = {
       description: "User avatar with image or fallback",
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
-      ],
-      examples: [
-        { name: "Basic", code: '<Avatar><AvatarImage src="/avatar.png" /><AvatarFallback>JD</AvatarFallback></Avatar>' }
       ],
       children: "components"
     },
@@ -168,7 +142,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "src", type: "string", required: true, description: "Image source URL" },
         { name: "alt", type: "string", required: false, description: "Alt text" }
       ],
-      examples: [],
       children: "none"
     },
     {
@@ -178,7 +151,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "text"
     },
     {
@@ -188,10 +160,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "orientation", type: '"horizontal" | "vertical"', required: false, default: "horizontal", description: "Line orientation" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
-      ],
-      examples: [
-        { name: "Horizontal", code: "<Separator />" },
-        { name: "Vertical", code: '<Separator orientation="vertical" className="h-6" />' }
       ],
       children: "none"
     },
@@ -203,9 +171,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "defaultValue", type: "string", required: true, description: "Default active tab value" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [
-        { name: "Basic", code: '<Tabs defaultValue="tab1"><TabsList><TabsTrigger value="tab1">Tab 1</TabsTrigger></TabsList><TabsContent value="tab1">Content</TabsContent></Tabs>' }
-      ],
       children: "components"
     },
     {
@@ -215,7 +180,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "components"
     },
     {
@@ -226,7 +190,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "value", type: "string", required: true, description: "Tab identifier value" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "text"
     },
     {
@@ -237,7 +200,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "value", type: "string", required: true, description: "Tab identifier value" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "components"
     },
     {
@@ -249,10 +211,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "onCheckedChange", type: "(checked: boolean) => void", required: false, description: "Change handler" },
         { name: "disabled", type: "boolean", required: false, description: "Disable switch" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
-      ],
-      examples: [
-        { name: "Basic", code: "<Switch />" },
-        { name: "Controlled", code: '<Switch checked={enabled} onCheckedChange={setEnabled} />' }
       ],
       children: "none"
     },
@@ -266,9 +224,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "disabled", type: "boolean", required: false, description: "Disable checkbox" },
         { name: "id", type: "string", required: false, description: "Element ID for label association" }
       ],
-      examples: [
-        { name: "Basic", code: '<Checkbox id="terms" />' }
-      ],
       children: "none"
     },
     {
@@ -279,9 +234,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "value", type: "number", required: false, default: "0", description: "Progress value (0-100)" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [
-        { name: "Basic", code: "<Progress value={60} />" }
-      ],
       children: "none"
     },
     {
@@ -291,10 +243,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Size and shape classes" }
       ],
-      examples: [
-        { name: "Text", code: '<Skeleton className="h-4 w-[200px]" />' },
-        { name: "Circle", code: '<Skeleton className="h-12 w-12 rounded-full" />' }
-      ],
       children: "none"
     },
     {
@@ -303,9 +251,6 @@ export const defaultCheatSheet: CheatSheet = {
       description: "Custom scrollable area with styled scrollbar",
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
-      ],
-      examples: [
-        { name: "Basic", code: '<ScrollArea className="h-[200px]">Long content here</ScrollArea>' }
       ],
       children: "components"
     },
@@ -317,9 +262,6 @@ export const defaultCheatSheet: CheatSheet = {
         { name: "variant", type: '"default" | "destructive"', required: false, default: "default", description: "Alert variant" },
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [
-        { name: "Default", code: "<Alert><AlertTitle>Note</AlertTitle><AlertDescription>Message here</AlertDescription></Alert>" }
-      ],
       children: "components"
     },
     {
@@ -329,7 +271,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "text"
     },
     {
@@ -339,7 +280,6 @@ export const defaultCheatSheet: CheatSheet = {
       props: [
         { name: "className", type: "string", required: false, description: "Additional CSS classes" }
       ],
-      examples: [],
       children: "text"
     }
   ]
