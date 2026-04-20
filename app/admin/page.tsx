@@ -59,6 +59,7 @@ import {
   Calendar,
   ExternalLink
 } from "lucide-react"
+import { CheatSheetEditor } from "@/components/admin/cheatsheet-editor"
 
 const availableIcons = [
   { name: "Server", icon: Server },
@@ -94,10 +95,11 @@ const tabs = [
   { id: "vps" as const, label: "VPS Runner", icon: Activity },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "models" as const, label: "Model Config", icon: Settings },
+  { id: "cheatsheet" as const, label: "Cheatsheet", icon: BookOpen },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "models" | "paptos"
+type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "models" | "cheatsheet" | "paptos"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -1271,6 +1273,17 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Cheatsheet Tab */}
+        {activeTab === "cheatsheet" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-lg font-semibold text-white">AI Generator Cheatsheet</h2>
+              <p className="text-sm text-white/40">Define shadcn/ui components available to the AI generator</p>
+            </div>
+            <CheatSheetEditor />
           </div>
         )}
 

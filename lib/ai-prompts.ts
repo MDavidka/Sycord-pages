@@ -1,3 +1,9 @@
+/**
+ * @deprecated This file is part of the old generation system.
+ * New system uses: lib/generator/prompts.ts
+ * This file is kept for backwards compatibility with ai-website-builder.tsx
+ * TODO: Migrate ai-website-builder.tsx to use new generator system
+ */
 
 import { MongoClient, ObjectId } from "mongodb"
 
