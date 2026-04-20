@@ -1,22 +1,13 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { getSystemPrompts } from "@/lib/ai-prompts"
+import { DEFAULT_BUILDER_CHEATSHEET, getSystemPrompts } from "@/lib/ai-prompts"
 import { callJsonModel, parseJsonResponse } from "@/lib/ai-builder/llm"
 import { createStyleJsonSchema } from "@/lib/ai-builder/schemas"
 import { prepareInput } from "@/lib/ai-builder/validation-gate"
 import type { StyleJson } from "@/lib/ai-builder/types"
 
 const MAX_RETRIES = 3
-const FALLBACK_PROMPT = `You are a UI layout architect. Given a user prompt and a component cheatsheet, output a VALID Style JSON tree.
-
-Rules:
-- Use ONLY component names from the cheatsheet array.
-- Every node must have: id, component.
-- id format: lowercase_component_000 (e.g. card_001, button_001).
-- onClick values must be handler IDs in the format: handleAction_001.
-- DO NOT write any JavaScript logic, state, or imports.
-- Output ONLY valid JSON, no markdown, no explanation.`
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -29,7 +20,7 @@ export async function POST(request: Request) {
     const rawPrompt = typeof body.prompt === "string" ? body.prompt : ""
     const { prompt, cheatsheet } = prepareInput(rawPrompt)
     const { builderCheatSheet } = await getSystemPrompts()
-    const systemPrompt = builderCheatSheet || FALLBACK_PROMPT
+    const systemPrompt = builderCheatSheet || DEFAULT_BUILDER_CHEATSHEET
     const schema = createStyleJsonSchema(cheatsheet)
 
     let lastError: unknown = null

@@ -18,14 +18,13 @@ export function assemble(styleJson: StyleJson, functionJson: FunctionJson): stri
   const state = buildStateBlock(functionJson.state)
   const handlers = buildHandlerBlock(functionJson.handlers)
   const jsx = renderNode(styleJson.root, functionJson.render_injections)
+  const logicBlocks = [state, handlers].filter((block) => block.trim().length > 0).join("\n  ")
+  const logicSection = logicBlocks ? `  ${logicBlocks}\n\n` : ""
 
   return `${imports}
 
 export default function App() {
-  ${state}
-  ${handlers}
-
-  return (
+${logicSection}  return (
     ${jsx.split("\n").join("\n    ")}
   )
 }

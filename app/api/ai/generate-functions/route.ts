@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { getSystemPrompts } from "@/lib/ai-prompts"
+import { DEFAULT_BUILDER_FUNCTION, getSystemPrompts } from "@/lib/ai-prompts"
 import { callJsonModel, parseJsonResponse } from "@/lib/ai-builder/llm"
 import { FunctionJsonSchema, createStyleJsonSchema } from "@/lib/ai-builder/schemas"
 import { buildDeveloperContext, collectHandlerIds } from "@/lib/ai-builder/manifest-resolver"
@@ -9,18 +9,6 @@ import { componentManifest } from "@/lib/ai-builder/manifest"
 import type { FunctionJson, StyleJson } from "@/lib/ai-builder/types"
 
 const MAX_RETRIES = 3
-const FALLBACK_PROMPT = `You are a React logic developer. You receive:
-1. A Style JSON tree describing the component structure.
-2. The actual source code of each used component.
-
-Your job is to write ONLY the React logic needed to make the app work.
-
-Rules:
-- state[]: valid useState hook declarations as strings.
-- handlers: object, keys = onClick IDs from Style JSON.
-- render_injections: object, keys = node IDs. Override props for that node.
-- DO NOT redesign the layout. DO NOT add components.
-- Output ONLY valid JSON.`
 
 function validateHandlerCoverage(styleJson: StyleJson, functionJson: FunctionJson) {
   const requiredHandlers = collectHandlerIds(styleJson.root)
@@ -43,7 +31,7 @@ export async function POST(request: Request) {
     const styleJson = styleSchema.parse(body.styleJson) as StyleJson
     const developerContext = buildDeveloperContext(styleJson)
     const { builderFunction } = await getSystemPrompts()
-    const systemPrompt = builderFunction || FALLBACK_PROMPT
+    const systemPrompt = builderFunction || DEFAULT_BUILDER_FUNCTION
 
     let lastError: unknown = null
 
