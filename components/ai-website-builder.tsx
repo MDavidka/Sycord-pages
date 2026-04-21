@@ -37,6 +37,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
+import { SHADCN_COMPONENT_NAMES } from "@/lib/shadcn-cheatsheets"
 
 // Model type for the chooser
 interface ModelOption {
@@ -62,34 +63,7 @@ const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar
 
 // How long to wait after deploy before the first log check (build pipeline startup time)
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
-const AI_BUILDER_CHEATSHEET = [
-  "Button",
-  "Card",
-  "CardHeader",
-  "CardTitle",
-  "CardDescription",
-  "CardContent",
-  "CardFooter",
-  "Input",
-  "Label",
-  "Badge",
-  "Textarea",
-  "Avatar",
-  "Alert",
-  "AlertTitle",
-  "AlertDescription",
-  "Dialog",
-  "DialogContent",
-  "DialogHeader",
-  "DialogTitle",
-  "DialogDescription",
-  "DialogFooter",
-  "Sheet",
-  "SheetContent",
-  "SheetHeader",
-  "SheetTitle",
-  "SheetDescription",
-]
+const AI_BUILDER_CHEATSHEET = SHADCN_COMPONENT_NAMES
 
 type GenerationPhase =
   | "idle"

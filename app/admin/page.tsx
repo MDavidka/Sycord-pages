@@ -57,8 +57,13 @@ import {
   User,
   ChevronDown,
   Calendar,
-  ExternalLink
+  ExternalLink,
+  FileCode
 } from "lucide-react"
+import {
+  SHADCN_COMPONENT_CODE_CHEAT_SHEET_FILE,
+  SHADCN_COMPONENT_VARIANT_CHEAT_SHEET_FILE,
+} from "@/lib/shadcn-cheatsheets"
 
 const availableIcons = [
   { name: "Server", icon: Server },
@@ -94,10 +99,11 @@ const tabs = [
   { id: "vps" as const, label: "VPS Runner", icon: Activity },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "models" as const, label: "Model Config", icon: Settings },
+  { id: "cheatsheets" as const, label: "Cheat Sheets", icon: FileCode },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "models" | "paptos"
+type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "models" | "cheatsheets" | "paptos"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -129,6 +135,9 @@ export default function AdminPage() {
   const [thinkerModel, setThinkerModel] = useState("nvidia/nemotron-3-super-120b-a12b:free")
   const [coderModel, setCoderModel] = useState("minimax/minimax-m2.5:free")
   const [modelConfigLoading, setModelConfigLoading] = useState(false)
+  const [promptConfigLoading, setPromptConfigLoading] = useState(false)
+  const [promptConfigSaving, setPromptConfigSaving] = useState(false)
+  const [promptConfig, setPromptConfig] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -425,9 +434,45 @@ export default function AdminPage() {
     }
   }
 
+  const fetchPromptConfig = async () => {
+    setPromptConfigLoading(true)
+    try {
+      const res = await fetch("/api/admin/prompts")
+      if (!res.ok) throw new Error("Failed to fetch prompt config")
+      const data = await res.json()
+      setPromptConfig(data)
+    } catch (err) {
+      console.error("Failed to fetch prompt config:", err)
+      toast.error("Failed to load prompt descriptions")
+    } finally {
+      setPromptConfigLoading(false)
+    }
+  }
+
+  const savePromptConfig = async () => {
+    setPromptConfigSaving(true)
+    try {
+      const res = await fetch("/api/admin/prompts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(promptConfig),
+      })
+      if (!res.ok) throw new Error("Failed to save prompt config")
+      toast.success("Prompt descriptions saved")
+    } catch (err) {
+      console.error("Failed to save prompt config:", err)
+      toast.error("Failed to save prompt descriptions")
+    } finally {
+      setPromptConfigSaving(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === "models") {
       fetchModelConfig()
+    }
+    if (activeTab === "cheatsheets") {
+      fetchPromptConfig()
     }
   }, [activeTab])
 
@@ -1270,6 +1315,99 @@ export default function AdminPage() {
                   </ul>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cheat Sheets Tab */}
+        {activeTab === "cheatsheets" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-lg font-semibold text-white">AI Builder Cheat Sheets</h2>
+              <p className="text-sm text-white/40">shadcn/ui reference files + stage prompt descriptions</p>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">File 1: Components + Variants</h3>
+                  <p className="text-xs text-white/30">All 43 shadcn/ui components and accepted variants for AI plan JSON.</p>
+                </div>
+                <Textarea
+                  readOnly
+                  className="font-mono text-xs min-h-[360px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed resize-none rounded-xl"
+                  value={SHADCN_COMPONENT_VARIANT_CHEAT_SHEET_FILE}
+                />
+              </div>
+
+              <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">File 2: Components + Code</h3>
+                  <p className="text-xs text-white/30">Same 43 shadcn/ui components with usage snippets for handling/conversion consistency.</p>
+                </div>
+                <Textarea
+                  readOnly
+                  className="font-mono text-xs min-h-[360px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed resize-none rounded-xl"
+                  value={SHADCN_COMPONENT_CODE_CHEAT_SHEET_FILE}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Prompt 1 Description (AI Plan JSON)</h3>
+                  <p className="text-xs text-white/30">Guides AI to understand shadcn/ui and produce strict Style JSON.</p>
+                </div>
+                <Textarea
+                  className="font-mono text-xs min-h-[260px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed resize-none rounded-xl"
+                  value={promptConfig.builderPlan || ""}
+                  onChange={(e) => setPromptConfig((prev) => ({ ...prev, builderPlan: e.target.value }))}
+                  disabled={promptConfigLoading || promptConfigSaving}
+                />
+              </div>
+
+              <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Prompt 2 Description (JSON → Code Converter)</h3>
+                  <p className="text-xs text-white/30">Describes how Style JSON + Function JSON are prepared for deterministic conversion (no AI).</p>
+                </div>
+                <Textarea
+                  className="font-mono text-xs min-h-[260px] bg-white/[0.02] border-white/[0.06] text-white/70 leading-relaxed resize-none rounded-xl"
+                  value={promptConfig.builderFunction || ""}
+                  onChange={(e) => setPromptConfig((prev) => ({ ...prev, builderFunction: e.target.value }))}
+                  disabled={promptConfigLoading || promptConfigSaving}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={savePromptConfig}
+                disabled={promptConfigLoading || promptConfigSaving}
+                className="bg-white/5 text-white/80 hover:bg-white/10 border border-white/[0.06] rounded-xl"
+              >
+                {promptConfigSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Prompt Descriptions
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={fetchPromptConfig}
+                disabled={promptConfigLoading || promptConfigSaving}
+                variant="outline"
+                className="bg-white/[0.02] text-white/60 hover:bg-white/5 border-white/[0.06] rounded-xl"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reload
+              </Button>
             </div>
           </div>
         )}

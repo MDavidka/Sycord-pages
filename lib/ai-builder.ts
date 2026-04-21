@@ -1,5 +1,6 @@
 import { promises as fs } from "fs"
 import path from "path"
+import { SHADCN_COMPONENT_CODE_MAP, SHADCN_COMPONENT_NAMES } from "@/lib/shadcn-cheatsheets"
 
 export type StyleNode = {
   id: string
@@ -49,7 +50,7 @@ const COMPONENT_IMPORTS: Record<string, { source: string; file: string }> = {
   SheetDescription: { source: "@/components/ui/sheet", file: "components/ui/sheet.tsx" },
 }
 
-export const BUILDER_COMPONENT_CHEATSHEET = Object.keys(COMPONENT_IMPORTS)
+export const BUILDER_COMPONENT_CHEATSHEET = SHADCN_COMPONENT_NAMES
 
 export function extractStyleComponents(node: StyleNode | undefined, bag = new Set<string>()) {
   if (!node) return bag
@@ -68,13 +69,18 @@ export function getComponentSourceMap(names: string[]) {
 }
 
 export async function readComponentSources(names: string[]) {
-  const entries = getComponentSourceMap(names)
   const sources: Record<string, string> = {}
+  const entries = getComponentSourceMap(names)
   await Promise.all(entries.map(async ({ name, meta }) => {
     const absolute = path.join(process.cwd(), meta.file)
     const content = await fs.readFile(absolute, "utf8")
     sources[name] = content
   }))
+  for (const name of Array.from(new Set(names))) {
+    if (sources[name]) continue
+    const fallback = SHADCN_COMPONENT_CODE_MAP[name]
+    if (fallback) sources[name] = fallback
+  }
   return sources
 }
 

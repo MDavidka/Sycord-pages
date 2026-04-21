@@ -55,6 +55,7 @@ function renderNode(node: StyleNode, fnJson: FunctionJson, depth = 2): string {
 
 function buildUiLibraryFile(componentNames: string[]) {
   const names = new Set(componentNames)
+  const defined = new Set<string>()
   const lines: string[] = [
     `import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react"`,
   ]
@@ -65,32 +66,37 @@ export function ${name}({ children, className = "", ...props }: { children?: Rea
 }
 `
 
-  if (names.has("Card")) lines.push(divComponent("Card", "rounded-xl border border-white/15 bg-black/30 p-4"))
-  if (names.has("CardHeader")) lines.push(divComponent("CardHeader", "mb-2"))
-  if (names.has("CardContent")) lines.push(divComponent("CardContent", "space-y-3"))
-  if (names.has("CardFooter")) lines.push(divComponent("CardFooter", "mt-4"))
-  if (names.has("CardTitle")) lines.push(`export const CardTitle = ({ children, className = "", ...props }: any) => <h2 className={\`text-xl font-semibold \${className}\`.trim()} {...props}>{children}</h2>`)
-  if (names.has("CardDescription")) lines.push(`export const CardDescription = ({ children, className = "", ...props }: any) => <p className={\`text-sm opacity-80 \${className}\`.trim()} {...props}>{children}</p>`)
-  if (names.has("Button")) lines.push(`export const Button = ({ children, className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { children?: ReactNode; className?: string }) => <button className={\`rounded-md bg-white text-black px-4 py-2 font-medium hover:opacity-90 \${className}\`.trim()} {...props}>{children}</button>`)
-  if (names.has("Input")) lines.push(`export const Input = ({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement> & { className?: string }) => <input className={\`rounded-md border border-white/20 bg-transparent px-3 py-2 \${className}\`.trim()} {...props} />`)
-  if (names.has("Textarea")) lines.push(`export const Textarea = ({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { className?: string }) => <textarea className={\`rounded-md border border-white/20 bg-transparent px-3 py-2 \${className}\`.trim()} {...props} />`)
-  if (names.has("Label")) lines.push(`export const Label = ({ children, className = "", ...props }: any) => <label className={\`text-sm font-medium \${className}\`.trim()} {...props}>{children}</label>`)
-  if (names.has("Badge")) lines.push(`export const Badge = ({ children, className = "", ...props }: any) => <span className={\`inline-flex rounded-full bg-white/15 px-2 py-1 text-xs \${className}\`.trim()} {...props}>{children}</span>`)
-  if (names.has("Avatar")) lines.push(divComponent("Avatar", "h-10 w-10 rounded-full bg-white/20"))
-  if (names.has("Alert")) lines.push(divComponent("Alert", "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3"))
-  if (names.has("AlertTitle")) lines.push(`export const AlertTitle = ({ children, className = "", ...props }: any) => <div className={\`font-semibold \${className}\`.trim()} {...props}>{children}</div>`)
-  if (names.has("AlertDescription")) lines.push(divComponent("AlertDescription", "text-sm opacity-90"))
-  if (names.has("Dialog")) lines.push(divComponent("Dialog", ""))
-  if (names.has("DialogContent")) lines.push(divComponent("DialogContent", "rounded-md border border-white/20 p-4"))
-  if (names.has("DialogHeader")) lines.push(divComponent("DialogHeader", "mb-2"))
-  if (names.has("DialogTitle")) lines.push(divComponent("DialogTitle", "font-semibold"))
-  if (names.has("DialogDescription")) lines.push(divComponent("DialogDescription", "text-sm opacity-80"))
-  if (names.has("DialogFooter")) lines.push(divComponent("DialogFooter", "mt-3"))
-  if (names.has("Sheet")) lines.push(divComponent("Sheet", ""))
-  if (names.has("SheetContent")) lines.push(divComponent("SheetContent", "rounded-md border border-white/20 p-4"))
-  if (names.has("SheetHeader")) lines.push(divComponent("SheetHeader", "mb-2"))
-  if (names.has("SheetTitle")) lines.push(divComponent("SheetTitle", "font-semibold"))
-  if (names.has("SheetDescription")) lines.push(divComponent("SheetDescription", "text-sm opacity-80"))
+  if (names.has("Card")) { lines.push(divComponent("Card", "rounded-xl border border-white/15 bg-black/30 p-4")); defined.add("Card") }
+  if (names.has("CardHeader")) { lines.push(divComponent("CardHeader", "mb-2")); defined.add("CardHeader") }
+  if (names.has("CardContent")) { lines.push(divComponent("CardContent", "space-y-3")); defined.add("CardContent") }
+  if (names.has("CardFooter")) { lines.push(divComponent("CardFooter", "mt-4")); defined.add("CardFooter") }
+  if (names.has("CardTitle")) { lines.push(`export const CardTitle = ({ children, className = "", ...props }: any) => <h2 className={\`text-xl font-semibold \${className}\`.trim()} {...props}>{children}</h2>`); defined.add("CardTitle") }
+  if (names.has("CardDescription")) { lines.push(`export const CardDescription = ({ children, className = "", ...props }: any) => <p className={\`text-sm opacity-80 \${className}\`.trim()} {...props}>{children}</p>`); defined.add("CardDescription") }
+  if (names.has("Button")) { lines.push(`export const Button = ({ children, className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { children?: ReactNode; className?: string }) => <button className={\`rounded-md bg-white text-black px-4 py-2 font-medium hover:opacity-90 \${className}\`.trim()} {...props}>{children}</button>`); defined.add("Button") }
+  if (names.has("Input")) { lines.push(`export const Input = ({ className = "", ...props }: InputHTMLAttributes<HTMLInputElement> & { className?: string }) => <input className={\`rounded-md border border-white/20 bg-transparent px-3 py-2 \${className}\`.trim()} {...props} />`); defined.add("Input") }
+  if (names.has("Textarea")) { lines.push(`export const Textarea = ({ className = "", ...props }: TextareaHTMLAttributes<HTMLTextAreaElement> & { className?: string }) => <textarea className={\`rounded-md border border-white/20 bg-transparent px-3 py-2 \${className}\`.trim()} {...props} />`); defined.add("Textarea") }
+  if (names.has("Label")) { lines.push(`export const Label = ({ children, className = "", ...props }: any) => <label className={\`text-sm font-medium \${className}\`.trim()} {...props}>{children}</label>`); defined.add("Label") }
+  if (names.has("Badge")) { lines.push(`export const Badge = ({ children, className = "", ...props }: any) => <span className={\`inline-flex rounded-full bg-white/15 px-2 py-1 text-xs \${className}\`.trim()} {...props}>{children}</span>`); defined.add("Badge") }
+  if (names.has("Avatar")) { lines.push(divComponent("Avatar", "h-10 w-10 rounded-full bg-white/20")); defined.add("Avatar") }
+  if (names.has("Alert")) { lines.push(divComponent("Alert", "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3")); defined.add("Alert") }
+  if (names.has("AlertTitle")) { lines.push(`export const AlertTitle = ({ children, className = "", ...props }: any) => <div className={\`font-semibold \${className}\`.trim()} {...props}>{children}</div>`); defined.add("AlertTitle") }
+  if (names.has("AlertDescription")) { lines.push(divComponent("AlertDescription", "text-sm opacity-90")); defined.add("AlertDescription") }
+  if (names.has("Dialog")) { lines.push(divComponent("Dialog", "")); defined.add("Dialog") }
+  if (names.has("DialogContent")) { lines.push(divComponent("DialogContent", "rounded-md border border-white/20 p-4")); defined.add("DialogContent") }
+  if (names.has("DialogHeader")) { lines.push(divComponent("DialogHeader", "mb-2")); defined.add("DialogHeader") }
+  if (names.has("DialogTitle")) { lines.push(divComponent("DialogTitle", "font-semibold")); defined.add("DialogTitle") }
+  if (names.has("DialogDescription")) { lines.push(divComponent("DialogDescription", "text-sm opacity-80")); defined.add("DialogDescription") }
+  if (names.has("DialogFooter")) { lines.push(divComponent("DialogFooter", "mt-3")); defined.add("DialogFooter") }
+  if (names.has("Sheet")) { lines.push(divComponent("Sheet", "")); defined.add("Sheet") }
+  if (names.has("SheetContent")) { lines.push(divComponent("SheetContent", "rounded-md border border-white/20 p-4")); defined.add("SheetContent") }
+  if (names.has("SheetHeader")) { lines.push(divComponent("SheetHeader", "mb-2")); defined.add("SheetHeader") }
+  if (names.has("SheetTitle")) { lines.push(divComponent("SheetTitle", "font-semibold")); defined.add("SheetTitle") }
+  if (names.has("SheetDescription")) { lines.push(divComponent("SheetDescription", "text-sm opacity-80")); defined.add("SheetDescription") }
+
+  for (const name of Array.from(names).sort()) {
+    if (defined.has(name)) continue
+    lines.push(divComponent(name, ""))
+  }
 
   return `${lines.join("\n")}
 `

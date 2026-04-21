@@ -1,5 +1,11 @@
 
 import { MongoClient, ObjectId } from "mongodb"
+import {
+  AI_BUILDER_CONVERTER_PROMPT_DESCRIPTION,
+  AI_BUILDER_PLAN_PROMPT_DESCRIPTION,
+  SHADCN_COMPONENT_CODE_CHEAT_SHEET_FILE,
+  SHADCN_COMPONENT_VARIANT_CHEAT_SHEET_FILE,
+} from "@/lib/shadcn-cheatsheets"
 
 const uri = process.env.MONGO_URI || ""
 const options = {}
@@ -29,19 +35,22 @@ if (!process.env.MONGO_URI) {
 // --- PROMPT TEMPLATES ---
 
 export const DEFAULT_BUILDER_PLAN = `
+${AI_BUILDER_PLAN_PROMPT_DESCRIPTION}
+
 You are a UI architect that converts a user prompt into strict Style JSON for a React component tree.
 
 INPUTS:
 - USER_REQUEST: the user prompt
-- CHEATSHEET: allowed component names
+- CHEATSHEET: allowed component names and variants (shadcn/ui)
 
 RULES:
 - Use ONLY components from CHEATSHEET.
 - Return JSON only.
 - Create unique stable IDs per node.
 - Include "root" object with nested "children".
-- Include visual props (variant, className, label, placeholder, etc.) but NO state or logic.
+- Include visual props (variant, className, size, label, placeholder, orientation, etc.) but NO state or logic.
 - If interaction is needed, set "onClick" as a handler name string like "handleClick_001" without implementation.
+- Keep component names deterministic and only from shadcn/ui catalog.
 
 OUTPUT SHAPE:
 {
@@ -72,9 +81,11 @@ CHEATSHEET:
 {{CHEATSHEET}}
 `
 
-export const DEFAULT_BUILDER_CHEATSHEET = `You are a strict UI architecture model. Output Style JSON only.`
+export const DEFAULT_BUILDER_CHEATSHEET = `${SHADCN_COMPONENT_VARIANT_CHEAT_SHEET_FILE}`
 
 export const DEFAULT_BUILDER_FUNCTION = `
+${AI_BUILDER_CONVERTER_PROMPT_DESCRIPTION}
+
 You are a React logic engineer.
 Given STYLE_JSON and COMPONENT_SOURCES, return Function JSON only:
 {
@@ -91,6 +102,8 @@ RULES:
 - Return valid JSON only.
 - Do not redesign layout; only add state/handlers/render injections for existing node IDs.
 - Handlers must match IDs referenced by Style JSON.
+- Assume STYLE_JSON was produced from shadcn/ui catalog rules.
+- The next stage is deterministic conversion (no AI), so keep output strict and machine-readable.
 
 STYLE_JSON:
 {{STYLE_JSON}}
@@ -100,6 +113,9 @@ COMPONENT_SOURCES:
 
 REQUEST:
 {{REQUEST}}
+
+REFERENCE_COMPONENT_CODE:
+${SHADCN_COMPONENT_CODE_CHEAT_SHEET_FILE}
 `
 
 export const DEFAULT_BUILDER_CODE = `
