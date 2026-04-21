@@ -56,9 +56,9 @@ export const SHADCN_COMPONENT_CODE_MAP = Object.fromEntries(
   SHADCN_COMPONENT_CATALOG.map((entry) => [entry.name, entry.code]),
 ) as Record<string, string>
 
-export const AI_BUILDER_PLAN_PROMPT_DESCRIPTION = `STEP 1 (AI): Understand the shadcn/ui library and produce strict Style JSON only.\nThe model must use only the allowed component names from the component catalog and set variants as props.\nNo state, handlers, or business logic are allowed in this step.`
+export const AI_BUILDER_PLAN_PROMPT_DESCRIPTION = `STEP 1 (AI via /api/ai/generate-plan): Understand the shadcn/ui library and produce strict Style JSON only.\nThe model must use only the allowed component names from the component catalog and set variants as props.\nNo state, handlers, or business logic are allowed in this step.`
 
-export const AI_BUILDER_CONVERTER_PROMPT_DESCRIPTION = `STEP 2 (AI + deterministic converter):\n- AI returns Function JSON that maps state, handlers, and render injections onto IDs from Style JSON.\n- Then a deterministic converter (no AI) assembles Style JSON + Function JSON into runnable code files.`
+export const AI_BUILDER_CONVERTER_PROMPT_DESCRIPTION = `STEP 2 (AI via /api/ai/generate-functions + deterministic /api/ai/orchestrate converter):\n- AI returns Function JSON that maps state, handlers, and render injections onto IDs from Style JSON.\n- Then a deterministic converter (no AI) assembles Style JSON + Function JSON into runnable code files.`
 
 function buildCheatSheetHeader(title: string, filePath: string) {
   return `# ${title}\n# file: ${filePath}\n# source: https://ui.shadcn.com\n# total_components: ${SHADCN_COMPONENT_CATALOG.length}`

@@ -61,6 +61,7 @@ import {
   FileCode
 } from "lucide-react"
 import {
+  SHADCN_COMPONENT_CATALOG,
   SHADCN_COMPONENT_CODE_CHEAT_SHEET_FILE,
   SHADCN_COMPONENT_VARIANT_CHEAT_SHEET_FILE,
 } from "@/lib/shadcn-cheatsheets"
@@ -1331,7 +1332,7 @@ export default function AdminPage() {
               <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-3">
                 <div>
                   <h3 className="text-sm font-semibold text-white">File 1: Components + Variants</h3>
-                  <p className="text-xs text-white/30">All 43 shadcn/ui components and accepted variants for AI plan JSON.</p>
+                  <p className="text-xs text-white/30">All {SHADCN_COMPONENT_CATALOG.length} shadcn/ui components and accepted variants for AI plan JSON.</p>
                 </div>
                 <Textarea
                   readOnly
@@ -1343,7 +1344,7 @@ export default function AdminPage() {
               <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-3">
                 <div>
                   <h3 className="text-sm font-semibold text-white">File 2: Components + Code</h3>
-                  <p className="text-xs text-white/30">Same 43 shadcn/ui components with usage snippets for handling/conversion consistency.</p>
+                  <p className="text-xs text-white/30">Same {SHADCN_COMPONENT_CATALOG.length} shadcn/ui components with usage snippets for handling/conversion consistency.</p>
                 </div>
                 <Textarea
                   readOnly
