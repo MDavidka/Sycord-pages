@@ -106,6 +106,17 @@ export async function POST(req: Request) {
       })
     }
 
+    // Save the raw JSON plan as well
+    for (let i = 0; i < jsonPlan.length; i++) {
+        const page = jsonPlan[i];
+        const pageName = page.title ? page.title.replace(/\s+/g, '') : `Page${i}`;
+        files.push({
+            name: `src/cache/plan-${pageName.toLowerCase()}.json`,
+            code: JSON.stringify(page, null, 2),
+            timestamp: Date.now()
+        });
+    }
+
     // We can also generate an App.tsx router if needed...
     const routeImports = jsonPlan.map((p: any) => {
         const pageName = p.title ? p.title.replace(/\s+/g, '') : "Page"

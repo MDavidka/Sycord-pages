@@ -1235,6 +1235,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setActiveFileUsedFor(undefined)
 
     try {
+      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider);
       // 1. Call Architect to get JSON structure
       const archRes = await fetch('/api/ai/architect', {
         method: 'POST',
@@ -1244,6 +1245,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       if (!archRes.ok) throw new Error("Architect generation failed");
       const archData = await archRes.json();
+      console.log("[DEBUG] Architect JSON Plan:", archData.plan);
 
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -1265,6 +1267,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       if (!orchRes.ok) throw new Error("Code orchestration failed");
       const orchData = await orchRes.json();
+      console.log("[DEBUG] Orchestrator Generated Files:", orchData.files);
 
       setGeneratedPages(orchData.files);
 

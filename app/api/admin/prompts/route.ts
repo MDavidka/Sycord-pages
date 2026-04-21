@@ -5,7 +5,7 @@ import { getSystemPrompts, saveSystemPrompts } from "@/lib/ai-prompts"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id || session.user.email !== "admin@sycord.com") {
+  if (!session?.user?.id || session.user.email !== "dmarton336@gmail.com") {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id || session.user.email !== "admin@sycord.com") {
+  if (!session?.user?.id || session.user.email !== "dmarton336@gmail.com") {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
