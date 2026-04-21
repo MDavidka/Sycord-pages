@@ -65,12 +65,35 @@ export async function POST(req: Request) {
     const data = await response.json()
     let content = data.choices?.[0]?.message?.content || "[]"
 
-    // Sanitize in case it includes markdown ticks
-    content = content.replace(/```json/g, '').replace(/```/g, '').trim()
+    // Robust JSON extraction
+    let jsonString = content;
+    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch) {
+      jsonString = codeBlockMatch[1];
+    } else {
+      // Fallback: Find first [ or { and last ] or }
+      const firstBracket = content.indexOf('[');
+      const firstBrace = content.indexOf('{');
+      const firstIndex = [firstBracket, firstBrace].filter(i => i >= 0).sort((a, b) => a - b)[0];
+
+      const lastBracket = content.lastIndexOf(']');
+      const lastBrace = content.lastIndexOf('}');
+      const lastIndex = [lastBracket, lastBrace].filter(i => i >= 0).sort((a, b) => b - a)[0];
+
+      if (firstIndex !== undefined && lastIndex !== undefined && lastIndex >= firstIndex) {
+        jsonString = content.substring(firstIndex, lastIndex + 1);
+      }
+    }
+
+    jsonString = jsonString.trim();
 
     let jsonPlan;
     try {
-      jsonPlan = JSON.parse(content)
+      jsonPlan = JSON.parse(jsonString)
+      // Ensure the result is an array
+      if (!Array.isArray(jsonPlan)) {
+        jsonPlan = [jsonPlan];
+      }
     } catch (e) {
       console.error("Failed to parse Architect JSON:", e, content)
       return NextResponse.json({ message: "Architect output invalid JSON" }, { status: 500 })

@@ -51,7 +51,7 @@ export async function POST(req: Request) {
           .join(" ")
       }
 
-      const hasChildren = node.children && node.children.length > 0
+      const hasChildren = Array.isArray(node.children) && node.children.length > 0
 
       if (!hasChildren) {
         return `<${Comp} ${propsStr} />`
@@ -63,10 +63,10 @@ export async function POST(req: Request) {
 
     function extractUsedComponents(node: any, set: Set<string>) {
       if (!node) return
-      if (node.component && node.component[0] === node.component[0].toUpperCase()) {
+      if (typeof node.component === "string" && node.component[0] === node.component[0].toUpperCase()) {
         set.add(node.component)
       }
-      if (node.children) {
+      if (node.children && Array.isArray(node.children)) {
         node.children.forEach((c: any) => extractUsedComponents(c, set))
       }
     }
