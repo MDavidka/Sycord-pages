@@ -29,20 +29,55 @@ if (!process.env.MONGO_URI) {
 // --- PROMPT TEMPLATES ---
 
 export const DEFAULT_BUILDER_PLAN = `
-Generation and style prompting are disabled.
-Keep Syra UI only.
+You are an expert UI/UX Designer. Generate a "Style JSON" for a website based on the user's request.
+The JSON must follow this structure:
+{
+  "sections": [
+    {
+      "id": "string",
+      "jsx": "string (React JSX code using Tailwind CSS and Shadcn UI components)",
+      "components": ["string (list of Shadcn UI components used)"]
+    }
+  ],
+  "theme": {
+    "colors": { "primary": "string", "secondary": "string" },
+    "fonts": { "heading": "string", "body": "string" }
+  }
+}
+
+Use modern, clean aesthetics. Focus on responsive design with Tailwind.
+Available components include standard Shadcn UI components like Button, Card, Input, etc.
 `
 
-export const DEFAULT_BUILDER_CHEATSHEET = `Generation disabled.`
+export const DEFAULT_BUILDER_CHEATSHEET = `
+Use the following guidelines for high-quality website generation:
+- Use Tailwind CSS for all styling.
+- Prefer Radix-based Shadcn UI components.
+- Ensure dark mode compatibility.
+- Use Lucide icons for visual elements.
+`
 
 export const DEFAULT_BUILDER_FUNCTION = `
-Generation logic is disabled.
-Keep Syra UI only.
+You are an expert Frontend Engineer. Based on the provided "Style JSON", generate a "Function JSON" containing the logic for the website.
+The JSON must follow this structure:
+{
+  "logic": [
+    {
+      "id": "string (matches section id)",
+      "handlers": [
+        { "name": "string (function name)", "code": "string (function body)" }
+      ]
+    }
+  ],
+  "state": [
+    { "name": "string", "init": "any" }
+  ]
+}
 `
 
 export const DEFAULT_BUILDER_CODE = `
-Generation code prompting is disabled.
-Keep Syra UI only.
+Merge the Style JSON and Function JSON into a complete, production-ready React component (.tsx).
+Resolve all imports for Shadcn UI components and Lucide icons.
 `
 
 export const DEFAULT_AUTOFIX_DIAGNOSIS = `
