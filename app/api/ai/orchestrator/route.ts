@@ -38,6 +38,7 @@ export async function POST(req: Request) {
 
     // Convert a JSON node to JSX string
     function jsonToJsx(node: any): string {
+      if (!node) return ""
       if (typeof node === "string") return `{\`${node}\`}`
       if (node.text) return node.text
 
