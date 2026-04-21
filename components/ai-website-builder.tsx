@@ -47,13 +47,11 @@ interface ModelOption {
   fast?: boolean
 }
 
-// Default to highest-quality Gemini; only three curated options are exposed.
-const DEFAULT_MODEL_ID = "gemini-3.1-pro-preview"
+const DEFAULT_MODEL_ID = "grok-4-1-fast-non-reasoning"
 
 const MODELS: ModelOption[] = [
-  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
-  { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash ⚡", provider: "Google", fast: true },
-  { id: "openai/gpt-oss-120b:free", name: "GPT-OSS 120B (Thinker)", provider: "OpenRouter" },
+  { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast (Non-Reasoning)", provider: "xAI", fast: true },
+  { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B (Free)", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -593,7 +591,7 @@ const InputBar = ({
                   className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
                 >
                   <div className="px-2 pt-1 pb-1 text-[10px] text-zinc-500 leading-relaxed">
-                    Planning always runs on <span className="text-zinc-300">Gemini 3.1 Flash-Lite</span> for fast reasoning. Pick Gemini Pro for quality or Flash for speed when generating code.
+                    Pick the model used for builder JSON generation (Style + Function); TypeScript conversion stays deterministic and runs without AI.
                   </div>
                   {bestModels.length > 0 && (
                     <>
@@ -1258,7 +1256,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const planResponse = await fetch("/api/ai/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, cheatsheet: AI_BUILDER_CHEATSHEET }),
+        body: JSON.stringify({ messages: history, cheatsheet: AI_BUILDER_CHEATSHEET, model: selectedModel.id }),
       })
       if (!planResponse.ok) throw new Error("Failed to generate style JSON")
       const planData = await planResponse.json()
@@ -1295,7 +1293,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const functionResponse = await fetch("/api/ai/generate-functions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ style, messages: history }),
+        body: JSON.stringify({ style, messages: history, model: selectedModel.id }),
       })
       if (!functionResponse.ok) throw new Error("Failed to generate function JSON")
       const functionData = await functionResponse.json()

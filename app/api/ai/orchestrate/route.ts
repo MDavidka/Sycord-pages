@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { extractStyleComponents, type FunctionJson, type StyleNode, type StyleJson } from "@/lib/ai-builder"
 
 type GeneratedFile = { name: string; content: string; usedFor: string }
+type FileDescriptor = { name: string; format: "json" | "typescript" | "tsx" | "css" | "html"; generatedBy: "ai" | "converter" }
 
 function getNodeChildrenInjection(nodeId: string, fnJson: FunctionJson) {
   const injection = fnJson.render_injections?.[nodeId]
@@ -125,8 +126,18 @@ ${jsx}
 `
 }
 
-function buildStaticFiles(appTsx: string, uiTsx: string): GeneratedFile[] {
-  return [
+function buildStaticFiles(appTsx: string, uiTsx: string, style: StyleJson, functions: FunctionJson): GeneratedFile[] {
+  const generatedFiles: GeneratedFile[] = [
+    {
+      name: ".ai-cache/builder/style.json",
+      usedFor: "AI style plan cache",
+      content: `${JSON.stringify(style, null, 2)}\n`,
+    },
+    {
+      name: ".ai-cache/builder/functions.json",
+      usedFor: "AI function plan cache",
+      content: `${JSON.stringify(functions, null, 2)}\n`,
+    },
     {
       name: "package.json",
       usedFor: "Vite/React package config",
@@ -230,6 +241,26 @@ html, body, #root { margin: 0; min-height: 100%; font-family: Inter, system-ui, 
     { name: "src/components/ui.tsx", usedFor: "Generated UI primitives", content: uiTsx },
     { name: "src/App.tsx", usedFor: "Generated app component", content: appTsx },
   ]
+
+  const descriptors: FileDescriptor[] = generatedFiles.map((file) => {
+    if (file.name.endsWith(".json")) return { name: file.name, format: "json", generatedBy: file.name.startsWith(".ai-cache/") ? "ai" : "converter" }
+    if (file.name.endsWith(".tsx")) return { name: file.name, format: "tsx", generatedBy: "converter" }
+    if (file.name.endsWith(".ts")) return { name: file.name, format: "typescript", generatedBy: "converter" }
+    if (file.name.endsWith(".css")) return { name: file.name, format: "css", generatedBy: "converter" }
+    return { name: file.name, format: "html", generatedBy: "converter" }
+  })
+
+  generatedFiles.unshift({
+    name: ".ai-cache/builder/file-structure.json",
+    usedFor: "Builder file structure cache",
+    content: `${JSON.stringify({
+      converter: "json-to-typescript",
+      generatedAt: new Date().toISOString(),
+      files: descriptors,
+    }, null, 2)}\n`,
+  })
+
+  return generatedFiles
 }
 
 export async function POST(request: Request) {
@@ -247,7 +278,7 @@ export async function POST(request: Request) {
     const componentNames = Array.from(extractStyleComponents(style.root))
     const appTsx = buildAppFile(style, functions || {}, componentNames)
     const uiTsx = buildUiLibraryFile(componentNames)
-    const files = buildStaticFiles(appTsx, uiTsx)
+    const files = buildStaticFiles(appTsx, uiTsx, style, functions || {})
     return NextResponse.json({ files })
   } catch (error: any) {
     console.error("[AI builder] Orchestration error:", error)
