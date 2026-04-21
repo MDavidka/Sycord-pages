@@ -15,7 +15,7 @@ export async function logAiDebug(action: string, details: any) {
       fs.mkdirSync(logDir, { recursive: true });
     }
 
-    const logString = \`[\${timestamp}] [\${action}] \${JSON.stringify(details)}\n\`;
+    const logString = `[${timestamp}] [${action}] ${JSON.stringify(details)}\n`;
     fs.appendFileSync(logFile, logString, 'utf8');
   } catch (fsError) {
     console.error('Failed to log to file (possibly read-only filesystem):', fsError);
