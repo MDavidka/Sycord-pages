@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       },
       {
         role: "user",
-        content: `Create a frontend UI JSON plan for: ${prompt}`
+        content: `Create a frontend UI JSON plan for: ${prompt}\n\nCRITICAL INSTRUCTION: You MUST ONLY output a valid JSON array of page objects. Do not write markdown, do not write explanations, do not write an implementation strategy. Return JUST the JSON array.`
       }
     ]
 
@@ -73,8 +73,12 @@ export async function POST(req: Request) {
     // Robust JSON extraction
     let jsonString = content;
     const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    const arrayBlockMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
     if (codeBlockMatch) {
       jsonString = codeBlockMatch[1];
+    } else if (arrayBlockMatch) {
+      jsonString = arrayBlockMatch[0];
     } else {
       // Fallback: Find first [ or { and last ] or }
       const firstBracket = content.indexOf('[');
@@ -103,7 +107,7 @@ export async function POST(req: Request) {
     } catch (e: any) {
       console.error("Failed to parse Architect JSON:", e, content)
       await logAiDebug('Architect Parse Error', { error: e.message, content })
-      return NextResponse.json({ message: "Architect output invalid JSON" }, { status: 500 })
+      return NextResponse.json({ message: "AI failed to generate a valid UI plan structure. Please try a different prompt or model." }, { status: 422 })
     }
 
     return NextResponse.json({ plan: jsonPlan })
