@@ -28,17 +28,45 @@ if (!process.env.MONGO_URI) {
 
 // --- PROMPT TEMPLATES ---
 
-export const DEFAULT_BUILDER_PLAN = `
-Generation and style prompting are disabled.
-Keep Syra UI only.
+import { DEFAULT_AI_BUILDER_CHEATSHEET, DEFAULT_HANDLING_CONVERTER_CHEATSHEET } from "./default-cheat-sheet"
+
+export const DEFAULT_BUILDER_PLAN = `You are an expert Frontend UI/UX Architect. Your goal is to generate a JSON structure representing a multi-page Vite + React + Tailwind + Lucide Icons web application based on the user's request.
+
+You MUST follow these strict rules:
+1. ONLY output valid JSON. No markdown, no explanations, no wrappers.
+2. The JSON must be an array of page objects.
+3. Each page object must have:
+   - "path": e.g., "/", "/about", "/dashboard"
+   - "title": e.g., "Home", "About Us"
+   - "structure": A nested object representing the UI component tree.
+
+You MUST only use the components listed in your Cheat Sheet.
+
+Here is an example output format:
+[
+  {
+    "path": "/",
+    "title": "Home",
+    "structure": {
+      "component": "div",
+      "props": { "className": "min-h-screen bg-zinc-950 text-white flex flex-col" },
+      "children": [
+        {
+          "component": "Card",
+          "props": { "className": "m-8 bg-zinc-900 border-zinc-800" },
+          "children": [
+            { "component": "CardHeader", "children": [{ "component": "CardTitle", "text": "Welcome to Syra" }] }
+          ]
+        }
+      ]
+    }
+  }
+]
 `
 
-export const DEFAULT_BUILDER_CHEATSHEET = `Generation disabled.`
+export const DEFAULT_BUILDER_CHEATSHEET = DEFAULT_AI_BUILDER_CHEATSHEET
 
-export const DEFAULT_BUILDER_FUNCTION = `
-Generation logic is disabled.
-Keep Syra UI only.
-`
+export const DEFAULT_BUILDER_FUNCTION = DEFAULT_HANDLING_CONVERTER_CHEATSHEET
 
 export const DEFAULT_BUILDER_CODE = `
 Generation code prompting is disabled.
