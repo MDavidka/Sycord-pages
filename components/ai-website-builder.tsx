@@ -868,6 +868,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [currentPlan, setCurrentPlan] = useState("")
   const [error, setError] = useState<string | null>(null)
 
+  const [debugMode, setDebugMode] = useState(false)
+  const [planJson, setPlanJson] = useState<any>(null)
+  const [functionJson, setFunctionJson] = useState<any>(null)
+
   const [activeFile, setActiveFile] = useState<string | undefined>(undefined)
   const [activeFileUsedFor, setActiveFileUsedFor] = useState<string | undefined>(undefined)
 
@@ -1209,11 +1213,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const startGeneration = async () => {
     if (!input.trim()) return
 
-    // Attachment filenames are appended to the user-visible prompt as plain
-    // text metadata so downstream plan-generation/model endpoints are aware
-    // of them. Full file upload / processing is handled server-side when
-    // the backend chooses to consume this metadata — the raw File objects
-    // themselves are not shipped with this request.
     const attachmentNote = attachments.length > 0
       ? `\n\n[Attached files: ${attachments.map(f => f.name).join(", ")}]`
       : ""
@@ -1227,19 +1226,66 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setMessages(prev => [...prev, userMessage])
     setAttachments([])
     setError(null)
-    setSitemap([])
-    setQuestionCount(0)
     setGeneratedPages([])
-    setInstruction("")
-    setCurrentPlan("Generation logic has been removed. Syra UI remains active.")
-    setStep("done")
-    setMessages(prev => [...prev, {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: "Generation is disabled for now. Syra UI is still available, but no code/style prompting or file generation logic runs.",
-    }])
-    setActiveFile(undefined)
-    setActiveFileUsedFor(undefined)
+    setPlanJson(null)
+    setFunctionJson(null)
+
+    try {
+      // Step 1: Plan
+      setStep("planning")
+      const planRes = await fetch("/api/ai/generate-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: input })
+      })
+      if (!planRes.ok) throw new Error("Plan generation failed")
+      const planData = await planRes.json()
+      setPlanJson(planData)
+
+      // Step 2: Functions
+      setStep("structuring")
+      const funcRes = await fetch("/api/ai/generate-functions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ styleJson: planData })
+      })
+      if (!funcRes.ok) throw new Error("Function generation failed")
+      const funcData = await funcRes.json()
+      setFunctionJson(funcData)
+
+      // Step 3: Orchestrate
+      setStep("building")
+      const orchRes = await fetch("/api/ai/orchestrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          styleJson: planData, 
+          functionJson: funcData,
+          projectId,
+          pageName: "index.tsx"
+        })
+      })
+      if (!orchRes.ok) throw new Error("Orchestration failed")
+      const orchData = await orchRes.json()
+      
+      setGeneratedPages([{
+        name: "index.tsx",
+        code: orchData.code,
+        timestamp: Date.now(),
+        usedFor: "AI Orchestration"
+      }])
+
+      setStep("done")
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: "I've built your website! You can see the files in the project structure.",
+      }])
+    } catch (e: any) {
+      console.error("Generation error:", e)
+      setError(e.message)
+      setStep("idle")
+    }
   }
 
   const checkDeployLogs = async (repoId: string, attempt = 0) => {
@@ -1314,6 +1360,19 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   return (
     <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
 
+      {/* Debug Toggle */}
+      <div className="absolute top-4 right-4 z-50">
+          <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDebugMode(!debugMode)}
+              className={cn("text-[10px] uppercase tracking-widest", debugMode ? "text-emerald-400" : "text-zinc-600")}
+          >
+              <Code className="h-3 w-3 mr-1.5" />
+              {debugMode ? "Debug ON" : "Debug OFF"}
+          </Button>
+      </div>
+
 
         {/* Background Accents - idle only */}
         {step === 'idle' && (
@@ -1347,6 +1406,28 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 {/* CHAT / GENERATING STATE */}
                 {step !== 'idle' && (
                     <div className="flex flex-col pt-6 sm:pt-8 pb-4">
+
+                    {/* Debug JSONs */}
+                    {debugMode && (
+                        <div className="space-y-4 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                            {planJson && (
+                                <div className="p-4 rounded-xl bg-black/40 border border-white/10 font-mono text-[10px] overflow-auto max-h-60 custom-scrollbar">
+                                    <div className="text-zinc-500 mb-2 uppercase tracking-tighter font-bold flex items-center gap-2">
+                                        <Layout className="h-3 w-3" /> Plan JSON
+                                    </div>
+                                    <pre className="text-zinc-400">{JSON.stringify(planJson, null, 2)}</pre>
+                                </div>
+                            )}
+                            {functionJson && (
+                                <div className="p-4 rounded-xl bg-black/40 border border-white/10 font-mono text-[10px] overflow-auto max-h-60 custom-scrollbar">
+                                    <div className="text-zinc-500 mb-2 uppercase tracking-tighter font-bold flex items-center gap-2">
+                                        <Zap className="h-3 w-3" /> Function JSON
+                                    </div>
+                                    <pre className="text-zinc-400">{JSON.stringify(functionJson, null, 2)}</pre>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                         {/* Messages */}
                         {messages
