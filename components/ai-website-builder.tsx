@@ -47,12 +47,11 @@ interface ModelOption {
 }
 
 // Default to highest-quality Gemini; only three curated options are exposed.
-const DEFAULT_MODEL_ID = "gemini-3.1-pro-preview"
+const DEFAULT_MODEL_ID = "grok-4-1-fast-non-reasoning"
 
 const MODELS: ModelOption[] = [
-  { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro (Preview)", provider: "Google" },
-  { id: "gemini-3.1-flash", name: "Gemini 3.1 Flash ⚡", provider: "Google", fast: true },
-  { id: "openai/gpt-oss-120b:free", name: "GPT-OSS 120B (Thinker)", provider: "OpenRouter" },
+  { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast", provider: "xAI", fast: true },
+  { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B Free", provider: "OpenRouter" },
 ]
 
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
@@ -1230,16 +1229,60 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setSitemap([])
     setQuestionCount(0)
     setGeneratedPages([])
-    setInstruction("")
-    setCurrentPlan("Generation logic has been removed. Syra UI remains active.")
-    setStep("done")
-    setMessages(prev => [...prev, {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: "Generation is disabled for now. Syra UI is still available, but no code/style prompting or file generation logic runs.",
-    }])
+    setInstruction("Architecting UI...")
+    setStep("planning")
     setActiveFile(undefined)
     setActiveFileUsedFor(undefined)
+
+    try {
+      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider);
+      // 1. Call Architect to get JSON structure
+      const archRes = await fetch('/api/ai/architect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel })
+      });
+
+      if (!archRes.ok) throw new Error("Architect generation failed");
+      const archData = await archRes.json();
+      console.log("[DEBUG] Architect JSON Plan:", archData.plan);
+
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "I have created the UI structure as JSON. Now converting to code without AI...",
+        isIntermediate: true
+      }]);
+
+      setSitemap(archData.plan.map((p: any) => ({ name: p.title || p.path, path: p.path, type: 'file' })))
+      setInstruction("Converting to TypeScript...")
+      setStep("building")
+
+      // 2. Call Orchestrator to convert JSON to TSX without AI
+      const orchRes = await fetch('/api/ai/orchestrator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonPlan: archData.plan })
+      });
+
+      if (!orchRes.ok) throw new Error("Code orchestration failed");
+      const orchData = await orchRes.json();
+      console.log("[DEBUG] Orchestrator Generated Files:", orchData.files);
+
+      setGeneratedPages(orchData.files);
+
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 2).toString(),
+        role: "assistant",
+        content: "Files have been successfully generated based on the architecture plan."
+      }]);
+
+      setStep("done");
+      setDeploySuccess(true); // For UI visual simulation
+    } catch (err: any) {
+      setError(err.message);
+      setStep("idle");
+    }
   }
 
   const checkDeployLogs = async (repoId: string, attempt = 0) => {

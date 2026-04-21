@@ -3,31 +3,31 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts, saveSystemPrompts } from "@/lib/ai-prompts"
 
-export async function GET(request: Request) {
+export async function GET() {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email?.includes("dmarton336@gmail.com")) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 403 })
+  if (!session?.user?.id || session.user.email !== "dmarton336@gmail.com") {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  try {
-    const prompts = await getSystemPrompts()
-    return NextResponse.json(prompts)
-  } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 500 })
-  }
+  const prompts = await getSystemPrompts()
+  return NextResponse.json({
+    aiCheatSheet: prompts.builderCheatSheet,
+    converterCheatSheet: prompts.builderFunction, // Using this existing field for the converter cheat sheet
+  })
 }
 
-export async function PUT(request: Request) {
+export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.email?.includes("dmarton336@gmail.com")) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 403 })
+  if (!session?.user?.id || session.user.email !== "dmarton336@gmail.com") {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  try {
-    const body = await request.json()
-    await saveSystemPrompts(body)
-    return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ message: error.message }, { status: 500 })
-  }
+  const { aiCheatSheet, converterCheatSheet } = await req.json()
+
+  await saveSystemPrompts({
+    builderCheatSheet: aiCheatSheet,
+    builderFunction: converterCheatSheet
+  })
+
+  return NextResponse.json({ success: true })
 }
