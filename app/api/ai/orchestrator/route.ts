@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
+import { logAiDebug } from "@/lib/logger"
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
 
   const body = await req.json()
   const { jsonPlan } = body
+
+  await logAiDebug('Orchestrator Request', { pagesCount: Array.isArray(jsonPlan) ? jsonPlan.length : 'invalid' })
 
   if (!jsonPlan || !Array.isArray(jsonPlan)) {
     return NextResponse.json({ message: "Valid jsonPlan array is required" }, { status: 400 })
@@ -150,9 +153,12 @@ ${routeDefs}
       timestamp: Date.now()
     })
 
+    await logAiDebug('Orchestrator Success', { generatedFilesCount: files.length })
+
     return NextResponse.json({ files })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Orchestrator Error:", error)
+    await logAiDebug('Orchestrator Fatal Error', { error: error.message, stack: error.stack })
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }
