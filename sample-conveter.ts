@@ -1,5 +1,3 @@
-'use server'
-
 import fs from 'fs'
 import path from 'path'
 
@@ -295,7 +293,6 @@ function normalizeName(name: string): string {
   if (REGEX.COMPONENT_NAME.test(name)) return name
   if (HTML_TAGS.has(name)) return name
   if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) return ALIAS_MAP[name]
-  if (REGEX.ALIAS_NAME.test(name) && HTML_TAGS.has(name)) return name
   throw new Error(`UNKNOWN_COMPONENT: "${name}" is not a known shadcn/ui component`)
 }
 

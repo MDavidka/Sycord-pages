@@ -1246,12 +1246,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
 
       // 1. Call Architect to get JSON structure
+      const planningModel = selectedModel.provider === "OpenRouter"
+        ? selectedModel
+        : { id: "openai/gpt-oss-20b:free", provider: "OpenRouter" as const }
       const archRes = await fetch('/api/ai/architect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: input + attachmentNote,
-          model: { id: "openai/gpt-oss-20b:free", provider: "OpenRouter" }
+          model: planningModel
         })
       })
 
@@ -1288,17 +1291,23 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setInstruction(progressInstruction(0, orchestratedFiles.length))
 
       // 3. Save generated files to project pages (and clear old ones)
-      await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
+      const clearRes = await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
+      if (!clearRes.ok) {
+        throw new Error("Failed to clear existing generated pages")
+      }
       const savedPages: GeneratedPage[] = []
       for (let i = 0; i < orchestratedFiles.length; i++) {
         const file = orchestratedFiles[i]
         setActiveFile(file.name)
         setInstruction(progressInstruction(i, orchestratedFiles.length))
-        await fetch(`/api/projects/${projectId}/pages`, {
+        const saveRes = await fetch(`/api/projects/${projectId}/pages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: file.name, content: file.code, usedFor: "AI generation" }),
         })
+        if (!saveRes.ok) {
+          throw new Error(`Failed to save generated file: ${file.name}`)
+        }
         savedPages.push({ ...file, timestamp: Date.now() })
         setGeneratedPages([...savedPages])
         setInstruction(progressInstruction(i + 1, orchestratedFiles.length))

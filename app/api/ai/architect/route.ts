@@ -15,7 +15,6 @@ function readHelperFile(fileName: string): string {
   }
 }
 
-// NOTE: Uses xAI API by default based on the model provided by frontend
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
