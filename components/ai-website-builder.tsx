@@ -929,7 +929,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [questionCount, setQuestionCount] = useState(0)
 
   const toErrorMessage = (error: unknown, fallback: string) => {
-    if (error instanceof Error && error.message.trim()) return error.message
+    if (error instanceof Error && error.message.trim()) return error.message.trim()
     return fallback
   }
 
@@ -953,7 +953,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     })
 
     if (!orchRes.ok) {
-      const reason = await extractApiErrorMessage(orchRes, "Code orchestration failed")
+      const reason = await extractApiErrorMessage(orchRes, "JSON to TypeScript conversion failed")
       throw new Error(reason)
     }
 
@@ -962,7 +962,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const testJsonConverter = async () => {
     if (!latestJsonPlan || latestJsonPlan.length === 0) {
-      setError("No JSON plan available to test yet. Generate a plan first.")
+      setError("No JSON plan available. Please generate a website plan first before testing the converter.")
       return
     }
 
