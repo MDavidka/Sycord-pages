@@ -928,7 +928,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Track question count to limit to 2 questions before auto-proceeding
   const [questionCount, setQuestionCount] = useState(0)
 
-  const toErrorMessage = (error: unknown, fallback: string) => {
+  const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message.trim()) return error.message.trim()
     return fallback
   }
@@ -953,7 +953,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     })
 
     if (!orchRes.ok) {
-      const reason = await extractApiErrorMessage(orchRes, "JSON to TypeScript conversion failed")
+      const reason = await extractApiErrorMessage(
+        orchRes,
+        `JSON to TypeScript conversion failed (HTTP ${orchRes.status})`
+      )
       throw new Error(reason)
     }
 
@@ -977,7 +980,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         content: `Converter test passed. Generated ${Array.isArray(orchData.files) ? orchData.files.length : 0} files.`
       }])
     } catch (err: unknown) {
-      setError(`Converter test failed: ${toErrorMessage(err, "Unknown converter error")}`)
+      setError(`Converter test failed: ${getErrorMessage(err, "Unknown converter error")}`)
     } finally {
       setIsTestingConverter(false)
     }
@@ -1339,7 +1342,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setStep("done");
       setDeploySuccess(true); // For UI visual simulation
     } catch (err: unknown) {
-      setError(toErrorMessage(err, "Generation failed"));
+      setError(getErrorMessage(err, "Generation failed"));
       setStep("idle");
     }
   }
