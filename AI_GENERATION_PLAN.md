@@ -1,410 +1,517 @@
-# Sycord UI Builder — AI Orchestration Pipeline
-
-> **Project:** AI-powered shadcn/ui website builder  
-> **Stack:** Next.js · TypeScript · OpenRouter · shadcn/ui  
-> **Status:** Steps 0.5 → 3 defined below. `converter.txt` pending.
-
----
-
-## Overview
-
-This pipeline turns a natural-language prompt into a working shadcn/ui component tree. The AI generates a strict JSON spec, a regex-based converter validates and transforms it into TypeScript, and the builder renders real code into the codebase.
-
-```
-User Prompt
-    │
-    ▼
-[Step 0.5] OpenRouter AI Call
-    │  creates → ui-tree JSON  →  saved to codebase
-    ▼
-[Step 1]  prompt.txt (shadcn cheat sheet)
-    │  constrains → AI output format
-    ▼
-[Step 2]  converter.ts  (regex + validator)
-    │  reads JSON → validates → maps imports
-    ▼
-[Step 3]  code generator
-           emits → .tsx files with real shadcn/ui code
-```
-
----
-
-## Step 0.5 — OpenRouter: File Structure & AI Call
-
-### Purpose
-Use OpenRouter to call an LLM that reads `prompt.txt` (the shadcn cheat sheet) and generates a valid `ui-tree` JSON file, then saves it to the project codebase.
-
-### File Structure
-
-```
-project-root/
-├── .ai/
-│   ├── prompt.txt              ← shadcn/ui cheat sheet (system prompt)
-│   ├── shadcn-cheatsheet.json  ← full component registry + prop definitions
-│   └── shadcn-orchestration.json ← orchestration rules, regex, importMap
-│
-├── builder/
-│   ├── openrouter.ts           ← OpenRouter API client
-│   ├── generate.ts             ← calls OpenRouter, saves output JSON
-│   ├── converter.ts            ← JSON → TypeScript/JSX (Step 2 + 3)
-│   └── types.ts                ← UITreeRoot, UINode interfaces
-│
-├── generated/
-│   └── [component-name].json   ← AI-generated ui-tree JSON (auto-saved here)
-│
-└── src/
-    └── components/
-        └── generated/
-            └── [ComponentName].tsx  ← Final emitted TypeScript component
-```
-
-### OpenRouter Call (`builder/openrouter.ts`)
-
-```typescript
-// builder/openrouter.ts
-import fs from 'fs'
-import path from 'path'
-
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!
-const MODEL = 'anthropic/claude-3.5-sonnet' // or openai/gpt-4o, etc.
-
-const systemPrompt = fs.readFileSync(
-  path.resolve('.ai/prompt.txt'),
-  'utf-8'
-)
-
-export async function generateComponentJSON(userPrompt: string): Promise<string> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://sycord.app',
-      'X-Title': 'Sycord Builder'
+{
+  "$schema": "https://ui.shadcn.com",
+  "version": "2.x (Tailwind v4)",
+  "description": "shadcn/ui component JSON reference for AI builders. Each entry includes: type, props, variants, sub-components, and usage examples.",
+  "typeSystem": {
+    "compound": "Requires multiple sub-components composed together",
+    "atomic": "Standalone, self-contained component",
+    "wrapper": "Wraps other content to apply behavior/style",
+    "provider": "App-level context — add once in root layout"
+  },
+  "globalNotes": {
+    "installation": "npx shadcn@latest add <component-name>",
+    "tailwindVersion": "Requires Tailwind CSS v4",
+    "theming": "Configure via components.json and globals.css CSS variables (--primary, --background, --radius, etc.)",
+    "darkMode": "Class-based. Set darkMode: 'class' in Tailwind config, managed via next-themes or manual toggle.",
+    "asChild": "Most trigger/wrapper components accept asChild={true} to delegate rendering to a child (e.g. <Link> from Next.js)",
+    "accessibility": "All components are built on Radix UI primitives — keyboard nav, ARIA, and focus management included."
+  },
+  "components": {
+    "Accordion": {
+      "type": "compound",
+      "subComponents": ["AccordionItem", "AccordionTrigger", "AccordionContent"],
+      "props": {
+        "type": { "type": "enum", "values": ["single", "multiple"], "default": "single" },
+        "collapsible": { "type": "boolean", "default": false, "note": "Only for type='single'" },
+        "defaultValue": { "type": "string | string[]" },
+        "value": { "type": "string | string[]" },
+        "onValueChange": { "type": "function" }
+      },
+      "subProps": {
+        "AccordionItem": { "value": "string (required)" }
+      },
+      "example": "<Accordion type='single' collapsible><AccordionItem value='item-1'><AccordionTrigger>Title</AccordionTrigger><AccordionContent>Content</AccordionContent></AccordionItem></Accordion>"
     },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
+    "Alert": {
+      "type": "compound",
+      "subComponents": ["AlertTitle", "AlertDescription"],
+      "props": {
+        "variant": { "type": "enum", "values": ["default", "destructive"], "default": "default" }
+      },
+      "example": "<Alert variant='destructive'><AlertTitle>Error</AlertTitle><AlertDescription>Something went wrong.</AlertDescription></Alert>"
+    },
+    "AlertDialog": {
+      "type": "compound",
+      "subComponents": ["AlertDialogTrigger", "AlertDialogContent", "AlertDialogHeader", "AlertDialogFooter", "AlertDialogTitle", "AlertDialogDescription", "AlertDialogAction", "AlertDialogCancel"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" }
+      },
+      "note": "Use for destructive confirmations (delete, irreversible actions)"
+    },
+    "AspectRatio": {
+      "type": "wrapper",
+      "props": {
+        "ratio": { "type": "number", "default": 1, "note": "e.g. 16/9, 4/3, 1" }
+      },
+      "example": "<AspectRatio ratio={16/9}><img src='...' alt='...' className='object-cover w-full h-full' /></AspectRatio>"
+    },
+    "Avatar": {
+      "type": "compound",
+      "subComponents": ["AvatarImage", "AvatarFallback"],
+      "subProps": {
+        "AvatarImage": { "src": "string", "alt": "string" },
+        "AvatarFallback": { "note": "Rendered when image fails to load" }
+      },
+      "example": "<Avatar><AvatarImage src='/avatar.png' alt='User' /><AvatarFallback>JD</AvatarFallback></Avatar>"
+    },
+    "Badge": {
+      "type": "atomic",
+      "props": {
+        "variant": { "type": "enum", "values": ["default", "secondary", "destructive", "outline"], "default": "default" }
+      },
+      "example": "<Badge variant='secondary'>Beta</Badge>"
+    },
+    "Breadcrumb": {
+      "type": "compound",
+      "subComponents": ["BreadcrumbList", "BreadcrumbItem", "BreadcrumbLink", "BreadcrumbPage", "BreadcrumbSeparator", "BreadcrumbEllipsis"],
+      "example": "<Breadcrumb><BreadcrumbList><BreadcrumbItem><BreadcrumbLink href='/'>Home</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>Current</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>"
+    },
+    "Button": {
+      "type": "atomic",
+      "props": {
+        "variant": { "type": "enum", "values": ["default", "outline", "ghost", "destructive", "secondary", "link"], "default": "default" },
+        "size": { "type": "enum", "values": ["default", "xs", "sm", "lg", "icon", "icon-xs", "icon-sm", "icon-lg"], "default": "default" },
+        "asChild": { "type": "boolean", "default": false },
+        "disabled": { "type": "boolean" }
+      },
+      "notes": [
+        "Add data-icon='inline-start' or 'inline-end' on icons inside buttons for correct spacing",
+        "Add className='rounded-full' for pill shape",
+        "Use asChild with <Link> for router navigation"
       ],
-      response_format: { type: 'json_object' }
-    })
-  })
-
-  const data = await response.json()
-  return data.choices[0].message.content
-}
-```
-
-### Auto-Save Generated JSON (`builder/generate.ts`)
-
-```typescript
-// builder/generate.ts
-import fs from 'fs'
-import path from 'path'
-import { generateComponentJSON } from './openrouter'
-
-export async function generateAndSave(
-  userPrompt: string,
-  componentName: string
-): Promise<string> {
-  const jsonString = await generateComponentJSON(userPrompt)
-
-  // Validate it is parseable before saving
-  JSON.parse(jsonString)
-
-  const outputPath = path.resolve(`generated/${componentName}.json`)
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true })
-  fs.writeFileSync(outputPath, jsonString, 'utf-8')
-
-  console.log(`✅ Saved: ${outputPath}`)
-  return outputPath
-}
-```
-
----
-
-## Step 1 — `prompt.txt`: The shadcn/ui Cheat Sheet System Prompt
-
-### Purpose
-`prompt.txt` is the **system prompt** sent to OpenRouter on every call. It contains the strict shadcn/ui JSON schema rules so the AI always outputs a valid `ui-tree` JSON and nothing else.
-
-### Location
-```
-.ai/prompt.txt
-```
-
-### What `prompt.txt` Must Tell the AI
-
-```
-You are a UI component JSON generator for shadcn/ui.
-
-RULES:
-1. Always output valid JSON that matches the ui-tree schema below.
-2. Never output prose, markdown, or explanation — only JSON.
-3. All component names must be PascalCase and exist in the registry below.
-4. Use $state.foo for state bindings and $handler.bar for callbacks.
-5. Respect allowed parent-child composition rules strictly.
-
---- ui-tree SCHEMA ---
-{
-  "type": "ui-tree",
-  "version": "1.0",
-  "importsMode": "auto",
-  "component": {
-    "name": "<ComponentName>",
-    "props": { ... },
-    "children": [ ... ],
-    "text": "<optional leaf text>"
+      "example": "<Button variant='outline' size='sm'>Click me</Button>"
+    },
+    "Calendar": {
+      "type": "atomic",
+      "props": {
+        "mode": { "type": "enum", "values": ["single", "multiple", "range"], "default": "single" },
+        "selected": { "type": "Date | Date[] | DateRange" },
+        "onSelect": { "type": "function" },
+        "disabled": { "type": "Date | function" },
+        "defaultMonth": { "type": "Date" },
+        "numberOfMonths": { "type": "number" }
+      },
+      "note": "Built on react-day-picker. Combine with <Popover> for a date picker."
+    },
+    "Card": {
+      "type": "compound",
+      "subComponents": ["CardHeader", "CardTitle", "CardDescription", "CardAction", "CardContent", "CardFooter"],
+      "props": {
+        "size": { "type": "enum", "values": ["default", "sm"], "default": "default" }
+      },
+      "subProps": {
+        "CardAction": "Placed top-right of CardHeader — use for buttons, badges, menus"
+      },
+      "example": "<Card><CardHeader><CardTitle>Title</CardTitle><CardDescription>Desc</CardDescription><CardAction><Button>X</Button></CardAction></CardHeader><CardContent>Body</CardContent><CardFooter>Footer</CardFooter></Card>"
+    },
+    "Carousel": {
+      "type": "compound",
+      "subComponents": ["CarouselContent", "CarouselItem", "CarouselPrevious", "CarouselNext"],
+      "props": {
+        "opts": { "type": "EmblaOptionsType", "note": "Embla carousel options object" },
+        "orientation": { "type": "enum", "values": ["horizontal", "vertical"], "default": "horizontal" },
+        "plugins": { "type": "EmblaPluginType[]" }
+      },
+      "note": "Built on embla-carousel-react"
+    },
+    "Checkbox": {
+      "type": "atomic",
+      "props": {
+        "checked": { "type": "boolean | 'indeterminate'" },
+        "defaultChecked": { "type": "boolean" },
+        "onCheckedChange": { "type": "function" },
+        "disabled": { "type": "boolean" },
+        "id": { "type": "string", "note": "Use with <Label htmlFor>" }
+      }
+    },
+    "Collapsible": {
+      "type": "compound",
+      "subComponents": ["CollapsibleTrigger", "CollapsibleContent"],
+      "props": {
+        "open": { "type": "boolean" },
+        "defaultOpen": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "disabled": { "type": "boolean" }
+      }
+    },
+    "Command": {
+      "type": "compound",
+      "subComponents": ["CommandInput", "CommandList", "CommandEmpty", "CommandGroup", "CommandItem", "CommandSeparator", "CommandShortcut"],
+      "props": {
+        "value": { "type": "string" },
+        "onValueChange": { "type": "function" },
+        "filter": { "type": "function", "signature": "(value: string, search: string) => number" },
+        "shouldFilter": { "type": "boolean", "default": true }
+      },
+      "note": "Built on cmdk. Combine with <Dialog> for a command palette, or <Popover> for a combobox."
+    },
+    "ContextMenu": {
+      "type": "compound",
+      "subComponents": ["ContextMenuTrigger", "ContextMenuContent", "ContextMenuItem", "ContextMenuCheckboxItem", "ContextMenuRadioItem", "ContextMenuLabel", "ContextMenuSeparator", "ContextMenuShortcut", "ContextMenuGroup", "ContextMenuSub", "ContextMenuSubTrigger", "ContextMenuSubContent", "ContextMenuRadioGroup"],
+      "note": "Shown on right-click. Wrap any element in <ContextMenuTrigger>."
+    },
+    "Dialog": {
+      "type": "compound",
+      "subComponents": ["DialogTrigger", "DialogContent", "DialogHeader", "DialogFooter", "DialogTitle", "DialogDescription", "DialogClose"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "defaultOpen": { "type": "boolean" }
+      },
+      "subProps": {
+        "DialogContent": {
+          "onInteractOutside": "function",
+          "onEscapeKeyDown": "function"
+        }
+      },
+      "example": "<Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button>Open</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Title</DialogTitle><DialogDescription>Description</DialogDescription></DialogHeader>Body<DialogFooter><Button>Save</Button></DialogFooter></DialogContent></Dialog>"
+    },
+    "Drawer": {
+      "type": "compound",
+      "subComponents": ["DrawerTrigger", "DrawerContent", "DrawerHeader", "DrawerFooter", "DrawerTitle", "DrawerDescription", "DrawerClose"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "direction": { "type": "enum", "values": ["bottom", "top", "left", "right"], "default": "bottom" }
+      },
+      "note": "Built on vaul. Use for mobile-first overlays."
+    },
+    "DropdownMenu": {
+      "type": "compound",
+      "subComponents": ["DropdownMenuTrigger", "DropdownMenuContent", "DropdownMenuItem", "DropdownMenuCheckboxItem", "DropdownMenuRadioItem", "DropdownMenuLabel", "DropdownMenuSeparator", "DropdownMenuShortcut", "DropdownMenuGroup", "DropdownMenuSub", "DropdownMenuSubTrigger", "DropdownMenuSubContent", "DropdownMenuRadioGroup"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "modal": { "type": "boolean", "default": true }
+      },
+      "subProps": {
+        "DropdownMenuContent": {
+          "align": { "values": ["start", "center", "end"], "default": "center" },
+          "side": { "values": ["top", "right", "bottom", "left"], "default": "bottom" },
+          "sideOffset": "number"
+        },
+        "DropdownMenuItem": {
+          "inset": "boolean",
+          "variant": { "values": ["default", "destructive"] },
+          "onSelect": "function"
+        }
+      }
+    },
+    "Form": {
+      "type": "compound",
+      "subComponents": ["FormField", "FormItem", "FormLabel", "FormControl", "FormDescription", "FormMessage"],
+      "note": "Requires react-hook-form + zod",
+      "pattern": "const form = useForm({ resolver: zodResolver(schema) }); <Form {...form}><form onSubmit={form.handleSubmit(onSubmit)}><FormField control={form.control} name='field' render={({ field }) => (<FormItem><FormLabel /><FormControl><Input {...field} /></FormControl><FormDescription /><FormMessage /></FormItem>)} /></form></Form>"
+    },
+    "HoverCard": {
+      "type": "compound",
+      "subComponents": ["HoverCardTrigger", "HoverCardContent"],
+      "props": {
+        "open": { "type": "boolean" },
+        "openDelay": { "type": "number", "default": 700 },
+        "closeDelay": { "type": "number", "default": 300 }
+      }
+    },
+    "Input": {
+      "type": "atomic",
+      "props": {
+        "type": { "type": "string", "values": ["text", "email", "password", "number", "search", "file", "..."] },
+        "placeholder": { "type": "string" },
+        "disabled": { "type": "boolean" },
+        "value": { "type": "string" },
+        "onChange": { "type": "function" }
+      }
+    },
+    "InputOTP": {
+      "type": "compound",
+      "subComponents": ["InputOTPGroup", "InputOTPSlot", "InputOTPSeparator"],
+      "props": {
+        "maxLength": { "type": "number", "required": true },
+        "value": { "type": "string" },
+        "onChange": { "type": "function" },
+        "pattern": { "type": "string", "note": "e.g. REGEXP_ONLY_DIGITS from 'input-otp'" }
+      },
+      "note": "Built on input-otp"
+    },
+    "Label": {
+      "type": "atomic",
+      "props": {
+        "htmlFor": { "type": "string" }
+      }
+    },
+    "Menubar": {
+      "type": "compound",
+      "subComponents": ["MenubarMenu", "MenubarTrigger", "MenubarContent", "MenubarItem", "MenubarSeparator", "MenubarLabel", "MenubarCheckboxItem", "MenubarRadioGroup", "MenubarRadioItem", "MenubarShortcut", "MenubarGroup", "MenubarSub", "MenubarSubContent", "MenubarSubTrigger"],
+      "note": "Desktop-style application menu bar (like File / Edit / View)"
+    },
+    "NavigationMenu": {
+      "type": "compound",
+      "subComponents": ["NavigationMenuList", "NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent", "NavigationMenuLink", "NavigationMenuIndicator", "NavigationMenuViewport"],
+      "props": {
+        "value": { "type": "string" },
+        "onValueChange": { "type": "function" },
+        "delayDuration": { "type": "number", "default": 200 }
+      }
+    },
+    "Pagination": {
+      "type": "compound",
+      "subComponents": ["PaginationContent", "PaginationItem", "PaginationLink", "PaginationPrevious", "PaginationNext", "PaginationEllipsis"],
+      "subProps": {
+        "PaginationLink": {
+          "isActive": "boolean",
+          "href": "string",
+          "size": { "values": ["default", "sm", "lg", "icon"] }
+        }
+      }
+    },
+    "Popover": {
+      "type": "compound",
+      "subComponents": ["PopoverTrigger", "PopoverContent"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "defaultOpen": { "type": "boolean" }
+      },
+      "subProps": {
+        "PopoverContent": {
+          "align": { "values": ["start", "center", "end"], "default": "center" },
+          "side": { "values": ["top", "right", "bottom", "left"] },
+          "sideOffset": { "type": "number", "default": 4 }
+        }
+      }
+    },
+    "Progress": {
+      "type": "atomic",
+      "props": {
+        "value": { "type": "number", "note": "0–100" },
+        "max": { "type": "number", "default": 100 }
+      }
+    },
+    "RadioGroup": {
+      "type": "compound",
+      "subComponents": ["RadioGroupItem"],
+      "props": {
+        "value": { "type": "string" },
+        "defaultValue": { "type": "string" },
+        "onValueChange": { "type": "function" },
+        "disabled": { "type": "boolean" },
+        "orientation": { "type": "enum", "values": ["horizontal", "vertical"] }
+      },
+      "subProps": {
+        "RadioGroupItem": {
+          "value": "string (required)",
+          "id": "string",
+          "disabled": "boolean"
+        }
+      }
+    },
+    "Resizable": {
+      "type": "compound",
+      "subComponents": ["ResizablePanelGroup", "ResizablePanel", "ResizableHandle"],
+      "subProps": {
+        "ResizablePanelGroup": {
+          "direction": { "values": ["horizontal", "vertical"], "required": true }
+        },
+        "ResizablePanel": {
+          "defaultSize": "number",
+          "minSize": "number",
+          "maxSize": "number"
+        }
+      }
+    },
+    "ScrollArea": {
+      "type": "compound",
+      "subComponents": ["ScrollBar"],
+      "props": {
+        "type": { "type": "enum", "values": ["auto", "always", "scroll", "hover"] },
+        "scrollHideDelay": { "type": "number" }
+      }
+    },
+    "Select": {
+      "type": "compound",
+      "subComponents": ["SelectTrigger", "SelectValue", "SelectContent", "SelectItem", "SelectLabel", "SelectSeparator", "SelectGroup", "SelectScrollUpButton", "SelectScrollDownButton"],
+      "props": {
+        "value": { "type": "string" },
+        "defaultValue": { "type": "string" },
+        "onValueChange": { "type": "function" },
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "disabled": { "type": "boolean" }
+      },
+      "subProps": {
+        "SelectTrigger": { "size": { "values": ["sm", "default"] } },
+        "SelectContent": { "position": { "values": ["popper", "item-aligned"] } },
+        "SelectItem": { "value": "string (required)", "disabled": "boolean" }
+      },
+      "example": "<Select onValueChange={v => setVal(v)}><SelectTrigger><SelectValue placeholder='Choose...' /></SelectTrigger><SelectContent><SelectItem value='a'>Option A</SelectItem></SelectContent></Select>"
+    },
+    "Separator": {
+      "type": "atomic",
+      "props": {
+        "orientation": { "type": "enum", "values": ["horizontal", "vertical"], "default": "horizontal" },
+        "decorative": { "type": "boolean", "default": true }
+      }
+    },
+    "Sheet": {
+      "type": "compound",
+      "subComponents": ["SheetTrigger", "SheetContent", "SheetHeader", "SheetFooter", "SheetTitle", "SheetDescription", "SheetClose"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" }
+      },
+      "subProps": {
+        "SheetContent": {
+          "side": { "values": ["top", "right", "bottom", "left"], "default": "right" }
+        }
+      }
+    },
+    "Sidebar": {
+      "type": "compound",
+      "subComponents": ["SidebarProvider", "SidebarTrigger", "SidebarContent", "SidebarHeader", "SidebarFooter", "SidebarGroup", "SidebarGroupLabel", "SidebarGroupContent", "SidebarMenu", "SidebarMenuItem", "SidebarMenuButton", "SidebarMenuSub", "SidebarMenuSubButton", "SidebarMenuSubItem", "SidebarRail", "SidebarInset", "SidebarSeparator"],
+      "subProps": {
+        "SidebarProvider": {
+          "defaultOpen": { "type": "boolean", "default": true },
+          "open": { "type": "boolean" },
+          "onOpenChange": { "type": "function" }
+        }
+      }
+    },
+    "Skeleton": {
+      "type": "atomic",
+      "props": {
+        "className": { "type": "string", "note": "Control dimensions via Tailwind: h-4 w-[250px]" }
+      },
+      "example": "<Skeleton className='h-4 w-[250px]' />"
+    },
+    "Slider": {
+      "type": "atomic",
+      "props": {
+        "value": { "type": "number[]" },
+        "defaultValue": { "type": "number[]" },
+        "onValueChange": { "type": "function" },
+        "onValueCommit": { "type": "function" },
+        "min": { "type": "number", "default": 0 },
+        "max": { "type": "number", "default": 100 },
+        "step": { "type": "number", "default": 1 },
+        "disabled": { "type": "boolean" },
+        "orientation": { "type": "enum", "values": ["horizontal", "vertical"] }
+      }
+    },
+    "Sonner": {
+      "type": "provider",
+      "note": "Add <Toaster /> once in root layout. Import toast() from 'sonner' anywhere to trigger.",
+      "props": {
+        "position": { "type": "enum", "values": ["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"], "default": "bottom-right" },
+        "expand": { "type": "boolean" },
+        "richColors": { "type": "boolean" },
+        "theme": { "type": "enum", "values": ["light", "dark", "system"] }
+      },
+      "usage": {
+        "basic": "toast('Message')",
+        "success": "toast.success('Done!')",
+        "error": "toast.error('Failed')",
+        "loading": "toast.loading('In progress...')",
+        "promise": "toast.promise(myPromise, { loading: '...', success: 'Done', error: 'Error' })",
+        "dismiss": "toast.dismiss(id)"
+      }
+    },
+    "Switch": {
+      "type": "atomic",
+      "props": {
+        "checked": { "type": "boolean" },
+        "defaultChecked": { "type": "boolean" },
+        "onCheckedChange": { "type": "function" },
+        "disabled": { "type": "boolean" },
+        "id": { "type": "string" }
+      }
+    },
+    "Table": {
+      "type": "compound",
+      "subComponents": ["TableHeader", "TableBody", "TableFooter", "TableRow", "TableHead", "TableCell", "TableCaption"],
+      "example": "<Table><TableHeader><TableRow><TableHead>Name</TableHead></TableRow></TableHeader><TableBody><TableRow><TableCell>Value</TableCell></TableRow></TableBody></Table>"
+    },
+    "Tabs": {
+      "type": "compound",
+      "subComponents": ["TabsList", "TabsTrigger", "TabsContent"],
+      "props": {
+        "value": { "type": "string" },
+        "defaultValue": { "type": "string" },
+        "onValueChange": { "type": "function" },
+        "orientation": { "type": "enum", "values": ["horizontal", "vertical"], "default": "horizontal" }
+      },
+      "subProps": {
+        "TabsTrigger": { "value": "string (required)", "disabled": "boolean" },
+        "TabsContent": { "value": "string (required)" }
+      }
+    },
+    "Textarea": {
+      "type": "atomic",
+      "props": {
+        "placeholder": { "type": "string" },
+        "disabled": { "type": "boolean" },
+        "rows": { "type": "number" },
+        "value": { "type": "string" },
+        "onChange": { "type": "function" }
+      }
+    },
+    "Toast": {
+      "type": "legacy",
+      "note": "DEPRECATED — prefer Sonner. If still needed: wrap app with <Toaster />, call useToast() hook.",
+      "usage": "const { toast } = useToast(); toast({ title: 'Title', description: 'Body', variant: 'destructive' })"
+    },
+    "Toggle": {
+      "type": "atomic",
+      "props": {
+        "variant": { "type": "enum", "values": ["default", "outline"], "default": "default" },
+        "size": { "type": "enum", "values": ["default", "sm", "lg"] },
+        "pressed": { "type": "boolean" },
+        "defaultPressed": { "type": "boolean" },
+        "onPressedChange": { "type": "function" },
+        "disabled": { "type": "boolean" },
+        "asChild": { "type": "boolean" }
+      }
+    },
+    "ToggleGroup": {
+      "type": "compound",
+      "subComponents": ["ToggleGroupItem"],
+      "props": {
+        "type": { "type": "enum", "values": ["single", "multiple"], "required": true },
+        "value": { "type": "string | string[]" },
+        "onValueChange": { "type": "function" },
+        "variant": { "type": "enum", "values": ["default", "outline"] },
+        "size": { "type": "enum", "values": ["default", "sm", "lg"] }
+      }
+    },
+    "Tooltip": {
+      "type": "compound",
+      "subComponents": ["TooltipProvider", "TooltipTrigger", "TooltipContent"],
+      "props": {
+        "open": { "type": "boolean" },
+        "onOpenChange": { "type": "function" },
+        "defaultOpen": { "type": "boolean" },
+        "delayDuration": { "type": "number", "default": 700 }
+      },
+      "note": "Wrap app or section once in <TooltipProvider>",
+      "example": "<TooltipProvider><Tooltip><TooltipTrigger asChild><Button>Hover</Button></TooltipTrigger><TooltipContent>Tooltip text</TooltipContent></Tooltip></TooltipProvider>"
+    }
+  },
+  "commonPatterns": {
+    "combobox": "Combine <Popover> + <Command> — Popover controls open state, Command handles search/filter",
+    "datePicker": "Combine <Popover> + <Calendar> — Popover is the anchor, Calendar is the content",
+    "commandPalette": "Combine <Dialog> + <Command> — Dialog is the modal, Command handles the search UI",
+    "dataTable": "Combine <Table> + @tanstack/react-table for sortable/filterable/paginated tables",
+    "confirmDialog": "Use <AlertDialog> for destructive confirmations, <Dialog> for complex multi-step confirmations",
+    "formField": "<FormField control={form.control} name='x' render={({ field }) => (<FormItem><FormLabel /><FormControl><Input {...field} /></FormControl><FormDescription /><FormMessage /></FormItem>)} />"
   }
 }
-
---- COMPONENT REGISTRY ---
-[Paste the full shadcn-cheatsheet.json components block here]
-
---- COMPOSITION RULES ---
-- DialogContent must be a child of Dialog
-- TabsTrigger and TabsContent must share matching value strings
-- SelectItem must be inside SelectContent
-- AccordionItem must be inside Accordion
-- CardHeader, CardContent, CardFooter must be inside Card
-
---- PROP ENUM RULES ---
-Button.variant: default | outline | ghost | destructive | secondary | link
-Button.size: default | xs | sm | lg | icon
-Card.size: default | sm
-Accordion.type: single | multiple
-SheetContent.side: top | right | bottom | left
-Tabs.orientation: horizontal | vertical
-```
-
-### How It Drives Step 2
-Because `prompt.txt` strictly enforces PascalCase names, enum prop values, and `$state`/`$handler` prefixes, the converter in Step 2 can rely on regex to detect and transform these reliably without defensive guessing.
-
----
-
-## Step 2 — Converter: Regex-Based JSON → TypeScript
-
-### Purpose
-`converter.ts` reads the saved `generated/*.json` file, validates it using regex rules and composition checks, collects all imports, and transforms the tree into a TypeScript component string.
-
-> **Note:** The full converter implementation will be defined in `converter.txt`.  
-> This section defines the interface, input/output contract, and regex rules the converter must implement.
-
-### Input
-A `ui-tree` JSON file from `generated/`.
-
-### Output
-A `.tsx` file written to `src/components/generated/`.
-
-### Regex Rules the Converter Must Apply
-
-| Check | Pattern | Purpose |
-|-------|---------|---------|
-| Valid component name | `^[A-Z][A-Za-z0-9]+$` | Reject unknown or lowercase names |
-| Alias detection | `^[a-z][a-z0-9-]*$` | Normalize `dialog` → `Dialog` |
-| State binding | `^\$state\.[A-Za-z_][A-Za-z0-9_]*$` | Convert `$state.open` → React `useState` |
-| Handler binding | `^\$handler\.[A-Za-z_][A-Za-z0-9_]*$` | Convert `$handler.onSubmit` → function ref |
-| Enum prop guard | `^(default\|outline\|ghost\|destructive\|secondary\|link\|xs\|sm\|lg\|icon)$` | Fast reject invalid variant values |
-| Import path safety | `^@\/components\/ui\/[a-z0-9-]+$` | Validate generated import paths |
-
-### Converter Interface (to be implemented in `converter.txt`)
-
-```typescript
-// builder/converter.ts
-
-import type { UITreeRoot, UINode } from './types'
-
-export interface ConversionResult {
-  imports: string      // grouped import statements
-  component: string    // full TSX component string
-  filePath: string     // absolute path where file is written
-}
-
-export function convertJSONToTypeScript(
-  jsonPath: string,
-  componentName: string
-): ConversionResult
-
-// Internal functions the converter must implement:
-// validateRoot(tree: UITreeRoot): void
-// normalizeNames(node: UINode): UINode
-// validateComposition(node: UINode): void
-// validateProps(node: UINode): void
-// collectImports(node: UINode): Map<string, Set<string>>
-// renderNode(node: UINode, depth?: number): string
-// resolveStateBindings(props: Record<string, unknown>): string
-```
-
-### What the Converter Produces
-
-**Input JSON:**
-```json
-{
-  "type": "ui-tree",
-  "version": "1.0",
-  "component": {
-    "name": "Button",
-    "props": { "variant": "outline", "onClick": "$handler.handleClick" },
-    "text": "Click me"
-  }
-}
-```
-
-**Output TSX:**
-```tsx
-import { Button } from '@/components/ui/button'
-
-interface Props {
-  handleClick: () => void
-}
-
-export function GeneratedComponent({ handleClick }: Props) {
-  return (
-    <Button variant="outline" onClick={handleClick}>
-      Click me
-    </Button>
-  )
-}
-```
-
----
-
-## Step 3 — Builder: Converting JSON to Real Code in the Codebase
-
-### Purpose
-Step 3 is the execution step. After the converter produces the `.tsx` string, the builder writes it to disk and optionally re-exports it via an index file.
-
-### Flow
-
-```typescript
-// Usage in your builder pipeline
-import { generateAndSave } from './builder/generate'
-import { convertJSONToTypeScript } from './builder/converter'
-
-async function buildComponent(prompt: string, name: string) {
-  // Step 0.5 + 1: AI generates JSON using prompt.txt, saves to codebase
-  const jsonPath = await generateAndSave(prompt, name)
-
-  // Step 2: Regex converter validates + maps JSON
-  // Step 3: Emits real .tsx file
-  const result = convertJSONToTypeScript(jsonPath, name)
-
-  console.log(`✅ Component written: ${result.filePath}`)
-  console.log(`📦 Imports:\n${result.imports}`)
-}
-
-buildComponent(
-  'Create a login card with email input, password input, and a submit button',
-  'LoginCard'
-)
-```
-
-### Output Written to Codebase
-
-```
-src/
-└── components/
-    └── generated/
-        ├── LoginCard.tsx      ← Step 3 output
-        ├── ProfileDialog.tsx
-        └── index.ts           ← auto-updated barrel export
-```
-
-### Auto-Updated Barrel (`src/components/generated/index.ts`)
-
-```typescript
-export { LoginCard } from './LoginCard'
-export { ProfileDialog } from './ProfileDialog'
-// new exports appended automatically by builder
-```
-
----
-
-## TypeScript Types (`builder/types.ts`)
-
-```typescript
-export interface UITreeRoot {
-  type: 'ui-tree'
-  version: string
-  importsMode?: 'auto' | 'manual'
-  component: UINode
-}
-
-export interface UINode {
-  id?: string
-  name: string
-  props?: Record<string, unknown>
-  text?: string
-  condition?: string
-  slot?: string
-  repeat?: {
-    source: string
-    item: string
-    key?: string
-  }
-  children?: UINode[]
-}
-```
-
-### Importing JSON into TypeScript
-
-**`tsconfig.json` (required settings):**
-```json
-{
-  "compilerOptions": {
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "moduleResolution": "bundler",
-    "strict": true
-  }
-}
-```
-
-**Using the JSON at runtime:**
-```typescript
-import spec from '../generated/LoginCard.json'
-import type { UITreeRoot } from './types'
-
-const tree = spec as UITreeRoot
-```
-
-**Or with runtime validation via Zod:**
-```typescript
-import { z } from 'zod'
-
-const UINodeSchema: z.ZodType<UINode> = z.lazy(() =>
-  z.object({
-    name: z.string().regex(/^[A-Z][A-Za-z0-9]+$/),
-    props: z.record(z.unknown()).optional(),
-    text: z.string().optional(),
-    children: z.array(UINodeSchema).optional()
-  })
-)
-
-const tree = UINodeSchema.parse(spec)
-```
-
----
-
-## Environment Variables
-
-```env
-# .env.local
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
-```
-
----
-
-## Next Steps
-
-| Step | File | Status |
-|------|------|--------|
-| 0.5 | `builder/openrouter.ts` + `builder/generate.ts` | ✅ Defined |
-| 1 | `.ai/prompt.txt` | ✅ Defined |
-| 2 | `builder/converter.ts` | ⏳ Pending `converter.txt` |
-| 3 | Builder pipeline + barrel export | ⏳ Depends on Step 2 |
-
-> **Up next:** Define `converter.txt` — the full regex validation and JSX rendering logic.
