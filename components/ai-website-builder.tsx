@@ -91,6 +91,13 @@ export interface GeneratedPage {
   usedFor?: string
 }
 
+interface JsonPlanPage {
+  title?: string
+  path?: string
+  structure?: unknown
+  [key: string]: unknown
+}
+
 // --- FILE TREE COMPONENT (VISUALIZATION) ---
 interface FileNode {
   name: string
@@ -866,7 +873,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [step, setStep] = useState<GenerationPhase>("idle")
   const [currentPlan, setCurrentPlan] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [latestJsonPlan, setLatestJsonPlan] = useState<any[] | null>(null)
+  const [latestJsonPlan, setLatestJsonPlan] = useState<JsonPlanPage[] | null>(null)
   const [isTestingConverter, setIsTestingConverter] = useState(false)
 
   const [activeFile, setActiveFile] = useState<string | undefined>(undefined)
@@ -921,6 +928,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   // Track question count to limit to 2 questions before auto-proceeding
   const [questionCount, setQuestionCount] = useState(0)
 
+  const toErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message.trim()) return error.message
+    return fallback
+  }
+
   const extractApiErrorMessage = async (res: Response, fallback: string) => {
     try {
       const data = await res.json()
@@ -933,7 +945,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     return fallback
   }
 
-  const runJsonConverter = async (jsonPlan: any[]) => {
+  const runJsonConverter = async (jsonPlan: JsonPlanPage[]) => {
     const orchRes = await fetch('/api/ai/orchestrator', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -964,8 +976,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         role: "assistant",
         content: `Converter test passed. Generated ${Array.isArray(orchData.files) ? orchData.files.length : 0} files.`
       }])
-    } catch (err: any) {
-      setError(`Converter test failed: ${err?.message || "Unknown converter error"}`)
+    } catch (err: unknown) {
+      setError(`Converter test failed: ${toErrorMessage(err, "Unknown converter error")}`)
     } finally {
       setIsTestingConverter(false)
     }
@@ -1326,8 +1338,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       setStep("done");
       setDeploySuccess(true); // For UI visual simulation
-    } catch (err: any) {
-      setError(err?.message || "Generation failed");
+    } catch (err: unknown) {
+      setError(toErrorMessage(err, "Generation failed"));
       setStep("idle");
     }
   }

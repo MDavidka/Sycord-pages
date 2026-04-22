@@ -23,14 +23,14 @@ export async function POST(req: Request) {
     const prompts = await getSystemPrompts()
 
     // The Handling Converter cheat sheet maps "ComponentName" -> "Import/Export Code"
-    let converterMap = {}
+    let converterMap: Record<string, string> = {}
     try {
       converterMap = JSON.parse(prompts.builderFunction)
     } catch (e) {
       console.warn("Could not parse Handling Converter map, using empty map", e)
     }
 
-    const files = []
+    const files: Array<{ name: string; code: string; timestamp: number }> = []
 
     // 1. Generate standard package.json and vite.config.ts if this was a full project...
     // But since the AI builder currently generates files sequentially to the UI, we'll
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
         const usedComponents = new Set<string>()
         extractUsedComponents(page.structure, usedComponents)
 
-        const imports = []
+        const imports: string[] = []
         usedComponents.forEach(comp => {
           if (converterMap[comp]) {
             // Basic hack to extract just the import statement from the converter map string
@@ -109,9 +109,10 @@ export async function POST(req: Request) {
           code: code,
           timestamp: Date.now()
         })
-      } catch (pageError: any) {
+      } catch (pageError: unknown) {
         const failingPageName = page?.title || page?.path || "unknown"
-        throw new Error(`Failed to convert page "${failingPageName}": ${pageError?.message || "Unknown conversion error"}`)
+        const pageErrorMessage = pageError instanceof Error ? pageError.message : "Unknown conversion error"
+        throw new Error(`Failed to convert page "${failingPageName}": ${pageErrorMessage}`)
       }
     }
 
@@ -162,13 +163,15 @@ ${routeDefs}
     await logAiDebug('Orchestrator Success', { generatedFilesCount: files.length })
 
     return NextResponse.json({ files })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Internal server error"
+    const errorStack = error instanceof Error ? error.stack : undefined
     console.error("Orchestrator Error:", error)
-    await logAiDebug('Orchestrator Fatal Error', { error: error.message, stack: error.stack })
+    await logAiDebug('Orchestrator Fatal Error', { error: errorMessage, stack: errorStack })
     return NextResponse.json(
       {
         message: "JSON to TypeScript conversion failed",
-        details: error?.message || "Internal server error",
+        details: errorMessage,
       },
       { status: 500 }
     )
