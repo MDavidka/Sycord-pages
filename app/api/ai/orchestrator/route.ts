@@ -68,6 +68,17 @@ export async function POST(req: Request) {
 
       const converted = convertTreeToTypeScript(uiTree, pageName)
       files.push({ name: fileName, code: converted.component, timestamp: Date.now() })
+
+      // Generate a logic file for any handler functions referenced in the page
+      if (converted.handlerNames.length > 0) {
+        const logicFileName = `src/lib/${pageName.toLowerCase()}-logic.ts`
+        const handlerStubs = converted.handlerNames
+          .map(h => `export function ${h}() {\n  // TODO: implement ${h}\n}`)
+          .join('\n\n')
+        const logicCode = `// Auto-generated logic handlers for ${pageName}\n\n${handlerStubs}\n`
+        files.push({ name: logicFileName, code: logicCode, timestamp: Date.now() })
+      }
+
       files.push({
         name: `src/cache/raw-plan-${pageName.toLowerCase()}.json`,
         code: JSON.stringify(page, null, 2),

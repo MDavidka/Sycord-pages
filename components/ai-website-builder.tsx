@@ -68,8 +68,9 @@ type GenerationPhase =
   | "clarifying"     // Step 3: Optional Questions
   | "structuring"    // Step 4: Structure / sitemap
   | "integrating"    // Step 5: Integration check
-  | "building"       // Step 6: Content & Build
-  | "deploying"      // Step 7: Review & Deploy
+  | "converting"     // Step 6: Convert raw JSON to TypeScript
+  | "building"       // Step 7: Content & Build
+  | "deploying"      // Step 8: Review & Deploy
   | "done"
   | "fixing"         // Auto-fix compatibility
 
@@ -222,12 +223,13 @@ const StepIndicator = ({ phase, progress, currentFile }: {
     clarifying:  { label: "Clarifying" },
     structuring: { label: "Structuring" },
     integrating: { label: "Integrating" },
+    converting:  { label: "Converting" },
     building:    { label: "Building" },
     deploying:   { label: "Deploying" },
     fixing:      { label: "Fixing" },
   }
 
-  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying", "fixing"]
+  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "converting", "building", "deploying", "fixing"]
   if (!displayable.includes(phase)) return null
 
   const config = phaseConfig[phase]
@@ -1274,7 +1276,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         path: p?.path || "/",
       })))
       setInstruction("Converting JSON to TypeScript...")
-      setStep("building")
+      setStep("converting")
 
       // 2. Call Orchestrator to convert JSON to TSX without AI
       const orchRes = await fetch('/api/ai/orchestrator', {
@@ -1288,6 +1290,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const orchestratedFiles: GeneratedPage[] = Array.isArray(orchData.files) ? orchData.files : []
       console.log("[DEBUG] Orchestrator Generated Files:", orchestratedFiles)
 
+      setStep("building")
       setInstruction(progressInstruction(0, orchestratedFiles.length))
 
       // 3. Save generated files to project pages (and clear old ones)
@@ -1531,7 +1534,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                         <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
 
                         {/* Sitemap visualization (parsed from plan) */}
-                        {sitemap.length > 0 && (step === 'building' || step === 'done') && (
+                        {sitemap.length > 0 && (step === 'converting' || step === 'building' || step === 'done') && (
                             <SitemapVisualizer nodes={sitemap} />
                         )}
 
