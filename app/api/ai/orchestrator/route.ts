@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
+import { logAiDebug } from "@/lib/logger"
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -11,6 +12,8 @@ export async function POST(req: Request) {
 
   const body = await req.json()
   const { jsonPlan } = body
+
+  await logAiDebug('Orchestrator Request', { pagesCount: Array.isArray(jsonPlan) ? jsonPlan.length : 'invalid' })
 
   if (!jsonPlan || !Array.isArray(jsonPlan)) {
     return NextResponse.json({ message: "Valid jsonPlan array is required" }, { status: 400 })
@@ -35,6 +38,7 @@ export async function POST(req: Request) {
 
     // Convert a JSON node to JSX string
     function jsonToJsx(node: any): string {
+      if (!node) return ""
       if (typeof node === "string") return `{\`${node}\`}`
       if (node.text) return node.text
 
@@ -51,7 +55,7 @@ export async function POST(req: Request) {
           .join(" ")
       }
 
-      const hasChildren = node.children && node.children.length > 0
+      const hasChildren = Array.isArray(node.children) && node.children.length > 0
 
       if (!hasChildren) {
         return `<${Comp} ${propsStr} />`
@@ -63,10 +67,10 @@ export async function POST(req: Request) {
 
     function extractUsedComponents(node: any, set: Set<string>) {
       if (!node) return
-      if (node.component && node.component[0] === node.component[0].toUpperCase()) {
+      if (typeof node.component === "string" && node.component[0] === node.component[0].toUpperCase()) {
         set.add(node.component)
       }
-      if (node.children) {
+      if (node.children && Array.isArray(node.children)) {
         node.children.forEach((c: any) => extractUsedComponents(c, set))
       }
     }
@@ -97,7 +101,7 @@ export async function POST(req: Request) {
 
       const jsx = jsonToJsx(page.structure)
 
-      const code = `${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
+      const code = `import React from 'react'\n${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
 
       files.push({
         name: fileName,
@@ -150,9 +154,12 @@ ${routeDefs}
       timestamp: Date.now()
     })
 
+    await logAiDebug('Orchestrator Success', { generatedFilesCount: files.length })
+
     return NextResponse.json({ files })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Orchestrator Error:", error)
+    await logAiDebug('Orchestrator Fatal Error', { error: error.message, stack: error.stack })
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }
