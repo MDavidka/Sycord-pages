@@ -946,11 +946,16 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   }
 
   const runJsonConverter = async (jsonPlan: JsonPlanPage[]) => {
-    const orchRes = await fetch('/api/ai/orchestrator', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonPlan })
-    })
+    let orchRes: Response
+    try {
+      orchRes = await fetch('/api/ai/orchestrator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonPlan })
+      })
+    } catch (error: unknown) {
+      throw new Error(`JSON to TypeScript conversion request failed: ${getErrorMessage(error, "Network error")}`)
+    }
 
     if (!orchRes.ok) {
       const reason = await extractApiErrorMessage(
@@ -977,7 +982,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: "assistant",
-        content: `Converter test passed. Generated ${orchData.files.length} files.`
+        content: `Converter test passed. Generated ${orchData.files.length} pages.`
       }])
     } catch (err: unknown) {
       setError(`Converter test failed: ${getErrorMessage(err, "Unknown converter error")}`)
