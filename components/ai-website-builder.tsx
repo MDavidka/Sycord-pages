@@ -965,7 +965,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const testJsonConverter = async () => {
     if (!latestJsonPlan || latestJsonPlan.length === 0) {
-      setError("No JSON plan available. Please generate a website plan first before testing the converter.")
+      setError("No JSON plan available. Generate a website plan first.")
       return
     }
 
@@ -977,7 +977,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: "assistant",
-        content: `Converter test passed. Generated ${Array.isArray(orchData.files) ? orchData.files.length : 0} files.`
+        content: `Converter test passed. Generated ${orchData.files.length} files.`
       }])
     } catch (err: unknown) {
       setError(`Converter test failed: ${getErrorMessage(err, "Unknown converter error")}`)

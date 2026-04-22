@@ -77,6 +77,9 @@ export async function POST(req: Request) {
 
     // Convert each page in the JSON Plan into a React TSX file
     for (const [pageIndex, page] of jsonPlan.entries()) {
+      if (!page || typeof page !== "object") {
+        throw new Error(`Invalid page payload at index ${pageIndex}`)
+      }
       try {
         const pageName = page.title ? page.title.replace(/\s+/g, '') : "Page"
         const path = page.path || `/${pageName.toLowerCase()}`
@@ -110,7 +113,7 @@ export async function POST(req: Request) {
           timestamp: Date.now()
         })
       } catch (pageError: unknown) {
-        const failingPageName = page?.title || page?.path || `unknown (index: ${pageIndex})`
+        const failingPageName = page.title || page.path || `unknown (index: ${pageIndex})`
         const pageErrorMessage = pageError instanceof Error ? pageError.message : "Unknown conversion error"
         throw new Error(`Failed to convert page "${failingPageName}": ${pageErrorMessage}`)
       }
