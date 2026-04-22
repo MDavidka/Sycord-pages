@@ -273,6 +273,8 @@ const HTML_TAGS = new Set([
   'div', 'span', 'p', 'a', 'button', 'input', 'textarea', 'label', 'form',
   'section', 'article', 'main', 'header', 'footer', 'nav', 'aside',
   'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img',
+  'table', 'thead', 'tbody', 'tr', 'td', 'th', 'select', 'option',
+  'video', 'audio', 'canvas',
 ])
 
 // ─── REGEX ────────────────────────────────────────────────────────────────────

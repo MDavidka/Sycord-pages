@@ -5,7 +5,7 @@ import { logAiDebug } from "@/lib/logger"
 import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter"
 
 function toPascalCase(input: string): string {
-  return (
+  const candidate = (
     input
       .replace(/[^A-Za-z0-9]+/g, " ")
       .trim()
@@ -14,6 +14,7 @@ function toPascalCase(input: string): string {
       .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join("") || "GeneratedPage"
   )
+  return /^[A-Za-z_]/.test(candidate) ? candidate : `Page${candidate}`
 }
 
 function toNode(node: any): UINode {
