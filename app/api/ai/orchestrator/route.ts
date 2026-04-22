@@ -101,7 +101,7 @@ export async function POST(req: Request) {
 
       const jsx = jsonToJsx(page.structure)
 
-      const code = `${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
+      const code = `import React from 'react'\n${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
 
       files.push({
         name: fileName,
