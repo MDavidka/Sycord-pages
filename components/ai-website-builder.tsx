@@ -1566,28 +1566,41 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                             </div>
                         )}
 
-                        {/* Error Display */}
-                        {error && (
-                            <div className="mt-4 flex items-start gap-2.5">
-                                <Bug className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-red-400">{error}</p>
-                                    <Button
-                                        className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline underline-offset-2 h-auto p-0 min-w-0"
-                                        onClick={() => setStep('idle')}
-                                    >
-                                        Reset
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
                         {/* Scroll anchor */}
                         <div ref={chatBottomRef} />
                     </div>
                 )}
             </div>
         </div>
+
+        {/* Global Warning Box */}
+        {error && (
+            <div className="mx-auto w-full max-w-2xl px-3 sm:px-4 md:px-0 mb-2 relative z-20">
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                    <div className="flex items-start gap-2.5">
+                        <Bug className="h-4 w-4 shrink-0 text-amber-300 mt-0.5" />
+                        <div>
+                            <p className="text-xs uppercase tracking-wide text-amber-300/90">Warning</p>
+                            <p className="text-sm text-amber-100">{error}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            className="text-xs text-amber-200 hover:text-white h-auto p-0 min-w-0 underline underline-offset-2"
+                            onClick={() => setStep('idle')}
+                        >
+                            Reset
+                        </Button>
+                        <Button
+                            className="text-xs text-amber-200/80 hover:text-white h-auto p-0 min-w-0"
+                            onClick={() => setError(null)}
+                        >
+                            Dismiss
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Input Bar — always at bottom */}
         <div className="w-full relative z-20">
