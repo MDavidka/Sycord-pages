@@ -1233,29 +1233,44 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setStep("planning")
     setActiveFile(undefined)
     setActiveFileUsedFor(undefined)
+    setDeploySuccess(false)
+    setDeployResult(null)
 
     try {
-      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider);
+      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider)
+
+      const progressInstruction = (done: number, total: number) => {
+        const doneMarkers = Array.from({ length: done }, () => "[Done]")
+        const pendingMarkers = Array.from({ length: Math.max(total - done, 0) }, (_, idx) => `[${done + idx + 1}]`)
+        return [...doneMarkers, ...pendingMarkers].join(" ")
+      }
+
       // 1. Call Architect to get JSON structure
       const archRes = await fetch('/api/ai/architect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel })
-      });
+        body: JSON.stringify({
+          prompt: input + attachmentNote,
+          model: { id: "openai/gpt-oss-20b:free", provider: "OpenRouter" }
+        })
+      })
 
-      if (!archRes.ok) throw new Error("Architect generation failed");
-      const archData = await archRes.json();
-      console.log("[DEBUG] Architect JSON Plan:", archData.plan);
+      if (!archRes.ok) throw new Error("Architect generation failed")
+      const archData = await archRes.json()
+      console.log("[DEBUG] Architect JSON Plan:", archData.plan)
 
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "I have created the UI structure as JSON. Now converting to code without AI...",
+        content: "I generated a strict raw JSON plan. Converting it to TypeScript now...",
         isIntermediate: true
-      }]);
+      }])
 
-      setSitemap(archData.plan.map((p: any) => ({ name: p.title || p.path, path: p.path, type: 'file' })))
-      setInstruction("Converting to TypeScript...")
+      setSitemap((archData.plan || []).map((p: any) => ({
+        page: p?.title || p?.path || "Page",
+        path: p?.path || "/",
+      })))
+      setInstruction("Converting JSON to TypeScript...")
       setStep("building")
 
       // 2. Call Orchestrator to convert JSON to TSX without AI
@@ -1263,25 +1278,68 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonPlan: archData.plan })
-      });
+      })
 
-      if (!orchRes.ok) throw new Error("Code orchestration failed");
-      const orchData = await orchRes.json();
-      console.log("[DEBUG] Orchestrator Generated Files:", orchData.files);
+      if (!orchRes.ok) throw new Error("Code orchestration failed")
+      const orchData = await orchRes.json()
+      const orchestratedFiles: GeneratedPage[] = Array.isArray(orchData.files) ? orchData.files : []
+      console.log("[DEBUG] Orchestrator Generated Files:", orchestratedFiles)
 
-      setGeneratedPages(orchData.files);
+      setInstruction(progressInstruction(0, orchestratedFiles.length))
 
+      // 3. Save generated files to project pages (and clear old ones)
+      await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
+      const savedPages: GeneratedPage[] = []
+      for (let i = 0; i < orchestratedFiles.length; i++) {
+        const file = orchestratedFiles[i]
+        setActiveFile(file.name)
+        setInstruction(progressInstruction(i, orchestratedFiles.length))
+        await fetch(`/api/projects/${projectId}/pages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, content: file.code, usedFor: "AI generation" }),
+        })
+        savedPages.push({ ...file, timestamp: Date.now() })
+        setGeneratedPages([...savedPages])
+        setInstruction(progressInstruction(i + 1, orchestratedFiles.length))
+      }
+      setActiveFile(undefined)
+
+      // 4. Build/deploy to runner
       setMessages(prev => [...prev, {
         id: (Date.now() + 2).toString(),
         role: "assistant",
-        content: "Files have been successfully generated based on the architecture plan."
-      }]);
+        content: "Files generated and saved. Starting build/deploy on runner..."
+      }])
+      setStep("deploying")
+      setInstruction("Deploying to Flask runner...")
 
-      setStep("done");
-      setDeploySuccess(true); // For UI visual simulation
+      const deployRes = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      })
+      const deployData = await deployRes.json()
+      if (!deployRes.ok || !deployData?.success) {
+        throw new Error(deployData?.error || "Runner deployment failed")
+      }
+
+      setDeploySuccess(true)
+      setDeployResult(deployData)
+      if (deployData.repoId) {
+        setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
+      }
+
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 3).toString(),
+        role: "assistant",
+        content: "Build pipeline finished and deployed successfully."
+      }])
+
+      setStep("done")
     } catch (err: any) {
-      setError(err.message);
-      setStep("idle");
+      setError(err.message)
+      setStep("idle")
     }
   }
 
