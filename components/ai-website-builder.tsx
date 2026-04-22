@@ -866,6 +866,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [step, setStep] = useState<GenerationPhase>("idle")
   const [currentPlan, setCurrentPlan] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [latestJsonPlan, setLatestJsonPlan] = useState<any[] | null>(null)
+  const [isTestingConverter, setIsTestingConverter] = useState(false)
 
   const [activeFile, setActiveFile] = useState<string | undefined>(undefined)
   const [activeFileUsedFor, setActiveFileUsedFor] = useState<string | undefined>(undefined)
@@ -918,6 +920,56 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   // Track question count to limit to 2 questions before auto-proceeding
   const [questionCount, setQuestionCount] = useState(0)
+
+  const extractApiErrorMessage = async (res: Response, fallback: string) => {
+    try {
+      const data = await res.json()
+      if (typeof data?.details === "string" && data.details.trim()) return data.details
+      if (typeof data?.message === "string" && data.message.trim()) return data.message
+      if (typeof data?.error === "string" && data.error.trim()) return data.error
+    } catch {
+      // Ignore parse errors and use fallback.
+    }
+    return fallback
+  }
+
+  const runJsonConverter = async (jsonPlan: any[]) => {
+    const orchRes = await fetch('/api/ai/orchestrator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonPlan })
+    })
+
+    if (!orchRes.ok) {
+      const reason = await extractApiErrorMessage(orchRes, "Code orchestration failed")
+      throw new Error(reason)
+    }
+
+    return await orchRes.json()
+  }
+
+  const testJsonConverter = async () => {
+    if (!latestJsonPlan || latestJsonPlan.length === 0) {
+      setError("No JSON plan available to test yet. Generate a plan first.")
+      return
+    }
+
+    setIsTestingConverter(true)
+    setError(null)
+    try {
+      const orchData = await runJsonConverter(latestJsonPlan)
+      setGeneratedPages(orchData.files || [])
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: `Converter test passed. Generated ${Array.isArray(orchData.files) ? orchData.files.length : 0} files.`
+      }])
+    } catch (err: any) {
+      setError(`Converter test failed: ${err?.message || "Unknown converter error"}`)
+    } finally {
+      setIsTestingConverter(false)
+    }
+  }
 
   /** Parse sitemap nodes from the plan instruction text */
   const parseSitemap = (planText: string) => {
@@ -1226,6 +1278,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setMessages(prev => [...prev, userMessage])
     setAttachments([])
     setError(null)
+    setLatestJsonPlan(null)
     setSitemap([])
     setQuestionCount(0)
     setGeneratedPages([])
@@ -1246,6 +1299,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       if (!archRes.ok) throw new Error("Architect generation failed");
       const archData = await archRes.json();
       console.log("[DEBUG] Architect JSON Plan:", archData.plan);
+      setLatestJsonPlan(Array.isArray(archData.plan) ? archData.plan : null)
 
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
@@ -1259,14 +1313,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setStep("building")
 
       // 2. Call Orchestrator to convert JSON to TSX without AI
-      const orchRes = await fetch('/api/ai/orchestrator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonPlan: archData.plan })
-      });
-
-      if (!orchRes.ok) throw new Error("Code orchestration failed");
-      const orchData = await orchRes.json();
+      const orchData = await runJsonConverter(archData.plan)
       console.log("[DEBUG] Orchestrator Generated Files:", orchData.files);
 
       setGeneratedPages(orchData.files);
@@ -1280,7 +1327,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setStep("done");
       setDeploySuccess(true); // For UI visual simulation
     } catch (err: any) {
-      setError(err.message);
+      setError(err?.message || "Generation failed");
       setStep("idle");
     }
   }
@@ -1505,6 +1552,23 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                 <Bug className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
                                 <div>
                                     <p className="text-sm text-red-400">{error}</p>
+                                    {latestJsonPlan && latestJsonPlan.length > 0 && (
+                                      <Button
+                                        type="button"
+                                        onClick={testJsonConverter}
+                                        disabled={isTestingConverter}
+                                        className="text-xs text-red-500/80 hover:text-red-300 mt-2 underline underline-offset-2 h-auto p-0 min-w-0"
+                                      >
+                                        {isTestingConverter ? (
+                                          <>
+                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                            Testing converter...
+                                          </>
+                                        ) : (
+                                          "Test JSON converter"
+                                        )}
+                                      </Button>
+                                    )}
                                     <Button
                                         className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline underline-offset-2 h-auto p-0 min-w-0"
                                         onClick={() => setStep('idle')}

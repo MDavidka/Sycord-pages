@@ -77,37 +77,42 @@ export async function POST(req: Request) {
 
     // Convert each page in the JSON Plan into a React TSX file
     for (const page of jsonPlan) {
-      const pageName = page.title ? page.title.replace(/\s+/g, '') : "Page"
-      const path = page.path || `/${pageName.toLowerCase()}`
-      const fileName = `src/pages${path === '/' ? '/index' : path}.tsx`
+      try {
+        const pageName = page.title ? page.title.replace(/\s+/g, '') : "Page"
+        const path = page.path || `/${pageName.toLowerCase()}`
+        const fileName = `src/pages${path === '/' ? '/index' : path}.tsx`
 
-      const usedComponents = new Set<string>()
-      extractUsedComponents(page.structure, usedComponents)
+        const usedComponents = new Set<string>()
+        extractUsedComponents(page.structure, usedComponents)
 
-      const imports = []
-      usedComponents.forEach(comp => {
-        if (converterMap[comp]) {
-           // Basic hack to extract just the import statement from the converter map string
-           const match = converterMap[comp].match(/import\s+.*?\s+from\s+['"].*?['"];?/)
-           if (match) imports.push(match[0])
-        } else {
-           // Fallback
-           imports.push(`import { ${comp} } from '@/components/ui/${comp.toLowerCase()}'`)
-        }
-      })
+        const imports = []
+        usedComponents.forEach(comp => {
+          if (converterMap[comp]) {
+            // Basic hack to extract just the import statement from the converter map string
+            const match = converterMap[comp].match(/import\s+.*?\s+from\s+['"].*?['"];?/)
+            if (match) imports.push(match[0])
+          } else {
+            // Fallback
+            imports.push(`import { ${comp} } from '@/components/ui/${comp.toLowerCase()}'`)
+          }
+        })
 
-      // Deduplicate imports
-      const uniqueImports = [...new Set(imports)]
+        // Deduplicate imports
+        const uniqueImports = [...new Set(imports)]
 
-      const jsx = jsonToJsx(page.structure)
+        const jsx = jsonToJsx(page.structure)
 
-      const code = `import React from 'react'\n${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
+        const code = `import React from 'react'\n${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
 
-      files.push({
-        name: fileName,
-        code: code,
-        timestamp: Date.now()
-      })
+        files.push({
+          name: fileName,
+          code: code,
+          timestamp: Date.now()
+        })
+      } catch (pageError: any) {
+        const failingPageName = page?.title || page?.path || "unknown"
+        throw new Error(`Failed to convert page "${failingPageName}": ${pageError?.message || "Unknown conversion error"}`)
+      }
     }
 
     // Save the raw JSON plan as well
@@ -160,6 +165,12 @@ ${routeDefs}
   } catch (error: any) {
     console.error("Orchestrator Error:", error)
     await logAiDebug('Orchestrator Fatal Error', { error: error.message, stack: error.stack })
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        message: "JSON to TypeScript conversion failed",
+        details: error?.message || "Internal server error",
+      },
+      { status: 500 }
+    )
   }
 }
