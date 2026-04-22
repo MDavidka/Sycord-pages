@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     }
 
     if (!apiKey) {
+      await logAiFailure('architect', { reason: 'api key not configured', provider: model?.provider })
       return NextResponse.json({ message: "API key not configured" }, { status: 500 })
     }
 
