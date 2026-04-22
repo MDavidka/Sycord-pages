@@ -1255,7 +1255,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }]);
 
       setSitemap(archData.plan.map((p: any) => ({ name: p.title || p.path, path: p.path, type: 'file' })))
-      setInstruction("Converting to TypeScript...")
+      setInstruction("Building files via deterministic orchestrator (no AI)...")
       setStep("building")
 
       // 2. Call Orchestrator to convert JSON to TSX without AI

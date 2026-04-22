@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { getSystemPrompts } from "@/lib/ai-prompts"
-import { logAiDebug } from "@/lib/logger"
+import { BUILDER_STRUCT_SCHEMA, getSystemPrompts, validatePlanStructure } from "@/lib/ai-prompts"
+import { logAiDebug, logAiFailure } from "@/lib/logger"
 
 // NOTE: Uses xAI API by default based on the model provided by frontend
 export async function POST(req: Request) {
@@ -17,11 +17,13 @@ export async function POST(req: Request) {
   await logAiDebug('Architect Request', { prompt, modelId: model?.id, provider: model?.provider })
 
   if (!prompt) {
+    await logAiFailure('architect', { reason: 'missing prompt' })
     return NextResponse.json({ message: "Prompt is required" }, { status: 400 })
   }
 
   try {
     const prompts = await getSystemPrompts()
+    const structSchemaText = JSON.stringify(BUILDER_STRUCT_SCHEMA, null, 2)
 
     let apiUrl = "https://api.x.ai/v1/chat/completions"
     let apiKey = process.env.XAI_API_KEY
@@ -38,7 +40,7 @@ export async function POST(req: Request) {
     const messages = [
       {
         role: "system",
-        content: `${prompts.builderPlan}\n\nHere is your UI Component Cheat Sheet (Available Components):\n${prompts.builderCheatSheet}`
+        content: `${prompts.builderPlan}\n\nSTRUCT SCHEME (STRICT):\n${structSchemaText}\n\nHere is your UI Component Cheat Sheet (Available Components):\n${prompts.builderCheatSheet}`
       },
       {
         role: "user",
@@ -62,7 +64,7 @@ export async function POST(req: Request) {
     if (!response.ok) {
       const errText = await response.text()
       console.error("Architect AI API Error:", errText)
-      await logAiDebug('Architect API Error', { status: response.status, errText })
+      await logAiFailure('architect', { reason: 'api', status: response.status, errText })
       return NextResponse.json({ message: "Architect API failed" }, { status: 500 })
     }
 
@@ -103,17 +105,22 @@ export async function POST(req: Request) {
       if (!Array.isArray(jsonPlan)) {
         jsonPlan = [jsonPlan];
       }
+      const validation = validatePlanStructure(jsonPlan)
+      if (!validation.valid) {
+        await logAiFailure('architect', { reason: 'struct schema validation', details: validation.reason, sample: jsonPlan?.[0] })
+        return NextResponse.json({ message: "AI output did not match the required struct scheme." }, { status: 422 })
+      }
       await logAiDebug('Architect Parse Success', { pages: jsonPlan.length })
     } catch (e: any) {
       console.error("Failed to parse Architect JSON:", e, content)
-      await logAiDebug('Architect Parse Error', { error: e.message, content })
+      await logAiFailure('architect', { reason: 'parse', error: e.message, content })
       return NextResponse.json({ message: "AI failed to generate a valid UI plan structure. Please try a different prompt or model." }, { status: 422 })
     }
 
     return NextResponse.json({ plan: jsonPlan })
   } catch (error: any) {
     console.error("Architect Error:", error)
-    await logAiDebug('Architect Fatal Error', { error: error.message, stack: error.stack })
+    await logAiFailure('architect', { reason: 'fatal', error: error.message, stack: error.stack })
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }
 }

@@ -30,15 +30,84 @@ if (!process.env.MONGO_URI) {
 
 import { DEFAULT_AI_BUILDER_CHEATSHEET, DEFAULT_HANDLING_CONVERTER_CHEATSHEET } from "./default-cheat-sheet"
 
+export const BUILDER_STRUCT_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    required: ["path", "title", "structure"],
+    properties: {
+      path: { type: "string", minLength: 1 },
+      title: { type: "string", minLength: 1 },
+      description: { type: "string" },
+      structure: {
+        $ref: "#/definitions/node"
+      }
+    },
+    additionalProperties: false
+  },
+  definitions: {
+    node: {
+      type: "object",
+      required: ["component"],
+      properties: {
+        component: { type: "string" },
+        props: { type: "object", additionalProperties: true },
+        text: { type: "string" },
+        children: {
+          type: "array",
+          items: { $ref: "#/definitions/node" }
+        }
+      },
+      additionalProperties: false
+    }
+  }
+}
+
+function isValidStructNode(node: any): boolean {
+  if (!node || typeof node !== "object") return false
+  if (typeof node.component !== "string" || node.component.length === 0) return false
+  if (node.props && (typeof node.props !== "object" || Array.isArray(node.props))) return false
+  if (node.text && typeof node.text !== "string") return false
+  if (node.children) {
+    if (!Array.isArray(node.children)) return false
+    return node.children.every((child: any) => isValidStructNode(child))
+  }
+  return true
+}
+
+export function validatePlanStructure(plan: any): { valid: boolean; reason?: string } {
+  if (!Array.isArray(plan)) {
+    return { valid: false, reason: "Plan must be an array" }
+  }
+
+  for (const page of plan) {
+    if (!page || typeof page !== "object") {
+      return { valid: false, reason: "Each page must be an object" }
+    }
+    if (typeof page.path !== "string" || page.path.length === 0) {
+      return { valid: false, reason: "Each page requires a non-empty path" }
+    }
+    if (typeof page.title !== "string" || page.title.length === 0) {
+      return { valid: false, reason: "Each page requires a non-empty title" }
+    }
+    if (!isValidStructNode(page.structure)) {
+      return { valid: false, reason: "Each page requires a valid structure tree" }
+    }
+  }
+
+  return { valid: true }
+}
+
 export const DEFAULT_BUILDER_PLAN = `You are an expert Frontend UI/UX Architect. Your goal is to generate a JSON structure representing a multi-page Vite + React + Tailwind + Lucide Icons web application based on the user's request.
 
 You MUST follow these strict rules:
 1. ONLY output valid JSON. No markdown, no explanations, no wrappers.
 2. The JSON must be an array of page objects.
-3. Each page object must have:
-   - "path": e.g., "/", "/about", "/dashboard"
-   - "title": e.g., "Home", "About Us"
-   - "structure": A nested object representing the UI component tree.
+3. You MUST match this STRUCT SCHEME (JSON Schema) exactly:
+${JSON.stringify(BUILDER_STRUCT_SCHEMA, null, 2)}
+   - "path": e.g., "/", "/about", "/dashboard" (string)
+   - "title": e.g., "Home", "About Us" (string)
+   - "structure": A nested object representing the UI component tree (see schema above).
 
 You MUST only use the components listed in your Cheat Sheet.
 

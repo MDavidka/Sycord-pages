@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
-import { logAiDebug } from "@/lib/logger"
+import { validatePlanStructure } from "@/lib/ai-prompts"
+import { logAiDebug, logAiFailure } from "@/lib/logger"
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -16,11 +17,18 @@ export async function POST(req: Request) {
   await logAiDebug('Orchestrator Request', { pagesCount: Array.isArray(jsonPlan) ? jsonPlan.length : 'invalid' })
 
   if (!jsonPlan || !Array.isArray(jsonPlan)) {
+    await logAiFailure('orchestrator', { reason: 'invalid payload', receivedType: typeof jsonPlan })
     return NextResponse.json({ message: "Valid jsonPlan array is required" }, { status: 400 })
   }
 
   try {
     const prompts = await getSystemPrompts()
+
+    const validation = validatePlanStructure(jsonPlan)
+    if (!validation.valid) {
+      await logAiFailure('orchestrator', { reason: 'struct schema validation', details: validation.reason, sample: jsonPlan?.[0] })
+      return NextResponse.json({ message: "jsonPlan does not match the required struct scheme" }, { status: 422 })
+    }
 
     // The Handling Converter cheat sheet maps "ComponentName" -> "Import/Export Code"
     let converterMap = {}
@@ -159,6 +167,7 @@ ${routeDefs}
     return NextResponse.json({ files })
   } catch (error: any) {
     console.error("Orchestrator Error:", error)
+    await logAiFailure('orchestrator', { reason: 'fatal', error: error.message, stack: error.stack })
     await logAiDebug('Orchestrator Fatal Error', { error: error.message, stack: error.stack })
     return NextResponse.json({ message: "Internal server error" }, { status: 500 })
   }

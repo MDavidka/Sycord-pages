@@ -30,3 +30,30 @@ export async function logAiDebug(action: string, details: any) {
     console.error('Failed to log to database:', dbError);
   }
 }
+
+export async function logAiFailure(generator: string, details: any) {
+  const timestamp = new Date().toISOString();
+  const logData = { timestamp, generator, details, level: 'error' };
+
+  try {
+    const logDir = path.join(process.cwd(), 'main', 'log');
+    const logFile = path.join(logDir, `${generator}-failures.log`);
+
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    const logString = `[${timestamp}] [${generator}] ${JSON.stringify(details)}\n`;
+    fs.appendFileSync(logFile, logString, 'utf8');
+  } catch (fsError) {
+    console.error('Failed to log failure to file:', fsError);
+  }
+
+  try {
+    const client = await clientPromise;
+    const db = client.db();
+    await db.collection('ai_failure_logs').insertOne(logData);
+  } catch (dbError) {
+    console.error('Failed to log failure to database:', dbError);
+  }
+}
