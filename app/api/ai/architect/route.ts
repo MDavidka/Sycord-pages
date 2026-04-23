@@ -43,11 +43,11 @@ export async function POST(req: Request) {
       role: "system" as const,
       content: `${prompts.builderPlan}
 
-The downstream pipeline builds a complete Vite + React + TypeScript project with react-router-dom routing. Your "Plan" step produces the sitemap + per-page feature list that Style and Logic stages will consume. Do NOT emit any UI tree, component, or code — the later stages handle that.
+The downstream pipeline builds a complete Vite + React + TypeScript project with react-router-dom routing and a shared <SiteNav /> that auto-links every route. Your "Plan" step produces the sitemap + per-page feature list that Style and Logic stages will consume. Do NOT emit any UI tree, component, or code — the later stages handle that.
 
 Return strictly a JSON array of page objects, each with:
-- "path":   URL path starting with "/" (e.g. "/", "/about", "/contact"). First entry SHOULD be "/".
-- "title":  short human-readable page title (used as the React component name).
+- "path":   URL path starting with "/" (e.g. "/", "/about", "/contact"). First entry MUST be "/".
+- "title":  short human-readable page title (used as the React component name and shown in the shared nav).
 - "description": 1–2 sentence description of the page's purpose, key sections and overall tone.
 - "features": array of short strings describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Logout button clears localStorage and redirects to /", "Mobile nav toggle"). Keep each feature concrete enough for a developer to implement.
 
@@ -57,7 +57,7 @@ No markdown, no prose, no wrapping object — just the JSON array.`,
       role: "user" as const,
       content: `Plan a multi-page website for: ${prompt}
 
-Return only the JSON array described above. Keep the plan to 3–6 pages unless the brief clearly requires more.`,
+Return only the JSON array described above. The sitemap MUST contain at least 3 distinct routes (ideally 4–6) so the shared <SiteNav /> has something to link to. Always include "/" as the first entry, plus enough additional pages (e.g. /about, /pricing, /contact, /docs, /blog) to give the site real structure.`,
     },
   ]
 
@@ -111,6 +111,29 @@ Return only the JSON array described above. Keep the plan to 3–6 pages unless 
         ? p.features.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
         : undefined,
     }))
+
+  // Enforce "/" as the first entry so SiteNav renders it at position 0.
+  const rootIdx = plan.findIndex((p) => p.path === "/")
+  if (rootIdx > 0) {
+    const [root] = plan.splice(rootIdx, 1)
+    plan.unshift(root)
+  } else if (rootIdx < 0 && plan.length > 0) {
+    plan[0] = { ...plan[0], path: "/" }
+  }
+
+  // Guarantee a minimum of 3 routes so the generated site actually has
+  // multi-page navigation (the user asked for pagination + reachable routes).
+  const defaults: PlanEntry[] = [
+    { path: "/", title: "Home", description: "Landing page with hero, highlights, and call-to-action linking to the rest of the site." },
+    { path: "/about", title: "About", description: "Short story of the brand, mission and team; ends with a CTA back to Home or Contact." },
+    { path: "/contact", title: "Contact", description: "Contact form with name / email / message plus a card summarizing other contact channels." },
+  ]
+  for (const d of defaults) {
+    if (plan.length >= 3) break
+    if (!plan.some((p) => p.path === d.path)) {
+      plan.push(d)
+    }
+  }
 
   await logAiDebug("Architect Parse Success", { pages: plan.length })
   return NextResponse.json({ plan })

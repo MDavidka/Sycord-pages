@@ -15,33 +15,30 @@ export interface ScaffoldRoute {
   componentName: string
 }
 
-/**
- * Full list of shadcn/ui components vendored into the generated Vite project.
- * Must be kept in sync with SUPPORTED_COMPONENTS in sample-conveter.ts —
- * every file here corresponds to 1+ supported component names.
- */
-const VENDORED_UI_FILES: string[] = [
-  "alert-dialog.tsx",
-  "alert.tsx",
-  "avatar.tsx",
-  "badge.tsx",
-  "button.tsx",
-  "card.tsx",
-  "dialog.tsx",
-  "dropdown-menu.tsx",
-  "input.tsx",
-  "label.tsx",
-  "progress.tsx",
-  "sheet.tsx",
-  "skeleton.tsx",
-  "switch.tsx",
-  "textarea.tsx",
-]
+// The scaffold ships EVERY .tsx file from this repo's `components/ui/`
+// directory — see discoverVendoredUIFiles(). Kept in sync with the full
+// shadcn/ui set (45+ components). The `sample-conveter.ts` SUPPORTED_COMPONENTS
+// and IMPORT_MAP must cover the same list so the AI Style stage can pick any
+// of them without falling back to <div>.
+function discoverVendoredUIFiles(): string[] {
+  const dir = path.join(process.cwd(), "components", "ui")
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((n) => n.endsWith(".tsx"))
+      .sort()
+  } catch {
+    return []
+  }
+}
 
 // ---------------------------------------------------------------------------
 // package.json
 // ---------------------------------------------------------------------------
 
+// Generated Vite project's package.json. Deps cover all 45+ vendored shadcn
+// components — picking a lower-common-denominator is easier than trying to
+// prune per-site, and the whole thing tree-shakes at build time anyway.
 const PACKAGE_JSON = {
   name: "generated-site",
   private: true,
@@ -56,14 +53,46 @@ const PACKAGE_JSON = {
     react: "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
+    // Radix primitives powering the shadcn components.
+    "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
+    "@radix-ui/react-aspect-ratio": "^1.1.1",
     "@radix-ui/react-avatar": "^1.1.1",
+    "@radix-ui/react-checkbox": "^1.1.3",
+    "@radix-ui/react-collapsible": "^1.1.2",
+    "@radix-ui/react-context-menu": "^2.2.4",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-dropdown-menu": "^2.1.4",
+    "@radix-ui/react-hover-card": "^1.1.4",
     "@radix-ui/react-label": "^2.1.1",
+    "@radix-ui/react-menubar": "^1.1.4",
+    "@radix-ui/react-navigation-menu": "^1.2.3",
+    "@radix-ui/react-popover": "^1.1.4",
     "@radix-ui/react-progress": "^1.1.1",
+    "@radix-ui/react-radio-group": "^1.2.2",
+    "@radix-ui/react-scroll-area": "^1.2.2",
+    "@radix-ui/react-select": "^2.1.4",
+    "@radix-ui/react-separator": "^1.1.1",
+    "@radix-ui/react-slider": "^1.2.2",
     "@radix-ui/react-slot": "^1.1.1",
     "@radix-ui/react-switch": "^1.1.2",
+    "@radix-ui/react-tabs": "^1.1.2",
+    "@radix-ui/react-toggle": "^1.1.1",
+    "@radix-ui/react-toggle-group": "^1.1.1",
+    "@radix-ui/react-tooltip": "^1.1.6",
+    // Other shadcn-component deps.
+    "@hookform/resolvers": "^3.9.1",
+    cmdk: "^1.0.4",
+    "date-fns": "^4.1.0",
+    "embla-carousel-react": "^8.5.1",
+    "input-otp": "^1.4.1",
+    "react-day-picker": "^9.4.1",
+    "react-hook-form": "^7.54.0",
+    "react-resizable-panels": "^2.1.7",
+    sonner: "^1.7.1",
+    vaul: "^1.1.2",
+    zod: "^3.24.1",
+    // Styling utilities.
     "class-variance-authority": "^0.7.1",
     clsx: "^2.1.1",
     "tailwind-merge": "^2.5.5",
@@ -76,6 +105,7 @@ const PACKAGE_JSON = {
     autoprefixer: "^10.4.20",
     postcss: "^8.4.49",
     tailwindcss: "^3.4.16",
+    "tailwindcss-animate": "^1.0.7",
     typescript: "^5.6.3",
     vite: "^5.4.10",
   },
@@ -138,6 +168,7 @@ const TSCONFIG_NODE_JSON = `{
 `
 
 const TAILWIND_CONFIG_TS = `import type { Config } from 'tailwindcss'
+import tailwindcssAnimate from 'tailwindcss-animate'
 
 const config: Config = {
   darkMode: 'class',
@@ -183,15 +214,47 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Sidebar-scoped tokens used by components/ui/sidebar.tsx.
+        sidebar: {
+          DEFAULT: 'hsl(var(--sidebar-background))',
+          foreground: 'hsl(var(--sidebar-foreground))',
+          primary: 'hsl(var(--sidebar-primary))',
+          'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+          accent: 'hsl(var(--sidebar-accent))',
+          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+          border: 'hsl(var(--sidebar-border))',
+          ring: 'hsl(var(--sidebar-ring))',
+        },
+        chart: {
+          '1': 'hsl(var(--chart-1))',
+          '2': 'hsl(var(--chart-2))',
+          '3': 'hsl(var(--chart-3))',
+          '4': 'hsl(var(--chart-4))',
+          '5': 'hsl(var(--chart-5))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+      },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssAnimate],
 }
 
 export default config
@@ -205,68 +268,109 @@ const POSTCSS_CONFIG_JS = `export default {
 }
 `
 
+// Locked theme: pure white background + #101010 (HSL 0 0% 6.3%) for dark.
+// The AI pipeline never emits custom colour tokens — this ensures every
+// generated site matches the Sycord UI (either full-white or #101010 dark).
 const INDEX_CSS = `@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Pure white theme */
+    --background: 0 0% 100%;                 /* #ffffff */
+    --foreground: 0 0% 6.3%;                 /* #101010 text on white */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 0 0% 6.3%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --popover-foreground: 0 0% 6.3%;
+    --primary: 0 0% 6.3%;                    /* #101010 */
+    --primary-foreground: 0 0% 100%;         /* white on #101010 */
+    --secondary: 0 0% 96%;                   /* very light grey */
+    --secondary-foreground: 0 0% 6.3%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 6.3%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 6.3%;
     --radius: 0.5rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 6.3%;
+    --sidebar-primary: 0 0% 6.3%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 6.3%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 0 0% 6.3%;
+    --chart-1: 0 0% 6.3%;
+    --chart-2: 0 0% 40%;
+    --chart-3: 0 0% 60%;
+    --chart-4: 0 0% 80%;
+    --chart-5: 0 0% 90%;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
+    /* #101010 dark theme */
+    --background: 0 0% 6.3%;                 /* #101010 */
+    --foreground: 0 0% 98%;                  /* near-white */
+    --card: 0 0% 6.3%;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
+    --popover: 0 0% 6.3%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
+    --primary: 0 0% 98%;                     /* light on dark */
+    --primary-foreground: 0 0% 6.3%;
+    --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 12%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 63% 30%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 0 0% 83%;
+    --sidebar-background: 0 0% 6.3%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 6.3%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 0 0% 83%;
+    --chart-1: 0 0% 98%;
+    --chart-2: 0 0% 65%;
+    --chart-3: 0 0% 45%;
+    --chart-4: 0 0% 30%;
+    --chart-5: 0 0% 16%;
   }
 }
 
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground; font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  html, body { @apply bg-background text-foreground; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100vh;
+  }
 }
 `
 
+// Default to the dark theme so the generated site matches the Sycord UI.
+// Users can toggle via `document.documentElement.classList.toggle('dark')`.
 const MAIN_TSX = `import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
+
+if (typeof document !== 'undefined') {
+  document.documentElement.classList.add('dark')
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
@@ -319,13 +423,25 @@ function readVendoredUIFile(fileName: string): string | null {
 
 function vendorShadcnFiles(timestamp: number): ScaffoldFile[] {
   const files: ScaffoldFile[] = []
-  for (const name of VENDORED_UI_FILES) {
+  for (const name of discoverVendoredUIFiles()) {
     const code = readVendoredUIFile(name)
     if (code) {
       files.push({ name: `src/components/ui/${name}`, code, timestamp })
     }
   }
   return files
+}
+
+// The sidebar component imports `@/hooks/use-mobile`. We vendor it from the
+// repo so the generated project is fully self-contained.
+function vendorHooks(timestamp: number): ScaffoldFile[] {
+  const src = path.join(process.cwd(), "hooks", "use-mobile.ts")
+  try {
+    const code = fs.readFileSync(src, "utf-8")
+    return [{ name: "src/hooks/use-mobile.ts", code, timestamp }]
+  } catch {
+    return []
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -337,31 +453,60 @@ function buildAppTsx(routes: ScaffoldRoute[]): string {
     .map((r) => `import { ${r.componentName} } from '${r.importPath}'`)
     .join("\n")
 
-  // React Router route entries. The plan's "/" becomes the index route, others
-  // become their own <Route path="..." />.
   const routeEntries = routes
-    .map((r) => {
-      const routePath = r.path === "/" ? "/" : r.path
-      return `      <Route path="${routePath}" element={<${r.componentName} />} />`
-    })
+    .map((r) => `        <Route path="${r.path}" element={<${r.componentName} />} />`)
     .join("\n")
 
   const fallback = routes.length > 0
-    ? `      <Route path="*" element={<${routes[0].componentName} />} />`
-    : `      <Route path="*" element={<div className="p-8 text-center">Not found</div>} />`
+    ? `        <Route path="*" element={<${routes[0].componentName} />} />`
+    : `        <Route path="*" element={<div className="p-8 text-center">Not found</div>} />`
 
   return `import { Routes, Route } from 'react-router-dom'
+import { SiteNav } from './components/site-nav'
 ${imports}
 
 export default function App() {
   return (
-    <Routes>
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <SiteNav />
+      <main className="flex-1">
+        <Routes>
 ${routeEntries}
 ${fallback}
-    </Routes>
+        </Routes>
+      </main>
+    </div>
   )
 }
 `
+}
+
+// A minimal top-of-page nav linking every route in the plan. Using plain
+// shadcn Button variants + react-router Links — no custom colour tokens.
+function buildSiteNavTsx(routes: ScaffoldRoute[]): string {
+  const links = routes
+    .map(
+      (r) =>
+        `        <Link to="${r.path}"><Button variant="ghost" size="sm">${escapeJsxText(r.componentName)}</Button></Link>`,
+    )
+    .join("\n")
+  return `import { Link } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+
+export function SiteNav() {
+  return (
+    <nav className="w-full border-b border-border">
+      <div className="container mx-auto flex items-center gap-2 py-3">
+${links}
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function escapeJsxText(s: string): string {
+  return s.replace(/[{}]/g, "")
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +535,9 @@ export function buildViteScaffold(routes: ScaffoldRoute[]): ScaffoldFile[] {
     { name: "src/index.css", code: INDEX_CSS, timestamp: now },
     { name: "src/main.tsx", code: MAIN_TSX, timestamp: now },
     { name: "src/App.tsx", code: buildAppTsx(routes), timestamp: now },
+    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(routes), timestamp: now },
     { name: "src/lib/utils.ts", code: LIB_UTILS_TS, timestamp: now },
+    ...vendorHooks(now),
     ...vendorShadcnFiles(now),
   ]
 }

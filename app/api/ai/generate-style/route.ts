@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
+import { IMPORT_MAP } from "@/sample-conveter"
 import fs from "fs"
 import path from "path"
 
@@ -56,6 +57,22 @@ export async function POST(req: Request) {
   const generationGuide = readHelperFile("generation.md")
   const cheatSheet = readHelperFile("cheat_sheat.json")
 
+  // Build the component catalogue from IMPORT_MAP so the prompt always
+  // reflects what we actually ship. Group exports by file for readability.
+  const byFile = new Map<string, string[]>()
+  for (const [name, importPath] of Object.entries(IMPORT_MAP)) {
+    const group = byFile.get(importPath) ?? []
+    group.push(name)
+    byFile.set(importPath, group)
+  }
+  const catalogueLines = Array.from(byFile.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([file, names]) => {
+      const componentName = file.replace("@/components/ui/", "")
+      return `- ${componentName}: ${names.sort().join(", ")}`
+    })
+    .join("\n")
+
   const messages = [
     {
       role: "system" as const,
@@ -66,26 +83,24 @@ Your only job is to emit a single JSON UI tree describing the visual layout of O
 STRICT CONTRACT (from generation.md):
 ${generationGuide || "No generation.md available"}
 
-VENDORED COMPONENT SET — the generated project only ships these shadcn/ui components. Using anything else will cause the converter to silently demote the node to <div>, so prefer this list:
-- Button
-- Alert, AlertTitle, AlertDescription
-- AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel
-- Avatar, AvatarImage, AvatarFallback
-- Badge
-- Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter
-- Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose
-- DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuGroup, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem
-- Input
-- Label
-- Progress
-- Sheet, SheetTrigger, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription, SheetClose
-- Skeleton
-- Switch
-- Textarea
+COMPLETE SHADCN/UI COMPONENT SET (${Object.keys(IMPORT_MAP).length} components from ${byFile.size} files — the generated Vite project vendors ALL of them, so you may freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>):
+${catalogueLines}
 
-For layout use native HTML tags (div, span, p, h1–h6, a, img, ul, li, section, header, footer, main, nav, form). For navigation between generated pages, use standard <a href="/other-path"> anchors — the scaffold uses react-router-dom, and the BrowserRouter will intercept in-app links.
+THEME (locked):
+- The generated site uses ONLY two backgrounds: pure white (#ffffff in light mode) or #101010 (in dark mode). The scaffold defaults to dark mode.
+- Use ONLY shadcn tokens: bg-background, text-foreground, bg-card, bg-primary, text-primary-foreground, bg-muted, text-muted-foreground, border-border, bg-secondary, text-secondary-foreground, bg-accent, text-accent-foreground, bg-destructive, text-destructive-foreground.
+- NEVER use bg-blue-*, bg-slate-*, text-gray-*, bg-gradient-*, or any other hard-coded Tailwind color utility. Layout/spacing utilities (p-*, m-*, flex, grid, gap-*, w-*, h-*, max-w-*, rounded-*, shadow-*, text-xl, font-bold, etc.) are fine.
+- NEVER embed inline CSS (no style={{ color: "..."}}, no arbitrary-value classes like [color:#abc] or bg-[#abc]).
 
-Full shadcn reference (for prop shapes & examples):
+COMPONENT-ONLY RULE:
+- Every visible text string MUST live inside a shadcn component that renders typography (CardTitle, CardDescription, Label, Badge, Button, AlertTitle, AlertDescription, PaginationLink, etc.) OR inside semantic HTML headings/paragraphs (h1–h6, p). No bare strings inside <div>/<span> — wrap them.
+- Raw HTML is limited to LAYOUT ONLY: div, section, main, header, footer, nav, aside, ul, ol, li, form, h1..h6, p, a, img, label. Anything interactive (buttons, toggles, inputs, selects, dialogs) MUST come from the shadcn set above.
+
+LAYOUT & NAVIGATION:
+- The scaffold already injects a top-of-page <SiteNav /> linking every route. Do NOT duplicate a global header inside individual pages. Start pages with a <main> / <section> hero, not a nav.
+- For in-page anchors and CTAs to other routes, use <a href="/other-path">. React-Router's BrowserRouter intercepts these automatically.
+
+Full shadcn reference (prop shapes & examples):
 ${cheatSheet || prompts.builderCheatSheet}
 
 OUTPUT FORMAT:
@@ -97,11 +112,9 @@ Return ONLY a raw JSON object (no markdown, no prose, no code fence). The root s
 }
 
 RULES:
-- Prefer components from the "Vendored component set" list above. Unknown components silently become <div>.
 - Dynamic values use "$state.<name>" / "$handler.<name>" strings. Never invent JSX or raw code inside the JSON.
-- className strings should use Tailwind utility classes consistent with a modern shadcn/ui aesthetic (they can be dark OR light mode — the scaffold ships both).
 - Do NOT use "$handler.set<X>" for state setters named after a "$state.<x>" — the converter wires those up automatically via useState. Use $handler.* only for real actions (onSubmit, onClickToggle, loadData, logout, etc.).
-- Keep the tree rich enough to look complete (hero, content, footer etc. where appropriate).
+- Keep the tree rich enough to look complete: multiple sections, use Cards / Tabs / Accordion / Badges to structure content.
 - No comments inside the JSON.`,
     },
     {
