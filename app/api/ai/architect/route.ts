@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import { getSystemPrompts } from "@/lib/ai-prompts"
-import { logAiDebug } from "@/lib/logger"
-import fs from "fs"
-import path from "path"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { getSystemPrompts } from "@/lib/ai-prompts";
+import { logAiDebug } from "@/lib/logger";
+import fs from "fs";
+import path from "path";
 
 function readHelperFile(fileName: string): string {
   try {
@@ -59,8 +59,7 @@ ${cheatSheet || prompts.builderCheatSheet}`
 CRITICAL:
 - Return ONLY raw JSON (no markdown, no prose)
 - Output MUST be a JSON array of pages
-- Each page MUST include: "path", "title", "structure"
-- "structure" MUST be a JSON UI tree compatible with the converter logic from generation.md`
+- Each page MUST include: "path", "title", "structure" -"structure" MUST be a JSON UI tree compatible with the converter logic from generation.md`
       }
     ]
 

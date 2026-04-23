@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
-import clientPromise from "@/lib/mongodb"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { ObjectId } from "mongodb"
+import { NextResponse } from "next/server";
+import clientPromise from "@/lib/mongodb";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { ObjectId } from "mongodb";
 
 export async function DELETE(
   req: Request,

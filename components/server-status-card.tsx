@@ -1,7 +1,6 @@
-"use client"
-
-import { Activity, Cloud, Cpu, Database, Globe2, HardDrive, Lock, Network, Server, Shield, Wifi, type LucideIcon } from "lucide-react"
-import { useState, useEffect } from "react"
+"use client";
+import { Activity, Cloud, Cpu, Database, Globe2, HardDrive, Lock, Network, Server, Shield, Wifi, type LucideIcon } from "lucide-react";
+import { useState, useEffect } from "react";
 
 interface ServerStatusCardProps {
   name: string
@@ -71,8 +70,7 @@ export function ServerStatusCard({ name, status, provider, providerIcon, iconTyp
               isUp === null 
                 ? 'bg-[#4a4a4a]' 
                 : isUp 
-                  ? 'bg-emerald-500' 
-                  : 'bg-red-500'
+                  ? 'bg-emerald-500' :'bg-red-500'
             }`}
           />
         ))}

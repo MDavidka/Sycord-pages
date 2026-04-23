@@ -1,6 +1,5 @@
-"use client"
-
-import { useEffect, useRef } from "react"
+"use client";
+import { useEffect, useRef } from "react";
 
 interface AIWebsiteRendererProps {
   code: string

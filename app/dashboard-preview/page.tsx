@@ -1,17 +1,16 @@
-"use client"
+"use client";
+import { Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { SitePreviewDashboard } from "@/components/site-preview-dashboard";
 
-import { Suspense } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
-import { ArrowLeft } from "lucide-react"
 
 function PreviewContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
 
-  const url = searchParams.get("url") ?? ""
-  const siteName = searchParams.get("name") ?? undefined
-  const isLive = searchParams.get("live") !== "false"
+  const url = searchParams?.get("url") ?? ""
+  const siteName = searchParams?.get("name") ?? undefined
+  const isLive = searchParams?.get("live") !== "false"
 
   // If no URL provided, show a helpful empty state
   if (!url) {
@@ -33,9 +32,9 @@ function PreviewContent() {
       url={url}
       siteName={siteName}
       isLive={isLive}
-      onClose={() => router.back()}
+      onClose={() => router?.back()}
     />
-  )
+  );
 }
 
 export default function DashboardPreviewPage() {
@@ -66,5 +65,5 @@ export default function DashboardPreviewPage() {
         <PreviewContent />
       </Suspense>
     </div>
-  )
+  );
 }

@@ -1,8 +1,8 @@
-import GoogleProvider from "next-auth/providers/google"
-import CredentialsProvider from "next-auth/providers/credentials"
-import type { AuthOptions } from "next-auth"
-import { headers } from "next/headers"
-import clientPromise from "./mongodb"
+import GoogleProvider from "next-auth/providers/google";
+import CredentialsProvider from "next-auth/providers/credentials";
+import type { AuthOptions } from "next-auth";
+import { headers } from "next/headers";
+import clientPromise from "./mongodb";
 
 // Log detailed warnings for debugging
 if (!process.env.GOOGLE_CLIENT_ID) {

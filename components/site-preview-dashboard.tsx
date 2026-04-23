@@ -1,6 +1,5 @@
-"use client"
-
-import { useState, useRef, useEffect, useCallback } from "react"
+"use client";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Globe,
   ExternalLink,
@@ -11,8 +10,8 @@ import {
   RefreshCw,
   Copy,
   Check,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type DeviceMode = "desktop" | "mobile"
 
@@ -116,8 +115,7 @@ export function SitePreviewDashboard({
                 className={cn(
                   "flex items-center justify-center w-8 h-7 rounded-md transition-colors",
                   deviceMode === mode
-                    ? "text-white"
-                    : "text-zinc-500 hover:text-zinc-300"
+                    ? "text-white" :"text-zinc-500 hover:text-zinc-300"
                 )}
                 style={
                   deviceMode === mode

@@ -1,76 +1,15 @@
-"use client"
-
-import React, { useState, useEffect, useMemo } from "react"
-import { useParams, useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
-import AIWebsiteBuilder, { type GeneratedPage } from "@/components/ai-website-builder"
-import {
-  Trash2,
-  Plus,
-  ExternalLink,
-  AlertCircle,
-  Loader2,
-  ArrowLeft,
-  ShoppingCart,
-  Zap,
-  Package,
-  Sparkles,
-  Menu,
-  Layout,
-  Tag,
-  BarChart3,
-  Users,
-  History,
-  FileText,
-  CreditCard,
-  LogOut,
-  User,
-  Rocket,
-  Globe,
-  Save,
-  Smartphone,
-  Monitor,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  Folder,
-  FolderOpen,
-  File,
-  FileCode,
-  FileType,
-  ChevronRight,
-  Code,
-  Lock,
-  Database,
-  Settings,
-  BookOpen,
-  Layers,
-  TrendingUp,
-  Wallet,
-  BadgeCheck,
-  Coins,
-  RefreshCw,
-  Key,
-  Mail,
-  Github,
-  ChevronDown,
-  Shield,
-  Search,
-  Send,
-  AlertTriangle,
-  MoreHorizontal,
-  ArrowUpRight,
-  Copy,
-  Check,
-  Clock,
-  TrendingDown,
-} from "lucide-react"
-import { currencySymbols } from "@/lib/webshop-types"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+"use client";
+import React, { useState, useEffect, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import AIWebsiteBuilder, { type GeneratedPage } from "@/components/ai-website-builder";
+import { Trash2, Plus, ExternalLink, AlertCircle, Loader2, ArrowLeft, ShoppingCart, Zap, Package, Sparkles, Menu, Layout, Users, History, FileText, LogOut, User, Globe, Save, Eye, EyeOff, CheckCircle2, Folder, FolderOpen, File, FileCode, FileType, ChevronRight, Code, Lock, Database, Settings, BookOpen, Layers, TrendingUp, Wallet, BadgeCheck, Coins, RefreshCw, Key, Mail, ChevronDown, Search, Send, ArrowUpRight, Copy, Check, Clock, TrendingDown,  } from "lucide-react";
+import { currencySymbols } from "@/lib/webshop-types";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,12 +17,12 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useSession, signOut } from "next-auth/react"
-import { motion, AnimatePresence } from "framer-motion"
-import { cn } from "@/lib/utils"
-import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
-import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
+} from "@/components/ui/dropdown-menu";
+import { useSession, signOut } from "next-auth/react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+
+import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar";
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -127,10 +66,7 @@ interface FileTreeNode {
 const getFileIcon = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase()
   switch (ext) {
-    case 'ts':
-    case 'tsx':
-    case 'js':
-    case 'jsx':
+    case 'ts': case'tsx': case'js': case'jsx':
       return FileCode
     case 'json':
       return FileType
@@ -444,8 +380,7 @@ const SidebarContent = ({
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 text-xs font-semibold uppercase tracking-wider",
                   groupHasActive
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "text-primary" :"text-muted-foreground hover:text-foreground"
                 )}
               >
                 {isOpen
@@ -1718,8 +1653,7 @@ export default function SiteSettingsPage() {
                               className={cn(
                                 "shrink-0 h-6 w-6 sm:h-7 sm:w-7 rounded-lg flex items-center justify-center transition-all",
                                 copiedDomain
-                                  ? "bg-emerald-500/20 text-emerald-400"
-                                  : "text-zinc-500 opacity-70 sm:opacity-0 sm:group-hover/dom:opacity-100 hover:bg-white/[0.06] hover:text-zinc-200"
+                                  ? "bg-emerald-500/20 text-emerald-400" :"text-zinc-500 opacity-70 sm:opacity-0 sm:group-hover/dom:opacity-100 hover:bg-white/[0.06] hover:text-zinc-200"
                               )}
                               aria-hidden="true"
                             >
@@ -1832,8 +1766,7 @@ export default function SiteSettingsPage() {
                             deltaPct === null
                               ? "bg-sky-500/10 text-sky-400"
                               : isUp
-                                ? "bg-emerald-500/10 text-emerald-400"
-                                : "bg-rose-500/10 text-rose-400"
+                                ? "bg-emerald-500/10 text-emerald-400" :"bg-rose-500/10 text-rose-400"
                           )}
                         >
                           {deltaPct === null ? (
@@ -2510,8 +2443,7 @@ export default function SiteSettingsPage() {
                         <path d="M17.193 9.555c-1.264-5.58-4.252-7.414-4.573-8.115-.28-.394-.53-.954-.735-1.44-.036.495-.055.685-.523 1.184-.723.566-4.438 3.682-4.74 10.02-.282 5.912 4.27 9.435 4.888 9.884l.07.05A73.49 73.49 0 0111.91 24h.481c.114-1.032.284-2.056.51-3.07.417-.296.604-.463.85-.693a11.342 11.342 0 003.639-8.464c.01-.814-.103-1.662-.197-2.218zm-5.336 8.195s0-8.291.275-8.29c.213 0 .49 10.695.49 10.695-.381-.045-.765-1.76-.765-2.405z" />
                       </svg>
                     )
-                  case "supabase":
-                  case "supabase-auth":
+                  case "supabase": case"supabase-auth":
                     return (
                       <svg viewBox="0 0 24 24" className="w-5 h-5" fill={color}>
                         <path d="M11.9 1.036c-.015-.986-1.26-1.41-1.874-.637L.764 12.05C.131 12.876.712 14.064 1.748 14.064h9.545a.2.2 0 01.2.2L11.9 22.964c.015.986 1.26 1.41 1.874.637l9.262-11.652c.633-.825.052-2.013-1.016-2.013H13.55a.2.2 0 01-.2-.2L11.9 1.036z" />

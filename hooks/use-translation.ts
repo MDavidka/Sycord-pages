@@ -1,7 +1,6 @@
-"use client"
-
-import { useContext } from "react"
-import { I18nContext } from "@/components/i18n-provider"
+"use client";
+import { useContext } from "react";
+import { I18nContext } from "../components/i18n-provider";
 
 export function useTranslation() {
   const context = useContext(I18nContext)

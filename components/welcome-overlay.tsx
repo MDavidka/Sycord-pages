@@ -1,8 +1,7 @@
-"use client"
-
-import { useEffect } from "react"
-import Image from "next/image"
-import { useTheme } from "next-themes"
+"use client";
+import { useEffect } from "react";
+import Image from "next/image";
+import { useTheme } from "next-themes";
 
 interface WelcomeOverlayProps {
   userName: string
@@ -34,9 +33,7 @@ export function WelcomeOverlay({ userName, userImage, isVisible, onComplete }: W
       .toUpperCase() || "U"
 
   const bgGradient =
-    theme === "light"
-      ? "bg-gradient-to-b from-background via-background to-card"
-      : "bg-gradient-to-b from-black via-slate-950 to-slate-900"
+    theme === "light" ?"bg-gradient-to-b from-background via-background to-card" :"bg-gradient-to-b from-black via-slate-950 to-slate-900"
 
   const textColor = theme === "light" ? "text-foreground" : "text-white"
   const subtextColor = theme === "light" ? "text-muted-foreground" : "text-gray-300"

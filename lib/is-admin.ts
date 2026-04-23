@@ -1,5 +1,5 @@
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 const ADMIN_EMAILS = ["dmarton336@gmail.com"]
 

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/is-admin"
-import clientPromise from "@/lib/mongodb"
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/is-admin";
+import clientPromise from "@/lib/mongodb";
 
 export async function GET() {
   try {

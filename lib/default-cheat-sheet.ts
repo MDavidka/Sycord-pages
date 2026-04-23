@@ -34,8 +34,11 @@ export const DEFAULT_AI_BUILDER_CHEATSHEET = `[
 ]`;
 
 export const DEFAULT_HANDLING_CONVERTER_CHEATSHEET = `{
-  "Button": "import { Button } from '@/components/ui/button';\\n\\nexport default function GenButton(props) { return <Button {...props} />; }",
-  "Card": "import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';\\n\\nexport { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };",
-  "Input": "import { Input } from '@/components/ui/input';\\n\\nexport default function GenInput(props) { return <Input {...props} />; }"
+  "Button": "import { Button } from '@/components/ui/button'
+;\\n\\nexport default function GenButton(props) { return <Button {...props} />; }",
+  "Card": "import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
+;\\n\\nexport { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };",
+  "Input": "import { Input } from '@/components/ui/input'
+;\\n\\nexport default function GenInput(props) { return <Input {...props} />; }"
   // ... 40 other components code mapped here
 }`;

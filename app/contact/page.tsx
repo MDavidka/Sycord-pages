@@ -1,9 +1,8 @@
-"use client"
-
-import Link from "next/link"
-import Image from "next/image"
-import { ArrowLeft, Mail, Phone, User, Shield, MapPin } from "lucide-react"
-import { Button } from "@/components/ui/button"
+"use client";
+import Link from "next/link";
+import Image from "next/image";
+import { ArrowLeft, Mail, Phone, User, Shield } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function ContactPage() {
   return (
@@ -21,7 +20,6 @@ export default function ContactPage() {
           </Button>
         </Link>
       </header>
-
       <main className="w-full max-w-4xl mx-auto px-4 md:px-8 py-12 md:py-20">
         {/* Hero */}
         <div className="text-center mb-12 md:mb-16">
@@ -93,11 +91,10 @@ export default function ContactPage() {
           </div>
         </div>
       </main>
-
       {/* Footer */}
       <footer className="w-full border-t border-white/5 py-6 mt-auto">
         <div className="max-w-4xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="text-[#8A8E91] text-[11px]">© {new Date().getFullYear()} Sycord. All rights reserved.</span>
+          <span className="text-[#8A8E91] text-[11px]">© {new Date()?.getFullYear()} Sycord. All rights reserved.</span>
           <div className="flex items-center gap-4">
             <Link href="/tos" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Terms</Link>
             <Link href="/pap" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Privacy</Link>
@@ -106,5 +103,5 @@ export default function ContactPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

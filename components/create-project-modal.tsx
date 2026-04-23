@@ -1,11 +1,10 @@
-"use client"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { ProjectForm } from "./project-form"
-import { themes } from "@/lib/webshop-types"
-import { toast } from "sonner"
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ProjectForm } from "./project-form";
+import { themes } from "@/lib/webshop-types";
+import { toast } from "sonner";
 
 interface CreateProjectModalProps {
   isOpen: boolean

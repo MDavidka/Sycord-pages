@@ -1,7 +1,6 @@
-"use client"
-
-import { useCallback, useState } from "react"
-import { Download } from "lucide-react"
+"use client";
+import { useCallback, useState } from "react";
+import { Download } from "lucide-react";
 
 /* ── plain-text version of every ToS section (used by the A4 renderer) ── */
 const sections = [

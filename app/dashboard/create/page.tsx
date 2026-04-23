@@ -1,8 +1,7 @@
-"use client"
-
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { useSession } from "next-auth/react"
+"use client";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   Briefcase,
   ShoppingCart,
@@ -15,9 +14,9 @@ import {
   ArrowRight,
   Check,
   Zap,
-} from "lucide-react"
-import { themes } from "@/lib/webshop-types"
-import { toast } from "sonner"
+} from "lucide-react";
+import { themes } from "@/lib/webshop-types";
+import { toast } from "sonner";
 
 const websiteTypes = [
   { id: "service", label: "Service", icon: Briefcase, description: "Business & services" },
@@ -324,11 +323,13 @@ export default function CreateProjectPage() {
                       : "bg-white/[0.07] hover:bg-white/10"
                   }`}
                 >
-                  <Icon
-                    className={`h-6 w-6 sm:h-7 sm:w-7 transition-colors ${
-                      formData.websiteType === id ? "text-white" : "text-white/40 group-hover:text-white/60"
-                    }`}
-                  />
+                  {Icon && (
+                    <Icon
+                      className={`h-6 w-6 sm:h-7 sm:w-7 transition-colors ${
+                        formData.websiteType === id ? "text-white" : "text-white/40 group-hover:text-white/60"
+                      }`}
+                    />
+                  )}
                   <span
                     className={`text-xs sm:text-sm font-medium transition-colors ${
                       formData.websiteType === id ? "text-white" : "text-white/40 group-hover:text-white/60"

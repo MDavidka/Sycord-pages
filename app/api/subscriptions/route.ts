@@ -1,14 +1,14 @@
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/mongodb";
 
 export async function GET() {
   try {
     const client = await clientPromise
-    const db = client.db("your_database_name")
+    const db = client?.db("your_database_name")
 
-    const tiers = await db.collection("subscriptionTiers").find({}).sort({ price: 1 }).toArray()
+    const tiers = await db?.collection("subscriptionTiers")?.find({})?.sort({ price: 1 })?.toArray()
 
     // Default tiers if collection is empty
-    if (tiers.length === 0) {
+    if (tiers?.length === 0) {
       const defaultTiers = [
         {
           name: "Free",

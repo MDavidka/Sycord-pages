@@ -1,5 +1,5 @@
-import fs from 'fs'
-import path from 'path'
+import fs from 'fs';
+import path from 'path';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -408,7 +408,7 @@ function buildImports(components: Set<string>, needsReact: boolean): string {
 
   const lines: string[] = []
 
-  if (needsReact) lines.push("import React from 'react'")
+  if (needsReact) lines.push("import React, { useState } from 'react';\n")
 
   const sorted = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b))
   for (const [src, names] of sorted) {

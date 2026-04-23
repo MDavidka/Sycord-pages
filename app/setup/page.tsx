@@ -1,34 +1,12 @@
-"use client"
-
-import { useState, useEffect, useCallback, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Server,
-  Play,
-  Square,
-  RotateCcw,
-  Loader2,
-  Check,
-  X,
-  AlertTriangle,
-  ArrowLeft,
-  ExternalLink,
-  ShieldCheck,
-  Globe,
-  Power,
-  Lock,
-  Terminal,
-  ScrollText,
-  ChevronDown,
-  ChevronUp,
-  Wifi,
-  WifiOff,
-} from "lucide-react"
-import Link from "next/link"
-import { toast } from "sonner"
+"use client";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Server, Play, Square, RotateCcw, Loader2, Check, AlertTriangle, ArrowLeft, ExternalLink, ShieldCheck, Globe, Power, Lock, Terminal, ScrollText, ChevronDown, ChevronUp, Wifi, WifiOff,  } from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -368,8 +346,7 @@ def api_status():
 @app.route("/api/deploy/<project_id>", methods=["POST"])
 def deploy(project_id):
     data = request.get_json(silent=True)
-    if not data or "files" not in data:
-        logger.error("Deploy %s: missing files", project_id)
+    if not data or "files" not in data: logger.error("Deploy %s: missing files", project_id)
         return jsonify(success=False, error="Request body must include 'files'"), 400
     files = data["files"]
     subdomain = data.get("subdomain")
@@ -462,8 +439,7 @@ def delete_project(project_id):
     logger.info("Deleted %s", project_id)
     return jsonify(success=True, message="Deleted")
 
-if __name__ == "__main__":
-    logger.info("Python %s", sys.version)
+if __name__ == "__main__": logger.info("Python %s", sys.version)
     if _missing:
         logger.warning("Missing packages: %s", ", ".join(_missing))
     if not _check_tool("npm"):
@@ -542,8 +518,7 @@ if __name__ == "__main__":
               <div className="relative">
                 <Server className="h-6 w-6 text-primary" />
                 <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background ${
-                  statusLoading ? "bg-yellow-500 animate-pulse" :
-                  runnerOnline ? "bg-green-500" : "bg-red-500"
+                  statusLoading ? "bg-yellow-500 animate-pulse" : runnerOnline ?"bg-green-500" : "bg-red-500"
                 }`} />
               </div>
               <span className="text-lg font-semibold">Runner</span>

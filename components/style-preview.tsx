@@ -1,7 +1,6 @@
-"use client"
-
-import { themeConfigs, themes } from "@/lib/webshop-types"
-import { Check } from "lucide-react"
+"use client";
+import { themeConfigs, themes } from "@/lib/webshop-types";
+import { Check } from "lucide-react";
 
 interface StylePreviewProps {
   theme: string

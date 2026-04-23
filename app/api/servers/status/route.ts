@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server"
-import clientPromise from "@/lib/mongodb"
+import { NextResponse } from "next/server";
+import clientPromise from "@/lib/mongodb";
 
 export const dynamic = "force-dynamic"
 
@@ -50,7 +50,7 @@ const normalizePings = (pings: PingEntry[]): HistoryPoint[] => {
   return pings
     .map((ping) => {
       const stamp = ping.stamp
-      const status = eventToStatus(ping.description)
+      let status = eventToStatus(ping.description)
       if (stamp && !Number.isNaN(stamp)) {
         return { ts: stamp, status }
       }

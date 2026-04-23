@@ -1,24 +1,20 @@
-"use client"
-
-import Link from "next/link"
-import { useEffect, useState } from "react"
-import { cn } from "@/lib/utils"
+"use client";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export function StatusBadge() {
   const [isOperational, setIsOperational] = useState<boolean>(true)
   const [loading, setLoading] = useState<boolean>(true)
 
   useEffect(() => {
-    fetch("/api/servers/status")
-      .then((res) => {
-        if (res.ok) return res.json()
+    fetch("/api/servers/status")?.then((res) => {
+        if (res?.ok) return res?.json();
         throw new Error("Failed to fetch status")
-      })
-      .then((data) => {
-        setIsOperational(data.globalStatus !== "outage")
+      })?.then((data) => {
+        setIsOperational(data?.globalStatus !== "outage")
         setLoading(false)
-      })
-      .catch(() => {
+      })?.catch(() => {
         // Default to operational if status check fails to avoid alarming users
         setIsOperational(true)
         setLoading(false)

@@ -1,15 +1,14 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { toast } from "sonner"
-import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,48 +16,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import Image from "next/image"
-import Link from "next/link"
-import {
-  AlertCircle,
-  Users,
-  Zap,
-  Shield,
-  Trash2,
-  Mail,
-  Search,
-  Menu,
-  X,
-  ArrowLeft,
-  LogOut,
-  BarChart3,
-  Server,
-  Activity,
-  Check,
-  Cloud,
-  Database,
-  Globe2,
-  HardDrive,
-  Network,
-  Cpu,
-  Wifi,
-  Lock,
-  Upload,
-  Image as ImageIcon,
-  Loader2,
-  Save,
-  RotateCcw,
-  BookOpen,
-  ArrowRight,
-  Ban,
-  UserCheck,
-  Settings,
-  User,
-  ChevronDown,
-  Calendar,
-  ExternalLink
-} from "lucide-react"
+} from "@/components/ui/dropdown-menu";
+import Image from "next/image";
+import Link from "next/link";
+import { AlertCircle, Users, Zap, Shield, Trash2, Mail, Search, Menu, X, ArrowLeft, LogOut, BarChart3, Server, Activity, Check, Cloud, Database, Globe2, HardDrive, Network, Cpu, Wifi, Lock, Upload, Image as ImageIcon, Loader2, Save, RotateCcw, BookOpen, Ban, UserCheck, Settings, User, ChevronDown, ExternalLink } from "lucide-react";
 
 const availableIcons = [
   { name: "Server", icon: Server },
@@ -455,8 +416,7 @@ export default function AdminPage() {
                     onClick={() => setActiveTab(tab.id)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                       activeTab === tab.id
-                        ? "text-white bg-white/10"
-                        : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                        ? "text-white bg-white/10" :"text-white/40 hover:text-white/70 hover:bg-white/5"
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -489,8 +449,7 @@ export default function AdminPage() {
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors text-left ${
                           activeTab === tab.id
-                            ? "text-white bg-white/10"
-                            : "text-white/40 hover:text-white/70 hover:bg-white/5"
+                            ? "text-white bg-white/10" :"text-white/40 hover:text-white/70 hover:bg-white/5"
                         }`}
                       >
                         <Icon className="h-5 w-5" />
@@ -737,8 +696,7 @@ export default function AdminPage() {
                           disabled={updatingUser === user.userId}
                           className={`h-8 px-3 rounded-lg text-[11px] font-medium border transition-colors ${
                             user.isBlocked
-                              ? "bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 hover:text-green-300"
-                              : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
+                              ? "bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 hover:text-green-300" :"bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
                           }`}
                         >
                           {user.isBlocked ? (
@@ -804,8 +762,7 @@ export default function AdminPage() {
                           variant="outline"
                           className={`text-[10px] px-1.5 py-0 h-5 flex-shrink-0 rounded-full ${
                             monitor.statusCode === 200
-                              ? 'border-green-500/30 text-green-500 bg-green-500/5'
-                              : 'border-red-500/30 text-red-500 bg-red-500/5'
+                              ? 'border-green-500/30 text-green-500 bg-green-500/5' :'border-red-500/30 text-red-500 bg-red-500/5'
                           }`}
                         >
                           {monitor.statusCode === 200 ? 'Online' : 'Offline'}
@@ -832,9 +789,7 @@ export default function AdminPage() {
                                       key={item.name}
                                       onClick={() => updateMonitorIcon(monitor.id, item.name, 'preset')}
                                       className={`p-2 rounded-lg transition-colors ${
-                                        monitor.providerIcon === item.name && monitor.iconType !== 'custom'
-                                          ? 'bg-white/10 text-white ring-1 ring-white/20'
-                                          : 'text-white/30 hover:text-white/60 hover:bg-white/5'
+                                        monitor.providerIcon === item.name && monitor.iconType !== 'custom' ?'bg-white/10 text-white ring-1 ring-white/20' :'text-white/30 hover:text-white/60 hover:bg-white/5'
                                       }`}
                                       title={item.name}
                                     >
@@ -1106,8 +1061,7 @@ export default function AdminPage() {
                         onClick={() => { setVpsLogType(type); fetchVpsLogs(type); }}
                         className={`px-2.5 py-1 text-[10px] font-medium transition-colors ${
                           vpsLogType === type
-                            ? "bg-white/10 text-white"
-                            : "text-white/30 hover:text-white/60 hover:bg-white/[0.04]"
+                            ? "bg-white/10 text-white" :"text-white/30 hover:text-white/60 hover:bg-white/[0.04]"
                         }`}
                       >
                         {type}
@@ -1141,12 +1095,9 @@ export default function AdminPage() {
                   {vpsLogs.map((line, i) => (
                     <p key={i} className={
                       line.toLowerCase().includes('error') || line.toLowerCase().includes('exception')
-                        ? 'text-red-400'
-                        : line.toLowerCase().includes('warn')
-                          ? 'text-yellow-400'
-                          : line.toLowerCase().includes('success') || line.toLowerCase().includes('deployed')
-                            ? 'text-green-400'
-                            : ''
+                        ? 'text-red-400' : line.toLowerCase().includes('warn')
+                          ? 'text-yellow-400' : line.toLowerCase().includes('success') || line.toLowerCase().includes('deployed')
+                            ? 'text-green-400' :''
                     }>
                       {line}
                     </p>

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 /**
  * Web Search API — searches the web for relevant information and images
@@ -87,8 +87,7 @@ async function fallbackSearch(query: string, type: string) {
 
   // Use Gemini to synthesize relevant information
   const prompt =
-    type === "images"
-      ? `Find 5 high-quality, royalty-free image URLs (prefer .png) relevant to: "${query}". Return ONLY a JSON array of objects with keys: title, link, snippet, image. No markdown.`
+    type === "images" ? `Find 5 high-quality, royalty-free image URLs (prefer .png) relevant to:"${query}". Return ONLY a JSON array of objects with keys: title, link, snippet, image. No markdown.`
       : `Search the web and find 5 relevant results about: "${query}". Return ONLY a JSON array of objects with keys: title, link, snippet. No markdown.`
 
   try {

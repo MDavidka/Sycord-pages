@@ -1,5 +1,5 @@
 
-import { MongoClient, ObjectId } from "mongodb"
+import { MongoClient, ObjectId } from "mongodb";
 
 const uri = process.env.MONGO_URI || ""
 const options = {}
@@ -28,7 +28,7 @@ if (!process.env.MONGO_URI) {
 
 // --- PROMPT TEMPLATES ---
 
-import { DEFAULT_AI_BUILDER_CHEATSHEET, DEFAULT_HANDLING_CONVERTER_CHEATSHEET } from "./default-cheat-sheet"
+import { DEFAULT_AI_BUILDER_CHEATSHEET, DEFAULT_HANDLING_CONVERTER_CHEATSHEET } from "./default-cheat-sheet";
 
 export const DEFAULT_BUILDER_PLAN = `You are an expert Frontend UI/UX Architect. Your goal is to generate a JSON structure representing a multi-page Vite + React + Tailwind + Lucide Icons web application based on the user's request.
 
@@ -36,9 +36,7 @@ You MUST follow these strict rules:
 1. ONLY output valid JSON. No markdown, no explanations, no wrappers.
 2. The JSON must be an array of page objects.
 3. Each page object must have:
-   - "path": e.g., "/", "/about", "/dashboard"
-   - "title": e.g., "Home", "About Us"
-   - "structure": A nested object representing the UI component tree.
+   - "path": e.g., "/", "/about", "/dashboard" -"title": e.g., "Home", "About Us" -"structure": A nested object representing the UI component tree.
 
 You MUST only use the components listed in your Cheat Sheet.
 
@@ -138,7 +136,7 @@ Example:
 I am fixing the typo in the import statement.
 [fix] {{FILENAME}}
 [code]
-import { x } from './y'
+
 ...
 [/code]
 `
@@ -207,7 +205,7 @@ Example:
 I found a broken import referencing a non-existent module.
 [fix] {{FILENAME}}
 [code]
-import { x } from './y'
+
 ...
 [/code]
 `

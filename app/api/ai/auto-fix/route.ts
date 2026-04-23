@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import { GoogleGenerativeAI } from "@google/generative-ai"
-import { getSystemPrompts } from "@/lib/ai-prompts"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getSystemPrompts } from "@/lib/ai-prompts";
 
 const FIX_MODEL = "gemini-2.0-flash"
 

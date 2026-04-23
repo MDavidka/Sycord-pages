@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { getClientIP } from "@/lib/get-client-ip"
-import { containsCurseWords } from "@/lib/curse-word-filter"
-import { generateWebpageId } from "@/lib/generate-webpage-id"
-import { ObjectId } from "mongodb"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import clientPromise from "@/lib/mongodb";
+
+import { containsCurseWords } from "@/lib/curse-word-filter";
+import { generateWebpageId } from "@/lib/generate-webpage-id";
+import { ObjectId } from "mongodb";
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -187,7 +187,7 @@ export async function POST(request: Request) {
     <div class="content">
         <h1>Here is your site</h1>
         <p>set up your website stile on the dasboard</p>
-        <button class="return-btn" onclick="window.parent !== window ? window.parent.postMessage('returnToDashboard', '*') : window.location.href='/'">return</button>
+        <button class="return-btn" onClick="window.parent !== window ? window.parent.postMessage('returnToDashboard', '*') : window.location.href='/'">return</button>
     </div>
     <div class="footer">
         privacy and policy &bull; terms of condition
