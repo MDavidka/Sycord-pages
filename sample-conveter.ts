@@ -300,10 +300,27 @@ function normalizeName(name: string): string {
 }
 
 function normalizeTree(node: UINode): UINode {
+  if (!node) return { name: "div" } as UINode;
+
+  let normalizedName = "div";
+  if (typeof node.name === 'string') {
+    try {
+      normalizedName = normalizeName(node.name);
+    } catch (e) {
+      normalizedName = "div";
+    }
+  } else if (typeof (node as any).component === 'string') {
+    try {
+      normalizedName = normalizeName((node as any).component);
+    } catch (e) {
+      normalizedName = "div";
+    }
+  }
+
   return {
     ...node,
-    name: normalizeName(node.name),
-    children: node.children?.map(normalizeTree),
+    name: normalizedName,
+    children: Array.isArray(node.children) ? node.children.map(normalizeTree).filter(Boolean) : undefined,
   }
 }
 
@@ -316,17 +333,27 @@ interface Collected {
 }
 
 function collect(node: UINode, acc: Collected): void {
-  acc.components.add(node.name)
+  if (!node) return;
 
-  for (const val of Object.values(node.props ?? {})) {
-    const s = String(val)
-    const stateMatch = s.match(REGEX.STATE_BINDING)
-    const handlerMatch = s.match(REGEX.HANDLER_BINDING)
-    if (stateMatch) acc.states.add(stateMatch[1])
-    if (handlerMatch) acc.handlers.add(handlerMatch[1])
+  if (typeof node.name === 'string') {
+    acc.components.add(node.name)
+  } else if (typeof (node as any).component === 'string') {
+    acc.components.add((node as any).component)
   }
 
-  node.children?.forEach(c => collect(c, acc))
+  if (node.props && typeof node.props === 'object') {
+    for (const val of Object.values(node.props)) {
+      const s = String(val)
+      const stateMatch = s.match(REGEX.STATE_BINDING)
+      const handlerMatch = s.match(REGEX.HANDLER_BINDING)
+      if (stateMatch) acc.states.add(stateMatch[1])
+      if (handlerMatch) acc.handlers.add(handlerMatch[1])
+    }
+  }
+
+  if (Array.isArray(node.children)) {
+    node.children.forEach(c => collect(c, acc))
+  }
 }
 
 // ─── INITIAL VALUE HEURISTIC ──────────────────────────────────────────────────
@@ -372,26 +399,35 @@ function resolveProps(props: Record<string, unknown>): string {
 // ─── NODE RENDERER ────────────────────────────────────────────────────────────
 
 function renderNode(node: UINode, depth: number): string {
+  if (!node) return "";
   const indent = '  '.repeat(depth)
-  const propsStr = node.props ? ' ' + resolveProps(node.props) : ''
-  const tag = `${node.name}${propsStr}`
+  const propsStr = node.props && typeof node.props === 'object' ? ' ' + resolveProps(node.props) : ''
+
+  let name = "div";
+  if (typeof node.name === 'string') {
+    name = node.name;
+  } else if (typeof (node as any).component === 'string') {
+    name = (node as any).component;
+  }
+
+  const tag = `${name}${propsStr}`
 
   // Self-closing
-  if (!node.children?.length && !node.text) {
+  if ((!node.children || !Array.isArray(node.children) || node.children.length === 0) && !node.text) {
     return `${indent}<${tag} />`
   }
 
   // Inline text
-  if (node.text && !node.children?.length) {
-    return `${indent}<${tag}>${node.text}</${node.name}>`
+  if (node.text !== undefined && node.text !== null && typeof node.text !== 'object' && (!node.children || !Array.isArray(node.children) || node.children.length === 0)) {
+    return `${indent}<${tag}>${String(node.text)}</${name}>`
   }
 
   // Children
-  const childLines = (node.children ?? [])
-    .map(c => renderNode(c, depth + 1))
-    .join('\n')
+  const childLines = Array.isArray(node.children)
+    ? node.children.map(c => renderNode(c, depth + 1)).filter(Boolean).join('\n')
+    : ""
 
-  return `${indent}<${tag}>\n${childLines}\n${indent}</${node.name}>`
+  return `${indent}<${tag}>\n${childLines}\n${indent}</${name}>`
 }
 
 // ─── IMPORT BUILDER ───────────────────────────────────────────────────────────
