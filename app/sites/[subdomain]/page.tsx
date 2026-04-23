@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation"
-import clientPromise from "@/lib/mongodb"
-import { currencySymbols, themeConfigs } from "@/lib/webshop-types"
-import { Facebook, Instagram, Twitter, ShoppingCart } from "lucide-react"
-import { ObjectId } from "mongodb"
+import { notFound } from "next/navigation";
+import clientPromise from "@/lib/mongodb";
+import { currencySymbols, themeConfigs } from "@/lib/webshop-types";
+import { Facebook, Instagram, Twitter, ShoppingCart } from "lucide-react";
+
 
 interface PageProps {
   params: Promise<{

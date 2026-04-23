@@ -1,13 +1,12 @@
-"use client"
-
-import Link from "next/link"
-import Image from "next/image"
-import { useRouter, useSearchParams } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
-import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard } from "lucide-react"
-import { useState, useEffect, Suspense } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+"use client";
+import Link from"next/link";
+ import Image from"next/image";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { Button } from "@/components/ui/button";
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Cpu } from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,11 +14,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { WebsitePreviewCard } from "@/components/website-preview-card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { WebsitePreviewCard } from "@/components/website-preview-card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup";
 
 // Maximum number of projects a user can have on the free plan.
 const MAX_FREE_PROJECTS = 3
@@ -201,11 +200,15 @@ function DashboardContent() {
                 <Image src="/logo.png" alt="Logo" width={32} height={32} />
                 <span className="text-xl font-semibold text-foreground">
                   {userStatus.isPremium
-                    ? userStatus.subscription === "Sycord Enterprise"
-                      ? "Sycord Enterprise"
-                      : "Sycord+"
-                    : "Sycord"}
+                    ? userStatus.subscription === "Sycord Enterprise" ?"Sycord Enterprise" :"Sycord+" :"Sycord"}
                 </span>
+              </Link>
+              <Link
+                href="/dashboard/generator"
+                className="hidden md:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Cpu className="h-4 w-4" />
+                Generator
               </Link>
             </div>
             <div className="flex items-center gap-2 md:gap-3">

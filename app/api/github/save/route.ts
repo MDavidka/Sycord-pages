@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 const GITHUB_API_BASE = "https://api.github.com"
 
@@ -13,8 +13,8 @@ const REPO_CREATION_DELAY_MS = 2000
  * Get GitHub credentials from environment variables
  */
 function getEnvGitHubCredentials(): { token: string; owner: string } | null {
-  const token = process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN
-  const owner = process.env.GITHUB_OWNER || process.env.GITHUB_USERNAME
+  let token = process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN
+  let owner = process.env.GITHUB_OWNER || process.env.GITHUB_USERNAME
   
   if (token && owner) {
     return { token, owner }

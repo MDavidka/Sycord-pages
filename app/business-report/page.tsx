@@ -1,85 +1,84 @@
-"use client"
-
-import Image from "next/image"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Download } from "lucide-react"
-import React, { useEffect, useRef, useState } from "react"
+"use client";
+import Image from "next/image";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 
 /* ─── Default report data (overridden by DB values on load) ─── */
-const OWNER_NAME = "Dávid Márton"
-const BUSINESS_NAME = "Sycord"
-const WEBSITE_URL = "https://sycord.com"
+const OWNER_NAME = "Dávid Márton";
+const BUSINESS_NAME = "Sycord";
+const WEBSITE_URL = "https://sycord.com";
 const REPORT_DATE = new Date().toLocaleDateString("en-GB", {
   day: "2-digit",
   month: "long",
-  year: "numeric",
-})
-const DOC_REF = `BAR-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
+  year: "numeric"
+});
+const DOC_REF = `BAR-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
 const PLANS = [
-  { name: "Sycord (Free)",     price: "$0",  period: "N/A",     features: "1 website · 1 GB storage · Basic templates · *.sycord.com subdomain" },
-  { name: "Sycord+ (Pro)",     price: "$9",  period: "Monthly", features: "Unlimited websites · 50 GB storage · AI Builder · Custom domain · Analytics" },
-  { name: "Sycord Enterprise", price: "$29", period: "Monthly", features: "Everything in Pro · 500 GB storage · Priority support · API access · Team collaboration" },
-]
+{ name: "Sycord (Free)", price: "$0", period: "N/A", features: "1 website · 1 GB storage · Basic templates · *.sycord.com subdomain" },
+{ name: "Sycord+ (Pro)", price: "$9", period: "Monthly", features: "Unlimited websites · 50 GB storage · AI Builder · Custom domain · Analytics" },
+{ name: "Sycord Enterprise", price: "$29", period: "Monthly", features: "Everything in Pro · 500 GB storage · Priority support · API access · Team collaboration" }];
+
 
 const SERVICES = [
-  { title: "AI Website Builder",       desc: "Users describe their desired website in plain English; the platform generates a complete, production-ready website automatically using Google Gemini AI." },
-  { title: "No-Code Visual Editor",    desc: "A drag-and-drop editor with real-time preview allows full customisation without writing any code." },
-  { title: "Instant Hosting",          desc: "Every website receives a free *.sycord.com subdomain with one-click publishing. Custom domains are available on paid plans." },
-  { title: "GitHub Deployment",        desc: "Source code is automatically pushed to a GitHub repository, providing built-in CI/CD pipelines and version control." },
-  { title: "Firebase Real-Time Sync",  desc: "Real-time data synchronisation via Firebase ensures instant updates across all devices." },
-  { title: "Content Moderation",       desc: "Automated AI-based content filtering maintains platform safety for all users." },
-]
+{ title: "AI Website Builder", desc: "Users describe their desired website in plain English; the platform generates a complete, production-ready website automatically using Google Gemini AI." },
+{ title: "No-Code Visual Editor", desc: "A drag-and-drop editor with real-time preview allows full customisation without writing any code." },
+{ title: "Instant Hosting", desc: "Every website receives a free *.sycord.com subdomain with one-click publishing. Custom domains are available on paid plans." },
+{ title: "GitHub Deployment", desc: "Source code is automatically pushed to a GitHub repository, providing built-in CI/CD pipelines and version control." },
+{ title: "Firebase Real-Time Sync", desc: "Real-time data synchronisation via Firebase ensures instant updates across all devices." },
+{ title: "Content Moderation", desc: "Automated AI-based content filtering maintains platform safety for all users." }];
+
 
 export default function BusinessReportPage() {
-  const docContainerRef = useRef<HTMLDivElement>(null)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const docContainerRef = useRef<HTMLDivElement>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   /* ── Load saved fields from MongoDB on first mount ── */
   useEffect(() => {
-    fetch("/api/business-report")
-      .then((r) => r.json())
-      .then((data: { fields: Record<string, string> | null }) => {
-        if (!data.fields) return
-        const root = docContainerRef.current
-        if (!root) return
-        for (const [fieldId, content] of Object.entries(data.fields)) {
-          const el = root.querySelector(`[data-field="${fieldId}"]`)
-          if (el) el.textContent = content
-        }
-      })
-      .catch((err) => {
-        console.warn("[business-report] Could not load saved fields:", err)
-      })
-  }, [])
+    fetch("/api/business-report").
+    then((r) => r.json()).
+    then((data: {fields: Record<string, string> | null;}) => {
+      if (!data.fields) return;
+      const root = docContainerRef.current;
+      if (!root) return;
+      for (const [fieldId, content] of Object.entries(data.fields)) {
+        const el = root.querySelector(`[data-field="${fieldId}"]`);
+        if (el) el.textContent = content;
+      }
+    }).
+    catch((err) => {
+      console.warn("[business-report] Could not load saved fields:", err);
+    });
+  }, []);
 
   /* ── Debounced auto-save to MongoDB ── */
   function scheduleAutoSave() {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    setSaveStatus("saving")
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus("saving");
     saveTimerRef.current = setTimeout(async () => {
       try {
-        const root = docContainerRef.current
-        if (!root) return
-        const fields: Record<string, string> = {}
+        const root = docContainerRef.current;
+        if (!root) return;
+        const fields: Record<string, string> = {};
         root.querySelectorAll<HTMLElement>("[data-field]").forEach((el) => {
-          const id = el.getAttribute("data-field")!
-          fields[id] = el.textContent ?? ""
-        })
+          const id = el.getAttribute("data-field")!;
+          fields[id] = el.textContent ?? "";
+        });
         const res = await fetch("/api/business-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fields }),
-        })
-        setSaveStatus(res.ok ? "saved" : "error")
+          body: JSON.stringify({ fields })
+        });
+        setSaveStatus(res.ok ? "saved" : "error");
       } catch {
-        setSaveStatus("error")
+        setSaveStatus("error");
       } finally {
-        setTimeout(() => setSaveStatus("idle"), 3000)
+        setTimeout(() => setSaveStatus("idle"), 3000);
       }
-    }, 1500)
+    }, 1500);
   }
 
   return (
@@ -137,22 +136,22 @@ export default function BusinessReportPage() {
         </Link>
         <div className="flex items-center gap-2">
           {/* Save status */}
-          {saveStatus === "saving" && (
-            <span className="text-[#8A8E91] text-xs">Saving…</span>
-          )}
-          {saveStatus === "saved" && (
-            <span className="text-emerald-400 text-xs">✓ Saved</span>
-          )}
-          {saveStatus === "error" && (
-            <span className="text-red-400 text-xs">Save failed</span>
-          )}
-          {saveStatus === "idle" && (
-            <span className="text-[#8A8E91] text-xs hidden sm:block">✎ Click any field to edit</span>
-          )}
+          {saveStatus === "saving" &&
+          <span className="text-[#8A8E91] text-xs">Saving…</span>
+          }
+          {saveStatus === "saved" &&
+          <span className="text-emerald-400 text-xs">✓ Saved</span>
+          }
+          {saveStatus === "error" &&
+          <span className="text-red-400 text-xs">Save failed</span>
+          }
+          {saveStatus === "idle" &&
+          <span className="text-[#8A8E91] text-xs hidden sm:block">✎ Click any field to edit</span>
+          }
           <Button
             onClick={() => window.print()}
-            className="bg-white text-[#18191B] hover:bg-white/90 text-xs font-semibold px-4 h-8 rounded-full flex items-center gap-1.5 flex-shrink-0"
-          >
+            className="bg-white text-[#18191B] hover:bg-white/90 text-xs font-semibold px-4 h-8 rounded-full flex items-center gap-1.5 flex-shrink-0">
+
             <Download className="w-3.5 h-3.5" />
             <span>Export PDF</span>
           </Button>
@@ -166,8 +165,8 @@ export default function BusinessReportPage() {
         <div
           className="a4-page"
           ref={docContainerRef}
-          onInput={scheduleAutoSave}
-        >
+          onInput={scheduleAutoSave}>
+
 
           {/* ── Document Header ── */}
           <header className="doc-header report-doc-header mb-6 sm:mb-8 pb-4 sm:pb-6 border-b-2 border-[#1a1a1a] flex items-start justify-between gap-3">
@@ -176,12 +175,12 @@ export default function BusinessReportPage() {
               <div className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center flex-shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="https://sycord.com/logo.png"
+                  src="https://img.rocket.new/generatedImages/rocket_gen_img_18d57fb40-1767003893838.png"
                   alt="Sycord"
                   width={40}
                   height={40}
-                  style={{ borderRadius: "6px", display: "block", objectFit: "contain" }}
-                />
+                  style={{ borderRadius: "6px", display: "block", objectFit: "contain" }} />
+
               </div>
               <div>
                 <EF tag="p" fieldId="header-business-name" className="text-[11pt] font-black text-[#1a1a1a] tracking-tight leading-none">{BUSINESS_NAME}</EF>
@@ -201,21 +200,21 @@ export default function BusinessReportPage() {
           <EF
             tag="div"
             fieldId="intro"
-            className="mb-6 sm:mb-8 p-3 border border-[#c0c0c0] bg-[#f9f9f9] text-[8.5pt] text-[#444] leading-relaxed"
-          >
+            className="mb-6 sm:mb-8 p-3 border border-[#c0c0c0] bg-[#f9f9f9] text-[8.5pt] text-[#444] leading-relaxed">
+
             This document constitutes an official Business Activity Report prepared by {OWNER_NAME} on behalf of {BUSINESS_NAME}. It has been compiled for regulatory, financial, or partnership compliance purposes and reflects the business activities as of the date stated above.
           </EF>
 
           {/* ── SECTION 1: Legal Identity ── */}
           <DocSection number="1" sectionId="s1" title="Legal Identity">
             <LegalTable tableId="s1-legal" rows={[
-              ["Full Legal Name",    OWNER_NAME],
-              ["Trading Name",       BUSINESS_NAME],
-              ["Business Type",      "Software-as-a-Service (SaaS) — Sole Trader / Individual"],
-              ["Website",            WEBSITE_URL],
-              ["Document Date",      REPORT_DATE],
-              ["Document Reference", DOC_REF],
-            ]} />
+            ["Full Legal Name", OWNER_NAME],
+            ["Trading Name", BUSINESS_NAME],
+            ["Business Type", "Software-as-a-Service (SaaS) — Sole Trader / Individual"],
+            ["Website", WEBSITE_URL],
+            ["Document Date", REPORT_DATE],
+            ["Document Reference", DOC_REF]]
+            } />
           </DocSection>
 
           {/* ── SECTION 2: Business Overview ── */}
@@ -239,8 +238,8 @@ export default function BusinessReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {SERVICES.map((s, i) => (
-                    <tr key={s.title} style={{ background: i % 2 === 0 ? "#fff" : "#f5f5f5" }}>
+                  {SERVICES.map((s, i) =>
+                  <tr key={s.title} style={{ background: i % 2 === 0 ? "#fff" : "#f5f5f5" }}>
                       <td className="px-3 py-2 font-semibold text-[#1a1a1a] align-top border border-[#ddd]">
                         <EF fieldId={`s3-svc-${i}-title`}>{s.title}</EF>
                       </td>
@@ -248,7 +247,7 @@ export default function BusinessReportPage() {
                         <EF fieldId={`s3-svc-${i}-desc`}>{s.desc}</EF>
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -270,14 +269,14 @@ export default function BusinessReportPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {PLANS.map((p, i) => (
-                    <tr key={p.name} style={{ background: i % 2 === 0 ? "#fff" : "#f5f5f5" }}>
+                  {PLANS.map((p, i) =>
+                  <tr key={p.name} style={{ background: i % 2 === 0 ? "#fff" : "#f5f5f5" }}>
                       <td className="px-3 py-2 font-semibold border border-[#ddd] align-top"><EF fieldId={`s4-plan-${i}-name`}>{p.name}</EF></td>
                       <td className="px-3 py-2 border border-[#ddd] align-top font-mono"><EF fieldId={`s4-plan-${i}-price`}>{p.price} USD</EF></td>
                       <td className="px-3 py-2 border border-[#ddd] align-top"><EF fieldId={`s4-plan-${i}-period`}>{p.period}</EF></td>
                       <td className="px-3 py-2 border border-[#ddd] text-[#444]"><EF fieldId={`s4-plan-${i}-features`}>{p.features}</EF></td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -295,26 +294,26 @@ export default function BusinessReportPage() {
               <li><EF fieldId="s5-li-3">Upon successful authorisation, PayPal redirects the customer back to Sycord and the subscription is activated.</EF></li>
             </ol>
             <LegalTable tableId="s5-pay" rows={[
-              ["Payment Processor",  "PayPal (PayPal Holdings, Inc.)"],
-              ["API Endpoint",       "api-m.paypal.com (production) / api-m.sandbox.paypal.com (testing)"],
-              ["Collection Point",   WEBSITE_URL + " — /subscriptions (checkout page)"],
-              ["Supported Currency", "United States Dollar (USD)"],
-              ["Billing Cycle",      "Monthly recurring subscription"],
-              ["Refund Policy",      "Subject to PayPal Buyer Protection and Sycord Terms of Service"],
-            ]} />
+            ["Payment Processor", "PayPal (PayPal Holdings, Inc.)"],
+            ["API Endpoint", "api-m.paypal.com (production) / api-m.sandbox.paypal.com (testing)"],
+            ["Collection Point", WEBSITE_URL + " — /subscriptions (checkout page)"],
+            ["Supported Currency", "United States Dollar (USD)"],
+            ["Billing Cycle", "Monthly recurring subscription"],
+            ["Refund Policy", "Subject to PayPal Buyer Protection and Sycord Terms of Service"]]
+            } />
           </DocSection>
 
           {/* ── SECTION 6: Branding & Online Presence ── */}
           <DocSection number="6" sectionId="s6" title="Branding and Online Presence">
             <LegalTable tableId="s6-brand" rows={[
-              ["Brand Name",        BUSINESS_NAME],
-              ["Primary Website",   WEBSITE_URL],
-              ["About Page",        WEBSITE_URL + "/about"],
-              ["Pricing Page",      WEBSITE_URL + "/subscriptions"],
-              ["Terms of Service",  WEBSITE_URL + "/tos"],
-              ["Privacy Policy",    WEBSITE_URL + "/pap"],
-              ["Contact",           WEBSITE_URL + "/contact"],
-            ]} />
+            ["Brand Name", BUSINESS_NAME],
+            ["Primary Website", WEBSITE_URL],
+            ["About Page", WEBSITE_URL + "/about"],
+            ["Pricing Page", WEBSITE_URL + "/subscriptions"],
+            ["Terms of Service", WEBSITE_URL + "/tos"],
+            ["Privacy Policy", WEBSITE_URL + "/pap"],
+            ["Contact", WEBSITE_URL + "/contact"]]
+            } />
           </DocSection>
 
           {/* ── SECTION 7: Declaration ── */}
@@ -328,10 +327,10 @@ export default function BusinessReportPage() {
           <footer className="report-footer mt-8 sm:mt-10 pt-5 sm:pt-6 border-t-2 border-[#1a1a1a] flex items-end justify-between gap-6">
             {/* Left — metadata */}
             <div className="space-y-0.5">
-              <EF tag="p" fieldId="footer-doc-ref"      className="text-[8pt] text-[#555]">Document reference: {DOC_REF}</EF>
-              <EF tag="p" fieldId="footer-prepared-by"  className="text-[8pt] text-[#555]">Prepared by: {OWNER_NAME}</EF>
-              <EF tag="p" fieldId="footer-date"         className="text-[8pt] text-[#555]">Date: {REPORT_DATE}</EF>
-              <EF tag="p" fieldId="footer-url"          className="text-[8pt] text-[#555] pt-1">{WEBSITE_URL}</EF>
+              <EF tag="p" fieldId="footer-doc-ref" className="text-[8pt] text-[#555]">Document reference: {DOC_REF}</EF>
+              <EF tag="p" fieldId="footer-prepared-by" className="text-[8pt] text-[#555]">Prepared by: {OWNER_NAME}</EF>
+              <EF tag="p" fieldId="footer-date" className="text-[8pt] text-[#555]">Date: {REPORT_DATE}</EF>
+              <EF tag="p" fieldId="footer-url" className="text-[8pt] text-[#555] pt-1">{WEBSITE_URL}</EF>
             </div>
 
             {/* Right — signature block */}
@@ -344,18 +343,18 @@ export default function BusinessReportPage() {
                 width="170"
                 height="55"
                 aria-label="Dávid Márton signature"
-                style={{ display: "block", marginLeft: "auto" }}
-              >
+                style={{ display: "block", marginLeft: "auto" }}>
+
                 <g fill="none" stroke="#1a1a1a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M 18,82 C 12,78 8,62 10,48 C 12,36 16,30 20,36 C 22,42 20,70 22,80"/>
-                  <path d="M 22,80 C 24,74 26,40 30,28 C 34,16 36,60 40,76 C 42,70 46,38 50,26 C 54,14 58,62 62,78"/>
-                  <path d="M 62,78 C 66,72 72,54 78,48 C 84,44 82,62 80,70 C 78,78 86,54 92,46"/>
-                  <path d="M 73,32 C 76,26 79,21 82,18"/>
-                  <path d="M 92,46 C 92,52 90,68 92,76 C 96,70 102,54 108,48"/>
-                  <path d="M 108,48 C 108,38 110,22 112,16 C 114,22 116,58 118,70 C 122,64 128,50 134,46"/>
-                  <path d="M 100,42 L 126,40"/>
-                  <path d="M 134,46 C 132,54 128,72 134,78 C 140,82 150,66 152,58 C 154,50 148,44 142,48 C 136,52 140,76 150,70"/>
-                  <path d="M 150,70 C 152,74 154,80 158,74 C 164,64 170,50 176,46 C 182,42 184,62 186,74 C 188,82 196,72 204,64 C 208,60 210,72 210,78"/>
+                  <path d="M 18,82 C 12,78 8,62 10,48 C 12,36 16,30 20,36 C 22,42 20,70 22,80" />
+                  <path d="M 22,80 C 24,74 26,40 30,28 C 34,16 36,60 40,76 C 42,70 46,38 50,26 C 54,14 58,62 62,78" />
+                  <path d="M 62,78 C 66,72 72,54 78,48 C 84,44 82,62 80,70 C 78,78 86,54 92,46" />
+                  <path d="M 73,32 C 76,26 79,21 82,18" />
+                  <path d="M 92,46 C 92,52 90,68 92,76 C 96,70 102,54 108,48" />
+                  <path d="M 108,48 C 108,38 110,22 112,16 C 114,22 116,58 118,70 C 122,64 128,50 134,46" />
+                  <path d="M 100,42 L 126,40" />
+                  <path d="M 134,46 C 132,54 128,72 134,78 C 140,82 150,66 152,58 C 154,50 148,44 142,48 C 136,52 140,76 150,70" />
+                  <path d="M 150,70 C 152,74 154,80 158,74 C 164,64 170,50 176,46 C 182,42 184,62 186,74 C 188,82 196,72 204,64 C 208,60 210,72 210,78" />
                 </g>
               </svg>
               <div style={{ width: "170px", borderTop: "1px solid #bbb", marginTop: "6px", marginLeft: "auto" }} />
@@ -366,8 +365,8 @@ export default function BusinessReportPage() {
         </div>
         {/* ═══ END A4 DOCUMENT ═══ */}
       </div>
-    </>
-  )
+    </>);
+
 }
 
 /* ─────────────────── EditableField ─────────────────── */
@@ -381,26 +380,26 @@ function EF({
   tag = "span",
   fieldId,
   className,
-  style,
-}: {
-  children?: React.ReactNode
-  tag?: string
-  fieldId?: string
-  className?: string
-  style?: React.CSSProperties
-}) {
-  const Tag = tag as React.ElementType
+  style
+
+
+
+
+
+
+}: {children?: React.ReactNode;tag?: string;fieldId?: string;className?: string;style?: React.CSSProperties;}) {
+  const Tag = tag as React.ElementType;
   return (
     <Tag
       contentEditable
       suppressContentEditableWarning
       data-field={fieldId}
       className={className}
-      style={style}
-    >
+      style={style}>
+
       {children}
-    </Tag>
-  )
+    </Tag>);
+
 }
 
 /* ─────────────────── DocSection ─────────────────── */
@@ -408,13 +407,13 @@ function DocSection({
   number,
   sectionId,
   title,
-  children,
-}: {
-  number: string
-  sectionId: string
-  title: string
-  children: React.ReactNode
-}) {
+  children
+
+
+
+
+
+}: {number: string;sectionId: string;title: string;children: React.ReactNode;}) {
   return (
     <section style={{ marginBottom: "18pt" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8pt", borderBottom: "1.5pt solid #1a1a1a", paddingBottom: "3pt", marginBottom: "8pt" }}>
@@ -425,44 +424,44 @@ function DocSection({
           contentEditable
           suppressContentEditableWarning
           data-field={`${sectionId}-title`}
-          style={{ fontSize: "10pt", fontWeight: 700, color: "#1a1a1a", textTransform: "uppercase", letterSpacing: "0.8pt", margin: 0 }}
-        >
+          style={{ fontSize: "10pt", fontWeight: 700, color: "#1a1a1a", textTransform: "uppercase", letterSpacing: "0.8pt", margin: 0 }}>
+
           {title}
         </h2>
       </div>
       {children}
-    </section>
-  )
+    </section>);
+
 }
 
 /* ─────────────────── LegalTable ─────────────────── */
-function LegalTable({ tableId, rows }: { tableId: string; rows: [string, string][] }) {
+function LegalTable({ tableId, rows }: {tableId: string;rows: [string, string][];}) {
   return (
     <div className="overflow-x-auto">
       <table className="legal-table w-full border-collapse" style={{ fontSize: "8.5pt" }}>
         <tbody>
-          {rows.map(([label, value], i) => (
-            <tr key={label}>
+          {rows.map(([label, value], i) =>
+          <tr key={label}>
               <td
-                contentEditable
-                suppressContentEditableWarning
-                data-field={`${tableId}-row-${i}-label`}
-                style={{ padding: "4pt 8pt", fontWeight: 600, color: "#444", width: "38%", borderBottom: "0.5pt solid #e0e0e0", verticalAlign: "top", backgroundColor: "#f5f5f5", minWidth: "100px" }}
-              >
+              contentEditable
+              suppressContentEditableWarning
+              data-field={`${tableId}-row-${i}-label`}
+              style={{ padding: "4pt 8pt", fontWeight: 600, color: "#444", width: "38%", borderBottom: "0.5pt solid #e0e0e0", verticalAlign: "top", backgroundColor: "#f5f5f5", minWidth: "100px" }}>
+
                 {label}
               </td>
               <td
-                contentEditable
-                suppressContentEditableWarning
-                data-field={`${tableId}-row-${i}-value`}
-                style={{ padding: "4pt 8pt", color: "#222", borderBottom: "0.5pt solid #e0e0e0", verticalAlign: "top" }}
-              >
+              contentEditable
+              suppressContentEditableWarning
+              data-field={`${tableId}-row-${i}-value`}
+              style={{ padding: "4pt 8pt", color: "#222", borderBottom: "0.5pt solid #e0e0e0", verticalAlign: "top" }}>
+
                 {value}
               </td>
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
-    </div>
-  )
+    </div>);
+
 }

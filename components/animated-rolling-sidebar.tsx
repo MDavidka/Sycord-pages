@@ -1,15 +1,14 @@
-"use client"
-
-import React, { useState, useEffect } from "react"
-import Image from "next/image"
-import { motion, AnimatePresence } from "framer-motion"
-import { cn } from "@/lib/utils"
+"use client";
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 import {
   ChevronDown,
   Lock,
   Pin,
   ChevronsUpDown,
-} from "lucide-react"
+} from "lucide-react";
 
 interface NavItem {
   id: string
@@ -115,8 +114,7 @@ const SidebarNavContent = ({
               <div className={cn(
                 "w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold border",
                 groupHasActive
-                  ? "bg-white/10 border-white/20 text-white"
-                  : "bg-white/[0.04] border-white/[0.08] text-white/50"
+                  ? "bg-white/10 border-white/20 text-white" :"bg-white/[0.04] border-white/[0.08] text-white/50"
               )}>
                 {group.title.charAt(0)}
               </div>
@@ -170,8 +168,7 @@ const SidebarNavContent = ({
                             isActive
                               ? "text-white font-semibold"
                               : isLocked
-                              ? "text-white/20 cursor-not-allowed"
-                              : "text-white/50 font-medium hover:text-white/80 hover:bg-white/[0.04]"
+                              ? "text-white/20 cursor-not-allowed" :"text-white/50 font-medium hover:text-white/80 hover:bg-white/[0.04]"
                           )}
                         >
                           {isActive && (
@@ -376,8 +373,7 @@ export function AnimatedRollingSidebarDesktop({
                       isActive
                         ? "bg-white/10 text-white"
                         : isLocked
-                        ? "text-white/20 cursor-not-allowed"
-                        : "text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
+                        ? "text-white/20 cursor-not-allowed" :"text-white/40 hover:text-white/70 hover:bg-white/[0.05]"
                     )}
                   >
                     <Icon className="h-[18px] w-[18px]" />

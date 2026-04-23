@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import { logAiDebug } from "@/lib/logger"
-import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { logAiDebug } from "@/lib/logger";
+import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter";
 
 function toPascalCase(input: string): string {
   const candidate = (

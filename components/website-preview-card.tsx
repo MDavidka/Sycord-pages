@@ -1,6 +1,5 @@
-"use client"
-
-import { useState, useRef, useEffect, useCallback } from "react"
+"use client";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Loader2,
   Globe,
@@ -9,9 +8,9 @@ import {
   Sparkles,
   Zap,
   CheckCircle2,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 interface WebsitePreviewCardProps {
   fallbackHtml?: string;

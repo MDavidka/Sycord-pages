@@ -1,6 +1,5 @@
-"use client"
-
-import { useState, useEffect } from "react"
+"use client";
+import { useState, useEffect } from "react";
 
 interface TimeLeft {
   days: number

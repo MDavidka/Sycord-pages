@@ -1,9 +1,8 @@
-"use client"
-
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Home, HelpCircle } from "lucide-react"
-import { useSession } from "next-auth/react"
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Home, HelpCircle } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 export function BottomMenu() {
   const pathname = usePathname()
@@ -29,8 +28,7 @@ export function BottomMenu() {
                 href={item.href}
                 className={`flex flex-col items-center justify-center gap-1 flex-1 h-full transition-colors ${
                   isActive(item.href)
-                    ? "text-primary border-t-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "text-primary border-t-2 border-primary" :"text-muted-foreground hover:text-foreground"
                 } ${item.disabled ? "pointer-events-none opacity-50" : ""}`}
               >
                 <Icon className="h-5 w-5" />

@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server";
 
 const PAYPAL_API_BASE =
-  process.env.NODE_ENV === "production"
-    ? "https://api-m.paypal.com"
+  process.env.NODE_ENV === "production" ?"https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com"
 
 async function getAccessToken(): Promise<string> {

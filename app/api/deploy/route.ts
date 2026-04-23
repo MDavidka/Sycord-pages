@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 const GITHUB_API_BASE = "https://api.github.com"
 const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.sycord.site"
@@ -320,7 +320,7 @@ export async function POST(request: Request) {
             deployMessage = "Deployed to Sycord VPS!"
             await db.collection("users").updateOne(
                 { id: session.user.id, "projects._id": new ObjectId(projectId) },
-                { $set: { "projects.$.cloudflareUrl": vpsUrl } } // Using cloudflareUrl for backward compatibility in DB schema
+                { $set: { "projects.$.cloudflareUrl": vpsUrl } }
             )
         }
     } catch (e) {

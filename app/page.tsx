@@ -1,10 +1,9 @@
-"use client"
-
-import Link from "next/link"
-import Image from "next/image"
-import { useEffect, useRef, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Check, Zap, Sparkles, ArrowRight } from "lucide-react"
+"use client";
+import Link from "next/link";
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Check, Zap, Sparkles } from "lucide-react";
 
 function useScrollReveal() {
   const ref = useRef<HTMLElement>(null)
@@ -255,8 +254,7 @@ export default function LandingPage() {
                     key={i}
                     className={`h-2 rounded-full transition-all duration-300 ${
                       i === featuresActiveIndex
-                        ? "w-8 bg-white/65"
-                        : "w-2.5 bg-white/25"
+                        ? "w-8 bg-white/65" :"w-2.5 bg-white/25"
                     }`}
                   />
                 ))}

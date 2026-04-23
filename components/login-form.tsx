@@ -1,11 +1,10 @@
-"use client"
-
-import type React from "react"
-import Link from "next/link"
-import Image from "next/image"
-import { signIn } from "next-auth/react"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, Shield, Zap, Globe } from "lucide-react"
+"use client";
+import type React from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { signIn } from "next-auth/react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Shield, Zap, Globe } from "lucide-react";
 
 export default function LoginForm() {
   return (

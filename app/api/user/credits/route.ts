@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import clientPromise from "@/lib/mongodb";
 import {
   BEST_COST_PER_FILE,
   FAST_COST_PER_FILE,
   seedBalance,
-} from "@/lib/credits"
+} from "@/lib/credits";
 
 export async function GET() {
   try {

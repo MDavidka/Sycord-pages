@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import { getSystemPrompts, saveSystemPrompts } from "@/lib/ai-prompts"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { getSystemPrompts, saveSystemPrompts } from "@/lib/ai-prompts";
 
 export async function GET() {
   const session = await getServerSession(authOptions)

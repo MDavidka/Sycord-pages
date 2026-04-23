@@ -1,5 +1,5 @@
-"use client"
-import { signIn } from "next-auth/react"
+"use client";
+import { signIn } from "next-auth/react";
 
 export default function Bypass() {
   return (

@@ -1,6 +1,6 @@
-import Link from "next/link"
-import Image from "next/image"
-import TosDownloadButton from "./tos-download-button"
+import Link from "next/link";
+import Image from "next/image";
+import TosDownloadButton from "./tos-download-button";
 
 export const metadata = {
   title: "Általános Szerződési Feltételek – Sycord",
@@ -17,7 +17,6 @@ export default function TermsOfServicePage() {
           <span className="text-base md:text-xl font-bold text-white tracking-tight">Sycord</span>
         </Link>
       </header>
-
       {/* Content */}
       <main className="w-full flex-1 flex flex-col items-center px-4 md:px-8 py-10 md:py-16">
         <article className="max-w-3xl w-full">
@@ -170,14 +169,13 @@ export default function TermsOfServicePage() {
           </section>
         </article>
       </main>
-
       {/* Footer */}
       <footer className="w-full border-t border-white/5 bg-[#1F1F21]">
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="text-[#8A8E91] text-[11px]">© {new Date().getFullYear()} Sycord. All rights reserved.</span>
+          <span className="text-[#8A8E91] text-[11px]">© {new Date()?.getFullYear()} Sycord. All rights reserved.</span>
           <Link href="/" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">← Vissza a főoldalra</Link>
         </div>
       </footer>
     </div>
-  )
+  );
 }

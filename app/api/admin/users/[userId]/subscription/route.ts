@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/is-admin"
-import clientPromise from "@/lib/mongodb"
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/is-admin";
+import clientPromise from "@/lib/mongodb";
 
 export async function POST(request: Request, { params }: { params: Promise<{ userId: string }> }) {
   try {
@@ -17,7 +17,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
     const db = client.db()
 
     const isPremium = subscription !== "Free"
-
     await db.collection("users").updateOne(
       { id: userId },
       {

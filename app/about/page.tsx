@@ -1,9 +1,8 @@
-"use client"
-
-import Link from "next/link"
-import Image from "next/image"
-import { ArrowLeft, Sparkles, Globe, Palette, Rocket, Cpu, Shield, Code, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
+"use client";
+import Link from "next/link";
+import Image from "next/image";
+import { ArrowLeft, Sparkles, Globe, Rocket, Cpu, Shield, Code, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const features = [
   {
@@ -72,7 +71,6 @@ export default function AboutPage() {
           </Button>
         </Link>
       </header>
-
       <main className="w-full max-w-5xl mx-auto px-4 md:px-8 py-12 md:py-20">
         {/* Hero */}
         <div className="text-center mb-16 md:mb-20">
@@ -120,16 +118,16 @@ export default function AboutPage() {
 
         {/* Feature Cards */}
         <div className="grid gap-4 md:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => (
+          {features?.map((f) => (
             <div
-              key={f.title}
+              key={f?.title}
               className="bg-[#252527] rounded-2xl p-6 border border-white/[0.08] hover:border-white/20 transition-all duration-300"
             >
-              <div className={`w-12 h-12 rounded-xl ${f.bg} flex items-center justify-center mb-4`}>
-                <f.icon className={`w-6 h-6 ${f.color}`} />
+              <div className={`w-12 h-12 rounded-xl ${f?.bg} flex items-center justify-center mb-4`}>
+                <f.icon className={`w-6 h-6 ${f?.color}`} />
               </div>
-              <h3 className="text-white font-semibold text-base mb-2">{f.title}</h3>
-              <p className="text-[#8A8E91] text-sm leading-relaxed">{f.description}</p>
+              <h3 className="text-white font-semibold text-base mb-2">{f?.title}</h3>
+              <p className="text-[#8A8E91] text-sm leading-relaxed">{f?.description}</p>
             </div>
           ))}
         </div>
@@ -153,11 +151,10 @@ export default function AboutPage() {
           </Button>
         </div>
       </main>
-
       {/* Footer */}
       <footer className="w-full border-t border-white/5 py-6 mt-auto">
         <div className="max-w-5xl mx-auto px-4 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="text-[#8A8E91] text-[11px]">© {new Date().getFullYear()} Sycord. All rights reserved.</span>
+          <span className="text-[#8A8E91] text-[11px]">© {new Date()?.getFullYear()} Sycord. All rights reserved.</span>
           <div className="flex items-center gap-4">
             <Link href="/tos" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Terms</Link>
             <Link href="/pap" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Privacy</Link>
@@ -167,5 +164,5 @@ export default function AboutPage() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

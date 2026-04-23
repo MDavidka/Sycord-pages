@@ -1,12 +1,11 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Loader2, Sparkles, CheckCircle2, AlertCircle, Terminal, FileCode, ArrowRight, Trash2, Move } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { GeneratedPage } from "@/components/ai-website-builder"
-import { cn } from "@/lib/utils"
+"use client";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Loader2, Sparkles, CheckCircle2, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import { GeneratedPage } from "@/components/ai-website-builder";
+import { cn } from "@/lib/utils";
 
 interface AutoFixModalProps {
   isOpen: boolean

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 // TLDs we want to display pricing for
 const TARGET_TLDS = ["com", "net", "org", "co", "io", "dev", "app", "store", "online"]

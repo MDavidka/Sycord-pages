@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import clientPromise from "@/lib/mongodb";
 
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)

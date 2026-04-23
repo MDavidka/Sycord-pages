@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
-import { NodeSSH } from "node-ssh"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { NextResponse } from "next/server";
+import { NodeSSH } from "node-ssh";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 
 export const runtime = "nodejs"
 
@@ -114,11 +114,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message:
-        action === "stop"
-          ? "Runner stopped."
-          : action === "start"
-            ? "Runner started."
-            : "Runner restarted.",
+        action === "stop" ?"Runner stopped."
+          : action === "start" ?"Runner started." :"Runner restarted.",
     })
   } catch (error: any) {
     console.error("[VPS Restart] Error:", error)

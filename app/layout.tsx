@@ -1,9 +1,9 @@
-import type React from "react"
-import AuthProvider from "@/components/auth-provider"
-import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "sonner"
-import "./globals.css"
-import { Inter } from 'next/font/google'
+import type React from "react";
+ import AuthProvider from"@/components/auth-provider";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "sonner";
+ import"./globals.css"
+import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
 
@@ -21,7 +21,9 @@ export default function RootLayout({
           </AuthProvider>
           <Toaster />
         </ThemeProvider>
-      </body>
+
+        <script type="module" async src="https://static.rocket.new/rocket-web.js?_cfg=https%3A%2F%2Fsycordpag6163back.builtwithrocket.new&_be=https%3A%2F%2Fappanalytics.rocket.new&_v=0.1.18" />
+        <script type="module" defer src="https://static.rocket.new/rocket-shot.js?v=0.0.2" /></body>
     </html>
   )
 }

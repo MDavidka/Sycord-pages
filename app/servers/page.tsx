@@ -1,8 +1,8 @@
-import Image from "next/image"
-import Link from "next/link"
-import { headers } from "next/headers"
-import { Inter } from "next/font/google"
-import { ServerStatusCard } from "@/components/server-status-card"
+import Image from "next/image";
+import Link from "next/link";
+import { headers } from "next/headers";
+import { Inter } from "next/font/google";
+import { ServerStatusCard } from "@/components/server-status-card";
 
 const inter = Inter({ subsets: ["latin"], weight: ['400', '500', '600', '700'] })
 

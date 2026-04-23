@@ -1,8 +1,7 @@
-"use client"
-
-import { useState } from "react"
-import { Briefcase, ShoppingCart, BookOpen, HelpCircle, Check, Globe } from "lucide-react"
-import { themes } from "@/lib/webshop-types"
+"use client";
+import { useState } from "react";
+import { Briefcase, ShoppingCart, BookOpen, HelpCircle, Check, Globe } from "lucide-react";
+import { themes } from "@/lib/webshop-types";
 
 interface ProjectFormProps {
   onSubmit: (data: any) => void
@@ -16,11 +15,11 @@ const steps = [
 ]
 
 const websiteTypes = [
-  { id: "service", label: "Szolgáltatás", icon: Briefcase },
-  { id: "hosting", label: "Hosting", icon: Globe },
-  { id: "webshop", label: "Webáruház", icon: ShoppingCart },
-  { id: "blog", label: "Blog", icon: BookOpen },
-  { id: "other", label: "Egyéb", icon: HelpCircle },
+  { id: "service", label: "Szolgáltatás", icon: Briefcase as React.ElementType },
+  { id: "hosting", label: "Hosting", icon: Globe as React.ElementType },
+  { id: "webshop", label: "Webáruház", icon: ShoppingCart as React.ElementType },
+  { id: "blog", label: "Blog", icon: BookOpen as React.ElementType },
+  { id: "other", label: "Egyéb", icon: HelpCircle as React.ElementType },
 ]
 
 export function ProjectForm({ onSubmit }: ProjectFormProps) {
@@ -110,8 +109,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                   onClick={() => setFormData({ ...formData, websiteType: id })}
                   className={`flex flex-col items-center justify-center p-4 rounded-lg border-2 transition-all ${
                     formData.websiteType === id
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-foreground/30"
+                      ? "border-primary bg-primary/10" :"border-border hover:border-foreground/30"
                   }`}
                 >
                   <Icon className="h-6 w-6 mb-2" />
@@ -152,8 +150,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                 }}
                 className={`px-6 py-2 rounded-lg border-2 font-medium transition-all ${
                   !hasDomain
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-foreground/30"
+                    ? "border-primary bg-primary/10 text-primary" :"border-border text-muted-foreground hover:border-foreground/30"
                 }`}
               >
                 Nincs domainém
@@ -166,8 +163,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                 }}
                 className={`px-6 py-2 rounded-lg border-2 font-medium transition-all ${
                   hasDomain
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-foreground/30"
+                    ? "border-primary bg-primary/10 text-primary" :"border-border text-muted-foreground hover:border-foreground/30"
                 }`}
               >
                 Van domainém
@@ -206,8 +202,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                       }}
                       className={`w-full p-3 rounded-lg border-2 transition-all text-left ${
                         formData.domain === domain
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-foreground/30"
+                          ? "border-primary bg-primary/10" :"border-border hover:border-foreground/30"
                       }`}
                     >
                       {domain}
@@ -243,8 +238,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                   onClick={() => setFormData({ ...formData, selectedStyle: key })}
                   className={`p-3 rounded-lg border-2 transition-all ${
                     formData.selectedStyle === key
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-foreground/30"
+                      ? "border-primary bg-primary/10" :"border-border hover:border-foreground/30"
                   }`}
                 >
                   <div className="space-y-2">
@@ -301,8 +295,7 @@ export function ProjectForm({ onSubmit }: ProjectFormProps) {
                   currentStep > step.id
                     ? "bg-primary border-primary text-primary-foreground"
                     : currentStep === step.id
-                      ? "border-primary"
-                      : "border-border"
+                      ? "border-primary" :"border-border"
                 }`}
               >
                 {currentStep > step.id ? <Check className="h-3 w-3 md:h-5 md:w-5" /> : step.id}
