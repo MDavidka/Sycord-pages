@@ -43,20 +43,21 @@ export async function POST(req: Request) {
       role: "system" as const,
       content: `${prompts.builderPlan}
 
-For the Plan step you output ONLY a high-level sitemap. Do NOT emit any UI tree, component, or code — the later pipeline stages handle that.
+The downstream pipeline builds a complete Vite + React + TypeScript project with react-router-dom routing. Your "Plan" step produces the sitemap + per-page feature list that Style and Logic stages will consume. Do NOT emit any UI tree, component, or code — the later stages handle that.
 
 Return strictly a JSON array of page objects, each with:
-- "path":  URL path starting with "/" (e.g. "/", "/about")
-- "title": short human-readable page title
-- "description": 1–2 sentence description of the page's purpose and key sections
+- "path":   URL path starting with "/" (e.g. "/", "/about", "/contact"). First entry SHOULD be "/".
+- "title":  short human-readable page title (used as the React component name).
+- "description": 1–2 sentence description of the page's purpose, key sections and overall tone.
+- "features": array of short strings describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Logout button clears localStorage and redirects to /", "Mobile nav toggle"). Keep each feature concrete enough for a developer to implement.
 
-No markdown, no prose, no wrapping object.`,
+No markdown, no prose, no wrapping object — just the JSON array.`,
     },
     {
       role: "user" as const,
       content: `Plan a multi-page website for: ${prompt}
 
-Return only the JSON array described above.`,
+Return only the JSON array described above. Keep the plan to 3–6 pages unless the brief clearly requires more.`,
     },
   ]
 
@@ -79,11 +80,17 @@ Return only the JSON array described above.`,
   }
 
   const parsed = extractJson<unknown>(result.content)
-  let plan: Array<{ path: string; title: string; description?: string }>
+  interface PlanEntry {
+    path: string
+    title: string
+    description?: string
+    features?: string[]
+  }
+  let plan: PlanEntry[]
   if (Array.isArray(parsed)) {
-    plan = parsed as typeof plan
+    plan = parsed as PlanEntry[]
   } else if (parsed && typeof parsed === "object") {
-    plan = [parsed as (typeof plan)[number]]
+    plan = [parsed as PlanEntry]
   } else {
     await logAiDebug("Architect Parse Error", { content: result.content })
     return NextResponse.json(
@@ -100,6 +107,9 @@ Return only the JSON array described above.`,
       path: typeof p.path === "string" && p.path.trim() ? p.path.trim() : `/page-${i + 1}`,
       title: typeof p.title === "string" && p.title.trim() ? p.title.trim() : `Page ${i + 1}`,
       description: typeof p.description === "string" ? p.description.trim() : undefined,
+      features: Array.isArray(p.features)
+        ? p.features.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+        : undefined,
     }))
 
   await logAiDebug("Architect Parse Success", { pages: plan.length })

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({})) as {
-    page?: { path?: string; title?: string; description?: string }
+    page?: { path?: string; title?: string; description?: string; features?: string[] }
     prompt?: string
     model?: ModelSelection
   }
@@ -59,14 +59,33 @@ export async function POST(req: Request) {
   const messages = [
     {
       role: "system" as const,
-      content: `You are the "Style JSON" stage of a deterministic web-app build pipeline.
+      content: `You are the "Style JSON" stage of a deterministic Vite + React + TypeScript build pipeline.
 
 Your only job is to emit a single JSON UI tree describing the visual layout of ONE page. A deterministic converter will turn this JSON into .tsx — so follow the contract exactly.
 
 STRICT CONTRACT (from generation.md):
 ${generationGuide || "No generation.md available"}
 
-COMPONENT CATALOGUE — you MUST only use components listed here (anything else will fail the converter):
+VENDORED COMPONENT SET — the generated project only ships these shadcn/ui components. Using anything else will cause the converter to silently demote the node to <div>, so prefer this list:
+- Button
+- Alert, AlertTitle, AlertDescription
+- AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel
+- Avatar, AvatarImage, AvatarFallback
+- Badge
+- Card, CardHeader, CardTitle, CardDescription, CardAction, CardContent, CardFooter
+- Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription, DialogClose
+- DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuGroup, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem
+- Input
+- Label
+- Progress
+- Sheet, SheetTrigger, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription, SheetClose
+- Skeleton
+- Switch
+- Textarea
+
+For layout use native HTML tags (div, span, p, h1–h6, a, img, ul, li, section, header, footer, main, nav, form). For navigation between generated pages, use standard <a href="/other-path"> anchors — the scaffold uses react-router-dom, and the BrowserRouter will intercept in-app links.
+
+Full shadcn reference (for prop shapes & examples):
 ${cheatSheet || prompts.builderCheatSheet}
 
 OUTPUT FORMAT:
@@ -78,10 +97,11 @@ Return ONLY a raw JSON object (no markdown, no prose, no code fence). The root s
 }
 
 RULES:
-- Use component names EXACTLY as they appear in the catalogue (PascalCase) or standard HTML tags (div, span, p, h1…h6, a, img, ul, li, section, header, footer, main, nav, form, etc.).
+- Prefer components from the "Vendored component set" list above. Unknown components silently become <div>.
 - Dynamic values use "$state.<name>" / "$handler.<name>" strings. Never invent JSX or raw code inside the JSON.
-- className strings should use Tailwind utility classes consistent with a modern dark-mode shadcn/ui aesthetic.
-- Keep the tree rich enough to look complete (hero, content, footer etc. where appropriate) but do not add components not in the catalogue.
+- className strings should use Tailwind utility classes consistent with a modern shadcn/ui aesthetic (they can be dark OR light mode — the scaffold ships both).
+- Do NOT use "$handler.set<X>" for state setters named after a "$state.<x>" — the converter wires those up automatically via useState. Use $handler.* only for real actions (onSubmit, onClickToggle, loadData, logout, etc.).
+- Keep the tree rich enough to look complete (hero, content, footer etc. where appropriate).
 - No comments inside the JSON.`,
     },
     {
@@ -92,8 +112,9 @@ Generate the UI tree JSON for this page:
 - path: ${page.path}
 - title: ${page.title}
 - description: ${page.description ?? "(no description)"}
+${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
 
-Return only the JSON object described in the contract.`,
+Make sure every feature above is represented in the tree (the UI must actually expose the relevant form / button / list / handler). Return only the JSON object described in the contract.`,
     },
   ]
 

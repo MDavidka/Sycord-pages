@@ -292,11 +292,50 @@ const REGEX = {
 
 // ─── NORMALIZE ────────────────────────────────────────────────────────────────
 
+// Components that are actually shipped in the generated project's scaffold
+// (see lib/vite-scaffold.ts). Anything else is silently demoted to a <div>
+// so the build never fails on a missing shadcn component.
+export const SUPPORTED_COMPONENTS: Set<string> = new Set([
+  'Button',
+  'Alert', 'AlertTitle', 'AlertDescription',
+  'AlertDialog', 'AlertDialogTrigger', 'AlertDialogContent', 'AlertDialogHeader',
+  'AlertDialogFooter', 'AlertDialogTitle', 'AlertDialogDescription',
+  'AlertDialogAction', 'AlertDialogCancel',
+  'Avatar', 'AvatarImage', 'AvatarFallback',
+  'Badge',
+  'Card', 'CardHeader', 'CardTitle', 'CardDescription', 'CardAction',
+  'CardContent', 'CardFooter',
+  'Dialog', 'DialogTrigger', 'DialogContent', 'DialogHeader', 'DialogFooter',
+  'DialogTitle', 'DialogDescription', 'DialogClose',
+  'DropdownMenu', 'DropdownMenuTrigger', 'DropdownMenuContent', 'DropdownMenuItem',
+  'DropdownMenuLabel', 'DropdownMenuSeparator', 'DropdownMenuShortcut',
+  'DropdownMenuGroup', 'DropdownMenuSub', 'DropdownMenuSubTrigger',
+  'DropdownMenuSubContent', 'DropdownMenuCheckboxItem', 'DropdownMenuRadioGroup',
+  'DropdownMenuRadioItem',
+  'Input',
+  'Label',
+  'Progress',
+  'Sheet', 'SheetTrigger', 'SheetContent', 'SheetHeader', 'SheetFooter',
+  'SheetTitle', 'SheetDescription', 'SheetClose',
+  'Skeleton',
+  'Switch',
+  'Textarea',
+])
+
 function normalizeName(name: string): string {
-  if (REGEX.COMPONENT_NAME.test(name)) return name
   if (HTML_TAGS.has(name)) return name
-  if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) return ALIAS_MAP[name]
-  throw new Error(`UNKNOWN_COMPONENT: "${name}" is not a known shadcn/ui component`)
+  if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) {
+    const mapped = ALIAS_MAP[name]
+    return SUPPORTED_COMPONENTS.has(mapped) ? mapped : 'div'
+  }
+  if (REGEX.COMPONENT_NAME.test(name)) {
+    // A PascalCase component is only emitted if (a) we know where to import
+    // it from, and (b) it's actually in the scaffold's vendored UI set.
+    // Otherwise demote it to a <div> so the generated project still builds.
+    if (IMPORT_MAP[name] && SUPPORTED_COMPONENTS.has(name)) return name
+    return 'div'
+  }
+  return 'div'
 }
 
 function normalizeTree(node: UINode): UINode {
@@ -329,13 +368,31 @@ function collect(node: UINode, acc: Collected): void {
   node.children?.forEach(c => collect(c, acc))
 }
 
+// Any handler named `set<Capitalized>` that matches an existing `$state.<x>`
+// collides with the useState setter the converter already creates. Drop it
+// from the handlers set so the page uses the local setter directly — this
+// stops the Logic stage from having to emit bogus stub setters and keeps
+// pages self-contained (no external Props plumbing for state updates).
+function pruneLocalSetterHandlers(acc: Collected): void {
+  const states = acc.states
+  for (const h of [...acc.handlers]) {
+    const match = h.match(/^set([A-Z][A-Za-z0-9_]*)$/)
+    if (!match) continue
+    const stateName = match[1].charAt(0).toLowerCase() + match[1].slice(1)
+    if (states.has(stateName)) {
+      acc.handlers.delete(h)
+    }
+  }
+}
+
 // ─── INITIAL VALUE HEURISTIC ──────────────────────────────────────────────────
 
 function initialValue(name: string): string {
-  if (/open|show|visible|active|checked|enabled/i.test(name)) return 'false'
-  if (/value|query|text|search|input|name|email|password/i.test(name)) return "''"
-  if (/count|index|step|page|num|size/i.test(name)) return '0'
-  return 'undefined'
+  if (/open|show|visible|active|checked|enabled|loading|disabled|dark/i.test(name)) return 'false'
+  if (/value|query|text|search|input|name|email|password|message|content|title|description|subject|phone|address/i.test(name)) return "''"
+  if (/count|index|step|page|num|size|total|quantity|amount|price/i.test(name)) return '0'
+  if (/list|items|results|entries|rows|options|tags|errors/i.test(name)) return '[]'
+  return "''"
 }
 
 // ─── PROP RESOLUTION ──────────────────────────────────────────────────────────
@@ -461,6 +518,7 @@ function convertTreeToTypeScriptInternal(
     components: new Set(),
   }
   collect(normalized, acc)
+  pruneLocalSetterHandlers(acc)
 
   const needsReact = acc.states.size > 0
 

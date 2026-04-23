@@ -1351,7 +1351,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         throw new Error(err?.message || "Planning stage failed")
       }
       const archData = await archRes.json()
-      const plan: Array<{ path: string; title: string; description?: string }> =
+      const plan: Array<{ path: string; title: string; description?: string; features?: string[] }> =
         Array.isArray(archData.plan) ? archData.plan : []
       if (plan.length === 0) throw new Error("Planner returned no pages")
 
@@ -1373,7 +1373,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setStageProgress({ styling: { done: 0, total: plan.length } })
       setInstruction(`Writing style JSON (0/${plan.length})`)
 
-      const styledPages: Array<{ path: string; title: string; description?: string; tree: unknown }> = []
+      const styledPages: Array<{ path: string; title: string; description?: string; features?: string[]; tree: unknown }> = []
       for (let i = 0; i < plan.length; i++) {
         const page = plan[i]
         setActiveFile(page.path)
@@ -1408,6 +1408,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           body: JSON.stringify({
             pageName: sp.title,
             tree: sp.tree,
+            features: sp.features,
             prompt: userPrompt,
             model: pipelineModel,
           }),

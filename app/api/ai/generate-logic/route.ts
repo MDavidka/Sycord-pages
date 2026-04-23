@@ -11,27 +11,60 @@ import { callModel, extractCode, type ModelSelection } from "@/lib/ai-provider"
 // the tree. The file is later merged into the generated page by the
 // converter/orchestrator stage.
 
-function collectHandlerNames(node: unknown, acc: Set<string>): void {
+interface HandlerCollectionResult {
+  stateNames: Set<string>
+  handlerNames: Set<string>
+}
+
+function collectBindings(node: unknown, acc: HandlerCollectionResult): void {
   if (!node || typeof node !== "object") return
   const n = node as Record<string, unknown>
   const props = n.props
   if (props && typeof props === "object") {
     for (const val of Object.values(props as Record<string, unknown>)) {
       if (typeof val === "string") {
-        const m = val.match(/^\$handler\.([A-Za-z_][A-Za-z0-9_]*)$/)
-        if (m) acc.add(m[1])
+        const state = val.match(/^\$state\.([A-Za-z_][A-Za-z0-9_]*)$/)
+        const handler = val.match(/^\$handler\.([A-Za-z_][A-Za-z0-9_]*)$/)
+        if (state) acc.stateNames.add(state[1])
+        if (handler) acc.handlerNames.add(handler[1])
       }
     }
   }
   const children = n.children
   if (Array.isArray(children)) {
-    for (const c of children) collectHandlerNames(c, acc)
+    for (const c of children) collectBindings(c, acc)
   }
 }
 
-function stubLogicFile(pageName: string, handlers: string[]): string {
+// Handlers named `set<State>` collide with the useState setter the converter
+// auto-generates. The orchestrator drops them from the Props interface, so
+// there's no point asking the model to implement them either — skip them
+// here and keep the logic module focused on real business logic.
+function nonSetterHandlers(handlers: Set<string>, states: Set<string>): string[] {
+  const out: string[] = []
+  for (const h of handlers) {
+    const m = h.match(/^set([A-Z][A-Za-z0-9_]*)$/)
+    if (m) {
+      const stateName = m[1].charAt(0).toLowerCase() + m[1].slice(1)
+      if (states.has(stateName)) continue
+    }
+    out.push(h)
+  }
+  return out
+}
+
+function stubLogicFile(pageName: string, handlers: string[], pageFileHint: string): string {
   const body = handlers
-    .map((h) => `export function ${h}() {\n  // TODO: implement ${h}\n}`)
+    .map(
+      (h) => `export function ${h}(event?: unknown): void {
+  const e = event as { preventDefault?: () => void } | undefined
+  e?.preventDefault?.()
+  // TODO: replace with real implementation for ${h}
+  if (typeof window !== 'undefined') {
+    window.alert('${h} called — implement in ${pageFileHint}')
+  }
+}`,
+    )
     .join("\n\n")
   return `// Auto-generated logic handlers for ${pageName}\n\n${body}\n`
 }
@@ -46,9 +79,10 @@ export async function POST(req: Request) {
     pageName?: string
     tree?: unknown
     prompt?: string
+    features?: string[]
     model?: ModelSelection
   }
-  const { pageName, tree, prompt, model } = body
+  const { pageName, tree, prompt, features, model } = body
 
   if (!pageName || !tree) {
     return NextResponse.json({ message: "pageName and tree are required" }, { status: 400 })
@@ -57,16 +91,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Model selection is required" }, { status: 400 })
   }
 
-  const handlerSet = new Set<string>()
+  const collection: HandlerCollectionResult = {
+    stateNames: new Set(),
+    handlerNames: new Set(),
+  }
   const root = (tree as { component?: unknown }).component ?? tree
-  collectHandlerNames(root, handlerSet)
-  const handlers = [...handlerSet]
+  collectBindings(root, collection)
+  const handlers = nonSetterHandlers(collection.handlerNames, collection.stateNames)
 
   if (handlers.length === 0) {
-    // Nothing to generate — tell the client there is no logic file for this
-    // page so it can skip writing one.
+    // Only setter-style handlers were referenced; the converter handles
+    // those via useState. No logic file needed for this page.
     return NextResponse.json({ code: null, handlers: [] })
   }
+
+  const pageFileHint = `src/lib/${pageName.toLowerCase()}-logic.ts`
 
   await logAiDebug("Logic Request", {
     pageName,
@@ -78,31 +117,56 @@ export async function POST(req: Request) {
   const messages = [
     {
       role: "system" as const,
-      content: `You are the "Logic" stage of a deterministic web-app build pipeline.
+      content: `You are the "Logic" stage of a deterministic Vite + React + TypeScript build pipeline.
 
-You must output a single self-contained TypeScript module that exports ONE function per handler listed below. The module will be imported by the generated page component; the page itself is created by a separate deterministic converter so DO NOT include JSX, React components, or imports from '@/components/...'.
+Your output is a single self-contained TypeScript module that will live at \`src/lib/<page>-logic.ts\` inside the generated project. The page component (a sibling .tsx) will \`import { ... } from '@/lib/<page>-logic'\` and attach each exported function to an event handler.
 
-STRICT RULES:
-- Output ONLY TypeScript source code — no prose, no markdown fences, no comments explaining the output.
-- Each handler MUST be exported with \`export function <name>(...) { ... }\`.
-- For setters named \`setX\`, accept a single value argument of a plausible type (boolean / string / number) and call nothing external.
-- For other handlers, accept no arguments by default. If the UI context implies an event (form submit, click), accept \`event?: unknown\` and call \`event?.preventDefault?.()\` when appropriate.
-- Keep the logic lightweight and side-effect free where possible: console.log, state setters passed in, or TODO comments are fine. Do NOT invent fetch/network calls unless the handler name clearly implies one (e.g. \`onSubmitForm\`, \`loadData\`).
-- Use strict TypeScript — no \`any\`, prefer \`unknown\` or explicit types.
-- The file must compile on its own with no external imports other than standard TS.`,
+STRICT OUTPUT CONTRACT
+- Output ONLY TypeScript source — no prose, no markdown fences, no backticks, no explanations.
+- Export exactly ONE function per handler name listed below. Function names must match EXACTLY.
+- Each function must have a real, deployable implementation. Never a \`console.log\`-only stub, never an empty body, never just a TODO comment.
+- The file is compiled by Vite with strict TypeScript — no \`any\`, no unused imports, no syntax errors.
+- Allowed external imports: none. The file must compile with pure browser-standard APIs.
+
+IMPLEMENTATION GUIDELINES (based on handler name semantics)
+- \`onSubmit*\` / \`handleSubmit*\`: accept \`event: React.FormEvent\` typed as \`{ preventDefault(): void }\`; call \`event.preventDefault()\`, then gather form data from \`(event.target as HTMLFormElement)\`, optionally POST with \`fetch\` to a plausible route (e.g. '/api/contact'), and surface success/error via \`window.alert\`. Wrap in try/catch.
+- \`onClick*\` / \`handleClick*\`: accept \`event: { preventDefault(): void }\` and perform the action implied by the name — e.g. navigation via \`window.location.href\`, opening a link, toggling class, or scrolling to an element.
+- \`loadData\` / \`fetch*\` / \`refresh*\`: use \`fetch\` against a plausible endpoint, parse JSON, and return the result; swallow errors with a sensible fallback.
+- \`logout\` / \`signOut\`: clear localStorage auth keys and redirect to '/' via \`window.location.href\`.
+- For anything ambiguous, provide a minimal but working side-effect (navigation, alert, localStorage update) — never a silent no-op.
+
+OUTPUT SHAPE EXAMPLE
+\`\`\`
+export function onSubmitContact(event: { preventDefault(): void, target: unknown }): void {
+  event.preventDefault()
+  const form = event.target as HTMLFormElement
+  const data = new FormData(form)
+  fetch('/api/contact', { method: 'POST', body: data }).then(() => {
+    window.alert('Thanks! We will be in touch.')
+    form.reset()
+  }).catch(() => {
+    window.alert('Something went wrong. Please try again.')
+  })
+}
+\`\`\`
+
+Return ONLY raw TypeScript — the first non-whitespace character must be \`export\` or an allowed top-level statement.`,
     },
     {
       role: "user" as const,
-      content: `Website context: ${prompt ?? "(no extra context)"}
+      content: `Website brief: ${prompt ?? "(no extra context)"}
 
 Page: ${pageName}
-UI tree (for reference only — do NOT render it):
+Target file path: ${pageFileHint}
+${features && features.length > 0 ? `\nPage features (from the Plan stage — use these to decide what each handler should do):\n${features.map((f) => `- ${f}`).join("\n")}` : ""}
+
+UI tree (for context — do not render it; only use it to infer what each handler should do):
 ${JSON.stringify(tree)}
 
-Handlers to implement (one exported function each, exact names):
+Handlers to implement (exact names — one \`export function\` each):
 ${handlers.map((h) => `- ${h}`).join("\n")}
 
-Output the complete TypeScript module now.`,
+Emit the complete TypeScript module now.`,
     },
   ]
 
@@ -121,7 +185,7 @@ Output the complete TypeScript module now.`,
     // Fall back to stubs so the build can still proceed — the user would rather
     // see a working scaffold than a hard failure from a free-tier model glitch.
     return NextResponse.json({
-      code: stubLogicFile(pageName, handlers),
+      code: stubLogicFile(pageName, handlers, pageFileHint),
       handlers,
       fallback: true,
       message: result.message,
@@ -130,18 +194,42 @@ Output the complete TypeScript module now.`,
 
   let code = extractCode(result.content, "ts")
   if (!code) code = extractCode(result.content)
-  // A minimal sanity check — if the model ignored the contract and returned
-  // something that clearly isn't a TS module, fall back to stubs.
+
+  // Guarantee every requested handler is exported. If the model skipped one,
+  // splice in a real (not console.log) stub implementation so the page's
+  // import always resolves.
+  const missing = handlers.filter(
+    (h) => !new RegExp(`export\\s+(?:async\\s+)?function\\s+${h}\\b`).test(code)
+      && !new RegExp(`export\\s+const\\s+${h}\\b`).test(code),
+  )
+  if (missing.length > 0) {
+    await logAiDebug("Logic Patch Missing", { pageName, missing })
+    const patch = missing
+      .map(
+        (h) => `\nexport function ${h}(event?: unknown): void {
+  const e = event as { preventDefault?: () => void } | undefined
+  e?.preventDefault?.()
+  if (typeof window !== 'undefined') {
+    window.alert('${h} called — implement in ${pageFileHint}')
+  }
+}`,
+      )
+      .join("\n")
+    code = code + patch
+  }
+
+  // Sanity check: if after patching there is still nothing that looks like a
+  // TS module, fall back entirely so the build doesn't die.
   const looksLikeTs = /export\s+function\s+/.test(code) || /export\s+const\s+/.test(code)
   if (!looksLikeTs) {
     await logAiDebug("Logic Fallback", { pageName, reason: "no exported function detected" })
     return NextResponse.json({
-      code: stubLogicFile(pageName, handlers),
+      code: stubLogicFile(pageName, handlers, pageFileHint),
       handlers,
       fallback: true,
     })
   }
 
-  await logAiDebug("Logic Parse Success", { pageName, length: code.length })
+  await logAiDebug("Logic Parse Success", { pageName, length: code.length, patched: missing.length })
   return NextResponse.json({ code, handlers })
 }
