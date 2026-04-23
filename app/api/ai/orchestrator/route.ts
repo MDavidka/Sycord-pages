@@ -83,9 +83,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { jsonPlan } = body
+  const { jsonPlan, model, prompt } = body
 
-  await logAiDebug('Orchestrator Request', { pagesCount: Array.isArray(jsonPlan) ? jsonPlan.length : 'invalid' })
+  await logAiDebug('Orchestrator Request', { pagesCount: Array.isArray(jsonPlan) ? jsonPlan.length : 'invalid', modelId: model?.id })
 
   if (!jsonPlan || !Array.isArray(jsonPlan)) {
     return NextResponse.json({ message: "Valid jsonPlan array is required" }, { status: 400 })
@@ -109,17 +109,64 @@ export async function POST(req: Request) {
       }
 
       const converted = convertTreeToTypeScript(uiTree, pageName)
-      files.push({ name: fileName, code: converted.component, timestamp: Date.now() })
+      let finalCode = converted.component
 
-      // Generate a logic file for any handler functions referenced in the page
-      if (converted.handlerNames.length > 0) {
-        const logicFileName = `src/lib/${logicFileBaseFromPagePath(fileName, pageName)}-logic.ts`
-        const handlerStubs = converted.handlerNames
-          .map(h => `export function ${h}() {\n  // TODO: implement ${h}\n}`)
-          .join('\n\n')
-        const logicCode = `// Auto-generated logic handlers for ${pageName}\n\n${handlerStubs}\n`
-        files.push({ name: logicFileName, code: logicCode, timestamp: Date.now() })
+      // Generate actual logic for any handler functions referenced in the page
+      if (converted.handlerNames.length > 0 && model && prompt) {
+        const apiKey = process.env.OPENROUTER_API_KEY
+        if (apiKey) {
+          try {
+            const systemPrompt = `You are an expert React developer.
+Implement the following TypeScript functions for the component "${pageName}": ${converted.handlerNames.join(", ")}.
+Original requirement: ${prompt}
+UI Structure: ${JSON.stringify(structureNode)}
+
+Guidelines:
+- Return ONLY the TypeScript code for these functions.
+- Each function must be exported.
+- Do NOT include the component itself.
+- You can use standard React hooks if needed (use React.useState, React.useEffect, etc. as 'React' is already imported).
+- For navigation, use 'window.location.href'.
+- Include any necessary imports at the top (e.g. from lucide-react or sonner).
+- NO markdown, NO explanations.`
+
+            const aiRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model: model.id || "openai/gpt-oss-20b:free",
+                messages: [{ role: "system", content: systemPrompt }, { role: "user", content: "Implement the handlers logic." }],
+                temperature: 0.1,
+              })
+            })
+
+            if (aiRes.ok) {
+              const aiData = await aiRes.json()
+              let logicCode = aiData.choices?.[0]?.message?.content || ""
+              logicCode = logicCode.replace(/```(?:typescript|ts|javascript|js)?\s*([\s\S]*?)\s*```/g, '$1').trim()
+
+              // Integrate logic into the component file
+              const hasUseClient = finalCode.startsWith("'use client'")
+              const strippedCode = hasUseClient ? finalCode.slice(12).trim() : finalCode
+
+              finalCode = (hasUseClient ? "'use client'\n\n" : "") + logicCode + "\n\n" + strippedCode
+
+              // Remove the props requirement from the component function signature
+              const handlerList = [...converted.handlerNames].join(', ')
+              const componentHeader = `export function ${pageName}({ ${handlerList} }: Props) {`
+              const newHeader = `export function ${pageName}() {`
+              finalCode = finalCode.replace(componentHeader, newHeader).replace(/interface Props \{[\s\S]*?\}/, '')
+            }
+          } catch (e) {
+            console.error("Failed to generate AI logic:", e)
+          }
+        }
       }
+
+      files.push({ name: fileName, code: finalCode, timestamp: Date.now() })
     }
 
     await logAiDebug('Orchestrator Success', { generatedFilesCount: files.length })
