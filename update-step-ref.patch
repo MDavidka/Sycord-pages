@@ -1,0 +1,12 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -1516,8 +1516,7 @@
+                             ))
+                         }
+
+-                        {/* ── Small inline step indicator (1 at a time) ── */}
+-                        <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
++                        {/* Removed inline StepIndicator, now shown in fixed bottom bar */}
+
+                         {/* Sitemap visualization (parsed from plan) */}
+                         {sitemap.length > 0 && (step === 'converting' || step === 'building' || step === 'done') && (

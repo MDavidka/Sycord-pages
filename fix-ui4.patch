@@ -1,0 +1,11 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -1599,7 +1599,7 @@
+                 {step !== 'idle' && step !== 'done' && (
+                     <OngoingTasks phase={step} progress={progress} currentFile={activeFile} />
+                 )}
+-                <div className={cn("w-full transition-all duration-300", step !== 'idle' && step !== 'done' ? "rounded-b-2xl bg-[#1a1a1a]/80 backdrop-blur" : "pb-4 sm:pb-6 md:pb-10")}>
++                <div className={cn("w-full transition-all duration-300", step === 'idle' || step === 'done' ? "pb-4 sm:pb-6 md:pb-10" : "")}>
+                   <InputBar
+                       input={input}
+                       setInput={setInput}

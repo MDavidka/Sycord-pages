@@ -1,0 +1,47 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -1595,20 +1595,20 @@
+         )}
+
+         {/* Input Bar — always at bottom */}
+-        <div className="fixed bottom-0 left-0 right-0 w-full z-50 flex flex-col items-center pointer-events-none">
+-            <div className="w-full max-w-2xl px-3 sm:px-4 md:px-0 pointer-events-auto flex flex-col">
+-                {step !== 'idle' && step !== 'done' && (
+-                    <OngoingTasks phase={step} progress={progress} currentFile={activeFile} />
+-                )}
+-                <InputBar
+-                    input={input}
+-                    setInput={setInput}
+-                    onSend={startGeneration}
+-                    disabled={step !== 'idle' && step !== 'clarifying'}
+-                    selectedModel={selectedModel}
+-                    setSelectedModel={setSelectedModel}
+-                    attachments={attachments}
+-                    setAttachments={setAttachments}
+-                    credits={credits}
+-                    bestCost={bestCost}
+-                    fastCost={fastCost}
+-                />
+-            </div>
++        <div className="fixed bottom-0 left-0 right-0 w-full z-50 flex flex-col items-center pointer-events-none">
++            <div className="w-full max-w-2xl pointer-events-auto flex flex-col px-3 sm:px-4 md:px-0 mb-4 sm:mb-6 md:mb-10">
++                {step !== 'idle' && step !== 'done' && (
++                    <OngoingTasks phase={step} progress={progress} currentFile={activeFile} />
++                )}
++                <InputBar
++                    input={input}
++                    setInput={setInput}
++                    onSend={startGeneration}
++                    disabled={step !== 'idle' && step !== 'clarifying'}
++                    selectedModel={selectedModel}
++                    setSelectedModel={setSelectedModel}
++                    attachments={attachments}
++                    setAttachments={setAttachments}
++                    credits={credits}
++                    bestCost={bestCost}
++                    fastCost={fastCost}
++                />
++            </div>
+         </div>
+     </div>
+   )

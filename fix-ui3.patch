@@ -1,0 +1,12 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -482,10 +482,10 @@
+   return (
+-    <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 relative">
++    <div className="w-full max-w-2xl mx-auto relative">
+       <div
+         className={cn(
+-          "bg-[#1a1a1a]/80 backdrop-blur frosted-input rounded-2xl border border-white/5 transition-all duration-300",
++          "bg-[#1a1a1a]/80 backdrop-blur frosted-input rounded-b-2xl border-x border-b border-white/5 transition-all duration-300",
+           disabled ? "opacity-70 pointer-events-none" : ""
+         )}
