@@ -2,12 +2,72 @@
 > my-v0-project@0.1.0 dev
 > next dev
 
- ⚠ Port 3000 is in use by an unknown process, using available port 3001 instead.
    ▲ Next.js 16.0.10 (Turbopack)
-   - Local:         http://localhost:3001
-   - Network:       http://192.168.0.2:3001
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.0.2:3000
 
  ✓ Starting...
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
  ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
- ✓ Ready in 2s
+ ✓ Ready in 1595ms
+ ○ Compiling /verify-ui ...
+ GET /verify-ui 200 in 5.0s (compile: 4.5s, proxy.ts: 130ms, render: 328ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+[NextAuth-WARN][NEXTAUTH_URL]
+[NextAuth-WARN][NO_SECRET]
+[NextAuth-WARN][DEBUG_ENABLED]
+ GET /api/user/credits 200 in 2.1s (compile: 1979ms, proxy.ts: 41ms, render: 88ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /api/auth/session 200 in 3.6s (compile: 3.6s, proxy.ts: 24ms, render: 18ms)
+ GET /verify-ui?test_step=planning 200 in 271ms (compile: 107ms, proxy.ts: 11ms, render: 153ms)
+ GET /api/user/credits 200 in 35ms (compile: 11ms, proxy.ts: 10ms, render: 14ms)
+ GET /api/auth/session 200 in 80ms (compile: 47ms, proxy.ts: 14ms, render: 18ms)
+ GET /api/user/credits 200 in 133ms (compile: 53ms, proxy.ts: 8ms, render: 72ms)
+ GET /api/auth/session 200 in 109ms (compile: 62ms, proxy.ts: 14ms, render: 33ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /verify-ui?test_step=structuring 200 in 112ms (compile: 6ms, proxy.ts: 8ms, render: 98ms)
+ GET /api/user/credits 200 in 36ms (compile: 18ms, proxy.ts: 7ms, render: 11ms)
+ GET /api/auth/session 200 in 97ms (compile: 67ms, proxy.ts: 7ms, render: 22ms)
+ GET /api/user/credits 200 in 87ms (compile: 51ms, proxy.ts: 6ms, render: 30ms)
+ GET /api/auth/session 200 in 55ms (compile: 15ms, proxy.ts: 25ms, render: 15ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /verify-ui?test_step=logic 200 in 96ms (compile: 6ms, proxy.ts: 4ms, render: 85ms)
+ GET /api/user/credits 200 in 19ms (compile: 4ms, proxy.ts: 4ms, render: 10ms)
+ GET /api/user/credits 200 in 67ms (compile: 8ms, proxy.ts: 6ms, render: 54ms)
+ GET /api/auth/session 200 in 83ms (compile: 61ms, proxy.ts: 6ms, render: 16ms)
+ GET /api/auth/session 200 in 68ms (compile: 42ms, proxy.ts: 8ms, render: 18ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /verify-ui?test_step=converting 200 in 87ms (compile: 4ms, proxy.ts: 5ms, render: 78ms)
+ GET /api/user/credits 200 in 17ms (compile: 4ms, proxy.ts: 4ms, render: 9ms)
+ GET /api/user/credits 200 in 23ms (compile: 5ms, proxy.ts: 5ms, render: 13ms)
+ GET /api/auth/session 200 in 69ms (compile: 51ms, proxy.ts: 7ms, render: 11ms)
+ GET /api/auth/session 200 in 45ms (compile: 26ms, proxy.ts: 7ms, render: 12ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /verify-ui?test_step=building 200 in 65ms (compile: 4ms, proxy.ts: 4ms, render: 57ms)
+ GET /api/user/credits 200 in 23ms (compile: 5ms, proxy.ts: 5ms, render: 13ms)
+ GET /api/user/credits 200 in 64ms (compile: 9ms, proxy.ts: 4ms, render: 51ms)
+ GET /api/auth/session 200 in 78ms (compile: 51ms, proxy.ts: 4ms, render: 24ms)
+ GET /api/auth/session 200 in 45ms (compile: 29ms, proxy.ts: 5ms, render: 12ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET
+ GET /verify-ui?test_step=deploying 200 in 78ms (compile: 4ms, proxy.ts: 4ms, render: 70ms)
+ GET /api/user/credits 200 in 17ms (compile: 4ms, proxy.ts: 4ms, render: 9ms)
+ GET /api/user/credits 200 in 61ms (compile: 6ms, proxy.ts: 5ms, render: 49ms)
+ GET /api/auth/session 200 in 76ms (compile: 51ms, proxy.ts: 6ms, render: 19ms)
+ GET /api/auth/session 200 in 29ms (compile: 15ms, proxy.ts: 4ms, render: 10ms)
+[v0] Auth Warning: Missing GOOGLE_CLIENT_ID
+[v0] Auth Warning: Missing GOOGLE_CLIENT_SECRET
+[v0] Auth Warning: Missing AUTH_SECRET

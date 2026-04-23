@@ -44,13 +44,14 @@ export async function POST(req: Request) {
     const messages = [
       {
         role: "system",
-        content: `${prompts.builderPlan}
+        content: `You are an expert Frontend Architect.
+Strictly use this UI cheat sheet JSON to understand available components:
+${cheatSheet || prompts.builderCheatSheet}
 
-Strictly follow this converter/generation logic:
+Strictly follow this converter/generation logic for the "structure" field:
 ${generationGuide || "No generation.md found"}
 
-Strictly use this UI cheat sheet JSON:
-${cheatSheet || prompts.builderCheatSheet}`
+${prompts.builderPlan}`
       },
       {
         role: "user",
@@ -60,7 +61,9 @@ CRITICAL:
 - Return ONLY raw JSON (no markdown, no prose)
 - Output MUST be a JSON array of pages
 - Each page MUST include: "path", "title", "structure"
-- "structure" MUST be a JSON UI tree compatible with the converter logic from generation.md`
+- "structure" MUST be a JSON UI tree.
+- Use "$state.key" and "$handler.key" for props to bind state and handlers as defined in the generation logic.
+- Ensure all components used are from the cheat sheet.`
       }
     ]
 

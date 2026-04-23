@@ -63,16 +63,14 @@ const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
 type GenerationPhase =
   | "idle"
-  | "planning"       // Step 1: Plan
-  | "searching"      // Step 2: Web Search
-  | "clarifying"     // Step 3: Optional Questions
-  | "structuring"    // Step 4: Structure / sitemap
-  | "integrating"    // Step 5: Integration check
-  | "converting"     // Step 6: Convert raw JSON to TypeScript
-  | "building"       // Step 7: Content & Build
-  | "deploying"      // Step 8: Review & Deploy
+  | "planning"
+  | "structuring"
+  | "logic"
+  | "converting"
+  | "building"
+  | "deploying"
   | "done"
-  | "fixing"         // Auto-fix compatibility
+  | "fixing"
 
 interface Message {
   id: string
@@ -208,57 +206,85 @@ const FileTreeVisualizer = ({ pages, currentFile }: { pages: GeneratedPage[], cu
   )
 }
 
-// --- GENERATION STEP ICONS (matching the reference UI) ---
-// Using lucide-react icons for a modern, clean look
-
-/** Small inline step indicator — shows thinking bubble with animated dots */
-const StepIndicator = ({ phase, progress, currentFile }: {
-  phase: GenerationPhase
-  progress: { percent: number; done: number; total: number }
+/** OngoingTasks component stacked on top of the input bar */
+const OngoingTasks = ({ step, progress, currentFile }: {
+  step: GenerationPhase;
+  progress: { percent: number; done: number; total: number };
   currentFile?: string
 }) => {
-  const phaseConfig: Record<string, { label: string }> = {
-    planning:    { label: "Planning" },
-    searching:   { label: "Searching" },
-    clarifying:  { label: "Clarifying" },
-    structuring: { label: "Structuring" },
-    integrating: { label: "Integrating" },
-    converting:  { label: "Converting" },
-    building:    { label: "Building" },
-    deploying:   { label: "Deploying" },
-    fixing:      { label: "Fixing" },
-  }
+  if (step === 'idle' || step === 'done' || step === 'fixing') return null
 
-  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "converting", "building", "deploying", "fixing"]
-  if (!displayable.includes(phase)) return null
+  const tasks = [
+    { id: 'planning', label: 'Planning' },
+    { id: 'structuring', label: 'Structuring' },
+    { id: 'logic', label: 'Logic' },
+    { id: 'converting', label: 'Conversion' },
+    { id: 'building', label: 'Building' },
+    { id: 'deploying', label: 'Deployment' },
+  ]
 
-  const config = phaseConfig[phase]
-  if (!config) return null
+  const phaseOrder: GenerationPhase[] = ['planning', 'structuring', 'logic', 'converting', 'building', 'deploying', 'done']
+  const currentIdx = phaseOrder.indexOf(step)
 
   return (
-    <div className="py-2 sm:py-2.5 flex flex-col items-start">
-      <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-bl-md bg-white/[0.06] border border-white/[0.06] max-w-[88%] sm:max-w-[82%]">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-1" />
-          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
-          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
+    <div className="mx-auto w-full max-w-2xl px-3 sm:px-4 md:px-0 mb-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="bg-[#1c1c1e]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Generation Progress</h3>
+          </div>
+          <span className="text-[10px] font-mono text-zinc-500">{step === 'building' ? `${progress.percent}%` : ''}</span>
         </div>
-        <span className="text-xs text-zinc-500 ml-1">{config.label}</span>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3 gap-x-4">
+          {tasks.map((task) => {
+            const taskIdx = phaseOrder.indexOf(task.id as GenerationPhase)
+            const isActive = step === task.id
+            const isCompleted = currentIdx > taskIdx
+            const isPending = currentIdx < taskIdx && !isActive
+
+            return (
+              <div key={task.id} className="flex items-center gap-2 min-w-0">
+                <div className={cn(
+                  "h-5 w-5 rounded-full flex items-center justify-center shrink-0 border transition-colors",
+                  isCompleted ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400" :
+                  isActive ? "bg-blue-500/20 border-blue-500/50 text-blue-400" :
+                  "bg-white/5 border-white/10 text-zinc-600"
+                )}>
+                  {isCompleted ? <CheckCircle2 className="h-3 w-3" /> :
+                   isActive ? <Loader2 className="h-3 w-3 animate-spin" /> :
+                   <div className="h-1 w-1 rounded-full bg-current" />}
+                </div>
+                <span className={cn(
+                  "text-[11px] font-medium truncate transition-colors",
+                  isCompleted ? "text-zinc-300" :
+                  isActive ? "text-white" :
+                  "text-zinc-600"
+                )}>
+                  {task.label}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        {step === 'building' && (
+          <div className="mt-4 space-y-2">
+            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all duration-500"
+                style={{ width: `${progress.percent}%` }}
+              />
+            </div>
+            {currentFile && (
+              <p className="text-[10px] text-zinc-500 font-mono truncate">
+                {currentFile}
+              </p>
+            )}
+          </div>
+        )}
       </div>
-      {phase === "building" && progress.total > 0 && (
-        <div className="mt-2 ml-1 space-y-1.5 max-w-xs">
-          {currentFile && (
-            <p className="text-xs text-zinc-500 font-mono truncate">{currentFile}</p>
-          )}
-          <div className="flex items-center justify-between text-[10px] text-zinc-600">
-            <span>{progress.done}/{progress.total} files</span>
-            <span>{progress.percent}%</span>
-          </div>
-          <div className="h-1 w-full bg-zinc-800/80 rounded-full overflow-hidden">
-            <div className="h-full bg-zinc-500 rounded-full transition-all duration-500 ease-out" style={{ width: `${progress.percent}%` }} />
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -488,7 +514,7 @@ const InputBar = ({
     <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 z-50 fixed bottom-0 left-0 right-0 md:static">
       <div
         className={cn(
-          "frosted-input rounded-2xl transition-all duration-300",
+          "rounded-2xl transition-all duration-300 bg-[#1a1a1a]/80 backdrop-blur border border-white/10 shadow-2xl",
           disabled ? "opacity-70 pointer-events-none" : ""
         )}
       >
@@ -1248,15 +1274,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
 
       // 1. Call Architect to get JSON structure
-      const planningModel = selectedModel.provider === "OpenRouter"
-        ? selectedModel
-        : { id: "openai/gpt-oss-20b:free", provider: "OpenRouter" as const }
       const archRes = await fetch('/api/ai/architect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: input + attachmentNote,
-          model: planningModel
+          model: selectedModel
         })
       })
 
@@ -1264,28 +1287,26 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const archData = await archRes.json()
       console.log("[DEBUG] Architect JSON Plan:", archData.plan)
 
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "I generated a strict raw JSON plan. Converting it to TypeScript now...",
-        isIntermediate: true
-      }])
-
+      setStep("structuring")
       setSitemap((archData.plan || []).map((p: any) => ({
         page: p?.title || p?.path || "Page",
         path: p?.path || "/",
       })))
-      setInstruction("Converting JSON to TypeScript...")
-      setStep("converting")
 
-      // 2. Call Orchestrator to convert JSON to TSX without AI
+      setStep("logic")
+      // 2. Call Orchestrator to convert JSON to TSX + Logic
       const orchRes = await fetch('/api/ai/orchestrator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonPlan: archData.plan })
+        body: JSON.stringify({
+          jsonPlan: archData.plan,
+          model: selectedModel,
+          prompt: input + attachmentNote
+        })
       })
 
       if (!orchRes.ok) throw new Error("Code orchestration failed")
+      setStep("converting")
       const orchData = await orchRes.json()
       const orchestratedFiles: GeneratedPage[] = Array.isArray(orchData.files) ? orchData.files : []
       console.log("[DEBUG] Orchestrator Generated Files:", orchestratedFiles)
@@ -1530,9 +1551,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                             ))
                         }
 
-                        {/* ── Small inline step indicator (1 at a time) ── */}
-                        <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
-
                         {/* Sitemap visualization (parsed from plan) */}
                         {sitemap.length > 0 && (step === 'converting' || step === 'building' || step === 'done') && (
                             <SitemapVisualizer nodes={sitemap} />
@@ -1607,6 +1625,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
         {/* Input Bar — always at bottom */}
         <div className="w-full relative z-20">
+            <OngoingTasks step={step} progress={progress} currentFile={activeFile} />
             <InputBar
                 input={input}
                 setInput={setInput}
