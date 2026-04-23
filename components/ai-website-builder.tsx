@@ -63,16 +63,23 @@ const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
 type GenerationPhase =
   | "idle"
-  | "planning"       // Step 1: Plan
-  | "searching"      // Step 2: Web Search
-  | "clarifying"     // Step 3: Optional Questions
-  | "structuring"    // Step 4: Structure / sitemap
-  | "integrating"    // Step 5: Integration check
-  | "converting"     // Step 6: Convert raw JSON to TypeScript
-  | "building"       // Step 7: Content & Build
-  | "deploying"      // Step 8: Review & Deploy
+  | "planning"       // Stage 1: Plan (model)
+  | "styling"        // Stage 2: Raw JSON for style (model, per page)
+  | "logic"          // Stage 3: TypeScript for logic (model, per page)
+  | "converting"     // Stage 4: Converter (deterministic sample-conveter.ts)
+  | "deploying"      // Stage 5: Build to Flask runner
   | "done"
+  | "clarifying"     // (compat) pre-submit holding phase for the composer
   | "fixing"         // Auto-fix compatibility
+
+// The five pipeline stages, in order, surfaced as the status bar.
+const PIPELINE_STAGES: { id: Exclude<GenerationPhase, "idle" | "done" | "clarifying" | "fixing">; label: string }[] = [
+  { id: "planning",   label: "Plan" },
+  { id: "styling",    label: "Style JSON" },
+  { id: "logic",      label: "Logic TS" },
+  { id: "converting", label: "Converter" },
+  { id: "deploying",  label: "Deploy" },
+]
 
 interface Message {
   id: string
@@ -219,17 +226,14 @@ const StepIndicator = ({ phase, progress, currentFile }: {
 }) => {
   const phaseConfig: Record<string, { label: string }> = {
     planning:    { label: "Planning" },
-    searching:   { label: "Searching" },
-    clarifying:  { label: "Clarifying" },
-    structuring: { label: "Structuring" },
-    integrating: { label: "Integrating" },
-    converting:  { label: "Converting" },
-    building:    { label: "Building" },
-    deploying:   { label: "Deploying" },
+    styling:     { label: "Writing style JSON" },
+    logic:       { label: "Writing logic TS" },
+    converting:  { label: "Running converter" },
+    deploying:   { label: "Deploying to runner" },
     fixing:      { label: "Fixing" },
   }
 
-  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "converting", "building", "deploying", "fixing"]
+  const displayable = ["planning", "styling", "logic", "converting", "deploying", "fixing"]
   if (!displayable.includes(phase)) return null
 
   const config = phaseConfig[phase]
@@ -245,7 +249,7 @@ const StepIndicator = ({ phase, progress, currentFile }: {
         </div>
         <span className="text-xs text-zinc-500 ml-1">{config.label}</span>
       </div>
-      {phase === "building" && progress.total > 0 && (
+      {(phase === "styling" || phase === "logic" || phase === "converting") && progress.total > 0 && (
         <div className="mt-2 ml-1 space-y-1.5 max-w-xs">
           {currentFile && (
             <p className="text-xs text-zinc-500 font-mono truncate">{currentFile}</p>
@@ -259,6 +263,89 @@ const StepIndicator = ({ phase, progress, currentFile }: {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// --- PIPELINE STATUS BAR ---
+// Always-visible bar showing the 5 build stages (Plan → Style JSON → Logic TS
+// → Converter → Deploy). Highlights the current stage, marks completed stages
+// with a check, and shows per-stage progress when the stage operates over
+// multiple pages/files.
+const PipelineStatusBar = ({
+  phase,
+  stageProgress,
+  error,
+  done,
+}: {
+  phase: GenerationPhase
+  stageProgress: Partial<Record<"styling" | "logic" | "converting", { done: number; total: number }>>
+  error: string | null
+  done: boolean
+}) => {
+  if (phase === "idle" || phase === "clarifying") return null
+
+  const activeIndex = PIPELINE_STAGES.findIndex((s) => s.id === phase)
+
+  return (
+    <div className="w-full animate-in fade-in slide-in-from-top-2 duration-300 mb-3">
+      <div className="rounded-xl bg-white/[0.04] border border-white/[0.06] backdrop-blur-md px-3 py-3">
+        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar">
+          {PIPELINE_STAGES.map((stage, i) => {
+            const isComplete = done ? true : activeIndex > i
+            const isActive = !done && activeIndex === i
+            const isPending = !done && activeIndex < i && activeIndex !== -1
+            const hasError = !!error && isActive
+            const progress = stageProgress[stage.id as "styling" | "logic" | "converting"]
+
+            return (
+              <div key={stage.id} className="flex items-center gap-2 shrink-0">
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors border",
+                    isComplete && "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
+                    isActive && !hasError && "bg-white/10 border-white/20 text-white",
+                    isActive && hasError && "bg-red-500/10 border-red-500/30 text-red-300",
+                    isPending && "bg-transparent border-white/5 text-zinc-500",
+                  )}
+                >
+                  {isComplete ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : isActive ? (
+                    hasError ? (
+                      <X className="h-3.5 w-3.5" />
+                    ) : (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )
+                  ) : (
+                    <div className="h-3.5 w-3.5 rounded-full border border-current opacity-40" />
+                  )}
+                  <span className="whitespace-nowrap">{stage.label}</span>
+                  {isActive && progress && progress.total > 0 && (
+                    <span className="text-[10px] opacity-70 tabular-nums">
+                      {progress.done}/{progress.total}
+                    </span>
+                  )}
+                </div>
+                {i < PIPELINE_STAGES.length - 1 && (
+                  <div
+                    className={cn(
+                      "h-px w-6 sm:w-8 shrink-0 transition-colors",
+                      isComplete ? "bg-emerald-500/40" : "bg-white/10",
+                    )}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+        {error && (
+          <div className="mt-2 text-[11px] text-red-400 flex items-center gap-1.5">
+            <X className="h-3 w-3 shrink-0" />
+            <span className="truncate">{error}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -879,6 +966,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [instruction, setInstruction] = useState<string>("")
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
 
+  // Per-stage progress counters for the PipelineStatusBar. Only the stages
+  // that iterate over pages/files populate this.
+  const [stageProgress, setStageProgress] = useState<
+    Partial<Record<"styling" | "logic" | "converting", { done: number; total: number }>>
+  >({})
+
   // Attachments staged for the current prompt (file metadata is included in the
   // user-visible message; full upload/processing is handled by the backend).
   const [attachments, setAttachments] = useState<File[]>([])
@@ -1231,97 +1324,147 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setSitemap([])
     setQuestionCount(0)
     setGeneratedPages([])
-    setInstruction("Architecting UI...")
+    setStageProgress({})
+    setInstruction("Planning site structure...")
     setStep("planning")
     setActiveFile(undefined)
     setActiveFileUsedFor(undefined)
     setDeploySuccess(false)
     setDeployResult(null)
 
+    // One model drives the whole pipeline — whatever the user picked in the
+    // chooser goes straight through to every AI stage.
+    const pipelineModel = { id: selectedModel.id, provider: selectedModel.provider, name: selectedModel.name }
+    const userPrompt = input + attachmentNote
+
     try {
-      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider)
+      console.log("[DEBUG] Starting generation with model:", pipelineModel.id, pipelineModel.provider)
 
-      const progressInstruction = (done: number, total: number) => {
-        const doneMarkers = Array.from({ length: done }, () => "[Done]")
-        const pendingMarkers = Array.from({ length: Math.max(total - done, 0) }, (_, idx) => `[${done + idx + 1}]`)
-        return [...doneMarkers, ...pendingMarkers].join(" ")
-      }
-
-      // 1. Call Architect to get JSON structure
-      const planningModel = selectedModel.provider === "OpenRouter"
-        ? selectedModel
-        : { id: "openai/gpt-oss-20b:free", provider: "OpenRouter" as const }
+      // ─── Stage 1: Plan ──────────────────────────────────────────────────
       const archRes = await fetch('/api/ai/architect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: input + attachmentNote,
-          model: planningModel
-        })
+        body: JSON.stringify({ prompt: userPrompt, model: pipelineModel }),
       })
-
-      if (!archRes.ok) throw new Error("Architect generation failed")
+      if (!archRes.ok) {
+        const err = await archRes.json().catch(() => ({}))
+        throw new Error(err?.message || "Planning stage failed")
+      }
       const archData = await archRes.json()
-      console.log("[DEBUG] Architect JSON Plan:", archData.plan)
+      const plan: Array<{ path: string; title: string; description?: string }> =
+        Array.isArray(archData.plan) ? archData.plan : []
+      if (plan.length === 0) throw new Error("Planner returned no pages")
+
+      setSitemap(plan.map(p => ({
+        page: p.title || p.path || "Page",
+        path: p.path || "/",
+        description: p.description,
+      })))
 
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "I generated a strict raw JSON plan. Converting it to TypeScript now...",
-        isIntermediate: true
+        content: `Plan ready — ${plan.length} page${plan.length === 1 ? "" : "s"}. Generating style JSON…`,
+        isIntermediate: true,
       }])
 
-      setSitemap((archData.plan || []).map((p: any) => ({
-        page: p?.title || p?.path || "Page",
-        path: p?.path || "/",
-      })))
-      setInstruction("Converting JSON to TypeScript...")
-      setStep("converting")
+      // ─── Stage 2: Style JSON (per page) ─────────────────────────────────
+      setStep("styling")
+      setStageProgress({ styling: { done: 0, total: plan.length } })
+      setInstruction(`Writing style JSON (0/${plan.length})`)
 
-      // 2. Call Orchestrator to convert JSON to TSX without AI
+      const styledPages: Array<{ path: string; title: string; description?: string; tree: unknown }> = []
+      for (let i = 0; i < plan.length; i++) {
+        const page = plan[i]
+        setActiveFile(page.path)
+        const res = await fetch('/api/ai/generate-style', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ page, prompt: userPrompt, model: pipelineModel }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err?.message || `Style stage failed for ${page.path}`)
+        }
+        const data = await res.json()
+        styledPages.push({ ...page, tree: data.tree })
+        setStageProgress(p => ({ ...p, styling: { done: i + 1, total: plan.length } }))
+        setInstruction(`Writing style JSON (${i + 1}/${plan.length})`)
+      }
+      setActiveFile(undefined)
+
+      // ─── Stage 3: Logic TS (per page, only where handlers exist) ────────
+      setStep("logic")
+      setStageProgress(p => ({ ...p, logic: { done: 0, total: styledPages.length } }))
+      setInstruction(`Writing logic TS (0/${styledPages.length})`)
+
+      const pagesWithLogic: Array<typeof styledPages[number] & { logicCode: string | null }> = []
+      for (let i = 0; i < styledPages.length; i++) {
+        const sp = styledPages[i]
+        setActiveFile(sp.path)
+        const res = await fetch('/api/ai/generate-logic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pageName: sp.title,
+            tree: sp.tree,
+            prompt: userPrompt,
+            model: pipelineModel,
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err?.message || `Logic stage failed for ${sp.path}`)
+        }
+        const data = await res.json() as { code: string | null }
+        pagesWithLogic.push({ ...sp, logicCode: data.code ?? null })
+        setStageProgress(p => ({ ...p, logic: { done: i + 1, total: styledPages.length } }))
+        setInstruction(`Writing logic TS (${i + 1}/${styledPages.length})`)
+      }
+      setActiveFile(undefined)
+
+      // ─── Stage 4: Converter (deterministic) ─────────────────────────────
+      setStep("converting")
+      setStageProgress(p => ({ ...p, converting: { done: 0, total: 1 } }))
+      setInstruction("Running converter...")
+
       const orchRes = await fetch('/api/ai/orchestrator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonPlan: archData.plan })
+        body: JSON.stringify({ jsonPlan: pagesWithLogic }),
       })
-
-      if (!orchRes.ok) throw new Error("Code orchestration failed")
+      if (!orchRes.ok) {
+        const err = await orchRes.json().catch(() => ({}))
+        throw new Error(err?.message || "Converter stage failed")
+      }
       const orchData = await orchRes.json()
       const orchestratedFiles: GeneratedPage[] = Array.isArray(orchData.files) ? orchData.files : []
-      console.log("[DEBUG] Orchestrator Generated Files:", orchestratedFiles)
+      setStageProgress(p => ({ ...p, converting: { done: 1, total: 1 } }))
 
-      setStep("building")
-      setInstruction(progressInstruction(0, orchestratedFiles.length))
-
-      // 3. Save generated files to project pages (and clear old ones)
+      // Persist the generated files so the workspace reflects the new output.
       const clearRes = await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
-      if (!clearRes.ok) {
-        throw new Error("Failed to clear existing generated pages")
-      }
+      if (!clearRes.ok) throw new Error("Failed to clear existing generated pages")
+
       const savedPages: GeneratedPage[] = []
       for (let i = 0; i < orchestratedFiles.length; i++) {
         const file = orchestratedFiles[i]
         setActiveFile(file.name)
-        setInstruction(progressInstruction(i, orchestratedFiles.length))
         const saveRes = await fetch(`/api/projects/${projectId}/pages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: file.name, content: file.code, usedFor: "AI generation" }),
         })
-        if (!saveRes.ok) {
-          throw new Error(`Failed to save generated file: ${file.name}`)
-        }
+        if (!saveRes.ok) throw new Error(`Failed to save generated file: ${file.name}`)
         savedPages.push({ ...file, timestamp: Date.now() })
         setGeneratedPages([...savedPages])
-        setInstruction(progressInstruction(i + 1, orchestratedFiles.length))
       }
       setActiveFile(undefined)
 
-      // 4. Build/deploy to runner
+      // ─── Stage 5: Deploy to Flask runner ────────────────────────────────
       setMessages(prev => [...prev, {
         id: (Date.now() + 2).toString(),
         role: "assistant",
-        content: "Files generated and saved. Starting build/deploy on runner..."
+        content: "Files generated. Deploying to the runner now...",
       }])
       setStep("deploying")
       setInstruction("Deploying to Flask runner...")
@@ -1345,13 +1488,13 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setMessages(prev => [...prev, {
         id: (Date.now() + 3).toString(),
         role: "assistant",
-        content: "Build pipeline finished and deployed successfully."
+        content: "Build pipeline finished and deployed successfully.",
       }])
 
       setStep("done")
     } catch (err: any) {
-      setError(err.message)
-      setStep("idle")
+      setError(err.message || "Generation failed")
+      // Keep the current phase so the status bar shows which stage broke.
     }
   }
 
@@ -1461,6 +1604,14 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 {step !== 'idle' && (
                     <div className="flex flex-col pt-6 sm:pt-8 pb-4">
 
+                        {/* Pipeline status bar — always visible during a build */}
+                        <PipelineStatusBar
+                            phase={step}
+                            stageProgress={stageProgress}
+                            error={error}
+                            done={step === 'done'}
+                        />
+
                         {/* Messages */}
                         {messages
                             .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.plan && !m.isIntermediate))
@@ -1534,7 +1685,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                         <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
 
                         {/* Sitemap visualization (parsed from plan) */}
-                        {sitemap.length > 0 && (step === 'converting' || step === 'building' || step === 'done') && (
+                        {sitemap.length > 0 && (step === 'styling' || step === 'logic' || step === 'converting' || step === 'deploying' || step === 'done') && (
                             <SitemapVisualizer nodes={sitemap} />
                         )}
 

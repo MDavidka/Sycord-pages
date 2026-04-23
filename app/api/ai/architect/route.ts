@@ -3,135 +3,105 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
-import fs from "fs"
-import path from "path"
+import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
 
-function readHelperFile(fileName: string): string {
-  try {
-    const filePath = path.join(process.cwd(), fileName)
-    return fs.readFileSync(filePath, "utf-8")
-  } catch {
-    return ""
-  }
-}
-
+// Stage 1 of the pipeline: the "Plan" step.
+//
+// Takes a free-form prompt and asks the currently selected model (whichever
+// provider — xAI, OpenRouter, …) to produce a high-level sitemap of pages.
+// No UI trees, no components, no code — those come from the later style/logic
+// stages. Keeping this step narrow makes it cheap and robust.
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  const body = await req.json()
+  const body = await req.json().catch(() => ({})) as {
+    prompt?: string
+    model?: ModelSelection
+  }
   const { prompt, model } = body
 
-  await logAiDebug('Architect Request', { prompt, modelId: model?.id, provider: model?.provider })
+  await logAiDebug("Architect Request", {
+    prompt,
+    modelId: model?.id,
+    provider: model?.provider,
+  })
 
   if (!prompt) {
     return NextResponse.json({ message: "Prompt is required" }, { status: 400 })
   }
-
-  try {
-    const prompts = await getSystemPrompts()
-    const generationGuide = readHelperFile("generation.md")
-    const cheatSheet = readHelperFile("cheat_sheat.json")
-    const apiUrl = "https://openrouter.ai/api/v1/chat/completions"
-    const apiKey = process.env.OPENROUTER_API_KEY
-
-    if (!apiKey) {
-      return NextResponse.json({ message: "OpenRouter API key not configured" }, { status: 500 })
-    }
-
-    const messages = [
-      {
-        role: "system",
-        content: `${prompts.builderPlan}
-
-Strictly follow this converter/generation logic:
-${generationGuide || "No generation.md found"}
-
-Strictly use this UI cheat sheet JSON:
-${cheatSheet || prompts.builderCheatSheet}`
-      },
-      {
-        role: "user",
-        content: `Create a frontend UI JSON plan for: ${prompt}
-
-CRITICAL:
-- Return ONLY raw JSON (no markdown, no prose)
-- Output MUST be a JSON array of pages
-- Each page MUST include: "path", "title", "structure"
-- "structure" MUST be a JSON UI tree compatible with the converter logic from generation.md`
-      }
-    ]
-
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: model?.id || "openai/gpt-oss-20b:free",
-        messages: messages,
-        temperature: 0.1,
-      })
-    })
-
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error("Architect AI API Error:", errText)
-      await logAiDebug('Architect API Error', { status: response.status, errText })
-      return NextResponse.json({ message: "Architect API failed" }, { status: 500 })
-    }
-
-    const data = await response.json()
-    await logAiDebug('Architect API Success', { choicesLength: data.choices?.length })
-    let content = data.choices?.[0]?.message?.content || "[]"
-
-    // Robust JSON extraction
-    let jsonString = content;
-    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    const arrayBlockMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
-
-    if (codeBlockMatch) {
-      jsonString = codeBlockMatch[1];
-    } else if (arrayBlockMatch) {
-      jsonString = arrayBlockMatch[0];
-    } else {
-      // Fallback: Find first [ or { and last ] or }
-      const firstBracket = content.indexOf('[');
-      const firstBrace = content.indexOf('{');
-      const firstIndex = [firstBracket, firstBrace].filter(i => i >= 0).sort((a, b) => a - b)[0];
-
-      const lastBracket = content.lastIndexOf(']');
-      const lastBrace = content.lastIndexOf('}');
-      const lastIndex = [lastBracket, lastBrace].filter(i => i >= 0).sort((a, b) => b - a)[0];
-
-      if (firstIndex !== undefined && lastIndex !== undefined && lastIndex >= firstIndex) {
-        jsonString = content.substring(firstIndex, lastIndex + 1);
-      }
-    }
-
-    jsonString = jsonString.trim();
-
-    let jsonPlan;
-    try {
-      jsonPlan = JSON.parse(jsonString)
-      // Ensure the result is an array
-      if (!Array.isArray(jsonPlan)) {
-        jsonPlan = [jsonPlan];
-      }
-      await logAiDebug('Architect Parse Success', { pages: jsonPlan.length })
-    } catch (e: any) {
-      console.error("Failed to parse Architect JSON:", e, content)
-      await logAiDebug('Architect Parse Error', { error: e.message, content })
-      return NextResponse.json({ message: "AI failed to generate a valid UI plan structure. Please try a different prompt or model." }, { status: 422 })
-    }
-
-    return NextResponse.json({ plan: jsonPlan })
-  } catch (error: any) {
-    console.error("Architect Error:", error)
-    await logAiDebug('Architect Fatal Error', { error: error.message, stack: error.stack })
-    return NextResponse.json({ message: "Internal server error" }, { status: 500 })
+  if (!model?.id || !model?.provider) {
+    return NextResponse.json({ message: "Model selection is required" }, { status: 400 })
   }
+
+  const prompts = await getSystemPrompts()
+
+  const messages = [
+    {
+      role: "system" as const,
+      content: `${prompts.builderPlan}
+
+For the Plan step you output ONLY a high-level sitemap. Do NOT emit any UI tree, component, or code — the later pipeline stages handle that.
+
+Return strictly a JSON array of page objects, each with:
+- "path":  URL path starting with "/" (e.g. "/", "/about")
+- "title": short human-readable page title
+- "description": 1–2 sentence description of the page's purpose and key sections
+
+No markdown, no prose, no wrapping object.`,
+    },
+    {
+      role: "user" as const,
+      content: `Plan a multi-page website for: ${prompt}
+
+Return only the JSON array described above.`,
+    },
+  ]
+
+  const result = await callModel({
+    model,
+    messages,
+    temperature: 0.1,
+  })
+
+  if (!result.ok) {
+    await logAiDebug("Architect API Error", {
+      status: result.status,
+      message: result.message,
+      details: result.details,
+    })
+    return NextResponse.json(
+      { message: result.message, details: result.details },
+      { status: result.status },
+    )
+  }
+
+  const parsed = extractJson<unknown>(result.content)
+  let plan: Array<{ path: string; title: string; description?: string }>
+  if (Array.isArray(parsed)) {
+    plan = parsed as typeof plan
+  } else if (parsed && typeof parsed === "object") {
+    plan = [parsed as (typeof plan)[number]]
+  } else {
+    await logAiDebug("Architect Parse Error", { content: result.content })
+    return NextResponse.json(
+      { message: "AI failed to generate a valid plan. Please try a different prompt or model." },
+      { status: 422 },
+    )
+  }
+
+  // Ensure the plan entries have the required fields so downstream stages don't
+  // crash on missing metadata.
+  plan = plan
+    .filter((p) => p && typeof p === "object")
+    .map((p, i) => ({
+      path: typeof p.path === "string" && p.path.trim() ? p.path.trim() : `/page-${i + 1}`,
+      title: typeof p.title === "string" && p.title.trim() ? p.title.trim() : `Page ${i + 1}`,
+      description: typeof p.description === "string" ? p.description.trim() : undefined,
+    }))
+
+  await logAiDebug("Architect Parse Success", { pages: plan.length })
+  return NextResponse.json({ plan })
 }

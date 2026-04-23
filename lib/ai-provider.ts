@@ -1,0 +1,169 @@
+// Unified chat-completion helper. Routes to the provider of the currently
+// selected model so every AI step in the build pipeline (plan → style JSON →
+// logic TS) runs on the same model the user picked from the dropdown.
+//
+// Supported providers:
+//   - "xAI"        → https://api.x.ai/v1/chat/completions         (XAI_API_KEY)
+//   - "OpenRouter" → https://openrouter.ai/api/v1/chat/completions (OPENROUTER_API_KEY)
+//
+// Both endpoints speak the OpenAI-compatible chat-completions schema, so the
+// request/response shape is identical.
+
+export type ChatRole = "system" | "user" | "assistant"
+
+export interface ChatMessage {
+  role: ChatRole
+  content: string
+}
+
+export interface ModelSelection {
+  id: string
+  provider: string
+  name?: string
+}
+
+export interface CallModelOptions {
+  model: ModelSelection
+  messages: ChatMessage[]
+  temperature?: number
+}
+
+export interface CallModelResult {
+  ok: true
+  content: string
+  raw: unknown
+}
+
+export interface CallModelError {
+  ok: false
+  status: number
+  message: string
+  details?: string
+}
+
+interface ProviderConfig {
+  url: string
+  apiKey: string | undefined
+  headers?: Record<string, string>
+}
+
+function providerConfig(provider: string): ProviderConfig {
+  if (provider === "xAI") {
+    return {
+      url: "https://api.x.ai/v1/chat/completions",
+      apiKey: process.env.XAI_API_KEY,
+    }
+  }
+  // Default to OpenRouter for any other provider string.
+  return {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    apiKey: process.env.OPENROUTER_API_KEY,
+  }
+}
+
+export async function callModel(
+  opts: CallModelOptions,
+): Promise<CallModelResult | CallModelError> {
+  const { model, messages, temperature = 0.1 } = opts
+  const cfg = providerConfig(model.provider)
+
+  if (!cfg.apiKey) {
+    return {
+      ok: false,
+      status: 500,
+      message: `${model.provider} API key is not configured`,
+    }
+  }
+
+  let response: Response
+  try {
+    response = await fetch(cfg.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cfg.apiKey}`,
+        ...(cfg.headers ?? {}),
+      },
+      body: JSON.stringify({
+        model: model.id,
+        messages,
+        temperature,
+      }),
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      status: 502,
+      message: `Network error calling ${model.provider}`,
+      details: err instanceof Error ? err.message : String(err),
+    }
+  }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "")
+    return {
+      ok: false,
+      status: response.status,
+      message: `${model.provider} API error`,
+      details: errText,
+    }
+  }
+
+  const data = await response.json().catch(() => null) as { choices?: Array<{ message?: { content?: string } }> } | null
+  const content = data?.choices?.[0]?.message?.content ?? ""
+  return { ok: true, content, raw: data }
+}
+
+// Extracts the first valid JSON payload from a model response. Handles fenced
+// ```json blocks, stray prose, and picks the outermost [ ... ] or { ... }
+// region as a fallback. Returns null if nothing parseable is found.
+export function extractJson<T = unknown>(content: string): T | null {
+  if (!content) return null
+  const trimmed = content.trim()
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fenced?.[1]) {
+    try {
+      return JSON.parse(fenced[1]) as T
+    } catch {
+      // fall through
+    }
+  }
+
+  const arrayBlock = trimmed.match(/\[\s*[\s\S]*\s*\]/)
+  if (arrayBlock) {
+    try {
+      return JSON.parse(arrayBlock[0]) as T
+    } catch {
+      // fall through
+    }
+  }
+
+  const objectBlock = trimmed.match(/\{\s*[\s\S]*\s*\}/)
+  if (objectBlock) {
+    try {
+      return JSON.parse(objectBlock[0]) as T
+    } catch {
+      // fall through
+    }
+  }
+
+  try {
+    return JSON.parse(trimmed) as T
+  } catch {
+    return null
+  }
+}
+
+// Extract the first fenced code block (```lang ... ```) body, or fall back to
+// returning the full content trimmed. Used by the logic-generation endpoint to
+// pull a TS file out of a chatty response.
+export function extractCode(content: string, lang?: string): string {
+  if (!content) return ""
+  const pattern = lang
+    ? new RegExp(`\`\`\`${lang}\\s*([\\s\\S]*?)\\s*\`\`\``, "i")
+    : /```[a-zA-Z0-9]*\s*([\s\S]*?)\s*```/
+  const m = content.match(pattern)
+  if (m?.[1]) return m[1].trim()
+  return content.trim()
+}
