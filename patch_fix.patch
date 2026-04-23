@@ -1,0 +1,10 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -1245,7 +1245,7 @@
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           prompt: input + attachmentNote,
+-          model: planningModel
++          model: selectedModel
+         })
+       })

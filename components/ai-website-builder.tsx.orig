@@ -480,10 +480,10 @@ const InputBar = ({
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto relative">
+    <div className="w-full max-w-2xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 md:pb-10 relative">
       <div
         className={cn(
-          "bg-[#1a1a1a]/80 backdrop-blur frosted-input rounded-b-2xl border border-t-0 border-white/5 transition-all duration-300",
+          "bg-[#1a1a1a]/80 backdrop-blur frosted-input rounded-2xl border border-white/5 transition-all duration-300",
           disabled ? "opacity-70 pointer-events-none" : ""
         )}
       >
@@ -941,12 +941,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         const fullPath = m[1]
         const name = m[2]
         const desc = m[3]
-        
+
         if (!INFRASTRUCTURE_COMPONENTS.has(name.toLowerCase())) {
-          nodes.push({ 
-            page: name.charAt(0).toUpperCase() + name.slice(1), 
-            path: name.toLowerCase() === 'home' ? '/' : '/' + name.toLowerCase(), 
-            description: desc 
+          nodes.push({
+            page: name.charAt(0).toUpperCase() + name.slice(1),
+            path: name.toLowerCase() === 'home' ? '/' : '/' + name.toLowerCase(),
+            description: desc
           })
         }
       }
@@ -1599,7 +1599,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 {step !== 'idle' && step !== 'done' && (
                     <OngoingTasks phase={step} progress={progress} currentFile={activeFile} />
                 )}
-                <div className={cn("w-full transition-all duration-300", step === 'idle' || step === 'done' ? "pb-4 sm:pb-6 md:pb-10" : "")}>
+                <div className={cn("w-full transition-all duration-300", step !== 'idle' && step !== 'done' ? "rounded-b-2xl bg-[#1a1a1a]/80 backdrop-blur" : "pb-4 sm:pb-6 md:pb-10")}>
                   <InputBar
                       input={input}
                       setInput={setInput}

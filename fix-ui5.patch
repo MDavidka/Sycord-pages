@@ -1,0 +1,5 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -482,7 +482,7 @@
+-          "bg-[#1a1a1a]/80 backdrop-blur frosted-input rounded-b-2xl border-x border-b border-white/5 transition-all duration-300",
++          "bg-[#1a1a1a]/80 backdrop-blur frosted-input rounded-b-2xl border border-white/5 transition-all duration-300",

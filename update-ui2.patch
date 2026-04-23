@@ -1,0 +1,50 @@
+--- components/ai-website-builder.tsx
++++ components/ai-website-builder.tsx
+@@ -1134,8 +1134,7 @@
+                             ))
+                         }
+
+-                        {/* ── Small inline step indicator (1 at a time) ── */}
+-                        <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
++                        {/* Removed inline StepIndicator, now shown in fixed bottom bar */}
+
+                         {/* Sitemap visualization (parsed from plan) */}
+                         {sitemap.length > 0 && (step === 'converting' || step === 'building' || step === 'done') && (
+@@ -1214,19 +1213,22 @@
+         )}
+
+         {/* Input Bar — always at bottom */}
+-        <div className="w-full relative z-20">
+-            <InputBar
+-                input={input}
+-                setInput={setInput}
+-                onSend={startGeneration}
+-                disabled={step !== 'idle' && step !== 'clarifying'}
+-                selectedModel={selectedModel}
+-                setSelectedModel={setSelectedModel}
+-                attachments={attachments}
+-                setAttachments={setAttachments}
+-                credits={credits}
+-                bestCost={bestCost}
+-                fastCost={fastCost}
+-            />
++        <div className="fixed bottom-0 left-0 right-0 w-full z-50 flex flex-col items-center pointer-events-none">
++            <div className="w-full max-w-2xl px-3 sm:px-4 md:px-0 pointer-events-auto flex flex-col">
++                {step !== 'idle' && step !== 'done' && (
++                    <OngoingTasks phase={step} progress={progress} currentFile={activeFile} />
++                )}
++                <InputBar
++                    input={input}
++                    setInput={setInput}
++                    onSend={startGeneration}
++                    disabled={step !== 'idle' && step !== 'clarifying'}
++                    selectedModel={selectedModel}
++                    setSelectedModel={setSelectedModel}
++                    attachments={attachments}
++                    setAttachments={setAttachments}
++                    credits={credits}
++                    bestCost={bestCost}
++                    fastCost={fastCost}
++                />
++            </div>
+         </div>
