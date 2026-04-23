@@ -3,8 +3,18 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
+import fs from "fs"
+import path from "path"
 
-// NOTE: Uses xAI API by default based on the model provided by frontend
+function readHelperFile(fileName: string): string {
+  try {
+    const filePath = path.join(process.cwd(), fileName)
+    return fs.readFileSync(filePath, "utf-8")
+  } catch {
+    return ""
+  }
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -22,27 +32,35 @@ export async function POST(req: Request) {
 
   try {
     const prompts = await getSystemPrompts()
-
-    let apiUrl = "https://api.x.ai/v1/chat/completions"
-    let apiKey = process.env.XAI_API_KEY
-
-    if (model?.provider === "OpenRouter") {
-      apiUrl = "https://openrouter.ai/api/v1/chat/completions"
-      apiKey = process.env.OPENROUTER_API_KEY
-    }
+    const generationGuide = readHelperFile("generation.md")
+    const cheatSheet = readHelperFile("cheat_sheat.json")
+    const apiUrl = "https://openrouter.ai/api/v1/chat/completions"
+    const apiKey = process.env.OPENROUTER_API_KEY
 
     if (!apiKey) {
-      return NextResponse.json({ message: "API key not configured" }, { status: 500 })
+      return NextResponse.json({ message: "OpenRouter API key not configured" }, { status: 500 })
     }
 
     const messages = [
       {
         role: "system",
-        content: `${prompts.builderPlan}\n\nHere is your UI Component Cheat Sheet (Available Components):\n${prompts.builderCheatSheet}`
+        content: `${prompts.builderPlan}
+
+Strictly follow this converter/generation logic:
+${generationGuide || "No generation.md found"}
+
+Strictly use this UI cheat sheet JSON:
+${cheatSheet || prompts.builderCheatSheet}`
       },
       {
         role: "user",
-        content: `Create a frontend UI JSON plan for: ${prompt}\n\nCRITICAL INSTRUCTION: You MUST ONLY output a valid JSON array of page objects. Do not write markdown, do not write explanations, do not write an implementation strategy. Return JUST the JSON array.`
+        content: `Create a frontend UI JSON plan for: ${prompt}
+
+CRITICAL:
+- Return ONLY raw JSON (no markdown, no prose)
+- Output MUST be a JSON array of pages
+- Each page MUST include: "path", "title", "structure"
+- "structure" MUST be a JSON UI tree compatible with the converter logic from generation.md`
       }
     ]
 
@@ -53,7 +71,7 @@ export async function POST(req: Request) {
         "Authorization": `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: model?.id || "grok-4-1-fast-non-reasoning",
+        model: model?.id || "openai/gpt-oss-20b:free",
         messages: messages,
         temperature: 0.1,
       })

@@ -1,5 +1,3 @@
-'use server'
-
 import fs from 'fs'
 import path from 'path'
 
@@ -271,6 +269,15 @@ const ALIAS_MAP: Record<string, string> = {
   'aspect-ratio': 'AspectRatio',
 }
 
+const HTML_TAGS = new Set([
+  'div', 'span', 'p', 'a', 'button', 'input', 'textarea', 'label', 'form',
+  'section', 'article', 'main', 'header', 'footer', 'nav', 'aside',
+  'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img',
+  'table', 'thead', 'tbody', 'tr', 'td', 'th', 'select', 'option',
+  'video', 'audio', 'canvas', 'svg', 'path', 'g', 'circle', 'rect', 'line',
+  'polyline', 'polygon', 'pre', 'code', 'blockquote', 'hr', 'br', 'iframe',
+])
+
 // ─── REGEX ────────────────────────────────────────────────────────────────────
 
 const REGEX = {
@@ -287,6 +294,7 @@ const REGEX = {
 
 function normalizeName(name: string): string {
   if (REGEX.COMPONENT_NAME.test(name)) return name
+  if (HTML_TAGS.has(name)) return name
   if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) return ALIAS_MAP[name]
   throw new Error(`UNKNOWN_COMPONENT: "${name}" is not a known shadcn/ui component`)
 }
@@ -434,28 +442,19 @@ function buildPropsInterface(handlers: Set<string>, states: Set<string>): string
 
 // ─── MAIN CONVERTER ───────────────────────────────────────────────────────────
 
-export function convertJSONToTypeScript(
-  jsonInput: string,
+function convertTreeToTypeScriptInternal(
+  tree: UITreeRoot,
   componentName: string,
-  outputDir = 'src/components/generated'
-): ConversionResult {
-  // 1. Parse
-  let tree: UITreeRoot
-  try {
-    tree = JSON.parse(jsonInput)
-  } catch {
-    throw new Error('JSON_PARSE_ERROR: Input is not valid JSON')
-  }
-
-  // 2. Validate root
+): Omit<ConversionResult, 'filePath'> {
+  // 1. Validate root
   if (tree.type !== 'ui-tree' || !tree.component) {
     throw new Error('SCHEMA_ERROR: Missing type="ui-tree" or component field')
   }
 
-  // 3. Normalize names
+  // 2. Normalize names
   const normalized = normalizeTree(tree.component)
 
-  // 4. Collect
+  // 3. Collect
   const acc: Collected = {
     states: new Set(),
     handlers: new Set(),
@@ -465,17 +464,17 @@ export function convertJSONToTypeScript(
 
   const needsReact = acc.states.size > 0
 
-  // 5. Build imports
+  // 4. Build imports
   const importsBlock = buildImports(acc.components, needsReact)
 
-  // 6. Props interface
+  // 5. Props interface
   const propsInterface = buildPropsInterface(acc.handlers, acc.states)
   const hasProps = acc.handlers.size > 0
   const paramStr = hasProps
     ? `{ ${[...acc.handlers].join(', ')} }: Props`
     : ''
 
-  // 7. State declarations
+  // 6. State declarations
   const stateLines = [...acc.states]
     .map(name => {
       const setter = 'set' + name.charAt(0).toUpperCase() + name.slice(1)
@@ -484,10 +483,10 @@ export function convertJSONToTypeScript(
     })
     .join('\n')
 
-  // 8. Render JSX
+  // 7. Render JSX
   const jsxBody = renderNode(normalized, 2)
 
-  // 9. Assemble
+  // 8. Assemble
   const sections: string[] = [
     "'use client'",
     '',
@@ -510,10 +509,43 @@ export function convertJSONToTypeScript(
 
   const component = sections.filter(s => s !== undefined).join('\n')
 
+  return {
+    imports: importsBlock,
+    component,
+    stateVars: [...acc.states],
+    handlerNames: [...acc.handlers],
+  }
+}
+
+export function convertTreeToTypeScript(
+  tree: UITreeRoot,
+  componentName: string,
+): ConversionResult {
+  const result = convertTreeToTypeScriptInternal(tree, componentName)
+  return {
+    ...result,
+    filePath: '',
+  }
+}
+
+export function convertJSONToTypeScript(
+  jsonInput: string,
+  componentName: string,
+  outputDir = 'src/components/generated'
+): ConversionResult {
+  // 1. Parse
+  let tree: UITreeRoot
+  try {
+    tree = JSON.parse(jsonInput)
+  } catch {
+    throw new Error('JSON_PARSE_ERROR: Input is not valid JSON')
+  }
+  const converted = convertTreeToTypeScriptInternal(tree, componentName)
+
   // 10. Write file
   const filePath = path.resolve(`${outputDir}/${componentName}.tsx`)
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, component, 'utf-8')
+  fs.writeFileSync(filePath, converted.component, 'utf-8')
 
   // 11. Update barrel index
   const indexPath = path.resolve(`${outputDir}/index.ts`)
@@ -528,11 +560,11 @@ export function convertJSONToTypeScript(
   }
 
   return {
-    imports: importsBlock,
-    component,
+    imports: converted.imports,
+    component: converted.component,
     filePath,
-    stateVars: [...acc.states],
-    handlerNames: [...acc.handlers],
+    stateVars: converted.stateVars,
+    handlerNames: converted.handlerNames,
   }
 }
 

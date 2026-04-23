@@ -1,8 +1,80 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
+import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter"
+
+function toPascalCase(input: string): string {
+  const candidate = (
+    input
+      .replace(/[^A-Za-z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join("") || "GeneratedPage"
+  )
+  return /^[A-Za-z_]/.test(candidate) ? candidate : `Page${candidate}`
+}
+
+function sanitizeRoutePath(input: unknown): string {
+  const raw = typeof input === "string" ? input.trim() : ""
+  const withLeadingSlash = raw.startsWith("/") ? raw : `/${raw}`
+  const segments = withLeadingSlash
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      const decoded = decodeURIComponent(segment).trim()
+      if (!decoded) return "page"
+
+      if (decoded.startsWith(":")) {
+        const dynamicParam = decoded.slice(1).replace(/[^A-Za-z0-9_]/g, "")
+        return dynamicParam ? `[${dynamicParam}]` : "param"
+      }
+
+      const sanitized = decoded
+        .replace(/\s+/g, "-")
+        .replace(/[^A-Za-z0-9._\[\]-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+
+      return sanitized || "page"
+    })
+
+  return segments.length > 0 ? `/${segments.join("/")}` : "/"
+}
+
+function logicFileBaseFromPagePath(pageFilePath: string, fallbackPageName: string): string {
+  const relative = pageFilePath
+    .replace(/^src\/pages\//, "")
+    .replace(/\.tsx$/, "")
+  const normalized = relative
+    .replace(/[\/\[\]]+/g, "-")
+    .replace(/[^A-Za-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase()
+
+  if (normalized) return normalized
+  return fallbackPageName.toLowerCase().replace(/[^a-z0-9-]/g, "-")
+}
+
+function toNode(node: any): UINode {
+  if (!node || typeof node !== "object") {
+    return { name: "div", text: String(node ?? "") }
+  }
+
+  const name = typeof node.name === "string"
+    ? node.name
+    : (typeof node.component === "string" ? node.component : "div")
+
+  return {
+    name,
+    props: (node.props && typeof node.props === "object") ? node.props : undefined,
+    text: typeof node.text === "string" ? node.text : undefined,
+    children: Array.isArray(node.children) ? node.children.map(toNode) : undefined,
+  }
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -20,142 +92,37 @@ export async function POST(req: Request) {
   }
 
   try {
-    const prompts = await getSystemPrompts()
+    const files: Array<{ name: string; code: string; timestamp: number }> = []
 
-    // The Handling Converter cheat sheet maps "ComponentName" -> "Import/Export Code"
-    let converterMap = {}
-    try {
-      converterMap = JSON.parse(prompts.builderFunction)
-    } catch (e) {
-      console.warn("Could not parse Handling Converter map, using empty map", e)
-    }
-
-    const files = []
-
-    // 1. Generate standard package.json and vite.config.ts if this was a full project...
-    // But since the AI builder currently generates files sequentially to the UI, we'll
-    // focus on generating the TSX components for each page.
-
-    // Convert a JSON node to JSX string
-    function jsonToJsx(node: any): string {
-      if (!node) return ""
-      if (typeof node === "string") return `{\`${node}\`}`
-      if (node.text) return node.text
-
-      const Comp = node.component || "div"
-
-      // Serialize props
-      let propsStr = ""
-      if (node.props) {
-        propsStr = Object.entries(node.props)
-          .map(([k, v]) => {
-            if (typeof v === "string") return `${k}="${v}"`
-            return `${k}={${JSON.stringify(v)}}`
-          })
-          .join(" ")
-      }
-
-      const hasChildren = Array.isArray(node.children) && node.children.length > 0
-
-      if (!hasChildren) {
-        return `<${Comp} ${propsStr} />`
-      }
-
-      const childrenJsx = node.children.map((c: any) => jsonToJsx(c)).join("\n")
-      return `<${Comp} ${propsStr}>\n${childrenJsx}\n</${Comp}>`
-    }
-
-    function extractUsedComponents(node: any, set: Set<string>) {
-      if (!node) return
-      if (typeof node.component === "string" && node.component[0] === node.component[0].toUpperCase()) {
-        set.add(node.component)
-      }
-      if (node.children && Array.isArray(node.children)) {
-        node.children.forEach((c: any) => extractUsedComponents(c, set))
-      }
-    }
-
-    // Convert each page in the JSON Plan into a React TSX file
-    for (const page of jsonPlan) {
-      const pageName = page.title ? page.title.replace(/\s+/g, '') : "Page"
-      const path = page.path || `/${pageName.toLowerCase()}`
-      const fileName = `src/pages${path === '/' ? '/index' : path}.tsx`
-
-      const usedComponents = new Set<string>()
-      extractUsedComponents(page.structure, usedComponents)
-
-      const imports = []
-      usedComponents.forEach(comp => {
-        if (converterMap[comp]) {
-           // Basic hack to extract just the import statement from the converter map string
-           const match = converterMap[comp].match(/import\s+.*?\s+from\s+['"].*?['"];?/)
-           if (match) imports.push(match[0])
-        } else {
-           // Fallback
-           imports.push(`import { ${comp} } from '@/components/ui/${comp.toLowerCase()}'`)
-        }
-      })
-
-      // Deduplicate imports
-      const uniqueImports = [...new Set(imports)]
-
-      const jsx = jsonToJsx(page.structure)
-
-      const code = `import React from 'react'\n${uniqueImports.join("\n")}\n\nexport default function ${pageName}() {\n  return (\n    ${jsx}\n  )\n}`
-
-      files.push({
-        name: fileName,
-        code: code,
-        timestamp: Date.now()
-      })
-    }
-
-    // Save the raw JSON plan as well
     for (let i = 0; i < jsonPlan.length; i++) {
-        const page = jsonPlan[i];
-        const pageName = page.title ? page.title.replace(/\s+/g, '') : `Page${i}`;
-        files.push({
-            name: `src/cache/plan-${pageName.toLowerCase()}.json`,
-            code: JSON.stringify(page, null, 2),
-            timestamp: Date.now()
-        });
+      const page = jsonPlan[i]
+      const pageName = toPascalCase(page?.title || `Page ${i + 1}`)
+      const routePath = typeof page?.path === "string" ? page.path : `/${pageName.toLowerCase()}`
+      const normalizedRoutePath = sanitizeRoutePath(routePath)
+      const fileName = `src/pages${normalizedRoutePath === "/" ? "/index" : normalizedRoutePath}.tsx`
+
+      const structureNode = page?.structure || page?.component || page
+      const uiTree: UITreeRoot = {
+        type: "ui-tree",
+        version: "1.0",
+        component: toNode(structureNode),
+      }
+
+      const converted = convertTreeToTypeScript(uiTree, pageName)
+      files.push({ name: fileName, code: converted.component, timestamp: Date.now() })
+
+      // Generate a logic file for any handler functions referenced in the page
+      if (converted.handlerNames.length > 0) {
+        const logicFileName = `src/lib/${logicFileBaseFromPagePath(fileName, pageName)}-logic.ts`
+        const handlerStubs = converted.handlerNames
+          .map(h => `export function ${h}() {\n  // TODO: implement ${h}\n}`)
+          .join('\n\n')
+        const logicCode = `// Auto-generated logic handlers for ${pageName}\n\n${handlerStubs}\n`
+        files.push({ name: logicFileName, code: logicCode, timestamp: Date.now() })
+      }
     }
-
-    // We can also generate an App.tsx router if needed...
-    const routeImports = jsonPlan.map((p: any) => {
-        const pageName = p.title ? p.title.replace(/\s+/g, '') : "Page"
-        const path = p.path || `/${pageName.toLowerCase()}`
-        return `import ${pageName} from './pages${path === '/' ? '/index' : path}'`
-    }).join("\n")
-
-    const routeDefs = jsonPlan.map((p: any) => {
-        const pageName = p.title ? p.title.replace(/\s+/g, '') : "Page"
-        const path = p.path || `/${pageName.toLowerCase()}`
-        return `      <Route path="${path}" element={<${pageName} />} />`
-    }).join("\n")
-
-    const appCode = `import React from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-${routeImports}
-
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-${routeDefs}
-      </Routes>
-    </BrowserRouter>
-  )
-}`
-
-    files.push({
-      name: "src/App.tsx",
-      code: appCode,
-      timestamp: Date.now()
-    })
 
     await logAiDebug('Orchestrator Success', { generatedFilesCount: files.length })
-
     return NextResponse.json({ files })
   } catch (error: any) {
     console.error("Orchestrator Error:", error)

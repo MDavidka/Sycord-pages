@@ -68,8 +68,9 @@ type GenerationPhase =
   | "clarifying"     // Step 3: Optional Questions
   | "structuring"    // Step 4: Structure / sitemap
   | "integrating"    // Step 5: Integration check
-  | "building"       // Step 6: Content & Build
-  | "deploying"      // Step 7: Review & Deploy
+  | "converting"     // Step 6: Convert raw JSON to TypeScript
+  | "building"       // Step 7: Content & Build
+  | "deploying"      // Step 8: Review & Deploy
   | "done"
   | "fixing"         // Auto-fix compatibility
 
@@ -222,12 +223,13 @@ const StepIndicator = ({ phase, progress, currentFile }: {
     clarifying:  { label: "Clarifying" },
     structuring: { label: "Structuring" },
     integrating: { label: "Integrating" },
+    converting:  { label: "Converting" },
     building:    { label: "Building" },
     deploying:   { label: "Deploying" },
     fixing:      { label: "Fixing" },
   }
 
-  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "building", "deploying", "fixing"]
+  const displayable = ["planning", "searching", "clarifying", "structuring", "integrating", "converting", "building", "deploying", "fixing"]
   if (!displayable.includes(phase)) return null
 
   const config = phaseConfig[phase]
@@ -1233,55 +1235,123 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setStep("planning")
     setActiveFile(undefined)
     setActiveFileUsedFor(undefined)
+    setDeploySuccess(false)
+    setDeployResult(null)
 
     try {
-      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider);
+      console.log("[DEBUG] Starting generation with model:", selectedModel.id, selectedModel.provider)
+
+      const progressInstruction = (done: number, total: number) => {
+        const doneMarkers = Array.from({ length: done }, () => "[Done]")
+        const pendingMarkers = Array.from({ length: Math.max(total - done, 0) }, (_, idx) => `[${done + idx + 1}]`)
+        return [...doneMarkers, ...pendingMarkers].join(" ")
+      }
+
       // 1. Call Architect to get JSON structure
+      const planningModel = selectedModel.provider === "OpenRouter"
+        ? selectedModel
+        : { id: "openai/gpt-oss-20b:free", provider: "OpenRouter" as const }
       const archRes = await fetch('/api/ai/architect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel })
-      });
+        body: JSON.stringify({
+          prompt: input + attachmentNote,
+          model: planningModel
+        })
+      })
 
-      if (!archRes.ok) throw new Error("Architect generation failed");
-      const archData = await archRes.json();
-      console.log("[DEBUG] Architect JSON Plan:", archData.plan);
+      if (!archRes.ok) throw new Error("Architect generation failed")
+      const archData = await archRes.json()
+      console.log("[DEBUG] Architect JSON Plan:", archData.plan)
 
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "I have created the UI structure as JSON. Now converting to code without AI...",
+        content: "I generated a strict raw JSON plan. Converting it to TypeScript now...",
         isIntermediate: true
-      }]);
+      }])
 
-      setSitemap(archData.plan.map((p: any) => ({ name: p.title || p.path, path: p.path, type: 'file' })))
-      setInstruction("Converting to TypeScript...")
-      setStep("building")
+      setSitemap((archData.plan || []).map((p: any) => ({
+        page: p?.title || p?.path || "Page",
+        path: p?.path || "/",
+      })))
+      setInstruction("Converting JSON to TypeScript...")
+      setStep("converting")
 
       // 2. Call Orchestrator to convert JSON to TSX without AI
       const orchRes = await fetch('/api/ai/orchestrator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonPlan: archData.plan })
-      });
+      })
 
-      if (!orchRes.ok) throw new Error("Code orchestration failed");
-      const orchData = await orchRes.json();
-      console.log("[DEBUG] Orchestrator Generated Files:", orchData.files);
+      if (!orchRes.ok) throw new Error("Code orchestration failed")
+      const orchData = await orchRes.json()
+      const orchestratedFiles: GeneratedPage[] = Array.isArray(orchData.files) ? orchData.files : []
+      console.log("[DEBUG] Orchestrator Generated Files:", orchestratedFiles)
 
-      setGeneratedPages(orchData.files);
+      setStep("building")
+      setInstruction(progressInstruction(0, orchestratedFiles.length))
 
+      // 3. Save generated files to project pages (and clear old ones)
+      const clearRes = await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
+      if (!clearRes.ok) {
+        throw new Error("Failed to clear existing generated pages")
+      }
+      const savedPages: GeneratedPage[] = []
+      for (let i = 0; i < orchestratedFiles.length; i++) {
+        const file = orchestratedFiles[i]
+        setActiveFile(file.name)
+        setInstruction(progressInstruction(i, orchestratedFiles.length))
+        const saveRes = await fetch(`/api/projects/${projectId}/pages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, content: file.code, usedFor: "AI generation" }),
+        })
+        if (!saveRes.ok) {
+          throw new Error(`Failed to save generated file: ${file.name}`)
+        }
+        savedPages.push({ ...file, timestamp: Date.now() })
+        setGeneratedPages([...savedPages])
+        setInstruction(progressInstruction(i + 1, orchestratedFiles.length))
+      }
+      setActiveFile(undefined)
+
+      // 4. Build/deploy to runner
       setMessages(prev => [...prev, {
         id: (Date.now() + 2).toString(),
         role: "assistant",
-        content: "Files have been successfully generated based on the architecture plan."
-      }]);
+        content: "Files generated and saved. Starting build/deploy on runner..."
+      }])
+      setStep("deploying")
+      setInstruction("Deploying to Flask runner...")
 
-      setStep("done");
-      setDeploySuccess(true); // For UI visual simulation
+      const deployRes = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId }),
+      })
+      const deployData = await deployRes.json()
+      if (!deployRes.ok || !deployData?.success) {
+        throw new Error(deployData?.error || "Runner deployment failed")
+      }
+
+      setDeploySuccess(true)
+      setDeployResult(deployData)
+      if (deployData.repoId) {
+        setTimeout(() => checkDeployLogs(deployData.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
+      }
+
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 3).toString(),
+        role: "assistant",
+        content: "Build pipeline finished and deployed successfully."
+      }])
+
+      setStep("done")
     } catch (err: any) {
-      setError(err.message);
-      setStep("idle");
+      setError(err.message)
+      setStep("idle")
     }
   }
 
@@ -1464,7 +1534,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                         <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
 
                         {/* Sitemap visualization (parsed from plan) */}
-                        {sitemap.length > 0 && (step === 'building' || step === 'done') && (
+                        {sitemap.length > 0 && (step === 'converting' || step === 'building' || step === 'done') && (
                             <SitemapVisualizer nodes={sitemap} />
                         )}
 
@@ -1499,28 +1569,41 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                             </div>
                         )}
 
-                        {/* Error Display */}
-                        {error && (
-                            <div className="mt-4 flex items-start gap-2.5">
-                                <Bug className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
-                                <div>
-                                    <p className="text-sm text-red-400">{error}</p>
-                                    <Button
-                                        className="text-xs text-red-500/60 hover:text-red-400 mt-1 underline underline-offset-2 h-auto p-0 min-w-0"
-                                        onClick={() => setStep('idle')}
-                                    >
-                                        Reset
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-
                         {/* Scroll anchor */}
                         <div ref={chatBottomRef} />
                     </div>
                 )}
             </div>
         </div>
+
+        {/* Global Warning Box */}
+        {error && (
+            <div className="mx-auto w-full max-w-2xl px-3 sm:px-4 md:px-0 mb-2 relative z-20">
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+                    <div className="flex items-start gap-2.5">
+                        <Bug className="h-4 w-4 shrink-0 text-amber-300 mt-0.5" />
+                        <div>
+                            <p className="text-xs uppercase tracking-wide text-amber-300/90">Warning</p>
+                            <p className="text-sm text-amber-100">{error}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button
+                            className="text-xs text-amber-200 hover:text-white h-auto p-0 min-w-0 underline underline-offset-2"
+                            onClick={() => setStep('idle')}
+                        >
+                            Reset
+                        </Button>
+                        <Button
+                            className="text-xs text-amber-200/80 hover:text-white h-auto p-0 min-w-0"
+                            onClick={() => setError(null)}
+                        >
+                            Dismiss
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* Input Bar — always at bottom */}
         <div className="w-full relative z-20">
