@@ -274,7 +274,8 @@ const HTML_TAGS = new Set([
   'section', 'article', 'main', 'header', 'footer', 'nav', 'aside',
   'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img',
   'table', 'thead', 'tbody', 'tr', 'td', 'th', 'select', 'option',
-  'video', 'audio', 'canvas',
+  'video', 'audio', 'canvas', 'svg', 'path', 'g', 'circle', 'rect', 'line',
+  'polyline', 'polygon', 'pre', 'code', 'blockquote', 'hr', 'br', 'iframe',
 ])
 
 // ─── REGEX ────────────────────────────────────────────────────────────────────
