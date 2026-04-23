@@ -45,11 +45,18 @@ export async function POST(req: Request) {
 
 The downstream pipeline builds a complete Vite + React + TypeScript project with react-router-dom routing and a shared <SiteNav /> that auto-links every route. Your "Plan" step produces the sitemap + per-page feature list that Style and Logic stages will consume. Do NOT emit any UI tree, component, or code — the later stages handle that.
 
+THINK CAREFULLY before emitting the array. For each page, decide:
+1. WHY this page exists — which concrete user goal / question / action does it address?
+2. WHO the visitor is at that point in the user journey (first-time visitor, returning customer, lead, authenticated user, etc.).
+3. WHAT content the page MUST expose to achieve that goal (sections, forms, lists, social proof, stats, FAQ, pricing, CTAs).
+4. WHAT the primary action ("happy path") is, and which OTHER page it links to afterwards.
+Do NOT emit a page just because a template usually has it — every entry must earn its place in the user journey.
+
 Return strictly a JSON array of page objects, each with:
-- "path":   URL path starting with "/" (e.g. "/", "/about", "/contact"). First entry MUST be "/".
-- "title":  short human-readable page title (used as the React component name and shown in the shared nav).
-- "description": 1–2 sentence description of the page's purpose, key sections and overall tone.
-- "features": array of short strings describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Logout button clears localStorage and redirects to /", "Mobile nav toggle"). Keep each feature concrete enough for a developer to implement.
+- "path":   URL path starting with "/" (e.g. "/", "/about", "/pricing", "/contact"). First entry MUST be "/".
+- "title":  short human-readable page title (used as the React component name and shown in the shared nav). PascalCase-friendly: "Home", "About", "Pricing", "Contact".
+- "description": 2–4 sentences covering: (a) the page's purpose and target audience, (b) the key content sections it renders (hero, feature grid, testimonials, pricing table, form, etc.), (c) what the primary CTA does and where it sends the user. Be specific — "hero + 3-column feature grid with icons + testimonial carousel + CTA linking to /contact" is good; "about the product" is not.
+- "features": array of short strings describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Toggle between monthly/yearly pricing", "FAQ accordion with 6 entries", "Newsletter signup at the bottom"). Keep each feature concrete enough for a developer to implement.
 
 No markdown, no prose, no wrapping object — just the JSON array.`,
     },

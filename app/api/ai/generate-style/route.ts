@@ -37,8 +37,9 @@ export async function POST(req: Request) {
     page?: { path?: string; title?: string; description?: string; features?: string[] }
     prompt?: string
     model?: ModelSelection
+    sitemap?: Array<{ path: string; title: string; description?: string }>
   }
-  const { page, prompt, model } = body
+  const { page, prompt, model, sitemap } = body
 
   if (!page?.title || !page?.path) {
     return NextResponse.json({ message: "page { path, title } is required" }, { status: 400 })
@@ -89,16 +90,31 @@ ${catalogueLines}
 THEME (locked):
 - The generated site uses ONLY two backgrounds: pure white (#ffffff in light mode) or #101010 (in dark mode). The scaffold defaults to dark mode.
 - Use ONLY shadcn tokens: bg-background, text-foreground, bg-card, bg-primary, text-primary-foreground, bg-muted, text-muted-foreground, border-border, bg-secondary, text-secondary-foreground, bg-accent, text-accent-foreground, bg-destructive, text-destructive-foreground.
-- NEVER use bg-blue-*, bg-slate-*, text-gray-*, bg-gradient-*, or any other hard-coded Tailwind color utility. Layout/spacing utilities (p-*, m-*, flex, grid, gap-*, w-*, h-*, max-w-*, rounded-*, shadow-*, text-xl, font-bold, etc.) are fine.
+- NEVER use bg-blue-*, bg-slate-*, text-gray-*, bg-gradient-*, or any other hard-coded Tailwind color utility. Layout/spacing/typography utilities (p-*, m-*, flex, grid, gap-*, w-*, h-*, max-w-*, rounded-*, shadow-*, text-xl, font-bold, leading-*, tracking-*) are fine.
 - NEVER embed inline CSS (no style={{ color: "..."}}, no arbitrary-value classes like [color:#abc] or bg-[#abc]).
+
+ICONS (HeroIcons ONLY):
+- Every icon MUST be a HeroIcon component (PascalCase name ending in "Icon", e.g. HomeIcon, UserIcon, ChevronRightIcon, CheckCircleIcon, ArrowRightIcon, MagnifyingGlassIcon, XMarkIcon, Bars3Icon). The converter auto-imports them from '@heroicons/react/24/outline'.
+- Icon nodes must have a className for sizing/color, e.g. {"name":"HomeIcon","props":{"className":"h-5 w-5"}}.
+- STRICTLY FORBIDDEN: emoji characters (🚀, ✨, ✅, 📱, 💡, etc.), unicode pictographs, ASCII art, or image URLs as icons. Any emoji in a text node is a bug — use a HeroIcon sibling instead.
+- See https://heroicons.com for the full list of available icon names; they all follow the \`<Name>Icon\` suffix convention.
 
 COMPONENT-ONLY RULE:
 - Every visible text string MUST live inside a shadcn component that renders typography (CardTitle, CardDescription, Label, Badge, Button, AlertTitle, AlertDescription, PaginationLink, etc.) OR inside semantic HTML headings/paragraphs (h1–h6, p). No bare strings inside <div>/<span> — wrap them.
 - Raw HTML is limited to LAYOUT ONLY: div, section, main, header, footer, nav, aside, ul, ol, li, form, h1..h6, p, a, img, label. Anything interactive (buttons, toggles, inputs, selects, dialogs) MUST come from the shadcn set above.
 
-LAYOUT & NAVIGATION:
-- The scaffold already injects a top-of-page <SiteNav /> linking every route. Do NOT duplicate a global header inside individual pages. Start pages with a <main> / <section> hero, not a nav.
-- For in-page anchors and CTAs to other routes, use <a href="/other-path">. React-Router's BrowserRouter intercepts these automatically.
+RESPONSIVE LAYOUT (mobile-first, required):
+- Every page must look correct on phone (<= 640px), tablet (641–1024px) AND desktop (>= 1025px). Use Tailwind responsive prefixes (sm:, md:, lg:, xl:) on grid/flex/width/padding utilities. Default state targets mobile.
+- NEVER use fixed pixel widths (w-[1200px], w-96 everywhere). Prefer container mx-auto + max-w-* + px-4 sm:px-6 lg:px-8.
+- Grids must collapse on mobile: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" is correct; "grid grid-cols-3" alone breaks on phones.
+- Navigation that has many items must use Sheet or DropdownMenu on mobile (toggle icon <= md breakpoint) and inline NavigationMenu on desktop.
+
+PAGE-SCOPE RULE (critical):
+- This Style call produces ONE single route's content. The page body must stand alone — do NOT render a site-wide header/footer/nav inside it (the scaffold already adds <SiteNav /> above every route).
+- Do NOT wrap the page in <Tabs> to switch between the OTHER planned routes. Tabs are only acceptable for in-page sub-sections of THIS specific route (e.g. "Mission / Team" on the About page). Switching between the site's top-level routes must happen via the shared SiteNav + full-page navigation.
+
+NAVIGATION (in-page links to other routes):
+- For CTAs / in-body links to another planned route, use <a href="/other-path">…</a>. The converter auto-rewrites these to <Link to="/other-path"> from react-router-dom, so they are intercepted and do NOT full-reload the page.
 
 Full shadcn reference (prop shapes & examples):
 ${cheatSheet || prompts.builderCheatSheet}
@@ -121,13 +137,13 @@ RULES:
       role: "user" as const,
       content: `Overall website brief: ${prompt ?? "(no extra context)"}
 
-Generate the UI tree JSON for this page:
+${sitemap && sitemap.length > 0 ? `Full sitemap (other pages the user can reach via the shared SiteNav — use their paths for CTAs with <a href="/...">, but do NOT re-render their content here):\n${sitemap.map((s) => `  - ${s.path} — ${s.title}${s.description ? `: ${s.description}` : ""}`).join("\n")}\n\n` : ""}Generate the UI tree JSON for ONLY this page:
 - path: ${page.path}
 - title: ${page.title}
 - description: ${page.description ?? "(no description)"}
 ${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
 
-Make sure every feature above is represented in the tree (the UI must actually expose the relevant form / button / list / handler). Return only the JSON object described in the contract.`,
+Make sure every feature above is represented in the tree (the UI must actually expose the relevant form / button / list / handler). Use HeroIcons for all iconography. Use responsive Tailwind (sm:/md:/lg:) on every grid/flex/width utility. Return only the JSON object described in the contract.`,
     },
   ]
 

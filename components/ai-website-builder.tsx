@@ -1380,7 +1380,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         const res = await fetch('/api/ai/generate-style', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ page, prompt: userPrompt, model: pipelineModel }),
+          body: JSON.stringify({
+            page,
+            prompt: userPrompt,
+            model: pipelineModel,
+            sitemap: plan.map((p) => ({ path: p.path, title: p.title, description: p.description })),
+          }),
         })
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))

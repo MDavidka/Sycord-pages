@@ -268,6 +268,12 @@ export const IMPORT_MAP: Record<string, string> = {
   TooltipContent: '@/components/ui/tooltip',
   TooltipProvider: '@/components/ui/tooltip',
   TooltipTrigger: '@/components/ui/tooltip',
+  // React-Router navigation primitive. The converter auto-rewrites
+  // <a href="/..."> to <Link to="/..."> so in-app navigation doesn't
+  // reload the whole page.
+  Link: 'react-router-dom',
+  NavLink: 'react-router-dom',
+  Outlet: 'react-router-dom',
 }
 
 // ─── ALIAS MAP ────────────────────────────────────────────────────────────────
@@ -350,6 +356,12 @@ const REGEX = {
 // exports to IMPORT_MAP and both systems pick it up automatically.
 export const SUPPORTED_COMPONENTS: Set<string> = new Set(Object.keys(IMPORT_MAP))
 
+// A PascalCase name ending in "Icon" is assumed to be a HeroIcon. Imports
+// are resolved at the buildImports stage (pulled from @heroicons/react/24/outline).
+function isHeroIconName(name: string): boolean {
+  return REGEX.COMPONENT_NAME.test(name) && /Icon$/.test(name) && name !== 'Icon'
+}
+
 function normalizeName(name: string): string {
   if (HTML_TAGS.has(name)) return name
   if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) {
@@ -359,14 +371,30 @@ function normalizeName(name: string): string {
   if (REGEX.COMPONENT_NAME.test(name)) {
     // A PascalCase component is only emitted if (a) we know where to import
     // it from, and (b) it's actually in the scaffold's vendored UI set.
-    // Otherwise demote it to a <div> so the generated project still builds.
+    // HeroIcons (any PascalCase name ending in "Icon") are also allowed.
     if (IMPORT_MAP[name] && SUPPORTED_COMPONENTS.has(name)) return name
+    if (isHeroIconName(name)) return name
     return 'div'
   }
   return 'div'
 }
 
 function normalizeTree(node: UINode): UINode {
+  // Internal <a href="/..."> is rewritten to <Link to="/..."> from
+  // react-router-dom so in-app navigation doesn't full-reload the page.
+  // External links (http://, https://, mailto:, #anchor) stay as <a>.
+  if (node.name === 'a' && node.props && typeof node.props.href === 'string') {
+    const href = node.props.href as string
+    if (href.startsWith('/') && !href.startsWith('//')) {
+      const { href: _, ...rest } = node.props as Record<string, unknown>
+      return {
+        ...node,
+        name: 'Link',
+        props: { ...rest, to: href },
+        children: node.children?.map(normalizeTree),
+      }
+    }
+  }
   return {
     ...node,
     name: normalizeName(node.name),
@@ -483,8 +511,13 @@ function renderNode(node: UINode, depth: number): string {
 
 function buildImports(components: Set<string>, needsReact: boolean): string {
   const grouped = new Map<string, string[]>()
+  const heroIcons: string[] = []
 
   for (const name of components) {
+    if (isHeroIconName(name) && !IMPORT_MAP[name]) {
+      heroIcons.push(name)
+      continue
+    }
     const src = IMPORT_MAP[name]
     if (!src) continue
     if (!grouped.has(src)) grouped.set(src, [])
@@ -499,6 +532,11 @@ function buildImports(components: Set<string>, needsReact: boolean): string {
   for (const [src, names] of sorted) {
     const sorted_names = names.sort().join(', ')
     lines.push(`import { ${sorted_names} } from '${src}'`)
+  }
+
+  if (heroIcons.length > 0) {
+    const sortedIcons = [...new Set(heroIcons)].sort().join(', ')
+    lines.push(`import { ${sortedIcons} } from '@heroicons/react/24/outline'`)
   }
 
   return lines.join('\n')
