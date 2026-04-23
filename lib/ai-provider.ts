@@ -155,15 +155,63 @@ export function extractJson<T = unknown>(content: string): T | null {
   }
 }
 
-// Extract the first fenced code block (```lang ... ```) body, or fall back to
-// returning the full content trimmed. Used by the logic-generation endpoint to
-// pull a TS file out of a chatty response.
+// Extract a runnable source code body out of a chatty model response.
+//
+// Real model output we've seen in the wild:
+//   1. Clean: just the code.
+//   2. Fenced with a language hint: ```typescript\n...\n```
+//   3. Fenced then trailing prose: "```ts\n...\n```\n\nLet me know…"
+//   4. Prose-then-fence: "Here is the code:\n\n```ts\n...\n```"
+//   5. Unclosed / malformed fence: "```typescript\n...\n" (no closing fence).
+//   6. No fence, prose prefix: "Here is the code:\n\nexport function …"
+//
+// The previous implementation failed case 2 when `lang="ts"` because \s* can't
+// match `cript` in ```typescript — it silently returned the full messy blob
+// (including prose and triple-backtick markers), which is exactly what lands
+// in the generated .ts file and kills `vite build`.
+//
+// This version tries multiple strategies and, crucially, always strips any
+// leading/trailing triple-backtick lines before returning.
 export function extractCode(content: string, lang?: string): string {
   if (!content) return ""
-  const pattern = lang
-    ? new RegExp(`\`\`\`${lang}\\s*([\\s\\S]*?)\\s*\`\`\``, "i")
-    : /```[a-zA-Z0-9]*\s*([\s\S]*?)\s*```/
-  const m = content.match(pattern)
-  if (m?.[1]) return m[1].trim()
-  return content.trim()
+  const trimmed = content.trim()
+
+  // Strategy A: lang-specific fence. Accept ```ts, ```typescript, ```tsx when
+  // lang=ts; accept ```js / ```javascript / ```jsx when lang=js. For other
+  // langs just match the lang literally.
+  const langAliases =
+    lang === "ts" ? ["typescript", "tsx", "ts"]
+    : lang === "js" ? ["javascript", "jsx", "js"]
+    : lang ? [lang]
+    : []
+  for (const alias of langAliases) {
+    const re = new RegExp(`\`\`\`${alias}\\b[\\t ]*\\n?([\\s\\S]*?)\\n?\`\`\``, "i")
+    const m = trimmed.match(re)
+    if (m?.[1]) return stripStrayFenceMarkers(m[1]).trim()
+  }
+
+  // Strategy B: any fenced block (first occurrence).
+  const anyFence = trimmed.match(/```[a-zA-Z0-9]*\b[\t ]*\n?([\s\S]*?)\n?```/)
+  if (anyFence?.[1]) return stripStrayFenceMarkers(anyFence[1]).trim()
+
+  // Strategy C: unclosed fence — a ``` that never closes. Take everything
+  // after the opening fence line.
+  const openFence = trimmed.match(/^```[a-zA-Z0-9]*\b[\t ]*\n([\s\S]*)$/)
+  if (openFence?.[1]) return stripStrayFenceMarkers(openFence[1]).trim()
+
+  // Strategy D: no fence but prose prefix before an import/export/const/function.
+  // Drop everything up to the first plausible code line.
+  const codeStart = trimmed.search(
+    /^(?:import\b|export\b|const\b|let\b|var\b|function\b|async\s+function\b|\/\/|\/\*)/m,
+  )
+  if (codeStart > 0) return stripStrayFenceMarkers(trimmed.slice(codeStart)).trim()
+
+  // Strategy E: give up and scrub stray fence markers out of the raw content.
+  return stripStrayFenceMarkers(trimmed).trim()
+}
+
+// Strip any lone ``` lines that slipped through — a ``` that is alone on a
+// line is always markdown noise, never valid TS/JS syntax.
+function stripStrayFenceMarkers(code: string): string {
+  return code.replace(/^[\t ]*```[a-zA-Z0-9]*[\t ]*$/gm, "")
 }

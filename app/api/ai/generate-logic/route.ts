@@ -194,6 +194,10 @@ Emit the complete TypeScript module now.`,
 
   let code = extractCode(result.content, "ts")
   if (!code) code = extractCode(result.content)
+  // Final pass: drop any stray triple-backtick lines. extractCode already
+  // does this for the first fence it matched, but if the model emits more
+  // than one ```…``` block we might still have leftovers.
+  code = code.replace(/^[\t ]*```[a-zA-Z0-9]*[\t ]*$/gm, "").trim()
 
   // Guarantee every requested handler is exported. If the model skipped one,
   // splice in a real (not console.log) stub implementation so the page's

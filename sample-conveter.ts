@@ -544,10 +544,10 @@ function convertTreeToTypeScriptInternal(
   // 7. Render JSX
   const jsxBody = renderNode(normalized, 2)
 
-  // 8. Assemble
+  // 8. Assemble. We do NOT emit `'use client'` — that's Next.js boilerplate.
+  // The generated project is a pure Vite + React app where every module is
+  // already a client module, so the directive is just noise.
   const sections: string[] = [
-    "'use client'",
-    '',
     importsBlock,
   ]
 

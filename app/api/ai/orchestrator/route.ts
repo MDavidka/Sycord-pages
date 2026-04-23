@@ -121,6 +121,33 @@ function attachLogicImport(pageCode: string, handlerNames: string[], logicModule
   return lines.join("\n")
 }
 
+// Belt-and-suspenders: strip any markdown fence markers (```typescript, ```,
+// bare ```ts) and obvious prose prefixes from logic code before we emit it to
+// disk. The Logic stage route already calls `extractCode`, but a stray
+// leftover fence in the emitted .ts file causes Vite's esbuild transform to
+// die with "Expected ';' but found 'is'" — which is the difference between
+// a working build and a blank deployed page.
+function sanitizeModelCode(code: string): string {
+  if (!code) return code
+  let out = code
+  // Lone triple-backtick line anywhere in the file is always markdown noise.
+  out = out.replace(/^[\t ]*```[a-zA-Z0-9]*[\t ]*$/gm, "")
+  // If the file starts with a fenced block, try to keep only the body.
+  const openingFence = out.match(/^\s*```[a-zA-Z0-9]*\s*\n([\s\S]*?)(?:```|$)/)
+  if (openingFence?.[1] && /^\s*```/.test(out)) {
+    out = openingFence[1]
+  }
+  // Strip leading lines that are obviously prose — nothing that starts with
+  // `import`, `export`, `const`, `let`, `var`, `function`, `//`, `/*`, `@`,
+  // `'use`, `"use` is a valid top-level TS statement head.
+  const codeHead = /^(?:import\b|export\b|const\b|let\b|var\b|function\b|async\s+function\b|\/\/|\/\*|@|['"]use\s)/m
+  if (!codeHead.test(out.slice(0, 200))) {
+    const match = out.search(codeHead)
+    if (match > 0) out = out.slice(match)
+  }
+  return out.trim() + "\n"
+}
+
 // Strip the `interface Props { ... }` block + function parameter destructure
 // the converter emits. Since handlers now come from an imported logic module
 // the page is a zero-prop component, which is what React Router expects.
@@ -204,7 +231,7 @@ export async function POST(req: Request) {
 
       pageFiles.push({
         name: pageFilePath,
-        code: componentCode,
+        code: sanitizeModelCode(componentCode),
         timestamp: Date.now(),
       })
 
@@ -240,7 +267,7 @@ export async function POST(req: Request) {
         }
         pageFiles.push({
           name: logicFilePath,
-          code: logicCode,
+          code: sanitizeModelCode(logicCode),
           timestamp: Date.now(),
         })
       }
