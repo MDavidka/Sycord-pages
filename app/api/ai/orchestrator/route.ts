@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { logAiDebug } from "@/lib/logger"
 import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter"
 import { buildViteScaffold, type ScaffoldFile, type ScaffoldRoute } from "@/lib/vite-scaffold"
+import type { ProjectManifest, ManifestPage } from "@/lib/project-manifest"
 
 // Stage 4 of the pipeline: deterministic "Converter".
 //
@@ -161,17 +162,43 @@ function stripPropsInterface(pageCode: string): string {
   return out
 }
 
+// Deterministically set document.title for each generated page from the
+// manifest's pageTitle. We inject `React.useEffect(() => { document.title =
+// "..." }, [])` at the top of the component body. This is one of the
+// "details that currently get lost" — even if the model forgets the <title>,
+// the runtime title is always correct. Safe on SSR/CSR because it runs only
+// inside useEffect.
+function injectDocumentTitle(pageCode: string, pageTitle: string): string {
+  if (!pageTitle) return pageCode
+  // Need React in scope. The converter imports React automatically when
+  // useState is used; when neither state nor handlers are present it might
+  // not — add an idempotent React import.
+  let out = pageCode
+  if (!/^import\s+React\b/m.test(out)) {
+    out = `import React from 'react'\n${out}`
+  }
+  const titleLiteral = JSON.stringify(pageTitle)
+  const hook = `  React.useEffect(() => { document.title = ${titleLiteral} }, [])\n`
+  // Insert after the function signature's opening brace. Match the
+  // canonical shape the converter emits: `export function Name() {`.
+  return out.replace(/(export function \w+\([^)]*\)\s*\{)\n/, `$1\n${hook}`)
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  const body = await req.json().catch(() => ({})) as { jsonPlan?: OrchestratorPage[] }
-  const { jsonPlan } = body
+  const body = await req.json().catch(() => ({})) as {
+    jsonPlan?: OrchestratorPage[]
+    manifest?: ProjectManifest
+  }
+  const { jsonPlan, manifest } = body
 
   await logAiDebug("Orchestrator Request", {
     pagesCount: Array.isArray(jsonPlan) ? jsonPlan.length : "invalid",
+    hasManifest: !!manifest,
   })
 
   if (!jsonPlan || !Array.isArray(jsonPlan) || jsonPlan.length === 0) {
@@ -190,17 +217,30 @@ export async function POST(req: Request) {
         typeof page.path === "string" ? page.path : `/${pageName.toLowerCase()}`,
       )
 
-      let slug = pageFileSlug(routePath, pageName)
-      // Avoid slug collisions if two plan entries sanitize to the same name
-      let suffix = 2
-      while (usedSlugs.has(slug)) {
-        slug = `${pageFileSlug(routePath, pageName)}-${suffix++}`
+      // Prefer the manifest entry as source of truth so slug / file paths /
+      // logic module are computed ONCE and match what the Style and Logic
+      // stages already saw. Fall back to the old per-entry derivation when
+      // the caller (older client) didn't send a manifest.
+      const manifestPage: ManifestPage | undefined = manifest?.pages.find(
+        (p) => p.route === routePath || p.componentName === pageName,
+      )
+
+      let slug: string
+      if (manifestPage) {
+        slug = manifestPage.slug
+      } else {
+        slug = pageFileSlug(routePath, pageName)
+        let suffix = 2
+        while (usedSlugs.has(slug)) {
+          slug = `${pageFileSlug(routePath, pageName)}-${suffix++}`
+        }
       }
       usedSlugs.add(slug)
 
-      const pageFilePath = `src/pages/${slug}.tsx`
-      const logicFilePath = `src/lib/${slug}-logic.ts`
-      const logicModuleSpecifier = `@/lib/${slug}-logic`
+      const pageFilePath = manifestPage?.pageFile ?? `src/pages/${slug}.tsx`
+      const logicFilePath = manifestPage?.logicFile ?? `src/lib/${slug}-logic.ts`
+      const logicModuleSpecifier = manifestPage?.logicModule ?? `@/lib/${slug}-logic`
+      const pageTitle = manifestPage?.pageTitle ?? page.title ?? pageName
 
       // Accept any of the legacy/new shapes: the Style stage emits a
       // {type, component} envelope on `tree`; older callers might still send
@@ -228,6 +268,9 @@ export async function POST(req: Request) {
         componentCode = attachLogicImport(componentCode, converted.handlerNames, logicModuleSpecifier)
         componentCode = stripPropsInterface(componentCode)
       }
+      // Deterministic: always set document.title from the manifest so the
+      // browser tab reflects the page name even if the model forgot a <title>.
+      componentCode = injectDocumentTitle(componentCode, pageTitle)
 
       pageFiles.push({
         name: pageFilePath,

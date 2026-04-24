@@ -1358,6 +1358,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const plan: Array<{ path: string; title: string; description?: string; features?: string[] }> =
         Array.isArray(archData.plan) ? archData.plan : []
       if (plan.length === 0) throw new Error("Planner returned no pages")
+      // Architect now emits an authoritative project manifest alongside the
+      // plan — every downstream stage gets the same manifest so they agree
+      // on slugs, file paths, logic module specifiers, and page titles.
+      const manifest = archData.manifest
 
       setSitemap(plan.map(p => ({
         page: p.title || p.path || "Page",
@@ -1389,6 +1393,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
             prompt: userPrompt,
             model: pipelineModel,
             sitemap: plan.map((p) => ({ path: p.path, title: p.title, description: p.description })),
+            manifest,
           }),
         })
         if (!res.ok) {
@@ -1420,6 +1425,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
             features: sp.features,
             prompt: userPrompt,
             model: pipelineModel,
+            manifest,
+            route: sp.path,
           }),
         })
         if (!res.ok) {
@@ -1441,7 +1448,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const orchRes = await fetch('/api/ai/orchestrator', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonPlan: pagesWithLogic }),
+        body: JSON.stringify({ jsonPlan: pagesWithLogic, manifest }),
       })
       if (!orchRes.ok) {
         const err = await orchRes.json().catch(() => ({}))

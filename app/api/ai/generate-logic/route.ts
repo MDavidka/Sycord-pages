@@ -3,6 +3,10 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractCode, type ModelSelection } from "@/lib/ai-provider"
+import {
+  renderManifestForPrompt,
+  type ProjectManifest,
+} from "@/lib/project-manifest"
 
 // Stage 3 of the pipeline: "TypeScript for logic".
 //
@@ -81,8 +85,10 @@ export async function POST(req: Request) {
     prompt?: string
     features?: string[]
     model?: ModelSelection
+    manifest?: ProjectManifest
+    route?: string
   }
-  const { pageName, tree, prompt, features, model } = body
+  const { pageName, tree, prompt, features, model, manifest, route } = body
 
   if (!pageName || !tree) {
     return NextResponse.json({ message: "pageName and tree are required" }, { status: 400 })
@@ -105,7 +111,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ code: null, handlers: [] })
   }
 
-  const pageFileHint = `src/lib/${pageName.toLowerCase()}-logic.ts`
+  // Prefer the manifest's logic file path when we have it (slug-based, matches
+  // what the orchestrator writes to disk). Fall back to the legacy hint when
+  // the caller didn't pass a manifest.
+  const manifestPage = manifest?.pages.find(
+    (p) => (route ? p.route === route : p.componentName === pageName),
+  )
+  const pageFileHint = manifestPage?.logicFile ?? `src/lib/${pageName.toLowerCase()}-logic.ts`
 
   await logAiDebug("Logic Request", {
     pageName,
@@ -150,7 +162,10 @@ export function onSubmitContact(event: { preventDefault(): void, target: unknown
 }
 \`\`\`
 
-Return ONLY raw TypeScript — the first non-whitespace character must be \`export\` or an allowed top-level statement.`,
+Return ONLY raw TypeScript — the first non-whitespace character must be \`export\` or an allowed top-level statement.
+
+CROSS-FILE CONTRACT (use the manifest below to understand the rest of the app; you may reference route paths when navigating):
+${manifest ? renderManifestForPrompt(manifest) : "(no manifest supplied)"}`,
     },
     {
       role: "user" as const,
@@ -158,6 +173,7 @@ Return ONLY raw TypeScript — the first non-whitespace character must be \`expo
 
 Page: ${pageName}
 Target file path: ${pageFileHint}
+${manifestPage ? `Route: ${manifestPage.route}\nPage title (for window.document.title and post-submit copy): ${JSON.stringify(manifestPage.pageTitle)}` : ""}
 ${features && features.length > 0 ? `\nPage features (from the Plan stage — use these to decide what each handler should do):\n${features.map((f) => `- ${f}`).join("\n")}` : ""}
 
 UI tree (for context — do not render it; only use it to infer what each handler should do):

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
+import type { PlanEntry } from "@/lib/plan-types"
+import { buildProjectManifest } from "@/lib/project-manifest"
 
 // Stage 1 of the pipeline: the "Plan" step.
 //
@@ -87,12 +89,6 @@ Return only the JSON array described above. The sitemap MUST contain at least 3 
   }
 
   const parsed = extractJson<unknown>(result.content)
-  interface PlanEntry {
-    path: string
-    title: string
-    description?: string
-    features?: string[]
-  }
   let plan: PlanEntry[]
   if (Array.isArray(parsed)) {
     plan = parsed as PlanEntry[]
@@ -142,6 +138,12 @@ Return only the JSON array described above. The sitemap MUST contain at least 3 
     }
   }
 
+  // Derive the project manifest deterministically from the plan. This is the
+  // authoritative source of truth every downstream stage (style, logic,
+  // orchestrator) reads from — so componentName / slug / pageFile / logicFile
+  // are computed ONCE here and can never drift between stages.
+  const manifest = buildProjectManifest(prompt, plan)
+
   await logAiDebug("Architect Parse Success", { pages: plan.length })
-  return NextResponse.json({ plan })
+  return NextResponse.json({ plan, manifest })
 }

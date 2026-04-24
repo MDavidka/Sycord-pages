@@ -5,6 +5,11 @@ import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
 import { IMPORT_MAP } from "@/sample-conveter"
+import {
+  renderManifestForPrompt,
+  type ProjectManifest,
+  type ManifestPage,
+} from "@/lib/project-manifest"
 import fs from "fs"
 import path from "path"
 
@@ -38,8 +43,9 @@ export async function POST(req: Request) {
     prompt?: string
     model?: ModelSelection
     sitemap?: Array<{ path: string; title: string; description?: string }>
+    manifest?: ProjectManifest
   }
-  const { page, prompt, model, sitemap } = body
+  const { page, prompt, model, sitemap, manifest } = body
 
   if (!page?.title || !page?.path) {
     return NextResponse.json({ message: "page { path, title } is required" }, { status: 400 })
@@ -47,6 +53,13 @@ export async function POST(req: Request) {
   if (!model?.id || !model?.provider) {
     return NextResponse.json({ message: "Model selection is required" }, { status: 400 })
   }
+
+  // Resolve this page's manifest entry (component name, logic module, title).
+  // Fall back to an empty entry when the caller didn't send a manifest (older
+  // clients) — the prompt still runs, just without the full cross-page view.
+  const manifestPage: ManifestPage | undefined = manifest?.pages.find(
+    (p) => p.route === page.path,
+  )
 
   await logAiDebug("Style Request", {
     page,
@@ -116,6 +129,16 @@ PAGE-SCOPE RULE (critical):
 NAVIGATION (in-page links to other routes):
 - For CTAs / in-body links to another planned route, use <a href="/other-path">…</a>. The converter auto-rewrites these to <Link to="/other-path"> from react-router-dom, so they are intercepted and do NOT full-reload the page.
 
+CROSS-FILE CONTRACT (read the manifest below BEFORE emitting JSON):
+${manifest ? renderManifestForPrompt(manifest) : "(no manifest supplied — fall back to the single-page brief)"}
+
+STRICT MULTI-PAGE RULES (enforced by the downstream converter):
+1. Every page MUST have a heading element (h1 or CardTitle) whose text matches its pageTitle from the manifest. The runtime also sets document.title to this value automatically — your job is to surface it visually.
+2. Every <Button> / <a> / interactive element that performs an ACTION (submit, toggle, call API, navigate, dismiss) MUST wire its handler via "$handler.<name>". Every such handler name MUST be implementable as a real function — never leave an empty arrow or a placeholder.
+3. Links between sibling routes MUST use <a href="/other-route">…</a> (the converter rewrites them to <Link to="/other-route">). Never emit full URLs for in-app navigation. Use the routes from the manifest above verbatim.
+4. Dynamic / user-facing data that would come from a data fetch MUST be bound to "$state.<name>" (the logic stage will provide the initial value and any loader). Do not hardcode user-specific data as JSX text — static marketing copy is fine, but things like "user profile", "order list", "post titles" belong in state.
+5. Never re-render sibling pages inside this page. Do not put the sitemap/nav into the page body (the scaffold already renders <SiteNav />). Use <Tabs> only for in-page sub-sections of THIS route, never to switch between the site's top-level routes.
+
 Full shadcn reference (prop shapes & examples):
 ${cheatSheet || prompts.builderCheatSheet}
 
@@ -137,9 +160,17 @@ RULES:
       role: "user" as const,
       content: `Overall website brief: ${prompt ?? "(no extra context)"}
 
-${sitemap && sitemap.length > 0 ? `Full sitemap (other pages the user can reach via the shared SiteNav — use their paths for CTAs with <a href="/...">, but do NOT re-render their content here):\n${sitemap.map((s) => `  - ${s.path} — ${s.title}${s.description ? `: ${s.description}` : ""}`).join("\n")}\n\n` : ""}Generate the UI tree JSON for ONLY this page:
+${manifest
+        ? `Refer to the PROJECT MANIFEST above for the full app structure. You are generating ONLY the page marked below.`
+        : sitemap && sitemap.length > 0
+          ? `Full sitemap (other pages the user can reach via the shared SiteNav — use their paths for CTAs with <a href="/...">, but do NOT re-render their content here):\n${sitemap.map((s) => `  - ${s.path} — ${s.title}${s.description ? `: ${s.description}` : ""}`).join("\n")}\n`
+          : ""
+      }
+
+Generate the UI tree JSON for ONLY this page:
 - path: ${page.path}
 - title: ${page.title}
+${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}` : ""}
 - description: ${page.description ?? "(no description)"}
 ${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
 
