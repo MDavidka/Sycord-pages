@@ -5,12 +5,14 @@
 // Supported providers:
 //   - "xAI"        → https://api.x.ai/v1/chat/completions                     (XAI_API_KEY)
 //   - "OpenRouter" → https://openrouter.ai/api/v1/chat/completions            (OPENROUTER_API_KEY)
-//   - "Google"     → https://generativelanguage.googleapis.com/v1beta/...:generateContent
+//   - "Google"     → https://aiplatform.googleapis.com/v1/publishers/google/
+//                    models/{model}:generateContent?key=...
 //                    (GOOGLE_AIAGENT_API)  —  Gemini 3.1 Pro Preview via
-//                    Google Agent Studio (formerly Vertex AI).
+//                    **Vertex AI in express mode** (Agent Studio), NOT the
+//                    AI Studio / generativelanguage.googleapis.com endpoint.
 //
-// OpenAI-style providers share a schema; Google's Generative Language API
-// uses a different request/response shape, handled separately below.
+// OpenAI-style providers share a schema; Vertex AI's generateContent uses a
+// different request/response shape, handled separately below.
 
 export type ChatRole = "system" | "user" | "assistant"
 
@@ -126,12 +128,14 @@ async function callOpenAICompatible(
   return { ok: true, content, raw: data }
 }
 
-// Google Generative Language API (gemini-*) speaks a different shape than the
-// OpenAI chat-completions schema:
+// Vertex AI in express mode (aiplatform.googleapis.com) speaks a different
+// shape than the OpenAI chat-completions schema:
 //   - request:  { systemInstruction?: { parts }, contents: [{ role, parts }] }
 //   - response: { candidates: [{ content: { parts: [{ text }] } }] }
 // We fold the OpenAI "system" message into systemInstruction, and map
-// user/assistant turns to "user"/"model" roles Google expects.
+// user/assistant turns to "user"/"model" roles Vertex expects. Auth is the
+// API key passed as `?key=` (NOT a bearer token — express mode accepts the
+// raw API key, unlike the standard Vertex endpoint which requires OAuth2).
 interface GooglePart { text: string }
 interface GoogleContent { role?: "user" | "model"; parts: GooglePart[] }
 interface GoogleResponse {
@@ -173,8 +177,10 @@ async function callGoogle(
     })
   }
 
+  // Vertex AI in express mode: API key is a query param, not a header.
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.id)}:generateContent`
+    `https://aiplatform.googleapis.com/v1/publishers/google/models/${encodeURIComponent(model.id)}:generateContent` +
+    `?key=${encodeURIComponent(apiKey)}`
 
   let response: Response
   try {
@@ -182,7 +188,6 @@ async function callGoogle(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
         systemInstruction,
@@ -194,7 +199,7 @@ async function callGoogle(
     return {
       ok: false,
       status: 502,
-      message: "Network error calling Google",
+      message: "Network error calling Vertex AI",
       details: err instanceof Error ? err.message : String(err),
     }
   }
@@ -204,7 +209,7 @@ async function callGoogle(
     return {
       ok: false,
       status: response.status,
-      message: "Google API error",
+      message: "Vertex AI API error",
       details: errText,
     }
   }
@@ -216,7 +221,7 @@ async function callGoogle(
     return {
       ok: false,
       status: 502,
-      message: "Google API returned no content",
+      message: "Vertex AI returned no content",
       details: data?.error?.message ?? JSON.stringify(data ?? {}),
     }
   }
