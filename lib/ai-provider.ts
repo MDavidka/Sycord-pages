@@ -3,11 +3,14 @@
 // logic TS) runs on the same model the user picked from the dropdown.
 //
 // Supported providers:
-//   - "xAI"        → https://api.x.ai/v1/chat/completions         (XAI_API_KEY)
-//   - "OpenRouter" → https://openrouter.ai/api/v1/chat/completions (OPENROUTER_API_KEY)
+//   - "xAI"        → https://api.x.ai/v1/chat/completions                     (XAI_API_KEY)
+//   - "OpenRouter" → https://openrouter.ai/api/v1/chat/completions            (OPENROUTER_API_KEY)
+//   - "Google"     → https://generativelanguage.googleapis.com/v1beta/...:generateContent
+//                    (GOOGLE_AIAGENT_API)  —  Gemini 3.1 Pro Preview via
+//                    Google Agent Studio (formerly Vertex AI).
 //
-// Both endpoints speak the OpenAI-compatible chat-completions schema, so the
-// request/response shape is identical.
+// OpenAI-style providers share a schema; Google's Generative Language API
+// uses a different request/response shape, handled separately below.
 
 export type ChatRole = "system" | "user" | "assistant"
 
@@ -64,6 +67,15 @@ function providerConfig(provider: string): ProviderConfig {
 export async function callModel(
   opts: CallModelOptions,
 ): Promise<CallModelResult | CallModelError> {
+  if (opts.model.provider === "Google") {
+    return callGoogle(opts)
+  }
+  return callOpenAICompatible(opts)
+}
+
+async function callOpenAICompatible(
+  opts: CallModelOptions,
+): Promise<CallModelResult | CallModelError> {
   const { model, messages, temperature = 0.1 } = opts
   const cfg = providerConfig(model.provider)
 
@@ -111,6 +123,103 @@ export async function callModel(
 
   const data = await response.json().catch(() => null) as { choices?: Array<{ message?: { content?: string } }> } | null
   const content = data?.choices?.[0]?.message?.content ?? ""
+  return { ok: true, content, raw: data }
+}
+
+// Google Generative Language API (gemini-*) speaks a different shape than the
+// OpenAI chat-completions schema:
+//   - request:  { systemInstruction?: { parts }, contents: [{ role, parts }] }
+//   - response: { candidates: [{ content: { parts: [{ text }] } }] }
+// We fold the OpenAI "system" message into systemInstruction, and map
+// user/assistant turns to "user"/"model" roles Google expects.
+interface GooglePart { text: string }
+interface GoogleContent { role?: "user" | "model"; parts: GooglePart[] }
+interface GoogleResponse {
+  candidates?: Array<{
+    content?: { parts?: GooglePart[]; role?: string }
+    finishReason?: string
+  }>
+  error?: { message?: string }
+}
+
+async function callGoogle(
+  opts: CallModelOptions,
+): Promise<CallModelResult | CallModelError> {
+  const { model, messages, temperature = 0.1 } = opts
+  const apiKey = process.env.GOOGLE_AIAGENT_API
+  if (!apiKey) {
+    return {
+      ok: false,
+      status: 500,
+      message: "Google Agent Studio API key is not configured (GOOGLE_AIAGENT_API).",
+    }
+  }
+
+  const systemTurns = messages.filter((m) => m.role === "system")
+  const nonSystem = messages.filter((m) => m.role !== "system")
+  const systemInstruction: GoogleContent | undefined = systemTurns.length
+    ? { parts: systemTurns.map((m) => ({ text: m.content })) }
+    : undefined
+  const contents: GoogleContent[] = nonSystem.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }))
+  // Google rejects requests with zero `contents`. If the caller only sent
+  // system messages, relay them as a single user turn so the call still runs.
+  if (contents.length === 0 && systemTurns.length > 0) {
+    contents.push({
+      role: "user",
+      parts: [{ text: systemTurns.map((m) => m.content).join("\n\n") }],
+    })
+  }
+
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.id)}:generateContent`
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction,
+        contents,
+        generationConfig: { temperature },
+      }),
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      status: 502,
+      message: "Network error calling Google",
+      details: err instanceof Error ? err.message : String(err),
+    }
+  }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "")
+    return {
+      ok: false,
+      status: response.status,
+      message: "Google API error",
+      details: errText,
+    }
+  }
+
+  const data = (await response.json().catch(() => null)) as GoogleResponse | null
+  const content =
+    data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? ""
+  if (!content) {
+    return {
+      ok: false,
+      status: 502,
+      message: "Google API returned no content",
+      details: data?.error?.message ?? JSON.stringify(data ?? {}),
+    }
+  }
   return { ok: true, content, raw: data }
 }
 

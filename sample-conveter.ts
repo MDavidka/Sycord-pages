@@ -453,6 +453,14 @@ function initialValue(name: string): string {
 
 // ─── PROP RESOLUTION ──────────────────────────────────────────────────────────
 
+// JSX would treat bare <, >, {, }, &, " inside an attribute string as the
+// end of the attribute (or an HTML entity / embedded expression). The safest
+// fix that preserves the literal text verbatim is to switch from a double-
+// quoted HTML attribute (`foo="…"`) to a JS string expression (`foo={"…"}`).
+// JS strings only need backslash / quote escaping, which JSON.stringify does.
+const JSX_UNSAFE_ATTR = /[<>{}"&\n\r]/
+const JSX_UNSAFE_TEXT = /[<>{}]/
+
 function resolveProps(props: Record<string, unknown>): string {
   return Object.entries(props)
     .map(([key, val]) => {
@@ -475,11 +483,22 @@ function resolveProps(props: Record<string, unknown>): string {
       // numeric
       if (REGEX.NUMBER.test(s)) return `${key}={${s}}`
 
-      // string literal
+      // string literal. If the value contains any character JSX would
+      // reinterpret inside an attribute, emit it as a JS string expression.
+      if (JSX_UNSAFE_ATTR.test(s)) return `${key}={${JSON.stringify(s)}}`
       return `${key}="${s}"`
     })
     .filter(Boolean)
     .join(' ')
+}
+
+// Wrap text node content in a JS string expression when it contains chars
+// that JSX would try to parse as markup or an expression boundary. Fixes
+// the common "<2", "<10", "x < y", "{foo}" leaking from model output into
+// rendered JSX and breaking the Vite build with "Expected identifier".
+function renderJsxText(text: string): string {
+  if (!JSX_UNSAFE_TEXT.test(text)) return text
+  return `{${JSON.stringify(text)}}`
 }
 
 // ─── NODE RENDERER ────────────────────────────────────────────────────────────
@@ -496,7 +515,7 @@ function renderNode(node: UINode, depth: number): string {
 
   // Inline text
   if (node.text && !node.children?.length) {
-    return `${indent}<${tag}>${node.text}</${node.name}>`
+    return `${indent}<${tag}>${renderJsxText(node.text)}</${node.name}>`
   }
 
   // Children
