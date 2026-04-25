@@ -274,6 +274,48 @@ export const IMPORT_MAP: Record<string, string> = {
   Link: 'react-router-dom',
   NavLink: 'react-router-dom',
   Outlet: 'react-router-dom',
+
+  // ── Aceternity UI (free, MIT) ─────────────────────────────────────────────
+  // Modern animated primitives layered on top of shadcn. Source vendored
+  // under components/aceternity/ in this repo and shipped into the
+  // generated project at src/components/aceternity/. AI may pick any of
+  // these by name — the converter resolves them like any other component.
+  CardBody: '@/components/aceternity/3d-card',
+  CardContainer: '@/components/aceternity/3d-card',
+  CardItem: '@/components/aceternity/3d-card',
+  AnimatedTooltip: '@/components/aceternity/animated-tooltip',
+  AuroraBackground: '@/components/aceternity/aurora-background',
+  BackgroundBeams: '@/components/aceternity/background-beams',
+  BackgroundBeamsWithCollision: '@/components/aceternity/background-beams-with-collision',
+  BackgroundGradient: '@/components/aceternity/background-gradient',
+  // card-hover-effect: re-named exports (HoverEffectCard*) to avoid clashing
+  // with shadcn HoverCard (popover-style hover card) and shadcn Card. AI
+  // uses HoverEffect for the grid and HoverEffectCard / HoverEffectCardTitle
+  // / HoverEffectCardDescription for the items.
+  HoverEffect: '@/components/aceternity/card-hover-effect',
+  HoverEffectCard: '@/components/aceternity/card-hover-effect',
+  HoverEffectCardTitle: '@/components/aceternity/card-hover-effect',
+  HoverEffectCardDescription: '@/components/aceternity/card-hover-effect',
+  ColourfulText: '@/components/aceternity/colourful-text',
+  FlipWords: '@/components/aceternity/flip-words',
+  FloatingNav: '@/components/aceternity/floating-navbar',
+  GlareCard: '@/components/aceternity/glare-card',
+  HeroHighlight: '@/components/aceternity/hero-highlight',
+  Highlight: '@/components/aceternity/hero-highlight',
+  HoverBorderGradient: '@/components/aceternity/hover-border-gradient',
+  Meteors: '@/components/aceternity/meteors',
+  // moving-border: shadcn already ships Button — Aceternity's was renamed
+  // to MovingBorderButton. MovingBorder remains exported for advanced use.
+  MovingBorder: '@/components/aceternity/moving-border',
+  MovingBorderButton: '@/components/aceternity/moving-border',
+  SparklesCore: '@/components/aceternity/sparkles',
+  Spotlight: '@/components/aceternity/spotlight',
+  TextGenerateEffect: '@/components/aceternity/text-generate-effect',
+  TracingBeam: '@/components/aceternity/tracing-beam',
+  TypewriterEffect: '@/components/aceternity/typewriter-effect',
+  TypewriterEffectSmooth: '@/components/aceternity/typewriter-effect',
+  WavyBackground: '@/components/aceternity/wavy-background',
+  WobbleCard: '@/components/aceternity/wobble-card',
 }
 
 // ─── ALIAS MAP ────────────────────────────────────────────────────────────────

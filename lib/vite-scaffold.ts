@@ -99,6 +99,17 @@ const PACKAGE_JSON = {
     "lucide-react": "^0.454.0",
     // HeroIcons — the only icon set the AI is allowed to use. No emoji icons.
     "@heroicons/react": "^2.2.0",
+    // Aceternity UI free components — modern animated UI on top of shadcn.
+    // `motion` is the new framer-motion package name (motion/react export).
+    motion: "^11.15.0",
+    // mini-svg-data-uri & simplex-noise are required by hero-highlight and
+    // wavy-background respectively. tsparticles powers the Sparkles component
+    // (heavier, but tree-shakes well).
+    "mini-svg-data-uri": "^1.4.4",
+    "simplex-noise": "^4.0.3",
+    "@tsparticles/react": "^3.0.0",
+    "@tsparticles/engine": "^3.5.0",
+    "@tsparticles/slim": "^3.5.0",
   },
   devDependencies: {
     "@types/react": "^18.3.12",
@@ -434,6 +445,37 @@ function vendorShadcnFiles(timestamp: number): ScaffoldFile[] {
   return files
 }
 
+// Aceternity UI free components live under components/aceternity/ in this
+// repo. They are vendored alongside shadcn into the generated project's
+// src/components/aceternity/ so the AI can use modern animated primitives
+// (Background Beams, Aurora, Hero Highlight, 3D Card, …) on top of shadcn.
+function discoverVendoredAceternityFiles(): string[] {
+  const dir = path.join(process.cwd(), "components", "aceternity")
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))
+      .sort()
+  } catch {
+    return []
+  }
+}
+
+function vendorAceternityFiles(timestamp: number): ScaffoldFile[] {
+  const files: ScaffoldFile[] = []
+  for (const name of discoverVendoredAceternityFiles()) {
+    const source = path.join(process.cwd(), "components", "aceternity", name)
+    try {
+      const raw = fs.readFileSync(source, "utf-8")
+      const code = raw.replace(/^(?:['"]use client['"];?\s*\n)+/, "")
+      files.push({ name: `src/components/aceternity/${name}`, code, timestamp })
+    } catch {
+      // skip unreadable files silently
+    }
+  }
+  return files
+}
+
 // The sidebar component imports `@/hooks/use-mobile`. We vendor it from the
 // repo so the generated project is fully self-contained.
 function vendorHooks(timestamp: number): ScaffoldFile[] {
@@ -586,5 +628,6 @@ export function buildViteScaffold(routes: ScaffoldRoute[]): ScaffoldFile[] {
     { name: "src/lib/utils.ts", code: LIB_UTILS_TS, timestamp: now },
     ...vendorHooks(now),
     ...vendorShadcnFiles(now),
+    ...vendorAceternityFiles(now),
   ]
 }

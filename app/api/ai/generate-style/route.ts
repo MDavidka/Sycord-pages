@@ -72,20 +72,31 @@ export async function POST(req: Request) {
   const cheatSheet = readHelperFile("cheat_sheat.json")
 
   // Build the component catalogue from IMPORT_MAP so the prompt always
-  // reflects what we actually ship. Group exports by file for readability.
+  // reflects what we actually ship. Group exports by file, split by source
+  // (shadcn vs aceternity) so the AI sees them as two distinct palettes.
   const byFile = new Map<string, string[]>()
   for (const [name, importPath] of Object.entries(IMPORT_MAP)) {
     const group = byFile.get(importPath) ?? []
     group.push(name)
     byFile.set(importPath, group)
   }
-  const catalogueLines = Array.from(byFile.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([file, names]) => {
-      const componentName = file.replace("@/components/ui/", "")
-      return `- ${componentName}: ${names.sort().join(", ")}`
-    })
-    .join("\n")
+  const renderGroup = (prefix: string, label: string) =>
+    Array.from(byFile.entries())
+      .filter(([file]) => file.startsWith(prefix))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([file, names]) => {
+        const fileName = file.replace(prefix, "")
+        return `- ${fileName} [${label}]: ${names.sort().join(", ")}`
+      })
+      .join("\n")
+  const shadcnCatalogue = renderGroup("@/components/ui/", "shadcn")
+  const aceternityCatalogue = renderGroup("@/components/aceternity/", "aceternity")
+  const shadcnCount = Array.from(byFile.entries()).filter(([f]) =>
+    f.startsWith("@/components/ui/"),
+  ).length
+  const aceternityCount = Array.from(byFile.entries()).filter(([f]) =>
+    f.startsWith("@/components/aceternity/"),
+  ).length
 
   const messages = [
     {
@@ -97,8 +108,26 @@ Your only job is to emit a single JSON UI tree describing the visual layout of O
 STRICT CONTRACT (from generation.md):
 ${generationGuide || "No generation.md available"}
 
-COMPLETE SHADCN/UI COMPONENT SET (${Object.keys(IMPORT_MAP).length} components from ${byFile.size} files — the generated Vite project vendors ALL of them, so you may freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>):
-${catalogueLines}
+COMPONENT CATALOGUE — TWO PALETTES (${Object.keys(IMPORT_MAP).length} components from ${byFile.size} files; the generated Vite project vendors ALL of them. You MAY freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>.).
+
+PALETTE A — shadcn/ui (${shadcnCount} files): the structural toolkit. Use for buttons, inputs, dialogs, cards, navigation, forms, tables, layout. Always available.
+${shadcnCatalogue}
+
+PALETTE B — Aceternity UI (${aceternityCount} files, free MIT components): the modern animated layer. Use these to make the site feel UNIQUE — bold backgrounds, animated text reveals, 3D cards, hover effects. EVERY page MUST use at least ONE Aceternity component (typically a hero background or animated text in the hero section). Pages without an Aceternity touch will look generic — that is a bug. Pick the Aceternity component matching the design fingerprint in the manifest (heroVariant / backgroundEffect / textEffect / cardStyle).
+${aceternityCatalogue}
+
+USAGE NOTES (Aceternity):
+- Backgrounds (BackgroundBeams, AuroraBackground, WavyBackground, Spotlight, Meteors, BackgroundGradient, BackgroundBeamsWithCollision, SparklesCore) wrap content. Pattern:
+  {"name":"AuroraBackground","children":[{"name":"div","props":{"className":"relative z-10 ..."},"children":[ ... ]}]}
+- HeroHighlight + Highlight: wrap hero heading. {"name":"HeroHighlight","children":[{"name":"h1","children":["Build the future of "{"name":"Highlight","children":["AI agents"]}]}]}
+- TextGenerateEffect / TypewriterEffect / TypewriterEffectSmooth / FlipWords / ColourfulText: pass words/text via props. e.g. {"name":"TextGenerateEffect","props":{"words":"Welcome to Acme."}}.
+- 3D Card: nest CardContainer > CardBody > CardItem(s).
+- HoverEffect (grid of items): {"name":"HoverEffect","props":{"items":[{"title":"X","description":"Y","link":"/x"}]}}
+- HoverBorderGradient and MovingBorderButton replace ordinary call-to-action buttons when you want extra polish.
+- FloatingNav is OPTIONAL — the scaffold already ships SiteNav at the top of every page. Do NOT also render FloatingNav unless the design fingerprint requests it.
+- TracingBeam wraps long-form content (blog/article style).
+- WobbleCard / GlareCard for premium feature cards.
+- Aceternity components mostly use motion/react under the hood — do not re-implement animations manually.
 
 THEME (locked):
 - The generated site uses ONLY two backgrounds: pure white (#ffffff in light mode) or #101010 (in dark mode). The scaffold defaults to dark mode.
@@ -173,6 +202,7 @@ Generate the UI tree JSON for ONLY this page:
 ${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}` : ""}
 - description: ${page.description ?? "(no description)"}
 ${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
+${manifestPage?.design ? `\nDESIGN FINGERPRINT (you MUST use these specific Aceternity components in the matching slots — they were picked by the design AI to make this site unique):\n  • Hero wrapper (heroVariant): ${manifestPage.design.heroVariant}\n  • Below-hero background effect (backgroundEffect): ${manifestPage.design.backgroundEffect}\n  • Hero text effect (textEffect): ${manifestPage.design.textEffect}\n  • Card style for grids (cardStyle): ${manifestPage.design.cardStyle}\n  • Primary CTA style (ctaStyle): ${manifestPage.design.ctaStyle}\n  • Page vibe: ${manifestPage.design.vibe}\nIf a slot is "none", omit that effect — do not substitute another. Heros must wrap their inner content in the named heroVariant component (unless heroVariant is "none"). Card grids must use the cardStyle component (unless cardStyle is "none"). Primary CTAs must use the ctaStyle component (unless ctaStyle is "none"). Hero headline must be wrapped in the textEffect component (unless textEffect is "none").` : ""}
 
 Make sure every feature above is represented in the tree (the UI must actually expose the relevant form / button / list / handler). Use HeroIcons for all iconography. Use responsive Tailwind (sm:/md:/lg:) on every grid/flex/width utility. Return only the JSON object described in the contract.`,
     },
