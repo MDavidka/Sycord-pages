@@ -272,83 +272,102 @@ const POSTCSS_CONFIG_JS = `export default {
 }
 `
 
-// Locked theme: pure white background + #101010 (HSL 0 0% 6.3%) for dark.
-// The AI pipeline never emits custom colour tokens — this ensures every
-// generated site matches the Sycord UI (either full-white or #101010 dark).
-const INDEX_CSS = `@tailwind base;
+// Per-site theme: the BACKGROUND stays neutral (white/light, #101010/dark)
+// so the locked Sycord UI shell still feels consistent — but PRIMARY,
+// ACCENT, RING and BORDER-RADIUS are taken from manifest.theme so two
+// different briefs produce visibly distinct sites. The brief's hash picks
+// one of THEME_PRESETS deterministically.
+function buildIndexCss(theme?: { primaryHue: number; primarySat: number; radius: number; fontHeading: string; fontBody: string }): string {
+  const hue = theme?.primaryHue ?? 0
+  const sat = theme?.primarySat ?? 0
+  const radius = theme?.radius ?? 0.5
+  const fontHeading = theme?.fontHeading ?? "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+  const fontBody = theme?.fontBody ?? "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+  // Light mode: primary = saturated mid-dark accent on white background.
+  // Dark mode:  primary = saturated mid-light accent on #101010 background.
+  // accent = a softer wash of the same hue, ring = the saturated value.
+  const primaryLight = `${hue} ${sat}% ${sat === 0 ? 6.3 : 45}%`
+  const primaryDark  = `${hue} ${sat}% ${sat === 0 ? 98 : 65}%`
+  const ringLight    = primaryLight
+  const ringDark     = primaryDark
+  const accentLight  = `${hue} ${sat === 0 ? 0 : Math.max(20, sat - 50)}% 96%`
+  const accentDark   = `${hue} ${sat === 0 ? 0 : Math.max(15, sat - 60)}% 14%`
+  return `@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Pure white theme */
-    --background: 0 0% 100%;                 /* #ffffff */
-    --foreground: 0 0% 6.3%;                 /* #101010 text on white */
+    /* Light theme — neutral background + per-site primary accent */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 6.3%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 6.3%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 6.3%;
-    --primary: 0 0% 6.3%;                    /* #101010 */
-    --primary-foreground: 0 0% 100%;         /* white on #101010 */
-    --secondary: 0 0% 96%;                   /* very light grey */
+    --primary: ${primaryLight};
+    --primary-foreground: 0 0% 100%;
+    --secondary: ${accentLight};
     --secondary-foreground: 0 0% 6.3%;
     --muted: 0 0% 96%;
     --muted-foreground: 0 0% 40%;
-    --accent: 0 0% 96%;
+    --accent: ${accentLight};
     --accent-foreground: 0 0% 6.3%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 0 0% 6.3%;
-    --radius: 0.5rem;
+    --ring: ${ringLight};
+    --radius: ${radius}rem;
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 0 0% 6.3%;
-    --sidebar-primary: 0 0% 6.3%;
+    --sidebar-primary: ${primaryLight};
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent: ${accentLight};
     --sidebar-accent-foreground: 0 0% 6.3%;
     --sidebar-border: 0 0% 90%;
-    --sidebar-ring: 0 0% 6.3%;
-    --chart-1: 0 0% 6.3%;
-    --chart-2: 0 0% 40%;
-    --chart-3: 0 0% 60%;
+    --sidebar-ring: ${ringLight};
+    --chart-1: ${primaryLight};
+    --chart-2: ${hue} ${Math.max(0, sat - 20)}% 60%;
+    --chart-3: ${hue} ${Math.max(0, sat - 40)}% 70%;
     --chart-4: 0 0% 80%;
     --chart-5: 0 0% 90%;
+    --font-heading: ${fontHeading};
+    --font-body: ${fontBody};
   }
 
   .dark {
-    /* #101010 dark theme */
-    --background: 0 0% 6.3%;                 /* #101010 */
-    --foreground: 0 0% 98%;                  /* near-white */
+    /* Dark theme — #101010 background + per-site primary accent */
+    --background: 0 0% 6.3%;
+    --foreground: 0 0% 98%;
     --card: 0 0% 6.3%;
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 6.3%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;                     /* light on dark */
+    --primary: ${primaryDark};
     --primary-foreground: 0 0% 6.3%;
-    --secondary: 0 0% 12%;
+    --secondary: ${accentDark};
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 65%;
-    --accent: 0 0% 12%;
+    --accent: ${accentDark};
     --accent-foreground: 0 0% 98%;
     --destructive: 0 63% 30%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 16%;
     --input: 0 0% 16%;
-    --ring: 0 0% 83%;
+    --ring: ${ringDark};
     --sidebar-background: 0 0% 6.3%;
     --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary: ${primaryDark};
     --sidebar-primary-foreground: 0 0% 6.3%;
-    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent: ${accentDark};
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 16%;
-    --sidebar-ring: 0 0% 83%;
-    --chart-1: 0 0% 98%;
-    --chart-2: 0 0% 65%;
-    --chart-3: 0 0% 45%;
+    --sidebar-ring: ${ringDark};
+    --chart-1: ${primaryDark};
+    --chart-2: ${hue} ${Math.max(0, sat - 20)}% 50%;
+    --chart-3: ${hue} ${Math.max(0, sat - 40)}% 35%;
     --chart-4: 0 0% 30%;
     --chart-5: 0 0% 16%;
   }
@@ -358,11 +377,16 @@ const INDEX_CSS = `@tailwind base;
   * { @apply border-border; }
   html, body { @apply bg-background text-foreground; }
   body {
-    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-body, ${fontBody});
     min-height: 100vh;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading, ${fontHeading});
   }
 }
 `
+}
+const INDEX_CSS = buildIndexCss()
 
 // Default to the dark theme so the generated site matches the Sycord UI.
 // Users can toggle via `document.documentElement.classList.toggle('dark')`.
@@ -385,12 +409,39 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 )
 `
 
-const INDEX_HTML = `<!doctype html>
+// Map a theme.fontHeading / fontBody quoted-family name to its Google Fonts
+// `family` query param. Names not on this list fall back to system fonts
+// (we just skip the <link> for them — the body font-family chain still
+// works because the second item is always ui-sans-serif).
+function googleFontFamily(fontStack: string): string | null {
+  const match = fontStack.match(/^'([^']+)'/)
+  if (!match) return null
+  const name = match[1]
+  const known = new Set([
+    "Inter", "Plus Jakarta Sans", "Manrope", "Space Grotesk", "DM Serif Display",
+    "JetBrains Mono", "Fraunces", "Geist", "Outfit", "Sora", "IBM Plex Sans",
+  ])
+  if (!known.has(name)) return null
+  return name.replace(/ /g, "+") + ":wght@400;500;600;700"
+}
+
+function buildIndexHtml(theme?: { fontHeading: string; fontBody: string }): string {
+  const fams = new Set<string>()
+  if (theme) {
+    const h = googleFontFamily(theme.fontHeading)
+    const b = googleFontFamily(theme.fontBody)
+    if (h) fams.add(h)
+    if (b) fams.add(b)
+  }
+  const fontsLink = fams.size > 0
+    ? `\n    <link rel="preconnect" href="https://fonts.googleapis.com" />\n    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />\n    <link href="https://fonts.googleapis.com/css2?${Array.from(fams).map((f) => `family=${f}`).join("&")}&display=swap" rel="stylesheet" />`
+    : ""
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Generated Site</title>
+    <title>Generated Site</title>${fontsLink}
   </head>
   <body>
     <div id="root"></div>
@@ -398,6 +449,8 @@ const INDEX_HTML = `<!doctype html>
   </body>
 </html>
 `
+}
+const INDEX_HTML = buildIndexHtml()
 
 const LIB_UTILS_TS = `import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -571,8 +624,13 @@ function escapeJsxText(s: string): string {
  * Pages and logic files come from the Style / Logic / Converter stages and
  * are merged in by the orchestrator.
  */
-export function buildViteScaffold(routes: ScaffoldRoute[]): ScaffoldFile[] {
+export function buildViteScaffold(
+  routes: ScaffoldRoute[],
+  theme?: { primaryHue: number; primarySat: number; radius: number; fontHeading: string; fontBody: string },
+): ScaffoldFile[] {
   const now = Date.now()
+  const indexCss = theme ? buildIndexCss(theme) : INDEX_CSS
+  const indexHtml = theme ? buildIndexHtml(theme) : INDEX_HTML
   return [
     { name: "package.json", code: JSON.stringify(PACKAGE_JSON, null, 2) + "\n", timestamp: now },
     { name: "vite.config.ts", code: VITE_CONFIG_TS, timestamp: now },
@@ -580,8 +638,8 @@ export function buildViteScaffold(routes: ScaffoldRoute[]): ScaffoldFile[] {
     { name: "tsconfig.node.json", code: TSCONFIG_NODE_JSON, timestamp: now },
     { name: "tailwind.config.ts", code: TAILWIND_CONFIG_TS, timestamp: now },
     { name: "postcss.config.js", code: POSTCSS_CONFIG_JS, timestamp: now },
-    { name: "index.html", code: INDEX_HTML, timestamp: now },
-    { name: "src/index.css", code: INDEX_CSS, timestamp: now },
+    { name: "index.html", code: indexHtml, timestamp: now },
+    { name: "src/index.css", code: indexCss, timestamp: now },
     { name: "src/main.tsx", code: MAIN_TSX, timestamp: now },
     { name: "src/App.tsx", code: buildAppTsx(routes), timestamp: now },
     { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(routes), timestamp: now },

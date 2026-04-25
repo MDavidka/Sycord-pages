@@ -53,11 +53,70 @@ export interface ManifestRouter {
   routes: ManifestRouterRoute[]
 }
 
+/**
+ * Per-site visual fingerprint. Picked deterministically from the brief so
+ * two different briefs produce visibly different sites (different primary
+ * accent, radius, type pair) — but the same brief always produces the same
+ * theme, which keeps reruns reproducible.
+ *
+ * Only the accent / ring / radius / font swap; the background stays the
+ * locked white-or-#101010 theme so light/dark mode keeps working.
+ */
+export interface ProjectTheme {
+  /** Short human label, e.g. "ocean", "sunset", "forest". */
+  name: string
+  /** Hue in degrees (0–359) for the primary accent. */
+  primaryHue: number
+  /** Saturation % (0–100) for the primary accent. */
+  primarySat: number
+  /** Border radius in rem applied to --radius. */
+  radius: number
+  /** Headline font family CSS value (must be a system / Google-default font). */
+  fontHeading: string
+  /** Body font family CSS value. */
+  fontBody: string
+}
+
 export interface ProjectManifest {
   /** Full website brief the user typed into the builder. */
   brief: string
   pages: ManifestPage[]
   router: ManifestRouter
+  /** Per-site theme fingerprint (set by buildProjectManifest). */
+  theme: ProjectTheme
+}
+
+/**
+ * Curated theme presets. Index picked deterministically by hashing the brief
+ * so the same brief → same theme; different briefs → different themes.
+ * Background colour stays locked — we only vary the accent + radius + font.
+ */
+export const THEME_PRESETS: ProjectTheme[] = [
+  { name: "ocean",     primaryHue: 210, primarySat: 90, radius: 0.5,  fontHeading: "'Inter', ui-sans-serif, system-ui", fontBody: "'Inter', ui-sans-serif, system-ui" },
+  { name: "forest",    primaryHue: 142, primarySat: 70, radius: 0.25, fontHeading: "'Plus Jakarta Sans', ui-sans-serif", fontBody: "'Plus Jakarta Sans', ui-sans-serif" },
+  { name: "sunset",    primaryHue: 22,  primarySat: 95, radius: 0.75, fontHeading: "'Manrope', ui-sans-serif", fontBody: "'Manrope', ui-sans-serif" },
+  { name: "royal",     primaryHue: 270, primarySat: 75, radius: 0.5,  fontHeading: "'Space Grotesk', ui-sans-serif", fontBody: "'Inter', ui-sans-serif" },
+  { name: "rose",      primaryHue: 340, primarySat: 85, radius: 1.0,  fontHeading: "'DM Serif Display', ui-serif", fontBody: "'Inter', ui-sans-serif" },
+  { name: "monochrome",primaryHue: 0,   primarySat: 0,  radius: 0,    fontHeading: "'JetBrains Mono', ui-monospace", fontBody: "'Inter', ui-sans-serif" },
+  { name: "amber",     primaryHue: 38,  primarySat: 95, radius: 0.5,  fontHeading: "'Fraunces', ui-serif", fontBody: "'Inter', ui-sans-serif" },
+  { name: "cyan",      primaryHue: 188, primarySat: 90, radius: 0.25, fontHeading: "'Geist', ui-sans-serif", fontBody: "'Geist', ui-sans-serif" },
+  { name: "lime",      primaryHue: 84,  primarySat: 80, radius: 0.5,  fontHeading: "'Outfit', ui-sans-serif", fontBody: "'Outfit', ui-sans-serif" },
+  { name: "indigo",    primaryHue: 245, primarySat: 80, radius: 0.5,  fontHeading: "'Inter', ui-sans-serif", fontBody: "'Inter', ui-sans-serif" },
+  { name: "magenta",   primaryHue: 320, primarySat: 80, radius: 0.75, fontHeading: "'Sora', ui-sans-serif", fontBody: "'Inter', ui-sans-serif" },
+  { name: "slate",     primaryHue: 220, primarySat: 15, radius: 0.5,  fontHeading: "'IBM Plex Sans', ui-sans-serif", fontBody: "'IBM Plex Sans', ui-sans-serif" },
+]
+
+function hashBrief(brief: string): number {
+  let h = 5381
+  for (let i = 0; i < brief.length; i++) {
+    h = ((h << 5) + h + brief.charCodeAt(i)) | 0
+  }
+  return Math.abs(h)
+}
+
+export function pickTheme(brief: string): ProjectTheme {
+  const idx = hashBrief(brief || "site") % THEME_PRESETS.length
+  return THEME_PRESETS[idx]
 }
 
 function toPascalCase(input: string): string {
@@ -128,7 +187,120 @@ export function buildProjectManifest(brief: string, plan: PlanEntry[]): ProjectM
     })),
   }
 
-  return { brief, pages, router }
+  return { brief, pages, router, theme: pickTheme(brief) }
+}
+
+/**
+ * Walk a UI tree and count "real" elements. A real element is a node with a
+ * non-empty `name` plus EITHER text content OR at least one child with
+ * its own name. Used by the Style stage to detect AI responses that are
+ * effectively empty (e.g. `{}`, `{component:{}}`, or just a heading + nothing).
+ */
+export function countTreeNodes(node: unknown): number {
+  if (!node || typeof node !== "object") return 0
+  const n = node as { name?: unknown; text?: unknown; children?: unknown }
+  let count = 0
+  if (typeof n.name === "string" && n.name.trim().length > 0) {
+    count = 1
+  }
+  if (Array.isArray(n.children)) {
+    for (const c of n.children) count += countTreeNodes(c)
+  }
+  return count
+}
+
+/**
+ * Build a deterministic, substantive UI tree for a page when the AI fails to
+ * produce one. Uses the manifest entry (title / description / features /
+ * layoutHint) to render a real hero + features grid + CTA so the page is
+ * NEVER blank. The shape is the standard converter envelope.
+ */
+export function buildFallbackTree(
+  page: ManifestPage,
+): { type: "ui-tree"; version: "1.0"; component: Record<string, unknown> } {
+  const features = (page.features ?? []).filter((f) => typeof f === "string" && f.trim().length > 0)
+  const featureCards = features.length > 0
+    ? features.slice(0, 6).map((f) => ({
+        name: "Card",
+        props: { className: "p-6" },
+        children: [
+          { name: "CardHeader", children: [
+            { name: "CardTitle", text: f.split(/[.!?]/)[0].trim() || f },
+          ] },
+          { name: "CardContent", children: [
+            { name: "p", props: { className: "text-sm text-muted-foreground" }, text: f },
+          ] },
+        ],
+      }))
+    : [
+        { name: "Card", props: { className: "p-6" }, children: [
+          { name: "CardHeader", children: [{ name: "CardTitle", text: "Get started" }] },
+          { name: "CardContent", children: [
+            { name: "p", props: { className: "text-sm text-muted-foreground" }, text: "Explore the site to learn more about what we offer." },
+          ] },
+        ] },
+      ]
+
+  return {
+    type: "ui-tree",
+    version: "1.0",
+    component: {
+      name: "main",
+      props: { className: "min-h-screen bg-background text-foreground" },
+      children: [
+        // Hero section
+        {
+          name: "section",
+          props: { className: "container mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24" },
+          children: [
+            { name: "h1", props: { className: "text-4xl md:text-6xl font-bold tracking-tight" }, text: page.pageTitle },
+            ...(page.description
+              ? [{ name: "p", props: { className: "mt-6 max-w-2xl text-lg text-muted-foreground" }, text: page.description }]
+              : []),
+            {
+              name: "div",
+              props: { className: "mt-8 flex flex-wrap gap-4" },
+              children: [
+                { name: "Button", props: { size: "lg" }, children: [{ name: "span", text: "Get started" }] },
+                { name: "Button", props: { size: "lg", variant: "outline" }, children: [{ name: "span", text: "Learn more" }] },
+              ],
+            },
+          ],
+        },
+        // Features grid
+        {
+          name: "section",
+          props: { className: "container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 border-t border-border" },
+          children: [
+            { name: "h2", props: { className: "text-2xl md:text-3xl font-semibold mb-8" }, text: "What you'll find here" },
+            {
+              name: "div",
+              props: { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" },
+              children: featureCards,
+            },
+          ],
+        },
+        // CTA section
+        {
+          name: "section",
+          props: { className: "container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20" },
+          children: [
+            {
+              name: "Card",
+              props: { className: "p-8 md:p-12 text-center" },
+              children: [
+                { name: "CardTitle", props: { className: "text-2xl md:text-3xl" }, text: "Ready to start?" },
+                { name: "p", props: { className: "mt-3 text-muted-foreground" }, text: "Reach out and we'll get back to you." },
+                { name: "div", props: { className: "mt-6 flex justify-center" }, children: [
+                  { name: "Button", props: { size: "lg" }, children: [{ name: "span", text: "Contact us" }] },
+                ] },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  }
 }
 
 /**
@@ -141,6 +313,9 @@ export function renderManifestForPrompt(manifest: ProjectManifest): string {
   const lines: string[] = []
   lines.push("PROJECT MANIFEST (authoritative — every sibling file is listed here):")
   lines.push(`  brief: ${manifest.brief}`)
+  lines.push(`  theme: ${manifest.theme.name} (primary hue ${manifest.theme.primaryHue}°, sat ${manifest.theme.primarySat}%, radius ${manifest.theme.radius}rem)`)
+  lines.push(`    headingFont: ${manifest.theme.fontHeading}`)
+  lines.push(`    bodyFont:    ${manifest.theme.fontBody}`)
   lines.push(`  pages:`)
   for (const p of manifest.pages) {
     lines.push(`    - component: ${p.componentName}`)

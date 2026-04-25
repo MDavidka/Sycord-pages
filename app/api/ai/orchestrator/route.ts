@@ -320,7 +320,7 @@ export async function POST(req: Request) {
     // main.tsx, App.tsx (routed), index.css, src/lib/utils.ts and the
     // vendored shadcn UI components. Emitted AFTER the page files so the
     // `files` array has a stable, human-readable ordering (pages first).
-    const scaffoldFiles = buildViteScaffold(routes)
+    const scaffoldFiles = buildViteScaffold(routes, manifest?.theme)
     const files = [...pageFiles, ...scaffoldFiles]
 
     await logAiDebug("Orchestrator Success", {

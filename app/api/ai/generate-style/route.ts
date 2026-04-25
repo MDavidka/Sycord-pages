@@ -7,6 +7,8 @@ import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
 import { IMPORT_MAP } from "@/sample-conveter"
 import {
   renderManifestForPrompt,
+  countTreeNodes,
+  buildFallbackTree,
   type ProjectManifest,
   type ManifestPage,
 } from "@/lib/project-manifest"
@@ -100,16 +102,32 @@ Your only job is to emit a single JSON UI tree describing the visual layout of O
 STRICT CONTRACT (from generation.md):
 ${generationGuide || "No generation.md available"}
 
+SHADCN PROJECT INFO (mirrors \`shadcn info --json\` for the generated project — use it to ground every decision; this is the same context the official shadcn/ui Skill provides at https://ui.shadcn.com/docs/skills):
+  framework:       vite
+  tailwindVersion: v3
+  baseLibrary:     radix
+  iconLibrary:     heroicons-outline-24
+  aliases:         { components: "@/components", ui: "@/components/ui", lib: "@/lib", hooks: "@/hooks", utils: "@/lib/utils" }
+  installedComponents: ${shadcnFileCount} files vendored under @/components/ui/
+
 COMPONENT CATALOGUE — shadcn/ui (${Object.keys(IMPORT_MAP).length} exports from ${shadcnFileCount} component files; the generated Vite project vendors ALL of them). You MAY freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>.
 ${shadcnCatalogue}
 
-USAGE NOTES (high-impact components you should be reaching for, NOT just Card+Button):
-- Hero / data: AspectRatio, Avatar, Badge, Skeleton (loading states), Spinner (inline busy), Empty ("no data" placeholder).
-- Forms: Form + FormField, Input, InputGroup, InputOTP, Textarea, Select, NativeSelect, RadioGroup, Checkbox, Switch, Slider, Label, Field (vertical field wrapper).
-- Disclosure: Accordion (FAQ), Collapsible, Tabs, Sheet (mobile drawer), Drawer (mobile bottom sheet), Dialog, AlertDialog, Popover, HoverCard, Tooltip, ContextMenu, DropdownMenu, Menubar, NavigationMenu.
-- Data display: Table, Card + CardHeader/Content/Footer, Carousel, Chart (recharts wrapper), Pagination, Breadcrumb, ScrollArea, Separator, Resizable, Item (list item), Kbd (keyboard shortcut), ButtonGroup, ToggleGroup, Toggle.
-- Feedback: Alert, Progress, Sonner (toaster), Calendar, Command, Sidebar.
-Pick at least 4 DIFFERENT shadcn components per page — do not just stack Card after Card.
+SHADCN COMPOSITION RULES (these are the patterns the official shadcn/ui Skill enforces — follow them exactly, NOT just "stack Card after Card"):
+- FORMS — never raw <input>. Wrap every field in Field + FieldLabel + FieldDescription + FieldError, and group related fields with FieldGroup or FieldSet. For prefixed/suffixed inputs (e.g. URL with https://, search with magnifying glass) use InputGroup + InputGroupAddon + InputGroupInput, never a manual flex container around a bare Input. Use Form + FormField for any form that submits.
+- OPTION SETS — for "pick one of N" use ToggleGroup with type="single", or RadioGroup. Multiple-select uses ToggleGroup type="multiple" or Checkbox stack. Never simulate a toggle group with multiple Buttons.
+- BUTTONS — group adjacent action buttons with ButtonGroup (e.g. "Save / Cancel", "Edit / Delete / Share"). Never wrap them in a bare <div className="flex gap-2">.
+- LISTS — for any list of records (users, files, history, settings rows) use Item + ItemMedia + ItemContent + ItemActions inside an ItemGroup. Never stack Card after Card to fake a list.
+- EMPTY STATES — when a section has nothing to show, render an Empty (with EmptyHeader / EmptyTitle / EmptyDescription / EmptyContent + EmptyMedia). Never just a paragraph saying "No data".
+- KEYBOARD HINTS — keyboard shortcuts MUST use Kbd / KbdGroup, never <code> or styled spans.
+- LOADING — busy/in-flight states use Spinner (inline) or Skeleton (block placeholders). Never the literal string "Loading..." in a Button.
+- DATA TABLES — for tabular data use Table + TableHeader + TableBody + TableRow + TableHead + TableCell. Never an HTML <table> directly.
+- CHARTS — for any data visualization use ChartContainer + ChartTooltip + ChartLegend + recharts primitives. Never a placeholder image.
+- DISCLOSURE — FAQ → Accordion + AccordionItem (8+ items if it is the page's main content). Pricing comparisons → Tabs (monthly/yearly) + Table. Settings panes → Tabs.
+- NAVIGATION — sibling-route CTAs use <a href="/route"> (the converter rewrites to <Link>). In-page section nav uses NavigationMenu or Tabs, never a custom anchor list.
+- SEMANTIC TOKENS ONLY — bg-primary / text-primary-foreground / bg-secondary / bg-accent / bg-muted / bg-card / bg-destructive. Never bg-blue-500, never bg-[#xxx], never bg-gradient-to-*. The generated site has a per-site primary hue (see manifest theme below) that lives in CSS vars; using semantic tokens is what makes the site visually distinct.
+
+A page MUST USE AT LEAST 5 DIFFERENT shadcn components from this catalogue — and at least 1 component from each of FORMS, LISTS-OR-DATA-DISPLAY, and DISCLOSURE-OR-FEEDBACK families when the page's purpose includes those. A 5-Card-grid is a bug.
 
 LAYOUT VARIETY (CRITICAL — this fixes "every page looks the same"):
 The manifest below assigns each page a layoutHint. You MUST honour it. The hint maps to a concrete page structure:
@@ -133,9 +151,10 @@ CONTENT DENSITY (every page must be substantive):
 - A page MUST NOT consist of only a hero + one CTA. Empty / under-filled pages are a bug.
 - Use real, brief-specific copy in headings and descriptions. Generic filler ("Lorem ipsum", "Add your content here") is forbidden.
 
-THEME (locked):
-- The generated site uses ONLY two backgrounds: pure white (#ffffff in light mode) or #101010 (in dark mode). The scaffold defaults to dark mode.
-- Use ONLY shadcn tokens: bg-background, text-foreground, bg-card, bg-primary, text-primary-foreground, bg-muted, text-muted-foreground, border-border, bg-secondary, text-secondary-foreground, bg-accent, text-accent-foreground, bg-destructive, text-destructive-foreground.
+THEME (per-site, NOT locked):
+- The background stays neutral (white in light, #101010 in dark) but the PRIMARY ACCENT, RING, and BORDER-RADIUS are UNIQUE PER SITE — see manifest.theme below. The scaffold writes those into CSS vars on \`:root\`.
+- Use ONLY shadcn semantic tokens: bg-background, text-foreground, bg-card, bg-primary, text-primary-foreground, bg-muted, text-muted-foreground, border-border, bg-secondary, text-secondary-foreground, bg-accent, text-accent-foreground, bg-destructive, text-destructive-foreground, ring-ring.
+- Reach for the accent colour via bg-primary / text-primary / ring-ring / border-primary — these resolve to the per-site primary colour automatically.
 - NEVER use bg-blue-*, bg-slate-*, text-gray-*, bg-gradient-*, or any other hard-coded Tailwind color utility. Layout/spacing/typography utilities (p-*, m-*, flex, grid, gap-*, w-*, h-*, max-w-*, rounded-*, shadow-*, text-xl, font-bold, leading-*, tracking-*) are fine.
 - NEVER embed inline CSS (no style={{ color: "..."}}, no arbitrary-value classes like [color:#abc] or bg-[#abc]).
 
@@ -214,41 +233,99 @@ Every feature above MUST be represented in the tree as a real, named element (Ca
   // Style temperature is intentionally higher than the architect / logic
   // calls so different briefs (and even retries on the same brief) produce
   // structurally varied trees instead of collapsing to one canonical layout.
-  const result = await callModel({
-    model,
-    messages,
-    temperature: 0.7,
+  //
+  // We attempt up to 2 calls. The AI sometimes returns an effectively empty
+  // tree (e.g. `{}` or `{component:{}}`) which previously rendered as a
+  // blank page in the deployed site. We detect that, retry once with a
+  // sterner instruction, and fall back to a deterministic page built from
+  // the manifest if the retry is also empty — so a page is NEVER blank.
+  const MIN_TREE_NODES = 8
+  const buildTree = async (
+    attempt: number,
+  ): Promise<{ ok: true; tree: Record<string, unknown>; nodeCount: number } | { ok: false; status: number; message: string; details?: unknown; raw?: string }> => {
+    const callMessages = attempt === 1
+      ? messages
+      : [
+          ...messages,
+          {
+            role: "system" as const,
+            content: `Your previous response produced an EMPTY tree (the rendered page was blank). This is a critical bug. You MUST emit at least ${MIN_TREE_NODES} named elements covering hero + multiple sections + CTA. Do NOT return {} or a tree whose root has no children. Honour the layoutHint and surface every feature from the manifest as a real element.`,
+          },
+        ]
+    const r = await callModel({ model, messages: callMessages, temperature: 0.7 })
+    if (!r.ok) {
+      return { ok: false, status: r.status, message: r.message, details: r.details }
+    }
+    const parsed = extractJson<unknown>(r.content)
+    if (!parsed || typeof parsed !== "object") {
+      return { ok: false, status: 422, message: "Parse failed", raw: r.content }
+    }
+    const envelope = parsed as Record<string, unknown>
+    const tree =
+      typeof envelope.component === "object" && envelope.component
+        ? envelope
+        : { type: "ui-tree", version: "1.0", component: parsed }
+    const nodeCount = countTreeNodes((tree as { component?: unknown }).component)
+    if (nodeCount < MIN_TREE_NODES) {
+      return { ok: false, status: 422, message: `Tree too small (${nodeCount} nodes, need ${MIN_TREE_NODES})`, raw: r.content }
+    }
+    return { ok: true, tree, nodeCount }
+  }
+
+  const attempt1 = await buildTree(1)
+  if (attempt1.ok) {
+    await logAiDebug("Style Parse Success", { path: page.path, nodeCount: attempt1.nodeCount, attempt: 1 })
+    return NextResponse.json({ tree: attempt1.tree })
+  }
+
+  // attempt1 failed — log and retry
+  await logAiDebug("Style Attempt 1 Empty/Invalid", {
+    path: page.path,
+    status: attempt1.status,
+    message: attempt1.message,
+    rawPreview: typeof attempt1.raw === "string" ? attempt1.raw.slice(0, 500) : undefined,
   })
 
-  if (!result.ok) {
-    await logAiDebug("Style API Error", {
-      status: result.status,
-      message: result.message,
-      details: result.details,
-    })
+  // Only retry on the "empty / invalid" cases (422). Network errors (5xx, 4xx
+  // auth) bubble up immediately because retrying won't help.
+  if (attempt1.status !== 422) {
     return NextResponse.json(
-      { message: result.message, details: result.details },
-      { status: result.status },
+      { message: attempt1.message, details: attempt1.details },
+      { status: attempt1.status },
     )
   }
 
-  const parsed = extractJson<unknown>(result.content)
-  if (!parsed || typeof parsed !== "object") {
-    await logAiDebug("Style Parse Error", { content: result.content })
-    return NextResponse.json(
-      { message: "AI failed to produce a valid style JSON tree." },
-      { status: 422 },
-    )
+  const attempt2 = await buildTree(2)
+  if (attempt2.ok) {
+    await logAiDebug("Style Parse Success", { path: page.path, nodeCount: attempt2.nodeCount, attempt: 2 })
+    return NextResponse.json({ tree: attempt2.tree })
   }
 
-  // The converter requires either the {type,component} envelope or at least a
-  // bare node. Normalize both shapes to the envelope here.
-  const envelope = parsed as Record<string, unknown>
-  const tree =
-    typeof envelope.component === "object" && envelope.component
-      ? envelope
-      : { type: "ui-tree", version: "1.0", component: parsed }
-
-  await logAiDebug("Style Parse Success", { path: page.path })
-  return NextResponse.json({ tree })
+  // Both attempts failed — emit the deterministic fallback so the page is
+  // never blank in the deployed site. Logged loudly so we can investigate
+  // why the AI keeps returning empty trees on this prompt.
+  await logAiDebug("Style Fallback Triggered", {
+    path: page.path,
+    attempt1Message: attempt1.message,
+    attempt2Message: attempt2.message,
+    rawPreview: typeof attempt2.raw === "string" ? attempt2.raw.slice(0, 500) : undefined,
+  })
+  if (manifestPage) {
+    const fallback = buildFallbackTree(manifestPage)
+    return NextResponse.json({ tree: fallback, fallback: true })
+  }
+  // No manifest entry — shouldn't happen, but if it does, build one on the
+  // fly so we still return a non-blank page.
+  const adhocPage: ManifestPage = {
+    componentName: page.title.replace(/[^A-Za-z0-9]/g, "") || "Page",
+    route: page.path,
+    slug: page.path === "/" ? "index" : page.path.replace(/^\//, "").replace(/[^a-z0-9-]/gi, "-").toLowerCase(),
+    pageFile: "",
+    logicFile: "",
+    logicModule: "",
+    pageTitle: page.title,
+    description: page.description,
+    features: page.features,
+  }
+  return NextResponse.json({ tree: buildFallbackTree(adhocPage), fallback: true })
 }
