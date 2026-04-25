@@ -5,14 +5,7 @@ import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
 import type { PlanEntry } from "@/lib/plan-types"
-import {
-  buildProjectManifest,
-  DESIGN_FINGERPRINT_OPTIONS,
-  defaultDesignFingerprint,
-  sanitizeDesignFingerprint,
-  sanitizeSiteDesign,
-  type ProjectManifest,
-} from "@/lib/project-manifest"
+import { buildProjectManifest, type ProjectManifest } from "@/lib/project-manifest"
 
 // Stage 1 of the pipeline: the "Plan" step.
 //
@@ -64,8 +57,10 @@ Do NOT emit a page just because a template usually has it — every entry must e
 Return strictly a JSON array of page objects, each with:
 - "path":   URL path starting with "/" (e.g. "/", "/about", "/pricing", "/contact"). First entry MUST be "/".
 - "title":  short human-readable page title (used as the React component name and shown in the shared nav). PascalCase-friendly: "Home", "About", "Pricing", "Contact".
-- "description": 2–4 sentences covering: (a) the page's purpose and target audience, (b) the key content sections it renders (hero, feature grid, testimonials, pricing table, form, etc.), (c) what the primary CTA does and where it sends the user. Be specific — "hero + 3-column feature grid with icons + testimonial carousel + CTA linking to /contact" is good; "about the product" is not.
-- "features": array of short strings describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Toggle between monthly/yearly pricing", "FAQ accordion with 6 entries", "Newsletter signup at the bottom"). Keep each feature concrete enough for a developer to implement.
+- "description": 3–5 sentences (REQUIRED, never empty) covering: (a) the page's purpose and target audience, (b) the SPECIFIC content sections it renders — be exhaustive (hero copy, feature grid, testimonials, pricing table, form fields, FAQ items, stats, etc.), (c) what the primary CTA does and where it sends the user. Tailor every description to THE BRIEF — a yoga studio's /about should mention the studio's story and instructors, NOT generic placeholder copy. Be specific — "hero + 3-column feature grid with icons + testimonial carousel + CTA linking to /contact" is good; "about the product" is not.
+- "features": array of AT LEAST 4 short strings (REQUIRED, never fewer) describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Toggle between monthly/yearly pricing", "FAQ accordion with 6 entries", "Newsletter signup at the bottom"). Every feature must be concrete enough for a developer to implement and specific to THIS brief.
+
+ANTI-DUPLICATE RULE: Every page MUST be structurally and contextually distinct from every other page in the sitemap. If two pages would render the same skeleton (same hero + same grid), redesign one of them with a different content type (table, accordion, form, gallery, article, dashboard widgets). Empty / under-filled pages are a bug.
 
 No markdown, no prose, no wrapping object — just the JSON array.`,
     },
@@ -73,14 +68,17 @@ No markdown, no prose, no wrapping object — just the JSON array.`,
       role: "user" as const,
       content: `Plan a multi-page website for: ${prompt}
 
-Return only the JSON array described above. The sitemap MUST contain at least 3 distinct routes (ideally 4–6) so the shared <SiteNav /> has something to link to. Always include "/" as the first entry, plus enough additional pages (e.g. /about, /pricing, /contact, /docs, /blog) to give the site real structure.`,
+Return only the JSON array described above. The sitemap MUST contain at least 4 distinct routes (ideally 5–7) so the shared <SiteNav /> has something to link to. Always include "/" as the first entry, plus enough additional pages (e.g. /about, /pricing, /contact, /docs, /blog, /features, /faq) to give the site real structure. Each page must have its OWN distinct purpose and content — not a generic copy of the home page with different text.`,
     },
   ]
 
   const result = await callModel({
     model,
     messages,
-    temperature: 0.1,
+    // Higher temperature so different briefs produce structurally different
+    // sitemaps. Low temp here was making every plan converge to the same
+    // 3 pages (Home / About / Contact) regardless of brief.
+    temperature: 0.6,
   })
 
   if (!result.ok) {
@@ -147,140 +145,74 @@ Return only the JSON array described above. The sitemap MUST contain at least 3 
 
   // Derive the project manifest deterministically from the plan. File
   // structure (componentName / slug / pageFile / logicFile) is fixed here
-  // and cannot drift across stages. The DESIGN portion (per-page Aceternity
-  // component picks + site-wide vibe) is then layered on top via a second
-  // AI call so each generated site looks unique even for similar briefs.
+  // and cannot drift across stages. Each page is also assigned a layout
+  // hint (split-hero, masonry-grid, sidebar-content, …) so the Style stage
+  // varies the structure across routes instead of repeating a single
+  // template — this addresses the "every page looks the same" problem.
   const manifest: ProjectManifest = buildProjectManifest(prompt, plan)
-
-  // ── Stage 1.5: AI design fingerprint ────────────────────────────────────
-  // Asks the model to pick — for the whole site and for each page — which
-  // Aceternity components to lean on. Output is sanitized against
-  // DESIGN_FINGERPRINT_OPTIONS so we can never inject a hallucinated
-  // component name into the Style stage.
-  await applyAiDesignFingerprint(manifest, prompt, model)
+  assignLayoutHints(manifest)
 
   await logAiDebug("Architect Parse Success", {
     pages: plan.length,
-    palette: manifest.design?.paletteName,
+    layouts: manifest.pages.map((p) => `${p.route}=${p.layoutHint ?? "?"}`),
   })
   return NextResponse.json({ plan, manifest })
 }
 
-async function applyAiDesignFingerprint(
-  manifest: ProjectManifest,
-  brief: string,
-  model: ModelSelection,
-): Promise<void> {
-  // The strict menu we hand to the AI — same data DESIGN_FINGERPRINT_OPTIONS
-  // exposes, formatted for prompt readability.
-  const menu = (Object.entries(DESIGN_FINGERPRINT_OPTIONS) as Array<
-    [string, readonly string[]]
-  >)
-    .map(([slot, opts]) => `- ${slot}: ${opts.join(" | ")}`)
-    .join("\n")
+// Distinct page layout structures. Each name maps to a concrete arrangement
+// of sections the Style stage MUST follow. See the Style prompt for the
+// per-layout section contract — the Architect's job here is just to ensure
+// no two adjacent pages get the same layout, so the generated site doesn't
+// feel like the same skeleton repeated.
+const LAYOUT_HINTS = [
+  "split-hero",         // 50/50 hero with text+CTA on one side, illustration/feature on the other
+  "full-bleed-hero",    // Massive hero w/ background panel + 3-column features below
+  "masonry-grid",       // Asymmetric tile grid (e.g. portfolio / showcase)
+  "sidebar-content",    // Left sticky sidebar nav + scrolling main column
+  "table-dashboard",    // Stats row + Table + Tabs (dashboard / data heavy)
+  "two-column-article", // Long-form text in left column + sticky aside (TOC/CTA)
+  "faq-stack",          // Hero + Accordion-driven FAQ + supporting cards
+  "pricing-table",      // Hero + 3-column pricing cards + feature comparison table
+  "contact-split",      // Form on one side + contact details / map / channels on the other
+  "testimonial-wall",   // Hero + 3x3 testimonial grid + social proof bar
+  "feature-spotlight",  // Hero + alternating left/right feature blocks (3 of them)
+  "media-gallery",      // Hero + Carousel + Bento-style media tiles
+] as const
 
-  const pagesHint = manifest.pages
-    .map(
-      (p, i) =>
-        `${i + 1}. ${p.componentName} @ ${p.route} — ${p.description ?? p.pageTitle}`,
-    )
-    .join("\n")
-
-  const messages = [
-    {
-      role: "system" as const,
-      content: `You are the "Design Fingerprint" stage of a Vite + React + TypeScript site generator. The generator ships shadcn/ui (structural components) PLUS a curated set of free Aceternity UI components (modern animated primitives — backgrounds, text effects, 3D cards, hover effects).
-
-Your job is to make every generated site UNIQUE. Given the user's brief and the page list, you pick which Aceternity components each page should lean on, plus a site-wide palette name and one-line vibe.
-
-Output STRICT JSON (no prose, no markdown) with this shape:
-{
-  "siteDesign": {
-    "paletteName": "<short label, e.g. 'noir SaaS', 'playful indie', 'retro terminal', 'high-end agency'>",
-    "paletteVibe": "<1–2 sentences describing the look + feel — what makes THIS site different from a generic template>",
-    "aceternityNorth": ["<2-4 Aceternity component names the site leans on overall>"]
-  },
-  "pages": [
-    {
-      "route": "/",
-      "design": {
-        "heroVariant": "<one of heroVariant options>",
-        "backgroundEffect": "<one of backgroundEffect options>",
-        "textEffect": "<one of textEffect options>",
-        "cardStyle": "<one of cardStyle options>",
-        "ctaStyle": "<one of ctaStyle options>",
-        "vibe": "<short page-specific tone hint, e.g. 'cinematic landing', 'data-dense dashboard'>"
-      }
-    }
-    // … one entry per page, in the order they were given to you …
-  ]
-}
-
-ALLOWED OPTIONS PER SLOT (you MUST pick from these — anything else is silently ignored):
-${menu}
-
-DESIGN PRINCIPLES:
-- Lean into ONE strong identity per site (don't mix every effect on every page).
-- Vary the picks across pages so the site feels like a coherent product, not a single template repeated.
-- Pages with form/data content (contact, dashboard) usually want a calmer hero (Spotlight, BackgroundGradient) than the marketing landing (AuroraBackground, BackgroundBeamsWithCollision).
-- Set "none" rather than forcing a slot when an effect would distract.
-- Pick a paletteName that genuinely matches the brief — a yoga studio shouldn't become a "noir SaaS".`,
-    },
-    {
-      role: "user" as const,
-      content: `Brief: ${brief}
-
-Pages (in order):
-${pagesHint}
-
-Return only the JSON object described above.`,
-    },
-  ]
-
-  let aiPicked = false
-  try {
-    const result = await callModel({ model, messages, temperature: 0.6 })
-    if (result.ok) {
-      const parsed = extractJson<unknown>(result.content) as {
-        siteDesign?: unknown
-        pages?: Array<{ route?: string; design?: unknown }>
-      } | null
-      if (parsed && typeof parsed === "object") {
-        manifest.design = sanitizeSiteDesign(parsed.siteDesign)
-        const byRoute = new Map<string, unknown>()
-        if (Array.isArray(parsed.pages)) {
-          for (const entry of parsed.pages) {
-            if (entry && typeof entry === "object" && typeof entry.route === "string") {
-              byRoute.set(entry.route.trim(), (entry as { design?: unknown }).design)
-            }
-          }
-        }
-        manifest.pages.forEach((p, i) => {
-          const raw = byRoute.get(p.route)
-          p.design = raw ? sanitizeDesignFingerprint(raw) : defaultDesignFingerprint(i)
-        })
-        aiPicked = true
-      }
-    } else {
-      await logAiDebug("Architect Design Fingerprint API Error", {
-        status: result.status,
-        message: result.message,
-      })
-    }
-  } catch (err) {
-    await logAiDebug("Architect Design Fingerprint Threw", {
-      error: err instanceof Error ? err.message : String(err),
-    })
+function assignLayoutHints(manifest: ProjectManifest): void {
+  const path = (p: string) => p.toLowerCase()
+  const byRoute: Record<string, string> = {
+    "/": "full-bleed-hero",
+    "/about": "two-column-article",
+    "/contact": "contact-split",
+    "/pricing": "pricing-table",
+    "/faq": "faq-stack",
+    "/dashboard": "table-dashboard",
+    "/blog": "sidebar-content",
+    "/portfolio": "masonry-grid",
+    "/gallery": "media-gallery",
+    "/testimonials": "testimonial-wall",
+    "/features": "feature-spotlight",
+    "/team": "testimonial-wall",
   }
 
-  if (!aiPicked) {
-    // Deterministic fallback so downstream stages always have a fingerprint.
-    manifest.design = {
-      paletteName: "modern",
-      paletteVibe:
-        "Clean, modern, animation-forward landing page leaning on Aceternity backgrounds and text effects.",
-      aceternityNorth: ["BackgroundBeams", "TextGenerateEffect", "GlareCard"],
+  // Track what each page got so we never assign the same layout to two
+  // adjacent pages — even if their routes weren't in the seeded map.
+  let prev = ""
+  manifest.pages.forEach((p, i) => {
+    let hint = byRoute[path(p.route)]
+    if (!hint) {
+      // Cycle through the remaining layouts in deterministic-but-varied order
+      // so different briefs with similar route names still differ.
+      const offset = (i + (manifest.brief.length % LAYOUT_HINTS.length)) % LAYOUT_HINTS.length
+      hint = LAYOUT_HINTS[offset]
     }
-    manifest.pages.forEach((p, i) => (p.design = defaultDesignFingerprint(i)))
-  }
+    if (hint === prev) {
+      // Bump to the next layout to break adjacent collisions.
+      const idx = LAYOUT_HINTS.indexOf(hint as (typeof LAYOUT_HINTS)[number])
+      hint = LAYOUT_HINTS[(idx + 1) % LAYOUT_HINTS.length]
+    }
+    p.layoutHint = hint
+    prev = hint
+  })
 }

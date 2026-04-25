@@ -72,30 +72,22 @@ export async function POST(req: Request) {
   const cheatSheet = readHelperFile("cheat_sheat.json")
 
   // Build the component catalogue from IMPORT_MAP so the prompt always
-  // reflects what we actually ship. Group exports by file, split by source
-  // (shadcn vs aceternity) so the AI sees them as two distinct palettes.
+  // reflects what we actually ship. Group exports by file so the AI sees
+  // each shadcn component file as one bullet (e.g. card.tsx → Card,
+  // CardHeader, CardTitle, …).
   const byFile = new Map<string, string[]>()
   for (const [name, importPath] of Object.entries(IMPORT_MAP)) {
     const group = byFile.get(importPath) ?? []
     group.push(name)
     byFile.set(importPath, group)
   }
-  const renderGroup = (prefix: string, label: string) =>
-    Array.from(byFile.entries())
-      .filter(([file]) => file.startsWith(prefix))
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([file, names]) => {
-        const fileName = file.replace(prefix, "")
-        return `- ${fileName} [${label}]: ${names.sort().join(", ")}`
-      })
-      .join("\n")
-  const shadcnCatalogue = renderGroup("@/components/ui/", "shadcn")
-  const aceternityCatalogue = renderGroup("@/components/aceternity/", "aceternity")
-  const shadcnCount = Array.from(byFile.entries()).filter(([f]) =>
+  const shadcnCatalogue = Array.from(byFile.entries())
+    .filter(([file]) => file.startsWith("@/components/ui/"))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([file, names]) => `- ${file.replace("@/components/ui/", "")}: ${names.sort().join(", ")}`)
+    .join("\n")
+  const shadcnFileCount = Array.from(byFile.keys()).filter((f) =>
     f.startsWith("@/components/ui/"),
-  ).length
-  const aceternityCount = Array.from(byFile.entries()).filter(([f]) =>
-    f.startsWith("@/components/aceternity/"),
   ).length
 
   const messages = [
@@ -108,26 +100,38 @@ Your only job is to emit a single JSON UI tree describing the visual layout of O
 STRICT CONTRACT (from generation.md):
 ${generationGuide || "No generation.md available"}
 
-COMPONENT CATALOGUE — TWO PALETTES (${Object.keys(IMPORT_MAP).length} components from ${byFile.size} files; the generated Vite project vendors ALL of them. You MAY freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>.).
-
-PALETTE A — shadcn/ui (${shadcnCount} files): the structural toolkit. Use for buttons, inputs, dialogs, cards, navigation, forms, tables, layout. Always available.
+COMPONENT CATALOGUE — shadcn/ui (${Object.keys(IMPORT_MAP).length} exports from ${shadcnFileCount} component files; the generated Vite project vendors ALL of them). You MAY freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>.
 ${shadcnCatalogue}
 
-PALETTE B — Aceternity UI (${aceternityCount} files, free MIT components): the modern animated layer. Use these to make the site feel UNIQUE — bold backgrounds, animated text reveals, 3D cards, hover effects. EVERY page MUST use at least ONE Aceternity component (typically a hero background or animated text in the hero section). Pages without an Aceternity touch will look generic — that is a bug. Pick the Aceternity component matching the design fingerprint in the manifest (heroVariant / backgroundEffect / textEffect / cardStyle).
-${aceternityCatalogue}
+USAGE NOTES (high-impact components you should be reaching for, NOT just Card+Button):
+- Hero / data: AspectRatio, Avatar, Badge, Skeleton (loading states), Spinner (inline busy), Empty ("no data" placeholder).
+- Forms: Form + FormField, Input, InputGroup, InputOTP, Textarea, Select, NativeSelect, RadioGroup, Checkbox, Switch, Slider, Label, Field (vertical field wrapper).
+- Disclosure: Accordion (FAQ), Collapsible, Tabs, Sheet (mobile drawer), Drawer (mobile bottom sheet), Dialog, AlertDialog, Popover, HoverCard, Tooltip, ContextMenu, DropdownMenu, Menubar, NavigationMenu.
+- Data display: Table, Card + CardHeader/Content/Footer, Carousel, Chart (recharts wrapper), Pagination, Breadcrumb, ScrollArea, Separator, Resizable, Item (list item), Kbd (keyboard shortcut), ButtonGroup, ToggleGroup, Toggle.
+- Feedback: Alert, Progress, Sonner (toaster), Calendar, Command, Sidebar.
+Pick at least 4 DIFFERENT shadcn components per page — do not just stack Card after Card.
 
-USAGE NOTES (Aceternity):
-- Backgrounds (BackgroundBeams, AuroraBackground, WavyBackground, Spotlight, Meteors, BackgroundGradient, BackgroundBeamsWithCollision, SparklesCore) wrap content. Pattern:
-  {"name":"AuroraBackground","children":[{"name":"div","props":{"className":"relative z-10 ..."},"children":[ ... ]}]}
-- HeroHighlight + Highlight: wrap hero heading. {"name":"HeroHighlight","children":[{"name":"h1","children":["Build the future of "{"name":"Highlight","children":["AI agents"]}]}]}
-- TextGenerateEffect / TypewriterEffect / TypewriterEffectSmooth / FlipWords / ColourfulText: pass words/text via props. e.g. {"name":"TextGenerateEffect","props":{"words":"Welcome to Acme."}}.
-- 3D Card: nest CardContainer > CardBody > CardItem(s).
-- HoverEffect (grid of items): {"name":"HoverEffect","props":{"items":[{"title":"X","description":"Y","link":"/x"}]}}
-- HoverBorderGradient and MovingBorderButton replace ordinary call-to-action buttons when you want extra polish.
-- FloatingNav is OPTIONAL — the scaffold already ships SiteNav at the top of every page. Do NOT also render FloatingNav unless the design fingerprint requests it.
-- TracingBeam wraps long-form content (blog/article style).
-- WobbleCard / GlareCard for premium feature cards.
-- Aceternity components mostly use motion/react under the hood — do not re-implement animations manually.
+LAYOUT VARIETY (CRITICAL — this fixes "every page looks the same"):
+The manifest below assigns each page a layoutHint. You MUST honour it. The hint maps to a concrete page structure:
+  - split-hero        → Two-column hero (text+CTA on left, illustration/feature card on right) → then a 3-card features row → then a CTA strip.
+  - full-bleed-hero   → Full-width hero with large heading + subhead + 2 CTAs → then a 3- or 4-column features grid → then social proof (Avatar row) → then a CTA Card.
+  - masonry-grid      → Compact hero → asymmetric grid of media tiles using AspectRatio + Card (mix of col-span-1 and col-span-2 on lg).
+  - sidebar-content   → Compact hero → two-column body with a sticky left Sidebar (or aside w/ sticky) listing sections → main column with multiple sections.
+  - table-dashboard   → Compact heading row with stats Cards (4 of them) → Tabs to switch views → Table inside the active tab → a side Card with summary.
+  - two-column-article→ Hero → long-form article body in a max-w-3xl prose column on the left + sticky aside Card on the right (TOC / CTA).
+  - faq-stack         → Hero → Accordion with at least 8 questions → supporting Cards (Contact, Docs).
+  - pricing-table     → Hero → 3-column pricing Cards (with Badge "Most popular" on the middle) → a feature comparison Table below.
+  - contact-split     → Hero heading → two-column body: Form on the left (Form/FormField/Input/Textarea/Button), contact channels Card + map placeholder + hours Table on the right.
+  - testimonial-wall  → Hero → 3x3 grid of testimonial Cards (with Avatar) → social proof bar with logos.
+  - feature-spotlight → Hero → three alternating left/right feature blocks (image/illustration card on one side, text+bullets on the other), alternating per row.
+  - media-gallery     → Hero → Carousel (3 slides) → Bento-style grid of AspectRatio media tiles below.
+NEVER reuse the same skeleton across pages. If you generated a 3-card features row on Home, the About / Pricing / Contact / FAQ pages MUST NOT also be a 3-card features row.
+
+CONTENT DENSITY (every page must be substantive):
+- A page MUST emit AT LEAST 4 distinct content sections (hero counts as 1).
+- Every feature listed in the manifest for THIS page MUST appear as a real, named element in the tree (Card, Accordion item, Table row, FormField, etc.) — not just mentioned in a paragraph.
+- A page MUST NOT consist of only a hero + one CTA. Empty / under-filled pages are a bug.
+- Use real, brief-specific copy in headings and descriptions. Generic filler ("Lorem ipsum", "Add your content here") is forbidden.
 
 THEME (locked):
 - The generated site uses ONLY two backgrounds: pure white (#ffffff in light mode) or #101010 (in dark mode). The scaffold defaults to dark mode.
@@ -199,19 +203,21 @@ ${manifest
 Generate the UI tree JSON for ONLY this page:
 - path: ${page.path}
 - title: ${page.title}
-${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}` : ""}
+${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}\n- layoutHint (you MUST follow this layout structure; see LAYOUT VARIETY in the system prompt): ${manifestPage.layoutHint ?? "full-bleed-hero"}` : ""}
 - description: ${page.description ?? "(no description)"}
 ${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
-${manifestPage?.design ? `\nDESIGN FINGERPRINT (you MUST use these specific Aceternity components in the matching slots — they were picked by the design AI to make this site unique):\n  • Hero wrapper (heroVariant): ${manifestPage.design.heroVariant}\n  • Below-hero background effect (backgroundEffect): ${manifestPage.design.backgroundEffect}\n  • Hero text effect (textEffect): ${manifestPage.design.textEffect}\n  • Card style for grids (cardStyle): ${manifestPage.design.cardStyle}\n  • Primary CTA style (ctaStyle): ${manifestPage.design.ctaStyle}\n  • Page vibe: ${manifestPage.design.vibe}\nIf a slot is "none", omit that effect — do not substitute another. Heros must wrap their inner content in the named heroVariant component (unless heroVariant is "none"). Card grids must use the cardStyle component (unless cardStyle is "none"). Primary CTAs must use the ctaStyle component (unless ctaStyle is "none"). Hero headline must be wrapped in the textEffect component (unless textEffect is "none").` : ""}
 
-Make sure every feature above is represented in the tree (the UI must actually expose the relevant form / button / list / handler). Use HeroIcons for all iconography. Use responsive Tailwind (sm:/md:/lg:) on every grid/flex/width utility. Return only the JSON object described in the contract.`,
+Every feature above MUST be represented in the tree as a real, named element (Card, Accordion item, Table row, FormField, list item) — not just mentioned in a paragraph. Use HeroIcons for all iconography. Use responsive Tailwind (sm:/md:/lg:) on every grid/flex/width utility. Follow the page's layoutHint exactly — do NOT default to a generic hero+grid skeleton. Return only the JSON object described in the contract.`,
     },
   ]
 
+  // Style temperature is intentionally higher than the architect / logic
+  // calls so different briefs (and even retries on the same brief) produce
+  // structurally varied trees instead of collapsing to one canonical layout.
   const result = await callModel({
     model,
     messages,
-    temperature: 0.1,
+    temperature: 0.7,
   })
 
   if (!result.ok) {

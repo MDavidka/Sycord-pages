@@ -52,6 +52,10 @@ const DEFAULT_MODEL_ID = "grok-4-1-fast-non-reasoning"
 const MODELS: ModelOption[] = [
   { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast", provider: "xAI", fast: true },
   { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B Free", provider: "OpenRouter" },
+  // "Fast" tier — Gemini 3.1 Flash Preview via Google Agent Studio (Vertex AI
+  // express mode). Cheaper and faster than Pro Preview, uses the same
+  // GOOGLE_AIAGENT_API env var server-side. Good default for quick iteration.
+  { id: "gemini-3.1-flash-preview", name: "Gemini 3.1 Flash (Fast)", provider: "Google", fast: true },
   // "Smart" tier — Gemini 3.1 Pro Preview via Google Agent Studio (formerly
   // Vertex AI). Higher quality for the Plan / Style / Logic stages. Uses the
   // GOOGLE_AIAGENT_API env var server-side.
