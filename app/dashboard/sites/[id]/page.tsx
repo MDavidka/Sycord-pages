@@ -653,7 +653,6 @@ export default function SiteSettingsPage() {
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
   const [hasDeployError, setHasDeployError] = useState(false)
-  const [autoFixLogs, setAutoFixLogs] = useState<string[] | null>(null)
 
   // Database / Firebase connection state
   const [databaseConnected, setDatabaseConnected] = useState(false)
@@ -1066,7 +1065,6 @@ export default function SiteSettingsPage() {
   }
 
   const startAutoFix = () => {
-    setAutoFixLogs(logs)
     setActiveTab("ai")
   }
 
@@ -2310,7 +2308,6 @@ export default function SiteSettingsPage() {
                         projectId={id}
                         generatedPages={generatedPages}
                         setGeneratedPages={setGeneratedPages}
-                        autoFixLogs={autoFixLogs}
                       />
                     </div>
                   ) : (
