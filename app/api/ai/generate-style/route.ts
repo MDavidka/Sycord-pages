@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
+import { tierOf } from "@/lib/credits"
 import { IMPORT_MAP } from "@/sample-conveter"
 import {
   renderManifestForPrompt,
@@ -70,6 +71,16 @@ export async function POST(req: Request) {
   })
 
   const prompts = await getSystemPrompts()
+  const smallModelMode = tierOf({ id: model.id, name: model.id }) === "fast"
+  const smallModelGuardrails = smallModelMode
+    ? `
+SMALL-MODEL SAFETY MODE (REQUIRED FOR THIS RUN):
+- Output MUST be strict JSON only; no markdown, no comments, no trailing prose.
+- Keep component names exactly from the provided shadcn catalogue; when unsure, pick simpler known components (Card, Button, Input, Table, Accordion, Tabs).
+- Prefer shallow, valid trees over deeply nested risky structures.
+- Before finalizing, mentally validate: root.type, root.version, and root.component all exist.
+`
+    : ""
   const generationGuide = readHelperFile("generation.md")
   const cheatSheet = readHelperFile("cheat_sheat.json")
 
@@ -112,6 +123,10 @@ SHADCN PROJECT INFO (mirrors \`shadcn info --json\` for the generated project �
 
 COMPONENT CATALOGUE — shadcn/ui (${Object.keys(IMPORT_MAP).length} exports from ${shadcnFileCount} component files; the generated Vite project vendors ALL of them). You MAY freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>.
 ${shadcnCatalogue}
+
+UI LIBRARY SOURCE OF TRUTH:
+- Use ONLY components and composition patterns from https://ui.shadcn.com .
+- Do NOT use Material UI, Chakra UI, Ant Design, Mantine, NextUI, Bootstrap, Tailwind UI snippets, or custom design-system component names.
 
 SHADCN COMPOSITION RULES (these are the patterns the official shadcn/ui Skill enforces — follow them exactly, NOT just "stack Card after Card"):
 - FORMS — never raw <input>. Wrap every field in Field + FieldLabel + FieldDescription + FieldError, and group related fields with FieldGroup or FieldSet. For prefixed/suffixed inputs (e.g. URL with https://, search with magnifying glass) use InputGroup + InputGroupAddon + InputGroupInput, never a manual flex container around a bare Input. Use Form + FormField for any form that submits.
@@ -206,7 +221,8 @@ RULES:
 - Dynamic values use "$state.<name>" / "$handler.<name>" strings. Never invent JSX or raw code inside the JSON.
 - Do NOT use "$handler.set<X>" for state setters named after a "$state.<x>" — the converter wires those up automatically via useState. Use $handler.* only for real actions (onSubmit, onClickToggle, loadData, logout, etc.).
 - Keep the tree rich enough to look complete: multiple sections, use Cards / Tabs / Accordion / Badges to structure content.
-- No comments inside the JSON.`,
+- No comments inside the JSON.
+${smallModelGuardrails}`,
     },
     {
       role: "user" as const,
