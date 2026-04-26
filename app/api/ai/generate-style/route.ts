@@ -174,10 +174,12 @@ THEME (per-site, NOT locked):
 - NEVER embed inline CSS (no style={{ color: "..."}}, no arbitrary-value classes like [color:#abc] or bg-[#abc]).
 
 ICONS (HeroIcons ONLY):
-- Every icon MUST be a HeroIcon component (PascalCase name ending in "Icon", e.g. HomeIcon, UserIcon, ChevronRightIcon, CheckCircleIcon, ArrowRightIcon, MagnifyingGlassIcon, XMarkIcon, Bars3Icon). The converter auto-imports them from '@heroicons/react/24/outline'.
+- Every icon MUST be one of this fixed allowlist (PascalCase + "Icon" suffix): ArrowRightIcon, Bars3Icon, Battery50Icon, CheckCircleIcon, Cog6ToothIcon, CreditCardIcon, DevicePhoneMobileIcon, EyeIcon, HomeIcon, MagnifyingGlassIcon, PhoneIcon, PuzzlePieceIcon, ShoppingBagIcon, StarIcon, UserIcon, XMarkIcon.
+- If an icon idea is not in the allowlist, use PuzzlePieceIcon instead.
+- The converter auto-imports allowed icons from '@heroicons/react/24/outline'.
 - Icon nodes must have a className for sizing/color, e.g. {"name":"HomeIcon","props":{"className":"h-5 w-5"}}.
 - STRICTLY FORBIDDEN: emoji characters (🚀, ✨, ✅, 📱, 💡, etc.), unicode pictographs, ASCII art, or image URLs as icons. Any emoji in a text node is a bug — use a HeroIcon sibling instead.
-- See https://heroicons.com for the full list of available icon names; they all follow the \`<Name>Icon\` suffix convention.
+- Do NOT use arbitrary HeroIcon names outside the allowlist above.
 
 COMPONENT-ONLY RULE:
 - Every visible text string MUST live inside a shadcn component that renders typography (CardTitle, CardDescription, Label, Badge, Button, AlertTitle, AlertDescription, PaginationLink, etc.) OR inside semantic HTML headings/paragraphs (h1–h6, p). No bare strings inside <div>/<span> — wrap them.
