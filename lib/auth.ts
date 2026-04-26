@@ -80,21 +80,25 @@ export const authOptions: AuthOptions = {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile, user }) {
       // console.log("[v0-DEBUG] JWT Callback Triggered")
       const client = await clientPromise
       const db = client.db()
 
-      if (account && profile) {
+      if (account && (profile || user)) {
         // Initial Sign In
-        const profileId = profile.sub || profile.user?.uid || profile.id
+        const profileId =
+          (profile as any)?.sub ||
+          (profile as any)?.user?.uid ||
+          (profile as any)?.id ||
+          (user as any)?.id
         if (profileId) {
           token.id = profileId
         }
 
-        token.picture = profile.picture
-        token.email = profile.email || profile.user?.email
-        token.name = profile.name || profile.user?.name || profile.user?.username
+        token.picture = (profile as any)?.picture || (user as any)?.image
+        token.email = (profile as any)?.email || (profile as any)?.user?.email || (user as any)?.email
+        token.name = (profile as any)?.name || (profile as any)?.user?.name || (profile as any)?.user?.username || (user as any)?.name
         token.isPremium = false
 
         // Initialize sessionVersion if not present

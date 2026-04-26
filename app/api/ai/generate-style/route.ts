@@ -160,6 +160,11 @@ The manifest below assigns each page a layoutHint. You MUST honour it. The hint 
   - media-gallery     → Hero → Carousel (3 slides) → Bento-style grid of AspectRatio media tiles below.
 NEVER reuse the same skeleton across pages. If you generated a 3-card features row on Home, the About / Pricing / Contact / FAQ pages MUST NOT also be a 3-card features row.
 
+ANTI-TEMPLATE EXECUTION (critical):
+- Do NOT ship a canned "semantic SaaS template". This page must feel purpose-built for THIS brief and route.
+- Section headings and card titles must use domain language from the brief, not generic placeholders.
+- Include at least 2 route-specific sections that are NOT the default hero+features+testimonials pattern (examples: booking flow steps, eligibility matrix, policy timeline, operations checklist, inventory table, lesson planner, care protocol, etc. — choose what fits the brief).
+
 CONTENT DENSITY (every page must be substantive):
 - A page MUST emit AT LEAST 4 distinct content sections (hero counts as 1).
 - Every feature listed in the manifest for THIS page MUST appear as a real, named element in the tree (Card, Accordion item, Table row, FormField, etc.) — not just mentioned in a paragraph.

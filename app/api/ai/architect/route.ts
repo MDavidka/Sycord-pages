@@ -73,6 +73,11 @@ Return strictly a JSON array of page objects, each with:
 
 ANTI-DUPLICATE RULE: Every page MUST be structurally and contextually distinct from every other page in the sitemap. If two pages would render the same skeleton (same hero + same grid), redesign one of them with a different content type (table, accordion, form, gallery, article, dashboard widgets). Empty / under-filled pages are a bug.
 
+ANTI-TEMPLATE RULE (critical):
+- Do NOT output a generic SaaS template sitemap. The plan must feel custom-built for THIS prompt's domain.
+- Every page description must include domain-specific nouns from the brief (products, audience, workflows, terminology) instead of only generic "hero/features/CTA" phrasing.
+- At least 2 pages must include a non-marketing primary section type (e.g. calculator, configurator, booking flow, knowledge base, timeline, policy matrix, comparison table, onboarding checklist), chosen to match the brief.
+
 No markdown, no prose, no wrapping object — just the JSON array.
 ${smallModelGuardrails}`,
     },
