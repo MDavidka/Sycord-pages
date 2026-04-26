@@ -550,7 +550,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [step, setStep] = useState<GenerationPhase>("idle")
-  const [error, setError] = useState<string | null>(null)
 
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployResult, setDeployResult] = useState<{ url?: string; githubUrl?: string } | null>(null)
@@ -810,7 +809,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
     } catch (e: any) {
        console.error("Auto fix loop error", e)
-       setError(e.message)
+       setMessages(prev => [...prev, {
+         id: Date.now().toString(),
+         role: "assistant",
+         content: `Auto-fix failed: ${e?.message || "Unknown error"}`,
+       }])
        setStep("idle")
     }
   }
@@ -835,7 +838,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
     setMessages(prev => [...prev, userMessage])
     setAttachments([])
-    setError(null)
     setGeneratedPages([])
     setStep("planning")
     setDeploySuccess(false)
@@ -992,7 +994,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       setStep("done")
     } catch (err: any) {
       const failure = err?.message || "Generation failed"
-      setError(failure)
       setMessages(prev => [...prev, {
         id: (Date.now() + 9).toString(),
         role: "assistant",
