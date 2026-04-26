@@ -1,5 +1,6 @@
 import fs from "fs"
 import path from "path"
+import type { ProjectChrome, FooterVariant, HeaderLayout, NavVariant } from "./design-genome"
 
 // A single file emitted into the generated project.
 export interface ScaffoldFile {
@@ -505,7 +506,7 @@ function vendorHooks(timestamp: number): ScaffoldFile[] {
 // Dynamic files (depend on the plan)
 // ---------------------------------------------------------------------------
 
-function buildAppTsx(routes: ScaffoldRoute[]): string {
+function buildAppTsx(routes: ScaffoldRoute[], chrome?: ProjectChrome): string {
   const imports = routes
     .map((r) => `import { ${r.componentName} } from '${r.importPath}'`)
     .join("\n")
@@ -518,34 +519,159 @@ function buildAppTsx(routes: ScaffoldRoute[]): string {
     ? `        <Route path="*" element={<${routes[0].componentName} />} />`
     : `        <Route path="*" element={<div className="p-8 text-center">Not found</div>} />`
 
+  const brandLiteral = JSON.stringify(chrome?.brandName ?? "Home")
+
   return `import { Routes, Route } from 'react-router-dom'
 import { SiteNav } from './components/site-nav'
+import { SiteFooter } from './components/site-footer'
 import siteStructure from './data/site-structure.json'
 ${imports}
 
 export default function App() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <SiteNav items={siteStructure.nav} />
+      <SiteNav items={siteStructure.nav} brandName={${brandLiteral}} />
       <main className="flex-1">
         <Routes>
 ${routeEntries}
 ${fallback}
         </Routes>
       </main>
+      <SiteFooter items={siteStructure.nav} />
     </div>
   )
 }
 `
 }
 
-// A responsive top-of-page nav linking every planned route.
-// Desktop: inline shadcn Buttons. Mobile: Sheet with a Bars3Icon trigger.
-function buildSiteNavTsx(): string {
-  return `import { Link, useLocation } from 'react-router-dom'
-import { Bars3Icon } from '@heroicons/react/24/outline'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+// Per-chrome top-of-page nav. The shape of the desktop bar (which slot the
+// brand sits in, what shows on the right, search/cart/CTA) is driven by
+// `chrome.headerLayout` + `chrome.navVariant`. The mobile menu is ALWAYS a
+// full-width Sheet (`w-full max-w-none` — the spec explicitly forbids the
+// narrow w-64 drawer the previous version used).
+function buildSiteNavTsx(chrome?: ProjectChrome): string {
+  const headerLayout: HeaderLayout = chrome?.headerLayout ?? "left-brand-right-nav"
+  const navVariant: NavVariant = chrome?.navVariant ?? "saas"
+  const ctaLabel = chrome?.ctaLabel ?? "Get started"
+  const ctaHref = chrome?.ctaHref ?? "/"
+  const showSearch = navVariant === "commerce" || headerLayout === "commerce-search-nav"
+  const showCart = navVariant === "commerce"
+  const showCta = navVariant !== "app" && navVariant !== "docs"
+  const compact = navVariant === "app"
+
+  const desktopLayoutClass = (() => {
+    switch (headerLayout) {
+      case "left-brand-center-nav-right-actions":
+        return "hidden md:grid grid-cols-[auto_1fr_auto] items-center gap-4"
+      case "centered-brand-split-nav":
+        return "hidden md:grid grid-cols-3 items-center"
+      case "commerce-search-nav":
+        return "hidden md:flex items-center justify-between gap-4"
+      case "app-topbar":
+        return "hidden md:flex items-center justify-between gap-2"
+      default:
+        return "hidden md:flex items-center justify-between gap-2"
+    }
+  })()
+
+  const renderDesktopBlock = (() => {
+    switch (headerLayout) {
+      case "left-brand-center-nav-right-actions":
+        return `
+          <Link to="/" className="font-semibold tracking-tight">{brandName}</Link>
+          <div className="flex items-center justify-center gap-1">
+            {navItems.map((item) => (
+              <Link key={item.to} to={item.to}>
+                <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">{item.label}</Button>
+              </Link>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            ${showSearch ? `<Input placeholder="Search" className="h-9 w-48" />` : ""}
+            ${showCart ? `<Button variant="ghost" size="icon" aria-label="Cart"><ShoppingBagIcon className="h-5 w-5" /></Button>` : ""}
+            ${showCta ? `<Link to="${ctaHref}"><Button size="sm">${escapeJsxText(ctaLabel)}</Button></Link>` : ""}
+          </div>`
+      case "centered-brand-split-nav":
+        return `
+          <div className="flex items-center gap-1">
+            {navItems.slice(0, Math.ceil(navItems.length / 2)).map((item) => (
+              <Link key={item.to} to={item.to}>
+                <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">{item.label}</Button>
+              </Link>
+            ))}
+          </div>
+          <Link to="/" className="font-semibold tracking-tight text-center">{brandName}</Link>
+          <div className="flex items-center gap-1 justify-end">
+            {navItems.slice(Math.ceil(navItems.length / 2)).map((item) => (
+              <Link key={item.to} to={item.to}>
+                <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">{item.label}</Button>
+              </Link>
+            ))}
+            ${showCta ? `<Link to="${ctaHref}" className="ml-2"><Button size="sm">${escapeJsxText(ctaLabel)}</Button></Link>` : ""}
+          </div>`
+      case "commerce-search-nav":
+        return `
+          <Link to="/" className="font-semibold tracking-tight">{brandName}</Link>
+          <div className="flex items-center gap-1 flex-1 justify-center">
+            {navItems.map((item) => (
+              <Link key={item.to} to={item.to}>
+                <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">{item.label}</Button>
+              </Link>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            ${showSearch ? `<div className="relative"><MagnifyingGlassIcon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search products" className="h-9 w-56 pl-8" /></div>` : ""}
+            ${showCart ? `<Button variant="ghost" size="icon" aria-label="Cart"><ShoppingBagIcon className="h-5 w-5" /></Button>` : ""}
+            ${showCta ? `<Link to="${ctaHref}"><Button size="sm">${escapeJsxText(ctaLabel)}</Button></Link>` : ""}
+          </div>`
+      case "app-topbar":
+        return `
+          <div className="flex items-center gap-3">
+            <Link to="/" className="font-semibold tracking-tight text-sm">{brandName}</Link>
+            <span className="text-muted-foreground text-sm">/</span>
+            <span className="text-sm text-muted-foreground">{navItems.find((i) => i.to === pathname)?.label ?? ''}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            {navItems.map((item) => (
+              <Link key={item.to} to={item.to}>
+                <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm" className="h-8">{item.label}</Button>
+              </Link>
+            ))}
+          </div>`
+      default:
+        return `
+          <Link to="/" className="font-semibold tracking-tight">{brandName}</Link>
+          <div className="flex items-center gap-1">
+            {navItems.map((item) => (
+              <Link key={item.to} to={item.to}>
+                <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">{item.label}</Button>
+              </Link>
+            ))}
+            ${showCta ? `<Link to="${ctaHref}" className="ml-2"><Button size="sm">${escapeJsxText(ctaLabel)}</Button></Link>` : ""}
+          </div>`
+    }
+  })()
+
+  const padding = compact ? "py-2" : "py-3"
+  const importLines: string[] = [
+    "import { Link, useLocation } from 'react-router-dom'",
+    "import { Bars3Icon } from '@heroicons/react/24/outline'",
+    "import { Button } from '@/components/ui/button'",
+    "import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'",
+  ]
+  if (showSearch) {
+    importLines.push("import { Input } from '@/components/ui/input'")
+    if (headerLayout === "commerce-search-nav") {
+      importLines.push("import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'")
+    }
+  }
+  if (showCart) importLines.push("import { ShoppingBagIcon } from '@heroicons/react/24/outline'")
+
+  const brandLiteral = JSON.stringify(chrome?.brandName ?? "Home")
+  const desktopClassLiteral = JSON.stringify(desktopLayoutClass)
+  const paddingLiteral = JSON.stringify(padding)
+
+  return `${importLines.join("\n")}
 
 type SiteNavItem = {
   to: string
@@ -554,49 +680,40 @@ type SiteNavItem = {
 
 type SiteNavProps = {
   items: SiteNavItem[]
+  brandName?: string
 }
 
-export function SiteNav({ items }: SiteNavProps) {
+export function SiteNav({ items, brandName: brandNameProp }: SiteNavProps) {
   const { pathname } = useLocation()
-  const navItems = items.length > 0 ? items : [{ to: '/', label: 'Home' }]
+  const brandName = brandNameProp ?? ${brandLiteral}
+  const navItems = items.length > 0 ? items : [{ to: '/', label: brandName }]
   return (
     <nav className="w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto flex items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/" className="font-semibold tracking-tight">
-          {navItems[0]?.label ?? 'Home'}
-        </Link>
-        <div className="hidden md:flex items-center gap-1">
-          {navItems.map((item) => (
-            <Link key={item.to} to={item.to}>
-              <Button
-                variant={pathname === item.to ? 'secondary' : 'ghost'}
-                size="sm"
-              >
-                {item.label}
-              </Button>
-            </Link>
-          ))}
+      <div className={"container mx-auto px-4 sm:px-6 lg:px-8 " + ${paddingLiteral}}>
+        <div className={${desktopClassLiteral}}>${renderDesktopBlock}
         </div>
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center justify-between">
+          <Link to="/" className="font-semibold tracking-tight">{brandName}</Link>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open menu">
                 <Bars3Icon className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-64">
-              <SheetTitle className="mb-4">Menu</SheetTitle>
+            <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-96 sm:max-w-sm">
+              <SheetTitle className="mb-6 text-xl">{brandName}</SheetTitle>
               <div className="flex flex-col gap-1">
                 {navItems.map((item) => (
                   <Link key={item.to} to={item.to}>
                     <Button
                       variant={pathname === item.to ? 'secondary' : 'ghost'}
-                      className="w-full justify-start"
+                      className="w-full justify-start text-base h-12"
                     >
                       {item.label}
                     </Button>
                   </Link>
                 ))}
+                ${showCta ? `<Link to="${ctaHref}" className="mt-6"><Button className="w-full h-12">${escapeJsxText(ctaLabel)}</Button></Link>` : ""}
               </div>
             </SheetContent>
           </Sheet>
@@ -608,12 +725,148 @@ export function SiteNav({ items }: SiteNavProps) {
 `
 }
 
-function buildSiteStructureJson(routes: ScaffoldRoute[]): string {
+function buildSiteFooterTsx(chrome?: ProjectChrome): string {
+  const variant: FooterVariant = chrome?.footerVariant ?? "simple"
+  const brandName = chrome?.brandName ?? "Site"
+  const year = new Date().getFullYear()
+
+  if (variant === "minimal") {
+    return `import { Link } from 'react-router-dom'
+
+type SiteFooterProps = { items: { to: string; label: string }[] }
+export function SiteFooter({ items }: SiteFooterProps) {
+  return (
+    <footer className="border-t border-border mt-auto py-6">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>© ${year} ${escapeJsxText(brandName)}</span>
+        <div className="flex items-center gap-4">
+          {items.map((it) => (
+            <Link key={it.to} to={it.to} className="hover:text-foreground">{it.label}</Link>
+          ))}
+        </div>
+      </div>
+    </footer>
+  )
+}
+`
+  }
+
+  if (variant === "newsletter") {
+    return `import { Link } from 'react-router-dom'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+
+type SiteFooterProps = { items: { to: string; label: string }[] }
+export function SiteFooter({ items }: SiteFooterProps) {
+  return (
+    <footer className="border-t border-border mt-auto">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 grid gap-10 md:grid-cols-2">
+        <div>
+          <h3 className="text-lg font-semibold">${escapeJsxText(brandName)}</h3>
+          <p className="mt-2 text-sm text-muted-foreground max-w-md">Updates straight to your inbox — no spam, just product news.</p>
+          <form className="mt-4 flex gap-2 max-w-md" onSubmit={(e) => { e.preventDefault() }}>
+            <Input placeholder="you@example.com" type="email" className="flex-1" />
+            <Button type="submit">Subscribe</Button>
+          </form>
+        </div>
+        <div className="grid grid-cols-2 gap-6 text-sm">
+          <div>
+            <h4 className="font-medium mb-3">Site</h4>
+            <ul className="space-y-2 text-muted-foreground">
+              {items.map((it) => (
+                <li key={it.to}><Link to={it.to} className="hover:text-foreground">{it.label}</Link></li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-medium mb-3">Legal</h4>
+            <ul className="space-y-2 text-muted-foreground">
+              <li>Privacy</li>
+              <li>Terms</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-border">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-xs text-muted-foreground">© ${year} ${escapeJsxText(brandName)}</div>
+      </div>
+    </footer>
+  )
+}
+`
+  }
+
+  if (variant === "multi-column") {
+    return `import { Link } from 'react-router-dom'
+
+type SiteFooterProps = { items: { to: string; label: string }[] }
+export function SiteFooter({ items }: SiteFooterProps) {
+  const cols = [
+    { title: 'Shop', links: items.slice(0, Math.ceil(items.length / 2)) },
+    { title: 'About', links: items.slice(Math.ceil(items.length / 2)) },
+    { title: 'Help', links: [{ to: '/', label: 'FAQs' }, { to: '/', label: 'Contact' }] },
+    { title: 'Legal', links: [{ to: '/', label: 'Privacy' }, { to: '/', label: 'Terms' }] },
+  ]
+  return (
+    <footer className="border-t border-border mt-auto">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        {cols.map((col) => (
+          <div key={col.title}>
+            <h4 className="font-medium mb-3">{col.title}</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              {col.links.map((l, i) => (
+                <li key={i}><Link to={l.to} className="hover:text-foreground">{l.label}</Link></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-border">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 text-xs text-muted-foreground">© ${year} ${escapeJsxText(brandName)}</div>
+      </div>
+    </footer>
+  )
+}
+`
+  }
+
+  // simple
+  return `import { Link } from 'react-router-dom'
+
+type SiteFooterProps = { items: { to: string; label: string }[] }
+export function SiteFooter({ items }: SiteFooterProps) {
+  return (
+    <footer className="border-t border-border mt-auto py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
+        <span className="font-medium">${escapeJsxText(brandName)}</span>
+        <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
+          {items.map((it) => (
+            <Link key={it.to} to={it.to} className="hover:text-foreground">{it.label}</Link>
+          ))}
+        </div>
+        <span className="text-muted-foreground">© ${year}</span>
+      </div>
+    </footer>
+  )
+}
+`
+}
+
+// Convert PascalCase component name (e.g. "PhonesCatalog") into a label
+// suitable for nav links ("Phones Catalog"). Falls back to the original
+// string if it doesn't match the expected pattern.
+function componentNameToLabel(name: string): string {
+  return name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/\s+/g, " ").trim()
+}
+
+function buildSiteStructureJson(routes: ScaffoldRoute[], chrome?: ProjectChrome): string {
   const structure = {
+    brand: chrome?.brandName ?? "Home",
     nav: routes.map((r) => ({
       to: r.path,
-      label: escapeJsxText(r.componentName),
+      label: escapeJsxText(componentNameToLabel(r.componentName)),
     })),
+    cta: chrome ? { label: chrome.ctaLabel, href: chrome.ctaHref } : undefined,
   }
   return JSON.stringify(structure, null, 2) + "\n"
 }
@@ -638,6 +891,7 @@ function escapeJsxText(s: string): string {
 export function buildViteScaffold(
   routes: ScaffoldRoute[],
   theme?: { primaryHue: number; primarySat: number; radius: number; fontHeading: string; fontBody: string },
+  chrome?: ProjectChrome,
 ): ScaffoldFile[] {
   const now = Date.now()
   const indexCss = theme ? buildIndexCss(theme) : INDEX_CSS
@@ -652,9 +906,10 @@ export function buildViteScaffold(
     { name: "index.html", code: indexHtml, timestamp: now },
     { name: "src/index.css", code: indexCss, timestamp: now },
     { name: "src/main.tsx", code: MAIN_TSX, timestamp: now },
-    { name: "src/App.tsx", code: buildAppTsx(routes), timestamp: now },
-    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(), timestamp: now },
-    { name: "src/data/site-structure.json", code: buildSiteStructureJson(routes), timestamp: now },
+    { name: "src/App.tsx", code: buildAppTsx(routes, chrome), timestamp: now },
+    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(chrome), timestamp: now },
+    { name: "src/components/site-footer.tsx", code: buildSiteFooterTsx(chrome), timestamp: now },
+    { name: "src/data/site-structure.json", code: buildSiteStructureJson(routes, chrome), timestamp: now },
     { name: "src/lib/utils.ts", code: LIB_UTILS_TS, timestamp: now },
     ...vendorHooks(now),
     ...vendorShadcnFiles(now),

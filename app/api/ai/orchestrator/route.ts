@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { logAiDebug } from "@/lib/logger"
-import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter"
+import { convertTreeToTypeScript, SUPPORTED_COMPONENTS, type UINode, type UITreeRoot } from "@/sample-conveter"
 import { buildViteScaffold, type ScaffoldFile, type ScaffoldRoute } from "@/lib/vite-scaffold"
 import type { ProjectManifest, ManifestPage } from "@/lib/project-manifest"
 
@@ -209,6 +209,25 @@ export async function POST(req: Request) {
     const pageFiles: ScaffoldFile[] = []
     const routes: ScaffoldRoute[] = []
     const usedSlugs = new Set<string>()
+    const allWarnings: string[] = []
+    const HTML_TAGS_LOCAL = new Set([
+      "div","span","section","article","header","footer","main","nav","aside","ul","ol","li","p","a","img","button","input","label","form","table","thead","tbody","tr","td","th","h1","h2","h3","h4","h5","h6","figure","figcaption","strong","em","small","blockquote","code","pre","video","audio","picture","source","iframe","hr","br",
+    ])
+    const collectUnknown = (node: unknown, page: string, seen = new Set<string>()): void => {
+      if (!node || typeof node !== "object") return
+      const n = node as Record<string, unknown>
+      const rawName = typeof n.name === "string" ? n.name : typeof n.component === "string" ? (n.component as string) : ""
+      if (rawName) {
+        const isHtml = HTML_TAGS_LOCAL.has(rawName)
+        const isHeroIcon = /^[A-Z][A-Za-z0-9]*Icon$/.test(rawName)
+        if (!isHtml && !isHeroIcon && !SUPPORTED_COMPONENTS.has(rawName) && !seen.has(rawName)) {
+          seen.add(rawName)
+          allWarnings.push(`[${page}] unknown component "${rawName}" — demoted to <div>.`)
+        }
+      }
+      const children = Array.isArray(n.children) ? n.children : []
+      for (const c of children) collectUnknown(c, page, seen)
+    }
 
     for (let i = 0; i < jsonPlan.length; i++) {
       const page = jsonPlan[i] ?? {}
@@ -258,6 +277,10 @@ export async function POST(req: Request) {
         version: "1.0",
         component: toNode(treeCandidate),
       }
+
+      // Walk the raw tree BEFORE conversion to log any component the converter
+      // is going to demote to <div>. The spec forbids silent demotion.
+      collectUnknown(treeCandidate, pageName)
 
       const converted = convertTreeToTypeScript(uiTree, pageName)
 
@@ -320,14 +343,19 @@ export async function POST(req: Request) {
     // main.tsx, App.tsx (routed), index.css, src/lib/utils.ts and the
     // vendored shadcn UI components. Emitted AFTER the page files so the
     // `files` array has a stable, human-readable ordering (pages first).
-    const scaffoldFiles = buildViteScaffold(routes, manifest?.theme)
+    const scaffoldFiles = buildViteScaffold(routes, manifest?.theme, manifest?.chrome)
     const files = [...pageFiles, ...scaffoldFiles]
+
+    if (allWarnings.length > 0) {
+      await logAiDebug("Orchestrator Converter Warnings", { warnings: allWarnings })
+    }
 
     await logAiDebug("Orchestrator Success", {
       generatedFilesCount: files.length,
       routesCount: routes.length,
+      warnings: allWarnings.length,
     })
-    return NextResponse.json({ files })
+    return NextResponse.json({ files, warnings: allWarnings })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
     const stack = error instanceof Error ? error.stack : undefined

@@ -245,7 +245,9 @@ ${manifest
 Generate the UI tree JSON for ONLY this page:
 - path: ${page.path}
 - title: ${page.title}
-${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}\n- layoutHint (you MUST follow this layout structure; see LAYOUT VARIETY in the system prompt): ${manifestPage.layoutHint ?? "full-bleed-hero"}` : ""}
+${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}\n- layoutHint (you MUST follow this layout structure; see LAYOUT VARIETY in the system prompt): ${manifestPage.layoutHint ?? "full-bleed-hero"}\n- layoutSignature (page-role identity — drives section list & content density): ${manifestPage.layoutSignature ?? "(unset)"}` : ""}
+${manifest?.design ? `\nDESIGN GENOME (apply uniformly across the whole site):\n  visualStyle:    ${manifest.design.visualStyle}    — overall aesthetic.\n  sectionRhythm:  ${manifest.design.sectionRhythm}  — how sections stack/alternate (use this layout pattern for the whole page).\n  cardTreatment:  ${manifest.design.cardTreatment}  — for Card variants: flat=no shadow no border, outlined=border-border only, elevated=shadow-md, glass=bg-card/60 backdrop-blur, dense=p-4 not p-6.\n  heroTreatment:  ${manifest.design.heroTreatment} — hero composition (split=text+media side-by-side, centered=centered text+CTAs, bento=grid of bento cards, media-led=full-bleed media on top, commerce=product-led, dashboard=stats row).\n  typographyScale:${manifest.design.typographyScale} — compact=text-3xl/text-2xl, standard=text-4xl md:text-5xl, display=text-5xl md:text-7xl.\nUse these as STYLE HINTS that apply uniformly across every page so the site has one coherent identity. Two different briefs MUST produce visibly different pages because their genomes differ.` : ""}
+${manifest?.chrome ? `\nSITE CHROME (already handled by the scaffold — DO NOT re-emit nav/header/footer in this page tree):\n  brand:        ${manifest.chrome.brandName}\n  navVariant:   ${manifest.chrome.navVariant}\n  headerLayout: ${manifest.chrome.headerLayout}\n  footerVariant:${manifest.chrome.footerVariant}\n  primaryCta:   ${manifest.chrome.ctaLabel} → ${manifest.chrome.ctaHref} (use this label/href for primary CTAs in your page so it stays consistent with the nav).` : ""}
 - description: ${page.description ?? "(no description)"}
 ${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
 
@@ -334,7 +336,7 @@ Every feature above MUST be represented in the tree as a real, named element (Ca
     rawPreview: typeof attempt2.raw === "string" ? attempt2.raw.slice(0, 500) : undefined,
   })
   if (manifestPage) {
-    const fallback = buildFallbackTree(manifestPage)
+    const fallback = buildFallbackTree(manifestPage, manifest)
     return NextResponse.json({ tree: fallback, fallback: true })
   }
   // No manifest entry — shouldn't happen, but if it does, build one on the
@@ -350,5 +352,5 @@ Every feature above MUST be represented in the tree as a real, named element (Ca
     description: page.description,
     features: page.features,
   }
-  return NextResponse.json({ tree: buildFallbackTree(adhocPage), fallback: true })
+  return NextResponse.json({ tree: buildFallbackTree(adhocPage, manifest), fallback: true })
 }
