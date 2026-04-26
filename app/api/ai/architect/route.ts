@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
+import { tierOf } from "@/lib/credits"
 import type { PlanEntry } from "@/lib/plan-types"
 import { buildProjectManifest, type ProjectManifest } from "@/lib/project-manifest"
 
@@ -39,6 +40,16 @@ export async function POST(req: Request) {
   }
 
   const prompts = await getSystemPrompts()
+  const smallModelMode = tierOf({ id: model.id, name: model.id }) === "fast"
+  const smallModelGuardrails = smallModelMode
+    ? `
+SMALL-MODEL SAFETY MODE (REQUIRED FOR THIS RUN):
+- Keep path/title/description/features extremely literal and explicit; avoid creative ambiguity.
+- Double-check output shape before finalizing: array only, every object has path/title/description/features.
+- Prefer simple, implementable pages over complex ideas that risk malformed JSON.
+- Never skip required fields, even if repeated.
+`
+    : ""
 
   const messages = [
     {
@@ -62,7 +73,13 @@ Return strictly a JSON array of page objects, each with:
 
 ANTI-DUPLICATE RULE: Every page MUST be structurally and contextually distinct from every other page in the sitemap. If two pages would render the same skeleton (same hero + same grid), redesign one of them with a different content type (table, accordion, form, gallery, article, dashboard widgets). Empty / under-filled pages are a bug.
 
-No markdown, no prose, no wrapping object — just the JSON array.`,
+ANTI-TEMPLATE RULE (critical):
+- Do NOT output a generic SaaS template sitemap. The plan must feel custom-built for THIS prompt's domain.
+- Every page description must include domain-specific nouns from the brief (products, audience, workflows, terminology) instead of only generic "hero/features/CTA" phrasing.
+- At least 2 pages must include a non-marketing primary section type (e.g. calculator, configurator, booking flow, knowledge base, timeline, policy matrix, comparison table, onboarding checklist), chosen to match the brief.
+
+No markdown, no prose, no wrapping object — just the JSON array.
+${smallModelGuardrails}`,
     },
     {
       role: "user" as const,

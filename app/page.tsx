@@ -652,7 +652,7 @@ export default function LandingPage() {
             <span className="text-[#8A8E91] text-[11px]">© {new Date().getFullYear()} Sycord. All rights reserved.</span>
             <div className="flex items-center gap-4">
               <Link href="#" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Twitter</Link>
-              <Link href="#" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">GitHub</Link>
+              <Link href="https://github.com/MDavidka/Sycord-pages" target="_blank" rel="noreferrer" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Source</Link>
               <Link href="#" className="text-[#8A8E91] hover:text-white text-[11px] transition-colors">Discord</Link>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractCode, type ModelSelection } from "@/lib/ai-provider"
+import { tierOf } from "@/lib/credits"
 import {
   renderManifestForPrompt,
   type ProjectManifest,
@@ -125,6 +126,16 @@ export async function POST(req: Request) {
     modelId: model.id,
     provider: model.provider,
   })
+  const smallModelMode = tierOf({ id: model.id, name: model.id }) === "fast"
+  const smallModelGuardrails = smallModelMode
+    ? `
+SMALL-MODEL SAFETY MODE (REQUIRED FOR THIS RUN):
+- Prefer simple, deterministic handlers over clever abstractions.
+- If uncertain, implement direct browser-safe behavior (preventDefault + fetch + alert/redirect).
+- Re-check every requested handler name appears exactly once as an exported function.
+- Keep TypeScript conservative and compile-safe.
+`
+    : ""
 
   const messages = [
     {
@@ -163,6 +174,7 @@ export function onSubmitContact(event: { preventDefault(): void, target: unknown
 \`\`\`
 
 Return ONLY raw TypeScript — the first non-whitespace character must be \`export\` or an allowed top-level statement.
+${smallModelGuardrails}
 
 CROSS-FILE CONTRACT (use the manifest below to understand the rest of the app; you may reference route paths when navigating):
 ${manifest ? renderManifestForPrompt(manifest) : "(no manifest supplied)"}`,
