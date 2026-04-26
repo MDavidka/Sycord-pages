@@ -15,6 +15,13 @@ export interface ScaffoldRoute {
   componentName: string
 }
 
+export interface ScaffoldChrome {
+  brandName?: string
+  navVariant?: "commerce" | "saas" | "editorial" | "portfolio" | "app"
+  mobileNav?: "fullscreen-sheet"
+  pageRhythm?: "compact" | "spacious"
+}
+
 // The scaffold ships EVERY .tsx file from this repo's `components/ui/`
 // directory — see discoverVendoredUIFiles(). Kept in sync with the full
 // shadcn/ui set (45+ components). The `sample-conveter.ts` SUPPORTED_COMPONENTS
@@ -505,7 +512,7 @@ function vendorHooks(timestamp: number): ScaffoldFile[] {
 // Dynamic files (depend on the plan)
 // ---------------------------------------------------------------------------
 
-function buildAppTsx(routes: ScaffoldRoute[]): string {
+function buildAppTsx(routes: ScaffoldRoute[], chrome: ScaffoldChrome = {}): string {
   const imports = routes
     .map((r) => `import { ${r.componentName} } from '${r.importPath}'`)
     .join("\n")
@@ -517,16 +524,18 @@ function buildAppTsx(routes: ScaffoldRoute[]): string {
   const fallback = routes.length > 0
     ? `        <Route path="*" element={<${routes[0].componentName} />} />`
     : `        <Route path="*" element={<div className="p-8 text-center">Not found</div>} />`
+  const rhythmMainClass = chrome.pageRhythm === "compact" ? "flex-1 py-2" : "flex-1 py-6 md:py-8"
 
   return `import { Routes, Route } from 'react-router-dom'
 import { SiteNav } from './components/site-nav'
+import siteStructure from './data/site-structure.json'
 ${imports}
 
 export default function App() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <SiteNav />
-      <main className="flex-1">
+      <SiteNav items={siteStructure.nav} />
+      <main className="${rhythmMainClass}">
         <Routes>
 ${routeEntries}
 ${fallback}
@@ -540,35 +549,87 @@ ${fallback}
 
 // A responsive top-of-page nav linking every planned route.
 // Desktop: inline shadcn Buttons. Mobile: Sheet with a Bars3Icon trigger.
-function buildSiteNavTsx(routes: ScaffoldRoute[]): string {
-  const items = routes
-    .map(
-      (r) =>
-        `  { to: '${r.path}', label: '${escapeJsxText(r.componentName).replace(/'/g, "\\'")}' }`,
-    )
-    .join(",\n")
+function buildSiteNavTsx(routes: ScaffoldRoute[], chrome: ScaffoldChrome = {}): string {
+  const brand = escapeJsxText(
+    chrome.brandName || routes[0]?.componentName || "Home",
+  ).replace(/'/g, "\\'")
+  const variant = chrome.navVariant ?? "saas"
+  const shellClassByVariant: Record<string, string> = {
+    commerce:
+      "sticky top-0 z-50 w-full border-b border-border bg-card/95 shadow-sm backdrop-blur",
+    saas:
+      "sticky top-0 z-50 w-full border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+    editorial:
+      "sticky top-0 z-50 w-full border-b border-border bg-background",
+    portfolio:
+      "sticky top-0 z-50 w-full border-b border-border bg-background/70 backdrop-blur-xl",
+    app:
+      "sticky top-0 z-50 w-full border-b border-border bg-muted/40 backdrop-blur",
+  }
+  const innerClassByVariant: Record<string, string> = {
+    commerce:
+      "container mx-auto flex items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8",
+    saas:
+      "container mx-auto flex items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8",
+    editorial:
+      "container mx-auto grid grid-cols-2 items-center gap-3 px-4 py-4 sm:px-6 md:grid-cols-3 lg:px-8",
+    portfolio:
+      "container mx-auto flex items-center justify-between gap-3 px-4 py-5 sm:px-6 lg:px-8",
+    app:
+      "container mx-auto flex items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8",
+  }
+  const brandClassByVariant: Record<string, string> = {
+    commerce: "text-lg font-bold tracking-tight",
+    saas: "text-base font-semibold tracking-tight",
+    editorial: "font-serif text-xl font-semibold tracking-tight md:text-center",
+    portfolio: "text-sm font-semibold uppercase tracking-[0.25em]",
+    app: "text-sm font-semibold tracking-tight",
+  }
+  const desktopNavClassByVariant: Record<string, string> = {
+    commerce: "hidden md:flex items-center gap-1 rounded-full border border-border bg-background/80 p-1",
+    saas: "hidden md:flex items-center gap-1",
+    editorial: "hidden md:flex items-center justify-end gap-1",
+    portfolio: "hidden md:flex items-center gap-2",
+    app: "hidden md:flex items-center gap-1 rounded-lg bg-background/70 p-1",
+  }
+  const activeVariant = variant === "commerce" ? "default" : "secondary"
+  const inactiveVariant = variant === "portfolio" ? "outline" : "ghost"
+  const shellClass = shellClassByVariant[variant] ?? shellClassByVariant.saas
+  const innerClass = innerClassByVariant[variant] ?? innerClassByVariant.saas
+  const brandClass = brandClassByVariant[variant] ?? brandClassByVariant.saas
+  const desktopNavClass = desktopNavClassByVariant[variant] ?? desktopNavClassByVariant.saas
   return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
 import { Bars3Icon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 
-const NAV_ITEMS = [
-${items},
-]
+const BRAND_NAME = '${brand}'
 
-export function SiteNav() {
+type SiteNavItem = {
+  to: string
+  label: string
+}
+
+type SiteNavProps = {
+  items: SiteNavItem[]
+}
+
+export function SiteNav({ items }: SiteNavProps) {
   const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  const navItems = items.length > 0 ? items : [{ to: '/', label: 'Home' }]
   return (
-    <nav className="w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto flex items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/" className="font-semibold tracking-tight">
-          {NAV_ITEMS[0]?.label ?? 'Home'}
+    <nav className="${shellClass}">
+      <div className="${innerClass}">
+        <Link to="/" className="${brandClass}">
+          {BRAND_NAME}
         </Link>
-        <div className="hidden md:flex items-center gap-1">
-          {NAV_ITEMS.map((item) => (
+        <div className="${desktopNavClass}">
+          {navItems.map((item) => (
             <Link key={item.to} to={item.to}>
               <Button
-                variant={pathname === item.to ? 'secondary' : 'ghost'}
+                variant={pathname === item.to ? '${activeVariant}' : '${inactiveVariant}'}
                 size="sm"
               >
                 {item.label}
@@ -577,19 +638,22 @@ export function SiteNav() {
           ))}
         </div>
         <div className="md:hidden">
-          <Sheet>
+          <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open menu">
                 <Bars3Icon className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-64">
-              <SheetTitle className="mb-4">Menu</SheetTitle>
-              <div className="flex flex-col gap-1">
-                {NAV_ITEMS.map((item) => (
-                  <Link key={item.to} to={item.to}>
+            <SheetContent
+              side="right"
+              className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm"
+            >
+              <SheetTitle className="mb-6 text-left">Menu</SheetTitle>
+              <div className="flex flex-col gap-2">
+                {navItems.map((item) => (
+                  <Link key={item.to} to={item.to} onClick={() => setOpen(false)} className="w-full">
                     <Button
-                      variant={pathname === item.to ? 'secondary' : 'ghost'}
+                      variant={pathname === item.to ? '${activeVariant}' : 'ghost'}
                       className="w-full justify-start"
                     >
                       {item.label}
@@ -605,6 +669,16 @@ export function SiteNav() {
   )
 }
 `
+}
+
+function buildSiteStructureJson(routes: ScaffoldRoute[]): string {
+  const structure = {
+    nav: routes.map((r) => ({
+      to: r.path,
+      label: escapeJsxText(r.componentName),
+    })),
+  }
+  return JSON.stringify(structure, null, 2) + "\n"
 }
 
 function escapeJsxText(s: string): string {
@@ -627,6 +701,7 @@ function escapeJsxText(s: string): string {
 export function buildViteScaffold(
   routes: ScaffoldRoute[],
   theme?: { primaryHue: number; primarySat: number; radius: number; fontHeading: string; fontBody: string },
+  chrome?: ScaffoldChrome,
 ): ScaffoldFile[] {
   const now = Date.now()
   const indexCss = theme ? buildIndexCss(theme) : INDEX_CSS
@@ -641,8 +716,9 @@ export function buildViteScaffold(
     { name: "index.html", code: indexHtml, timestamp: now },
     { name: "src/index.css", code: indexCss, timestamp: now },
     { name: "src/main.tsx", code: MAIN_TSX, timestamp: now },
-    { name: "src/App.tsx", code: buildAppTsx(routes), timestamp: now },
-    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(routes), timestamp: now },
+    { name: "src/App.tsx", code: buildAppTsx(routes, chrome), timestamp: now },
+    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(routes, chrome), timestamp: now },
+    { name: "src/data/site-structure.json", code: buildSiteStructureJson(routes), timestamp: now },
     { name: "src/lib/utils.ts", code: LIB_UTILS_TS, timestamp: now },
     ...vendorHooks(now),
     ...vendorShadcnFiles(now),

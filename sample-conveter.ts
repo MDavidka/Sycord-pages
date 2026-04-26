@@ -403,8 +403,31 @@ export const SUPPORTED_COMPONENTS: Set<string> = new Set(Object.keys(IMPORT_MAP)
 
 // A PascalCase name ending in "Icon" is assumed to be a HeroIcon. Imports
 // are resolved at the buildImports stage (pulled from @heroicons/react/24/outline).
+const HEROICON_ALLOWLIST = new Set([
+  'ArrowRightIcon',
+  'Bars3Icon',
+  'Battery50Icon',
+  'CheckCircleIcon',
+  'Cog6ToothIcon',
+  'CreditCardIcon',
+  'DevicePhoneMobileIcon',
+  'EyeIcon',
+  'HomeIcon',
+  'MagnifyingGlassIcon',
+  'PhoneIcon',
+  'PuzzlePieceIcon',
+  'ShoppingBagIcon',
+  'StarIcon',
+  'UserIcon',
+  'XMarkIcon',
+])
+
 function isHeroIconName(name: string): boolean {
   return REGEX.COMPONENT_NAME.test(name) && /Icon$/.test(name) && name !== 'Icon'
+}
+
+function safeHeroIcon(name: string): string {
+  return HEROICON_ALLOWLIST.has(name) ? name : 'PuzzlePieceIcon'
 }
 
 function normalizeName(name: string): string {
@@ -418,7 +441,7 @@ function normalizeName(name: string): string {
     // it from, and (b) it's actually in the scaffold's vendored UI set.
     // HeroIcons (any PascalCase name ending in "Icon") are also allowed.
     if (IMPORT_MAP[name] && SUPPORTED_COMPONENTS.has(name)) return name
-    if (isHeroIconName(name)) return name
+    if (isHeroIconName(name)) return safeHeroIcon(name)
     return 'div'
   }
   return 'div'

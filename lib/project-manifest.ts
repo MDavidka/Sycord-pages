@@ -77,6 +77,20 @@ export interface ProjectTheme {
   fontBody: string
 }
 
+export type NavVariant =
+  | "commerce"
+  | "saas"
+  | "editorial"
+  | "portfolio"
+  | "app"
+
+export interface ProjectChrome {
+  brandName: string
+  navVariant: NavVariant
+  mobileNav: "fullscreen-sheet"
+  pageRhythm: "compact" | "spacious"
+}
+
 export interface ProjectManifest {
   /** Full website brief the user typed into the builder. */
   brief: string
@@ -84,6 +98,8 @@ export interface ProjectManifest {
   router: ManifestRouter
   /** Per-site theme fingerprint (set by buildProjectManifest). */
   theme: ProjectTheme
+  /** Shared site shell/header fingerprint (manifest-driven scaffold chrome). */
+  chrome: ProjectChrome
 }
 
 /**
@@ -117,6 +133,44 @@ function hashBrief(brief: string): number {
 export function pickTheme(brief: string): ProjectTheme {
   const idx = hashBrief(brief || "site") % THEME_PRESETS.length
   return THEME_PRESETS[idx]
+}
+
+const NAV_VARIANTS: NavVariant[] = [
+  "commerce",
+  "saas",
+  "editorial",
+  "portfolio",
+  "app",
+]
+
+function pickChrome(brief: string, plan: PlanEntry[]): ProjectChrome {
+  const h = hashBrief(brief || "site")
+  const text = brief.toLowerCase()
+  let navVariant: NavVariant = NAV_VARIANTS[h % NAV_VARIANTS.length]
+  if (/\b(shop|store|commerce|phone|cart|deal|product|checkout)\b/i.test(text)) {
+    navVariant = "commerce"
+  } else if (/\b(portfolio|gallery|artist|studio|photography|creative)\b/i.test(text)) {
+    navVariant = "portfolio"
+  } else if (/\b(blog|news|magazine|article|docs|publication)\b/i.test(text)) {
+    navVariant = "editorial"
+  } else if (/\b(dashboard|admin|crm|analytics|portal|internal)\b/i.test(text)) {
+    navVariant = "app"
+  }
+  const home = plan.find((p) => p.path === "/") ?? plan[0]
+  const brandFromPlan =
+    home?.title && home.title.toLowerCase() !== "home"
+      ? home.title
+      : ""
+  const brandFromBrief = brief
+    .split(/[,.:-]/)[0]
+    .replace(/\b(create|build|make|website|site|for)\b/gi, "")
+    .trim()
+  return {
+    brandName: (brandFromPlan || brandFromBrief || "Generated Site").slice(0, 32),
+    navVariant,
+    mobileNav: "fullscreen-sheet",
+    pageRhythm: h % 2 === 0 ? "spacious" : "compact",
+  }
 }
 
 function toPascalCase(input: string): string {
@@ -187,7 +241,7 @@ export function buildProjectManifest(brief: string, plan: PlanEntry[]): ProjectM
     })),
   }
 
-  return { brief, pages, router, theme: pickTheme(brief) }
+  return { brief, pages, router, theme: pickTheme(brief), chrome: pickChrome(brief, plan) }
 }
 
 /**
@@ -316,6 +370,8 @@ export function renderManifestForPrompt(manifest: ProjectManifest): string {
   lines.push(`  theme: ${manifest.theme.name} (primary hue ${manifest.theme.primaryHue}°, sat ${manifest.theme.primarySat}%, radius ${manifest.theme.radius}rem)`)
   lines.push(`    headingFont: ${manifest.theme.fontHeading}`)
   lines.push(`    bodyFont:    ${manifest.theme.fontBody}`)
+  lines.push(`  chrome: ${manifest.chrome.navVariant} nav, ${manifest.chrome.mobileNav}, ${manifest.chrome.pageRhythm} rhythm`)
+  lines.push(`    brandName: ${JSON.stringify(manifest.chrome.brandName)}`)
   lines.push(`  pages:`)
   for (const p of manifest.pages) {
     lines.push(`    - component: ${p.componentName}`)

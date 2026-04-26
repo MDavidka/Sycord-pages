@@ -12,19 +12,9 @@ import {
 import {
   Loader2,
   ChevronDown,
-  Sparkles,
-  FileCode,
-  ArrowRight,
   CheckCircle2,
-  Folder,
-  FolderOpen,
-  ChevronRight,
-  Code,
-  Bug,
-  Layout,
   Send,
   Zap,
-  Globe,
   Database,
   ThumbsUp,
   ThumbsDown,
@@ -65,7 +55,6 @@ const MODELS: ModelOption[] = [
 // Log-analysis constants — keep in sync with dashboard page fetchLogs
 const LOG_SUCCESS_PATTERNS = ['take a peek over at', 'deployment complete', 'pages.dev']
 const LOG_ERROR_PATTERNS   = ['error', 'fail', 'exception']
-const INFRASTRUCTURE_COMPONENTS = new Set(['header', 'footer', 'layout', 'navbar', 'sidebar', 'utils', 'db', 'types'])
 
 // How long to wait after deploy before the first log check (build pipeline startup time)
 const DEPLOY_LOG_CHECK_DELAY_MS = 8000
@@ -79,15 +68,6 @@ type GenerationPhase =
   | "done"
   | "clarifying"     // (compat) pre-submit holding phase for the composer
   | "fixing"         // Auto-fix compatibility
-
-// The five pipeline stages, in order, surfaced as the status bar.
-const PIPELINE_STAGES: { id: Exclude<GenerationPhase, "idle" | "done" | "clarifying" | "fixing">; label: string }[] = [
-  { id: "planning",   label: "Plan" },
-  { id: "styling",    label: "Style JSON" },
-  { id: "logic",      label: "Logic TS" },
-  { id: "converting", label: "Converter" },
-  { id: "deploying",  label: "Deploy" },
-]
 
 interface Message {
   id: string
@@ -105,394 +85,6 @@ export interface GeneratedPage {
   code: string
   timestamp: number
   usedFor?: string
-}
-
-// --- FILE TREE COMPONENT (VISUALIZATION) ---
-interface FileNode {
-  name: string
-  path: string
-  type: 'file' | 'folder'
-  children?: FileNode[]
-  status: 'pending' | 'generating' | 'done'
-}
-
-const FileTreeVisualizer = ({ pages, currentFile }: { pages: GeneratedPage[], currentFile?: string }) => {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ 'root': true, 'src': true })
-
-  // Build tree from pages
-  const buildTree = () => {
-    const root: FileNode[] = []
-    const addNode = (path: string, status: 'done' | 'generating') => {
-      const parts = path.split('/')
-      let current = root
-      let currentPath = ''
-
-      parts.forEach((part, i) => {
-        currentPath = currentPath ? `${currentPath}/${part}` : part
-        const isFile = i === parts.length - 1
-        let node = current.find(n => n.name === part)
-
-        if (!node) {
-          node = {
-            name: part,
-            path: currentPath,
-            type: isFile ? 'file' : 'folder',
-            children: isFile ? undefined : [],
-            status: isFile ? status : 'done'
-          }
-          current.push(node)
-        } else if (isFile && status === 'generating') {
-           node.status = 'generating'
-        }
-
-        if (!isFile && node.children) {
-          current = node.children
-        }
-      })
-    }
-
-    pages.forEach(p => addNode(p.name, 'done'))
-    if (currentFile) addNode(currentFile, 'generating')
-
-    const sortNodes = (nodes: FileNode[]) => {
-        nodes.sort((a, b) => {
-            if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
-            return a.name.localeCompare(b.name)
-        })
-        nodes.forEach(n => { if(n.children) sortNodes(n.children) })
-    }
-    sortNodes(root)
-    return root
-  }
-
-  const tree = buildTree()
-
-  const renderNode = (node: FileNode, depth: number) => {
-    const isExp = expanded[node.path] ?? true
-    const Icon = node.type === 'folder' ? (isExp ? FolderOpen : Folder) : FileCode
-    const isGenerating = node.status === 'generating'
-
-    return (
-      <div key={node.path}>
-        <div
-          className={cn(
-            "flex items-center gap-2 py-1.5 px-2 text-xs rounded-md hover:bg-white/5 cursor-pointer select-none transition-colors",
-            isGenerating && "bg-white/5 animate-pulse",
-            node.status === 'done' && node.type === 'file' && "text-zinc-400"
-          )}
-          style={{ paddingLeft: `${depth * 16 + 8}px` }}
-          onClick={() => {
-              if (node.type === 'folder') {
-                  setExpanded(p => ({...p, [node.path]: !isExp}))
-              }
-          }}
-        >
-          {node.type === 'folder' && (
-              <ChevronRight className={cn("h-3 w-3 transition-transform text-zinc-500", isExp && "rotate-90")} />
-          )}
-          {node.type === 'file' && <span className="w-3" />}
-
-          <Icon className={cn(
-              "h-3.5 w-3.5",
-              node.type === 'folder' ? "text-zinc-500" : "text-zinc-400",
-              isGenerating && "text-white"
-          )} />
-
-          <span className={cn("truncate flex-1 font-mono", isGenerating ? "text-white" : "text-zinc-400")}>{node.name}</span>
-
-          {isGenerating && <Loader2 className="h-3 w-3 animate-spin text-white" />}
-        </div>
-        {node.type === 'folder' && isExp && node.children && (
-            <div>{node.children.map(c => renderNode(c, depth + 1))}</div>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="font-mono bg-white/5 backdrop-blur-md rounded-xl border border-white/10 p-3 min-h-[200px] max-h-[400px] overflow-y-auto custom-scrollbar">
-      <div className="text-[10px] text-zinc-500 mb-3 flex items-center gap-2 uppercase tracking-wider font-semibold px-2">
-         <Folder className="h-3 w-3" /> Project Structure
-      </div>
-      {tree.length === 0 ? (
-          <div className="text-center py-8 text-zinc-600 text-xs italic">
-              Waiting for files...
-          </div>
-      ) : tree.map(n => renderNode(n, 0))}
-    </div>
-  )
-}
-
-// --- GENERATION STEP ICONS (matching the reference UI) ---
-// Using lucide-react icons for a modern, clean look
-
-/** Small inline step indicator — shows thinking bubble with animated dots */
-const StepIndicator = ({ phase, progress, currentFile }: {
-  phase: GenerationPhase
-  progress: { percent: number; done: number; total: number }
-  currentFile?: string
-}) => {
-  const phaseConfig: Record<string, { label: string }> = {
-    planning:    { label: "Planning" },
-    styling:     { label: "Writing style JSON" },
-    logic:       { label: "Writing logic TS" },
-    converting:  { label: "Running converter" },
-    deploying:   { label: "Deploying to runner" },
-    fixing:      { label: "Fixing" },
-  }
-
-  const displayable = ["planning", "styling", "logic", "converting", "deploying", "fixing"]
-  if (!displayable.includes(phase)) return null
-
-  const config = phaseConfig[phase]
-  if (!config) return null
-
-  return (
-    <div className="py-2 sm:py-2.5 flex flex-col items-start">
-      <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-bl-md bg-white/[0.06] border border-white/[0.06] max-w-[88%] sm:max-w-[82%]">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-1" />
-          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
-          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
-        </div>
-        <span className="text-xs text-zinc-500 ml-1">{config.label}</span>
-      </div>
-      {(phase === "styling" || phase === "logic" || phase === "converting") && progress.total > 0 && (
-        <div className="mt-2 ml-1 space-y-1.5 max-w-xs">
-          {currentFile && (
-            <p className="text-xs text-zinc-500 font-mono truncate">{currentFile}</p>
-          )}
-          <div className="flex items-center justify-between text-[10px] text-zinc-600">
-            <span>{progress.done}/{progress.total} files</span>
-            <span>{progress.percent}%</span>
-          </div>
-          <div className="h-1 w-full bg-zinc-800/80 rounded-full overflow-hidden">
-            <div className="h-full bg-zinc-500 rounded-full transition-all duration-500 ease-out" style={{ width: `${progress.percent}%` }} />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// --- PIPELINE STATUS BAR ---
-// Always-visible bar showing the 5 build stages (Plan → Style JSON → Logic TS
-// → Converter → Deploy). Highlights the current stage, marks completed stages
-// with a check, and shows per-stage progress when the stage operates over
-// multiple pages/files.
-const PipelineStatusBar = ({
-  phase,
-  stageProgress,
-  error,
-  done,
-}: {
-  phase: GenerationPhase
-  stageProgress: Partial<Record<"styling" | "logic" | "converting", { done: number; total: number }>>
-  error: string | null
-  done: boolean
-}) => {
-  if (phase === "idle" || phase === "clarifying") return null
-
-  const activeIndex = PIPELINE_STAGES.findIndex((s) => s.id === phase)
-
-  return (
-    <div className="w-full animate-in fade-in slide-in-from-top-2 duration-300 mb-3">
-      <div className="rounded-xl bg-white/[0.04] border border-white/[0.06] backdrop-blur-md px-3 py-3">
-        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar">
-          {PIPELINE_STAGES.map((stage, i) => {
-            const isComplete = done ? true : activeIndex > i
-            const isActive = !done && activeIndex === i
-            const isPending = !done && activeIndex < i && activeIndex !== -1
-            const hasError = !!error && isActive
-            const progress = stageProgress[stage.id as "styling" | "logic" | "converting"]
-
-            return (
-              <div key={stage.id} className="flex items-center gap-2 shrink-0">
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors border",
-                    isComplete && "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
-                    isActive && !hasError && "bg-white/10 border-white/20 text-white",
-                    isActive && hasError && "bg-red-500/10 border-red-500/30 text-red-300",
-                    isPending && "bg-transparent border-white/5 text-zinc-500",
-                  )}
-                >
-                  {isComplete ? (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  ) : isActive ? (
-                    hasError ? (
-                      <X className="h-3.5 w-3.5" />
-                    ) : (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    )
-                  ) : (
-                    <div className="h-3.5 w-3.5 rounded-full border border-current opacity-40" />
-                  )}
-                  <span className="whitespace-nowrap">{stage.label}</span>
-                  {isActive && progress && progress.total > 0 && (
-                    <span className="text-[10px] opacity-70 tabular-nums">
-                      {progress.done}/{progress.total}
-                    </span>
-                  )}
-                </div>
-                {i < PIPELINE_STAGES.length - 1 && (
-                  <div
-                    className={cn(
-                      "h-px w-6 sm:w-8 shrink-0 transition-colors",
-                      isComplete ? "bg-emerald-500/40" : "bg-white/10",
-                    )}
-                  />
-                )}
-              </div>
-            )
-          })}
-        </div>
-        {error && (
-          <div className="mt-2 text-[11px] text-red-400 flex items-center gap-1.5">
-            <X className="h-3 w-3 shrink-0" />
-            <span className="truncate">{error}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// --- SITEMAP COMPONENT ---
-
-interface SitemapNode {
-  page: string
-  path: string
-  leadsTo?: string[]
-  description?: string
-}
-
-const SitemapVisualizer = ({ nodes }: { nodes: SitemapNode[] }) => {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 })
-  const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 })
-
-  if (!nodes || nodes.length === 0) return null
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    setIsDragging(true)
-    setStartPos({ x: e.clientX, y: e.clientY })
-    if (containerRef.current) {
-      setScrollStart({ x: containerRef.current.scrollLeft, y: containerRef.current.scrollTop })
-    }
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging || !containerRef.current) return
-    const dx = e.clientX - startPos.x
-    const dy = e.clientY - startPos.y
-    containerRef.current.scrollLeft = scrollStart.x - dx
-    containerRef.current.scrollTop = scrollStart.y - dy
-  }
-
-  const handlePointerUp = () => {
-    setIsDragging(false)
-  }
-
-  // Layout constants for the sitemap grid
-  const TILE_WIDTH = 170
-  const TILE_GAP = 32
-  const CONTAINER_PADDING = 48
-  const TILE_HEIGHT = 80
-  const ROW_GAP = 24
-
-  // Arrange nodes in a visual layout
-  const cols = Math.min(nodes.length, 3)
-  const rows = Math.ceil(nodes.length / cols)
-
-  // SVG line calculation constants
-  const COL_SPACING = TILE_WIDTH + TILE_GAP  // 202px per column
-  const TILE_CENTER_X = Math.floor(TILE_WIDTH / 2) + 15  // horizontal center offset (85+24 padding)
-  const TILE_CENTER_Y = Math.floor(TILE_HEIGHT / 2) + CONTAINER_PADDING / 2  // vertical center offset (40+24 padding)
-  const ROW_SPACING = TILE_HEIGHT + ROW_GAP  // 104px per row
-
-  return (
-    <div className="mt-4 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5 px-1">
-        <Layout className="h-3 w-3" /> Sitemap
-      </div>
-      <div
-        ref={containerRef}
-        className={cn(
-          "rounded-2xl bg-zinc-900/80 backdrop-blur-md border border-white/[0.06] overflow-auto custom-scrollbar select-none",
-          "max-h-[260px] sm:max-h-[320px]",
-          isDragging ? "cursor-grabbing" : "cursor-grab"
-        )}
-        style={{ touchAction: 'none' }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      >
-        <div
-          className="relative p-4 sm:p-6"
-          style={{
-            minWidth: `${cols * TILE_WIDTH + (cols - 1) * TILE_GAP + CONTAINER_PADDING}px`,
-            minHeight: `${rows * TILE_HEIGHT + (rows - 1) * ROW_GAP + CONTAINER_PADDING}px`,
-          }}
-        >
-          {/* Connecting lines via SVG */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
-            {nodes.map((node, i) => {
-              if (i === 0) return null
-              const prevCol = (i - 1) % cols
-              const prevRow = Math.floor((i - 1) / cols)
-              const curCol = i % cols
-              const curRow = Math.floor(i / cols)
-              const x1 = prevCol * COL_SPACING + TILE_CENTER_X
-              const y1 = prevRow * ROW_SPACING + TILE_CENTER_Y
-              const x2 = curCol * COL_SPACING + TILE_CENTER_X
-              const y2 = curRow * ROW_SPACING + TILE_CENTER_Y
-              return (
-                <line
-                  key={`line-${i}`}
-                  x1={x1} y1={y1} x2={x2} y2={y2}
-                  stroke="rgba(255,255,255,0.06)"
-                  strokeWidth="1.5"
-                  strokeDasharray="4 4"
-                />
-              )
-            })}
-          </svg>
-
-          {/* Node tiles */}
-          <div
-            className="relative grid gap-4 sm:gap-6"
-            style={{
-              gridTemplateColumns: `repeat(${cols}, 1fr)`,
-              zIndex: 1,
-            }}
-          >
-            {nodes.map((node, i) => (
-              <div
-                key={i}
-                className="group flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] hover:border-white/[0.1] transition-all min-w-[140px]"
-              >
-                <div className="h-8 w-8 rounded-lg bg-white/[0.06] border border-white/[0.06] flex items-center justify-center group-hover:bg-white/[0.08] transition-colors">
-                  <Globe className="h-3.5 w-3.5 text-zinc-400" />
-                </div>
-                <p className="text-[11px] font-medium text-zinc-300 text-center truncate w-full">{node.page}</p>
-                <p className="text-[9px] text-zinc-600 text-center truncate w-full">{node.path}</p>
-                {node.leadsTo && node.leadsTo.length > 0 && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <ArrowRight className="h-2.5 w-2.5 text-zinc-600" />
-                    <span className="text-[8px] text-zinc-600 truncate max-w-[80px]">{node.leadsTo.join(", ")}</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // --- ENV VAR / INTEGRATION COMPONENTS ---
@@ -803,9 +395,6 @@ const ModelRow = ({
   </DropdownMenuItem>
 )
 
-// ThinkingCard, ProgressCard, SavingCard replaced by StepIndicator above
-
-
 const WebsitePreviewCardSkeleton = () => {
     return (
         <div className="w-full aspect-video rounded-2xl bg-[#1c1c1c] border border-white/5 shadow-2xl overflow-hidden relative animate-in fade-in slide-in-from-bottom-4 duration-700 backdrop-blur-xl flex flex-col items-center justify-center">
@@ -961,24 +550,12 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [step, setStep] = useState<GenerationPhase>("idle")
-  const [currentPlan, setCurrentPlan] = useState("")
   const [error, setError] = useState<string | null>(null)
 
-  const [activeFile, setActiveFile] = useState<string | undefined>(undefined)
-  const [activeFileUsedFor, setActiveFileUsedFor] = useState<string | undefined>(undefined)
-
-  const [isDeploying, setIsDeploying] = useState(false)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployResult, setDeployResult] = useState<{ url?: string; githubUrl?: string } | null>(null)
 
-  const [instruction, setInstruction] = useState<string>("")
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
-
-  // Per-stage progress counters for the PipelineStatusBar. Only the stages
-  // that iterate over pages/files populate this.
-  const [stageProgress, setStageProgress] = useState<
-    Partial<Record<"styling" | "logic" | "converting", { done: number; total: number }>>
-  >({})
 
   // Attachments staged for the current prompt (file metadata is included in the
   // user-visible message; full upload/processing is handled by the backend).
@@ -1010,58 +587,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const [fixHistory, setFixHistory] = useState<any[]>([])
 
-  // Sitemap — parsed from the generation plan
-  const [sitemap, setSitemap] = useState<SitemapNode[]>([])
-
   // Per-message feedback: 'like' | 'dislike' | 'report' | null
   const [messageFeedback, setMessageFeedback] = useState<Record<string, 'like' | 'dislike' | 'report' | null>>({})
-
-  // Whether auto-deploy has been triggered for this generation
-  const [autoDeployTriggered, setAutoDeployTriggered] = useState(false)
-
-  // Track question count to limit to 2 questions before auto-proceeding
-  const [questionCount, setQuestionCount] = useState(0)
-
-  /** Parse sitemap nodes from the plan instruction text */
-  const parseSitemap = (planText: string) => {
-    const nodes: SitemapNode[] = []
-    // Look for page structure section
-    const pageSection = planText.match(/## 4\. Page Structure([\s\S]*?)(?:## 5|$)/i)
-    if (pageSection) {
-      const lines = pageSection[1].split('\n')
-      for (const line of lines) {
-        const match = line.match(/[-*]\s*\*\*([^*]+)\*\*\/?:?\s*(.*)/)
-        if (match) {
-          const pageName = match[1].replace(/\/$/, '').trim()
-          const desc = match[2].trim()
-          const path = '/' + pageName.toLowerCase().replace(/\s+/g, '-')
-          // Extract navigation links mentioned in description
-          const linkMatches = desc.match(/(?:link|lead|navigate|redirect|go)\s+to\s+([^.,]+)/gi) || []
-          const leadsTo = linkMatches.map(l => l.replace(/.*to\s+/i, '').trim())
-          nodes.push({ page: pageName, path, description: desc, leadsTo })
-        }
-      }
-    }
-    // Fallback: extract from [N] file markers that look like pages
-    if (nodes.length === 0) {
-      // Look for components that are likely pages (not header/footer/utils)
-      const componentMatches = planText.matchAll(/\[\d+\]\s*(src\/components\/([\w-]+)\.tsx?)\s*:\s*\[usedfor\](.*?)\[usedfor\]/g)
-      for (const m of componentMatches) {
-        const fullPath = m[1]
-        const name = m[2]
-        const desc = m[3]
-        
-        if (!INFRASTRUCTURE_COMPONENTS.has(name.toLowerCase())) {
-          nodes.push({ 
-            page: name.charAt(0).toUpperCase() + name.slice(1), 
-            path: name.toLowerCase() === 'home' ? '/' : '/' + name.toLowerCase(), 
-            description: desc 
-          })
-        }
-      }
-    }
-    setSitemap(nodes)
-  }
 
   const giveFeedback = (msgId: string, kind: 'like' | 'dislike' | 'report') => {
     setMessageFeedback(prev => ({
@@ -1069,21 +596,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       [msgId]: prev[msgId] === kind ? null : kind,
     }))
   }
-
-
-  // Compute file-level progress from instruction
-  const getProgress = () => {
-    if (!instruction) return { done: 0, total: 0, percent: 0 }
-    const totalMatch = instruction.match(/\[\d+\]/g) || []
-    const doneMatch = instruction.match(/\[Done\]/gi) || []
-    const total = totalMatch.length + doneMatch.length
-    const done = doneMatch.length
-    const percent = total > 0 ? Math.round((done / total) * 100) : 0
-    return { done, total, percent }
-  }
-
-  const progress = getProgress()
-
   // Ref for auto-scrolling to the bottom of the chat
   const chatBottomRef = useRef<HTMLDivElement>(null)
 
@@ -1101,7 +613,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
   const startAutoFixSession = async (logs: string[]) => {
     setStep("fixing")
-    setCurrentPlan("Analyzing logs...")
     setFixHistory([])
 
     const logMessage: Message = {
@@ -1232,7 +743,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
        }
 
        if (result.action === 'read') {
-          setCurrentPlan(`Reading ${result.targetFile}...`)
           const page = generatedPages.find(p => p.name === result.targetFile)
           if (page) {
              actionResult = { status: 'success', code: page.code }
@@ -1248,7 +758,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           }
        }
        else if (result.action === 'move') {
-          setCurrentPlan(`Moving ${result.targetFile}...`)
           const page = generatedPages.find(p => p.name === result.targetFile)
           if (page) {
              const newName = result.newPath
@@ -1267,7 +776,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           }
        }
        else if (result.action === 'delete') {
-          setCurrentPlan(`Deleting ${result.targetFile}...`)
           setGeneratedPages(prev => prev.filter(p => p.name !== result.targetFile))
           await fetch(`/api/projects/${projectId}/pages?name=${encodeURIComponent(result.targetFile)}`, { method: "DELETE" })
           setMessages(prev => [...prev, {
@@ -1278,7 +786,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
           actionSummary = `Deleted ${result.targetFile}`
        }
        else if (result.action === 'write') {
-          setCurrentPlan(`Fixing ${result.targetFile}...`)
           await updateFile(result.targetFile, result.code, 'Auto-fix')
 
           setMessages(prev => [...prev, {
@@ -1329,14 +836,8 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     setMessages(prev => [...prev, userMessage])
     setAttachments([])
     setError(null)
-    setSitemap([])
-    setQuestionCount(0)
     setGeneratedPages([])
-    setStageProgress({})
-    setInstruction("Planning site structure...")
     setStep("planning")
-    setActiveFile(undefined)
-    setActiveFileUsedFor(undefined)
     setDeploySuccess(false)
     setDeployResult(null)
 
@@ -1367,12 +868,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       // on slugs, file paths, logic module specifiers, and page titles.
       const manifest = archData.manifest
 
-      setSitemap(plan.map(p => ({
-        page: p.title || p.path || "Page",
-        path: p.path || "/",
-        description: p.description,
-      })))
-
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -1382,13 +877,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       // ─── Stage 2: Style JSON (per page) ─────────────────────────────────
       setStep("styling")
-      setStageProgress({ styling: { done: 0, total: plan.length } })
-      setInstruction(`Writing style JSON (0/${plan.length})`)
 
       const styledPages: Array<{ path: string; title: string; description?: string; features?: string[]; tree: unknown }> = []
       for (let i = 0; i < plan.length; i++) {
         const page = plan[i]
-        setActiveFile(page.path)
         const res = await fetch('/api/ai/generate-style', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1406,20 +898,14 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         }
         const data = await res.json()
         styledPages.push({ ...page, tree: data.tree })
-        setStageProgress(p => ({ ...p, styling: { done: i + 1, total: plan.length } }))
-        setInstruction(`Writing style JSON (${i + 1}/${plan.length})`)
       }
-      setActiveFile(undefined)
 
       // ─── Stage 3: Logic TS (per page, only where handlers exist) ────────
       setStep("logic")
-      setStageProgress(p => ({ ...p, logic: { done: 0, total: styledPages.length } }))
-      setInstruction(`Writing logic TS (0/${styledPages.length})`)
 
       const pagesWithLogic: Array<typeof styledPages[number] & { logicCode: string | null }> = []
       for (let i = 0; i < styledPages.length; i++) {
         const sp = styledPages[i]
-        setActiveFile(sp.path)
         const res = await fetch('/api/ai/generate-logic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1439,15 +925,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         }
         const data = await res.json() as { code: string | null }
         pagesWithLogic.push({ ...sp, logicCode: data.code ?? null })
-        setStageProgress(p => ({ ...p, logic: { done: i + 1, total: styledPages.length } }))
-        setInstruction(`Writing logic TS (${i + 1}/${styledPages.length})`)
       }
-      setActiveFile(undefined)
 
       // ─── Stage 4: Converter (deterministic) ─────────────────────────────
       setStep("converting")
-      setStageProgress(p => ({ ...p, converting: { done: 0, total: 1 } }))
-      setInstruction("Running converter...")
 
       const orchRes = await fetch('/api/ai/orchestrator', {
         method: 'POST',
@@ -1460,7 +941,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       }
       const orchData = await orchRes.json()
       const orchestratedFiles: GeneratedPage[] = Array.isArray(orchData.files) ? orchData.files : []
-      setStageProgress(p => ({ ...p, converting: { done: 1, total: 1 } }))
 
       // Persist the generated files so the workspace reflects the new output.
       const clearRes = await fetch(`/api/projects/${projectId}/pages?all=true`, { method: "DELETE" })
@@ -1469,7 +949,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
       const savedPages: GeneratedPage[] = []
       for (let i = 0; i < orchestratedFiles.length; i++) {
         const file = orchestratedFiles[i]
-        setActiveFile(file.name)
         const saveRes = await fetch(`/api/projects/${projectId}/pages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1479,7 +958,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         savedPages.push({ ...file, timestamp: Date.now() })
         setGeneratedPages([...savedPages])
       }
-      setActiveFile(undefined)
 
       // ─── Stage 5: Deploy to Flask runner ────────────────────────────────
       setMessages(prev => [...prev, {
@@ -1488,7 +966,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
         content: "Files generated. Deploying to the runner now...",
       }])
       setStep("deploying")
-      setInstruction("Deploying to Flask runner...")
 
       const deployRes = await fetch("/api/deploy", {
         method: "POST",
@@ -1514,8 +991,14 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
 
       setStep("done")
     } catch (err: any) {
-      setError(err.message || "Generation failed")
-      // Keep the current phase so the status bar shows which stage broke.
+      const failure = err?.message || "Generation failed"
+      setError(failure)
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 9).toString(),
+        role: "assistant",
+        content: `Generation failed: ${failure}`,
+      }])
+      setStep("clarifying")
     }
   }
 
@@ -1562,32 +1045,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
     }
   }
 
-  const handleDeploy = async () => {
-      setIsDeploying(true)
-      try {
-          const res = await fetch("/api/deploy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ projectId })
-          })
-          const data = await res.json()
-          if(data.success) {
-              setDeploySuccess(true)
-              setDeployResult(data)
-              // After deploy succeeds, wait for the build then check logs for errors
-              if (data.repoId) {
-                  setTimeout(() => checkDeployLogs(data.repoId), DEPLOY_LOG_CHECK_DELAY_MS)
-              }
-          } else {
-              setError(data.error)
-          }
-      } catch(e: any) {
-          setError(e.message)
-      } finally {
-          setIsDeploying(false)
-      }
-  }
-
   return (
     <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
 
@@ -1624,14 +1081,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 {/* CHAT / GENERATING STATE */}
                 {step !== 'idle' && (
                     <div className="flex flex-col pt-6 sm:pt-8 pb-4">
-
-                        {/* Pipeline status bar — always visible during a build */}
-                        <PipelineStatusBar
-                            phase={step}
-                            stageProgress={stageProgress}
-                            error={error}
-                            done={step === 'done'}
-                        />
 
                         {/* Messages */}
                         {messages
@@ -1702,14 +1151,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                             ))
                         }
 
-                        {/* ── Small inline step indicator (1 at a time) ── */}
-                        <StepIndicator phase={step} progress={progress} currentFile={activeFile} />
-
-                        {/* Sitemap visualization (parsed from plan) */}
-                        {sitemap.length > 0 && (step === 'styling' || step === 'logic' || step === 'converting' || step === 'deploying' || step === 'done') && (
-                            <SitemapVisualizer nodes={sitemap} />
-                        )}
-
                         {step === 'done' && (
                             <div className="py-3 mt-2 flex items-center gap-2.5 step-enter">
                                 <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
@@ -1733,7 +1174,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                                         setStep('idle')
                                         setInput("")
                                         setMessages([])
-                                        setAutoDeployTriggered(false)
                                     }}
                                 >
                                     Create Another
@@ -1747,35 +1187,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, autoFi
                 )}
             </div>
         </div>
-
-        {/* Global Warning Box */}
-        {error && (
-            <div className="mx-auto w-full max-w-2xl px-3 sm:px-4 md:px-0 mb-2 relative z-20">
-                <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-                    <div className="flex items-start gap-2.5">
-                        <Bug className="h-4 w-4 shrink-0 text-amber-300 mt-0.5" />
-                        <div>
-                            <p className="text-xs uppercase tracking-wide text-amber-300/90">Warning</p>
-                            <p className="text-sm text-amber-100">{error}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <Button
-                            className="text-xs text-amber-200 hover:text-white h-auto p-0 min-w-0 underline underline-offset-2"
-                            onClick={() => setStep('idle')}
-                        >
-                            Reset
-                        </Button>
-                        <Button
-                            className="text-xs text-amber-200/80 hover:text-white h-auto p-0 min-w-0"
-                            onClick={() => setError(null)}
-                        >
-                            Dismiss
-                        </Button>
-                    </div>
-                </div>
-            </div>
-        )}
 
         {/* Input Bar — always at bottom */}
         <div className="w-full relative z-20">
