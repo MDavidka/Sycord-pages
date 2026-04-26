@@ -520,12 +520,13 @@ function buildAppTsx(routes: ScaffoldRoute[]): string {
 
   return `import { Routes, Route } from 'react-router-dom'
 import { SiteNav } from './components/site-nav'
+import siteStructure from './data/site-structure.json'
 ${imports}
 
 export default function App() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <SiteNav />
+      <SiteNav items={siteStructure.nav} />
       <main className="flex-1">
         <Routes>
 ${routeEntries}
@@ -540,32 +541,32 @@ ${fallback}
 
 // A responsive top-of-page nav linking every planned route.
 // Desktop: inline shadcn Buttons. Mobile: Sheet with a Bars3Icon trigger.
-function buildSiteNavTsx(routes: ScaffoldRoute[]): string {
-  const items = routes
-    .map(
-      (r) =>
-        `  { to: '${r.path}', label: '${escapeJsxText(r.componentName).replace(/'/g, "\\'")}' }`,
-    )
-    .join(",\n")
+function buildSiteNavTsx(): string {
   return `import { Link, useLocation } from 'react-router-dom'
 import { Bars3Icon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 
-const NAV_ITEMS = [
-${items},
-]
+type SiteNavItem = {
+  to: string
+  label: string
+}
 
-export function SiteNav() {
+type SiteNavProps = {
+  items: SiteNavItem[]
+}
+
+export function SiteNav({ items }: SiteNavProps) {
   const { pathname } = useLocation()
+  const navItems = items.length > 0 ? items : [{ to: '/', label: 'Home' }]
   return (
     <nav className="w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
       <div className="container mx-auto flex items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
         <Link to="/" className="font-semibold tracking-tight">
-          {NAV_ITEMS[0]?.label ?? 'Home'}
+          {navItems[0]?.label ?? 'Home'}
         </Link>
         <div className="hidden md:flex items-center gap-1">
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <Link key={item.to} to={item.to}>
               <Button
                 variant={pathname === item.to ? 'secondary' : 'ghost'}
@@ -586,7 +587,7 @@ export function SiteNav() {
             <SheetContent side="right" className="w-64">
               <SheetTitle className="mb-4">Menu</SheetTitle>
               <div className="flex flex-col gap-1">
-                {NAV_ITEMS.map((item) => (
+                {navItems.map((item) => (
                   <Link key={item.to} to={item.to}>
                     <Button
                       variant={pathname === item.to ? 'secondary' : 'ghost'}
@@ -605,6 +606,16 @@ export function SiteNav() {
   )
 }
 `
+}
+
+function buildSiteStructureJson(routes: ScaffoldRoute[]): string {
+  const structure = {
+    nav: routes.map((r) => ({
+      to: r.path,
+      label: escapeJsxText(r.componentName),
+    })),
+  }
+  return JSON.stringify(structure, null, 2) + "\n"
 }
 
 function escapeJsxText(s: string): string {
@@ -642,7 +653,8 @@ export function buildViteScaffold(
     { name: "src/index.css", code: indexCss, timestamp: now },
     { name: "src/main.tsx", code: MAIN_TSX, timestamp: now },
     { name: "src/App.tsx", code: buildAppTsx(routes), timestamp: now },
-    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(routes), timestamp: now },
+    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(), timestamp: now },
+    { name: "src/data/site-structure.json", code: buildSiteStructureJson(routes), timestamp: now },
     { name: "src/lib/utils.ts", code: LIB_UTILS_TS, timestamp: now },
     ...vendorHooks(now),
     ...vendorShadcnFiles(now),
