@@ -447,6 +447,45 @@ function normalizeTree(node: UINode): UINode {
   }
 }
 
+// ─── STRIP GLOBAL CHROME (defense-in-depth) ───────────────────────────────────
+//
+// The Style stage prompt forbids the model from emitting global header /
+// nav / footer inside a page body — the Vite scaffold renders those once
+// at the App root from the manifest's chrome descriptor. But models still
+// emit them ~10% of the time, which results in two stacked headers in the
+// generated site. So before we render the page we walk the top-level
+// children and drop anything that looks like a site-wide chrome element.
+
+const GLOBAL_CHROME_NAMES = new Set([
+  'SiteNav', 'SiteFooter', 'SiteHeader', 'TopBar', 'GlobalNav', 'NavBar',
+  'Footer', 'Header', 'Navbar', 'NewsletterFooter',
+])
+
+function looksLikeGlobalNavTag(node: UINode): boolean {
+  // Bare semantic tags at the very root of the tree.
+  if (node.name === 'header' || node.name === 'nav' || node.name === 'footer') {
+    return true
+  }
+  return GLOBAL_CHROME_NAMES.has(node.name)
+}
+
+function stripGlobalChrome(root: UINode): UINode {
+  // Only strip at the IMMEDIATE first / last child level. We don't want to
+  // recurse — an in-page <nav> inside a docs sidebar is fine, only the
+  // wrapping site shell is the bug.
+  if (!root.children || root.children.length === 0) return root
+  let children = [...root.children]
+  // Drop matching first child(ren).
+  while (children.length > 0 && looksLikeGlobalNavTag(children[0])) {
+    children.shift()
+  }
+  // Drop matching last child(ren).
+  while (children.length > 0 && looksLikeGlobalNavTag(children[children.length - 1])) {
+    children.pop()
+  }
+  return { ...root, children }
+}
+
 // ─── COLLECT STATE + HANDLERS ─────────────────────────────────────────────────
 
 interface Collected {
@@ -638,8 +677,11 @@ function convertTreeToTypeScriptInternal(
     throw new Error('SCHEMA_ERROR: Missing type="ui-tree" or component field')
   }
 
-  // 2. Normalize names
-  const normalized = normalizeTree(tree.component)
+  // 2. Normalize names + strip out any global header/nav/footer the AI may
+  //    have emitted at the top of the tree (the scaffold renders those once
+  //    above every route from the manifest chrome — having them in the body
+  //    too produces a duplicate site shell).
+  const normalized = stripGlobalChrome(normalizeTree(tree.component))
 
   // 3. Collect
   const acc: Collected = {
@@ -754,6 +796,69 @@ export function convertJSONToTypeScript(
     stateVars: converted.stateVars,
     handlerNames: converted.handlerNames,
   }
+}
+
+// ─── VALIDATION ───────────────────────────────────────────────────────────────
+
+export interface ValidationWarning {
+  level: 'warn' | 'error'
+  code: string
+  message: string
+}
+
+/**
+ * Cheap text-level checks on the converted .tsx (after orchestrator merges
+ * in the page imports and document.title side-effect). Returns warnings the
+ * orchestrator can log, but doesn't reject the file — the build itself is
+ * the canonical validation.
+ *
+ * Catches common AI mistakes that survive type-checking:
+ * - duplicate React imports
+ * - import paths that don't resolve in the Vite scaffold (only @/ allowed)
+ * - bare emoji characters in JSX
+ * - hard-coded color utilities (bg-blue-500, text-gray-700) instead of
+ *   semantic tokens (bg-primary, text-foreground)
+ */
+export function validateConvertedTsx(code: string, opts: { componentName: string }): ValidationWarning[] {
+  const warnings: ValidationWarning[] = []
+
+  // 1. Duplicate React imports.
+  const reactImports = (code.match(/^import React\b.*$/gm) ?? []).length
+  if (reactImports > 1) {
+    warnings.push({ level: 'warn', code: 'DUPLICATE_REACT_IMPORT', message: 'Page contains multiple `import React` lines.' })
+  }
+
+  // 2. Component declaration matches expected name.
+  const exportName = opts.componentName
+  if (!new RegExp(`export\\s+(?:default\\s+)?function\\s+${exportName}\\b`).test(code)) {
+    warnings.push({ level: 'warn', code: 'COMPONENT_NAME_MISMATCH', message: `Expected exported function ${exportName}().` })
+  }
+
+  // 3. Disallowed import roots (only @/, react, react-router-dom, react-dom, @heroicons/react/24/outline, recharts, ./… etc.).
+  const importLines = code.match(/^import\s.+from\s+['"](.+?)['"]/gm) ?? []
+  const allowedPrefixes = ['@/', 'react', 'react-dom', 'react-router-dom', '@heroicons/react/24/outline', 'recharts', 'lucide-react', 'clsx', 'tailwind-merge', './', '../']
+  for (const line of importLines) {
+    const m = line.match(/from\s+['"](.+?)['"]/)
+    if (!m) continue
+    const src = m[1]
+    if (!allowedPrefixes.some((p) => src === p || src.startsWith(p))) {
+      warnings.push({ level: 'warn', code: 'UNKNOWN_IMPORT', message: `Unknown import path "${src}".` })
+    }
+  }
+
+  // 4. Hard-coded Tailwind colour utilities.
+  const HARDCODED_COLORS = /\b(bg|text|border|ring|from|to|via)-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/
+  if (HARDCODED_COLORS.test(code)) {
+    warnings.push({ level: 'warn', code: 'HARDCODED_COLOR', message: 'Hard-coded color utility detected (use bg-primary / bg-muted / text-foreground / etc).' })
+  }
+
+  // 5. Emoji in JSX (after the converter step they should all be HeroIcons).
+  const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u
+  if (EMOJI_RE.test(code)) {
+    warnings.push({ level: 'warn', code: 'EMOJI_IN_JSX', message: 'Emoji character detected — replace with a HeroIcon.' })
+  }
+
+  return warnings
 }
 
 // ─── FILE-BASED ENTRY POINT ───────────────────────────────────────────────────

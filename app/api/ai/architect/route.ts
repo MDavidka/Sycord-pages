@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
-import type { PlanEntry } from "@/lib/plan-types"
+import type { PlanEntry, PlanContentType } from "@/lib/plan-types"
 import { buildProjectManifest, type ProjectManifest } from "@/lib/project-manifest"
 
 // Stage 1 of the pipeline: the "Plan" step.
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       role: "system" as const,
       content: `${prompts.builderPlan}
 
-The downstream pipeline builds a complete Vite + React + TypeScript project with react-router-dom routing and a shared <SiteNav /> that auto-links every route. Your "Plan" step produces the sitemap + per-page feature list that Style and Logic stages will consume. Do NOT emit any UI tree, component, or code — the later stages handle that.
+The downstream pipeline builds a complete Vite + React + TypeScript project with react-router-dom routing. The Vite scaffold renders a shared <SiteNav /> + <SiteFooter /> around every route — those are picked from a separate "chrome" descriptor by the system, NOT by you. Your "Plan" step only describes the routes and their bodies. Do NOT emit UI trees, components, code, or chrome details.
 
 THINK CAREFULLY before emitting the array. For each page, decide:
 1. WHY this page exists — which concrete user goal / question / action does it address?
@@ -55,12 +55,18 @@ THINK CAREFULLY before emitting the array. For each page, decide:
 Do NOT emit a page just because a template usually has it — every entry must earn its place in the user journey.
 
 Return strictly a JSON array of page objects, each with:
-- "path":   URL path starting with "/" (e.g. "/", "/about", "/pricing", "/contact"). First entry MUST be "/".
+- "path":   URL path starting with "/" (e.g. "/", "/about", "/pricing", "/contact"). First entry MUST be "/". Use kebab-case for multi-word slugs (/case-studies, /trade-in).
 - "title":  short human-readable page title (used as the React component name and shown in the shared nav). PascalCase-friendly: "Home", "About", "Pricing", "Contact".
 - "description": 3–5 sentences (REQUIRED, never empty) covering: (a) the page's purpose and target audience, (b) the SPECIFIC content sections it renders — be exhaustive (hero copy, feature grid, testimonials, pricing table, form fields, FAQ items, stats, etc.), (c) what the primary CTA does and where it sends the user. Tailor every description to THE BRIEF — a yoga studio's /about should mention the studio's story and instructors, NOT generic placeholder copy. Be specific — "hero + 3-column feature grid with icons + testimonial carousel + CTA linking to /contact" is good; "about the product" is not.
 - "features": array of AT LEAST 4 short strings (REQUIRED, never fewer) describing user-facing interactive features on the page (e.g. "Contact form posts to /api/contact", "Toggle between monthly/yearly pricing", "FAQ accordion with 6 entries", "Newsletter signup at the bottom"). Every feature must be concrete enough for a developer to implement and specific to THIS brief.
+- "primaryAction":   short string describing the page's primary call-to-action ("happy path"), e.g. "Shop now", "Book a class", "Start free trial", "Contact us". REQUIRED.
+- "secondaryAction": optional short string for the secondary CTA, e.g. "View deals", "See pricing", "Download brochure". Omit if there is genuinely no second CTA.
+- "audience": short string describing WHO the visitor is at this page, e.g. "first-time visitor", "returning customer comparing plans", "lead ready to convert", "logged-in user managing their account". REQUIRED.
+- "contentType": one of "marketing" | "commerce" | "dashboard" | "docs" | "portfolio" | "support" | "blog". Pick the closest match for the page's PRIMARY purpose. REQUIRED.
 
 ANTI-DUPLICATE RULE: Every page MUST be structurally and contextually distinct from every other page in the sitemap. If two pages would render the same skeleton (same hero + same grid), redesign one of them with a different content type (table, accordion, form, gallery, article, dashboard widgets). Empty / under-filled pages are a bug.
+
+CHROME / NAV / FOOTER RULE: You are NOT designing the header, footer, brand mark, mobile menu, or "buy / login" buttons that appear on every page. The scaffold derives those from a separate ProjectChrome descriptor. Do NOT mention them in your descriptions or features. Page descriptions are about what's UNIQUE TO THAT PAGE'S BODY.
 
 No markdown, no prose, no wrapping object — just the JSON array.`,
     },
@@ -107,18 +113,36 @@ Return only the JSON array described above. The sitemap MUST contain at least 4 
     )
   }
 
-  // Ensure the plan entries have the required fields so downstream stages don't
-  // crash on missing metadata.
+  const validContentTypes = new Set<PlanContentType>([
+    "marketing", "commerce", "dashboard", "docs", "portfolio", "support", "blog",
+  ])
+
+  // Ensure the plan entries have the required fields so downstream stages
+  // don't crash on missing metadata.
   plan = plan
     .filter((p) => p && typeof p === "object")
-    .map((p, i) => ({
-      path: typeof p.path === "string" && p.path.trim() ? p.path.trim() : `/page-${i + 1}`,
-      title: typeof p.title === "string" && p.title.trim() ? p.title.trim() : `Page ${i + 1}`,
-      description: typeof p.description === "string" ? p.description.trim() : undefined,
-      features: Array.isArray(p.features)
-        ? p.features.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
-        : undefined,
-    }))
+    .map((p, i) => {
+      const ct = (p as { contentType?: unknown }).contentType
+      const contentType: PlanContentType | undefined =
+        typeof ct === "string" && validContentTypes.has(ct as PlanContentType)
+          ? (ct as PlanContentType)
+          : undefined
+      return {
+        path: typeof p.path === "string" && p.path.trim() ? p.path.trim() : `/page-${i + 1}`,
+        title: typeof p.title === "string" && p.title.trim() ? p.title.trim() : `Page ${i + 1}`,
+        description: typeof p.description === "string" ? p.description.trim() : undefined,
+        features: Array.isArray(p.features)
+          ? p.features.filter((f): f is string => typeof f === "string" && f.trim().length > 0)
+          : undefined,
+        primaryAction:
+          typeof p.primaryAction === "string" && p.primaryAction.trim() ? p.primaryAction.trim() : undefined,
+        secondaryAction:
+          typeof p.secondaryAction === "string" && p.secondaryAction.trim() ? p.secondaryAction.trim() : undefined,
+        audience:
+          typeof p.audience === "string" && p.audience.trim() ? p.audience.trim() : undefined,
+        contentType,
+      }
+    })
 
   // Enforce "/" as the first entry so SiteNav renders it at position 0.
   const rootIdx = plan.findIndex((p) => p.path === "/")
@@ -132,9 +156,21 @@ Return only the JSON array described above. The sitemap MUST contain at least 4 
   // Guarantee a minimum of 3 routes so the generated site actually has
   // multi-page navigation (the user asked for pagination + reachable routes).
   const defaults: PlanEntry[] = [
-    { path: "/", title: "Home", description: "Landing page with hero, highlights, and call-to-action linking to the rest of the site." },
-    { path: "/about", title: "About", description: "Short story of the brand, mission and team; ends with a CTA back to Home or Contact." },
-    { path: "/contact", title: "Contact", description: "Contact form with name / email / message plus a card summarizing other contact channels." },
+    {
+      path: "/", title: "Home",
+      description: "Landing page with hero, highlights, and call-to-action linking to the rest of the site.",
+      primaryAction: "Get started", audience: "first-time visitor", contentType: "marketing",
+    },
+    {
+      path: "/about", title: "About",
+      description: "Short story of the brand, mission and team; ends with a CTA back to Home or Contact.",
+      primaryAction: "Learn more", audience: "first-time visitor", contentType: "marketing",
+    },
+    {
+      path: "/contact", title: "Contact",
+      description: "Contact form with name / email / message plus a card summarizing other contact channels.",
+      primaryAction: "Send message", audience: "lead ready to convert", contentType: "support",
+    },
   ]
   for (const d of defaults) {
     if (plan.length >= 3) break
@@ -146,73 +182,16 @@ Return only the JSON array described above. The sitemap MUST contain at least 4 
   // Derive the project manifest deterministically from the plan. File
   // structure (componentName / slug / pageFile / logicFile) is fixed here
   // and cannot drift across stages. Each page is also assigned a layout
-  // hint (split-hero, masonry-grid, sidebar-content, …) so the Style stage
-  // varies the structure across routes instead of repeating a single
-  // template — this addresses the "every page looks the same" problem.
+  // hint, page role, and section signature inside buildProjectManifest so
+  // the Style stage varies the structure across routes instead of repeating
+  // a single template.
   const manifest: ProjectManifest = buildProjectManifest(prompt, plan)
-  assignLayoutHints(manifest)
 
   await logAiDebug("Architect Parse Success", {
     pages: plan.length,
-    layouts: manifest.pages.map((p) => `${p.route}=${p.layoutHint ?? "?"}`),
+    layouts: manifest.pages.map((p) => `${p.route}=${p.layoutHint}`),
+    chrome: manifest.chrome,
+    visualStyle: manifest.design.visualStyle,
   })
   return NextResponse.json({ plan, manifest })
-}
-
-// Distinct page layout structures. Each name maps to a concrete arrangement
-// of sections the Style stage MUST follow. See the Style prompt for the
-// per-layout section contract — the Architect's job here is just to ensure
-// no two adjacent pages get the same layout, so the generated site doesn't
-// feel like the same skeleton repeated.
-const LAYOUT_HINTS = [
-  "split-hero",         // 50/50 hero with text+CTA on one side, illustration/feature on the other
-  "full-bleed-hero",    // Massive hero w/ background panel + 3-column features below
-  "masonry-grid",       // Asymmetric tile grid (e.g. portfolio / showcase)
-  "sidebar-content",    // Left sticky sidebar nav + scrolling main column
-  "table-dashboard",    // Stats row + Table + Tabs (dashboard / data heavy)
-  "two-column-article", // Long-form text in left column + sticky aside (TOC/CTA)
-  "faq-stack",          // Hero + Accordion-driven FAQ + supporting cards
-  "pricing-table",      // Hero + 3-column pricing cards + feature comparison table
-  "contact-split",      // Form on one side + contact details / map / channels on the other
-  "testimonial-wall",   // Hero + 3x3 testimonial grid + social proof bar
-  "feature-spotlight",  // Hero + alternating left/right feature blocks (3 of them)
-  "media-gallery",      // Hero + Carousel + Bento-style media tiles
-] as const
-
-function assignLayoutHints(manifest: ProjectManifest): void {
-  const path = (p: string) => p.toLowerCase()
-  const byRoute: Record<string, string> = {
-    "/": "full-bleed-hero",
-    "/about": "two-column-article",
-    "/contact": "contact-split",
-    "/pricing": "pricing-table",
-    "/faq": "faq-stack",
-    "/dashboard": "table-dashboard",
-    "/blog": "sidebar-content",
-    "/portfolio": "masonry-grid",
-    "/gallery": "media-gallery",
-    "/testimonials": "testimonial-wall",
-    "/features": "feature-spotlight",
-    "/team": "testimonial-wall",
-  }
-
-  // Track what each page got so we never assign the same layout to two
-  // adjacent pages — even if their routes weren't in the seeded map.
-  let prev = ""
-  manifest.pages.forEach((p, i) => {
-    let hint = byRoute[path(p.route)]
-    if (!hint) {
-      // Cycle through the remaining layouts in deterministic-but-varied order
-      // so different briefs with similar route names still differ.
-      const offset = (i + (manifest.brief.length % LAYOUT_HINTS.length)) % LAYOUT_HINTS.length
-      hint = LAYOUT_HINTS[offset]
-    }
-    if (hint === prev) {
-      // Bump to the next layout to break adjacent collisions.
-      const idx = LAYOUT_HINTS.indexOf(hint as (typeof LAYOUT_HINTS)[number])
-      hint = LAYOUT_HINTS[(idx + 1) % LAYOUT_HINTS.length]
-    }
-    p.layoutHint = hint
-    prev = hint
-  })
 }

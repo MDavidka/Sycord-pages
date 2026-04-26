@@ -174,8 +174,11 @@ RESPONSIVE LAYOUT (mobile-first, required):
 - Grids must collapse on mobile: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" is correct; "grid grid-cols-3" alone breaks on phones.
 - Navigation that has many items must use Sheet or DropdownMenu on mobile (toggle icon <= md breakpoint) and inline NavigationMenu on desktop.
 
-PAGE-SCOPE RULE (critical):
-- This Style call produces ONE single route's content. The page body must stand alone — do NOT render a site-wide header/footer/nav inside it (the scaffold already adds <SiteNav /> above every route).
+PAGE-SCOPE RULE (critical, do NOT violate):
+- This Style call produces ONE single route's BODY. Render the body content of this route only.
+- The Vite scaffold ALREADY renders <SiteNav /> above every route AND <SiteFooter /> below every route. Those are picked from the manifest's "chrome" descriptor. DO NOT emit a header, top nav, brand mark, login/cart button row, mobile menu, breadcrumb-bar-as-header, footer, social row, or copyright line in your tree. ANY of those at the root of your output is a critical bug.
+- Specifically forbidden as the FIRST or LAST top-level child of the tree: <header>, <nav>, <footer>, anything named SiteNav / SiteFooter / TopBar / SiteHeader / GlobalNav / Footer / NewsletterFooter, or a <div> styled like a header (sticky+top-0 with a brand label).
+- Do NOT render a list of links to OTHER planned routes as a primary navigation block. Cross-route links belong in the global SiteNav (already rendered). Inline CTA links to a single related route are fine ({"name":"a","props":{"href":"/contact"}}).
 - Do NOT wrap the page in <Tabs> to switch between the OTHER planned routes. Tabs are only acceptable for in-page sub-sections of THIS specific route (e.g. "Mission / Team" on the About page). Switching between the site's top-level routes must happen via the shared SiteNav + full-page navigation.
 
 NAVIGATION (in-page links to other routes):
@@ -222,7 +225,15 @@ ${manifest
 Generate the UI tree JSON for ONLY this page:
 - path: ${page.path}
 - title: ${page.title}
-${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}\n- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}\n- logicModule (handlers you reference will live here): ${manifestPage.logicModule}\n- layoutHint (you MUST follow this layout structure; see LAYOUT VARIETY in the system prompt): ${manifestPage.layoutHint ?? "full-bleed-hero"}` : ""}
+${manifestPage ? `- componentName (must match the manifest): ${manifestPage.componentName}
+- pageTitle (show as heading AND used for document.title): ${manifestPage.pageTitle}
+- logicModule (handlers you reference will live here): ${manifestPage.logicModule}
+- pageRole (drives the kind of layout this page must have): ${manifestPage.pageRole}
+- layoutHint (you MUST follow this layout structure; see LAYOUT VARIETY in the system prompt): ${manifestPage.layoutHint}
+- sectionSignature (canonical sequence of sections; emit them in THIS order): ${manifestPage.sectionSignature}
+- density: ${manifestPage.density}
+${manifestPage.primaryAction ? `- primaryAction: ${manifestPage.primaryAction}` : ""}
+${manifestPage.secondaryAction ? `- secondaryAction: ${manifestPage.secondaryAction}` : ""}` : ""}
 - description: ${page.description ?? "(no description)"}
 ${page.features && page.features.length > 0 ? `- features:\n${page.features.map((f) => `    • ${f}`).join("\n")}` : ""}
 
@@ -326,6 +337,10 @@ Every feature above MUST be represented in the tree as a real, named element (Ca
     pageTitle: page.title,
     description: page.description,
     features: page.features,
+    layoutHint: "full-bleed-hero",
+    sectionSignature: "hero-features-cta",
+    pageRole: page.path === "/" ? "landing" : "about",
+    density: "balanced",
   }
   return NextResponse.json({ tree: buildFallbackTree(adhocPage), fallback: true })
 }

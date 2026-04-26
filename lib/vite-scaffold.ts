@@ -1,5 +1,6 @@
 import fs from "fs"
 import path from "path"
+import type { ProjectChrome, NavVariant, FooterVariant } from "./project-manifest"
 
 // A single file emitted into the generated project.
 export interface ScaffoldFile {
@@ -520,6 +521,7 @@ function buildAppTsx(routes: ScaffoldRoute[]): string {
 
   return `import { Routes, Route } from 'react-router-dom'
 import { SiteNav } from './components/site-nav'
+import { SiteFooter } from './components/site-footer'
 ${imports}
 
 export default function App() {
@@ -532,70 +534,194 @@ ${routeEntries}
 ${fallback}
         </Routes>
       </main>
+      <SiteFooter />
     </div>
   )
 }
 `
 }
 
-// A responsive top-of-page nav linking every planned route.
-// Desktop: inline shadcn Buttons. Mobile: Sheet with a Bars3Icon trigger.
-function buildSiteNavTsx(routes: ScaffoldRoute[]): string {
-  const items = routes
+// ---------------------------------------------------------------------------
+// SiteNav — generated from the manifest's ProjectChrome. Each navVariant
+// renders a structurally distinct header so a commerce site doesn't look
+// like a SaaS site doesn't look like a docs site.
+//
+// All variants share:
+//   - controlled mobile sheet (closes on link click — fixes "menu stays open")
+//   - full-width sheet on phones (w-full max-w-none, sm:w-80 sm:max-w-sm)
+//   - active-route highlight via useLocation()
+// ---------------------------------------------------------------------------
+
+const DEFAULT_CHROME: ProjectChrome = {
+  brandName: "Site",
+  navVariant: "saas",
+  headerLayout: "left-brand-center-nav-right-actions",
+  mobileNav: "fullscreen-sheet",
+  footerVariant: "simple",
+  ctaLabel: "Get started",
+  ctaHref: "/",
+}
+
+function navItemLabel(componentName: string): string {
+  // PascalCase → spaced label, e.g. "TradeIn" → "Trade In", "Home" → "Home".
+  const spaced = componentName.replace(/([a-z])([A-Z])/g, "$1 $2")
+  return spaced
+}
+
+function buildNavItems(routes: ScaffoldRoute[]): string {
+  return routes
     .map(
       (r) =>
-        `  { to: '${r.path}', label: '${escapeJsxText(r.componentName).replace(/'/g, "\\'")}' }`,
+        `  { to: '${r.path}', label: '${navItemLabel(r.componentName).replace(/'/g, "\\'")}' }`,
     )
     .join(",\n")
+}
+
+interface NavBuildOpts {
+  routes: ScaffoldRoute[]
+  chrome: ProjectChrome
+}
+
+function buildCommerceNav({ routes, chrome }: NavBuildOpts): string {
   return `import { Link, useLocation } from 'react-router-dom'
-import { Bars3Icon } from '@heroicons/react/24/outline'
+import { useState } from 'react'
+import { Bars3Icon, ShoppingCartIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
 const NAV_ITEMS = [
-${items},
+${buildNavItems(routes)},
 ]
 
 export function SiteNav() {
   const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
   return (
-    <nav className="w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
-      <div className="container mx-auto flex items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/" className="font-semibold tracking-tight">
-          {NAV_ITEMS[0]?.label ?? 'Home'}
-        </Link>
+    <nav className="w-full border-b border-border bg-background sticky top-0 z-50">
+      <div className="container mx-auto flex items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <Link to="/" className="text-lg font-bold tracking-tight">{BRAND}</Link>
+        <div className="hidden lg:flex flex-1 max-w-md mx-4 items-center rounded-md border border-border bg-muted/40 px-3 py-1.5">
+          <MagnifyingGlassIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">Search the store</span>
+        </div>
         <div className="hidden md:flex items-center gap-1">
           {NAV_ITEMS.map((item) => (
             <Link key={item.to} to={item.to}>
-              <Button
-                variant={pathname === item.to ? 'secondary' : 'ghost'}
-                size="sm"
-              >
+              <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">
                 {item.label}
               </Button>
             </Link>
           ))}
         </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Link to={CTA.href}>
+            <Button size="sm" className="hidden sm:inline-flex">
+              <ShoppingCartIcon className="h-4 w-4 mr-2" />
+              {CTA.label}
+            </Button>
+          </Link>
+          <div className="md:hidden">
+            <Sheet open={open} onOpenChange={setOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Open menu">
+                  <Bars3Icon className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+                <SheetTitle className="mb-4">{BRAND}</SheetTitle>
+                <div className="flex flex-col gap-1">
+                  {NAV_ITEMS.map((item) => (
+                    <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                      <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
+                        {item.label}
+                      </Button>
+                    </Link>
+                  ))}
+                  <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                    <Button className="w-full">
+                      <ShoppingCartIcon className="h-4 w-4 mr-2" />
+                      {CTA.label}
+                    </Button>
+                  </Link>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function buildEditorialNav({ routes, chrome }: NavBuildOpts): string {
+  // Editorial: centered brand on desktop with split nav left/right, sheet on mobile.
+  const left = routes.slice(0, Math.ceil(routes.length / 2))
+  const right = routes.slice(Math.ceil(routes.length / 2))
+  return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Bars3Icon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
+const NAV_LEFT = [
+${left.map((r) => `  { to: '${r.path}', label: '${navItemLabel(r.componentName).replace(/'/g, "\\'")}' }`).join(",\n")},
+]
+
+const NAV_RIGHT = [
+${right.map((r) => `  { to: '${r.path}', label: '${navItemLabel(r.componentName).replace(/'/g, "\\'")}' }`).join(",\n")},
+]
+
+const NAV_ITEMS = [...NAV_LEFT, ...NAV_RIGHT]
+
+export function SiteNav() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  return (
+    <nav className="w-full border-b border-border bg-background">
+      <div className="container mx-auto flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+        <div className="hidden md:flex items-center gap-3">
+          {NAV_LEFT.map((item) => (
+            <Link key={item.to} to={item.to} className={pathname === item.to ? 'font-semibold' : 'text-muted-foreground hover:text-foreground transition'}>
+              {item.label}
+            </Link>
+          ))}
+        </div>
+        <Link to="/" className="text-2xl font-serif font-bold tracking-tight">{BRAND}</Link>
+        <div className="hidden md:flex items-center gap-3">
+          {NAV_RIGHT.map((item) => (
+            <Link key={item.to} to={item.to} className={pathname === item.to ? 'font-semibold' : 'text-muted-foreground hover:text-foreground transition'}>
+              {item.label}
+            </Link>
+          ))}
+        </div>
         <div className="md:hidden">
-          <Sheet>
+          <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open menu">
                 <Bars3Icon className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-64">
-              <SheetTitle className="mb-4">Menu</SheetTitle>
+            <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+              <SheetTitle className="mb-4">{BRAND}</SheetTitle>
               <div className="flex flex-col gap-1">
                 {NAV_ITEMS.map((item) => (
-                  <Link key={item.to} to={item.to}>
-                    <Button
-                      variant={pathname === item.to ? 'secondary' : 'ghost'}
-                      className="w-full justify-start"
-                    >
+                  <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                    <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
                       {item.label}
                     </Button>
                   </Link>
                 ))}
+                <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                  <Button className="w-full">{CTA.label}</Button>
+                </Link>
               </div>
             </SheetContent>
           </Sheet>
@@ -607,8 +733,483 @@ export function SiteNav() {
 `
 }
 
-function escapeJsxText(s: string): string {
-  return s.replace(/[{}]/g, "")
+function buildPortfolioNav({ routes, chrome }: NavBuildOpts): string {
+  return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Bars3Icon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
+const NAV_ITEMS = [
+${buildNavItems(routes)},
+]
+
+export function SiteNav() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  return (
+    <nav className="w-full">
+      <div className="container mx-auto flex items-center justify-between px-4 py-6 sm:px-6 lg:px-8">
+        <Link to="/" className="text-base font-medium tracking-wide uppercase">{BRAND}</Link>
+        <div className="hidden md:flex items-center gap-6 text-sm">
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.to} to={item.to} className={pathname === item.to ? 'font-semibold underline underline-offset-4' : 'text-muted-foreground hover:text-foreground transition'}>
+              {item.label}
+            </Link>
+          ))}
+          <Link to={CTA.href}>
+            <Button size="sm">{CTA.label}</Button>
+          </Link>
+        </div>
+        <div className="md:hidden">
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Open menu">
+                <Bars3Icon className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+              <SheetTitle className="mb-4">{BRAND}</SheetTitle>
+              <div className="flex flex-col gap-1">
+                {NAV_ITEMS.map((item) => (
+                  <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                    <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
+                      {item.label}
+                    </Button>
+                  </Link>
+                ))}
+                <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                  <Button className="w-full">{CTA.label}</Button>
+                </Link>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function buildAppNav({ routes, chrome }: NavBuildOpts): string {
+  return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Bars3Icon, UserCircleIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
+const NAV_ITEMS = [
+${buildNavItems(routes)},
+]
+
+export function SiteNav() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  return (
+    <nav className="w-full border-b border-border bg-background sticky top-0 z-50">
+      <div className="container mx-auto flex items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
+        <Link to="/" className="text-sm font-semibold tracking-tight">{BRAND}</Link>
+        <div className="hidden md:flex items-center gap-1 ml-4">
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.to} to={item.to}>
+              <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">
+                {item.label}
+              </Button>
+            </Link>
+          ))}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <Link to={CTA.href}>
+            <Button size="sm" variant="outline" className="hidden sm:inline-flex">
+              <UserCircleIcon className="h-4 w-4 mr-2" />
+              {CTA.label}
+            </Button>
+          </Link>
+          <div className="md:hidden">
+            <Sheet open={open} onOpenChange={setOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Open menu">
+                  <Bars3Icon className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+                <SheetTitle className="mb-4">{BRAND}</SheetTitle>
+                <div className="flex flex-col gap-1">
+                  {NAV_ITEMS.map((item) => (
+                    <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                      <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
+                        {item.label}
+                      </Button>
+                    </Link>
+                  ))}
+                  <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                    <Button className="w-full">{CTA.label}</Button>
+                  </Link>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function buildDocsNav({ routes, chrome }: NavBuildOpts): string {
+  return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
+const NAV_ITEMS = [
+${buildNavItems(routes)},
+]
+
+export function SiteNav() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  return (
+    <nav className="w-full border-b border-border bg-background sticky top-0 z-50">
+      <div className="container mx-auto flex items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <Link to="/" className="text-base font-semibold tracking-tight flex items-center gap-2">
+          {BRAND}
+          <Badge variant="outline">Docs</Badge>
+        </Link>
+        <div className="hidden md:flex items-center gap-4 text-sm ml-4">
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.to} to={item.to} className={pathname === item.to ? 'font-semibold' : 'text-muted-foreground hover:text-foreground transition'}>
+              {item.label}
+            </Link>
+          ))}
+        </div>
+        <div className="hidden md:flex items-center gap-2 ml-auto rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground">
+          <MagnifyingGlassIcon className="h-4 w-4" />
+          <span>Search docs</span>
+        </div>
+        <div className="md:hidden ml-auto">
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Open menu">
+                <Bars3Icon className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+              <SheetTitle className="mb-4">{BRAND}</SheetTitle>
+              <div className="flex flex-col gap-1">
+                {NAV_ITEMS.map((item) => (
+                  <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                    <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
+                      {item.label}
+                    </Button>
+                  </Link>
+                ))}
+                <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                  <Button className="w-full">{CTA.label}</Button>
+                </Link>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function buildAgencyNav({ routes, chrome }: NavBuildOpts): string {
+  return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Bars3Icon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
+const NAV_ITEMS = [
+${buildNavItems(routes)},
+]
+
+export function SiteNav() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  return (
+    <nav className="w-full">
+      <div className="container mx-auto flex items-center justify-between px-4 py-5 sm:px-6 lg:px-8">
+        <Link to="/" className="text-2xl font-bold tracking-tight">{BRAND}<span className="text-primary">.</span></Link>
+        <div className="hidden md:flex items-center gap-1">
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.to} to={item.to}>
+              <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">
+                {item.label}
+              </Button>
+            </Link>
+          ))}
+          <Link to={CTA.href} className="ml-2">
+            <Button size="sm">{CTA.label}</Button>
+          </Link>
+        </div>
+        <div className="md:hidden">
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Open menu">
+                <Bars3Icon className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+              <SheetTitle className="mb-4">{BRAND}</SheetTitle>
+              <div className="flex flex-col gap-1">
+                {NAV_ITEMS.map((item) => (
+                  <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                    <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
+                      {item.label}
+                    </Button>
+                  </Link>
+                ))}
+                <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                  <Button className="w-full">{CTA.label}</Button>
+                </Link>
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function buildSaasNav({ routes, chrome }: NavBuildOpts): string {
+  return `import { Link, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Bars3Icon } from '@heroicons/react/24/outline'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const CTA = { label: ${JSON.stringify(chrome.ctaLabel)}, href: ${JSON.stringify(chrome.ctaHref)} }
+
+const NAV_ITEMS = [
+${buildNavItems(routes)},
+]
+
+export function SiteNav() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(false)
+  return (
+    <nav className="w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
+      <div className="container mx-auto flex items-center justify-between gap-2 px-4 py-3 sm:px-6 lg:px-8">
+        <Link to="/" className="font-semibold tracking-tight">{BRAND}</Link>
+        <div className="hidden md:flex items-center gap-1">
+          {NAV_ITEMS.map((item) => (
+            <Link key={item.to} to={item.to}>
+              <Button variant={pathname === item.to ? 'secondary' : 'ghost'} size="sm">
+                {item.label}
+              </Button>
+            </Link>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Link to={CTA.href}>
+            <Button size="sm" className="hidden sm:inline-flex">{CTA.label}</Button>
+          </Link>
+          <div className="md:hidden">
+            <Sheet open={open} onOpenChange={setOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Open menu">
+                  <Bars3Icon className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full max-w-none border-l border-border bg-background p-6 sm:w-80 sm:max-w-sm">
+                <SheetTitle className="mb-4">{BRAND}</SheetTitle>
+                <div className="flex flex-col gap-1">
+                  {NAV_ITEMS.map((item) => (
+                    <Link key={item.to} to={item.to} onClick={() => setOpen(false)}>
+                      <Button variant={pathname === item.to ? 'secondary' : 'ghost'} className="w-full justify-start">
+                        {item.label}
+                      </Button>
+                    </Link>
+                  ))}
+                  <Link to={CTA.href} onClick={() => setOpen(false)} className="mt-4">
+                    <Button className="w-full">{CTA.label}</Button>
+                  </Link>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+      </div>
+    </nav>
+  )
+}
+`
+}
+
+function buildSiteNavTsx(routes: ScaffoldRoute[], chrome: ProjectChrome): string {
+  const opts: NavBuildOpts = { routes, chrome }
+  switch (chrome.navVariant as NavVariant) {
+    case "commerce":  return buildCommerceNav(opts)
+    case "editorial": return buildEditorialNav(opts)
+    case "portfolio": return buildPortfolioNav(opts)
+    case "app":       return buildAppNav(opts)
+    case "docs":      return buildDocsNav(opts)
+    case "agency":    return buildAgencyNav(opts)
+    case "saas":
+    default:          return buildSaasNav(opts)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SiteFooter — picked from chrome.footerVariant.
+// ---------------------------------------------------------------------------
+
+function buildSimpleFooter(chrome: ProjectChrome): string {
+  return `import { Link } from 'react-router-dom'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+
+export function SiteFooter() {
+  return (
+    <footer className="w-full border-t border-border bg-background py-8 mt-auto">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+        <p>© {new Date().getFullYear()} {BRAND}. All rights reserved.</p>
+        <div className="flex items-center gap-4">
+          <Link to="/" className="hover:text-foreground transition">Home</Link>
+          <Link to="/" className="hover:text-foreground transition">Privacy</Link>
+          <Link to="/" className="hover:text-foreground transition">Terms</Link>
+        </div>
+      </div>
+    </footer>
+  )
+}
+`
+}
+
+function buildMinimalFooter(chrome: ProjectChrome): string {
+  return `const BRAND = ${JSON.stringify(chrome.brandName)}
+
+export function SiteFooter() {
+  return (
+    <footer className="w-full py-6 mt-auto">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-muted-foreground">
+        © {new Date().getFullYear()} {BRAND}
+      </div>
+    </footer>
+  )
+}
+`
+}
+
+function buildMultiColumnFooter(chrome: ProjectChrome, routes: ScaffoldRoute[]): string {
+  const columnGroups = [
+    { title: "Shop",     items: routes.filter((r) => /\/(shop|products?|deals?|catalog)/.test(r.path)).slice(0, 4) },
+    { title: "Support",  items: routes.filter((r) => /\/(support|help|faq|contact)/.test(r.path)).slice(0, 4) },
+    { title: "Company",  items: routes.filter((r) => /\/(about|story|team|careers?)/.test(r.path)).slice(0, 4) },
+  ].map((g) => ({
+    title: g.title,
+    items: g.items.length > 0 ? g.items : routes.slice(0, Math.min(3, routes.length)),
+  }))
+  const columnsLiteral = columnGroups
+    .map(
+      (g) =>
+        `  { title: '${g.title}', items: [\n${g.items
+          .map((r) => `    { to: '${r.path}', label: '${navItemLabel(r.componentName).replace(/'/g, "\\'")}' }`)
+          .join(",\n")},\n  ]}`,
+    )
+    .join(",\n")
+  return `import { Link } from 'react-router-dom'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+const COLUMNS = [
+${columnsLiteral},
+]
+
+export function SiteFooter() {
+  return (
+    <footer className="w-full border-t border-border bg-card mt-auto">
+      <div className="container mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 px-4 sm:px-6 lg:px-8 py-12">
+        <div>
+          <p className="text-base font-semibold">{BRAND}</p>
+          <p className="mt-2 text-sm text-muted-foreground">© {new Date().getFullYear()} {BRAND}</p>
+        </div>
+        {COLUMNS.map((col) => (
+          <div key={col.title}>
+            <p className="text-sm font-semibold mb-3">{col.title}</p>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              {col.items.map((item) => (
+                <li key={item.to}>
+                  <Link to={item.to} className="hover:text-foreground transition">{item.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </footer>
+  )
+}
+`
+}
+
+function buildNewsletterFooter(chrome: ProjectChrome): string {
+  return `import { Link } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+
+const BRAND = ${JSON.stringify(chrome.brandName)}
+
+export function SiteFooter() {
+  return (
+    <footer className="w-full border-t border-border bg-card mt-auto">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        <div>
+          <p className="text-2xl font-semibold">Stay in the loop</p>
+          <p className="mt-2 text-sm text-muted-foreground">Subscribe for updates from {BRAND}. No spam, unsubscribe any time.</p>
+        </div>
+        <form className="flex flex-col sm:flex-row gap-2 w-full" onSubmit={(e) => e.preventDefault()}>
+          <Input type="email" placeholder="you@example.com" aria-label="Email" />
+          <Button type="submit">Subscribe</Button>
+        </form>
+      </div>
+      <div className="border-t border-border">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-muted-foreground">
+          <p>© {new Date().getFullYear()} {BRAND}</p>
+          <div className="flex items-center gap-4">
+            <Link to="/" className="hover:text-foreground transition">Privacy</Link>
+            <Link to="/" className="hover:text-foreground transition">Terms</Link>
+          </div>
+        </div>
+      </div>
+    </footer>
+  )
+}
+`
+}
+
+function buildSiteFooterTsx(routes: ScaffoldRoute[], chrome: ProjectChrome): string {
+  switch (chrome.footerVariant as FooterVariant) {
+    case "multi-column": return buildMultiColumnFooter(chrome, routes)
+    case "newsletter":   return buildNewsletterFooter(chrome)
+    case "minimal":      return buildMinimalFooter(chrome)
+    case "simple":
+    default:             return buildSimpleFooter(chrome)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -627,11 +1228,14 @@ function escapeJsxText(s: string): string {
 export function buildViteScaffold(
   routes: ScaffoldRoute[],
   theme?: { primaryHue: number; primarySat: number; radius: number; fontHeading: string; fontBody: string },
+  chrome?: ProjectChrome,
+  manifestJson?: string,
 ): ScaffoldFile[] {
   const now = Date.now()
   const indexCss = theme ? buildIndexCss(theme) : INDEX_CSS
   const indexHtml = theme ? buildIndexHtml(theme) : INDEX_HTML
-  return [
+  const effectiveChrome: ProjectChrome = chrome ?? DEFAULT_CHROME
+  const files: ScaffoldFile[] = [
     { name: "package.json", code: JSON.stringify(PACKAGE_JSON, null, 2) + "\n", timestamp: now },
     { name: "vite.config.ts", code: VITE_CONFIG_TS, timestamp: now },
     { name: "tsconfig.json", code: TSCONFIG_JSON, timestamp: now },
@@ -642,9 +1246,16 @@ export function buildViteScaffold(
     { name: "src/index.css", code: indexCss, timestamp: now },
     { name: "src/main.tsx", code: MAIN_TSX, timestamp: now },
     { name: "src/App.tsx", code: buildAppTsx(routes), timestamp: now },
-    { name: "src/components/site-nav.tsx", code: buildSiteNavTsx(routes), timestamp: now },
+    { name: "src/components/site-nav.tsx",    code: buildSiteNavTsx(routes, effectiveChrome),    timestamp: now },
+    { name: "src/components/site-footer.tsx", code: buildSiteFooterTsx(routes, effectiveChrome), timestamp: now },
     { name: "src/lib/utils.ts", code: LIB_UTILS_TS, timestamp: now },
     ...vendorHooks(now),
     ...vendorShadcnFiles(now),
   ]
+  if (manifestJson) {
+    // Drop the manifest into the project for debugging the generator output.
+    // Tree-shaken away at build time, no runtime cost.
+    files.push({ name: "src/generated-manifest.json", code: manifestJson, timestamp: now })
+  }
+  return files
 }
