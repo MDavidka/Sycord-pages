@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { logAiDebug } from "@/lib/logger"
-import { convertTreeToTypeScript, type UINode, type UITreeRoot } from "@/sample-conveter"
+import { convertTreeToTypeScript, validateConvertedTsx, type UINode, type UITreeRoot } from "@/sample-conveter"
 import { buildViteScaffold, type ScaffoldFile, type ScaffoldRoute } from "@/lib/vite-scaffold"
 import type { ProjectManifest, ManifestPage } from "@/lib/project-manifest"
 
@@ -272,9 +272,17 @@ export async function POST(req: Request) {
       // browser tab reflects the page name even if the model forgot a <title>.
       componentCode = injectDocumentTitle(componentCode, pageTitle)
 
+      const finalCode = sanitizeModelCode(componentCode)
+      const warnings = validateConvertedTsx(finalCode, { componentName: pageName })
+      if (warnings.length > 0) {
+        await logAiDebug("Orchestrator Page Warnings", {
+          page: pageFilePath,
+          warnings: warnings.map((w) => `${w.code}: ${w.message}`),
+        })
+      }
       pageFiles.push({
         name: pageFilePath,
-        code: sanitizeModelCode(componentCode),
+        code: finalCode,
         timestamp: Date.now(),
       })
 
@@ -317,10 +325,12 @@ export async function POST(req: Request) {
     }
 
     // Scaffold: package.json, vite.config, tsconfig, tailwind, index.html,
-    // main.tsx, App.tsx (routed), index.css, src/lib/utils.ts and the
-    // vendored shadcn UI components. Emitted AFTER the page files so the
-    // `files` array has a stable, human-readable ordering (pages first).
-    const scaffoldFiles = buildViteScaffold(routes, manifest?.theme)
+    // main.tsx, App.tsx (routed), index.css, src/components/site-nav,
+    // src/components/site-footer, src/lib/utils.ts and the vendored shadcn
+    // UI components. Emitted AFTER the page files so the `files` array has a
+    // stable, human-readable ordering (pages first).
+    const manifestJson = manifest ? JSON.stringify(manifest, null, 2) + "\n" : undefined
+    const scaffoldFiles = buildViteScaffold(routes, manifest?.theme, manifest?.chrome, manifestJson)
     const files = [...pageFiles, ...scaffoldFiles]
 
     await logAiDebug("Orchestrator Success", {
