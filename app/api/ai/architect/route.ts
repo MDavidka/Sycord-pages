@@ -7,6 +7,7 @@ import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
 import { tierOf } from "@/lib/credits"
 import type { PlanEntry } from "@/lib/plan-types"
 import { buildProjectManifest, type ProjectManifest } from "@/lib/project-manifest"
+import { enrichManifestDesign } from "@/lib/design-genome"
 
 // Stage 1 of the pipeline: the "Plan" step.
 //
@@ -169,9 +170,17 @@ Return only the JSON array described above. The sitemap MUST contain at least 4 
   const manifest: ProjectManifest = buildProjectManifest(prompt, plan)
   assignLayoutHints(manifest)
 
+  // Phase 3 ("Designing") of the rebuilt pipeline: deterministically attach
+  // chrome (brand, nav variant, header layout, footer, primary CTA) +
+  // visual design genome + per-page layoutSignature. Every downstream stage
+  // (Style, Logic, Converter, Vite-scaffold) reads these from the manifest.
+  enrichManifestDesign(manifest)
+
   await logAiDebug("Architect Parse Success", {
     pages: plan.length,
-    layouts: manifest.pages.map((p) => `${p.route}=${p.layoutHint ?? "?"}`),
+    layouts: manifest.pages.map((p) => `${p.route}=${p.layoutHint ?? "?"}/${p.layoutSignature ?? "?"}`),
+    chrome: manifest.chrome,
+    design: manifest.design,
   })
   return NextResponse.json({ plan, manifest })
 }
