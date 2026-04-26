@@ -31,190 +31,294 @@ export interface ConversionResult {
 
 // ─── IMPORT MAP ───────────────────────────────────────────────────────────────
 
-const IMPORT_MAP: Record<string, string> = {
-  Button: '@/components/ui/button',
-  Card: '@/components/ui/card',
-  CardHeader: '@/components/ui/card',
-  CardTitle: '@/components/ui/card',
-  CardDescription: '@/components/ui/card',
-  CardAction: '@/components/ui/card',
-  CardContent: '@/components/ui/card',
-  CardFooter: '@/components/ui/card',
-  Dialog: '@/components/ui/dialog',
-  DialogTrigger: '@/components/ui/dialog',
-  DialogContent: '@/components/ui/dialog',
-  DialogHeader: '@/components/ui/dialog',
-  DialogFooter: '@/components/ui/dialog',
-  DialogTitle: '@/components/ui/dialog',
-  DialogDescription: '@/components/ui/dialog',
-  DialogClose: '@/components/ui/dialog',
-  AlertDialog: '@/components/ui/alert-dialog',
-  AlertDialogTrigger: '@/components/ui/alert-dialog',
-  AlertDialogContent: '@/components/ui/alert-dialog',
-  AlertDialogHeader: '@/components/ui/alert-dialog',
-  AlertDialogFooter: '@/components/ui/alert-dialog',
-  AlertDialogTitle: '@/components/ui/alert-dialog',
-  AlertDialogDescription: '@/components/ui/alert-dialog',
-  AlertDialogAction: '@/components/ui/alert-dialog',
-  AlertDialogCancel: '@/components/ui/alert-dialog',
-  Input: '@/components/ui/input',
-  Label: '@/components/ui/label',
-  Textarea: '@/components/ui/textarea',
-  Checkbox: '@/components/ui/checkbox',
-  Switch: '@/components/ui/switch',
-  Slider: '@/components/ui/slider',
-  Badge: '@/components/ui/badge',
-  Skeleton: '@/components/ui/skeleton',
-  Separator: '@/components/ui/separator',
-  Progress: '@/components/ui/progress',
-  Tabs: '@/components/ui/tabs',
-  TabsList: '@/components/ui/tabs',
-  TabsTrigger: '@/components/ui/tabs',
-  TabsContent: '@/components/ui/tabs',
-  Select: '@/components/ui/select',
-  SelectTrigger: '@/components/ui/select',
-  SelectValue: '@/components/ui/select',
-  SelectContent: '@/components/ui/select',
-  SelectItem: '@/components/ui/select',
-  SelectLabel: '@/components/ui/select',
-  SelectSeparator: '@/components/ui/select',
-  SelectGroup: '@/components/ui/select',
-  SelectScrollUpButton: '@/components/ui/select',
-  SelectScrollDownButton: '@/components/ui/select',
-  Popover: '@/components/ui/popover',
-  PopoverTrigger: '@/components/ui/popover',
-  PopoverContent: '@/components/ui/popover',
-  Command: '@/components/ui/command',
-  CommandInput: '@/components/ui/command',
-  CommandList: '@/components/ui/command',
-  CommandEmpty: '@/components/ui/command',
-  CommandGroup: '@/components/ui/command',
-  CommandItem: '@/components/ui/command',
-  CommandSeparator: '@/components/ui/command',
-  CommandShortcut: '@/components/ui/command',
-  Calendar: '@/components/ui/calendar',
+// Every export from every vendored shadcn/ui file (see components/ui/).
+// Kept exhaustive on purpose so the AI Style stage can freely pick any
+// shadcn primitive without hallucinating component names.
+export const IMPORT_MAP: Record<string, string> = {
   Accordion: '@/components/ui/accordion',
+  AccordionContent: '@/components/ui/accordion',
   AccordionItem: '@/components/ui/accordion',
   AccordionTrigger: '@/components/ui/accordion',
-  AccordionContent: '@/components/ui/accordion',
-  Sheet: '@/components/ui/sheet',
-  SheetTrigger: '@/components/ui/sheet',
-  SheetContent: '@/components/ui/sheet',
-  SheetHeader: '@/components/ui/sheet',
-  SheetFooter: '@/components/ui/sheet',
-  SheetTitle: '@/components/ui/sheet',
-  SheetDescription: '@/components/ui/sheet',
-  SheetClose: '@/components/ui/sheet',
+  Alert: '@/components/ui/alert',
+  AlertDescription: '@/components/ui/alert',
+  AlertTitle: '@/components/ui/alert',
+  AlertDialog: '@/components/ui/alert-dialog',
+  AlertDialogAction: '@/components/ui/alert-dialog',
+  AlertDialogCancel: '@/components/ui/alert-dialog',
+  AlertDialogContent: '@/components/ui/alert-dialog',
+  AlertDialogDescription: '@/components/ui/alert-dialog',
+  AlertDialogFooter: '@/components/ui/alert-dialog',
+  AlertDialogHeader: '@/components/ui/alert-dialog',
+  AlertDialogOverlay: '@/components/ui/alert-dialog',
+  AlertDialogPortal: '@/components/ui/alert-dialog',
+  AlertDialogTitle: '@/components/ui/alert-dialog',
+  AlertDialogTrigger: '@/components/ui/alert-dialog',
+  AspectRatio: '@/components/ui/aspect-ratio',
+  Avatar: '@/components/ui/avatar',
+  AvatarFallback: '@/components/ui/avatar',
+  AvatarImage: '@/components/ui/avatar',
+  Badge: '@/components/ui/badge',
+  Breadcrumb: '@/components/ui/breadcrumb',
+  BreadcrumbEllipsis: '@/components/ui/breadcrumb',
+  BreadcrumbItem: '@/components/ui/breadcrumb',
+  BreadcrumbLink: '@/components/ui/breadcrumb',
+  BreadcrumbList: '@/components/ui/breadcrumb',
+  BreadcrumbPage: '@/components/ui/breadcrumb',
+  BreadcrumbSeparator: '@/components/ui/breadcrumb',
+  Button: '@/components/ui/button',
+  ButtonGroup: '@/components/ui/button-group',
+  ButtonGroupSeparator: '@/components/ui/button-group',
+  ButtonGroupText: '@/components/ui/button-group',
+  Calendar: '@/components/ui/calendar',
+  CalendarDayButton: '@/components/ui/calendar',
+  Card: '@/components/ui/card',
+  CardAction: '@/components/ui/card',
+  CardContent: '@/components/ui/card',
+  CardDescription: '@/components/ui/card',
+  CardFooter: '@/components/ui/card',
+  CardHeader: '@/components/ui/card',
+  CardTitle: '@/components/ui/card',
+  Carousel: '@/components/ui/carousel',
+  CarouselContent: '@/components/ui/carousel',
+  CarouselItem: '@/components/ui/carousel',
+  CarouselNext: '@/components/ui/carousel',
+  CarouselPrevious: '@/components/ui/carousel',
+  ChartContainer: '@/components/ui/chart',
+  ChartLegend: '@/components/ui/chart',
+  ChartLegendContent: '@/components/ui/chart',
+  ChartStyle: '@/components/ui/chart',
+  ChartTooltip: '@/components/ui/chart',
+  ChartTooltipContent: '@/components/ui/chart',
+  Checkbox: '@/components/ui/checkbox',
+  Collapsible: '@/components/ui/collapsible',
+  CollapsibleContent: '@/components/ui/collapsible',
+  CollapsibleTrigger: '@/components/ui/collapsible',
+  Command: '@/components/ui/command',
+  CommandDialog: '@/components/ui/command',
+  CommandEmpty: '@/components/ui/command',
+  CommandGroup: '@/components/ui/command',
+  CommandInput: '@/components/ui/command',
+  CommandItem: '@/components/ui/command',
+  CommandList: '@/components/ui/command',
+  CommandSeparator: '@/components/ui/command',
+  CommandShortcut: '@/components/ui/command',
+  ContextMenu: '@/components/ui/context-menu',
+  ContextMenuCheckboxItem: '@/components/ui/context-menu',
+  ContextMenuContent: '@/components/ui/context-menu',
+  ContextMenuGroup: '@/components/ui/context-menu',
+  ContextMenuItem: '@/components/ui/context-menu',
+  ContextMenuLabel: '@/components/ui/context-menu',
+  ContextMenuPortal: '@/components/ui/context-menu',
+  ContextMenuRadioGroup: '@/components/ui/context-menu',
+  ContextMenuRadioItem: '@/components/ui/context-menu',
+  ContextMenuSeparator: '@/components/ui/context-menu',
+  ContextMenuShortcut: '@/components/ui/context-menu',
+  ContextMenuSub: '@/components/ui/context-menu',
+  ContextMenuSubContent: '@/components/ui/context-menu',
+  ContextMenuSubTrigger: '@/components/ui/context-menu',
+  ContextMenuTrigger: '@/components/ui/context-menu',
+  Dialog: '@/components/ui/dialog',
+  DialogClose: '@/components/ui/dialog',
+  DialogContent: '@/components/ui/dialog',
+  DialogDescription: '@/components/ui/dialog',
+  DialogFooter: '@/components/ui/dialog',
+  DialogHeader: '@/components/ui/dialog',
+  DialogOverlay: '@/components/ui/dialog',
+  DialogPortal: '@/components/ui/dialog',
+  DialogTitle: '@/components/ui/dialog',
+  DialogTrigger: '@/components/ui/dialog',
   Drawer: '@/components/ui/drawer',
-  DrawerTrigger: '@/components/ui/drawer',
-  DrawerContent: '@/components/ui/drawer',
-  DrawerHeader: '@/components/ui/drawer',
-  DrawerFooter: '@/components/ui/drawer',
-  DrawerTitle: '@/components/ui/drawer',
-  DrawerDescription: '@/components/ui/drawer',
   DrawerClose: '@/components/ui/drawer',
+  DrawerContent: '@/components/ui/drawer',
+  DrawerDescription: '@/components/ui/drawer',
+  DrawerFooter: '@/components/ui/drawer',
+  DrawerHeader: '@/components/ui/drawer',
+  DrawerOverlay: '@/components/ui/drawer',
+  DrawerPortal: '@/components/ui/drawer',
+  DrawerTitle: '@/components/ui/drawer',
+  DrawerTrigger: '@/components/ui/drawer',
   DropdownMenu: '@/components/ui/dropdown-menu',
-  DropdownMenuTrigger: '@/components/ui/dropdown-menu',
+  DropdownMenuCheckboxItem: '@/components/ui/dropdown-menu',
   DropdownMenuContent: '@/components/ui/dropdown-menu',
+  DropdownMenuGroup: '@/components/ui/dropdown-menu',
   DropdownMenuItem: '@/components/ui/dropdown-menu',
   DropdownMenuLabel: '@/components/ui/dropdown-menu',
-  DropdownMenuSeparator: '@/components/ui/dropdown-menu',
-  DropdownMenuShortcut: '@/components/ui/dropdown-menu',
-  DropdownMenuGroup: '@/components/ui/dropdown-menu',
-  DropdownMenuSub: '@/components/ui/dropdown-menu',
-  DropdownMenuSubTrigger: '@/components/ui/dropdown-menu',
-  DropdownMenuSubContent: '@/components/ui/dropdown-menu',
-  DropdownMenuCheckboxItem: '@/components/ui/dropdown-menu',
+  DropdownMenuPortal: '@/components/ui/dropdown-menu',
   DropdownMenuRadioGroup: '@/components/ui/dropdown-menu',
   DropdownMenuRadioItem: '@/components/ui/dropdown-menu',
+  DropdownMenuSeparator: '@/components/ui/dropdown-menu',
+  DropdownMenuShortcut: '@/components/ui/dropdown-menu',
+  DropdownMenuSub: '@/components/ui/dropdown-menu',
+  DropdownMenuSubContent: '@/components/ui/dropdown-menu',
+  DropdownMenuSubTrigger: '@/components/ui/dropdown-menu',
+  DropdownMenuTrigger: '@/components/ui/dropdown-menu',
+  Empty: '@/components/ui/empty',
+  EmptyContent: '@/components/ui/empty',
+  EmptyDescription: '@/components/ui/empty',
+  EmptyHeader: '@/components/ui/empty',
+  EmptyMedia: '@/components/ui/empty',
+  EmptyTitle: '@/components/ui/empty',
+  Field: '@/components/ui/field',
+  FieldContent: '@/components/ui/field',
+  FieldDescription: '@/components/ui/field',
+  FieldError: '@/components/ui/field',
+  FieldGroup: '@/components/ui/field',
+  FieldLabel: '@/components/ui/field',
+  FieldLegend: '@/components/ui/field',
+  FieldSeparator: '@/components/ui/field',
+  FieldSet: '@/components/ui/field',
+  FieldTitle: '@/components/ui/field',
+  Form: '@/components/ui/form',
+  FormControl: '@/components/ui/form',
+  FormDescription: '@/components/ui/form',
+  FormField: '@/components/ui/form',
+  FormItem: '@/components/ui/form',
+  FormLabel: '@/components/ui/form',
+  FormMessage: '@/components/ui/form',
+  HoverCard: '@/components/ui/hover-card',
+  HoverCardContent: '@/components/ui/hover-card',
+  HoverCardTrigger: '@/components/ui/hover-card',
+  Input: '@/components/ui/input',
+  InputGroup: '@/components/ui/input-group',
+  InputGroupAddon: '@/components/ui/input-group',
+  InputGroupButton: '@/components/ui/input-group',
+  InputGroupInput: '@/components/ui/input-group',
+  InputGroupText: '@/components/ui/input-group',
+  InputGroupTextarea: '@/components/ui/input-group',
+  InputOTP: '@/components/ui/input-otp',
+  InputOTPGroup: '@/components/ui/input-otp',
+  InputOTPSeparator: '@/components/ui/input-otp',
+  InputOTPSlot: '@/components/ui/input-otp',
+  Item: '@/components/ui/item',
+  ItemActions: '@/components/ui/item',
+  ItemContent: '@/components/ui/item',
+  ItemDescription: '@/components/ui/item',
+  ItemFooter: '@/components/ui/item',
+  ItemGroup: '@/components/ui/item',
+  ItemHeader: '@/components/ui/item',
+  ItemMedia: '@/components/ui/item',
+  ItemSeparator: '@/components/ui/item',
+  ItemTitle: '@/components/ui/item',
+  Kbd: '@/components/ui/kbd',
+  KbdGroup: '@/components/ui/kbd',
+  Label: '@/components/ui/label',
+  Menubar: '@/components/ui/menubar',
+  MenubarCheckboxItem: '@/components/ui/menubar',
+  MenubarContent: '@/components/ui/menubar',
+  MenubarGroup: '@/components/ui/menubar',
+  MenubarItem: '@/components/ui/menubar',
+  MenubarLabel: '@/components/ui/menubar',
+  MenubarMenu: '@/components/ui/menubar',
+  MenubarPortal: '@/components/ui/menubar',
+  MenubarRadioGroup: '@/components/ui/menubar',
+  MenubarRadioItem: '@/components/ui/menubar',
+  MenubarSeparator: '@/components/ui/menubar',
+  MenubarShortcut: '@/components/ui/menubar',
+  MenubarSub: '@/components/ui/menubar',
+  MenubarSubContent: '@/components/ui/menubar',
+  MenubarSubTrigger: '@/components/ui/menubar',
+  MenubarTrigger: '@/components/ui/menubar',
+  NativeSelect: '@/components/ui/native-select',
+  NavigationMenu: '@/components/ui/navigation-menu',
+  NavigationMenuContent: '@/components/ui/navigation-menu',
+  NavigationMenuIndicator: '@/components/ui/navigation-menu',
+  NavigationMenuItem: '@/components/ui/navigation-menu',
+  NavigationMenuLink: '@/components/ui/navigation-menu',
+  NavigationMenuList: '@/components/ui/navigation-menu',
+  NavigationMenuTrigger: '@/components/ui/navigation-menu',
+  NavigationMenuViewport: '@/components/ui/navigation-menu',
+  Pagination: '@/components/ui/pagination',
+  PaginationContent: '@/components/ui/pagination',
+  PaginationEllipsis: '@/components/ui/pagination',
+  PaginationItem: '@/components/ui/pagination',
+  PaginationLink: '@/components/ui/pagination',
+  PaginationNext: '@/components/ui/pagination',
+  PaginationPrevious: '@/components/ui/pagination',
+  Popover: '@/components/ui/popover',
+  PopoverAnchor: '@/components/ui/popover',
+  PopoverContent: '@/components/ui/popover',
+  PopoverTrigger: '@/components/ui/popover',
+  Progress: '@/components/ui/progress',
+  RadioGroup: '@/components/ui/radio-group',
+  RadioGroupItem: '@/components/ui/radio-group',
+  ResizableHandle: '@/components/ui/resizable',
+  ResizablePanel: '@/components/ui/resizable',
+  ResizablePanelGroup: '@/components/ui/resizable',
+  ScrollArea: '@/components/ui/scroll-area',
+  ScrollBar: '@/components/ui/scroll-area',
+  Select: '@/components/ui/select',
+  SelectContent: '@/components/ui/select',
+  SelectGroup: '@/components/ui/select',
+  SelectItem: '@/components/ui/select',
+  SelectLabel: '@/components/ui/select',
+  SelectScrollDownButton: '@/components/ui/select',
+  SelectScrollUpButton: '@/components/ui/select',
+  SelectSeparator: '@/components/ui/select',
+  SelectTrigger: '@/components/ui/select',
+  SelectValue: '@/components/ui/select',
+  Separator: '@/components/ui/separator',
+  Sheet: '@/components/ui/sheet',
+  SheetClose: '@/components/ui/sheet',
+  SheetContent: '@/components/ui/sheet',
+  SheetDescription: '@/components/ui/sheet',
+  SheetFooter: '@/components/ui/sheet',
+  SheetHeader: '@/components/ui/sheet',
+  SheetTitle: '@/components/ui/sheet',
+  SheetTrigger: '@/components/ui/sheet',
+  Sidebar: '@/components/ui/sidebar',
+  SidebarContent: '@/components/ui/sidebar',
+  SidebarFooter: '@/components/ui/sidebar',
+  SidebarGroup: '@/components/ui/sidebar',
+  SidebarGroupAction: '@/components/ui/sidebar',
+  SidebarGroupContent: '@/components/ui/sidebar',
+  SidebarGroupLabel: '@/components/ui/sidebar',
+  SidebarHeader: '@/components/ui/sidebar',
+  SidebarInput: '@/components/ui/sidebar',
+  SidebarInset: '@/components/ui/sidebar',
+  SidebarMenu: '@/components/ui/sidebar',
+  SidebarMenuAction: '@/components/ui/sidebar',
+  SidebarMenuBadge: '@/components/ui/sidebar',
+  SidebarMenuButton: '@/components/ui/sidebar',
+  SidebarMenuItem: '@/components/ui/sidebar',
+  SidebarMenuSkeleton: '@/components/ui/sidebar',
+  SidebarMenuSub: '@/components/ui/sidebar',
+  SidebarMenuSubButton: '@/components/ui/sidebar',
+  SidebarMenuSubItem: '@/components/ui/sidebar',
+  SidebarProvider: '@/components/ui/sidebar',
+  SidebarRail: '@/components/ui/sidebar',
+  SidebarSeparator: '@/components/ui/sidebar',
+  SidebarTrigger: '@/components/ui/sidebar',
+  Skeleton: '@/components/ui/skeleton',
+  Slider: '@/components/ui/slider',
+  Spinner: '@/components/ui/spinner',
+  Toaster: '@/components/ui/sonner',
+  Switch: '@/components/ui/switch',
   Table: '@/components/ui/table',
-  TableHeader: '@/components/ui/table',
   TableBody: '@/components/ui/table',
-  TableFooter: '@/components/ui/table',
-  TableRow: '@/components/ui/table',
-  TableHead: '@/components/ui/table',
-  TableCell: '@/components/ui/table',
   TableCaption: '@/components/ui/table',
+  TableCell: '@/components/ui/table',
+  TableFooter: '@/components/ui/table',
+  TableHead: '@/components/ui/table',
+  TableHeader: '@/components/ui/table',
+  TableRow: '@/components/ui/table',
+  Tabs: '@/components/ui/tabs',
+  TabsContent: '@/components/ui/tabs',
+  TabsList: '@/components/ui/tabs',
+  TabsTrigger: '@/components/ui/tabs',
+  Textarea: '@/components/ui/textarea',
   Toggle: '@/components/ui/toggle',
   ToggleGroup: '@/components/ui/toggle-group',
   ToggleGroupItem: '@/components/ui/toggle-group',
   Tooltip: '@/components/ui/tooltip',
+  TooltipContent: '@/components/ui/tooltip',
   TooltipProvider: '@/components/ui/tooltip',
   TooltipTrigger: '@/components/ui/tooltip',
-  TooltipContent: '@/components/ui/tooltip',
-  HoverCard: '@/components/ui/hover-card',
-  HoverCardTrigger: '@/components/ui/hover-card',
-  HoverCardContent: '@/components/ui/hover-card',
-  Collapsible: '@/components/ui/collapsible',
-  CollapsibleTrigger: '@/components/ui/collapsible',
-  CollapsibleContent: '@/components/ui/collapsible',
-  ScrollArea: '@/components/ui/scroll-area',
-  ScrollBar: '@/components/ui/scroll-area',
-  Carousel: '@/components/ui/carousel',
-  CarouselContent: '@/components/ui/carousel',
-  CarouselItem: '@/components/ui/carousel',
-  CarouselPrevious: '@/components/ui/carousel',
-  CarouselNext: '@/components/ui/carousel',
-  Breadcrumb: '@/components/ui/breadcrumb',
-  BreadcrumbList: '@/components/ui/breadcrumb',
-  BreadcrumbItem: '@/components/ui/breadcrumb',
-  BreadcrumbLink: '@/components/ui/breadcrumb',
-  BreadcrumbPage: '@/components/ui/breadcrumb',
-  BreadcrumbSeparator: '@/components/ui/breadcrumb',
-  BreadcrumbEllipsis: '@/components/ui/breadcrumb',
-  Pagination: '@/components/ui/pagination',
-  PaginationContent: '@/components/ui/pagination',
-  PaginationItem: '@/components/ui/pagination',
-  PaginationLink: '@/components/ui/pagination',
-  PaginationPrevious: '@/components/ui/pagination',
-  PaginationNext: '@/components/ui/pagination',
-  PaginationEllipsis: '@/components/ui/pagination',
-  Sidebar: '@/components/ui/sidebar',
-  SidebarProvider: '@/components/ui/sidebar',
-  SidebarTrigger: '@/components/ui/sidebar',
-  SidebarContent: '@/components/ui/sidebar',
-  SidebarHeader: '@/components/ui/sidebar',
-  SidebarFooter: '@/components/ui/sidebar',
-  SidebarGroup: '@/components/ui/sidebar',
-  SidebarGroupLabel: '@/components/ui/sidebar',
-  SidebarGroupContent: '@/components/ui/sidebar',
-  SidebarMenu: '@/components/ui/sidebar',
-  SidebarMenuItem: '@/components/ui/sidebar',
-  SidebarMenuButton: '@/components/ui/sidebar',
-  SidebarInset: '@/components/ui/sidebar',
-  SidebarSeparator: '@/components/ui/sidebar',
-  Form: '@/components/ui/form',
-  FormField: '@/components/ui/form',
-  FormItem: '@/components/ui/form',
-  FormLabel: '@/components/ui/form',
-  FormControl: '@/components/ui/form',
-  FormDescription: '@/components/ui/form',
-  FormMessage: '@/components/ui/form',
-  Menubar: '@/components/ui/menubar',
-  MenubarMenu: '@/components/ui/menubar',
-  MenubarTrigger: '@/components/ui/menubar',
-  MenubarContent: '@/components/ui/menubar',
-  MenubarItem: '@/components/ui/menubar',
-  MenubarSeparator: '@/components/ui/menubar',
-  NavigationMenu: '@/components/ui/navigation-menu',
-  NavigationMenuList: '@/components/ui/navigation-menu',
-  NavigationMenuItem: '@/components/ui/navigation-menu',
-  NavigationMenuTrigger: '@/components/ui/navigation-menu',
-  NavigationMenuContent: '@/components/ui/navigation-menu',
-  NavigationMenuLink: '@/components/ui/navigation-menu',
-  InputOTP: '@/components/ui/input-otp',
-  InputOTPGroup: '@/components/ui/input-otp',
-  InputOTPSlot: '@/components/ui/input-otp',
-  InputOTPSeparator: '@/components/ui/input-otp',
-  Resizable: '@/components/ui/resizable',
-  ResizablePanelGroup: '@/components/ui/resizable',
-  ResizablePanel: '@/components/ui/resizable',
-  ResizableHandle: '@/components/ui/resizable',
-  AspectRatio: '@/components/ui/aspect-ratio',
-  Avatar: '@/components/ui/avatar',
-  AvatarImage: '@/components/ui/avatar',
-  AvatarFallback: '@/components/ui/avatar',
-  Toaster: 'sonner',
+  // React-Router navigation primitive. The converter auto-rewrites
+  // <a href="/..."> to <Link to="/..."> so in-app navigation doesn't
+  // reload the whole page.
+  Link: 'react-router-dom',
+  NavLink: 'react-router-dom',
+  Outlet: 'react-router-dom',
 }
 
 // ─── ALIAS MAP ────────────────────────────────────────────────────────────────
@@ -292,14 +396,50 @@ const REGEX = {
 
 // ─── NORMALIZE ────────────────────────────────────────────────────────────────
 
+// Every component name the Style stage is allowed to emit. Derived from
+// IMPORT_MAP so we never drift: if we vendor a new shadcn file, add its
+// exports to IMPORT_MAP and both systems pick it up automatically.
+export const SUPPORTED_COMPONENTS: Set<string> = new Set(Object.keys(IMPORT_MAP))
+
+// A PascalCase name ending in "Icon" is assumed to be a HeroIcon. Imports
+// are resolved at the buildImports stage (pulled from @heroicons/react/24/outline).
+function isHeroIconName(name: string): boolean {
+  return REGEX.COMPONENT_NAME.test(name) && /Icon$/.test(name) && name !== 'Icon'
+}
+
 function normalizeName(name: string): string {
-  if (REGEX.COMPONENT_NAME.test(name)) return name
   if (HTML_TAGS.has(name)) return name
-  if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) return ALIAS_MAP[name]
-  throw new Error(`UNKNOWN_COMPONENT: "${name}" is not a known shadcn/ui component`)
+  if (REGEX.ALIAS_NAME.test(name) && ALIAS_MAP[name]) {
+    const mapped = ALIAS_MAP[name]
+    return SUPPORTED_COMPONENTS.has(mapped) ? mapped : 'div'
+  }
+  if (REGEX.COMPONENT_NAME.test(name)) {
+    // A PascalCase component is only emitted if (a) we know where to import
+    // it from, and (b) it's actually in the scaffold's vendored UI set.
+    // HeroIcons (any PascalCase name ending in "Icon") are also allowed.
+    if (IMPORT_MAP[name] && SUPPORTED_COMPONENTS.has(name)) return name
+    if (isHeroIconName(name)) return name
+    return 'div'
+  }
+  return 'div'
 }
 
 function normalizeTree(node: UINode): UINode {
+  // Internal <a href="/..."> is rewritten to <Link to="/..."> from
+  // react-router-dom so in-app navigation doesn't full-reload the page.
+  // External links (http://, https://, mailto:, #anchor) stay as <a>.
+  if (node.name === 'a' && node.props && typeof node.props.href === 'string') {
+    const href = node.props.href as string
+    if (href.startsWith('/') && !href.startsWith('//')) {
+      const { href: _, ...rest } = node.props as Record<string, unknown>
+      return {
+        ...node,
+        name: 'Link',
+        props: { ...rest, to: href },
+        children: node.children?.map(normalizeTree),
+      }
+    }
+  }
   return {
     ...node,
     name: normalizeName(node.name),
@@ -329,16 +469,42 @@ function collect(node: UINode, acc: Collected): void {
   node.children?.forEach(c => collect(c, acc))
 }
 
+// Any handler named `set<Capitalized>` that matches an existing `$state.<x>`
+// collides with the useState setter the converter already creates. Drop it
+// from the handlers set so the page uses the local setter directly — this
+// stops the Logic stage from having to emit bogus stub setters and keeps
+// pages self-contained (no external Props plumbing for state updates).
+function pruneLocalSetterHandlers(acc: Collected): void {
+  const states = acc.states
+  for (const h of [...acc.handlers]) {
+    const match = h.match(/^set([A-Z][A-Za-z0-9_]*)$/)
+    if (!match) continue
+    const stateName = match[1].charAt(0).toLowerCase() + match[1].slice(1)
+    if (states.has(stateName)) {
+      acc.handlers.delete(h)
+    }
+  }
+}
+
 // ─── INITIAL VALUE HEURISTIC ──────────────────────────────────────────────────
 
 function initialValue(name: string): string {
-  if (/open|show|visible|active|checked|enabled/i.test(name)) return 'false'
-  if (/value|query|text|search|input|name|email|password/i.test(name)) return "''"
-  if (/count|index|step|page|num|size/i.test(name)) return '0'
-  return 'undefined'
+  if (/open|show|visible|active|checked|enabled|loading|disabled|dark/i.test(name)) return 'false'
+  if (/value|query|text|search|input|name|email|password|message|content|title|description|subject|phone|address/i.test(name)) return "''"
+  if (/count|index|step|page|num|size|total|quantity|amount|price/i.test(name)) return '0'
+  if (/list|items|results|entries|rows|options|tags|errors/i.test(name)) return '[]'
+  return "''"
 }
 
 // ─── PROP RESOLUTION ──────────────────────────────────────────────────────────
+
+// JSX would treat bare <, >, {, }, &, " inside an attribute string as the
+// end of the attribute (or an HTML entity / embedded expression). The safest
+// fix that preserves the literal text verbatim is to switch from a double-
+// quoted HTML attribute (`foo="…"`) to a JS string expression (`foo={"…"}`).
+// JS strings only need backslash / quote escaping, which JSON.stringify does.
+const JSX_UNSAFE_ATTR = /[<>{}"&\n\r]/
+const JSX_UNSAFE_TEXT = /[<>{}]/
 
 function resolveProps(props: Record<string, unknown>): string {
   return Object.entries(props)
@@ -362,11 +528,22 @@ function resolveProps(props: Record<string, unknown>): string {
       // numeric
       if (REGEX.NUMBER.test(s)) return `${key}={${s}}`
 
-      // string literal
+      // string literal. If the value contains any character JSX would
+      // reinterpret inside an attribute, emit it as a JS string expression.
+      if (JSX_UNSAFE_ATTR.test(s)) return `${key}={${JSON.stringify(s)}}`
       return `${key}="${s}"`
     })
     .filter(Boolean)
     .join(' ')
+}
+
+// Wrap text node content in a JS string expression when it contains chars
+// that JSX would try to parse as markup or an expression boundary. Fixes
+// the common "<2", "<10", "x < y", "{foo}" leaking from model output into
+// rendered JSX and breaking the Vite build with "Expected identifier".
+function renderJsxText(text: string): string {
+  if (!JSX_UNSAFE_TEXT.test(text)) return text
+  return `{${JSON.stringify(text)}}`
 }
 
 // ─── NODE RENDERER ────────────────────────────────────────────────────────────
@@ -383,7 +560,7 @@ function renderNode(node: UINode, depth: number): string {
 
   // Inline text
   if (node.text && !node.children?.length) {
-    return `${indent}<${tag}>${node.text}</${node.name}>`
+    return `${indent}<${tag}>${renderJsxText(node.text)}</${node.name}>`
   }
 
   // Children
@@ -398,8 +575,13 @@ function renderNode(node: UINode, depth: number): string {
 
 function buildImports(components: Set<string>, needsReact: boolean): string {
   const grouped = new Map<string, string[]>()
+  const heroIcons: string[] = []
 
   for (const name of components) {
+    if (isHeroIconName(name) && !IMPORT_MAP[name]) {
+      heroIcons.push(name)
+      continue
+    }
     const src = IMPORT_MAP[name]
     if (!src) continue
     if (!grouped.has(src)) grouped.set(src, [])
@@ -414,6 +596,11 @@ function buildImports(components: Set<string>, needsReact: boolean): string {
   for (const [src, names] of sorted) {
     const sorted_names = names.sort().join(', ')
     lines.push(`import { ${sorted_names} } from '${src}'`)
+  }
+
+  if (heroIcons.length > 0) {
+    const sortedIcons = [...new Set(heroIcons)].sort().join(', ')
+    lines.push(`import { ${sortedIcons} } from '@heroicons/react/24/outline'`)
   }
 
   return lines.join('\n')
@@ -461,6 +648,7 @@ function convertTreeToTypeScriptInternal(
     components: new Set(),
   }
   collect(normalized, acc)
+  pruneLocalSetterHandlers(acc)
 
   const needsReact = acc.states.size > 0
 
@@ -486,10 +674,10 @@ function convertTreeToTypeScriptInternal(
   // 7. Render JSX
   const jsxBody = renderNode(normalized, 2)
 
-  // 8. Assemble
+  // 8. Assemble. We do NOT emit `'use client'` — that's Next.js boilerplate.
+  // The generated project is a pure Vite + React app where every module is
+  // already a client module, so the directive is just noise.
   const sections: string[] = [
-    "'use client'",
-    '',
     importsBlock,
   ]
 
