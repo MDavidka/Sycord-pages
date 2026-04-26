@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { getSystemPrompts } from "@/lib/ai-prompts"
 import { logAiDebug } from "@/lib/logger"
 import { callModel, extractJson, type ModelSelection } from "@/lib/ai-provider"
+import { tierOf } from "@/lib/credits"
 import { IMPORT_MAP } from "@/sample-conveter"
 import {
   renderManifestForPrompt,
@@ -70,6 +71,16 @@ export async function POST(req: Request) {
   })
 
   const prompts = await getSystemPrompts()
+  const smallModelMode = tierOf({ id: model.id, name: model.id }) === "fast"
+  const smallModelGuardrails = smallModelMode
+    ? `
+SMALL-MODEL SAFETY MODE (REQUIRED FOR THIS RUN):
+- Output MUST be strict JSON only; no markdown, no comments, no trailing prose.
+- Keep component names exactly from the provided shadcn catalogue; when unsure, pick simpler known components (Card, Button, Input, Table, Accordion, Tabs).
+- Prefer shallow, valid trees over deeply nested risky structures.
+- Before finalizing, mentally validate: root.type, root.version, and root.component all exist.
+`
+    : ""
   const generationGuide = readHelperFile("generation.md")
   const cheatSheet = readHelperFile("cheat_sheat.json")
 
@@ -113,6 +124,10 @@ SHADCN PROJECT INFO (mirrors \`shadcn info --json\` for the generated project �
 COMPONENT CATALOGUE — shadcn/ui (${Object.keys(IMPORT_MAP).length} exports from ${shadcnFileCount} component files; the generated Vite project vendors ALL of them). You MAY freely use any of these names. Do NOT invent component names outside this list; unknown names silently demote to <div>.
 ${shadcnCatalogue}
 
+UI LIBRARY SOURCE OF TRUTH:
+- Use ONLY components and composition patterns from https://ui.shadcn.com .
+- Do NOT use Material UI, Chakra UI, Ant Design, Mantine, NextUI, Bootstrap, Tailwind UI snippets, or custom design-system component names.
+
 SHADCN COMPOSITION RULES (these are the patterns the official shadcn/ui Skill enforces — follow them exactly, NOT just "stack Card after Card"):
 - FORMS — never raw <input>. Wrap every field in Field + FieldLabel + FieldDescription + FieldError, and group related fields with FieldGroup or FieldSet. For prefixed/suffixed inputs (e.g. URL with https://, search with magnifying glass) use InputGroup + InputGroupAddon + InputGroupInput, never a manual flex container around a bare Input. Use Form + FormField for any form that submits.
 - OPTION SETS — for "pick one of N" use ToggleGroup with type="single", or RadioGroup. Multiple-select uses ToggleGroup type="multiple" or Checkbox stack. Never simulate a toggle group with multiple Buttons.
@@ -145,6 +160,11 @@ The manifest below assigns each page a layoutHint. You MUST honour it. The hint 
   - media-gallery     → Hero → Carousel (3 slides) → Bento-style grid of AspectRatio media tiles below.
 NEVER reuse the same skeleton across pages. If you generated a 3-card features row on Home, the About / Pricing / Contact / FAQ pages MUST NOT also be a 3-card features row.
 
+ANTI-TEMPLATE EXECUTION (critical):
+- Do NOT ship a canned "semantic SaaS template". This page must feel purpose-built for THIS brief and route.
+- Section headings and card titles must use domain language from the brief, not generic placeholders.
+- Include at least 2 route-specific sections that are NOT the default hero+features+testimonials pattern (examples: booking flow steps, eligibility matrix, policy timeline, operations checklist, inventory table, lesson planner, care protocol, etc. — choose what fits the brief).
+
 CONTENT DENSITY (every page must be substantive):
 - A page MUST emit AT LEAST 4 distinct content sections (hero counts as 1).
 - Every feature listed in the manifest for THIS page MUST appear as a real, named element in the tree (Card, Accordion item, Table row, FormField, etc.) — not just mentioned in a paragraph.
@@ -159,10 +179,12 @@ THEME (per-site, NOT locked):
 - NEVER embed inline CSS (no style={{ color: "..."}}, no arbitrary-value classes like [color:#abc] or bg-[#abc]).
 
 ICONS (HeroIcons ONLY):
-- Every icon MUST be a HeroIcon component (PascalCase name ending in "Icon", e.g. HomeIcon, UserIcon, ChevronRightIcon, CheckCircleIcon, ArrowRightIcon, MagnifyingGlassIcon, XMarkIcon, Bars3Icon). The converter auto-imports them from '@heroicons/react/24/outline'.
+- Every icon MUST be one of this fixed allowlist (PascalCase + "Icon" suffix): ArrowRightIcon, Bars3Icon, Battery50Icon, CheckCircleIcon, Cog6ToothIcon, CreditCardIcon, DevicePhoneMobileIcon, EyeIcon, HomeIcon, MagnifyingGlassIcon, PhoneIcon, PuzzlePieceIcon, ShoppingBagIcon, StarIcon, UserIcon, XMarkIcon.
+- If an icon idea is not in the allowlist, use PuzzlePieceIcon instead.
+- The converter auto-imports allowed icons from '@heroicons/react/24/outline'.
 - Icon nodes must have a className for sizing/color, e.g. {"name":"HomeIcon","props":{"className":"h-5 w-5"}}.
 - STRICTLY FORBIDDEN: emoji characters (🚀, ✨, ✅, 📱, 💡, etc.), unicode pictographs, ASCII art, or image URLs as icons. Any emoji in a text node is a bug — use a HeroIcon sibling instead.
-- See https://heroicons.com for the full list of available icon names; they all follow the \`<Name>Icon\` suffix convention.
+- Do NOT use arbitrary HeroIcon names outside the allowlist above.
 
 COMPONENT-ONLY RULE:
 - Every visible text string MUST live inside a shadcn component that renders typography (CardTitle, CardDescription, Label, Badge, Button, AlertTitle, AlertDescription, PaginationLink, etc.) OR inside semantic HTML headings/paragraphs (h1–h6, p). No bare strings inside <div>/<span> — wrap them.
@@ -206,7 +228,8 @@ RULES:
 - Dynamic values use "$state.<name>" / "$handler.<name>" strings. Never invent JSX or raw code inside the JSON.
 - Do NOT use "$handler.set<X>" for state setters named after a "$state.<x>" — the converter wires those up automatically via useState. Use $handler.* only for real actions (onSubmit, onClickToggle, loadData, logout, etc.).
 - Keep the tree rich enough to look complete: multiple sections, use Cards / Tabs / Accordion / Badges to structure content.
-- No comments inside the JSON.`,
+- No comments inside the JSON.
+${smallModelGuardrails}`,
     },
     {
       role: "user" as const,

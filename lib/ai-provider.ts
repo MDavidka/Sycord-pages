@@ -146,6 +146,15 @@ interface GoogleResponse {
   error?: { message?: string }
 }
 
+function googleModelCandidates(modelId: string): string[] {
+  const normalized = modelId.trim()
+  const aliases: Record<string, string[]> = {
+    "gemini-3.1-flash-preview": ["gemini-3.1-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash-001"],
+    "gemini-3.1-pro-preview": ["gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-1.5-pro-002"],
+  }
+  return aliases[normalized] ?? [normalized]
+}
+
 async function callGoogle(
   opts: CallModelOptions,
 ): Promise<CallModelResult | CallModelError> {
@@ -178,54 +187,61 @@ async function callGoogle(
   }
 
   // Vertex AI in express mode: API key is a query param, not a header.
-  const url =
-    `https://aiplatform.googleapis.com/v1/publishers/google/models/${encodeURIComponent(model.id)}:generateContent` +
-    `?key=${encodeURIComponent(apiKey)}`
+  // Gemini preview SKUs can move quickly; try the requested id first, then
+  // curated fallback aliases so "Gemini 3.1 Flash" keeps working even when
+  // Vertex maps it to the latest stable flash family id.
+  const candidates = googleModelCandidates(model.id)
+  const errors: string[] = []
 
-  let response: Response
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction,
-        contents,
-        generationConfig: { temperature },
-      }),
-    })
-  } catch (err) {
-    return {
-      ok: false,
-      status: 502,
-      message: "Network error calling Vertex AI",
-      details: err instanceof Error ? err.message : String(err),
+  for (const candidate of candidates) {
+    const url =
+      `https://aiplatform.googleapis.com/v1beta1/publishers/google/models/${encodeURIComponent(candidate)}:generateContent` +
+      `?key=${encodeURIComponent(apiKey)}`
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemInstruction,
+          contents,
+          generationConfig: { temperature },
+        }),
+      })
+    } catch (err) {
+      return {
+        ok: false,
+        status: 502,
+        message: "Network error calling Vertex AI",
+        details: err instanceof Error ? err.message : String(err),
+      }
     }
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "")
+      errors.push(`${candidate}: ${response.status} ${errText}`)
+      continue
+    }
+
+    const data = (await response.json().catch(() => null)) as GoogleResponse | null
+    const content =
+      data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? ""
+    if (!content) {
+      errors.push(`${candidate}: empty content (${data?.error?.message ?? "no candidate text"})`)
+      continue
+    }
+    return { ok: true, content, raw: data }
   }
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "")
-    return {
-      ok: false,
-      status: response.status,
-      message: "Vertex AI API error",
-      details: errText,
-    }
+  return {
+    ok: false,
+    status: 502,
+    message: "Vertex AI API error",
+    details: errors.join("\n"),
   }
-
-  const data = (await response.json().catch(() => null)) as GoogleResponse | null
-  const content =
-    data?.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? ""
-  if (!content) {
-    return {
-      ok: false,
-      status: 502,
-      message: "Vertex AI returned no content",
-      details: data?.error?.message ?? JSON.stringify(data ?? {}),
-    }
-  }
-  return { ok: true, content, raw: data }
 }
 
 // Extracts the first valid JSON payload from a model response. Handles fenced
