@@ -508,6 +508,10 @@ function scaffoldFiles(manifest: ProjectManifest): BuilderFile[] {
             react: "latest",
             "react-dom": "latest",
             "framer-motion": "latest",
+            tailwindcss: "latest",
+            postcss: "latest",
+            autoprefixer: "latest",
+            typescript: "latest",
           },
         },
         null,
@@ -570,6 +574,21 @@ function scaffoldFiles(manifest: ProjectManifest): BuilderFile[] {
       content: "export function cn(...values: Array<string | undefined | false | null>) { return values.filter(Boolean).join(' ') }\n",
     },
     {
+      path: "components/ui/button.tsx",
+      content:
+        "\"use client\"\nimport * as React from \"react\"\n\ntype ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean; variant?: \"default\" | \"outline\"; size?: \"default\" | \"sm\" }\n\nexport function Button({ className = \"\", variant = \"default\", children, asChild, ...props }: ButtonProps) {\n  const base = \"inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition\"\n  const tone = variant === \"outline\" ? \"border border-border bg-transparent\" : \"bg-foreground text-background\"\n  if (asChild && React.isValidElement(children)) {\n    return React.cloneElement(children as React.ReactElement<any>, {\n      className: `${base} ${tone} ${(children as any).props?.className || \"\"} ${className}`.trim(),\n    })\n  }\n  return <button className={`${base} ${tone} ${className}`.trim()} {...props}>{children}</button>\n}\n",
+    },
+    {
+      path: "components/ui/badge.tsx",
+      content:
+        "import * as React from \"react\"\n\ntype BadgeProps = React.HTMLAttributes<HTMLSpanElement> & { variant?: \"default\" | \"secondary\" }\n\nexport function Badge({ className = \"\", variant = \"default\", ...props }: BadgeProps) {\n  const tone = variant === \"secondary\" ? \"bg-muted text-foreground\" : \"bg-foreground text-background\"\n  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${tone} ${className}`.trim()} {...props} />\n}\n",
+    },
+    {
+      path: "components/ui/sheet.tsx",
+      content:
+        "\"use client\"\nimport * as React from \"react\"\n\nexport function Sheet({ children }: { children: React.ReactNode }) { return <>{children}</> }\nexport function SheetTrigger({ children }: { children: React.ReactNode; asChild?: boolean }) { return <>{children}</> }\nexport function SheetContent({ children, className = \"\" }: { children: React.ReactNode; side?: string; className?: string }) {\n  return <div className={`mt-2 rounded-md border bg-background p-4 ${className}`.trim()}>{children}</div>\n}\n",
+    },
+    {
       path: "lib/site-config.ts",
       content: `export const siteConfig = { name: ${JSON.stringify(projectName)}, links: [${navLinks}] }\n`,
     },
@@ -594,7 +613,15 @@ function runBuildValidation(files: BuilderFile[]) {
   const errors: string[] = []
   const fileMap = new Map(files.map((f) => [f.path, f.content]))
 
-  for (const must of ["app/layout.tsx", "app/globals.css", "components/site-header.tsx", "components/site-footer.tsx"]) {
+  for (const must of [
+    "app/layout.tsx",
+    "app/globals.css",
+    "components/site-header.tsx",
+    "components/site-footer.tsx",
+    "components/ui/button.tsx",
+    "components/ui/badge.tsx",
+    "components/ui/sheet.tsx",
+  ]) {
     if (!fileMap.has(must)) errors.push(`Missing required file: ${must}`)
   }
 
