@@ -509,6 +509,7 @@ function scaffoldFiles(manifest: ProjectManifest): BuilderFile[] {
             "react-dom": "latest",
             "framer-motion": "latest",
             tailwindcss: "latest",
+            "@tailwindcss/postcss": "latest",
             postcss: "latest",
             autoprefixer: "latest",
             typescript: "latest",
@@ -542,7 +543,7 @@ function scaffoldFiles(manifest: ProjectManifest): BuilderFile[] {
       path: "tailwind.config.ts",
       content: "export default { content: [\"./app/**/*.{ts,tsx}\", \"./components/**/*.{ts,tsx}\"] }\n",
     },
-    { path: "postcss.config.js", content: "module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } }\n" },
+    { path: "postcss.config.js", content: "module.exports = { plugins: { '@tailwindcss/postcss': {}, autoprefixer: {} } }\n" },
     {
       path: "app/layout.tsx",
       content:
@@ -631,6 +632,11 @@ function runBuildValidation(files: BuilderFile[]) {
     if (filePath.endsWith(".tsx") && !content.includes("export default") && !filePath.includes("components/")) {
       errors.push(`Route file missing default export: ${filePath}`)
     }
+  }
+
+  const postcssConfig = fileMap.get("postcss.config.js") || ""
+  if (!postcssConfig.includes("@tailwindcss/postcss")) {
+    errors.push("postcss.config.js must use @tailwindcss/postcss plugin")
   }
 
   return { ok: errors.length === 0, errors, attempts: 1 }
