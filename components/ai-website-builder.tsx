@@ -321,6 +321,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPipelineStep, setCurrentPipelineStep] = useState<string>("Planning")
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
@@ -362,6 +363,27 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     }
   }, [messages.length, isLoading])
 
+  useEffect(() => {
+    if (!isLoading) return
+    const steps = [
+      "Planning",
+      "Manifest",
+      "Component Context",
+      "Scaffold",
+      "Generating Page JSON",
+      "Validating JSON",
+      "Converting to Files",
+      "Building",
+    ]
+    let idx = 0
+    setCurrentPipelineStep(steps[idx])
+    const timer = setInterval(() => {
+      idx = (idx + 1) % steps.length
+      setCurrentPipelineStep(steps[idx])
+    }, 1200)
+    return () => clearInterval(timer)
+  }, [isLoading])
+
   const startGeneration = async () => {
     if (!input.trim() || isLoading) return
 
@@ -390,11 +412,26 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       const data = await res.json()
 
-      setMessages(prev => [...prev, {
+      const assistantMessages: Message[] = []
+      assistantMessages.push({
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: data.message || "Website generation is currently disabled.",
-      }])
+        content: data.message || "Website generation finished.",
+      })
+
+      if (Array.isArray(data?.logs) && data.logs.length > 0) {
+        const progressText = data.logs
+          .map((log: { step?: string; detail?: string }) => `• ${log.detail || log.step || "Pipeline step completed"}`)
+          .join("\n")
+
+        assistantMessages.push({
+          id: (Date.now() + 2).toString(),
+          role: "assistant",
+          content: `Pipeline execution:\n${progressText}`,
+        })
+      }
+
+      setMessages(prev => [...prev, ...assistantMessages])
     } catch (err: any) {
       setError(err.message || "Failed to send message")
     } finally {
@@ -498,7 +535,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                                     <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
                                     <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
                                     </div>
-                                    <span className="text-xs text-zinc-500 ml-1">Thinking</span>
+                                    <span className="text-xs text-zinc-500 ml-1">{currentPipelineStep}...</span>
                                 </div>
                             </div>
                         )}
