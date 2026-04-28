@@ -686,7 +686,6 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
     logs.push({ step: "runAIWebsiteBuilder", detail: `generatePageJson(${page.path}) - generating page JSON` })
     const subset = buildComponentSubset(page, library)
     const rawJson = await generatePageJson(userPrompt, page, manifest, subset)
-    files.push({ path: `.sycord/page-json${page.path === "/" ? "/home" : page.path}.json`, content: JSON.stringify(rawJson, null, 2) })
 
     logs.push({ step: "runAIWebsiteBuilder", detail: `validatePageJson(${page.path}) - validating JSON` })
     const errors = validatePageJson(rawJson, page, manifest.pages.map((p) => p.path))
@@ -699,22 +698,6 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
     logs.push({ step: "runAIWebsiteBuilder", detail: `convert(${page.path}) - converting JSON to ${page.filePath}` })
     files.push({ path: page.filePath, content: convertToPageFile(manifest, page, usableJson) })
   }
-
-  logs.push({ step: "runAIWebsiteBuilder", detail: "vmAdapter() - creating Next.js file payload for runner VM" })
-  files.push({
-    path: ".sycord/vm/deploy-payload.json",
-    content: JSON.stringify(
-      {
-        runtime: "nextjs",
-        createdAt: new Date().toISOString(),
-        files: files
-          .filter((f) => !f.path.startsWith(".sycord/page-json"))
-          .map((f) => ({ path: f.path, size: f.content.length })),
-      },
-      null,
-      2,
-    ),
-  })
 
   logs.push({ step: "runAIWebsiteBuilder", detail: "buildValidation() - checking generated project output" })
   const build = runBuildValidation(files)

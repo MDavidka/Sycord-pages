@@ -10,6 +10,20 @@ interface GeneratedFile {
   content: string
 }
 
+function isDeployableNextFile(pathname: string) {
+  if (!pathname || pathname.startsWith(".") || pathname.includes("..")) return false
+  const normalized = pathname.replace(/^\/+/, "")
+  const allowedExact = new Set([
+    "package.json",
+    "tsconfig.json",
+    "next.config.ts",
+    "postcss.config.js",
+    "tailwind.config.ts",
+  ])
+  if (allowedExact.has(normalized)) return true
+  return /^(app|components|lib|public)\//.test(normalized) && /\.(tsx?|css|json|js|mjs|cjs|svg|png|jpg|jpeg|webp|ico)$/.test(normalized)
+}
+
 async function saveGeneratedFilesToProject(
   userId: string,
   projectId: string,
@@ -20,7 +34,7 @@ async function saveGeneratedFilesToProject(
   }
 
   const normalizedPages = files
-    .filter((file) => typeof file.path === "string" && typeof file.content === "string")
+    .filter((file) => typeof file.path === "string" && typeof file.content === "string" && isDeployableNextFile(file.path))
     .map((file) => {
       const safeName = file.path.replace(/^\/+/, "").slice(0, 255)
       return {
@@ -68,17 +82,18 @@ export async function POST(req: Request) {
     }
 
     const result = await runAIWebsiteBuilder(prompt)
+    const deployableFiles = result.files.filter((file) => isDeployableNextFile(file.path))
     let savedPages = 0
     if (body.projectId) {
-      await saveGeneratedFilesToProject(session.user.id, body.projectId, result.files)
-      savedPages = result.files.length
+      await saveGeneratedFilesToProject(session.user.id, body.projectId, deployableFiles)
+      savedPages = deployableFiles.length
     }
 
     const routeSummary = result.manifest.pages.map((p) => p.path).join(", ")
     return NextResponse.json({
       message: `Builder completed ${result.manifest.pages.length} pages: ${routeSummary}`,
       manifest: result.manifest,
-      files: result.files,
+      files: deployableFiles,
       savedPages,
       build: result.build,
       logs: result.logs,
