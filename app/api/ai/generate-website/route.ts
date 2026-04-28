@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { runAIWebsiteBuilder } from "@/lib/ai-website-builder"
+import { BuilderPipelineError, runAIWebsiteBuilder } from "@/lib/ai-website-builder"
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -28,6 +28,18 @@ export async function POST(req: Request) {
       logs: result.logs,
     })
   } catch (error) {
+    if (error instanceof BuilderPipelineError) {
+      return NextResponse.json(
+        {
+          message: "Builder failed",
+          details: error.message,
+          failingFunction: error.failingFn,
+          logs: error.logs,
+          build: { ok: false, errors: [error.message], attempts: 1 },
+        },
+        { status: 500 },
+      )
+    }
     return NextResponse.json(
       {
         message: "Builder failed",

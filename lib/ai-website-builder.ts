@@ -47,9 +47,13 @@ interface BuilderFile {
   content: string
 }
 
-interface PipelineLog {
+export interface PipelineLog {
   step: string
+  fn: string
+  status: "running" | "completed" | "failed" | "fallback"
   detail: string
+  durationMs?: number
+  error?: string
 }
 
 interface RunBuilderResult {
@@ -57,6 +61,18 @@ interface RunBuilderResult {
   files: BuilderFile[]
   logs: PipelineLog[]
   build: { ok: boolean; errors: string[]; attempts: number }
+}
+
+export class BuilderPipelineError extends Error {
+  logs: PipelineLog[]
+  failingFn: string
+
+  constructor(message: string, failingFn: string, logs: PipelineLog[]) {
+    super(message)
+    this.name = "BuilderPipelineError"
+    this.failingFn = failingFn
+    this.logs = logs
+  }
 }
 
 interface ComponentEntry {
@@ -84,14 +100,14 @@ interface PageJson {
 }
 
 const GOOGLE_PLANNER_MODEL = { id: "gemini-3.1-flash-preview", provider: "Google" }
-const GOOGLE_PAGE_MODEL = { id: "gemini-3.1-pro-preview", provider: "Google" }
+const GOOGLE_PAGE_MODEL = { id: "gemini-3.1-flash-preview", provider: "Google" }
 
 async function callAIAgent(
   messages: ChatMessage[],
   opts: { temperature?: number; retries?: number; mode?: "planner" | "page" } = {},
 ) {
   const temperature = opts.temperature ?? 0.2
-  const retries = opts.retries ?? 2
+  const retries = opts.retries ?? (opts.mode === "page" ? 1 : 2)
   const model = opts.mode === "page" ? GOOGLE_PAGE_MODEL : GOOGLE_PLANNER_MODEL
 
   let lastError = "Unknown AI error"
@@ -572,40 +588,92 @@ function runBuildValidation(files: BuilderFile[]) {
 
 export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
-
-  logs.push({ step: "runAIWebsiteBuilder", detail: "planning() - generating AI site plan" })
-  const plan = await planWebsite(userPrompt)
-
-  logs.push({ step: "runAIWebsiteBuilder", detail: "manifest() - building deterministic manifest" })
-  const manifest = buildManifest(plan)
-
-  logs.push({ step: "runAIWebsiteBuilder", detail: "componentContext() - loading component source-of-truth" })
-  const library = await loadComponentLibrary()
-
-  logs.push({ step: "runAIWebsiteBuilder", detail: "scaffold() - generating Next.js base files" })
-  const files: BuilderFile[] = [...scaffoldFiles(manifest)]
-
-  for (const page of manifest.pages) {
-    logs.push({ step: "runAIWebsiteBuilder", detail: `generatePageJson(${page.path}) - generating page JSON` })
-    const subset = buildComponentSubset(page, library)
-    const rawJson = await generatePageJson(userPrompt, page, manifest, subset)
-    files.push({ path: `.sycord/page-json${page.path === "/" ? "/home" : page.path}.json`, content: JSON.stringify(rawJson, null, 2) })
-
-    logs.push({ step: "runAIWebsiteBuilder", detail: `validatePageJson(${page.path}) - validating JSON` })
-    const errors = validatePageJson(rawJson, page, manifest.pages.map((p) => p.path))
-    const usableJson = errors.length ? fallbackPageJson(page) : rawJson
-
-    if (errors.length) {
-      logs.push({ step: "runAIWebsiteBuilder", detail: `fallback(${page.path}) - used deterministic fallback due to: ${errors.join("; ")}` })
-    }
-
-    logs.push({ step: "runAIWebsiteBuilder", detail: `convert(${page.path}) - converting JSON to ${page.filePath}` })
-    files.push({ path: page.filePath, content: convertToPageFile(manifest, page, usableJson) })
+  const begin = (fn: string, detail: string) => {
+    const entry: PipelineLog = { step: "runAIWebsiteBuilder", fn, status: "running", detail }
+    logs.push(entry)
+    return { entry, started: Date.now() }
   }
 
-  logs.push({ step: "runAIWebsiteBuilder", detail: "buildValidation() - checking generated project output" })
-  const build = runBuildValidation(files)
+  const complete = (ctx: { entry: PipelineLog; started: number }, detail?: string) => {
+    ctx.entry.status = "completed"
+    ctx.entry.durationMs = Date.now() - ctx.started
+    if (detail) ctx.entry.detail = detail
+  }
 
-  logs.push({ step: "runAIWebsiteBuilder", detail: `done() - generated ${files.length} files` })
-  return { manifest, files, logs, build }
+  const fail = (ctx: { entry: PipelineLog; started: number }, error: unknown) => {
+    ctx.entry.status = "failed"
+    ctx.entry.durationMs = Date.now() - ctx.started
+    ctx.entry.error = error instanceof Error ? error.message : String(error)
+  }
+
+  try {
+    const planning = begin("planning", "Generating AI site plan")
+    const plan = await planWebsite(userPrompt)
+    complete(planning, `Planned ${plan.pages.length} pages`)
+
+    const manifestStep = begin("manifest", "Building deterministic manifest")
+    const manifest = buildManifest(plan)
+    complete(manifestStep, `Manifest ready with ${manifest.pages.length} routes`)
+
+    const componentContext = begin("componentContext", "Loading component source-of-truth")
+    const library = await loadComponentLibrary()
+    complete(componentContext, `Loaded ${library.length} component definitions`)
+
+    const scaffoldStep = begin("scaffold", "Generating Next.js base files")
+    const files: BuilderFile[] = [...scaffoldFiles(manifest)]
+    complete(scaffoldStep, `Scaffolded ${files.length} base files`)
+
+    for (const page of manifest.pages) {
+      const jsonStep = begin("generatePageJson", `Generating JSON for ${page.path}`)
+      const subset = buildComponentSubset(page, library)
+      const rawJson = await generatePageJson(userPrompt, page, manifest, subset)
+      files.push({
+        path: `.sycord/page-json${page.path === "/" ? "/home" : page.path}.json`,
+        content: JSON.stringify(rawJson, null, 2),
+      })
+      complete(jsonStep, `Generated JSON for ${page.path} using ${subset.length} components`)
+
+      const validateStep = begin("validatePageJson", `Validating ${page.path}`)
+      const errors = validatePageJson(rawJson, page, manifest.pages.map((p) => p.path))
+      complete(validateStep, errors.length ? `Validation found ${errors.length} issue(s)` : "Validation passed")
+
+      const usableJson = errors.length ? fallbackPageJson(page) : rawJson
+      if (errors.length) {
+        logs.push({
+          step: "runAIWebsiteBuilder",
+          fn: "fallback",
+          status: "fallback",
+          detail: `Fallback for ${page.path}: ${errors.join("; ")}`,
+        })
+      }
+
+      const convertStep = begin("convert", `Converting ${page.path} into ${page.filePath}`)
+      files.push({ path: page.filePath, content: convertToPageFile(manifest, page, usableJson) })
+      complete(convertStep, `Generated ${page.filePath}`)
+    }
+
+    const buildStep = begin("buildValidation", "Checking generated project output")
+    const build = runBuildValidation(files)
+    complete(buildStep, build.ok ? "Build validation passed" : `Build validation failed with ${build.errors.length} error(s)`)
+
+    logs.push({
+      step: "runAIWebsiteBuilder",
+      fn: "done",
+      status: "completed",
+      detail: `Generated ${files.length} files`,
+    })
+
+    return { manifest, files, logs, build }
+  } catch (error) {
+    const running = [...logs].reverse().find((log) => log.status === "running")
+    if (running) {
+      fail({ entry: running, started: Date.now() }, error)
+    }
+    const failingFn = running?.fn || "unknown"
+    throw new BuilderPipelineError(
+      `Builder failed in ${failingFn}: ${error instanceof Error ? error.message : String(error)}`,
+      failingFn,
+      logs,
+    )
+  }
 }

@@ -321,7 +321,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentPipelineStep, setCurrentPipelineStep] = useState<string>("Planning")
+  const [currentPipelineStep, setCurrentPipelineStep] = useState<string>("Idle")
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
@@ -363,27 +363,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     }
   }, [messages.length, isLoading])
 
-  useEffect(() => {
-    if (!isLoading) return
-    const steps = [
-      "Planning",
-      "Manifest",
-      "Component Context",
-      "Scaffold",
-      "Generating Page JSON",
-      "Validating JSON",
-      "Converting to Files",
-      "Building",
-    ]
-    let idx = 0
-    setCurrentPipelineStep(steps[idx])
-    const timer = setInterval(() => {
-      idx = (idx + 1) % steps.length
-      setCurrentPipelineStep(steps[idx])
-    }, 1200)
-    return () => clearInterval(timer)
-  }, [isLoading])
-
   const startGeneration = async () => {
     if (!input.trim() || isLoading) return
 
@@ -402,6 +381,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     setAttachments([])
     setError(null)
     setIsLoading(true)
+    setCurrentPipelineStep("Running pipeline...")
 
     try {
       const res = await fetch('/api/ai/generate-website', {
@@ -411,6 +391,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       })
 
       const data = await res.json()
+      if (!res.ok) {
+        const failureReason = data?.details || data?.message || "Builder failed"
+        const fn = data?.failingFunction ? ` (${data.failingFunction})` : ""
+        setError(`${failureReason}${fn}`)
+      }
 
       const assistantMessages: Message[] = []
       assistantMessages.push({
@@ -421,7 +406,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       if (Array.isArray(data?.logs) && data.logs.length > 0) {
         const progressText = data.logs
-          .map((log: { step?: string; detail?: string }) => `• ${log.detail || log.step || "Pipeline step completed"}`)
+          .map((log: { fn?: string; status?: string; detail?: string; error?: string }) => {
+            const icon = log.status === "failed" ? "❌" : log.status === "fallback" ? "⚠️" : "✅"
+            const suffix = log.error ? ` (${log.error})` : ""
+            return `${icon} ${log.fn || "step"}: ${log.detail || "Pipeline step completed"}${suffix}`
+          })
           .join("\n")
 
         assistantMessages.push({
@@ -432,8 +421,13 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       }
 
       setMessages(prev => [...prev, ...assistantMessages])
+      const latest = Array.isArray(data?.logs) && data.logs.length > 0
+        ? data.logs[data.logs.length - 1]
+        : null
+      setCurrentPipelineStep(latest?.detail || (res.ok ? "Completed" : "Failed"))
     } catch (err: any) {
       setError(err.message || "Failed to send message")
+      setCurrentPipelineStep("Failed")
     } finally {
       setIsLoading(false)
     }
