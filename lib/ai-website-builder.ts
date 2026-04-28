@@ -667,6 +667,22 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
     files.push({ path: page.filePath, content: convertToPageFile(manifest, page, usableJson) })
   }
 
+  logs.push({ step: "runAIWebsiteBuilder", detail: "vmAdapter() - creating Next.js file payload for runner VM" })
+  files.push({
+    path: ".sycord/vm/deploy-payload.json",
+    content: JSON.stringify(
+      {
+        runtime: "nextjs",
+        createdAt: new Date().toISOString(),
+        files: files
+          .filter((f) => !f.path.startsWith(".sycord/page-json"))
+          .map((f) => ({ path: f.path, size: f.content.length })),
+      },
+      null,
+      2,
+    ),
+  })
+
   logs.push({ step: "runAIWebsiteBuilder", detail: "buildValidation() - checking generated project output" })
   const build = runBuildValidation(files)
 

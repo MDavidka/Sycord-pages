@@ -407,10 +407,24 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       const res = await fetch('/api/ai/generate-website', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel }),
+        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel, projectId }),
       })
 
       const data = await res.json()
+
+      if (Array.isArray(data?.files)) {
+        const nextPages: GeneratedPage[] = data.files
+          .filter((f: { path?: string; content?: string }) => typeof f?.path === "string" && typeof f?.content === "string")
+          .map((f: { path: string; content: string }) => ({
+            name: f.path,
+            code: f.content,
+            timestamp: Date.now(),
+            usedFor: "ai-builder",
+          }))
+        if (nextPages.length > 0) {
+          setGeneratedPages(nextPages)
+        }
+      }
 
       const assistantMessages: Message[] = []
       assistantMessages.push({
@@ -418,6 +432,14 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         role: "assistant",
         content: data.message || "Website generation finished.",
       })
+
+      if (typeof data?.savedPages === "number" && data.savedPages > 0) {
+        assistantMessages.push({
+          id: (Date.now() + 11).toString(),
+          role: "assistant",
+          content: `Saved ${data.savedPages} generated files to project Pages.`,
+        })
+      }
 
       if (Array.isArray(data?.logs) && data.logs.length > 0) {
         const progressText = data.logs
