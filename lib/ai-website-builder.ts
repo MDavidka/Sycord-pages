@@ -524,7 +524,11 @@ function scaffoldFiles(manifest: ProjectManifest): BuilderFile[] {
         2,
       ),
     },
-    { path: "next.config.ts", content: "const nextConfig = {}\nexport default nextConfig\n" },
+    {
+      path: "next.config.ts",
+      content:
+        "const nextConfig = {\n  output: \"export\",\n  images: { unoptimized: true },\n  trailingSlash: true,\n}\nexport default nextConfig\n",
+    },
     {
       path: "tsconfig.json",
       content: JSON.stringify(
@@ -642,6 +646,10 @@ function runBuildValidation(files: BuilderFile[]) {
   const postcssConfig = fileMap.get("postcss.config.js") || ""
   if (!postcssConfig.includes("@tailwindcss/postcss")) {
     errors.push("postcss.config.js must use @tailwindcss/postcss plugin")
+  }
+  const nextConfig = fileMap.get("next.config.ts") || ""
+  if (!nextConfig.includes("output: \"export\"")) {
+    errors.push("next.config.ts must set output: \"export\" for static runner hosting")
   }
 
   return { ok: errors.length === 0, errors, attempts: 1 }
