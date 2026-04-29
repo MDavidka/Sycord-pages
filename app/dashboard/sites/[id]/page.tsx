@@ -649,6 +649,7 @@ export default function SiteSettingsPage() {
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string } | null>(null)
+  const [isUpdatingVps, setIsUpdatingVps] = useState(false)
 
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
@@ -1184,6 +1185,41 @@ export default function SiteSettingsPage() {
       setTimeout(fetchLogs, 1000)
     } finally {
       setIsDeploying(false)
+    }
+  }
+
+  const handleUpdateVps = async () => {
+    if (isUpdatingVps) return
+    setIsUpdatingVps(true)
+    try {
+      const initRes = await fetch("/api/vps/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "init" }),
+      })
+
+      if (!initRes.ok && initRes.status !== 401) {
+        const data = await initRes.json().catch(() => ({}))
+        throw new Error(data.error || "VPS init update failed")
+      }
+
+      const restartRes = await fetch("/api/vps/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restart" }),
+      })
+
+      if (!restartRes.ok) {
+        const data = await restartRes.json().catch(() => ({}))
+        throw new Error(data.error || "VPS restart failed")
+      }
+
+      await fetchLogs()
+      alert("VPS runtime updated and runner restarted.")
+    } catch (error: any) {
+      alert(error.message || "Failed to update VPS runtime")
+    } finally {
+      setIsUpdatingVps(false)
     }
   }
 
@@ -2359,6 +2395,19 @@ export default function SiteSettingsPage() {
                     <div className="flex items-center gap-2">
                       {generatedPages.length > 0 && (
                         <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleUpdateVps}
+                            disabled={isUpdatingVps}
+                          >
+                            {isUpdatingVps ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                            )}
+                            Update VPS
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
