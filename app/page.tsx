@@ -1,73 +1,75 @@
 "use client"
 
 import Image from "next/image"
-import Link from "next/link"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 
 export default function LandingPage() {
   const { data: session } = useSession()
-  const userInitial = session?.user?.name?.trim()?.charAt(0)?.toUpperCase() || "M"
+  const userInitial =
+    session?.user?.name?.trim()?.charAt(0)?.toUpperCase() || "M"
 
   return (
-    <main className="min-h-screen bg-[#0f1218] text-white relative overflow-hidden">
+    <main className="relative min-h-[100svh] w-full overflow-hidden bg-[#0f1115] text-white">
       <div
-        className="absolute inset-0 opacity-30"
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-40"
         style={{
-          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.10) 1.5px, transparent 1.5px)",
-          backgroundSize: "48px 48px",
+          backgroundImage:
+            "radial-gradient(circle, rgba(255,255,255,0.09) 1.25px, transparent 1.25px)",
+          backgroundSize: "26px 26px",
         }}
       />
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-6 py-10 sm:px-10">
+      <div className="relative z-10 mx-auto flex min-h-[100svh] w-full max-w-6xl flex-col px-5 pt-6 sm:px-8 sm:pt-8 lg:px-12 lg:pt-10">
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Sycord" width={44} height={44} className="opacity-90" priority />
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Sycord"
+            width={48}
+            height={48}
+            priority
+            className="h-8 w-auto opacity-60 sm:h-9 lg:h-10"
+          />
 
-          <div className="flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 backdrop-blur">
+          <div className="flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.04] p-1.5 backdrop-blur-sm">
+            <div
+              aria-hidden
+              className="h-7 w-20 rounded-full bg-white/[0.05] sm:w-28"
+            />
             {session?.user?.image ? (
               <Image
                 src={session.user.image}
                 alt="Profile"
-                width={32}
-                height={32}
-                className="h-8 w-8 rounded-full object-cover"
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-md object-cover"
               />
             ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-sm font-semibold">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-[13px] font-semibold text-black">
                 {userInitial}
               </div>
             )}
           </div>
         </header>
 
-        <section className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center text-center">
-          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">
-            Create <span className="text-zinc-400">your site</span>
+        <section className="flex flex-1 flex-col items-center justify-center pb-10 pt-10 text-center sm:pb-14 sm:pt-14">
+          <h1 className="text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+            Create <span className="text-zinc-500">your site</span>
             <br />
             under a minute
           </h1>
 
-          <div className="mt-12 flex flex-col gap-3 sm:flex-row">
-            <Button
-              asChild
-              variant="outline"
-              className="h-12 min-w-[160px] rounded-2xl border-white/20 bg-transparent text-lg text-white hover:bg-white/10"
-            >
-              <Link href="/login">Get Started</Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              className="h-12 min-w-[160px] rounded-2xl border-white/20 bg-transparent text-lg text-white hover:bg-white/10"
-            >
-              <Link href="/dashboard">Dashboard</Link>
-            </Button>
+          <div className="mt-10 flex items-center justify-center gap-3 sm:mt-12">
+            <Button variant="outline">Button</Button>
+            <Button variant="outline">Button</Button>
           </div>
         </section>
 
-        <section className="mx-auto mb-6 h-[340px] w-full max-w-5xl rounded-[2.5rem] border border-white/10 bg-white/[0.05]" />
+        <div
+          aria-hidden
+          className="mx-auto mt-auto h-[42svh] w-full max-w-5xl rounded-t-[2rem] border border-b-0 border-white/[0.06] bg-white/[0.04] sm:h-[48svh] sm:rounded-t-[2.5rem] lg:h-[52svh]"
+        />
       </div>
     </main>
   )
