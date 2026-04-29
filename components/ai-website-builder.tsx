@@ -194,14 +194,14 @@ const InputBar = ({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className="bg-[#1c1c1c] border border-white/10 min-w-[260px] rounded-xl p-1.5"
+                  className="bg-[#1c1c1c]/95 backdrop-blur-xl border border-white/10 min-w-[280px] rounded-2xl p-2 shadow-2xl"
                 >
-                  <div className="px-2 pt-1 pb-1 text-[10px] text-zinc-500 leading-relaxed">
+                  <div className="px-2.5 pt-1 pb-2 text-[10px] text-zinc-500 leading-relaxed border-b border-white/10 mb-1.5">
                     Planning always runs on <span className="text-zinc-300">Gemini 3.1 Flash-Lite</span> for fast reasoning. Pick Gemini Pro for quality or Flash for speed when generating code.
                   </div>
                   {bestModels.length > 0 && (
                     <>
-                      <div className="px-2 pt-1.5 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/80">
+                      <div className="px-2.5 pt-1.5 pb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/90">
                         <Gem className="h-3 w-3" />
                         Best
                         <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">
@@ -221,7 +221,7 @@ const InputBar = ({
                   )}
                   {fastModels.length > 0 && (
                     <>
-                      <div className="px-2 pt-2 pb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-yellow-300/80">
+                      <div className="px-2.5 pt-2.5 pb-1.5 mt-1 border-t border-white/10 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-yellow-300/90">
                         <Zap className="h-3 w-3" />
                         Fast
                         <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">
@@ -293,8 +293,10 @@ const ModelRow = ({
   <DropdownMenuItem
     onClick={onSelect}
     className={cn(
-      "text-xs rounded-lg px-2 py-1.5 flex items-center gap-2",
-      selected ? "text-white bg-white/[0.08]" : "text-zinc-300 hover:bg-white/[0.04]"
+      "text-xs rounded-xl px-2.5 py-2 flex items-center gap-2.5 border transition-all",
+      selected
+        ? "text-white bg-white/[0.10] border-white/20 shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset]"
+        : "text-zinc-300 border-transparent hover:bg-white/[0.05] hover:border-white/10"
     )}
   >
     {tier === "fast"
@@ -302,7 +304,9 @@ const ModelRow = ({
       : <Gem className="h-3 w-3 text-violet-400 shrink-0" />
     }
     <span className="flex-1 min-w-0 truncate">{model.name}</span>
-    <span className="text-[10px] text-zinc-500 shrink-0">{model.provider}</span>
+    <span className="text-[10px] text-zinc-500 shrink-0 px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.06]">
+      {model.provider}
+    </span>
     {selected && <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />}
   </DropdownMenuItem>
 )
@@ -321,6 +325,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPipelineStep, setCurrentPipelineStep] = useState<string>("Planning")
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
@@ -362,6 +367,27 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     }
   }, [messages.length, isLoading])
 
+  useEffect(() => {
+    if (!isLoading) return
+    const steps = [
+      "Planning",
+      "Manifest",
+      "Component Context",
+      "Scaffold",
+      "Generating Page JSON",
+      "Validating JSON",
+      "Converting to Files",
+      "Building",
+    ]
+    let idx = 0
+    setCurrentPipelineStep(steps[idx])
+    const timer = setInterval(() => {
+      idx = (idx + 1) % steps.length
+      setCurrentPipelineStep(steps[idx])
+    }, 1200)
+    return () => clearInterval(timer)
+  }, [isLoading])
+
   const startGeneration = async () => {
     if (!input.trim() || isLoading) return
 
@@ -385,16 +411,53 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       const res = await fetch('/api/ai/generate-website', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel }),
+        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel, projectId }),
       })
 
       const data = await res.json()
 
-      setMessages(prev => [...prev, {
+      if (Array.isArray(data?.files)) {
+        const nextPages: GeneratedPage[] = data.files
+          .filter((f: { path?: string; content?: string }) => typeof f?.path === "string" && typeof f?.content === "string")
+          .map((f: { path: string; content: string }) => ({
+            name: f.path,
+            code: f.content,
+            timestamp: Date.now(),
+            usedFor: "ai-builder",
+          }))
+        if (nextPages.length > 0) {
+          setGeneratedPages(nextPages)
+        }
+      }
+
+      const assistantMessages: Message[] = []
+      assistantMessages.push({
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: data.message || "Website generation is currently disabled.",
-      }])
+        content: data.message || "Website generation finished.",
+      })
+
+      if (typeof data?.savedPages === "number" && data.savedPages > 0) {
+        assistantMessages.push({
+          id: (Date.now() + 11).toString(),
+          role: "assistant",
+          content: `Saved ${data.savedPages} generated files to project Pages.`,
+        })
+      }
+
+      if (Array.isArray(data?.logs) && data.logs.length > 0) {
+        const progressText = data.logs
+          .map((log: { step?: string; detail?: string }) => `• ${log.detail || log.step || "Pipeline step completed"}`)
+          .join("\n")
+
+        assistantMessages.push({
+          id: (Date.now() + 2).toString(),
+          role: "assistant",
+          content: `Pipeline execution:\n${progressText}`,
+        })
+      }
+
+      setMessages(prev => [...prev, ...assistantMessages])
     } catch (err: any) {
       setError(err.message || "Failed to send message")
     } finally {
@@ -498,7 +561,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                                     <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
                                     <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
                                     </div>
-                                    <span className="text-xs text-zinc-500 ml-1">Thinking</span>
+                                    <span className="text-xs text-zinc-500 ml-1">{currentPipelineStep}...</span>
                                 </div>
                             </div>
                         )}

@@ -654,6 +654,14 @@ export default function SiteSettingsPage() {
   const [logs, setLogs] = useState<string[]>([])
   const [hasDeployError, setHasDeployError] = useState(false)
 
+  const runnerErrorDetails = useMemo(() => {
+    if (!Array.isArray(logs) || logs.length === 0) return null
+    const errorPattern = /(build error occurred|turbopack build failed|failed to type check|module not found|cannot find module|npm run build exited|error evaluating node\.js code)/i
+    const relevant = logs.filter((line) => errorPattern.test(line))
+    if (relevant.length === 0) return null
+    return relevant.slice(-10).join("\n")
+  }, [logs])
+
   // Database / Firebase connection state
   const [databaseConnected, setDatabaseConnected] = useState(false)
 
@@ -2393,6 +2401,31 @@ export default function SiteSettingsPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {(deployError || runnerErrorDetails || hasDeployError) && (
+                    <Card className="border-destructive/40 bg-destructive/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-destructive flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          Runner Build Error
+                        </CardTitle>
+                        <CardDescription className="text-xs">
+                          Latest deployment/build issue captured from runner logs.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <pre className="text-xs whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 text-red-100 border border-red-500/20 max-h-64 overflow-y-auto">
+                          {deployError || runnerErrorDetails || "Deployment failed. Check runner logs for details."}
+                        </pre>
+                        <div className="mt-3">
+                          <Button variant="outline" size="sm" onClick={() => fetchLogs()}>
+                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                            Refresh Runner Logs
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {generatedPages.length === 0 ? (
                     <div className="border-2 border-dashed border-white/10 rounded-xl p-12 text-center bg-white/5">
