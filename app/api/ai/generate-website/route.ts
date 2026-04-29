@@ -10,6 +10,12 @@ interface GeneratedFile {
   content: string
 }
 
+function isDeployableFilePath(filePath: string) {
+  if (!filePath || filePath.startsWith(".sycord/")) return false
+  if (filePath.endsWith(".json") && filePath !== "package.json" && filePath !== "tsconfig.json") return false
+  return true
+}
+
 async function saveGeneratedFilesToProject(
   userId: string,
   projectId: string,
@@ -20,7 +26,11 @@ async function saveGeneratedFilesToProject(
   }
 
   const normalizedPages = files
-    .filter((file) => typeof file.path === "string" && typeof file.content === "string")
+    .filter((file) =>
+      typeof file.path === "string" &&
+      typeof file.content === "string" &&
+      isDeployableFilePath(file.path),
+    )
     .map((file) => {
       const safeName = file.path.replace(/^\/+/, "").slice(0, 255)
       return {

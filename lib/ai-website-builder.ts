@@ -59,6 +59,11 @@ interface RunBuilderResult {
   build: { ok: boolean; errors: string[]; attempts: number }
 }
 
+function isDeployableProjectFile(filePath: string) {
+  if (!filePath || filePath.startsWith(".sycord/")) return false
+  return true
+}
+
 interface ComponentEntry {
   name: string
   import_path: string
@@ -667,6 +672,7 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
 
   logs.push({ step: "runAIWebsiteBuilder", detail: "scaffold() - generating Next.js base files" })
   let files: BuilderFile[] = []
+  const debugFiles: BuilderFile[] = []
   try {
     files = [...scaffoldFiles(manifest)]
     logs.push({ step: "scaffold", detail: `Generated ${files.length} base files` })
@@ -686,7 +692,7 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
     logs.push({ step: "runAIWebsiteBuilder", detail: `generatePageJson(${page.path}) - generating page JSON` })
     const subset = buildComponentSubset(page, library)
     const rawJson = await generatePageJson(userPrompt, page, manifest, subset)
-    files.push({ path: `.sycord/page-json${page.path === "/" ? "/home" : page.path}.json`, content: JSON.stringify(rawJson, null, 2) })
+    debugFiles.push({ path: `.sycord/page-json${page.path === "/" ? "/home" : page.path}.json`, content: JSON.stringify(rawJson, null, 2) })
 
     logs.push({ step: "runAIWebsiteBuilder", detail: `validatePageJson(${page.path}) - validating JSON` })
     const errors = validatePageJson(rawJson, page, manifest.pages.map((p) => p.path))
@@ -701,14 +707,13 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
   }
 
   logs.push({ step: "runAIWebsiteBuilder", detail: "vmAdapter() - creating Next.js file payload for runner VM" })
-  files.push({
+  debugFiles.push({
     path: ".sycord/vm/deploy-payload.json",
     content: JSON.stringify(
       {
         runtime: "nextjs",
         createdAt: new Date().toISOString(),
         files: files
-          .filter((f) => !f.path.startsWith(".sycord/page-json"))
           .map((f) => ({ path: f.path, size: f.content.length })),
       },
       null,
@@ -717,8 +722,9 @@ export async function runAIWebsiteBuilder(userPrompt: string): Promise<RunBuilde
   })
 
   logs.push({ step: "runAIWebsiteBuilder", detail: "buildValidation() - checking generated project output" })
-  const build = runBuildValidation(files)
+  const deployableFiles = files.filter((f) => isDeployableProjectFile(f.path))
+  const build = runBuildValidation(deployableFiles)
 
-  logs.push({ step: "runAIWebsiteBuilder", detail: `done() - generated ${files.length} files` })
-  return { manifest, files, logs, build }
+  logs.push({ step: "runAIWebsiteBuilder", detail: `done() - generated ${deployableFiles.length} deployable files (${debugFiles.length} debug artifacts kept in memory)` })
+  return { manifest, files: deployableFiles, logs, build }
 }
