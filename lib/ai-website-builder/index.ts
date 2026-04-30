@@ -19,10 +19,14 @@ import type {
   BuilderOptions,
   CtaPlan,
   DesignBrief,
+  EnvVarRequirement,
   GeneratedProjectManifest,
+  IntegrationKind,
+  IntegrationPlan,
   NavLink,
   PagePlan,
   PipelineLog,
+  ProjectContext,
   RequiredComponent,
   RunBuilderResult,
   SectionItem,
@@ -35,13 +39,16 @@ import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
 import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
-import { ALL_UI_COMPONENTS, buildUiComponentFiles, scaffoldBaseFiles } from "./scaffold"
+import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
 export type {
   BuilderOptions,
+  EnvVarRequirement,
   GeneratedProjectManifest,
+  IntegrationPlan,
   PagePlan,
+  ProjectContext,
   RunBuilderResult,
   SectionPlan,
   ThemeTokens,
@@ -321,15 +328,19 @@ function defaultSectionsForRoute(routePath: string, brief: DesignBrief): Section
   }
 }
 
-function fallbackBriefFromPrompt(prompt: string): DesignBrief {
+function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): DesignBrief {
   const seedName = (prompt.split(/\s+/).slice(0, 3).join(" ").trim() || "Sycord Site").replace(/[^A-Za-z0-9 ]/g, "")
+  const derivedName = seedName.length > 2 ? seedName : "Sycord Studio"
+  const projectName = project?.name?.trim() || derivedName
+  const description = project?.description?.trim()
+    || (prompt.length > 30 ? prompt : "A polished, mobile-first website tuned for the brand and audience.")
   return {
-    projectName: seedName.length > 2 ? seedName : "Sycord Studio",
+    projectName,
     tagline: "Beautiful, fast, on-brand websites.",
-    description: prompt.length > 30 ? prompt : "A polished, mobile-first website tuned for the brand and audience.",
+    description,
     audience: "Modern teams that care about craft.",
     voice: "Confident, warm, specific.",
-    themePreset: detectPresetFromPrompt(prompt),
+    themePreset: detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`),
     navLinks: [
       { label: "Home", href: "/" },
       { label: "Features", href: "/features" },
@@ -341,6 +352,9 @@ function fallbackBriefFromPrompt(prompt: string): DesignBrief {
     secondaryCta: { label: "Learn more", href: "/about" },
     footerCta: { label: "Talk to us", href: "/contact" },
     contact: { email: "hello@example.com" },
+    logoUrl: project?.logoUrl,
+    logoInitials: computeInitials(projectName),
+    category: project?.category,
   }
 }
 
@@ -354,8 +368,8 @@ function fallbackPagesFromBrief(brief: DesignBrief): PagePlan[] {
   }))
 }
 
-function normalizeManifest(raw: unknown, prompt: string): GeneratedProjectManifest {
-  const fallbackBrief = fallbackBriefFromPrompt(prompt)
+function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext): GeneratedProjectManifest {
+  const fallbackBrief = fallbackBriefFromPrompt(prompt, project)
   const root = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
   const briefRaw = (root.brief as Record<string, unknown> | undefined) ?? {}
 
@@ -363,7 +377,7 @@ function normalizeManifest(raw: unknown, prompt: string): GeneratedProjectManife
     const fromAi = safeText(briefRaw.themePreset, "")
     const candidate = fromAi.toLowerCase().replace(/\s+/g, "-") as ThemePreset
     if (THEME_PRESETS.includes(candidate)) return candidate
-    return detectPresetFromPrompt(prompt)
+    return detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`)
   })()
 
   // Pre-normalize page paths to wire navLinks against real routes.
@@ -421,12 +435,23 @@ function normalizeManifest(raw: unknown, prompt: string): GeneratedProjectManife
     }
   }
 
+  // Host-project branding always wins over AI-invented names/descriptions.
+  // If the planner proposed a different name, keep the real project name
+  // and fold the AI's suggestion into the tagline instead (less disruptive
+  // than renaming the user's business).
+  const aiProjectName = safeText(briefRaw.projectName, "")
+  const resolvedProjectName = project?.name?.trim() || aiProjectName || fallbackBrief.projectName
+  const aiTagline = safeText(briefRaw.tagline, "")
+  const resolvedTagline = aiTagline
+    || (aiProjectName && project?.name && aiProjectName !== project.name ? aiProjectName : fallbackBrief.tagline)
+  const resolvedDescription = project?.description?.trim() || safeText(briefRaw.description, fallbackBrief.description)
+
   // Fill empty sections from defaults and de-dup consecutive variants.
   const briefSeed: DesignBrief = {
     ...fallbackBrief,
-    projectName: safeText(briefRaw.projectName, fallbackBrief.projectName),
-    tagline: safeText(briefRaw.tagline, fallbackBrief.tagline),
-    description: safeText(briefRaw.description, fallbackBrief.description),
+    projectName: resolvedProjectName,
+    tagline: resolvedTagline,
+    description: resolvedDescription,
     audience: safeText(briefRaw.audience, fallbackBrief.audience),
     voice: safeText(briefRaw.voice, fallbackBrief.voice),
     themePreset,
@@ -454,6 +479,9 @@ function normalizeManifest(raw: unknown, prompt: string): GeneratedProjectManife
         address: safeText(c.address, "") || undefined,
       }
     })(),
+    logoUrl: project?.logoUrl || fallbackBrief.logoUrl,
+    logoInitials: computeInitials(resolvedProjectName),
+    category: project?.category || fallbackBrief.category,
   }
 
   for (const page of pages) {
@@ -468,11 +496,194 @@ function normalizeManifest(raw: unknown, prompt: string): GeneratedProjectManife
     page.sections = dedupConsecutive(page.sections)
   }
 
+  const { needsDatabase, integrations, databaseProvider } = resolveIntegrations(root, prompt, project)
+  const requiredEnvVars = buildRequiredEnvVars(integrations, needsDatabase)
+
   return {
     brief: briefSeed,
     theme: buildTheme(themePreset),
     pages,
+    needsDatabase,
+    databaseProvider,
+    integrations,
+    requiredEnvVars,
   }
+}
+
+// Keywords that unambiguously point at features requiring persistent data.
+const DB_KEYWORDS = [
+  "booking",
+  "reservation",
+  "appointment",
+  "schedule",
+  "dashboard",
+  "account",
+  "sign up",
+  "signup",
+  "login",
+  "admin",
+  "cms",
+  "editor",
+  "marketplace",
+  "orders",
+  "order",
+  "cart",
+  "checkout",
+  "ecommerce",
+  "e-commerce",
+  "storefront",
+  "inventory",
+  "product",
+  "submission",
+  "form",
+  "blog post",
+  "content",
+  "save",
+  "persist",
+]
+
+const INTEGRATION_KINDS: ReadonlySet<IntegrationKind> = new Set<IntegrationKind>([
+  "database",
+  "auth",
+  "email",
+  "analytics",
+  "storage",
+  "payments",
+  "other",
+])
+
+function promptSuggestsDatabase(prompt: string, project?: ProjectContext): boolean {
+  const blob = `${prompt} ${project?.description ?? ""} ${project?.category ?? ""}`.toLowerCase()
+  return DB_KEYWORDS.some((kw) => blob.includes(kw))
+}
+
+function envKeyLooksLikeSecret(key: string): boolean {
+  return /^[A-Z][A-Z0-9_]*$/.test(key.trim())
+}
+
+function normalizeIntegration(raw: unknown): IntegrationPlan | null {
+  if (!raw || typeof raw !== "object") return null
+  const r = raw as Record<string, unknown>
+  const name = safeText(r.name, "")
+  const providerRaw = safeText(r.provider, "").toLowerCase()
+  if (!name) return null
+  const kindCandidate = safeText(r.kind, "").toLowerCase() as IntegrationKind
+  const kind: IntegrationKind = INTEGRATION_KINDS.has(kindCandidate) ? kindCandidate : "other"
+  const envVars = Array.isArray(r.envVars)
+    ? (r.envVars as unknown[])
+        .map((e) => safeText(e, ""))
+        .filter(envKeyLooksLikeSecret)
+    : []
+  return {
+    kind,
+    name,
+    provider: providerRaw || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    reason: safeText(r.reason, ""),
+    envVars,
+  }
+}
+
+function tursoIntegration(reason: string): IntegrationPlan {
+  return {
+    kind: "database",
+    name: "Turso",
+    provider: "turso",
+    reason: reason || "SQLite database for persistent app data",
+    envVars: ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
+  }
+}
+
+function resolveIntegrations(
+  root: Record<string, unknown>,
+  prompt: string,
+  project?: ProjectContext,
+): {
+  needsDatabase: boolean
+  integrations: IntegrationPlan[]
+  databaseProvider?: "turso" | "none"
+} {
+  const rawIntegrations = Array.isArray(root.integrations)
+    ? (root.integrations as unknown[]).map(normalizeIntegration).filter((i): i is IntegrationPlan => i !== null)
+    : []
+
+  const aiNeedsDb = typeof root.needsDatabase === "boolean" ? (root.needsDatabase as boolean) : undefined
+  // If AI said true, or the prompt clearly implies persistence, we need a DB.
+  const needsDatabase = aiNeedsDb === true || (aiNeedsDb !== false && promptSuggestsDatabase(prompt, project))
+
+  // Dedup by provider (case-insensitive).
+  const byProvider = new Map<string, IntegrationPlan>()
+  for (const integration of rawIntegrations) {
+    const key = integration.provider.toLowerCase()
+    if (!byProvider.has(key)) byProvider.set(key, integration)
+  }
+
+  // If a project integration list was provided, surface them too (env-var-less
+  // unless the AI already described them). This lets the UI echo back what's
+  // already connected without asking the user to reconfigure.
+  for (const projectInt of project?.integrations ?? []) {
+    const provider = (projectInt.provider || projectInt.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    if (byProvider.has(provider)) continue
+    byProvider.set(provider, {
+      kind: "other",
+      name: projectInt.name,
+      provider,
+      reason: "Already connected to this project",
+      envVars: [],
+    })
+  }
+
+  if (needsDatabase) {
+    const existingDb = Array.from(byProvider.values()).find((i) => i.kind === "database")
+    if (!existingDb || existingDb.provider !== "turso") {
+      // Force Turso as the default database even if the planner proposed
+      // another provider — the host infra only has Turso wired up.
+      byProvider.set("turso", tursoIntegration(existingDb?.reason ?? ""))
+      if (existingDb && existingDb.provider !== "turso") {
+        byProvider.delete(existingDb.provider)
+      }
+    } else {
+      // Ensure env var list is correct for Turso.
+      byProvider.set("turso", tursoIntegration(existingDb.reason))
+    }
+  } else {
+    // Strip any database integrations the planner may have added erroneously.
+    for (const [k, v] of Array.from(byProvider.entries())) {
+      if (v.kind === "database") byProvider.delete(k)
+    }
+  }
+
+  return {
+    needsDatabase,
+    integrations: Array.from(byProvider.values()),
+    databaseProvider: needsDatabase ? "turso" : "none",
+  }
+}
+
+function buildRequiredEnvVars(integrations: IntegrationPlan[], needsDatabase: boolean): EnvVarRequirement[] {
+  const out: EnvVarRequirement[] = []
+  const seen = new Set<string>()
+  for (const integration of integrations) {
+    for (const key of integration.envVars) {
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        key,
+        purpose: `${integration.name} — ${integration.reason || "integration env var"}`.trim(),
+        provider: integration.provider,
+        required: integration.kind === "database" || needsDatabase,
+        integration: integration.name,
+      })
+    }
+  }
+  return out
+}
+
+function computeMissingEnvVars(
+  required: EnvVarRequirement[],
+  existingKeys: string[] | undefined,
+): EnvVarRequirement[] {
+  const present = new Set((existingKeys ?? []).filter(Boolean))
+  return required.filter((env) => !present.has(env.key))
 }
 
 function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
@@ -488,6 +699,22 @@ function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
   return out
 }
 
+function buildPlannerUserContent(prompt: string, project?: ProjectContext): string {
+  if (!project) return prompt
+  const projectBits: string[] = []
+  if (project.name) projectBits.push(`Project name: ${project.name}`)
+  if (project.description) projectBits.push(`Project description: ${project.description}`)
+  if (project.category) projectBits.push(`Category: ${project.category}`)
+  if (project.envVarKeys?.length) projectBits.push(`Existing env var keys: ${project.envVarKeys.join(", ")}`)
+  if (project.integrations?.length) {
+    projectBits.push(
+      `Connected integrations: ${project.integrations.map((i) => i.name).join(", ")}`,
+    )
+  }
+  if (projectBits.length === 0) return prompt
+  return `${prompt}\n\nHost project context (branding & existing setup — keep the project name/description consistent):\n${projectBits.join("\n")}`
+}
+
 async function planManifest(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<GeneratedProjectManifest> {
   const model = pickModel(opts, "planner")
   let raw = ""
@@ -495,7 +722,7 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
     raw = await callAIAgent(
       [
         { role: "system", content: PLAN_SYSTEM_PROMPT },
-        { role: "user", content: prompt },
+        { role: "user", content: buildPlannerUserContent(prompt, opts.project) },
       ],
       { model, temperature: 0.6 },
     )
@@ -508,7 +735,7 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
   }
 
   const parsed = extractJson<unknown>(raw)
-  const manifest = normalizeManifest(parsed, prompt)
+  const manifest = normalizeManifest(parsed, prompt, opts.project)
 
   const validation = validateManifest(manifest)
   if (!validation.ok) {
@@ -537,14 +764,14 @@ async function repairManifest(
         { role: "system", content: PLAN_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Original prompt:\n${prompt}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
+          content: `Original prompt:\n${buildPlannerUserContent(prompt, opts.project)}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
         },
       ],
       { model, temperature: 0.2, retries: 0 },
     )
     const parsed = extractJson<unknown>(raw)
     if (!parsed) return null
-    const manifest = normalizeManifest(parsed, prompt)
+    const manifest = normalizeManifest(parsed, prompt, opts.project)
     const v = validateManifest(manifest)
     if (v.ok) {
       logs.push({ step: "plan-repair", detail: "Repair succeeded." })
@@ -658,19 +885,31 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
-  // 3. Scaffold base + ui components.
-  const baseFiles = scaffoldBaseFiles(manifest, required)
+  // 3. Scaffold base + ui components (+ optional DB files).
+  const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
   // 4. File-level validation.
-  const build = runBuildValidation(allFiles)
+  const build = runBuildValidation(allFiles, { needsDatabase: manifest.needsDatabase })
   if (!build.ok) {
     logs.push({ step: "build-validate", detail: `Build validation failed: ${build.errors.join("; ")}` })
   } else {
     logs.push({ step: "build-validate", detail: `Build validation passed (${build.warnings.length} warnings)` })
+  }
+
+  const missingEnvVars = computeMissingEnvVars(manifest.requiredEnvVars, options.project?.envVarKeys)
+  if (manifest.needsDatabase) {
+    logs.push({
+      step: "integrations",
+      detail: missingEnvVars.length
+        ? `Database required (Turso). Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`
+        : "Database required (Turso). Env vars detected.",
+    })
+  } else {
+    logs.push({ step: "integrations", detail: "No database integration required" })
   }
 
   const qualityScore = computeQualityScore(manifest, build)
@@ -683,5 +922,10 @@ export async function runAIWebsiteBuilder(
     build,
     warnings: build.warnings,
     qualityScore,
+    needsDatabase: manifest.needsDatabase,
+    databaseProvider: manifest.databaseProvider,
+    integrations: manifest.integrations,
+    requiredEnvVars: manifest.requiredEnvVars,
+    missingEnvVars,
   }
 }

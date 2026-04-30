@@ -59,6 +59,16 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
     "socialLinks"?: [ { "label": string, "href": string } ],
     "contact"?: { "email"?: string, "phone"?: string, "address"?: string }
   },
+  "needsDatabase": boolean,
+  "integrations": [
+    {
+      "kind": "database" | "auth" | "email" | "analytics" | "storage" | "payments" | "other",
+      "name": string,
+      "provider": string,
+      "reason": string,
+      "envVars": string[]
+    }
+  ],
   "pages": [
     {
       "path": "/" or "/something" (lowercase, kebab),
@@ -69,6 +79,13 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
     }
   ]
 }
+
+Integration & database rules:
+- Set "needsDatabase": true for bookings, ecommerce, orders, cart, dashboards, accounts, admin panels, CMS/blog editing, marketplaces, saved forms, inventory, or any user-generated/persistent data.
+- Set "needsDatabase": false for purely static landing pages, marketing sites, brochure sites, or one-off event pages without signups.
+- If "needsDatabase" is true, ALWAYS include exactly one integration with "provider": "turso", "kind": "database", "name": "Turso", and "envVars": ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"].
+- Only add non-database integrations (payments, email, auth, etc.) if the requested app clearly needs them. Do NOT invent analytics or marketing tools the user didn't ask for.
+- Never hard-code secret values anywhere in the plan. Only env var NAMES may appear.
 
 SectionPlan rules:
 - "kind" must be one of: ${SECTION_KINDS.map((k) => `"${k}"`).join(" | ")}

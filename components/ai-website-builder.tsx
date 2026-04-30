@@ -461,6 +461,64 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         })
       }
 
+      // Database / integration diagnostics
+      const integrations: Array<{ name: string; provider: string; kind: string }> = Array.isArray(
+        data?.integrations,
+      )
+        ? data.integrations
+        : []
+      const requiredEnvVars: Array<{ key: string; integration?: string }> = Array.isArray(
+        data?.requiredEnvVars,
+      )
+        ? data.requiredEnvVars
+        : []
+      const missingEnvVars: Array<{ key: string; integration?: string }> = Array.isArray(
+        data?.missingEnvVars,
+      )
+        ? data.missingEnvVars
+        : []
+      const needsDb = Boolean(data?.needsDatabase)
+
+      if (needsDb || integrations.length > 0 || requiredEnvVars.length > 0) {
+        const integrationLines: string[] = []
+        if (needsDb) {
+          const dbProvider = (data?.databaseProvider as string | undefined) || "turso"
+          integrationLines.push(
+            `Database required: ${dbProvider === "turso" ? "Turso" : dbProvider}`,
+          )
+        }
+        const nonDbIntegrations = integrations.filter((i) => i.kind !== "database")
+        if (nonDbIntegrations.length > 0) {
+          integrationLines.push(
+            `Integrations: ${nonDbIntegrations.map((i) => i.name).join(", ")}`,
+          )
+        }
+        if (needsDb) {
+          if (missingEnvVars.length > 0) {
+            integrationLines.push(
+              `Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`,
+            )
+          } else if (requiredEnvVars.length > 0) {
+            integrationLines.push(
+              `Database connected: ${requiredEnvVars.map((e) => e.key).join(", ")} detected`,
+            )
+          }
+        }
+        if (typeof data?.envVarsAdded === "number" && data.envVarsAdded > 0) {
+          integrationLines.push(
+            `Added ${data.envVarsAdded} required env var${data.envVarsAdded === 1 ? "" : "s"} to project settings (fill in values before deploying).`,
+          )
+        }
+
+        if (integrationLines.length > 0) {
+          assistantMessages.push({
+            id: (Date.now() + 14).toString(),
+            role: "assistant",
+            content: integrationLines.map((l) => `• ${l}`).join("\n"),
+          })
+        }
+      }
+
       if (!buildOk && buildErrors.length > 0) {
         assistantMessages.push({
           id: (Date.now() + 12).toString(),

@@ -104,6 +104,37 @@ export interface DesignBrief {
   footerCta?: CtaPlan
   socialLinks?: SocialLink[]
   contact?: ContactInfo
+  // Branding assets that may come from the host project record.
+  logoUrl?: string
+  logoInitials?: string
+  category?: string
+}
+
+// Integration metadata driven both by the AI planner's judgement and by the
+// host project's connected integrations. Used to decide which scaffolded
+// files (db client, health route, schema, queries, .env.example) to emit
+// and which env vars to surface back to the user.
+export type IntegrationKind = "database" | "auth" | "email" | "analytics" | "storage" | "payments" | "other"
+
+export interface IntegrationPlan {
+  kind: IntegrationKind
+  // Short name the user sees, e.g. "Turso", "Stripe". The planner can name
+  // things loosely; the orchestrator normalizes "turso" -> provider "turso".
+  name: string
+  provider: string
+  reason: string
+  envVars: string[]
+}
+
+export interface EnvVarRequirement {
+  key: string
+  // Purpose shown in the UI.
+  purpose: string
+  provider?: string
+  // Whether this env var MUST be present for the generated site to work
+  // (true) or is optional (false). Database env vars are always required.
+  required: boolean
+  integration?: string
 }
 
 // Each section plan carries copy, optional layout variant, optional visual
@@ -168,6 +199,12 @@ export interface GeneratedProjectManifest {
   brief: DesignBrief
   theme: ThemeTokens
   pages: PagePlan[]
+  // Planning metadata (populated by the orchestrator even when the raw AI
+  // output omits it).
+  needsDatabase: boolean
+  databaseProvider?: "turso" | "none"
+  integrations: IntegrationPlan[]
+  requiredEnvVars: EnvVarRequirement[]
 }
 
 export interface RequiredComponent {
@@ -179,10 +216,25 @@ export interface RequiredComponent {
   exports: string[]
 }
 
+// Project-level context forwarded from the Sycord host app. Allows the
+// builder to brand generated sites with the real project name, logo,
+// description, and to reason about existing environment variables so
+// generated apps can plug directly into the user's configured secrets.
+export interface ProjectContext {
+  name?: string
+  description?: string
+  category?: string
+  logoUrl?: string
+  subdomain?: string
+  envVarKeys?: string[]
+  integrations?: { name: string; provider?: string }[]
+}
+
 export interface BuilderOptions {
   model?: ModelSelection
   quality?: "fast" | "best"
   projectId?: string
+  project?: ProjectContext
 }
 
 export interface BuilderFile {
@@ -209,4 +261,12 @@ export interface RunBuilderResult {
   build: BuildValidationResult
   warnings: string[]
   qualityScore: number
+  // Integration diagnostics. Useful for the API route to return to the UI
+  // so it can show clear "Database required: Turso" / "Missing env vars"
+  // messages without re-deriving state from the manifest.
+  needsDatabase: boolean
+  databaseProvider?: "turso" | "none"
+  integrations: IntegrationPlan[]
+  requiredEnvVars: EnvVarRequirement[]
+  missingEnvVars: EnvVarRequirement[]
 }

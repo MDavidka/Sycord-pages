@@ -182,13 +182,29 @@ function collectHrefs(sections: SectionPlan[]): string[] {
   return out
 }
 
+export interface RunBuildValidationOpts {
+  needsDatabase?: boolean
+}
+
+// Patterns we treat as hard-coded secrets in generated source. The file
+// scaffolder only reads secrets via `process.env.X`, so anything matching
+// these patterns is a planner/AI slip we want to surface.
+const HARD_CODED_SECRET_PATTERNS: { name: string; pattern: RegExp }[] = [
+  { name: "libsql URL", pattern: /libsql:\/\/[A-Za-z0-9._-]+/g },
+  { name: "Turso auth token", pattern: /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g },
+  { name: "Stripe secret key", pattern: /sk_(?:live|test)_[A-Za-z0-9]{12,}/g },
+  { name: "Stripe publishable key", pattern: /pk_(?:live|test)_[A-Za-z0-9]{12,}/g },
+  { name: "Generic hex API key", pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*["'][A-Za-z0-9]{24,}["']/gi },
+]
+
 // File-level validators run AFTER rendering. They catch obvious TSX issues:
 // missing default exports, dangling shadcn imports, missing required files,
 // duplicate routes that crept through, etc.
-export function runBuildValidation(files: BuilderFile[]): BuildValidationResult {
+export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidationOpts = {}): BuildValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
   const fileMap = new Map(files.map((f) => [f.path, f.content]))
+  const needsDatabase = opts.needsDatabase ?? false
 
   const required = [
     "package.json",
@@ -210,6 +226,71 @@ export function runBuildValidation(files: BuilderFile[]): BuildValidationResult 
   ]
   for (const need of required) {
     if (!fileMap.has(need)) errors.push(`missing required file: ${need}`)
+  }
+
+  // Database-specific required files (only when the planner said so).
+  if (needsDatabase) {
+    const dbRequired = [
+      "lib/db/client.ts",
+      "lib/db/schema.ts",
+      "lib/db/queries.ts",
+      "app/api/health/db/route.ts",
+      ".env.example",
+    ]
+    for (const need of dbRequired) {
+      if (!fileMap.has(need)) errors.push(`missing required database file: ${need}`)
+    }
+    const packageJson = fileMap.get("package.json") || ""
+    if (!/\"@libsql\/client\"/.test(packageJson)) {
+      errors.push("package.json missing @libsql/client dependency required for Turso integration")
+    }
+    const envExample = fileMap.get(".env.example") || ""
+    if (envExample && !envExample.includes("TURSO_DATABASE_URL")) {
+      errors.push(".env.example must document TURSO_DATABASE_URL for Turso integration")
+    }
+    if (envExample && !envExample.includes("TURSO_AUTH_TOKEN")) {
+      errors.push(".env.example must document TURSO_AUTH_TOKEN for Turso integration")
+    }
+  } else {
+    // When no DB is needed, we shouldn't emit dangling db imports either.
+    for (const [p, c] of fileMap) {
+      if (/@\/lib\/db\//.test(c) && p !== "lib/db/client.ts") {
+        warnings.push(`${p} imports @/lib/db/* but needsDatabase is false`)
+      }
+    }
+  }
+
+  // If any file imports @/lib/db/*, the client file must exist.
+  const dbImport = /@\/lib\/db\/([a-z-]+)/g
+  for (const [p, c] of fileMap) {
+    let m: RegExpExecArray | null
+    while ((m = dbImport.exec(c)) != null) {
+      const path = `lib/db/${m[1]}.ts`
+      if (!fileMap.has(path)) {
+        errors.push(`${p} imports @/lib/db/${m[1]} but ${path} is missing`)
+      }
+    }
+  }
+
+  // Site config must include a logo initials fallback so the header/footer
+  // never render an empty badge when no logo URL is configured.
+  const siteConfig = fileMap.get("lib/site-config.ts") || ""
+  if (siteConfig && !/\"logoInitials\"\s*:\s*\"[A-Za-z0-9]{1,4}\"/.test(siteConfig)) {
+    errors.push("lib/site-config.ts must include a non-empty logoInitials fallback")
+  }
+
+  // Hard-coded secret detection. Skip files that legitimately reference
+  // env-var names (package.json, .env.example, db/client.ts which reads
+  // process.env.TURSO_*).
+  const secretSkip = new Set(["package.json", ".env.example"])
+  for (const [p, c] of fileMap) {
+    if (secretSkip.has(p)) continue
+    for (const { name, pattern } of HARD_CODED_SECRET_PATTERNS) {
+      pattern.lastIndex = 0
+      if (pattern.test(c)) {
+        errors.push(`${p} appears to contain a hard-coded ${name}; secrets must only be read from process.env`)
+      }
+    }
   }
 
   const tsxFiles = files.filter((f) => f.path.endsWith(".tsx"))

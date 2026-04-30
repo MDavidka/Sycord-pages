@@ -20,6 +20,18 @@ function projectSlug(name: string): string {
   )
 }
 
+export function computeInitials(name: string): string {
+  if (!name) return "SY"
+  const letters = name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter((c): c is string => Boolean(c))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
+  return letters || name.slice(0, 2).toUpperCase()
+}
+
 function tokensToCssVars(tokens: ColorTokens, radius: string): string {
   return `  --background: ${tokens.background};
   --foreground: ${tokens.foreground};
@@ -126,7 +138,11 @@ ${backgroundUtilities(theme)}
 `
 }
 
-function buildPackageJson(slug: string, requiredComponents: RequiredComponent[]): string {
+function buildPackageJson(
+  slug: string,
+  requiredComponents: RequiredComponent[],
+  opts: { needsDatabase: boolean },
+): string {
   const slugs = new Set(requiredComponents.map((c) => c.slug))
   const deps: Record<string, string> = {
     next: "^15.0.0",
@@ -143,6 +159,7 @@ function buildPackageJson(slug: string, requiredComponents: RequiredComponent[])
   if (slugs.has("separator")) deps["@radix-ui/react-separator"] = "^1.1.0"
   if (slugs.has("label")) deps["@radix-ui/react-label"] = "^2.1.0"
   if (slugs.has("tabs")) deps["@radix-ui/react-tabs"] = "^1.1.1"
+  if (opts.needsDatabase) deps["@libsql/client"] = "^0.14.0"
   const devDeps: Record<string, string> = {
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
@@ -171,11 +188,14 @@ function buildPackageJson(slug: string, requiredComponents: RequiredComponent[])
   )
 }
 
-function buildNextConfig(): string {
+function buildNextConfig(opts: { needsDatabase: boolean }): string {
+  // Static export mode only when the site has no runtime API routes. When
+  // a Turso-backed DB is required we ship a `app/api/health/db/route.ts`
+  // handler that needs the Node runtime, so we skip `output: "export"`.
+  const output = opts.needsDatabase ? "" : `  output: "export",\n`
   return `/** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export",
-  images: { unoptimized: true },
+${output}  images: { unoptimized: true },
   trailingSlash: true,
   reactStrictMode: true,
 }
@@ -224,6 +244,10 @@ function buildPostcssConfig(): string {
 
 function buildLayout(manifest: GeneratedProjectManifest): string {
   const projectName = manifest.brief.projectName
+  const logoUrl = manifest.brief.logoUrl
+  const metaIcons = logoUrl
+    ? `,\n  icons: { icon: ${JSON.stringify(logoUrl)}, apple: ${JSON.stringify(logoUrl)} }`
+    : ""
   return `import type { Metadata } from "next"
 import "./globals.css"
 import { SiteHeader } from "@/components/site-header"
@@ -232,6 +256,12 @@ import { SiteFooter } from "@/components/site-footer"
 export const metadata: Metadata = {
   title: ${JSON.stringify(`${projectName} — ${manifest.brief.tagline}`)},
   description: ${JSON.stringify(manifest.brief.description)},
+  openGraph: {
+    title: ${JSON.stringify(`${projectName} — ${manifest.brief.tagline}`)},
+    description: ${JSON.stringify(manifest.brief.description)},
+    siteName: ${JSON.stringify(projectName)},
+    type: "website",
+  }${metaIcons},
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -248,24 +278,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 `
 }
 
-function buildSiteHeader(manifest: GeneratedProjectManifest): string {
-  const projectName = manifest.brief.projectName
-  const navLinks = manifest.brief.navLinks
-  const primaryCta = manifest.brief.primaryCta
-  const navItems = navLinks
-    .map((l) => `{ label: ${JSON.stringify(l.label)}, href: ${JSON.stringify(l.href)} }`)
-    .join(",\n  ")
+function buildSiteHeader(_manifest: GeneratedProjectManifest): string {
   return `"use client"
 
 import * as React from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { siteConfig } from "@/lib/site-config"
 
-const navItems: { label: string; href: string }[] = [
-  ${navItems},
-]
+const navItems = siteConfig.navLinks
+const primaryCta = siteConfig.primaryCta
 
 export function SiteHeader() {
   const [open, setOpen] = React.useState(false)
@@ -284,14 +309,21 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">${projectName
-            .split(/\s+/)
-            .map((w) => w[0])
-            .filter(Boolean)
-            .slice(0, 2)
-            .join("")
-            .toUpperCase() || "S"}</span>
-          <span>${projectName}</span>
+          {siteConfig.logoUrl ? (
+            <Image
+              src={siteConfig.logoUrl}
+              alt={siteConfig.name + " logo"}
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-lg object-cover"
+              priority
+            />
+          ) : (
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
+              {siteConfig.logoInitials}
+            </span>
+          )}
+          <span>{siteConfig.name}</span>
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
           {navItems.map((item) => (
@@ -305,7 +337,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="hidden md:block">
-          <Button asChild size="sm"><Link href={${JSON.stringify(primaryCta.href)}}>${primaryCta.label}</Link></Button>
+          <Button asChild size="sm"><Link href={primaryCta.href}>{primaryCta.label}</Link></Button>
         </div>
         <button
           type="button"
@@ -335,7 +367,7 @@ export function SiteHeader() {
             </Link>
           ))}
           <Button asChild className="mt-2 w-full" onClick={() => setOpen(false)}>
-            <Link href={${JSON.stringify(primaryCta.href)}}>${primaryCta.label}</Link>
+            <Link href={primaryCta.href}>{primaryCta.label}</Link>
           </Button>
         </div>
       </div>
@@ -345,22 +377,16 @@ export function SiteHeader() {
 `
 }
 
-function buildSiteFooter(manifest: GeneratedProjectManifest): string {
-  const { projectName, navLinks, footerCta, contact, socialLinks, description } = manifest.brief
-  const navItems = navLinks
-    .map((l) => `{ label: ${JSON.stringify(l.label)}, href: ${JSON.stringify(l.href)} }`)
-    .join(", ")
-  const socials = (socialLinks ?? []).map((s) => `{ label: ${JSON.stringify(s.label)}, href: ${JSON.stringify(s.href)} }`).join(", ")
-  return `import Link from "next/link"
+function buildSiteFooter(_manifest: GeneratedProjectManifest): string {
+  return `import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { siteConfig } from "@/lib/site-config"
 
-const navItems: { label: string; href: string }[] = [${navItems}]
-const socialLinks: { label: string; href: string }[] = [${socials}]
-const footerInfo = {
-  email: ${JSON.stringify(contact?.email ?? "")},
-  phone: ${JSON.stringify(contact?.phone ?? "")},
-  address: ${JSON.stringify(contact?.address ?? "")},
-}
+const navItems = siteConfig.navLinks
+const socialLinks = siteConfig.socialLinks
+const footerInfo = siteConfig.contact ?? { email: "", phone: "", address: "" }
+const footerCta = siteConfig.footerCta
 
 export function SiteFooter() {
   return (
@@ -368,11 +394,28 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-4">
           <div className="space-y-3 lg:col-span-2">
-            <p className="text-lg font-semibold tracking-tight">${projectName}</p>
-            <p className="max-w-md text-sm text-muted-foreground">${description.replace(/"/g, '\\"')}</p>
-            ${footerCta?.label
-              ? `<Button asChild size="sm" variant="outline" className="mt-2"><Link href={${JSON.stringify(footerCta.href)}}>${footerCta.label}</Link></Button>`
-              : ""}
+            <div className="flex items-center gap-2">
+              {siteConfig.logoUrl ? (
+                <Image
+                  src={siteConfig.logoUrl}
+                  alt={siteConfig.name + " logo"}
+                  width={28}
+                  height={28}
+                  className="h-7 w-7 rounded-md object-cover"
+                />
+              ) : (
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">
+                  {siteConfig.logoInitials}
+                </span>
+              )}
+              <p className="text-lg font-semibold tracking-tight">{siteConfig.name}</p>
+            </div>
+            <p className="max-w-md text-sm text-muted-foreground">{siteConfig.description}</p>
+            {footerCta ? (
+              <Button asChild size="sm" variant="outline" className="mt-2">
+                <Link href={footerCta.href}>{footerCta.label}</Link>
+              </Button>
+            ) : null}
           </div>
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
@@ -405,7 +448,7 @@ export function SiteFooter() {
           </div>
         </div>
         <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-border/60 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center">
-          <p>© {new Date().getFullYear()} ${projectName}. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {siteConfig.name}. All rights reserved.</p>
           <p>Crafted with care.</p>
         </div>
       </div>
@@ -426,6 +469,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 function buildSiteConfig(manifest: GeneratedProjectManifest): string {
+  const logoInitials = manifest.brief.logoInitials || computeInitials(manifest.brief.projectName)
   return `import type { Metadata } from "next"
 
 export const siteConfig = ${JSON.stringify(
@@ -434,13 +478,19 @@ export const siteConfig = ${JSON.stringify(
       tagline: manifest.brief.tagline,
       description: manifest.brief.description,
       audience: manifest.brief.audience,
+      category: manifest.brief.category ?? null,
+      logoUrl: manifest.brief.logoUrl ?? null,
+      logoInitials,
       navLinks: manifest.brief.navLinks,
       primaryCta: manifest.brief.primaryCta,
-      secondaryCta: manifest.brief.secondaryCta,
-      footerCta: manifest.brief.footerCta,
+      secondaryCta: manifest.brief.secondaryCta ?? null,
+      footerCta: manifest.brief.footerCta ?? null,
       socialLinks: manifest.brief.socialLinks ?? [],
       contact: manifest.brief.contact ?? null,
       themePreset: manifest.theme.preset,
+      integrations: manifest.integrations,
+      needsDatabase: manifest.needsDatabase,
+      databaseProvider: manifest.databaseProvider ?? null,
     },
     null,
     2,
@@ -824,14 +874,330 @@ export function buildUiComponentFiles(slugs: Iterable<string>): BuilderFile[] {
   return out
 }
 
+// ---------- Turso / @libsql database scaffolding ----------
+
+// Shapes that the AI planner expresses as "needsDatabase" plus prompt
+// keywords. We pick a minimal, real-world SQL schema per shape so queries
+// compile and the generated health route can actually run.
+export type DbShape = "bookings" | "orders" | "generic"
+
+export function detectDbShape(manifest: GeneratedProjectManifest, prompt: string): DbShape {
+  const blob = `${prompt} ${manifest.brief.description} ${manifest.brief.tagline} ${manifest.brief.category ?? ""}`.toLowerCase()
+  if (/(book|reservation|appointment|schedule|booking)/.test(blob)) return "bookings"
+  if (/(shop|store|ecommerce|e-commerce|cart|checkout|order|product|candle|merch)/.test(blob)) return "orders"
+  return "generic"
+}
+
+function buildDbClient(): string {
+  return `import { createClient, type Client } from "@libsql/client"
+
+// Lazily construct a Turso client so missing env vars only blow up at call
+// time (not at module import). This keeps build/CI green even when the
+// user hasn't filled in TURSO_DATABASE_URL yet.
+
+let client: Client | null = null
+
+export function getDbClient(): Client {
+  if (client) return client
+  const url = process.env.TURSO_DATABASE_URL
+  const authToken = process.env.TURSO_AUTH_TOKEN
+  if (!url) {
+    throw new Error(
+      "Missing TURSO_DATABASE_URL. Add it to your environment (see .env.example).",
+    )
+  }
+  client = createClient({ url, authToken })
+  return client
+}
+
+export function hasDbEnv(): boolean {
+  return Boolean(process.env.TURSO_DATABASE_URL)
+}
+`
+}
+
+function buildDbSchema(shape: DbShape): string {
+  const tables: string[] = []
+  if (shape === "bookings") {
+    tables.push(`CREATE TABLE IF NOT EXISTS bookings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  party_size INTEGER NOT NULL DEFAULT 2,
+  starts_at TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`)
+    tables.push(`CREATE INDEX IF NOT EXISTS idx_bookings_starts_at ON bookings(starts_at);`)
+  } else if (shape === "orders") {
+    tables.push(`CREATE TABLE IF NOT EXISTS products (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  price_cents INTEGER NOT NULL,
+  image_url TEXT,
+  stock INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`)
+    tables.push(`CREATE TABLE IF NOT EXISTS orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_name TEXT NOT NULL,
+  customer_email TEXT NOT NULL,
+  total_cents INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`)
+    tables.push(`CREATE TABLE IF NOT EXISTS order_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price_cents INTEGER NOT NULL
+);`)
+  } else {
+    tables.push(`CREATE TABLE IF NOT EXISTS entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  body TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);`)
+  }
+
+  return `import { getDbClient } from "@/lib/db/client"
+
+// Database schema for this generated site. Apply with \`applySchema()\` on
+// first boot or via the health check. Idempotent thanks to IF NOT EXISTS.
+
+export const schemaStatements: string[] = ${JSON.stringify(tables, null, 2)}
+
+export async function applySchema(): Promise<void> {
+  const db = getDbClient()
+  for (const statement of schemaStatements) {
+    await db.execute(statement)
+  }
+}
+`
+}
+
+function buildDbQueries(shape: DbShape): string {
+  if (shape === "bookings") {
+    return `import { getDbClient } from "@/lib/db/client"
+
+export interface BookingInput {
+  name: string
+  email: string
+  phone?: string
+  partySize: number
+  startsAt: string
+  notes?: string
+}
+
+export interface BookingRecord extends BookingInput {
+  id: number
+  status: string
+  createdAt: string
+}
+
+export async function createBooking(input: BookingInput): Promise<number> {
+  const db = getDbClient()
+  const result = await db.execute({
+    sql: \`INSERT INTO bookings (name, email, phone, party_size, starts_at, notes)
+          VALUES (?, ?, ?, ?, ?, ?)\`,
+    args: [input.name, input.email, input.phone ?? null, input.partySize, input.startsAt, input.notes ?? null],
+  })
+  return Number(result.lastInsertRowid ?? 0)
+}
+
+export async function listUpcomingBookings(limit = 50): Promise<BookingRecord[]> {
+  const db = getDbClient()
+  const result = await db.execute({
+    sql: \`SELECT id, name, email, phone, party_size as partySize, starts_at as startsAt,
+                 notes, status, created_at as createdAt
+          FROM bookings
+          WHERE starts_at >= datetime('now')
+          ORDER BY starts_at ASC
+          LIMIT ?\`,
+    args: [limit],
+  })
+  return result.rows as unknown as BookingRecord[]
+}
+
+export async function updateBookingStatus(id: number, status: string): Promise<void> {
+  const db = getDbClient()
+  await db.execute({
+    sql: "UPDATE bookings SET status = ? WHERE id = ?",
+    args: [status, id],
+  })
+}
+`
+  }
+  if (shape === "orders") {
+    return `import { getDbClient } from "@/lib/db/client"
+
+export interface ProductRecord {
+  id: number
+  slug: string
+  name: string
+  description: string | null
+  priceCents: number
+  imageUrl: string | null
+  stock: number
+}
+
+export interface OrderInput {
+  customerName: string
+  customerEmail: string
+  items: { productId: number; quantity: number; unitPriceCents: number }[]
+}
+
+export async function listProducts(limit = 24): Promise<ProductRecord[]> {
+  const db = getDbClient()
+  const result = await db.execute({
+    sql: \`SELECT id, slug, name, description, price_cents as priceCents,
+                 image_url as imageUrl, stock
+          FROM products ORDER BY created_at DESC LIMIT ?\`,
+    args: [limit],
+  })
+  return result.rows as unknown as ProductRecord[]
+}
+
+export async function getProductBySlug(slug: string): Promise<ProductRecord | null> {
+  const db = getDbClient()
+  const result = await db.execute({
+    sql: \`SELECT id, slug, name, description, price_cents as priceCents,
+                 image_url as imageUrl, stock
+          FROM products WHERE slug = ? LIMIT 1\`,
+    args: [slug],
+  })
+  const row = result.rows[0]
+  return (row as unknown as ProductRecord) ?? null
+}
+
+export async function createOrder(input: OrderInput): Promise<number> {
+  const db = getDbClient()
+  const total = input.items.reduce((sum, it) => sum + it.quantity * it.unitPriceCents, 0)
+  const insert = await db.execute({
+    sql: \`INSERT INTO orders (customer_name, customer_email, total_cents) VALUES (?, ?, ?)\`,
+    args: [input.customerName, input.customerEmail, total],
+  })
+  const orderId = Number(insert.lastInsertRowid ?? 0)
+  for (const item of input.items) {
+    await db.execute({
+      sql: \`INSERT INTO order_items (order_id, product_id, quantity, unit_price_cents)
+            VALUES (?, ?, ?, ?)\`,
+      args: [orderId, item.productId, item.quantity, item.unitPriceCents],
+    })
+  }
+  return orderId
+}
+`
+  }
+  return `import { getDbClient } from "@/lib/db/client"
+
+export interface EntryRecord {
+  id: number
+  title: string
+  body: string | null
+  createdAt: string
+}
+
+export async function listEntries(limit = 50): Promise<EntryRecord[]> {
+  const db = getDbClient()
+  const result = await db.execute({
+    sql: \`SELECT id, title, body, created_at as createdAt
+          FROM entries ORDER BY created_at DESC LIMIT ?\`,
+    args: [limit],
+  })
+  return result.rows as unknown as EntryRecord[]
+}
+
+export async function createEntry(input: { title: string; body?: string }): Promise<number> {
+  const db = getDbClient()
+  const result = await db.execute({
+    sql: "INSERT INTO entries (title, body) VALUES (?, ?)",
+    args: [input.title, input.body ?? null],
+  })
+  return Number(result.lastInsertRowid ?? 0)
+}
+`
+}
+
+function buildHealthRoute(): string {
+  return `import { NextResponse } from "next/server"
+import { getDbClient, hasDbEnv } from "@/lib/db/client"
+import { applySchema } from "@/lib/db/schema"
+
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
+export async function GET() {
+  if (!hasDbEnv()) {
+    return NextResponse.json(
+      { ok: false, error: "Missing TURSO_DATABASE_URL environment variable." },
+      { status: 503 },
+    )
+  }
+  try {
+    const db = getDbClient()
+    await applySchema()
+    const result = await db.execute("SELECT 1 as ok")
+    return NextResponse.json({ ok: true, result: result.rows })
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : String(error) },
+      { status: 500 },
+    )
+  }
+}
+`
+}
+
+function buildEnvExample(needsDatabase: boolean, integrations: GeneratedProjectManifest["integrations"]): string {
+  const lines = ["# Copy this file to .env.local and fill in real values.", ""]
+  if (needsDatabase) {
+    lines.push("# Turso (SQLite over libSQL) — required for all database-backed features.")
+    lines.push("TURSO_DATABASE_URL=")
+    lines.push("TURSO_AUTH_TOKEN=")
+    lines.push("")
+  }
+  const nonDb = integrations.filter((i) => i.kind !== "database" && i.envVars.length > 0)
+  for (const integration of nonDb) {
+    lines.push(`# ${integration.name}${integration.reason ? ` — ${integration.reason}` : ""}`)
+    for (const env of integration.envVars) {
+      lines.push(`${env}=`)
+    }
+    lines.push("")
+  }
+  return lines.join("\n")
+}
+
+export function buildDatabaseFiles(
+  manifest: GeneratedProjectManifest,
+  prompt: string,
+): BuilderFile[] {
+  if (!manifest.needsDatabase) return []
+  const shape = detectDbShape(manifest, prompt)
+  return [
+    { path: "lib/db/client.ts", content: buildDbClient() },
+    { path: "lib/db/schema.ts", content: buildDbSchema(shape) },
+    { path: "lib/db/queries.ts", content: buildDbQueries(shape) },
+    { path: "app/api/health/db/route.ts", content: buildHealthRoute() },
+  ]
+}
+
 export function scaffoldBaseFiles(
   manifest: GeneratedProjectManifest,
   requiredComponents: RequiredComponent[],
+  prompt: string,
 ): BuilderFile[] {
   const slug = projectSlug(manifest.brief.projectName)
+  const needsDatabase = manifest.needsDatabase
   const files: BuilderFile[] = [
-    { path: "package.json", content: buildPackageJson(slug, requiredComponents) },
-    { path: "next.config.mjs", content: buildNextConfig() },
+    { path: "package.json", content: buildPackageJson(slug, requiredComponents, { needsDatabase }) },
+    { path: "next.config.mjs", content: buildNextConfig({ needsDatabase }) },
     { path: "tsconfig.json", content: buildTsconfig() },
     { path: "postcss.config.js", content: buildPostcssConfig() },
     { path: "app/globals.css", content: buildGlobalsCss(manifest.theme) },
@@ -843,5 +1209,9 @@ export function scaffoldBaseFiles(
     { path: "lib/generated-manifest.ts", content: buildGeneratedManifest(manifest) },
     { path: "next-env.d.ts", content: `/// <reference types="next" />\n/// <reference types="next/image-types/global" />\n` },
   ]
+  if (needsDatabase || manifest.integrations.some((i) => i.envVars.length > 0)) {
+    files.push({ path: ".env.example", content: buildEnvExample(needsDatabase, manifest.integrations) })
+  }
+  files.push(...buildDatabaseFiles(manifest, prompt))
   return files
 }

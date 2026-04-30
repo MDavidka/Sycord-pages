@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { runAIWebsiteBuilder, type BuilderOptions } from "@/lib/ai-website-builder"
+import {
+  runAIWebsiteBuilder,
+  type BuilderOptions,
+  type EnvVarRequirement,
+  type ProjectContext,
+} from "@/lib/ai-website-builder"
 import type { ModelSelection } from "@/lib/ai-provider"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -9,6 +14,20 @@ import { ObjectId } from "mongodb"
 interface GeneratedFile {
   path: string
   content: string
+}
+
+// Host-project record fields we care about. The DB doc may have extra
+// fields; we only read the ones the builder needs.
+interface ProjectDoc {
+  _id: ObjectId
+  businessName?: string
+  businessDescription?: string
+  profileImage?: string
+  category?: string
+  subdomain?: string
+  style?: string
+  envVars?: { key: string; value?: string; integration?: string | null }[]
+  integrations?: { name: string; provider?: string }[]
 }
 
 // Anything inside `.sycord/` is debug-only. Lockfiles and other non-source
@@ -100,6 +119,72 @@ function parseQuality(value: unknown): BuilderOptions["quality"] {
   return undefined
 }
 
+// Load the project for a user and return both the raw doc (for env-merge)
+// and the builder's ProjectContext view (branding + existing env keys).
+async function loadProjectContext(
+  userId: string,
+  projectId: string,
+): Promise<{ doc: ProjectDoc | null; context: ProjectContext | undefined }> {
+  if (!ObjectId.isValid(projectId)) return { doc: null, context: undefined }
+  const client = await clientPromise
+  const db = client.db()
+  const userDoc = await db.collection("users").findOne({ id: userId })
+  if (!userDoc || !Array.isArray(userDoc.projects)) return { doc: null, context: undefined }
+  const project = userDoc.projects.find(
+    (p: { _id?: ObjectId }) => p._id?.toString() === projectId,
+  ) as ProjectDoc | undefined
+  if (!project) return { doc: null, context: undefined }
+  const envVarKeys = Array.isArray(project.envVars)
+    ? project.envVars.map((e) => e.key).filter((k): k is string => typeof k === "string" && k.length > 0)
+    : []
+  const context: ProjectContext = {
+    name: project.businessName,
+    description: project.businessDescription,
+    category: project.category,
+    logoUrl: project.profileImage,
+    subdomain: project.subdomain,
+    envVarKeys,
+    integrations: Array.isArray(project.integrations) ? project.integrations : [],
+  }
+  return { doc: project, context }
+}
+
+// Merge the builder's required env vars into the project's stored envVars
+// array. We NEVER overwrite existing values — only append missing keys with
+// an empty value so the UI can prompt the user to fill them in.
+async function mergeRequiredEnvVars(
+  userId: string,
+  projectId: string,
+  doc: ProjectDoc | null,
+  required: EnvVarRequirement[],
+): Promise<number> {
+  if (!doc || required.length === 0) return 0
+  const existing = new Set((doc.envVars ?? []).map((e) => e.key))
+  const toAdd = required
+    .filter((r) => r.required && !existing.has(r.key))
+    .map((r) => ({
+      key: r.key,
+      value: "",
+      integration: r.integration ?? null,
+      addedAt: new Date(),
+      source: "ai-builder",
+      purpose: r.purpose,
+    }))
+  if (toAdd.length === 0) return 0
+  const client = await clientPromise
+  const db = client.db()
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    {
+      $push: {
+        "projects.$.envVars": { $each: toAdd },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    },
+  )
+  return toAdd.length
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -119,27 +204,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Prompt is required" }, { status: 400 })
     }
 
+    const projectId = typeof body.projectId === "string" ? body.projectId : undefined
+    const { doc: projectDoc, context: projectContext } = projectId
+      ? await loadProjectContext(session.user.id, projectId)
+      : { doc: null, context: undefined }
+
     const opts: BuilderOptions = {
       model: parseModelSelection(body.model),
       quality: parseQuality(body.quality),
-      projectId: typeof body.projectId === "string" ? body.projectId : undefined,
+      projectId,
+      project: projectContext,
     }
 
     const result = await runAIWebsiteBuilder(prompt, opts)
 
     let savedPages = 0
     let savedFileNames: string[] = []
-    if (body.projectId) {
-      const saved = await saveGeneratedFilesToProject(session.user.id, body.projectId, result.files)
+    if (projectId) {
+      const saved = await saveGeneratedFilesToProject(session.user.id, projectId, result.files)
       savedPages = saved.saved
       savedFileNames = saved.files.map((f) => f.path)
     }
 
+    // Merge required env vars into the project record so the deploy route
+    // can see them later.
+    let envVarsAdded = 0
+    if (projectId && projectDoc && result.requiredEnvVars.length > 0) {
+      envVarsAdded = await mergeRequiredEnvVars(
+        session.user.id,
+        projectId,
+        projectDoc,
+        result.requiredEnvVars,
+      )
+    }
+
     const routeSummary = result.manifest.pages.map((p) => p.path).join(", ")
     const buildOk = result.build.ok
+    const dbMsg = result.needsDatabase ? " (Turso database required)" : ""
     const message = buildOk
-      ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}`
-      : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}`
+      ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
+      : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
     return NextResponse.json({
       message,
@@ -151,6 +255,12 @@ export async function POST(req: Request) {
       logs: result.logs,
       warnings: result.warnings,
       qualityScore: result.qualityScore,
+      needsDatabase: result.needsDatabase,
+      databaseProvider: result.databaseProvider,
+      integrations: result.integrations,
+      requiredEnvVars: result.requiredEnvVars,
+      missingEnvVars: result.missingEnvVars,
+      envVarsAdded,
     })
   } catch (error) {
     return NextResponse.json(

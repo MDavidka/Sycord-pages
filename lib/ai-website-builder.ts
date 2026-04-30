@@ -6,8 +6,12 @@
 export { runAIWebsiteBuilder } from "./ai-website-builder/index"
 export type {
   BuilderOptions,
+  EnvVarRequirement,
   GeneratedProjectManifest,
+  IntegrationKind,
+  IntegrationPlan,
   PagePlan,
+  ProjectContext,
   RunBuilderResult,
   SectionPlan,
   ThemeTokens,
