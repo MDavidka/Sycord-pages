@@ -496,7 +496,11 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
     page.sections = dedupConsecutive(page.sections)
   }
 
-  const { needsDatabase, integrations, databaseProvider } = resolveIntegrations(root, prompt, project)
+  const { needsDatabase, integrations, databaseProvider, unconnectedRequested } = resolveIntegrations(
+    root,
+    prompt,
+    project,
+  )
   const requiredEnvVars = buildRequiredEnvVars(integrations, needsDatabase)
 
   return {
@@ -507,6 +511,7 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
     databaseProvider,
     integrations,
     requiredEnvVars,
+    unconnectedIntegrations: unconnectedRequested,
   }
 }
 
@@ -593,6 +598,40 @@ function tursoIntegration(reason: string): IntegrationPlan {
   }
 }
 
+// Map integration provider keys (what the planner/us emit) to Sycord
+// integration IDs (what the user has connected in the dashboard).
+// Both sides get normalized to the same dash-separated lowercase form
+// before lookup.
+const INTEGRATION_ID_ALIASES: Record<string, string> = {
+  "turso": "turso",
+  "mongodb": "mongodb",
+  "supabase": "supabase",
+  "supabase-auth": "supabase-auth",
+  "firebase": "firebase",
+  "upstash": "upstash",
+  "upstash-redis": "upstash",
+  "redis": "upstash",
+  "nextauth": "nextauth",
+  "auth-js": "nextauth",
+  "clerk": "clerk",
+  "stripe": "stripe",
+  "paypal": "paypal",
+  "openai": "openai",
+  "resend": "resend",
+  "github": "github",
+  "sendgrid": "resend",
+  "postmark": "resend",
+}
+
+function normalizeId(raw: string | undefined | null): string {
+  return (raw ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+}
+
+function integrationId(plan: IntegrationPlan): string {
+  const p = normalizeId(plan.provider)
+  return INTEGRATION_ID_ALIASES[p] ?? p
+}
+
 function resolveIntegrations(
   root: Record<string, unknown>,
   prompt: string,
@@ -601,6 +640,7 @@ function resolveIntegrations(
   needsDatabase: boolean
   integrations: IntegrationPlan[]
   databaseProvider?: "turso" | "none"
+  unconnectedRequested: string[]
 } {
   const rawIntegrations = Array.isArray(root.integrations)
     ? (root.integrations as unknown[]).map(normalizeIntegration).filter((i): i is IntegrationPlan => i !== null)
@@ -610,23 +650,46 @@ function resolveIntegrations(
   // If AI said true, or the prompt clearly implies persistence, we need a DB.
   const needsDatabase = aiNeedsDb === true || (aiNeedsDb !== false && promptSuggestsDatabase(prompt, project))
 
-  // Dedup by provider (case-insensitive).
-  const byProvider = new Map<string, IntegrationPlan>()
-  for (const integration of rawIntegrations) {
-    const key = integration.provider.toLowerCase()
-    if (!byProvider.has(key)) byProvider.set(key, integration)
+  // Connected integration id set. Turso is always treated as "connectable"
+  // because it's the platform's default DB — but we still warn if the env
+  // vars aren't resolved.
+  const connected = new Set<string>(["turso"])
+  for (const id of project?.connectedIntegrationIds ?? []) {
+    const norm = normalizeId(id)
+    if (norm) connected.add(INTEGRATION_ID_ALIASES[norm] ?? norm)
+  }
+  for (const projectInt of project?.integrations ?? []) {
+    const provider = normalizeId(projectInt.provider || projectInt.name)
+    if (provider) connected.add(INTEGRATION_ID_ALIASES[provider] ?? provider)
   }
 
-  // If a project integration list was provided, surface them too (env-var-less
-  // unless the AI already described them). This lets the UI echo back what's
-  // already connected without asking the user to reconfigure.
+  // Dedup planner-requested integrations by normalized id.
+  const byProvider = new Map<string, IntegrationPlan>()
+  const unconnectedRequested: string[] = []
+  for (const integration of rawIntegrations) {
+    const id = integrationId(integration)
+    if (!connected.has(id)) {
+      // Planner asked for a non-connected integration — drop it but
+      // remember the name so we can surface a "not connected" warning
+      // and render a safe UI placeholder instead of real SDK code.
+      if (!unconnectedRequested.includes(integration.name)) {
+        unconnectedRequested.push(integration.name)
+      }
+      continue
+    }
+    if (!byProvider.has(id)) byProvider.set(id, integration)
+  }
+
+  // Promote every connected project integration into the plan so the UI
+  // can echo them back (even if the planner didn't mention them).
   for (const projectInt of project?.integrations ?? []) {
-    const provider = (projectInt.provider || projectInt.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")
-    if (byProvider.has(provider)) continue
-    byProvider.set(provider, {
+    const provider = normalizeId(projectInt.provider || projectInt.name)
+    const id = INTEGRATION_ID_ALIASES[provider] ?? provider
+    if (!id || byProvider.has(id)) continue
+    byProvider.set(id, {
       kind: "other",
       name: projectInt.name,
-      provider,
+      provider: id,
       reason: "Already connected to this project",
       envVars: [],
     })
@@ -656,6 +719,7 @@ function resolveIntegrations(
     needsDatabase,
     integrations: Array.from(byProvider.values()),
     databaseProvider: needsDatabase ? "turso" : "none",
+    unconnectedRequested,
   }
 }
 
@@ -681,9 +745,46 @@ function buildRequiredEnvVars(integrations: IntegrationPlan[], needsDatabase: bo
 function computeMissingEnvVars(
   required: EnvVarRequirement[],
   existingKeys: string[] | undefined,
+  resolvedValues?: Record<string, string>,
 ): EnvVarRequirement[] {
   const present = new Set((existingKeys ?? []).filter(Boolean))
-  return required.filter((env) => !present.has(env.key))
+  return required.filter((env) => {
+    // If we have a non-empty resolved value (from project envVars or the
+    // server env), the key is no longer missing even if it wasn't in the
+    // project's envVarKeys list.
+    if (resolvedValues && resolvedValues[env.key] && resolvedValues[env.key].trim().length > 0) return false
+    return !present.has(env.key)
+  })
+}
+
+// Build a map of envKey -> real value, sourced from (in order):
+//   1. project.envVars (the user's stored secrets)
+//   2. process.env (server env on the host)
+// Values are only used locally to populate the generated `.env` file.
+// Missing keys stay absent (NOT filled with a fake placeholder).
+function resolveRequiredEnvVarValues(
+  required: EnvVarRequirement[],
+  project: ProjectContext | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  const projectValues = new Map<string, string>()
+  for (const v of project?.envVars ?? []) {
+    if (typeof v?.key === "string" && typeof v?.value === "string" && v.value.length > 0) {
+      projectValues.set(v.key, v.value)
+    }
+  }
+  for (const req of required) {
+    const fromProject = projectValues.get(req.key)
+    if (fromProject && fromProject.length > 0) {
+      out[req.key] = fromProject
+      continue
+    }
+    const fromServer = process.env[req.key]
+    if (typeof fromServer === "string" && fromServer.length > 0) {
+      out[req.key] = fromServer
+    }
+  }
+  return out
 }
 
 function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
@@ -885,47 +986,91 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
+  // Resolve env var values (project envVars ⟶ server env fallback) so the
+  // generated `.env` file can carry real values. We intentionally keep
+  // this in a local map and NEVER echo the values back through logs or
+  // the API response.
+  const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
+
   // 3. Scaffold base + ui components (+ optional DB files).
-  const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
+  const baseFiles = scaffoldBaseFiles(manifest, required, prompt, { resolvedEnv })
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
   // 4. File-level validation.
-  const build = runBuildValidation(allFiles, { needsDatabase: manifest.needsDatabase })
+  const connectedIntegrationIds = Array.from(new Set([
+    ...(options.project?.connectedIntegrationIds ?? []),
+    ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
+  ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
+  const build = runBuildValidation(allFiles, {
+    needsDatabase: manifest.needsDatabase,
+    connectedIntegrationIds,
+  })
   if (!build.ok) {
     logs.push({ step: "build-validate", detail: `Build validation failed: ${build.errors.join("; ")}` })
   } else {
     logs.push({ step: "build-validate", detail: `Build validation passed (${build.warnings.length} warnings)` })
   }
 
-  const missingEnvVars = computeMissingEnvVars(manifest.requiredEnvVars, options.project?.envVarKeys)
+  // Missing env var calculation combines project.envVarKeys with the
+  // resolved values map — a key is only "missing" if neither the project
+  // nor the server provided a non-empty value.
+  const missingEnvVars = computeMissingEnvVars(
+    manifest.requiredEnvVars,
+    options.project?.envVarKeys,
+    resolvedEnv,
+  )
   if (manifest.needsDatabase) {
-    logs.push({
-      step: "integrations",
-      detail: missingEnvVars.length
-        ? `Database required (Turso). Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`
-        : "Database required (Turso). Env vars detected.",
-    })
+    // NEVER include secret values in the log message — only key names.
+    const missingNames = missingEnvVars.map((e) => e.key)
+    if (missingNames.length) {
+      logs.push({
+        step: "integrations",
+        detail: `Database required (Turso). Missing env vars: ${missingNames.join(", ")}`,
+      })
+    } else {
+      logs.push({ step: "integrations", detail: "Database required (Turso). Turso env loaded." })
+    }
   } else {
     logs.push({ step: "integrations", detail: "No database integration required" })
+  }
+  if (manifest.unconnectedIntegrations.length) {
+    logs.push({
+      step: "integrations",
+      detail: `Skipped unconnected integrations: ${manifest.unconnectedIntegrations.join(", ")}`,
+    })
   }
 
   const qualityScore = computeQualityScore(manifest, build)
   logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files` })
+
+  // Advisory warnings surfaced to the UI. Never include values here.
+  const advisoryWarnings = [...build.warnings]
+  if (manifest.needsDatabase && missingEnvVars.length) {
+    advisoryWarnings.unshift(
+      `Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`,
+    )
+  }
+  if (manifest.unconnectedIntegrations.length) {
+    advisoryWarnings.push(
+      `Integrations not connected (UI placeholders used): ${manifest.unconnectedIntegrations.join(", ")}`,
+    )
+  }
 
   return {
     manifest,
     files: allFiles,
     logs,
     build,
-    warnings: build.warnings,
+    warnings: advisoryWarnings,
     qualityScore,
     needsDatabase: manifest.needsDatabase,
     databaseProvider: manifest.databaseProvider,
     integrations: manifest.integrations,
     requiredEnvVars: manifest.requiredEnvVars,
     missingEnvVars,
+    unconnectedIntegrations: manifest.unconnectedIntegrations,
   }
 }

@@ -112,7 +112,7 @@ export interface DesignBrief {
 
 // Integration metadata driven both by the AI planner's judgement and by the
 // host project's connected integrations. Used to decide which scaffolded
-// files (db client, health route, schema, queries, .env.example) to emit
+// files (db client, health route, schema, queries, .env) to emit
 // and which env vars to surface back to the user.
 export type IntegrationKind = "database" | "auth" | "email" | "analytics" | "storage" | "payments" | "other"
 
@@ -205,6 +205,10 @@ export interface GeneratedProjectManifest {
   databaseProvider?: "turso" | "none"
   integrations: IntegrationPlan[]
   requiredEnvVars: EnvVarRequirement[]
+  // Human-readable names of integrations the planner wanted but that the
+  // user hasn't connected. The renderer emits safe UI placeholders for
+  // these instead of real SDK code, and the API surfaces them in warnings.
+  unconnectedIntegrations: string[]
 }
 
 export interface RequiredComponent {
@@ -220,6 +224,16 @@ export interface RequiredComponent {
 // builder to brand generated sites with the real project name, logo,
 // description, and to reason about existing environment variables so
 // generated apps can plug directly into the user's configured secrets.
+//
+// `envVars` contains key+value pairs from `projects.$.envVars`. Values
+// are ONLY used for local consumption (generating a real `.env` file,
+// deciding if Turso is "connected") and must NEVER be echoed back to
+// the UI or included in the API response — only key names may leak.
+//
+// `connectedIntegrationIds` is the authoritative list of integrations
+// the user has actually wired up (derived from envVars with an
+// `integration` tag). The planner MUST NOT generate real code for any
+// integration id not in this set.
 export interface ProjectContext {
   name?: string
   description?: string
@@ -227,7 +241,9 @@ export interface ProjectContext {
   logoUrl?: string
   subdomain?: string
   envVarKeys?: string[]
+  envVars?: { key: string; value?: string; integration?: string | null }[]
   integrations?: { name: string; provider?: string }[]
+  connectedIntegrationIds?: string[]
 }
 
 export interface BuilderOptions {
@@ -269,4 +285,7 @@ export interface RunBuilderResult {
   integrations: IntegrationPlan[]
   requiredEnvVars: EnvVarRequirement[]
   missingEnvVars: EnvVarRequirement[]
+  // Integrations the planner wanted but the user hasn't connected —
+  // passed through so the API/UI can show a non-blocking advisory.
+  unconnectedIntegrations: string[]
 }

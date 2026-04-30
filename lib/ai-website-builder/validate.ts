@@ -184,6 +184,11 @@ function collectHrefs(sections: SectionPlan[]): string[] {
 
 export interface RunBuildValidationOpts {
   needsDatabase?: boolean
+  // Integration ids (matching Sycord's envVar.integration field, e.g.
+  // "stripe", "firebase", "resend") that are actually connected on the
+  // project. If provided, the validator flags any imports of those
+  // integration SDKs in generated files.
+  connectedIntegrationIds?: string[]
 }
 
 // Patterns we treat as hard-coded secrets in generated source. The file
@@ -235,7 +240,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
       "lib/db/schema.ts",
       "lib/db/queries.ts",
       "app/api/health/db/route.ts",
-      ".env.example",
+      ".env",
     ]
     for (const need of dbRequired) {
       if (!fileMap.has(need)) errors.push(`missing required database file: ${need}`)
@@ -244,12 +249,29 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     if (!/\"@libsql\/client\"/.test(packageJson)) {
       errors.push("package.json missing @libsql/client dependency required for Turso integration")
     }
-    const envExample = fileMap.get(".env.example") || ""
-    if (envExample && !envExample.includes("TURSO_DATABASE_URL")) {
-      errors.push(".env.example must document TURSO_DATABASE_URL for Turso integration")
-    }
-    if (envExample && !envExample.includes("TURSO_AUTH_TOKEN")) {
-      errors.push(".env.example must document TURSO_AUTH_TOKEN for Turso integration")
+    const envFile = fileMap.get(".env") || ""
+    if (envFile) {
+      if (!envFile.includes("TURSO_DATABASE_URL")) {
+        errors.push(".env must declare TURSO_DATABASE_URL for Turso integration")
+      }
+      if (!envFile.includes("TURSO_AUTH_TOKEN")) {
+        errors.push(".env must declare TURSO_AUTH_TOKEN for Turso integration")
+      }
+      // Flag obvious fake/placeholder values — real deployment MUST read
+      // values either from the project's envVars or from server env.
+      const fakeValues = [
+        /TURSO_DATABASE_URL=\s*libsql:\/\/example\./i,
+        /TURSO_DATABASE_URL=\s*libsql:\/\/your-/i,
+        /TURSO_DATABASE_URL=\s*libsql:\/\/my-db\b/i,
+        /TURSO_AUTH_TOKEN=\s*(your-token|your-auth-token|placeholder|xxx+)/i,
+        /=\s*(changeme|placeholder|dummy|fake|test-value|lorem)/i,
+      ]
+      for (const pattern of fakeValues) {
+        if (pattern.test(envFile)) {
+          errors.push(".env contains a fake placeholder value; load real values from project envVars or server env instead")
+          break
+        }
+      }
     }
   } else {
     // When no DB is needed, we shouldn't emit dangling db imports either.
@@ -279,16 +301,46 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     errors.push("lib/site-config.ts must include a non-empty logoInitials fallback")
   }
 
-  // Hard-coded secret detection. Skip files that legitimately reference
-  // env-var names (package.json, .env.example, db/client.ts which reads
-  // process.env.TURSO_*).
-  const secretSkip = new Set(["package.json", ".env.example"])
+  // Hard-coded secret detection. Skip files that legitimately carry real
+  // secret values: `package.json`, `.env` (resolved runtime values go here
+  // on purpose). Every other generated file must read secrets only from
+  // `process.env.X`.
+  const secretSkip = new Set(["package.json", ".env"])
   for (const [p, c] of fileMap) {
     if (secretSkip.has(p)) continue
     for (const { name, pattern } of HARD_CODED_SECRET_PATTERNS) {
       pattern.lastIndex = 0
       if (pattern.test(c)) {
         errors.push(`${p} appears to contain a hard-coded ${name}; secrets must only be read from process.env`)
+      }
+    }
+  }
+
+  // Check for integration SDK imports that the user hasn't actually
+  // connected. Only flags obvious integration packages; string keywords
+  // like "stripe" in marketing copy are ignored.
+  if (opts.connectedIntegrationIds !== undefined) {
+    const connected = new Set(opts.connectedIntegrationIds)
+    const integrationSdkChecks: Array<{ id: string; patterns: RegExp[] }> = [
+      { id: "stripe", patterns: [/from\s+["']stripe["']/, /from\s+["']@stripe\//] },
+      { id: "firebase", patterns: [/from\s+["']firebase\//, /from\s+["']firebase-admin/] },
+      { id: "resend", patterns: [/from\s+["']resend["']/] },
+      { id: "clerk", patterns: [/from\s+["']@clerk\//] },
+      { id: "supabase", patterns: [/from\s+["']@supabase\/supabase-js["']/] },
+      { id: "openai", patterns: [/from\s+["']openai["']/] },
+      { id: "paypal", patterns: [/from\s+["']@paypal\//] },
+      { id: "mongodb", patterns: [/from\s+["']mongodb["']/, /from\s+["']mongoose["']/] },
+    ]
+    for (const [p, c] of fileMap) {
+      if (p === "package.json" || p === ".env") continue
+      for (const { id, patterns } of integrationSdkChecks) {
+        if (connected.has(id)) continue
+        for (const pattern of patterns) {
+          if (pattern.test(c)) {
+            errors.push(`${p} imports a ${id} SDK but the ${id} integration is not connected to this project`)
+            break
+          }
+        }
       }
     }
   }

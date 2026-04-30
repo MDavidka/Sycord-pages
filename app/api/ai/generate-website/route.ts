@@ -134,9 +134,21 @@ async function loadProjectContext(
     (p: { _id?: ObjectId }) => p._id?.toString() === projectId,
   ) as ProjectDoc | undefined
   if (!project) return { doc: null, context: undefined }
-  const envVarKeys = Array.isArray(project.envVars)
-    ? project.envVars.map((e) => e.key).filter((k): k is string => typeof k === "string" && k.length > 0)
-    : []
+  const envVars = Array.isArray(project.envVars) ? project.envVars : []
+  const envVarKeys = envVars
+    .map((e) => e.key)
+    .filter((k): k is string => typeof k === "string" && k.length > 0)
+  // Connected integration IDs = the set of `integration` fields from
+  // envVars (that's how the Sycord dashboard tracks "Connected"). This is
+  // the whitelist the builder uses to decide which integration code is
+  // allowed to be generated.
+  const connectedIntegrationIds = Array.from(
+    new Set(
+      envVars
+        .map((e) => (typeof e.integration === "string" ? e.integration : null))
+        .filter((id): id is string => !!id && id.length > 0),
+    ),
+  )
   const context: ProjectContext = {
     name: project.businessName,
     description: project.businessDescription,
@@ -144,14 +156,17 @@ async function loadProjectContext(
     logoUrl: project.profileImage,
     subdomain: project.subdomain,
     envVarKeys,
+    envVars,
     integrations: Array.isArray(project.integrations) ? project.integrations : [],
+    connectedIntegrationIds,
   }
   return { doc: project, context }
 }
 
 // Merge the builder's required env vars into the project's stored envVars
-// array. We NEVER overwrite existing values — only append missing keys with
-// an empty value so the UI can prompt the user to fill them in.
+// array. We NEVER overwrite existing values. Missing keys get appended —
+// with the value from server env (process.env.X) if available, otherwise
+// an empty string that the user must fill in via the env settings UI.
 async function mergeRequiredEnvVars(
   userId: string,
   projectId: string,
@@ -162,14 +177,17 @@ async function mergeRequiredEnvVars(
   const existing = new Set((doc.envVars ?? []).map((e) => e.key))
   const toAdd = required
     .filter((r) => r.required && !existing.has(r.key))
-    .map((r) => ({
-      key: r.key,
-      value: "",
-      integration: r.integration ?? null,
-      addedAt: new Date(),
-      source: "ai-builder",
-      purpose: r.purpose,
-    }))
+    .map((r) => {
+      const serverValue = process.env[r.key]
+      return {
+        key: r.key,
+        value: typeof serverValue === "string" && serverValue.length > 0 ? serverValue : "",
+        integration: r.integration ?? null,
+        addedAt: new Date(),
+        source: "ai-builder",
+        purpose: r.purpose,
+      }
+    })
   if (toAdd.length === 0) return 0
   const client = await clientPromise
   const db = client.db()
@@ -183,6 +201,26 @@ async function mergeRequiredEnvVars(
     },
   )
   return toAdd.length
+}
+
+// Redact secret values out of files we return to the UI. The `.env` file
+// is saved to MongoDB with real values (so the deployer can use them),
+// but we never echo the values back to the browser.
+function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
+  return files.map((f) => {
+    if (f.path !== ".env") return f
+    const redacted = f.content
+      .split("\n")
+      .map((line) => {
+        const m = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/)
+        if (!m) return line
+        const [, key, value] = m
+        if (!value) return line
+        return `${key}=***`
+      })
+      .join("\n")
+    return { path: f.path, content: redacted }
+  })
 }
 
 export async function POST(req: Request) {
@@ -245,10 +283,14 @@ export async function POST(req: Request) {
       ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
       : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
+    // Redact any real secret values from files we send back to the UI.
+    // MongoDB already has the real values stored under projects.$.pages.
+    const safeFiles = redactEnvFiles(result.files)
+
     return NextResponse.json({
       message,
       manifest: result.manifest,
-      files: result.files,
+      files: safeFiles,
       savedPages,
       savedFileNames,
       build: result.build,
@@ -260,6 +302,7 @@ export async function POST(req: Request) {
       integrations: result.integrations,
       requiredEnvVars: result.requiredEnvVars,
       missingEnvVars: result.missingEnvVars,
+      unconnectedIntegrations: result.unconnectedIntegrations,
       envVarsAdded,
     })
   } catch (error) {

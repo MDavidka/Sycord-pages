@@ -479,7 +479,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         : []
       const needsDb = Boolean(data?.needsDatabase)
 
-      if (needsDb || integrations.length > 0 || requiredEnvVars.length > 0) {
+      const unconnectedIntegrations: string[] = Array.isArray(data?.unconnectedIntegrations)
+        ? data.unconnectedIntegrations
+        : []
+
+      if (needsDb || integrations.length > 0 || requiredEnvVars.length > 0 || unconnectedIntegrations.length > 0) {
         const integrationLines: string[] = []
         if (needsDb) {
           const dbProvider = (data?.databaseProvider as string | undefined) || "turso"
@@ -495,18 +499,22 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         }
         if (needsDb) {
           if (missingEnvVars.length > 0) {
+            // Blocking warning — never echo values, only key names.
             integrationLines.push(
               `Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`,
             )
-          } else if (requiredEnvVars.length > 0) {
-            integrationLines.push(
-              `Database connected: ${requiredEnvVars.map((e) => e.key).join(", ")} detected`,
-            )
+          } else {
+            integrationLines.push("Turso env loaded")
           }
+        }
+        if (unconnectedIntegrations.length > 0) {
+          integrationLines.push(
+            `Not connected (UI placeholders used): ${unconnectedIntegrations.join(", ")}`,
+          )
         }
         if (typeof data?.envVarsAdded === "number" && data.envVarsAdded > 0) {
           integrationLines.push(
-            `Added ${data.envVarsAdded} required env var${data.envVarsAdded === 1 ? "" : "s"} to project settings (fill in values before deploying).`,
+            `Added ${data.envVarsAdded} required env var${data.envVarsAdded === 1 ? "" : "s"} to project settings.`,
           )
         }
 
