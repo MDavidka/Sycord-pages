@@ -437,11 +437,42 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         content: data.message || "Website generation finished.",
       })
 
+      const summaryLines: string[] = []
+      const pageCount = Array.isArray(data?.manifest?.pages) ? data.manifest.pages.length : 0
+      const fileCount = Array.isArray(data?.files) ? data.files.length : 0
+      if (pageCount > 0) summaryLines.push(`Pages: ${pageCount}`)
+      if (fileCount > 0) summaryLines.push(`Files: ${fileCount}`)
       if (typeof data?.savedPages === "number" && data.savedPages > 0) {
+        summaryLines.push(`Saved to project: ${data.savedPages}`)
+      }
+      if (data?.manifest?.theme?.preset) summaryLines.push(`Theme: ${data.manifest.theme.preset}`)
+      if (typeof data?.qualityScore === "number") summaryLines.push(`Quality: ${data.qualityScore}/100`)
+      const buildOk = Boolean(data?.build?.ok)
+      const buildErrors: string[] = Array.isArray(data?.build?.errors) ? data.build.errors : []
+      const buildWarnings: string[] = Array.isArray(data?.build?.warnings) ? data.build.warnings : []
+      summaryLines.push(`Build: ${buildOk ? "passed" : `failed (${buildErrors.length} issue${buildErrors.length === 1 ? "" : "s"})`}`)
+      if (buildWarnings.length > 0) summaryLines.push(`Warnings: ${buildWarnings.length}`)
+
+      if (summaryLines.length > 0) {
         assistantMessages.push({
           id: (Date.now() + 11).toString(),
           role: "assistant",
-          content: `Saved ${data.savedPages} generated files to project Pages.`,
+          content: summaryLines.map((l) => `• ${l}`).join("\n"),
+        })
+      }
+
+      if (!buildOk && buildErrors.length > 0) {
+        assistantMessages.push({
+          id: (Date.now() + 12).toString(),
+          role: "assistant",
+          isErrorLog: true,
+          content: `Build validation failed:\n${buildErrors.slice(0, 6).map((e) => `• ${e}`).join("\n")}`,
+        })
+      } else if (buildWarnings.length > 0) {
+        assistantMessages.push({
+          id: (Date.now() + 13).toString(),
+          role: "assistant",
+          content: `Notes:\n${buildWarnings.slice(0, 5).map((w) => `• ${w}`).join("\n")}`,
         })
       }
 
