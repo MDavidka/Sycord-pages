@@ -40,11 +40,11 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen w-full bg-[#18191B] text-white">
       <Hero />
+      <ProductShowcase />
       <TrustStrip />
       <HowItWorks />
       <AIBuilderFeatures />
       <HostingFeatures />
-      <ProductShowcase />
       <Templates />
       <Pricing />
       <FAQ />
@@ -73,10 +73,10 @@ function Hero() {
           <Image
             src="/logo.png"
             alt="logo"
-            width={36}
-            height={36}
+            width={56}
+            height={56}
             priority
-            className="h-9 w-9 opacity-90"
+            className="h-12 w-12 opacity-90 sm:h-14 sm:w-14"
           />
         </Link>
 
@@ -174,33 +174,8 @@ function HeroPreview() {
 
       {/* Body grid */}
       <div className="mt-5 grid grid-cols-12 gap-4">
-        {/* AI builder panel */}
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#15171a] p-4 lg:col-span-4">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
-            <Wand2 className="h-3.5 w-3.5" />
-            AI Builder
-          </div>
-          <p className="mt-3 text-sm text-white">
-            Build me a portfolio for a product designer with case studies and a
-            contact section.
-          </p>
-          <div className="mt-3 space-y-1.5 text-xs text-[#A7AAB0]">
-            <Step label="Outlining pages" done />
-            <Step label="Generating sections" done />
-            <Step label="Writing copy" />
-            <Step label="Optimizing for mobile" pending />
-          </div>
-          <button
-            type="button"
-            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#2a2c30] bg-[#0f1012] px-3 py-2 text-xs font-semibold text-white"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Regenerate
-          </button>
-        </div>
-
         {/* Website thumbnail preview */}
-        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#15171a] lg:col-span-5">
+        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#15171a] lg:col-span-9">
           <div className="flex items-center justify-between border-b border-[#2a2c30] px-4 py-2.5">
             <div className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
@@ -282,35 +257,6 @@ function HeroPreview() {
           <Sparkline />
         </div>
       </div>
-    </div>
-  )
-}
-
-function Step({
-  label,
-  done,
-  pending,
-}: {
-  label: string
-  done?: boolean
-  pending?: boolean
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span
-        className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border ${
-          done
-            ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
-            : pending
-            ? "border-[#2a2c30] bg-[#0f1012] text-[#A7AAB0]"
-            : "border-[#2a2c30] bg-[#0f1012] text-white"
-        }`}
-      >
-        {done ? <CheckCircle2 className="h-2.5 w-2.5" /> : null}
-      </span>
-      <span className={done ? "text-[#A7AAB0] line-through" : "text-white"}>
-        {label}
-      </span>
     </div>
   )
 }
