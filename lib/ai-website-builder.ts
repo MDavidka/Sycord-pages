@@ -560,7 +560,7 @@ function scaffoldFiles(manifest: ProjectManifest): BuilderFile[] {
     },
     {
       path: "app/globals.css",
-      content: "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n:root{color-scheme:light dark;}\n",
+      content: "@import \"tailwindcss\";\n:root{color-scheme:light dark;}\n",
     },
     { path: "components/site-header.tsx", content: createSiteHeader({ ...manifest, projectName }) },
     { path: "components/site-footer.tsx", content: createSiteFooter({ ...manifest, projectName }) },
