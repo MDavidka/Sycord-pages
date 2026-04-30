@@ -40,7 +40,6 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen w-full bg-[#18191B] text-white">
       <Hero />
-      <ProductShowcase />
       <TrustStrip />
       <HowItWorks />
       <AIBuilderFeatures />
@@ -151,16 +150,14 @@ function HeroPreview() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0f1012]">
-            <Sparkles className="h-3.5 w-3.5 text-white/80" />
+            <Code2 className="h-3.5 w-3.5 text-white/80" />
           </div>
-          <span className="text-sm font-semibold text-white">
-            Sycord Studio
-          </span>
+          <span className="text-sm font-semibold text-white">Editor</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1.5 rounded-full border border-[#2a2c30] bg-[#0f1012] px-2.5 py-1 text-[11px] text-[#A7AAB0] sm:inline-flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Live
+            <MousePointerClick className="h-3 w-3" />
+            Drag &amp; drop
           </span>
           <button
             type="button"
@@ -172,10 +169,33 @@ function HeroPreview() {
         </div>
       </div>
 
-      {/* Body grid */}
+      {/* Body grid: section list + browser-like preview */}
       <div className="mt-5 grid grid-cols-12 gap-4">
-        {/* Website thumbnail preview */}
-        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#15171a] lg:col-span-9">
+        {/* Section list */}
+        <div className="col-span-12 space-y-2 sm:col-span-4">
+          {[
+            { label: "Hero", active: true },
+            { label: "Features" },
+            { label: "Pricing" },
+            { label: "FAQ" },
+            { label: "Footer" },
+          ].map(({ label, active }) => (
+            <div
+              key={label}
+              className={`flex items-center justify-between rounded-xl border border-[#2a2c30] px-3 py-2.5 text-xs font-medium ${
+                active
+                  ? "bg-white text-black"
+                  : "bg-[#15171a] text-[#E5E7EB]"
+              }`}
+            >
+              {label}
+              <ChevronRight className="h-3.5 w-3.5 opacity-60" />
+            </div>
+          ))}
+        </div>
+
+        {/* Browser-like preview */}
+        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#15171a] sm:col-span-8">
           <div className="flex items-center justify-between border-b border-[#2a2c30] px-4 py-2.5">
             <div className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
@@ -188,43 +208,15 @@ function HeroPreview() {
             <div className="w-10" />
           </div>
           <div className="aspect-[16/10] w-full bg-gradient-to-br from-[#1b1d20] to-[#0f1012] p-5">
-            <div className="h-2.5 w-24 rounded bg-white/80" />
-            <div className="mt-2 h-1.5 w-40 rounded bg-white/30" />
+            <div className="h-2.5 w-28 rounded bg-white/80" />
+            <div className="mt-2 h-1.5 w-44 rounded bg-white/30" />
             <div className="mt-5 grid grid-cols-3 gap-2">
               <div className="aspect-square rounded-lg bg-white/[0.06]" />
               <div className="aspect-square rounded-lg bg-white/[0.04]" />
               <div className="aspect-square rounded-lg bg-white/[0.05]" />
             </div>
-            <div className="mt-3 h-6 w-24 rounded-full bg-white/90" />
+            <div className="mt-3 h-6 w-28 rounded-full bg-white/90" />
           </div>
-        </div>
-
-        {/* Right column stats */}
-        <div className="col-span-12 grid grid-cols-2 gap-4 lg:col-span-3 lg:grid-cols-1">
-          <StatusCard
-            icon={<Globe className="h-3.5 w-3.5" />}
-            title="Domain"
-            value="myportfolio.com"
-            tag="Connected"
-          />
-          <StatusCard
-            icon={<ShieldCheck className="h-3.5 w-3.5" />}
-            title="SSL"
-            value="Active"
-            tag="Auto-renew"
-          />
-          <StatusCard
-            icon={<Activity className="h-3.5 w-3.5" />}
-            title="Uptime"
-            value="99.99%"
-            tag="30 days"
-          />
-          <StatusCard
-            icon={<BarChart3 className="h-3.5 w-3.5" />}
-            title="Visitors"
-            value="12.4k"
-            tag="+18%"
-          />
         </div>
       </div>
 
