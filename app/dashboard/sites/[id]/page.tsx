@@ -68,6 +68,7 @@ import {
   Check,
   Clock,
   TrendingDown,
+  Bug,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -653,6 +654,9 @@ export default function SiteSettingsPage() {
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
   const [hasDeployError, setHasDeployError] = useState(false)
+  const [sentryIssues, setSentryIssues] = useState<any[]>([])
+  const [sentryFilter, setSentryFilter] = useState("all")
+  const [isRescanningSentry, setIsRescanningSentry] = useState(false)
 
   const runnerErrorDetails = useMemo(() => {
     if (!Array.isArray(logs) || logs.length === 0) return null
@@ -1198,6 +1202,24 @@ export default function SiteSettingsPage() {
     )
   }
 
+
+  useEffect(() => {
+    if (activeTab !== "sentry" || !id) return
+    fetch(`/api/projects/${id}/sentry`).then((r) => r.json()).then((d) => setSentryIssues(Array.isArray(d.issues) ? d.issues : []))
+  }, [activeTab, id])
+
+  const rescanSentry = async () => {
+    if (!id) return
+    setIsRescanningSentry(true)
+    try {
+      const sources: Array<{ source: "vm-build" | "vm-deploy" | "ai-generation" | "website-runtime", rawLog: string, deploymentId?: string }> = []
+      if (deployError) sources.push({ source: "vm-build", rawLog: deployError })
+      if (runnerErrorDetails) sources.push({ source: "vm-deploy", rawLog: runnerErrorDetails })
+      const res = await fetch(`/api/projects/${id}/sentry`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sources }) })
+      const data = await res.json()
+      setSentryIssues(Array.isArray(data.issues) ? data.issues : [])
+    } finally { setIsRescanningSentry(false) }
+  }
   if (!project) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -1278,6 +1300,7 @@ export default function SiteSettingsPage() {
       defaultOpen: false,
       items: [
         { id: "integrations", label: "Integrations", icon: Database },
+        { id: "sentry", label: "Sentry", icon: Bug, badge: sentryIssues.filter((i) => i.aiDecision === "mark").length > 0 ? String(sentryIssues.filter((i) => i.aiDecision === "mark").length) : undefined },
         { id: "settings", label: "Settings", icon: Settings },
       ],
     },
@@ -2324,6 +2347,33 @@ export default function SiteSettingsPage() {
                       <span className="text-destructive">Project ID error</span>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+
+            {activeTab === "sentry" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                <h2 className="text-4xl font-bold text-white">Sentry found <span className="text-emerald-400">{sentryIssues.filter((i) => i.aiDecision === "mark").length} error</span> based on your activity</h2>
+                <div className="flex gap-2 flex-wrap">
+                  {["all","mark","skip","vm-build","ai-generation","website-runtime"].map((f) => (
+                    <Button key={f} variant={sentryFilter===f?"default":"outline"} size="sm" onClick={() => setSentryFilter(f)}>{f}</Button>
+                  ))}
+                  <Button onClick={rescanSentry} disabled={isRescanningSentry}>{isRescanningSentry ? "Re-scanning..." : "Re-scan activity"}</Button>
+                </div>
+                <div className="space-y-3">
+                  {sentryIssues.filter((i)=> sentryFilter==="all" || i.aiDecision===sentryFilter || i.source===sentryFilter).map((issue) => (
+                    <Card key={issue.id} className="bg-zinc-900/80 border-white/10 rounded-2xl">
+                      <CardContent className="pt-5 space-y-2 text-sm">
+                        <div className="flex items-center gap-2"><span className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-300">[{issue.aiDecision || "new"}]</span><span>{issue.source}</span></div>
+                        <p className="font-semibold">{issue.errorName || "Issue detected"}</p>
+                        <p className="text-zinc-300">{issue.description}</p>
+                        <p className="text-zinc-400">{issue.fixSuggestion}</p>
+                        {issue.affectedFile && <p className="text-zinc-500">File: {issue.affectedFile}</p>}
+                        <details><summary>Raw log</summary><pre className="whitespace-pre-wrap text-xs">{issue.rawLog}</pre></details>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               </div>
             )}
