@@ -504,7 +504,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
               `Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`,
             )
           } else {
-            integrationLines.push("Turso env loaded")
+            integrationLines.push("Turso env will be injected during VM deployment")
           }
         }
         if (unconnectedIntegrations.length > 0) {

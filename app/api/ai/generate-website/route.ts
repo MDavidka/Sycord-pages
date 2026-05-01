@@ -36,6 +36,8 @@ interface ProjectDoc {
 // the static-export deployer needs both.
 function isDeployableFilePath(filePath: string) {
   if (!filePath || filePath.startsWith(".sycord/")) return false
+  const lower = filePath.toLowerCase()
+  if (lower === ".env" || lower === ".env.local" || lower === ".env.production" || lower.startsWith(".env.")) return false
   if (filePath.endsWith(".json")) {
     return filePath === "package.json" || filePath === "tsconfig.json"
   }
@@ -45,6 +47,34 @@ function isDeployableFilePath(filePath: string) {
 interface SaveResult {
   saved: number
   files: GeneratedFile[]
+}
+
+
+function validateNoSecretFileContent(files: GeneratedFile[], projectEnvVars: ProjectDoc["envVars"] = []): void {
+  const knownValues = new Set<string>()
+  for (const ev of projectEnvVars ?? []) {
+    if (typeof ev?.value === "string" && ev.value.trim().length > 0) knownValues.add(ev.value.trim())
+  }
+  for (const key of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]) {
+    const v = process.env[key]
+    if (typeof v === "string" && v.trim().length > 0) knownValues.add(v.trim())
+  }
+
+  for (const file of files) {
+    const pathLower = file.path.toLowerCase()
+    if (pathLower === ".env" || pathLower === ".env.local" || pathLower === ".env.production" || pathLower.startsWith(".env.")) {
+      throw new Error(`Forbidden generated file: ${file.path}. Environment files are not allowed in generated output.`)
+    }
+    const content = file.content || ""
+    if (/TURSO_AUTH_TOKEN\s*=/.test(content) || /TURSO_DATABASE_URL\s*=/.test(content)) {
+      throw new Error(`Forbidden secret assignment found in ${file.path}. Secrets must only be injected at deploy time.`)
+    }
+    for (const value of knownValues) {
+      if (value && content.includes(value)) {
+        throw new Error(`Potential secret leak detected in ${file.path}.`)
+      }
+    }
+  }
 }
 
 async function saveGeneratedFilesToProject(
@@ -207,8 +237,8 @@ async function mergeRequiredEnvVars(
 // is saved to MongoDB with real values (so the deployer can use them),
 // but we never echo the values back to the browser.
 function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
-  return files.map((f) => {
-    if (f.path !== ".env") return f
+  return files.filter((f) => !/^\.env(\.|$)/i.test(f.path)).map((f) => {
+    if (!/^\.env(\.|$)/i.test(f.path)) return f
     const redacted = f.content
       .split("\n")
       .map((line) => {
@@ -255,6 +285,7 @@ export async function POST(req: Request) {
     }
 
     const result = await runAIWebsiteBuilder(prompt, opts)
+    validateNoSecretFileContent(result.files, projectDoc?.envVars)
 
     let savedPages = 0
     let savedFileNames: string[] = []
