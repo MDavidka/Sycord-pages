@@ -31,11 +31,10 @@ interface ProjectDoc {
 }
 
 // Anything inside `.sycord/` is debug-only. Lockfiles and other non-source
-// JSON we never plan to emit are skipped here as well so deployments stay
-// lean. `package.json` and `tsconfig.json` are explicitly allowed because
-// the static-export deployer needs both.
+// JSON we never plan to emit are skipped here as well so deployments stay lean.
 function isDeployableFilePath(filePath: string) {
   if (!filePath || filePath.startsWith(".sycord/")) return false
+  if (/^\.env(?:\.|$)/.test(filePath) || /\/\.env(?:\.|$)/.test(filePath)) return false
   if (filePath.endsWith(".json")) {
     return filePath === "package.json" || filePath === "tsconfig.json"
   }
@@ -62,6 +61,10 @@ async function saveGeneratedFilesToProject(
       typeof file.content === "string" &&
       isDeployableFilePath(file.path),
   )
+  const envFile = files.find((file) => /^\.env(?:\.|$)/.test(file.path) || /\/\.env(?:\.|$)/.test(file.path))
+  if (envFile) {
+    throw new Error(`Generated env file is not allowed: ${envFile.path}`)
+  }
 
   const normalizedPages = deployable.map((file) => {
     const safeName = file.path.replace(/^\/+/, "").slice(0, 255)
@@ -98,7 +101,7 @@ async function saveGeneratedFilesToProject(
   return { saved: normalizedPages.length, files: deployable }
 }
 
-function readDeploymentMode(files: GeneratedFile[]): "static-export" | "next-server" {
+function readDeploymentMode(files: GeneratedFile[]): "next-server" {
   const manifestFile = files.find((file) => file.path === "lib/generated-manifest.ts")
   if (manifestFile) {
     const match = manifestFile.content.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
@@ -111,7 +114,7 @@ function readDeploymentMode(files: GeneratedFile[]): "static-export" | "next-ser
       }
     }
   }
-  return files.some((file) => file.path.startsWith("app/api/")) ? "next-server" : "static-export"
+  return "next-server"
 }
 
 // Validate the model JSON the client sends. Anything malformed is dropped

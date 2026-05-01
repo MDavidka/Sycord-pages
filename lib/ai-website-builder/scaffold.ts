@@ -177,7 +177,7 @@ function buildPackageJson(
       scripts: {
         dev: "next dev",
         build: "next build",
-        start: "next start",
+        start: "next start -H 0.0.0.0",
         lint: "next lint",
       },
       dependencies: deps,
@@ -188,11 +188,10 @@ function buildPackageJson(
   )
 }
 
-function buildNextConfig(opts: { deploymentMode: GeneratedProjectManifest["deploymentMode"] }): string {
-  const output = opts.deploymentMode === "static-export" ? `  output: "export",\n` : ""
+function buildNextConfig(): string {
   return `/** @type {import('next').NextConfig} */
 const nextConfig = {
-${output}  images: { unoptimized: true },
+  images: { unoptimized: true },
   trailingSlash: true,
   reactStrictMode: true,
 }
@@ -1163,9 +1162,7 @@ export function buildDatabaseFiles(
     { path: "lib/db/schema.ts", content: buildDbSchema(shape) },
     { path: "lib/db/queries.ts", content: buildDbQueries(shape) },
   ]
-  if (manifest.deploymentMode === "next-server") {
-    files.push({ path: "app/api/health/db/route.ts", content: buildHealthRoute() })
-  }
+  files.push({ path: "app/api/health/db/route.ts", content: buildHealthRoute() })
   return files
 }
 
@@ -1178,7 +1175,7 @@ export function scaffoldBaseFiles(
   const needsDatabase = manifest.needsDatabase
   const files: BuilderFile[] = [
     { path: "package.json", content: buildPackageJson(slug, requiredComponents, { needsDatabase }) },
-    { path: "next.config.mjs", content: buildNextConfig({ deploymentMode: manifest.deploymentMode }) },
+    { path: "next.config.mjs", content: buildNextConfig() },
     { path: "tsconfig.json", content: buildTsconfig() },
     { path: "postcss.config.js", content: buildPostcssConfig() },
     { path: "app/globals.css", content: buildGlobalsCss(manifest.theme) },

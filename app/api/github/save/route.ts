@@ -237,6 +237,9 @@ export async function POST(request: Request) {
       
       for (const page of pages) {
         let path = page.name
+        if (/^\.env(?:\.|$)/.test(path) || /\/\.env(?:\.|$)/.test(path)) {
+          return NextResponse.json({ error: `Env files must not be pushed to GitHub: ${path}` }, { status: 400 })
+        }
         // Ensure path doesn't start with /
         if (path.startsWith('/')) {
           path = path.substring(1)

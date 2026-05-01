@@ -17,6 +17,7 @@ import { callModel, extractJson, type ChatMessage, type ModelSelection } from "@
 import type {
   BuilderFile,
   BuilderOptions,
+  ComponentNode,
   CtaPlan,
   DesignBrief,
   EnvVarRequirement,
@@ -56,7 +57,6 @@ export type {
 
 const FALLBACK_MODEL: ModelSelection = { id: "gemini-3.1-flash-preview", provider: "Google" }
 const DEFAULT_BEST_MODEL: ModelSelection = { id: "gemini-3.1-pro-preview", provider: "Google" }
-const NEXT_SERVER_DEPLOY_SUPPORTED = false
 
 const ALLOWED_KINDS: ReadonlySet<SectionKind> = new Set<SectionKind>([
   "hero",
@@ -74,6 +74,42 @@ const ALLOWED_KINDS: ReadonlySet<SectionKind> = new Set<SectionKind>([
   "logos",
   "team",
   "blog-preview",
+])
+
+const ALLOWED_COMPONENTS: ReadonlySet<ComponentNode["component"]> = new Set<ComponentNode["component"]>([
+  "Page",
+  "Section",
+  "Container",
+  "Grid",
+  "Stack",
+  "Button",
+  "Card",
+  "CardHeader",
+  "CardTitle",
+  "CardDescription",
+  "CardContent",
+  "CardFooter",
+  "Badge",
+  "Accordion",
+  "AccordionItem",
+  "AccordionTrigger",
+  "AccordionContent",
+  "Tabs",
+  "TabsList",
+  "TabsTrigger",
+  "TabsContent",
+  "Input",
+  "Textarea",
+  "Label",
+  "Avatar",
+  "Separator",
+  "Image",
+  "Link",
+  "Heading",
+  "Text",
+  "Stat",
+  "PricingCard",
+  "FeatureCard",
 ])
 
 function isProvidedModel(model: ModelSelection | undefined): model is ModelSelection {
@@ -231,6 +267,44 @@ function normalizeSectionItems(items: unknown): SectionItem[] | undefined {
   return out.length ? out : undefined
 }
 
+function jsonSafeProps(input: unknown): Record<string, unknown> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(key)) continue
+    if (typeof value === "string") out[key] = safeText(value, "")
+    else if (typeof value === "number" && Number.isFinite(value)) out[key] = value
+    else if (typeof value === "boolean") out[key] = value
+    else if (value === null) out[key] = null
+    else if (Array.isArray(value)) {
+      const arr = value.filter((v) => typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null)
+      if (arr.length === value.length) out[key] = arr
+    }
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function normalizeComponentNode(raw: unknown, depth = 0): ComponentNode | undefined {
+  if (depth > 8 || !raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const r = raw as Record<string, unknown>
+  const component = safeText(r.component, "")
+  if (!ALLOWED_COMPONENTS.has(component as ComponentNode["component"])) return undefined
+  const children = Array.isArray(r.children)
+    ? r.children
+        .map((child) => normalizeComponentNode(child, depth + 1))
+        .filter((child): child is ComponentNode => Boolean(child))
+        .slice(0, 40)
+    : undefined
+  const id = safeText(r.id, "") || `${component.toLowerCase()}-${depth}`
+  return {
+    id: id.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80),
+    component: component as ComponentNode["component"],
+    props: jsonSafeProps(r.props),
+    text: safeText(r.text, "") || undefined,
+    children: children?.length ? children : undefined,
+  }
+}
+
 function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): SectionPlan {
   const r = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
   const kindCandidate = safeText(r.kind, "") as SectionKind
@@ -252,6 +326,7 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
     components: Array.isArray(r.components) ? (r.components as unknown[]).map((c) => safeText(c, "")).filter(Boolean) : undefined,
     items,
     imageHint: safeText(r.imageHint, "") || undefined,
+    componentTree: normalizeComponentNode(r.componentTree),
     anchor: safeText(r.anchor, "") || undefined,
   }
 }
@@ -503,16 +578,12 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
     project,
   )
   const requiredEnvVars = buildRequiredEnvVars(integrations, needsDatabase)
-  const requestedDeploymentMode = root.deploymentMode === "next-server" ? "next-server" : "static-export"
-  const deploymentMode = requestedDeploymentMode === "next-server" && NEXT_SERVER_DEPLOY_SUPPORTED
-    ? "next-server"
-    : "static-export"
 
   return {
     brief: briefSeed,
     theme: buildTheme(themePreset),
     pages,
-    deploymentMode,
+    deploymentMode: "next-server",
     needsDatabase,
     databaseProvider,
     integrations,
@@ -843,13 +914,6 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
 
   const parsed = extractJson<unknown>(raw)
   const manifest = normalizeManifest(parsed, prompt, opts.project)
-  if (manifest.needsDatabase && manifest.deploymentMode === "static-export") {
-    logs.push({
-      step: "deployment-mode",
-      detail: "Static export selected; database code is deploy-env only and no runtime API routes will be generated.",
-    })
-  }
-
   const validation = validateManifest(manifest)
   if (!validation.ok) {
     logs.push({ step: "plan-validate", detail: `Manifest invalid: ${validation.errors.join("; ")}. Repairing...` })

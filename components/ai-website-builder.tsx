@@ -447,8 +447,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       }
       if (data?.manifest?.theme?.preset) summaryLines.push(`Theme: ${data.manifest.theme.preset}`)
       if (data?.deploymentMode || data?.manifest?.deploymentMode) {
-        const mode = (data.deploymentMode || data.manifest.deploymentMode) as string
-        summaryLines.push(`Deployment mode: ${mode === "next-server" ? "Next server" : "Static export"}`)
+        summaryLines.push("Deployment mode: Next server")
       }
       if (typeof data?.qualityScore === "number") summaryLines.push(`Quality: ${data.qualityScore}/100`)
       const buildOk = Boolean(data?.build?.ok)
@@ -489,9 +488,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       if (needsDb || integrations.length > 0 || requiredEnvVars.length > 0 || unconnectedIntegrations.length > 0) {
         const integrationLines: string[] = []
-        if ((data?.deploymentMode || data?.manifest?.deploymentMode) === "static-export" && needsDb) {
-          integrationLines.push("Static export: database env stays deploy-only; no runtime API route generated")
-        }
+        integrationLines.push("Runtime: Next server via VM process with deploy-time env vars")
         if (needsDb) {
           const dbProvider = (data?.databaseProvider as string | undefined) || "turso"
           integrationLines.push(

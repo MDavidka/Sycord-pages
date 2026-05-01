@@ -162,8 +162,8 @@ async function main() {
     const nameOk = result.manifest.brief.projectName === c.expectProjectName
     const dbOk = result.needsDatabase === c.expectDatabase
     const filesOk = c.expectedDbFiles.every((p) => filePaths.has(p))
-    const noRuntimeApi = !Array.from(filePaths).some((p) => p.startsWith("app/api/"))
-    const staticConfigOk = result.deploymentMode === "static-export" && nextConfig.includes('output: "export"')
+    const runtimeApiOk = c.expectDatabase ? filePaths.has("app/api/health/db/route.ts") : !Array.from(filePaths).some((p) => p.startsWith("app/api/"))
+    const nextServerConfigOk = result.deploymentMode === "next-server" && !nextConfig.includes('output: "export"')
     const missingOk = (() => {
       const exp = c.expectedMissingEnv ?? []
       const got = new Set(result.missingEnvVars.map((e) => e.key))
@@ -201,8 +201,8 @@ async function main() {
       ["project name threaded", nameOk],
       ["needsDatabase", dbOk],
       ["expected DB files emitted", filesOk],
-      ["static export config emitted", staticConfigOk],
-      ["no runtime API routes in static export", noRuntimeApi],
+      ["next server config emitted", nextServerConfigOk],
+      ["runtime API routes only when needed", runtimeApiOk],
       ["expected missing env vars", missingOk],
       ["no DB files when not needed", noExtraDbFiles],
       ["build validation ok", buildOk],

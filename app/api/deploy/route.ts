@@ -3,10 +3,10 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import * as Sentry from "@sentry/nextjs"
 
 const GITHUB_API_BASE = "https://api.github.com"
 const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.sycord.site"
-const NEXT_SERVER_DEPLOY_SUPPORTED = false
 
 // Initial delay after creating a repository before attempting file upload
 const INITIAL_REPO_DELAY_MS = 1000
@@ -177,7 +177,7 @@ async function deployViaGitTree(
     console.log(`[Deploy] Atomic deployment complete. New commit: ${commitData.sha}`)
 }
 
-type DeploymentMode = "static-export" | "next-server"
+type DeploymentMode = "next-server"
 
 function readGeneratedManifest(files: { path: string; content: string }[]): Record<string, unknown> | null {
   const manifestFile = files.find((file) => file.path === "lib/generated-manifest.ts")
@@ -193,9 +193,10 @@ function readGeneratedManifest(files: { path: string; content: string }[]): Reco
 
 function resolveDeploymentMode(files: { path: string; content: string }[]): DeploymentMode {
   const manifest = readGeneratedManifest(files)
-  if (manifest?.deploymentMode === "next-server") return "next-server"
-  if (files.some((file) => file.path.startsWith("app/api/"))) return "next-server"
-  return "static-export"
+  if (manifest?.deploymentMode && manifest.deploymentMode !== "next-server") {
+    return "next-server"
+  }
+  return "next-server"
 }
 
 function validateFilesForDeployment(
@@ -203,36 +204,83 @@ function validateFilesForDeployment(
   deploymentMode: DeploymentMode,
 ): string[] {
   const errors: string[] = []
-  if (deploymentMode === "static-export") {
-    const nextConfig = files.find((file) => file.path === "next.config.mjs" || file.path === "next.config.ts")?.content ?? ""
-    if (nextConfig && (!nextConfig.includes("output:") || !nextConfig.includes("export"))) {
-      errors.push('Missing output: "export" in next.config for static deployment')
-    }
-    const apiRoute = files.find((file) => file.path.startsWith("app/api/"))
-    if (apiRoute) errors.push(`Dynamic API route generated for static deployment: ${apiRoute.path}`)
+  if (deploymentMode !== "next-server") {
+    errors.push('Deployment mode must be "next-server"')
   }
-  if (deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED) {
-    errors.push("Next server mode unsupported by the current VM runner")
+  const nextConfig = files.find((file) => file.path === "next.config.mjs")?.content ?? ""
+  if (!nextConfig) {
+    errors.push("Missing next.config.mjs")
+  } else if (/output\s*:\s*["']export["']/.test(nextConfig)) {
+    errors.push('next.config.mjs must not contain output: "export"')
+  }
+  const packageJson = files.find((file) => file.path === "package.json")?.content ?? ""
+  try {
+    const pkg = JSON.parse(packageJson) as { scripts?: Record<string, string> }
+    if (!pkg.scripts?.start || !pkg.scripts.start.includes("next start")) {
+      errors.push('package.json must include a "start" script using next start')
+    }
+  } catch {
+    errors.push("Missing or invalid package.json")
+  }
+  const envFile = files.find((file) => /^\.env(?:\.|$)/.test(file.path) || /\/\.env(?:\.|$)/.test(file.path))
+  if (envFile) {
+    errors.push(`Env files must not be deployed: ${envFile.path}`)
   }
   return errors
 }
 
-function deployErrorFromResponse(data: any, deploymentMode: DeploymentMode): string | null {
+function deployErrorFromResponse(data: any): string | null {
   if (!data?.success) return data?.error || "VM deployment failed"
-  if (deploymentMode === "static-export") {
-    if (data?.artifact?.verified !== true) {
-      return data?.artifact?.error || "Missing out/index.html"
-    }
+  if (data?.build?.built === false || data?.build?.error || data?.build === false) {
+    return data?.build?.error || "VM build failed"
   }
-  if (deploymentMode === "next-server") {
-    if (data?.health?.ok !== true) {
-      return data?.health?.error || "Next server health check failed"
-    }
-  }
-  if (data?.build?.built === false || data?.build?.error) {
-    return data.build.error || "VM build failed"
-  }
+  if (data?.build !== true && data?.build?.built !== true) return "VM build did not complete successfully"
+  if (data?.running !== true && data?.health?.ok !== true) return data?.health?.error || "Next server process is not running"
+  if (data?.health_ok !== true && data?.health?.ok !== true) return data?.health?.error || "Next server health check failed"
+  if (!data?.domain) return "VM deploy did not return a live domain"
   return null
+}
+
+function captureDeployFailure(input: {
+  error: string
+  projectId: string
+  repo: string
+  subdomain: string
+  data?: any
+}) {
+  Sentry.captureException(new Error(`AI website deploy failed: ${input.error}`), {
+    tags: {
+      area: "ai-website-builder",
+      deployment_mode: "next-server",
+      project_id: input.projectId,
+      repo: input.repo,
+      subdomain: input.subdomain,
+    },
+    extra: {
+      buildLogs: input.data?.buildLogs ?? input.data?.build?.logs,
+      deployLogs: input.data?.deployLogs ?? input.data?.logs,
+      health: input.data?.health,
+      health_ok: input.data?.health_ok,
+      running: input.data?.running,
+      port: input.data?.port,
+    },
+  })
+}
+
+function deployFailurePayload(data: any, error: string, deploymentMode: DeploymentMode) {
+  return {
+    success: false,
+    error,
+    buildLogs: data?.buildLogs ?? data?.build?.logs,
+    deployLogs: data?.deployLogs ?? data?.logs,
+    build: data?.build,
+    running: data?.running,
+    health_ok: data?.health_ok,
+    health: data?.health,
+    domain: data?.domain,
+    port: data?.port,
+    deploymentMode,
+  }
 }
 
 export async function POST(request: Request) {
@@ -320,7 +368,7 @@ export async function POST(request: Request) {
         const deployBody: any = {
           files,
           subdomain: repo,
-          deployment_mode: deploymentMode,
+          deployment_mode: "next-server",
         }
         if (Object.keys(envVars).length > 0) {
           deployBody.env_vars = envVars
@@ -333,9 +381,10 @@ export async function POST(request: Request) {
         const triggerData = await triggerRes.json().catch(() => ({}))
         console.log(`[Deploy] Trigger status: ${triggerRes.status}`, triggerData)
 
-        const deployFailure = triggerRes.ok ? deployErrorFromResponse(triggerData, deploymentMode) : (triggerData.error || `VM deploy failed with HTTP ${triggerRes.status}`)
+        const deployFailure = triggerRes.ok ? deployErrorFromResponse(triggerData) : (triggerData.error || `VM deploy failed with HTTP ${triggerRes.status}`)
         if (deployFailure) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
+          captureDeployFailure({ error: deployFailure, projectId, repo, subdomain: repo, data: triggerData })
           await db.collection("users").updateOne(
               { id: session.user.id, "projects._id": new ObjectId(projectId) },
               {
@@ -348,15 +397,10 @@ export async function POST(request: Request) {
               }
           )
           return NextResponse.json({
-            success: false,
-            error: deployFailure,
+            ...deployFailurePayload(triggerData, deployFailure, deploymentMode),
             githubUrl: gitUrl,
             filesCount: files.length,
             repoId: repoId.toString(),
-            deploymentMode,
-            build: triggerData.build,
-            artifact: triggerData.artifact,
-            health: triggerData.health,
           }, { status: 502 })
         } else if (triggerData.domain) {
           vpsUrl = triggerData.domain.startsWith('http') ? triggerData.domain : `https://${triggerData.domain}`
@@ -380,6 +424,7 @@ export async function POST(request: Request) {
     } catch (e) {
         console.error("Sycord Deploy Error:", e)
         const message = e instanceof Error ? e.message : String(e)
+        captureDeployFailure({ error: message, projectId, repo, subdomain: repo })
         await db.collection("users").updateOne(
             { id: session.user.id, "projects._id": new ObjectId(projectId) },
             {
@@ -401,7 +446,8 @@ export async function POST(request: Request) {
     }
 
     if (!vpsUrl) {
-      const message = deploymentMode === "static-export" ? "VM deploy did not return a verified live domain" : "Next server health check did not produce a live domain"
+      const message = "Next server health check did not produce a live domain"
+      captureDeployFailure({ error: message, projectId, repo, subdomain: repo })
       await db.collection("users").updateOne(
           { id: session.user.id, "projects._id": new ObjectId(projectId) },
           {
@@ -422,7 +468,7 @@ export async function POST(request: Request) {
       }, { status: 502 })
     }
 
-    // 7. Deploy source to GitHub only after the VM verified the live artifact.
+    // 7. Deploy source to GitHub only after the VM verified the live server.
     await deployViaGitTree(owner, repo, files, token)
 
     await db.collection("users").updateOne(
@@ -436,6 +482,12 @@ export async function POST(request: Request) {
                 "projects.$.cloudflareUrl": vpsUrl,
                 "projects.$.deploymentMode": deploymentMode,
                 "projects.$.lastDeployError": null,
+                "projects.$.lastDeployRuntime": {
+                  build: true,
+                  running: true,
+                  health_ok: true,
+                  domain: vpsUrl,
+                },
                 "projects.$.deployedAt": new Date()
             }
         }
@@ -463,6 +515,10 @@ export async function POST(request: Request) {
         message: deployMessage,
         repoId: repoId.toString(),
         deploymentMode,
+        build: true,
+        running: true,
+        health_ok: true,
+        domain: vpsUrl.replace(/^https?:\/\//, ""),
     })
 
   } catch (error: any) {

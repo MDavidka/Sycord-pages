@@ -116,7 +116,48 @@ export interface DesignBrief {
 // and which env vars to surface back to the user.
 export type IntegrationKind = "database" | "auth" | "email" | "analytics" | "storage" | "payments" | "other"
 
-export type DeploymentMode = "static-export" | "next-server"
+export type DeploymentMode = "next-server"
+
+export type ComponentNode = {
+  id: string
+  component:
+    | "Page"
+    | "Section"
+    | "Container"
+    | "Grid"
+    | "Stack"
+    | "Button"
+    | "Card"
+    | "CardHeader"
+    | "CardTitle"
+    | "CardDescription"
+    | "CardContent"
+    | "CardFooter"
+    | "Badge"
+    | "Accordion"
+    | "AccordionItem"
+    | "AccordionTrigger"
+    | "AccordionContent"
+    | "Tabs"
+    | "TabsList"
+    | "TabsTrigger"
+    | "TabsContent"
+    | "Input"
+    | "Textarea"
+    | "Label"
+    | "Avatar"
+    | "Separator"
+    | "Image"
+    | "Link"
+    | "Heading"
+    | "Text"
+    | "Stat"
+    | "PricingCard"
+    | "FeatureCard"
+  props?: Record<string, unknown>
+  text?: string
+  children?: ComponentNode[]
+}
 
 export interface IntegrationPlan {
   kind: IntegrationKind
@@ -157,6 +198,7 @@ export interface SectionPlan {
   components?: string[]
   items?: SectionItem[]
   imageHint?: string
+  componentTree?: ComponentNode
   // Free-form ID is helpful for in-page anchors (#pricing, #faq, etc.).
   anchor?: string
 }

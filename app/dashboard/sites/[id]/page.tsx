@@ -114,28 +114,14 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
-type DeploymentMode = "static-export" | "next-server"
+type DeploymentMode = "next-server"
 
-const NEXT_SERVER_DEPLOY_SUPPORTED = false
-
-const formatDeploymentMode = (mode?: string | null) => (
-  mode === "next-server" ? "Next server" : "Static export"
+const formatDeploymentMode = (_mode?: string | null) => (
+  "Next server"
 )
 
-const detectDeploymentModeFromPages = (pages: GeneratedPage[]): DeploymentMode => {
-  const manifest = pages.find((page) => page.name === "lib/generated-manifest.ts")?.code
-  if (manifest) {
-    const match = manifest.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[1]) as { deploymentMode?: unknown }
-        if (parsed.deploymentMode === "next-server") return "next-server"
-      } catch {
-        // Fall back to file-path detection.
-      }
-    }
-  }
-  return pages.some((page) => page.name.startsWith("app/api/")) ? "next-server" : "static-export"
+const detectDeploymentModeFromPages = (_pages: GeneratedPage[]): DeploymentMode => {
+  return "next-server"
 }
 
 // File tree node interface
@@ -672,9 +658,9 @@ export default function SiteSettingsPage() {
   const [deployProgress, setDeployProgress] = useState(0)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
-  const [deployResult, setDeployResult] = useState<{ url?: string; message?: string } | null>(null)
+  const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
   const deploymentMode = useMemo(
-    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : ((project as any)?.deploymentMode || "static-export")) as DeploymentMode,
+    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
     [generatedPages, project],
   )
 
@@ -1133,11 +1119,6 @@ export default function SiteSettingsPage() {
 
   const handleDeploy = async () => {
     if (isDeploying) return
-    if (deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED) {
-      setDeployError("Next server mode unsupported by the current VM runner.")
-      setHasDeployError(true)
-      return
-    }
     
     setIsDeploying(true)
     setDeployProgress(0)
@@ -1186,19 +1167,24 @@ export default function SiteSettingsPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || errorData.build?.error || errorData.artifact?.error || errorData.health?.error || "Deployment failed")
+        throw new Error(errorData.error || errorData.build?.error || errorData.health?.error || "Deployment failed")
       }
 
       const result = await response.json()
-      if (result?.success === false) {
-        throw new Error(result.error || result.build?.error || result.artifact?.error || result.health?.error || "Deployment failed")
+      if (result?.success !== true || result?.health_ok !== true) {
+        throw new Error(result.error || result.build?.error || result.health?.error || "Deployment failed")
       }
 
       setDeployProgress(100)
       setDeploySuccess(true)
       setDeployResult({
         url: result.url,
-        message: `${result.message || `Successfully deployed ${result.filesCount} file(s)`} (${formatDeploymentMode(result.deploymentMode || deploymentMode)})`
+        message: `${result.message || `Successfully deployed ${result.filesCount} file(s)`} (${formatDeploymentMode(result.deploymentMode || deploymentMode)})`,
+        build: result.build === true || result.build?.built === true,
+        running: result.running === true,
+        health_ok: result.health_ok === true,
+        domain: result.domain || result.cloudflareUrl?.replace(/^https?:\/\//, ""),
+        port: result.port,
       })
 
       if (result.repoId) {
@@ -2405,7 +2391,7 @@ export default function SiteSettingsPage() {
                             variant="outline"
                             size="sm"
                             onClick={handleDeploy}
-                            disabled={isDeploying || (deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED)}
+                            disabled={isDeploying}
                           >
                             {isDeploying ? (
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -2444,19 +2430,25 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
-                  {deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED && (
-                    <Card className="border-amber-500/40 bg-amber-500/5">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-amber-200 flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4" />
-                          Next server mode unsupported
-                        </CardTitle>
-                        <CardDescription className="text-xs text-amber-100/80">
-                          This generated project contains runtime API/server features. The current VM runner only supports static export deploys, so deployment is blocked instead of pretending success.
-                        </CardDescription>
-                      </CardHeader>
-                    </Card>
-                  )}
+                  <Card className="border-primary/30 bg-primary/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Rocket className="h-4 w-4 text-primary" />
+                        Next server runtime
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Deployments run npm install, npm run build, then PORT=&lt;allocated&gt; npm run start. Live status requires build, server process, and health check success.
+                      </CardDescription>
+                    </CardHeader>
+                    {deployResult && (
+                      <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                        <div>Build: {deployResult.build ? "ok" : "pending"}</div>
+                        <div>Server: {deployResult.running ? "running" : "pending"}</div>
+                        <div>Health: {deployResult.health_ok ? "ok" : "pending"}</div>
+                        <div>Port: {deployResult.port ?? "allocated by VM"}</div>
+                      </CardContent>
+                    )}
+                  </Card>
 
                   {(deployError || runnerErrorDetails || hasDeployError) && (
                     <Card className="border-destructive/40 bg-destructive/5">

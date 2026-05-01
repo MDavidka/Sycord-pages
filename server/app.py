@@ -249,7 +249,7 @@ def _build_project(project_id: str, project_dir: Path) -> dict:
         "Detected buildable project %s – starting build", project_id,
     )
 
-    install_cmd = ["npm", "install", "--no-fund", "--no-audit"]
+    install_cmd = ["npm", "install", "--no-fund", "--no-audit", "--legacy-peer-deps"]
     logger.info(
         "Build [install] project %s – running: %s",
         project_id, " ".join(install_cmd),
@@ -361,16 +361,6 @@ def _build_project(project_id: str, project_dir: Path) -> dict:
     return {"built": True, "logs": build_logs, "output_dir": output_dir_name}
 
 
-def _verify_static_export(project_id: str, project_dir: Path) -> dict:
-    out_dir = project_dir / "out"
-    index_html = out_dir / "index.html"
-    if not out_dir.is_dir():
-        return {"verified": False, "error": "Missing out/ directory after static export build"}
-    if not index_html.is_file():
-        return {"verified": False, "error": "Missing out/index.html after static export build"}
-    return {"verified": True, "serve_dir": "out", "index": "out/index.html"}
-
-
 def _port_for_project(project_id: str) -> int:
     return NEXT_SERVER_PORT_BASE + (abs(hash(project_id)) % 1000)
 
@@ -403,12 +393,12 @@ def _start_next_server(project_id: str, project_dir: Path, env_vars: dict) -> di
     env = os.environ.copy()
     env.update({str(k): str(v) for k, v in env_vars.items()})
     env["PORT"] = str(port)
-    env["HOSTNAME"] = "127.0.0.1"
+    env["HOSTNAME"] = "0.0.0.0"
     env["PATH"] = str(project_dir / "node_modules" / ".bin") + os.pathsep + env.get("PATH", "")
 
     log_file = open(project_dir / ".next-server.log", "a", encoding="utf-8")
     proc = subprocess.Popen(
-        ["npm", "run", "start", "--", "-p", str(port), "-H", "127.0.0.1"],
+        ["npm", "run", "start"],
         cwd=str(project_dir),
         stdout=log_file,
         stderr=subprocess.STDOUT,
@@ -585,15 +575,15 @@ def serve_subdomain_content():
     except ValueError:
         abort(403)
 
+    meta = _read_meta(subdomain) or _read_meta(project_dir.resolve().name)
+    if meta and meta.get("deployment_mode") == "next-server" and meta.get("next_server_url"):
+        return _proxy_next_request(meta["next_server_url"])
+
     if target.is_file():
         return send_from_directory(str(project_dir), rel_path)
 
     if (project_dir / rel_path / "index.html").is_file():
         return send_from_directory(str(project_dir / rel_path), "index.html")
-
-    meta = _read_meta(subdomain) or _read_meta(project_dir.resolve().name)
-    if meta and meta.get("deployment_mode") == "next-server" and meta.get("next_server_url"):
-        return _proxy_next_request(meta["next_server_url"])
 
     abort(404)
 
@@ -651,21 +641,16 @@ def deploy(project_id: str):
     files: list[dict] = data["files"]
     subdomain: str | None = data.get("subdomain")
     env_vars: dict = data.get("env_vars", {})
-    deployment_mode: str = data.get("deployment_mode") or data.get("deploymentMode") or "static-export"
-    if deployment_mode not in {"static-export", "next-server"}:
+    deployment_mode: str = data.get("deployment_mode") or data.get("deploymentMode") or "next-server"
+    if deployment_mode != "next-server":
         return jsonify(success=False, error=f"Unsupported deployment mode: {deployment_mode}"), 400
 
     if not files:
         logger.error("Deploy %s: empty files list", project_id)
         return jsonify(success=False, error="No files provided"), 400
-    if deployment_mode == "static-export":
-        api_files = [f.get("path", "") for f in files if str(f.get("path", "")).startswith("app/api/")]
-        if api_files:
-            return jsonify(
-                success=False,
-                error=f"Dynamic API route generated for static deployment: {api_files[0]}",
-                artifact={"verified": False, "error": "Dynamic API route generated for static deployment"},
-            ), 400
+    env_files = [f.get("path", "") for f in files if str(f.get("path", "")).split("/")[-1].startswith(".env")]
+    if env_files:
+        return jsonify(success=False, error=f"Env files must not be deployed: {env_files[0]}"), 400
 
     logger.info(
         "Deploy started for %s (%d files, subdomain=%s, env_vars=%d)",
@@ -723,8 +708,9 @@ def deploy(project_id: str):
                 "deployment_mode": deployment_mode,
                 "deployed_at": datetime.now(timezone.utc).isoformat(),
                 "build": False,
+                "running": False,
+                "health_ok": False,
                 "build_error": build_result.get("error"),
-                "artifact": {"verified": False, "error": build_result.get("error") or "Build failed"},
             },
         )
         _write_meta(project_id, meta)
@@ -734,71 +720,42 @@ def deploy(project_id: str):
             project_id=project_id,
             files_count=written,
             build=build_result,
-            artifact=meta["artifact"],
+            running=False,
+            health_ok=False,
         ), 400
 
-    # Subdomain symlink – point to build output dir if it exists
     serve_dir = project_dir
-    artifact_result: dict = {"verified": True}
-    health_result: dict | None = None
-    if deployment_mode == "static-export":
-        artifact_result = _verify_static_export(project_id, project_dir)
-        if not artifact_result.get("verified"):
-            meta = _read_meta(project_id) or {}
-            meta.update(
-                {
-                    "project_id": project_id,
-                    "subdomain": subdomain,
-                    "domain": None,
-                    "files_count": written,
-                    "env_vars_count": len(env_vars),
-                    "deployment_mode": deployment_mode,
-                    "deployed_at": datetime.now(timezone.utc).isoformat(),
-                    "build": True,
-                    "build_error": artifact_result.get("error"),
-                    "artifact": artifact_result,
-                },
-            )
-            _write_meta(project_id, meta)
-            return jsonify(
-                success=False,
-                error=artifact_result.get("error") or "Missing static export artifact",
-                project_id=project_id,
-                files_count=written,
-                build=build_result,
-                artifact=artifact_result,
-            ), 400
-        serve_dir = project_dir / "out"
-        logger.info("Deploy %s: serving static export from out/", project_id)
-    else:
-        health_result = _start_next_server(project_id, project_dir, env_vars)
-        if not health_result.get("ok"):
-            meta = _read_meta(project_id) or {}
-            meta.update(
-                {
-                    "project_id": project_id,
-                    "subdomain": subdomain,
-                    "domain": None,
-                    "files_count": written,
-                    "env_vars_count": len(env_vars),
-                    "deployment_mode": deployment_mode,
-                    "deployed_at": datetime.now(timezone.utc).isoformat(),
-                    "build": True,
-                    "build_error": health_result.get("error"),
-                    "artifact": {"verified": True, "serve_dir": ".next"},
-                    "health": health_result,
-                },
-            )
-            _write_meta(project_id, meta)
-            return jsonify(
-                success=False,
-                error=health_result.get("error") or "Next server health check failed",
-                project_id=project_id,
-                files_count=written,
-                build=build_result,
-                artifact=meta["artifact"],
-                health=health_result,
-            ), 400
+    health_result = _start_next_server(project_id, project_dir, env_vars)
+    if not health_result.get("ok"):
+        meta = _read_meta(project_id) or {}
+        meta.update(
+            {
+                "project_id": project_id,
+                "subdomain": subdomain,
+                "domain": None,
+                "files_count": written,
+                "env_vars_count": len(env_vars),
+                "deployment_mode": deployment_mode,
+                "deployed_at": datetime.now(timezone.utc).isoformat(),
+                "build": True,
+                "running": False,
+                "health_ok": False,
+                "build_error": health_result.get("error"),
+                "health": health_result,
+            },
+        )
+        _write_meta(project_id, meta)
+        return jsonify(
+            success=False,
+            error=health_result.get("error") or "Next server health check failed",
+            project_id=project_id,
+            files_count=written,
+            build=build_result,
+            running=False,
+            health_ok=False,
+            health=health_result,
+            port=health_result.get("port"),
+        ), 400
 
     if subdomain:
         link = PROJECTS_DIR / subdomain
@@ -839,9 +796,11 @@ def deploy(project_id: str):
             "dns_status": dns_result.get("action", "skipped"),
             "build": build_result.get("built", False),
             "build_error": build_result.get("error"),
-            "artifact": artifact_result,
             "health": health_result,
             "next_server_url": health_result.get("url") if health_result else None,
+            "running": True,
+            "health_ok": True,
+            "port": health_result.get("port") if health_result else None,
         },
     )
     _write_meta(project_id, meta)
@@ -858,8 +817,10 @@ def deploy(project_id: str):
         files_count=written,
         dns=dns_result,
         build=build_result,
+        running=True,
+        health_ok=True,
+        port=health_result.get("port") if health_result else None,
         deployment_mode=deployment_mode,
-        artifact=artifact_result,
         health=health_result,
     )
 
