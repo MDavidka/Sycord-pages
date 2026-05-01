@@ -114,6 +114,30 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
+type DeploymentMode = "static-export" | "next-server"
+
+const NEXT_SERVER_DEPLOY_SUPPORTED = false
+
+const formatDeploymentMode = (mode?: string | null) => (
+  mode === "next-server" ? "Next server" : "Static export"
+)
+
+const detectDeploymentModeFromPages = (pages: GeneratedPage[]): DeploymentMode => {
+  const manifest = pages.find((page) => page.name === "lib/generated-manifest.ts")?.code
+  if (manifest) {
+    const match = manifest.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]) as { deploymentMode?: unknown }
+        if (parsed.deploymentMode === "next-server") return "next-server"
+      } catch {
+        // Fall back to file-path detection.
+      }
+    }
+  }
+  return pages.some((page) => page.name.startsWith("app/api/")) ? "next-server" : "static-export"
+}
+
 // File tree node interface
 interface FileTreeNode {
   name: string
@@ -649,6 +673,10 @@ export default function SiteSettingsPage() {
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string } | null>(null)
+  const deploymentMode = useMemo(
+    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : ((project as any)?.deploymentMode || "static-export")) as DeploymentMode,
+    [generatedPages, project],
+  )
 
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
@@ -817,6 +845,10 @@ export default function SiteSettingsPage() {
                   usedFor: p.usedFor || ''
                 })),
               )
+            }
+            if (data.lastDeployError) {
+              setDeployError(data.lastDeployError)
+              setHasDeployError(true)
             }
             setProjectLoading(false)
           })
@@ -1101,6 +1133,11 @@ export default function SiteSettingsPage() {
 
   const handleDeploy = async () => {
     if (isDeploying) return
+    if (deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED) {
+      setDeployError("Next server mode unsupported by the current VM runner.")
+      setHasDeployError(true)
+      return
+    }
     
     setIsDeploying(true)
     setDeployProgress(0)
@@ -1149,16 +1186,19 @@ export default function SiteSettingsPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Deployment failed")
+        throw new Error(errorData.error || errorData.build?.error || errorData.artifact?.error || errorData.health?.error || "Deployment failed")
       }
 
       const result = await response.json()
+      if (result?.success === false) {
+        throw new Error(result.error || result.build?.error || result.artifact?.error || result.health?.error || "Deployment failed")
+      }
 
       setDeployProgress(100)
       setDeploySuccess(true)
       setDeployResult({
         url: result.url,
-        message: result.message || `Successfully deployed ${result.filesCount} file(s) to GitHub`
+        message: `${result.message || `Successfully deployed ${result.filesCount} file(s)`} (${formatDeploymentMode(result.deploymentMode || deploymentMode)})`
       })
 
       if (result.repoId) {
@@ -2354,7 +2394,9 @@ export default function SiteSettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-semibold">Site Pages</h2>
-                      <p className="text-muted-foreground">Manage AI-generated content (Vite + TypeScript)</p>
+                      <p className="text-muted-foreground">
+                        Manage AI-generated content · Deployment mode: {formatDeploymentMode(deploymentMode)}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {generatedPages.length > 0 && (
@@ -2363,7 +2405,7 @@ export default function SiteSettingsPage() {
                             variant="outline"
                             size="sm"
                             onClick={handleDeploy}
-                            disabled={isDeploying}
+                            disabled={isDeploying || (deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED)}
                           >
                             {isDeploying ? (
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -2401,6 +2443,20 @@ export default function SiteSettingsPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {deploymentMode === "next-server" && !NEXT_SERVER_DEPLOY_SUPPORTED && (
+                    <Card className="border-amber-500/40 bg-amber-500/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-amber-200 flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4" />
+                          Next server mode unsupported
+                        </CardTitle>
+                        <CardDescription className="text-xs text-amber-100/80">
+                          This generated project contains runtime API/server features. The current VM runner only supports static export deploys, so deployment is blocked instead of pretending success.
+                        </CardDescription>
+                      </CardHeader>
+                    </Card>
+                  )}
 
                   {(deployError || runnerErrorDetails || hasDeployError) && (
                     <Card className="border-destructive/40 bg-destructive/5">

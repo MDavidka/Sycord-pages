@@ -59,6 +59,7 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
     "socialLinks"?: [ { "label": string, "href": string } ],
     "contact"?: { "email"?: string, "phone"?: string, "address"?: string }
   },
+  "deploymentMode": "static-export" | "next-server",
   "needsDatabase": boolean,
   "integrations": [
     {
@@ -81,6 +82,9 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
 }
 
 Integration & database rules:
+- The Sycord VM currently serves static exports, so prefer "deploymentMode": "static-export".
+- Use "next-server" only for unavoidable runtime features: app/api/**, auth, server actions, dynamic SSR, or database runtime routes.
+- For static-export, NEVER plan runtime API routes or server-only rendering. Database/Turso can be listed as deploy env metadata, but generated pages must render without database reads.
 - Set "needsDatabase": true for bookings, ecommerce, orders, cart, dashboards, accounts, admin panels, CMS/blog editing, marketplaces, saved forms, inventory, or any user-generated/persistent data.
 - Set "needsDatabase": false for purely static landing pages, marketing sites, brochure sites, or one-off event pages without signups.
 - If "needsDatabase" is true, ALWAYS include exactly one integration with "provider": "turso", "kind": "database", "name": "Turso", and "envVars": ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"].

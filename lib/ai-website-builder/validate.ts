@@ -184,6 +184,7 @@ function collectHrefs(sections: SectionPlan[]): string[] {
 
 export interface RunBuildValidationOpts {
   needsDatabase?: boolean
+  deploymentMode?: GeneratedProjectManifest["deploymentMode"]
   // Integration ids (matching Sycord's envVar.integration field, e.g.
   // "stripe", "firebase", "resend") that are actually connected on the
   // project. If provided, the validator flags any imports of those
@@ -210,6 +211,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   const warnings: string[] = []
   const fileMap = new Map(files.map((f) => [f.path, f.content]))
   const needsDatabase = opts.needsDatabase ?? false
+  const deploymentMode = opts.deploymentMode ?? "static-export"
 
   const required = [
     "package.json",
@@ -232,6 +234,9 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   for (const need of required) {
     if (!fileMap.has(need)) errors.push(`missing required file: ${need}`)
   }
+  if (fileMap.has(".env")) {
+    errors.push(".env files must not be generated; use project env vars / VM deploy env")
+  }
 
   // Database-specific required files (only when the planner said so).
   if (needsDatabase) {
@@ -239,39 +244,14 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
       "lib/db/client.ts",
       "lib/db/schema.ts",
       "lib/db/queries.ts",
-      "app/api/health/db/route.ts",
-      ".env",
     ]
+    if (deploymentMode === "next-server") dbRequired.push("app/api/health/db/route.ts")
     for (const need of dbRequired) {
       if (!fileMap.has(need)) errors.push(`missing required database file: ${need}`)
     }
     const packageJson = fileMap.get("package.json") || ""
     if (!/\"@libsql\/client\"/.test(packageJson)) {
       errors.push("package.json missing @libsql/client dependency required for Turso integration")
-    }
-    const envFile = fileMap.get(".env") || ""
-    if (envFile) {
-      if (!envFile.includes("TURSO_DATABASE_URL")) {
-        errors.push(".env must declare TURSO_DATABASE_URL for Turso integration")
-      }
-      if (!envFile.includes("TURSO_AUTH_TOKEN")) {
-        errors.push(".env must declare TURSO_AUTH_TOKEN for Turso integration")
-      }
-      // Flag obvious fake/placeholder values — real deployment MUST read
-      // values either from the project's envVars or from server env.
-      const fakeValues = [
-        /TURSO_DATABASE_URL=\s*libsql:\/\/example\./i,
-        /TURSO_DATABASE_URL=\s*libsql:\/\/your-/i,
-        /TURSO_DATABASE_URL=\s*libsql:\/\/my-db\b/i,
-        /TURSO_AUTH_TOKEN=\s*(your-token|your-auth-token|placeholder|xxx+)/i,
-        /=\s*(changeme|placeholder|dummy|fake|test-value|lorem)/i,
-      ]
-      for (const pattern of fakeValues) {
-        if (pattern.test(envFile)) {
-          errors.push(".env contains a fake placeholder value; load real values from project envVars or server env instead")
-          break
-        }
-      }
     }
   } else {
     // When no DB is needed, we shouldn't emit dangling db imports either.
@@ -280,6 +260,25 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
         warnings.push(`${p} imports @/lib/db/* but needsDatabase is false`)
       }
     }
+  }
+
+  if (deploymentMode === "static-export") {
+    const nextConfig = fileMap.get("next.config.mjs") || fileMap.get("next.config.ts") || ""
+    if (!nextConfig.includes("output:") || !nextConfig.includes("export")) {
+      errors.push('static-export deployment requires next.config output: "export"')
+    }
+    for (const path of fileMap.keys()) {
+      if (path.startsWith("app/api/")) {
+        errors.push(`static-export deployment cannot include runtime API route: ${path}`)
+      }
+    }
+    for (const [p, c] of fileMap) {
+      if (/export\s+const\s+(dynamic|runtime)\s*=/.test(c) || /"use server"|server action/i.test(c)) {
+        errors.push(`static-export deployment cannot include dynamic server runtime code in ${p}`)
+      }
+    }
+  } else {
+    errors.push("next-server deployment mode is not supported by the current Sycord VM runner")
   }
 
   // If any file imports @/lib/db/*, the client file must exist.
@@ -301,11 +300,9 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     errors.push("lib/site-config.ts must include a non-empty logoInitials fallback")
   }
 
-  // Hard-coded secret detection. Skip files that legitimately carry real
-  // secret values: `package.json`, `.env` (resolved runtime values go here
-  // on purpose). Every other generated file must read secrets only from
-  // `process.env.X`.
-  const secretSkip = new Set(["package.json", ".env"])
+  // Hard-coded secret detection. Generated output must not include `.env`
+  // files; runtime secrets come from project settings / deploy env only.
+  const secretSkip = new Set(["package.json"])
   for (const [p, c] of fileMap) {
     if (secretSkip.has(p)) continue
     for (const { name, pattern } of HARD_CODED_SECRET_PATTERNS) {
@@ -389,7 +386,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     errors.push("postcss.config.js must use @tailwindcss/postcss plugin")
   }
   const nextConfig = fileMap.get("next.config.mjs") || ""
-  if (!nextConfig.includes("output:") || !nextConfig.includes("export")) {
+  if (deploymentMode === "static-export" && (!nextConfig.includes("output:") || !nextConfig.includes("export"))) {
     warnings.push('next.config.mjs should set output: "export" for static deploy')
   }
 

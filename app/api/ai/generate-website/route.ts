@@ -85,6 +85,7 @@ async function saveGeneratedFilesToProject(
     {
       $set: {
         "projects.$.pages": normalizedPages,
+        "projects.$.deploymentMode": readDeploymentMode(files),
         "projects.$.updatedAt": new Date(),
       },
     },
@@ -95,6 +96,22 @@ async function saveGeneratedFilesToProject(
   }
 
   return { saved: normalizedPages.length, files: deployable }
+}
+
+function readDeploymentMode(files: GeneratedFile[]): "static-export" | "next-server" {
+  const manifestFile = files.find((file) => file.path === "lib/generated-manifest.ts")
+  if (manifestFile) {
+    const match = manifestFile.content.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
+    if (match) {
+      try {
+        const manifest = JSON.parse(match[1]) as { deploymentMode?: unknown }
+        if (manifest.deploymentMode === "next-server") return "next-server"
+      } catch {
+        // Fall through to file detection.
+      }
+    }
+  }
+  return files.some((file) => file.path.startsWith("app/api/")) ? "next-server" : "static-export"
 }
 
 // Validate the model JSON the client sends. Anything malformed is dropped
@@ -203,9 +220,8 @@ async function mergeRequiredEnvVars(
   return toAdd.length
 }
 
-// Redact secret values out of files we return to the UI. The `.env` file
-// is saved to MongoDB with real values (so the deployer can use them),
-// but we never echo the values back to the browser.
+// Defensive redaction for legacy generated files. New builder output never
+// emits `.env`; deploy env vars come from project settings/server env only.
 function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
   return files.map((f) => {
     if (f.path !== ".env") return f
@@ -283,8 +299,7 @@ export async function POST(req: Request) {
       ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
       : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
-    // Redact any real secret values from files we send back to the UI.
-    // MongoDB already has the real values stored under projects.$.pages.
+    // Redact any legacy secret file values from files we send back to the UI.
     const safeFiles = redactEnvFiles(result.files)
 
     return NextResponse.json({
@@ -303,6 +318,7 @@ export async function POST(req: Request) {
       requiredEnvVars: result.requiredEnvVars,
       missingEnvVars: result.missingEnvVars,
       unconnectedIntegrations: result.unconnectedIntegrations,
+      deploymentMode: result.deploymentMode,
       envVarsAdded,
     })
   } catch (error) {

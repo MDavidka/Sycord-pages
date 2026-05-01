@@ -13,7 +13,6 @@ type Expectation = {
   expectDatabase: boolean
   expectedDbFiles: string[]
   expectedMissingEnv?: string[]
-  expectedResolvedEnv?: string[] // keys that should have real values in .env
   expectProjectName: string
   expectUnconnected?: string[]
 }
@@ -54,11 +53,8 @@ const cases: Expectation[] = [
       "lib/db/client.ts",
       "lib/db/schema.ts",
       "lib/db/queries.ts",
-      "app/api/health/db/route.ts",
-      ".env",
     ],
     expectedMissingEnv: [],
-    expectedResolvedEnv: ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
     expectProjectName: "Maison Noir",
   },
   {
@@ -80,11 +76,8 @@ const cases: Expectation[] = [
       "lib/db/client.ts",
       "lib/db/schema.ts",
       "lib/db/queries.ts",
-      "app/api/health/db/route.ts",
-      ".env",
     ],
     expectedMissingEnv: ["TURSO_AUTH_TOKEN"],
-    expectedResolvedEnv: ["TURSO_DATABASE_URL"],
     expectProjectName: "Ember Wick",
   },
   {
@@ -109,11 +102,8 @@ const cases: Expectation[] = [
       "lib/db/client.ts",
       "lib/db/schema.ts",
       "lib/db/queries.ts",
-      "app/api/health/db/route.ts",
-      ".env",
     ],
     expectedMissingEnv: [],
-    expectedResolvedEnv: ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
     expectProjectName: "Planly",
   },
   {
@@ -136,11 +126,8 @@ const cases: Expectation[] = [
       "lib/db/client.ts",
       "lib/db/schema.ts",
       "lib/db/queries.ts",
-      "app/api/health/db/route.ts",
-      ".env",
     ],
     expectedMissingEnv: [],
-    expectedResolvedEnv: ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"],
     expectProjectName: "Signal Weekly",
   },
 ]
@@ -170,30 +157,24 @@ async function main() {
     }
 
     const filePaths = new Set(result.files.map((f) => f.path))
-    const envFile = result.files.find((f) => f.path === ".env")
-    const envContent = envFile?.content ?? ""
+    const nextConfig = result.files.find((f) => f.path === "next.config.mjs")?.content ?? ""
 
     const nameOk = result.manifest.brief.projectName === c.expectProjectName
     const dbOk = result.needsDatabase === c.expectDatabase
     const filesOk = c.expectedDbFiles.every((p) => filePaths.has(p))
+    const noRuntimeApi = !Array.from(filePaths).some((p) => p.startsWith("app/api/"))
+    const staticConfigOk = result.deploymentMode === "static-export" && nextConfig.includes('output: "export"')
     const missingOk = (() => {
       const exp = c.expectedMissingEnv ?? []
       const got = new Set(result.missingEnvVars.map((e) => e.key))
       if (got.size !== exp.length) return false
       return exp.every((k) => got.has(k))
     })()
-    const resolvedEnvOk = c.expectedResolvedEnv?.every((k) => {
-      const line = envContent.split("\n").find((l) => l.startsWith(`${k}=`))
-      if (!line) return false
-      const value = line.slice(k.length + 1)
-      // must be non-empty AND not a fake placeholder
-      return value.length > 0 && !/your-|xxx|changeme|placeholder/i.test(value)
-    }) ?? true
     const noExtraDbFiles = c.expectDatabase
       ? true
       : !filePaths.has("lib/db/client.ts") && !filePaths.has(".env")
     const buildOk = result.build.ok
-    const noFakeInEnv = !/libsql:\/\/example\.|your-token|placeholder/i.test(envContent)
+    const noEnvFile = !filePaths.has(".env")
     const logsHaveNoSecret = !result.logs.some((l) => /eyJhbGciOi/.test(l.detail) || /libsql:\/\/[a-z0-9-]+\.turso\.io/.test(l.detail))
 
     const unconnectedOk = c.expectUnconnected
@@ -212,6 +193,7 @@ async function main() {
       buildOk,
       buildErrors: result.build.errors,
       theme: result.manifest.theme.preset,
+      deploymentMode: result.deploymentMode,
     }
     console.log(summary)
 
@@ -219,11 +201,12 @@ async function main() {
       ["project name threaded", nameOk],
       ["needsDatabase", dbOk],
       ["expected DB files emitted", filesOk],
+      ["static export config emitted", staticConfigOk],
+      ["no runtime API routes in static export", noRuntimeApi],
       ["expected missing env vars", missingOk],
       ["no DB files when not needed", noExtraDbFiles],
       ["build validation ok", buildOk],
-      [".env has real resolved values", resolvedEnvOk],
-      [".env has no fake placeholders", noFakeInEnv],
+      ["no .env file generated", noEnvFile],
       ["logs contain no secret values", logsHaveNoSecret],
       ["unconnected integrations surfaced", unconnectedOk],
     ]

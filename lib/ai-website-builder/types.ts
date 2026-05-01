@@ -112,9 +112,11 @@ export interface DesignBrief {
 
 // Integration metadata driven both by the AI planner's judgement and by the
 // host project's connected integrations. Used to decide which scaffolded
-// files (db client, health route, schema, queries, .env) to emit
+// files (db client, health route, schema, queries) to emit
 // and which env vars to surface back to the user.
 export type IntegrationKind = "database" | "auth" | "email" | "analytics" | "storage" | "payments" | "other"
+
+export type DeploymentMode = "static-export" | "next-server"
 
 export interface IntegrationPlan {
   kind: IntegrationKind
@@ -199,6 +201,7 @@ export interface GeneratedProjectManifest {
   brief: DesignBrief
   theme: ThemeTokens
   pages: PagePlan[]
+  deploymentMode: DeploymentMode
   // Planning metadata (populated by the orchestrator even when the raw AI
   // output omits it).
   needsDatabase: boolean
@@ -288,4 +291,5 @@ export interface RunBuilderResult {
   // Integrations the planner wanted but the user hasn't connected —
   // passed through so the API/UI can show a non-blocking advisory.
   unconnectedIntegrations: string[]
+  deploymentMode: DeploymentMode
 }

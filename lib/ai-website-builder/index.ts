@@ -56,6 +56,7 @@ export type {
 
 const FALLBACK_MODEL: ModelSelection = { id: "gemini-3.1-flash-preview", provider: "Google" }
 const DEFAULT_BEST_MODEL: ModelSelection = { id: "gemini-3.1-pro-preview", provider: "Google" }
+const NEXT_SERVER_DEPLOY_SUPPORTED = false
 
 const ALLOWED_KINDS: ReadonlySet<SectionKind> = new Set<SectionKind>([
   "hero",
@@ -502,11 +503,16 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
     project,
   )
   const requiredEnvVars = buildRequiredEnvVars(integrations, needsDatabase)
+  const requestedDeploymentMode = root.deploymentMode === "next-server" ? "next-server" : "static-export"
+  const deploymentMode = requestedDeploymentMode === "next-server" && NEXT_SERVER_DEPLOY_SUPPORTED
+    ? "next-server"
+    : "static-export"
 
   return {
     brief: briefSeed,
     theme: buildTheme(themePreset),
     pages,
+    deploymentMode,
     needsDatabase,
     databaseProvider,
     integrations,
@@ -760,8 +766,8 @@ function computeMissingEnvVars(
 // Build a map of envKey -> real value, sourced from (in order):
 //   1. project.envVars (the user's stored secrets)
 //   2. process.env (server env on the host)
-// Values are only used locally to populate the generated `.env` file.
-// Missing keys stay absent (NOT filled with a fake placeholder).
+// Values are only used locally for missing-env checks and are never emitted
+// into generated files.
 function resolveRequiredEnvVarValues(
   required: EnvVarRequirement[],
   project: ProjectContext | undefined,
@@ -837,6 +843,12 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
 
   const parsed = extractJson<unknown>(raw)
   const manifest = normalizeManifest(parsed, prompt, opts.project)
+  if (manifest.needsDatabase && manifest.deploymentMode === "static-export") {
+    logs.push({
+      step: "deployment-mode",
+      detail: "Static export selected; database code is deploy-env only and no runtime API routes will be generated.",
+    })
+  }
 
   const validation = validateManifest(manifest)
   if (!validation.ok) {
@@ -974,7 +986,7 @@ export async function runAIWebsiteBuilder(
   const manifest = await planManifest(prompt, options, logs)
   logs.push({
     step: "plan",
-    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}`,
+    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
   })
 
   // 2. Render pages.
@@ -986,14 +998,12 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) so the
-  // generated `.env` file can carry real values. We intentionally keep
-  // this in a local map and NEVER echo the values back through logs or
-  // the API response.
+  // Resolve env var values (project envVars ⟶ server env fallback) for
+  // missing-env checks only. Never echo or write these values to files.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
-  const baseFiles = scaffoldBaseFiles(manifest, required, prompt, { resolvedEnv })
+  const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
@@ -1006,6 +1016,7 @@ export async function runAIWebsiteBuilder(
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
   const build = runBuildValidation(allFiles, {
     needsDatabase: manifest.needsDatabase,
+    deploymentMode: manifest.deploymentMode,
     connectedIntegrationIds,
   })
   if (!build.ok) {
@@ -1044,7 +1055,7 @@ export async function runAIWebsiteBuilder(
   }
 
   const qualityScore = computeQualityScore(manifest, build)
-  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files` })
+  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
 
   // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
@@ -1072,5 +1083,6 @@ export async function runAIWebsiteBuilder(
     requiredEnvVars: manifest.requiredEnvVars,
     missingEnvVars,
     unconnectedIntegrations: manifest.unconnectedIntegrations,
+    deploymentMode: manifest.deploymentMode,
   }
 }
