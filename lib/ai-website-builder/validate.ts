@@ -275,6 +275,14 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   if (siteConfig && !/\"logoInitials\"\s*:\s*\"[A-Za-z0-9]{1,4}\"/.test(siteConfig)) {
     errors.push("lib/site-config.ts must include a non-empty logoInitials fallback")
   }
+  const siteFooter = fileMap.get("components/site-footer.tsx") || ""
+  if (siteFooter) {
+    const hasFooterInfoType = /type\s+FooterInfo\s*=/.test(siteFooter)
+    const hasTypedFooterInfoConst = /const\s+footerInfo\s*:\s*FooterInfo/.test(siteFooter)
+    if (!hasFooterInfoType || !hasTypedFooterInfoConst) {
+      errors.push("components/site-footer.tsx must type footerInfo with optional email/phone/address fields")
+    }
+  }
 
   // Hard-coded secret detection. Skip files that legitimately carry real
   // secret values: package.json may contain benign tokens, but generated

@@ -385,7 +385,8 @@ import { siteConfig } from "@/lib/site-config"
 
 const navItems = siteConfig.navLinks
 const socialLinks = siteConfig.socialLinks
-const footerInfo = siteConfig.contact ?? { email: "", phone: "", address: "" }
+type FooterInfo = { email?: string; phone?: string; address?: string }
+const footerInfo: FooterInfo = siteConfig.contact ?? { email: undefined, phone: undefined, address: undefined }
 const footerCta = siteConfig.footerCta
 
 export function SiteFooter() {
@@ -472,7 +473,33 @@ function buildSiteConfig(manifest: GeneratedProjectManifest): string {
   const logoInitials = manifest.brief.logoInitials || computeInitials(manifest.brief.projectName)
   return `import type { Metadata } from "next"
 
-export const siteConfig = ${JSON.stringify(
+type FooterInfo = {
+  email?: string
+  phone?: string
+  address?: string
+}
+
+type SiteConfig = {
+  name: string
+  tagline: string
+  description: string
+  audience: string
+  category: string | null
+  logoUrl: string | null
+  logoInitials: string
+  navLinks: Array<{ label: string; href: string }>
+  primaryCta: { label: string; href: string }
+  secondaryCta: { label: string; href: string } | null
+  footerCta: { label: string; href: string } | null
+  socialLinks: Array<{ label: string; href: string }>
+  contact: FooterInfo | null
+  themePreset: string
+  integrations: unknown[]
+  needsDatabase: boolean
+  databaseProvider: string | null
+}
+
+export const siteConfig: SiteConfig = ${JSON.stringify(
     {
       name: manifest.brief.projectName,
       tagline: manifest.brief.tagline,
@@ -494,9 +521,7 @@ export const siteConfig = ${JSON.stringify(
     },
     null,
     2,
-  )} as const
-
-export type SiteConfig = typeof siteConfig
+  )}
 
 export function pageMetadata(input: { title: string; description: string }): Metadata {
   return {

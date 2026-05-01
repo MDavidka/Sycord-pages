@@ -233,26 +233,6 @@ async function mergeRequiredEnvVars(
   return toAdd.length
 }
 
-// Redact secret values out of files we return to the UI. The `.env` file
-// is saved to MongoDB with real values (so the deployer can use them),
-// but we never echo the values back to the browser.
-function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
-  return files.filter((f) => !/^\.env(\.|$)/i.test(f.path)).map((f) => {
-    if (!/^\.env(\.|$)/i.test(f.path)) return f
-    const redacted = f.content
-      .split("\n")
-      .map((line) => {
-        const m = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/)
-        if (!m) return line
-        const [, key, value] = m
-        if (!value) return line
-        return `${key}=***`
-      })
-      .join("\n")
-    return { path: f.path, content: redacted }
-  })
-}
-
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -314,14 +294,10 @@ export async function POST(req: Request) {
       ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
       : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
-    // Redact any real secret values from files we send back to the UI.
-    // MongoDB already has the real values stored under projects.$.pages.
-    const safeFiles = redactEnvFiles(result.files)
-
     return NextResponse.json({
       message,
       manifest: result.manifest,
-      files: safeFiles,
+      files: result.files,
       savedPages,
       savedFileNames,
       build: result.build,

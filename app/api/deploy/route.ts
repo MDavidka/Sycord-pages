@@ -328,9 +328,24 @@ export async function POST(request: Request) {
         })
         const triggerData = await triggerRes.json().catch(() => ({}))
         console.log(`[Deploy] Trigger status: ${triggerRes.status}`, triggerData)
+        const explicitBuildFailure = triggerData?.build === false
+          || triggerData?.success === false
+          || Array.isArray(triggerData?.build_errors)
+          || Array.isArray(triggerData?.errors)
+          || typeof triggerData?.build_error === "string"
         
         if (!triggerRes.ok) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
+          return NextResponse.json(
+            { error: triggerData?.error || "VM deployment failed", details: triggerData },
+            { status: 502 },
+          )
+        } else if (explicitBuildFailure) {
+          console.error(`[Deploy] Downstream VPS build failed:`, triggerData)
+          return NextResponse.json(
+            { error: "VM build failed", details: triggerData },
+            { status: 502 },
+          )
         } else if (triggerData.domain) {
           vpsUrl = triggerData.domain.startsWith('http') ? triggerData.domain : `https://${triggerData.domain}`
         }
