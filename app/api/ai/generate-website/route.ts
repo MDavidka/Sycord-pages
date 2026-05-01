@@ -11,6 +11,23 @@ import type { ModelSelection } from "@/lib/ai-provider"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
+
+async function recordAIGenerationIssue(userId: string, projectId: string, rawLog: string) {
+  const { hashLog, redactSecrets } = await import("@/lib/sentry-log-parser")
+  const client = await clientPromise
+  const db = client.db()
+  const user = await db.collection("users").findOne({ id: userId, "projects._id": new ObjectId(projectId) }, { projection: { projects: 1 } })
+  const project = user?.projects?.find((p: any) => p._id.toString() === projectId)
+  const logHash = hashLog("ai-generation", rawLog)
+  const issues = Array.isArray(project?.sentryIssues) ? project.sentryIssues : []
+  if (issues.some((i: any) => i.logHash === logHash)) return
+  const now = new Date()
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    { $push: { "projects.$.sentryIssues": { id: new ObjectId().toString(), projectId, source: "ai-generation", rawLog: redactSecrets(rawLog), logHash, status: "new", createdAt: now, updatedAt: now } } },
+  )
+}
+
 interface GeneratedFile {
   path: string
   content: string
@@ -285,6 +302,10 @@ export async function POST(req: Request) {
 
     // Redact any real secret values from files we send back to the UI.
     // MongoDB already has the real values stored under projects.$.pages.
+    if (projectId && (!buildOk || result.warnings.length > 0)) {
+      await recordAIGenerationIssue(session.user.id, projectId, JSON.stringify({ build: result.build, warnings: result.warnings, logs: result.logs }))
+    }
+
     const safeFiles = redactEnvFiles(result.files)
 
     return NextResponse.json({
@@ -306,6 +327,10 @@ export async function POST(req: Request) {
       envVarsAdded,
     })
   } catch (error) {
+    const body = (await req.json().catch(() => ({}))) as { projectId?: string }
+    if (body?.projectId) {
+      await recordAIGenerationIssue(session.user.id, body.projectId, String(error instanceof Error ? error.stack || error.message : error))
+    }
     return NextResponse.json(
       {
         message: "Builder failed",

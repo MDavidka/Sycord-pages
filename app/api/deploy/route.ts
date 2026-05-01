@@ -11,6 +11,20 @@ const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.syc
 const INITIAL_REPO_DELAY_MS = 1000
 const MAX_REPO_INIT_RETRIES = 5
 
+async function recordSentryIssue(db: any, userId: string, projectId: string, source: "vm-build" | "vm-deploy", rawLog: string, deploymentId?: string) {
+  const { hashLog, redactSecrets } = await import("@/lib/sentry-log-parser")
+  const logHash = hashLog(source, rawLog, deploymentId)
+  const user = await db.collection("users").findOne({ id: userId, "projects._id": new ObjectId(projectId) }, { projection: { projects: 1 } })
+  const project = user?.projects?.find((pr: any) => pr._id.toString() === projectId)
+  const issues = Array.isArray(project?.sentryIssues) ? project.sentryIssues : []
+  if (issues.some((i: any) => i.logHash === logHash)) return
+  const now = new Date()
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    { $push: { "projects.$.sentryIssues": { id: new ObjectId().toString(), projectId, source, deploymentId, rawLog: redactSecrets(rawLog), logHash, status: "new", createdAt: now, updatedAt: now } } },
+  )
+}
+
 function getEnvGitHubCredentials() {
   const token = process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN
   const owner = process.env.GITHUB_OWNER || process.env.GITHUB_USERNAME
@@ -298,6 +312,7 @@ export async function POST(request: Request) {
         
         if (!triggerRes.ok) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
+          await recordSentryIssue(db, session.user.id, projectId, "vm-deploy", JSON.stringify(triggerData), String(repoId))
         } else if (triggerData.domain) {
           vpsUrl = triggerData.domain.startsWith('http') ? triggerData.domain : `https://${triggerData.domain}`
         }
