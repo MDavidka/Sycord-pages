@@ -8,12 +8,35 @@ import {
   type ProjectContext,
 } from "@/lib/ai-website-builder"
 import type { ModelSelection } from "@/lib/ai-provider"
+import { isForbiddenEnvFilePath } from "@/lib/ai-website-builder/validate"
 import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Document, type PushOperator, type SetFields } from "mongodb"
 
 interface GeneratedFile {
   path: string
   content: string
+}
+
+interface SessionUserWithId {
+  id: string
+}
+
+interface SessionWithUser {
+  user?: unknown
+}
+
+function getSessionUserId(session: unknown): string | null {
+  const id = ((session as SessionWithUser | null)?.user as SessionUserWithId | undefined)?.id
+  return typeof id === "string" && id.length > 0 ? id : null
+}
+
+interface ProjectEnvVar {
+  key: string
+  value?: string
+  integration?: string | null
+  addedAt?: Date
+  source?: string
+  purpose?: string
 }
 
 // Host-project record fields we care about. The DB doc may have extra
@@ -26,7 +49,7 @@ interface ProjectDoc {
   category?: string
   subdomain?: string
   style?: string
-  envVars?: { key: string; value?: string; integration?: string | null }[]
+  envVars?: ProjectEnvVar[]
   integrations?: { name: string; provider?: string }[]
 }
 
@@ -35,11 +58,18 @@ interface ProjectDoc {
 // lean. `package.json` and `tsconfig.json` are explicitly allowed because
 // the static-export deployer needs both.
 function isDeployableFilePath(filePath: string) {
-  if (!filePath || filePath.startsWith(".sycord/")) return false
+  if (!filePath || filePath.startsWith(".sycord/") || isForbiddenEnvFilePath(filePath)) return false
   if (filePath.endsWith(".json")) {
     return filePath === "package.json" || filePath === "tsconfig.json"
   }
   return true
+}
+
+function assertNoForbiddenGeneratedFiles(files: GeneratedFile[]) {
+  const forbidden = files.filter((file) => typeof file.path === "string" && isForbiddenEnvFilePath(file.path))
+  if (forbidden.length > 0) {
+    throw new Error(`Generated env files are not allowed: ${forbidden.map((file) => file.path).join(", ")}`)
+  }
 }
 
 interface SaveResult {
@@ -55,6 +85,7 @@ async function saveGeneratedFilesToProject(
   if (!ObjectId.isValid(projectId)) {
     throw new Error("Invalid project ID")
   }
+  assertNoForbiddenGeneratedFiles(files)
 
   const deployable = files.filter(
     (file) =>
@@ -174,7 +205,8 @@ async function mergeRequiredEnvVars(
   required: EnvVarRequirement[],
 ): Promise<number> {
   if (!doc || required.length === 0) return 0
-  const existing = new Set((doc.envVars ?? []).map((e) => e.key))
+  const existingEnvVars = Array.isArray(doc.envVars) ? doc.envVars : []
+  const existing = new Map(existingEnvVars.map((e) => [e.key, e]))
   const toAdd = required
     .filter((r) => r.required && !existing.has(r.key))
     .map((r) => {
@@ -188,44 +220,47 @@ async function mergeRequiredEnvVars(
         purpose: r.purpose,
       }
     })
-  if (toAdd.length === 0) return 0
+  const toSet: Record<string, string> = {}
+  for (const req of required) {
+    if (!req.required) continue
+    const existingVar = existing.get(req.key)
+    const serverValue = process.env[req.key]
+    if (
+      existingVar &&
+      (!existingVar.value || existingVar.value.length === 0) &&
+      typeof serverValue === "string" &&
+      serverValue.length > 0
+    ) {
+      toSet[`projects.$.envVars.${existingEnvVars.indexOf(existingVar)}.value`] = serverValue
+    }
+  }
+  if (toAdd.length === 0 && Object.keys(toSet).length === 0) return 0
   const client = await clientPromise
   const db = client.db()
-  await db.collection("users").updateOne(
-    { id: userId, "projects._id": new ObjectId(projectId) },
-    {
-      $push: {
-        "projects.$.envVars": { $each: toAdd },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
-    },
-  )
-  return toAdd.length
-}
-
-// Redact secret values out of files we return to the UI. The `.env` file
-// is saved to MongoDB with real values (so the deployer can use them),
-// but we never echo the values back to the browser.
-function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
-  return files.map((f) => {
-    if (f.path !== ".env") return f
-    const redacted = f.content
-      .split("\n")
-      .map((line) => {
-        const m = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/)
-        if (!m) return line
-        const [, key, value] = m
-        if (!value) return line
-        return `${key}=***`
-      })
-      .join("\n")
-    return { path: f.path, content: redacted }
-  })
+  const users = db.collection<{ projects: { envVars: ProjectEnvVar[] }[] }>("users")
+  if (toAdd.length > 0) {
+    await db.collection<Document>("users").updateOne(
+      { id: userId, "projects._id": new ObjectId(projectId) },
+      {
+        $push: {
+          "projects.$.envVars": { $each: toAdd },
+        } as PushOperator<{ projects: { envVars: ProjectEnvVar[] }[] }>,
+      },
+    )
+  }
+  if (Object.keys(toSet).length > 0) {
+    await db.collection<Document>("users").updateOne(
+      { id: userId, "projects._id": new ObjectId(projectId) },
+      { $set: toSet as SetFields<{ projects: { envVars: ProjectEnvVar[] }[] }> },
+    )
+  }
+  return toAdd.length + Object.keys(toSet).length
 }
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
+  const userId = getSessionUserId(session)
+  if (!userId) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
@@ -244,7 +279,7 @@ export async function POST(req: Request) {
 
     const projectId = typeof body.projectId === "string" ? body.projectId : undefined
     const { doc: projectDoc, context: projectContext } = projectId
-      ? await loadProjectContext(session.user.id, projectId)
+      ? await loadProjectContext(userId, projectId)
       : { doc: null, context: undefined }
 
     const opts: BuilderOptions = {
@@ -255,11 +290,12 @@ export async function POST(req: Request) {
     }
 
     const result = await runAIWebsiteBuilder(prompt, opts)
+    assertNoForbiddenGeneratedFiles(result.files)
 
     let savedPages = 0
     let savedFileNames: string[] = []
     if (projectId) {
-      const saved = await saveGeneratedFilesToProject(session.user.id, projectId, result.files)
+      const saved = await saveGeneratedFilesToProject(userId, projectId, result.files)
       savedPages = saved.saved
       savedFileNames = saved.files.map((f) => f.path)
     }
@@ -269,7 +305,7 @@ export async function POST(req: Request) {
     let envVarsAdded = 0
     if (projectId && projectDoc && result.requiredEnvVars.length > 0) {
       envVarsAdded = await mergeRequiredEnvVars(
-        session.user.id,
+        userId,
         projectId,
         projectDoc,
         result.requiredEnvVars,
@@ -283,9 +319,7 @@ export async function POST(req: Request) {
       ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
       : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
-    // Redact any real secret values from files we send back to the UI.
-    // MongoDB already has the real values stored under projects.$.pages.
-    const safeFiles = redactEnvFiles(result.files)
+    const safeFiles = result.files.filter((file) => !isForbiddenEnvFilePath(file.path))
 
     return NextResponse.json({
       message,

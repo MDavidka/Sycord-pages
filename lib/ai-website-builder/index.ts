@@ -650,10 +650,7 @@ function resolveIntegrations(
   // If AI said true, or the prompt clearly implies persistence, we need a DB.
   const needsDatabase = aiNeedsDb === true || (aiNeedsDb !== false && promptSuggestsDatabase(prompt, project))
 
-  // Connected integration id set. Turso is always treated as "connectable"
-  // because it's the platform's default DB — but we still warn if the env
-  // vars aren't resolved.
-  const connected = new Set<string>(["turso"])
+  const connected = new Set<string>()
   for (const id of project?.connectedIntegrationIds ?? []) {
     const norm = normalizeId(id)
     if (norm) connected.add(INTEGRATION_ID_ALIASES[norm] ?? norm)
@@ -695,7 +692,15 @@ function resolveIntegrations(
     })
   }
 
-  if (needsDatabase) {
+  const hasTursoEnv = Boolean(
+    project?.envVars?.some((e) => e.key === "TURSO_DATABASE_URL" && typeof e.value === "string" && e.value.length > 0) ||
+      process.env.TURSO_DATABASE_URL,
+  ) && Boolean(
+    project?.envVars?.some((e) => e.key === "TURSO_AUTH_TOKEN" && typeof e.value === "string" && e.value.length > 0) ||
+      process.env.TURSO_AUTH_TOKEN,
+  )
+
+  if (needsDatabase && hasTursoEnv) {
     const existingDb = Array.from(byProvider.values()).find((i) => i.kind === "database")
     if (!existingDb || existingDb.provider !== "turso") {
       // Force Turso as the default database even if the planner proposed
@@ -708,11 +713,22 @@ function resolveIntegrations(
       // Ensure env var list is correct for Turso.
       byProvider.set("turso", tursoIntegration(existingDb.reason))
     }
+  } else if (needsDatabase) {
+    const existingDb = Array.from(byProvider.values()).find((i) => i.kind === "database")
+    if (!unconnectedRequested.includes("Turso")) {
+      unconnectedRequested.push(existingDb?.name ?? "Turso")
+    }
+    for (const [k, v] of Array.from(byProvider.entries())) {
+      if (v.kind === "database") byProvider.delete(k)
+    }
   } else {
     // Strip any database integrations the planner may have added erroneously.
     for (const [k, v] of Array.from(byProvider.entries())) {
       if (v.kind === "database") byProvider.delete(k)
     }
+  }
+  if (needsDatabase && !byProvider.has("turso")) {
+    byProvider.set("turso", tursoIntegration("Turso database env vars must be configured before deployment"))
   }
 
   return {
@@ -760,8 +776,8 @@ function computeMissingEnvVars(
 // Build a map of envKey -> real value, sourced from (in order):
 //   1. project.envVars (the user's stored secrets)
 //   2. process.env (server env on the host)
-// Values are only used locally to populate the generated `.env` file.
-// Missing keys stay absent (NOT filled with a fake placeholder).
+// Values are only used for validation/status; they are never written to files
+// or returned to the UI.
 function resolveRequiredEnvVarValues(
   required: EnvVarRequirement[],
   project: ProjectContext | undefined,
@@ -785,6 +801,27 @@ function resolveRequiredEnvVarValues(
     }
   }
   return out
+}
+
+function collectSecretValues(
+  required: EnvVarRequirement[],
+  project: ProjectContext | undefined,
+): string[] {
+  const requiredKeys = new Set(required.map((r) => r.key))
+  const values = new Set<string>()
+  for (const v of project?.envVars ?? []) {
+    if (typeof v?.value === "string" && v.value.length >= 8) {
+      values.add(v.value)
+    }
+  }
+  const secretLikeEnvKeys = Object.keys(process.env).filter((key) => (
+    requiredKeys.has(key) || /(?:TOKEN|SECRET|KEY|PASSWORD|DATABASE_URL|DATABASE_URI|API_KEY)$/i.test(key)
+  ))
+  for (const key of secretLikeEnvKeys) {
+    const value = process.env[key]
+    if (typeof value === "string" && value.length >= 8) values.add(value)
+  }
+  return Array.from(values)
 }
 
 function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
@@ -986,14 +1023,12 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) so the
-  // generated `.env` file can carry real values. We intentionally keep
-  // this in a local map and NEVER echo the values back through logs or
-  // the API response.
+  // Resolve env var values for status/validation only. We intentionally keep
+  // this in local memory and NEVER write it to generated files or echo values.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
-  const baseFiles = scaffoldBaseFiles(manifest, required, prompt, { resolvedEnv })
+  const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
@@ -1007,6 +1042,7 @@ export async function runAIWebsiteBuilder(
   const build = runBuildValidation(allFiles, {
     needsDatabase: manifest.needsDatabase,
     connectedIntegrationIds,
+    secretValues: collectSecretValues(manifest.requiredEnvVars, options.project),
   })
   if (!build.ok) {
     logs.push({ step: "build-validate", detail: `Build validation failed: ${build.errors.join("; ")}` })
