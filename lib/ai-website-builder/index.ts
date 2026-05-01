@@ -986,14 +986,13 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) so the
-  // generated `.env` file can carry real values. We intentionally keep
-  // this in a local map and NEVER echo the values back through logs or
-  // the API response.
+  // Resolve env var values (project envVars ⟶ server env fallback) only
+  // for diagnostics/missing-key checks. Values are never written to files
+  // or returned to the UI/API payload.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
-  const baseFiles = scaffoldBaseFiles(manifest, required, prompt, { resolvedEnv })
+  const baseFiles = scaffoldBaseFiles(manifest, required, prompt, {})
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 

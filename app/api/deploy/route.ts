@@ -11,6 +11,20 @@ const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.syc
 const INITIAL_REPO_DELAY_MS = 1000
 const MAX_REPO_INIT_RETRIES = 5
 
+function isEnvFilePath(path: string): boolean {
+  const lower = path.toLowerCase()
+  return lower === ".env" || lower === ".env.local" || lower === ".env.production" || lower.startsWith(".env.")
+}
+
+function needsDatabaseFromProject(project: any): boolean {
+  const pages = Array.isArray(project?.pages) ? project.pages : []
+  return pages.some((p: any) => {
+    const name = String(p?.name || "")
+    const content = String(p?.content || "")
+    return name.startsWith("lib/db/") || name === "app/api/health/db/route.ts" || content.includes("@libsql/client")
+  })
+}
+
 function getEnvGitHubCredentials() {
   const token = process.env.GITHUB_API_TOKEN || process.env.GITHUB_TOKEN
   const owner = process.env.GITHUB_OWNER || process.env.GITHUB_USERNAME
@@ -222,6 +236,7 @@ export async function POST(request: Request) {
         for (const page of pages) {
             let path = page.name
             if (path.startsWith('/')) path = path.substring(1)
+            if (isEnvFilePath(path)) continue
             files.push({ path, content: page.content })
         }
     } else if (project.aiGeneratedCode) {
@@ -229,6 +244,12 @@ export async function POST(request: Request) {
     }
 
     if (files.length === 0) return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
+
+    for (const file of files) {
+      if (isEnvFilePath(file.path)) {
+        return NextResponse.json({ error: `Deployment blocked. Forbidden env file in deploy list: ${file.path}` }, { status: 400 })
+      }
+    }
 
     // 6. Deploy using Git Tree Strategy (Atomic & Cleaner)
     await deployViaGitTree(owner, repo, files, token)
@@ -258,6 +279,18 @@ export async function POST(request: Request) {
           envVars[ev.key] = ev.value
         }
       }
+    }
+
+    const dbRequired = needsDatabaseFromProject(project)
+    if (dbRequired) {
+      const hasUrl = Boolean(envVars.TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL)
+      const hasToken = Boolean(envVars.TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN)
+      if (!hasUrl || !hasToken) {
+        const missing = [!hasUrl ? "TURSO_DATABASE_URL" : null, !hasToken ? "TURSO_AUTH_TOKEN" : null].filter(Boolean)
+        return NextResponse.json({ error: `Database deployment blocked. Missing env vars: ${missing.join(", ")}` }, { status: 400 })
+      }
+      if (!envVars.TURSO_DATABASE_URL && process.env.TURSO_DATABASE_URL) envVars.TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL
+      if (!envVars.TURSO_AUTH_TOKEN && process.env.TURSO_AUTH_TOKEN) envVars.TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN
     }
 
     // Save Git Connection for Sycord Deployer
@@ -295,9 +328,24 @@ export async function POST(request: Request) {
         })
         const triggerData = await triggerRes.json().catch(() => ({}))
         console.log(`[Deploy] Trigger status: ${triggerRes.status}`, triggerData)
+        const explicitBuildFailure = triggerData?.build === false
+          || triggerData?.success === false
+          || Array.isArray(triggerData?.build_errors)
+          || Array.isArray(triggerData?.errors)
+          || typeof triggerData?.build_error === "string"
         
         if (!triggerRes.ok) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
+          return NextResponse.json(
+            { error: triggerData?.error || "VM deployment failed", details: triggerData },
+            { status: 502 },
+          )
+        } else if (explicitBuildFailure) {
+          console.error(`[Deploy] Downstream VPS build failed:`, triggerData)
+          return NextResponse.json(
+            { error: "VM build failed", details: triggerData },
+            { status: 502 },
+          )
         } else if (triggerData.domain) {
           vpsUrl = triggerData.domain.startsWith('http') ? triggerData.domain : `https://${triggerData.domain}`
         }
