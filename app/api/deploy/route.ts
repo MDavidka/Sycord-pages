@@ -2,7 +2,15 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Db } from "mongodb"
+import { classifySentryIssuesSequentially } from "@/lib/sentry-ai"
+import {
+  createSentryLogHash,
+  createUnclassifiedSentryIssue,
+  redactSentryLog,
+  type SentryIssue,
+  type SentryIssueSource,
+} from "@/lib/sentry-log-parser"
 
 const GITHUB_API_BASE = "https://api.github.com"
 const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.sycord.site"
@@ -94,6 +102,48 @@ async function waitForRepoInitialization(owner: string, repo: string, token: str
   }
 }
 
+async function saveDeploymentSentryIssue(input: {
+  db: Db
+  userId: string
+  projectId: string
+  source: SentryIssueSource
+  rawLog: string
+  deploymentId?: string
+}) {
+  if (!ObjectId.isValid(input.projectId)) return
+  const safeLog = redactSentryLog(input.rawLog)
+  const logHash = createSentryLogHash(input.projectId, input.source, safeLog, input.deploymentId)
+  const user = await input.db.collection("users").findOne(
+    {
+      id: input.userId,
+      "projects._id": new ObjectId(input.projectId),
+      "projects.sentryIssues.logHash": logHash,
+    },
+    { projection: { _id: 1 } },
+  )
+  if (user) return
+
+  const [classified] = await classifySentryIssuesSequentially([
+    createUnclassifiedSentryIssue({
+      projectId: input.projectId,
+      source: input.source,
+      rawLog: safeLog,
+      logHash,
+      deploymentId: input.deploymentId,
+    }),
+  ] as SentryIssue[])
+
+  await input.db.collection("users").updateOne(
+    { id: input.userId, "projects._id": new ObjectId(input.projectId) },
+    {
+      $push: {
+        "projects.$.sentryIssues": classified,
+      },
+      $set: { "projects.$.updatedAt": new Date() },
+    } as any,
+  )
+}
+
 /**
  * Deploy using Git Data API (Tree -> Commit -> Ref)
  * This is "atomic" and efficiently handles "clearing" old state by simply not including old files in the new tree.
@@ -177,15 +227,18 @@ async function deployViaGitTree(
 }
 
 export async function POST(request: Request) {
+  let sentryContext: { db: Db; userId: string; projectId: string; deploymentId: string } | null = null
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { projectId } = await request.json()
     if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
+    const deploymentId = new ObjectId().toString()
 
     const client = await clientPromise
     const db = client.db()
+    sentryContext = { db, userId: session.user.id, projectId, deploymentId }
 
     // 1. Credentials
     const envCredentials = getEnvGitHubCredentials()
@@ -228,7 +281,17 @@ export async function POST(request: Request) {
         files.push({ path: "index.html", content: project.aiGeneratedCode })
     }
 
-    if (files.length === 0) return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
+    if (files.length === 0) {
+      await saveDeploymentSentryIssue({
+        db,
+        userId: session.user.id,
+        projectId,
+        source: "vm-build",
+        rawLog: "Deployment failed: No files to deploy.",
+        deploymentId,
+      })
+      return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
+    }
 
     // 6. Deploy using Git Tree Strategy (Atomic & Cleaner)
     await deployViaGitTree(owner, repo, files, token)
@@ -298,6 +361,14 @@ export async function POST(request: Request) {
         
         if (!triggerRes.ok) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
+          await saveDeploymentSentryIssue({
+            db,
+            userId: session.user.id,
+            projectId,
+            source: "vm-deploy",
+            rawLog: `Downstream VPS deploy failed with HTTP ${triggerRes.status}:\n${JSON.stringify(triggerData, null, 2)}`,
+            deploymentId,
+          })
         } else if (triggerData.domain) {
           vpsUrl = triggerData.domain.startsWith('http') ? triggerData.domain : `https://${triggerData.domain}`
         }
@@ -325,6 +396,14 @@ export async function POST(request: Request) {
         }
     } catch (e) {
         console.error("Sycord Deploy Error:", e)
+        await saveDeploymentSentryIssue({
+          db,
+          userId: session.user.id,
+          projectId,
+          source: "vm-deploy",
+          rawLog: `Sycord Deploy Error:\n${e instanceof Error ? e.stack || e.message : String(e)}`,
+          deploymentId,
+        })
     }
 
     return NextResponse.json({
@@ -339,6 +418,16 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error("[Deploy] Error:", error)
+    if (sentryContext) {
+      await saveDeploymentSentryIssue({
+        db: sentryContext.db,
+        userId: sentryContext.userId,
+        projectId: sentryContext.projectId,
+        source: "vm-deploy",
+        rawLog: `Deployment failed:\n${error instanceof Error ? error.stack || error.message : String(error)}`,
+        deploymentId: sentryContext.deploymentId,
+      })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
