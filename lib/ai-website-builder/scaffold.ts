@@ -385,7 +385,7 @@ import { siteConfig } from "@/lib/site-config"
 
 const navItems = siteConfig.navLinks
 const socialLinks = siteConfig.socialLinks
-const footerInfo = siteConfig.contact ?? { email: "", phone: "", address: "" }
+const footerInfo: { email?: string; phone?: string; address?: string } = siteConfig.contact ?? {}
 const footerCta = siteConfig.footerCta
 
 export function SiteFooter() {
