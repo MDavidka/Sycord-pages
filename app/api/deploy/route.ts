@@ -2,7 +2,37 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
+import { isForbiddenEnvFilePath } from "@/lib/ai-website-builder/validate"
 import { ObjectId } from "mongodb"
+
+interface ProjectEnvVar {
+  key?: string
+  value?: string
+}
+
+interface ProjectPage {
+  name?: string
+  content?: string
+}
+
+interface ProjectForDeploy {
+  needsDatabase?: boolean
+  pages?: ProjectPage[]
+  envVars?: ProjectEnvVar[]
+}
+
+interface SessionUserWithId {
+  id: string
+}
+
+interface SessionWithUser {
+  user?: unknown
+}
+
+function getSessionUserId(session: unknown): string | null {
+  const id = ((session as SessionWithUser | null)?.user as SessionUserWithId | undefined)?.id
+  return typeof id === "string" && id.length > 0 ? id : null
+}
 
 const GITHUB_API_BASE = "https://api.github.com"
 const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.sycord.site"
@@ -105,6 +135,7 @@ async function deployViaGitTree(
     token: string
 ) {
     console.log(`[Deploy] Starting atomic deployment via Git Tree API...`)
+    assertNoEnvFiles(files)
 
     // 1. Get latest commit SHA (base_tree)
     let latestCommitSha = null
@@ -176,10 +207,68 @@ async function deployViaGitTree(
     console.log(`[Deploy] Atomic deployment complete. New commit: ${commitData.sha}`)
 }
 
+function assertNoEnvFiles(files: { path: string; content: string }[]) {
+  const forbidden = files.filter((file) => isForbiddenEnvFilePath(file.path))
+  if (forbidden.length > 0) {
+    throw new Error(`Deployment file list includes forbidden env files: ${forbidden.map((file) => file.path).join(", ")}`)
+  }
+}
+
+function collectProjectEnvVars(project: ProjectForDeploy): Record<string, string> {
+  const envVars: Record<string, string> = {}
+  if (Array.isArray(project.envVars)) {
+    for (const ev of project.envVars) {
+      if (ev.key && ev.value) {
+        envVars[ev.key] = ev.value
+      }
+    }
+  }
+  if (!envVars.TURSO_DATABASE_URL && process.env.TURSO_DATABASE_URL) {
+    envVars.TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL
+  }
+  if (!envVars.TURSO_AUTH_TOKEN && process.env.TURSO_AUTH_TOKEN) {
+    envVars.TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN
+  }
+  return envVars
+}
+
+function projectNeedsDatabase(project: ProjectForDeploy, files: { path: string; content: string }[]) {
+  if (project.needsDatabase === true) return true
+  if (Array.isArray(project.pages)) {
+    for (const page of project.pages) {
+      if (
+        typeof page?.name === "string" &&
+        [
+          "lib/db/client.ts",
+          "lib/db/schema.ts",
+          "lib/db/queries.ts",
+          "app/api/health/db/route.ts",
+        ].includes(page.name.replace(/^\/+/, ""))
+      ) {
+        return true
+      }
+    }
+  }
+  return files.some((file) => /@libsql\/client|process\.env\.TURSO_DATABASE_URL|process\.env\.TURSO_AUTH_TOKEN/.test(file.content))
+}
+
+function validateDatabaseEnvForDeploy(
+  project: ProjectForDeploy,
+  files: { path: string; content: string }[],
+  envVars: Record<string, string>,
+) {
+  if (!projectNeedsDatabase(project, files)) return
+  const missing = ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"].filter((key) => !envVars[key])
+  if (missing.length > 0) {
+    throw new Error(`Database required: Turso. Missing env vars: ${missing.join(", ")}`)
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userId = getSessionUserId(session)
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { projectId } = await request.json()
     if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
@@ -195,7 +284,7 @@ export async function POST(request: Request) {
     const { token, owner } = envCredentials
 
     // 2. Project Data
-    const userDoc = await db.collection("users").findOne({ id: session.user.id })
+    const userDoc = await db.collection("users").findOne({ id: userId })
     const project = userDoc?.projects?.find((p: any) => p._id.toString() === projectId)
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
 
@@ -230,6 +319,11 @@ export async function POST(request: Request) {
 
     if (files.length === 0) return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
 
+    assertNoEnvFiles(files)
+
+    const envVars = collectProjectEnvVars(project)
+    validateDatabaseEnvForDeploy(project, files, envVars)
+
     // 6. Deploy using Git Tree Strategy (Atomic & Cleaner)
     await deployViaGitTree(owner, repo, files, token)
 
@@ -238,7 +332,7 @@ export async function POST(request: Request) {
 
     // Update User/Project DB
     await db.collection("users").updateOne(
-        { id: session.user.id, "projects._id": new ObjectId(projectId) },
+        { id: userId, "projects._id": new ObjectId(projectId) },
         {
             $set: {
                 "projects.$.githubOwner": owner,
@@ -250,18 +344,8 @@ export async function POST(request: Request) {
         }
     )
 
-    // Collect env vars for this project to pass to the deployer
-    const envVars: Record<string, string> = {}
-    if (Array.isArray(project.envVars)) {
-      for (const ev of project.envVars) {
-        if (ev.key && ev.value) {
-          envVars[ev.key] = ev.value
-        }
-      }
-    }
-
     // Save Git Connection for Sycord Deployer
-    await db.collection("users").updateOne({ id: session.user.id }, {
+    await db.collection("users").updateOne({ id: userId }, {
         $set: { [`git_connection.${repoId}`]: {
             username: owner,
             repo_id: repoId.toString(),
@@ -319,7 +403,7 @@ export async function POST(request: Request) {
         if (vpsUrl) {
             deployMessage = "Deployed to Sycord VPS!"
             await db.collection("users").updateOne(
-                { id: session.user.id, "projects._id": new ObjectId(projectId) },
+                { id: userId, "projects._id": new ObjectId(projectId) },
                 { $set: { "projects.$.cloudflareUrl": vpsUrl } } // Using cloudflareUrl for backward compatibility in DB schema
             )
         }

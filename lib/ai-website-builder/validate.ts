@@ -189,6 +189,16 @@ export interface RunBuildValidationOpts {
   // project. If provided, the validator flags any imports of those
   // integration SDKs in generated files.
   connectedIntegrationIds?: string[]
+  secretValues?: string[]
+}
+
+function normalizeGeneratedPath(filePath: string): string {
+  return filePath.replace(/^\/+/, "")
+}
+
+export function isForbiddenEnvFilePath(filePath: string): boolean {
+  const name = normalizeGeneratedPath(filePath).split("/").pop() ?? ""
+  return name === ".env" || name === ".env.local" || name === ".env.production" || name.startsWith(".env.")
 }
 
 // Patterns we treat as hard-coded secrets in generated source. The file
@@ -210,6 +220,12 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   const warnings: string[] = []
   const fileMap = new Map(files.map((f) => [f.path, f.content]))
   const needsDatabase = opts.needsDatabase ?? false
+
+  for (const file of files) {
+    if (isForbiddenEnvFilePath(file.path)) {
+      errors.push(`forbidden env file generated: ${file.path}`)
+    }
+  }
 
   const required = [
     "package.json",
@@ -240,7 +256,6 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
       "lib/db/schema.ts",
       "lib/db/queries.ts",
       "app/api/health/db/route.ts",
-      ".env",
     ]
     for (const need of dbRequired) {
       if (!fileMap.has(need)) errors.push(`missing required database file: ${need}`)
@@ -249,29 +264,12 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     if (!/\"@libsql\/client\"/.test(packageJson)) {
       errors.push("package.json missing @libsql/client dependency required for Turso integration")
     }
-    const envFile = fileMap.get(".env") || ""
-    if (envFile) {
-      if (!envFile.includes("TURSO_DATABASE_URL")) {
-        errors.push(".env must declare TURSO_DATABASE_URL for Turso integration")
-      }
-      if (!envFile.includes("TURSO_AUTH_TOKEN")) {
-        errors.push(".env must declare TURSO_AUTH_TOKEN for Turso integration")
-      }
-      // Flag obvious fake/placeholder values — real deployment MUST read
-      // values either from the project's envVars or from server env.
-      const fakeValues = [
-        /TURSO_DATABASE_URL=\s*libsql:\/\/example\./i,
-        /TURSO_DATABASE_URL=\s*libsql:\/\/your-/i,
-        /TURSO_DATABASE_URL=\s*libsql:\/\/my-db\b/i,
-        /TURSO_AUTH_TOKEN=\s*(your-token|your-auth-token|placeholder|xxx+)/i,
-        /=\s*(changeme|placeholder|dummy|fake|test-value|lorem)/i,
-      ]
-      for (const pattern of fakeValues) {
-        if (pattern.test(envFile)) {
-          errors.push(".env contains a fake placeholder value; load real values from project envVars or server env instead")
-          break
-        }
-      }
+    const dbClient = fileMap.get("lib/db/client.ts") || ""
+    if (!dbClient.includes("process.env.TURSO_DATABASE_URL")) {
+      errors.push("lib/db/client.ts must read TURSO_DATABASE_URL from process.env")
+    }
+    if (!dbClient.includes("process.env.TURSO_AUTH_TOKEN")) {
+      errors.push("lib/db/client.ts must read TURSO_AUTH_TOKEN from process.env")
     }
   } else {
     // When no DB is needed, we shouldn't emit dangling db imports either.
@@ -301,17 +299,26 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     errors.push("lib/site-config.ts must include a non-empty logoInitials fallback")
   }
 
-  // Hard-coded secret detection. Skip files that legitimately carry real
-  // secret values: `package.json`, `.env` (resolved runtime values go here
-  // on purpose). Every other generated file must read secrets only from
-  // `process.env.X`.
-  const secretSkip = new Set(["package.json", ".env"])
+  // Hard-coded secret detection. Every generated file must read secrets
+  // only from process.env.X; env files are forbidden entirely.
+  const secretSkip = new Set(["package.json"])
   for (const [p, c] of fileMap) {
     if (secretSkip.has(p)) continue
+    if (/(^|[\s"'`/])\.env(?:$|[\s"'`/])/.test(c)) {
+      errors.push(`${p} references .env; generated projects must use deployment env settings instead`)
+    }
+    if (/TURSO_AUTH_TOKEN\s*=\s*["'][^"']+["']/.test(c) || /TURSO_DATABASE_URL\s*=\s*["'][^"']+["']/.test(c)) {
+      errors.push(`${p} assigns Turso env values directly; generated code must read process.env at runtime`)
+    }
     for (const { name, pattern } of HARD_CODED_SECRET_PATTERNS) {
       pattern.lastIndex = 0
       if (pattern.test(c)) {
         errors.push(`${p} appears to contain a hard-coded ${name}; secrets must only be read from process.env`)
+      }
+    }
+    for (const secret of opts.secretValues ?? []) {
+      if (secret.length >= 8 && c.includes(secret)) {
+        errors.push(`${p} contains a copied secret value; secrets must only be stored in project env settings`)
       }
     }
   }
@@ -332,7 +339,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
       { id: "mongodb", patterns: [/from\s+["']mongodb["']/, /from\s+["']mongoose["']/] },
     ]
     for (const [p, c] of fileMap) {
-      if (p === "package.json" || p === ".env") continue
+      if (p === "package.json" || isForbiddenEnvFilePath(p)) continue
       for (const { id, patterns } of integrationSdkChecks) {
         if (connected.has(id)) continue
         for (const pattern of patterns) {

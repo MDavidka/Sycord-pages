@@ -86,6 +86,7 @@ Integration & database rules:
 - If "needsDatabase" is true, ALWAYS include exactly one integration with "provider": "turso", "kind": "database", "name": "Turso", and "envVars": ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"].
 - Only add non-database integrations (payments, email, auth, etc.) if the requested app clearly needs them. Do NOT invent analytics or marketing tools the user didn't ask for.
 - Never hard-code secret values anywhere in the plan. Only env var NAMES may appear.
+- Never generate .env files or secret values. Generated code must read runtime env vars from process.env only.
 
 SectionPlan rules:
 - "kind" must be one of: ${SECTION_KINDS.map((k) => `"${k}"`).join(" | ")}
