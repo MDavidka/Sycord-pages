@@ -437,11 +437,108 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         content: data.message || "Website generation finished.",
       })
 
+      const summaryLines: string[] = []
+      const pageCount = Array.isArray(data?.manifest?.pages) ? data.manifest.pages.length : 0
+      const fileCount = Array.isArray(data?.files) ? data.files.length : 0
+      if (pageCount > 0) summaryLines.push(`Pages: ${pageCount}`)
+      if (fileCount > 0) summaryLines.push(`Files: ${fileCount}`)
       if (typeof data?.savedPages === "number" && data.savedPages > 0) {
+        summaryLines.push(`Saved to project: ${data.savedPages}`)
+      }
+      if (data?.manifest?.theme?.preset) summaryLines.push(`Theme: ${data.manifest.theme.preset}`)
+      if (typeof data?.qualityScore === "number") summaryLines.push(`Quality: ${data.qualityScore}/100`)
+      const buildOk = Boolean(data?.build?.ok)
+      const buildErrors: string[] = Array.isArray(data?.build?.errors) ? data.build.errors : []
+      const buildWarnings: string[] = Array.isArray(data?.build?.warnings) ? data.build.warnings : []
+      summaryLines.push(`Build: ${buildOk ? "passed" : `failed (${buildErrors.length} issue${buildErrors.length === 1 ? "" : "s"})`}`)
+      if (buildWarnings.length > 0) summaryLines.push(`Warnings: ${buildWarnings.length}`)
+
+      if (summaryLines.length > 0) {
         assistantMessages.push({
           id: (Date.now() + 11).toString(),
           role: "assistant",
-          content: `Saved ${data.savedPages} generated files to project Pages.`,
+          content: summaryLines.map((l) => `• ${l}`).join("\n"),
+        })
+      }
+
+      // Database / integration diagnostics
+      const integrations: Array<{ name: string; provider: string; kind: string }> = Array.isArray(
+        data?.integrations,
+      )
+        ? data.integrations
+        : []
+      const requiredEnvVars: Array<{ key: string; integration?: string }> = Array.isArray(
+        data?.requiredEnvVars,
+      )
+        ? data.requiredEnvVars
+        : []
+      const missingEnvVars: Array<{ key: string; integration?: string }> = Array.isArray(
+        data?.missingEnvVars,
+      )
+        ? data.missingEnvVars
+        : []
+      const needsDb = Boolean(data?.needsDatabase)
+
+      const unconnectedIntegrations: string[] = Array.isArray(data?.unconnectedIntegrations)
+        ? data.unconnectedIntegrations
+        : []
+
+      if (needsDb || integrations.length > 0 || requiredEnvVars.length > 0 || unconnectedIntegrations.length > 0) {
+        const integrationLines: string[] = []
+        if (needsDb) {
+          const dbProvider = (data?.databaseProvider as string | undefined) || "turso"
+          integrationLines.push(
+            `Database required: ${dbProvider === "turso" ? "Turso" : dbProvider}`,
+          )
+        }
+        const nonDbIntegrations = integrations.filter((i) => i.kind !== "database")
+        if (nonDbIntegrations.length > 0) {
+          integrationLines.push(
+            `Integrations: ${nonDbIntegrations.map((i) => i.name).join(", ")}`,
+          )
+        }
+        if (needsDb) {
+          if (missingEnvVars.length > 0) {
+            // Blocking warning — never echo values, only key names.
+            integrationLines.push(
+              `Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`,
+            )
+          } else {
+            integrationLines.push("Turso env loaded")
+          }
+        }
+        if (unconnectedIntegrations.length > 0) {
+          integrationLines.push(
+            `Not connected (UI placeholders used): ${unconnectedIntegrations.join(", ")}`,
+          )
+        }
+        if (typeof data?.envVarsAdded === "number" && data.envVarsAdded > 0) {
+          integrationLines.push(
+            `Added ${data.envVarsAdded} required env var${data.envVarsAdded === 1 ? "" : "s"} to project settings.`,
+          )
+        }
+
+        if (integrationLines.length > 0) {
+          assistantMessages.push({
+            id: (Date.now() + 14).toString(),
+            role: "assistant",
+            content: integrationLines.map((l) => `• ${l}`).join("\n"),
+          })
+        }
+      }
+
+      if (!buildOk && buildErrors.length > 0) {
+        assistantMessages.push({
+          id: (Date.now() + 12).toString(),
+          role: "assistant",
+          isErrorLog: true,
+          content: `Build validation failed:\n${buildErrors.slice(0, 6).map((e) => `• ${e}`).join("\n")}`,
+        })
+      } else if (buildWarnings.length > 0) {
+        assistantMessages.push({
+          id: (Date.now() + 13).toString(),
+          role: "assistant",
+          content: `Notes:\n${buildWarnings.slice(0, 5).map((w) => `• ${w}`).join("\n")}`,
         })
       }
 
