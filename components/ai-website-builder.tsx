@@ -446,6 +446,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
         summaryLines.push(`Saved to project: ${data.savedPages}`)
       }
       if (data?.manifest?.theme?.preset) summaryLines.push(`Theme: ${data.manifest.theme.preset}`)
+      if (data?.deploymentMode || data?.manifest?.deploymentMode) {
+        summaryLines.push("Deployment mode: Next server")
+      }
       if (typeof data?.qualityScore === "number") summaryLines.push(`Quality: ${data.qualityScore}/100`)
       const buildOk = Boolean(data?.build?.ok)
       const buildErrors: string[] = Array.isArray(data?.build?.errors) ? data.build.errors : []
@@ -485,6 +488,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
       if (needsDb || integrations.length > 0 || requiredEnvVars.length > 0 || unconnectedIntegrations.length > 0) {
         const integrationLines: string[] = []
+        integrationLines.push("Runtime: Next server via VM process with deploy-time env vars")
         if (needsDb) {
           const dbProvider = (data?.databaseProvider as string | undefined) || "turso"
           integrationLines.push(

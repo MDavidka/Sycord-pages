@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { NodeSSH } from "node-ssh"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { readFile } from "fs/promises"
+import path from "path"
 
 export const runtime = "nodejs"
 
@@ -15,7 +17,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { action, pythonRunnerScript } = body
+    const { action } = body
 
     const host = process.env.VPS_IP
     const username = process.env.VPS_USERNAME
@@ -253,10 +255,7 @@ ingress:
     if (action === "start_server") {
       console.log(`[VPS Setup] Running Step 4: Start Server...`)
 
-      if (!pythonRunnerScript) {
-        ssh.dispose()
-        return NextResponse.json({ error: "Missing python runner script" }, { status: 400 })
-      }
+      const pythonRunnerScript = await readFile(path.join(process.cwd(), "server", "app.py"), "utf8")
 
       // Write optional SSL Certs if provided
       const { sslCert, sslKey } = body

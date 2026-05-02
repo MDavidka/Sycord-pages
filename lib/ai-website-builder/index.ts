@@ -17,6 +17,7 @@ import { callModel, extractJson, type ChatMessage, type ModelSelection } from "@
 import type {
   BuilderFile,
   BuilderOptions,
+  ComponentNode,
   CtaPlan,
   DesignBrief,
   EnvVarRequirement,
@@ -73,6 +74,42 @@ const ALLOWED_KINDS: ReadonlySet<SectionKind> = new Set<SectionKind>([
   "logos",
   "team",
   "blog-preview",
+])
+
+const ALLOWED_COMPONENTS: ReadonlySet<ComponentNode["component"]> = new Set<ComponentNode["component"]>([
+  "Page",
+  "Section",
+  "Container",
+  "Grid",
+  "Stack",
+  "Button",
+  "Card",
+  "CardHeader",
+  "CardTitle",
+  "CardDescription",
+  "CardContent",
+  "CardFooter",
+  "Badge",
+  "Accordion",
+  "AccordionItem",
+  "AccordionTrigger",
+  "AccordionContent",
+  "Tabs",
+  "TabsList",
+  "TabsTrigger",
+  "TabsContent",
+  "Input",
+  "Textarea",
+  "Label",
+  "Avatar",
+  "Separator",
+  "Image",
+  "Link",
+  "Heading",
+  "Text",
+  "Stat",
+  "PricingCard",
+  "FeatureCard",
 ])
 
 function isProvidedModel(model: ModelSelection | undefined): model is ModelSelection {
@@ -230,6 +267,44 @@ function normalizeSectionItems(items: unknown): SectionItem[] | undefined {
   return out.length ? out : undefined
 }
 
+function jsonSafeProps(input: unknown): Record<string, unknown> | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(key)) continue
+    if (typeof value === "string") out[key] = safeText(value, "")
+    else if (typeof value === "number" && Number.isFinite(value)) out[key] = value
+    else if (typeof value === "boolean") out[key] = value
+    else if (value === null) out[key] = null
+    else if (Array.isArray(value)) {
+      const arr = value.filter((v) => typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null)
+      if (arr.length === value.length) out[key] = arr
+    }
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function normalizeComponentNode(raw: unknown, depth = 0): ComponentNode | undefined {
+  if (depth > 8 || !raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const r = raw as Record<string, unknown>
+  const component = safeText(r.component, "")
+  if (!ALLOWED_COMPONENTS.has(component as ComponentNode["component"])) return undefined
+  const children = Array.isArray(r.children)
+    ? r.children
+        .map((child) => normalizeComponentNode(child, depth + 1))
+        .filter((child): child is ComponentNode => Boolean(child))
+        .slice(0, 40)
+    : undefined
+  const id = safeText(r.id, "") || `${component.toLowerCase()}-${depth}`
+  return {
+    id: id.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80),
+    component: component as ComponentNode["component"],
+    props: jsonSafeProps(r.props),
+    text: safeText(r.text, "") || undefined,
+    children: children?.length ? children : undefined,
+  }
+}
+
 function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): SectionPlan {
   const r = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
   const kindCandidate = safeText(r.kind, "") as SectionKind
@@ -251,6 +326,7 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
     components: Array.isArray(r.components) ? (r.components as unknown[]).map((c) => safeText(c, "")).filter(Boolean) : undefined,
     items,
     imageHint: safeText(r.imageHint, "") || undefined,
+    componentTree: normalizeComponentNode(r.componentTree),
     anchor: safeText(r.anchor, "") || undefined,
   }
 }
@@ -507,6 +583,7 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
     brief: briefSeed,
     theme: buildTheme(themePreset),
     pages,
+    deploymentMode: "next-server",
     needsDatabase,
     databaseProvider,
     integrations,
@@ -760,8 +837,8 @@ function computeMissingEnvVars(
 // Build a map of envKey -> real value, sourced from (in order):
 //   1. project.envVars (the user's stored secrets)
 //   2. process.env (server env on the host)
-// Values are only used locally to populate the generated `.env` file.
-// Missing keys stay absent (NOT filled with a fake placeholder).
+// Values are only used locally for missing-env checks and are never emitted
+// into generated files.
 function resolveRequiredEnvVarValues(
   required: EnvVarRequirement[],
   project: ProjectContext | undefined,
@@ -837,7 +914,6 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
 
   const parsed = extractJson<unknown>(raw)
   const manifest = normalizeManifest(parsed, prompt, opts.project)
-
   const validation = validateManifest(manifest)
   if (!validation.ok) {
     logs.push({ step: "plan-validate", detail: `Manifest invalid: ${validation.errors.join("; ")}. Repairing...` })
@@ -974,7 +1050,7 @@ export async function runAIWebsiteBuilder(
   const manifest = await planManifest(prompt, options, logs)
   logs.push({
     step: "plan",
-    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}`,
+    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
   })
 
   // 2. Render pages.
@@ -986,14 +1062,12 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) so the
-  // generated `.env` file can carry real values. We intentionally keep
-  // this in a local map and NEVER echo the values back through logs or
-  // the API response.
+  // Resolve env var values (project envVars ⟶ server env fallback) for
+  // missing-env checks only. Never echo or write these values to files.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
-  const baseFiles = scaffoldBaseFiles(manifest, required, prompt, { resolvedEnv })
+  const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
@@ -1006,6 +1080,7 @@ export async function runAIWebsiteBuilder(
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
   const build = runBuildValidation(allFiles, {
     needsDatabase: manifest.needsDatabase,
+    deploymentMode: manifest.deploymentMode,
     connectedIntegrationIds,
   })
   if (!build.ok) {
@@ -1044,7 +1119,7 @@ export async function runAIWebsiteBuilder(
   }
 
   const qualityScore = computeQualityScore(manifest, build)
-  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files` })
+  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
 
   // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
@@ -1072,5 +1147,6 @@ export async function runAIWebsiteBuilder(
     requiredEnvVars: manifest.requiredEnvVars,
     missingEnvVars,
     unconnectedIntegrations: manifest.unconnectedIntegrations,
+    deploymentMode: manifest.deploymentMode,
   }
 }

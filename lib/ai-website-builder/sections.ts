@@ -13,7 +13,7 @@
 // placeholder text. If a field is missing, a sensible default specific to the
 // section is used (still better than "Lorem ipsum").
 
-import type { CtaPlan, SectionItem, SectionPlan } from "./types"
+import type { ComponentNode, CtaPlan, SectionItem, SectionPlan } from "./types"
 
 interface RenderContext {
   sectionIndex: number
@@ -172,6 +172,175 @@ function sectionWrapperOpen(anchor: string | undefined, extra = ""): string {
 
 function emptyImport(): RenderedSection["imports"] {
   return []
+}
+
+const ALLOWED_COMPONENT_NODES: ReadonlySet<ComponentNode["component"]> = new Set<ComponentNode["component"]>([
+  "Page",
+  "Section",
+  "Container",
+  "Grid",
+  "Stack",
+  "Button",
+  "Card",
+  "CardHeader",
+  "CardTitle",
+  "CardDescription",
+  "CardContent",
+  "CardFooter",
+  "Badge",
+  "Accordion",
+  "AccordionItem",
+  "AccordionTrigger",
+  "AccordionContent",
+  "Tabs",
+  "TabsList",
+  "TabsTrigger",
+  "TabsContent",
+  "Input",
+  "Textarea",
+  "Label",
+  "Avatar",
+  "Separator",
+  "Image",
+  "Link",
+  "Heading",
+  "Text",
+  "Stat",
+  "PricingCard",
+  "FeatureCard",
+])
+
+const COMPONENT_IMPORTS: Partial<Record<ComponentNode["component"], RenderedSection["imports"][number]>> = {
+  Button: { from: "@/components/ui/button", named: ["Button"] },
+  Card: { from: "@/components/ui/card", named: ["Card"] },
+  CardHeader: { from: "@/components/ui/card", named: ["CardHeader"] },
+  CardTitle: { from: "@/components/ui/card", named: ["CardTitle"] },
+  CardDescription: { from: "@/components/ui/card", named: ["CardDescription"] },
+  CardContent: { from: "@/components/ui/card", named: ["CardContent"] },
+  CardFooter: { from: "@/components/ui/card", named: ["CardFooter"] },
+  Badge: { from: "@/components/ui/badge", named: ["Badge"] },
+  Accordion: { from: "@/components/ui/accordion", named: ["Accordion"] },
+  AccordionItem: { from: "@/components/ui/accordion", named: ["AccordionItem"] },
+  AccordionTrigger: { from: "@/components/ui/accordion", named: ["AccordionTrigger"] },
+  AccordionContent: { from: "@/components/ui/accordion", named: ["AccordionContent"] },
+  Tabs: { from: "@/components/ui/tabs", named: ["Tabs"] },
+  TabsList: { from: "@/components/ui/tabs", named: ["TabsList"] },
+  TabsTrigger: { from: "@/components/ui/tabs", named: ["TabsTrigger"] },
+  TabsContent: { from: "@/components/ui/tabs", named: ["TabsContent"] },
+  Input: { from: "@/components/ui/input", named: ["Input"] },
+  Textarea: { from: "@/components/ui/textarea", named: ["Textarea"] },
+  Label: { from: "@/components/ui/label", named: ["Label"] },
+  Avatar: { from: "@/components/ui/avatar", named: ["Avatar", "AvatarFallback", "AvatarImage"] },
+  Separator: { from: "@/components/ui/separator", named: ["Separator"] },
+  Image: { from: "next/image", named: ["default as Image"] },
+  Link: { from: "next/link", named: ["default as Link"] },
+  PricingCard: { from: "@/components/ui/card", named: ["Card", "CardContent", "CardFooter", "CardHeader", "CardTitle"] },
+  FeatureCard: { from: "@/components/ui/card", named: ["Card", "CardContent", "CardHeader", "CardTitle", "CardDescription"] },
+}
+
+export function isAllowedComponentNode(component: string): component is ComponentNode["component"] {
+  return ALLOWED_COMPONENT_NODES.has(component as ComponentNode["component"])
+}
+
+function cleanClass(value: unknown): string {
+  if (typeof value !== "string") return ""
+  return value.replace(/[{}<>`]/g, "").slice(0, 500).trim()
+}
+
+function propString(props: Record<string, unknown> | undefined, allow: ReadonlySet<string>): string {
+  if (!props) return ""
+  const out: string[] = []
+  for (const [key, value] of Object.entries(props)) {
+    if (!allow.has(key)) continue
+    if (typeof value === "string") out.push(`${key}=${jsxStr(value)}`)
+    else if (typeof value === "number" && Number.isFinite(value)) out.push(`${key}={${value}}`)
+    else if (typeof value === "boolean" && value) out.push(key)
+  }
+  return out.length ? ` ${out.join(" ")}` : ""
+}
+
+function classProp(props: Record<string, unknown> | undefined, fallback = ""): string {
+  const cls = cleanClass(props?.className || props?.class)
+  const value = cls || fallback
+  return value ? ` className=${jsxStr(value)}` : ""
+}
+
+function nodeChildren(node: ComponentNode, ctx: RenderContext): string {
+  const parts = [...(node.text ? [esc(node.text)] : []), ...(node.children ?? []).map((child) => renderComponentNode(child, ctx))]
+  return parts.filter(Boolean).join("\n")
+}
+
+function hrefProp(props: Record<string, unknown> | undefined): string {
+  const href = typeof props?.href === "string" && /^(\/|#|https?:\/\/|mailto:|tel:)/.test(props.href) ? props.href : "#"
+  return ` href=${jsxStr(href)}`
+}
+
+export function componentNodeImports(node: ComponentNode): RenderedSection["imports"] {
+  const imports: RenderedSection["imports"] = []
+  const add = (imp: RenderedSection["imports"][number] | undefined) => {
+    if (imp) imports.push(imp)
+  }
+  const walk = (current: ComponentNode) => {
+    if (!isAllowedComponentNode(current.component)) {
+      for (const child of current.children ?? []) walk(child)
+      return
+    }
+    add(COMPONENT_IMPORTS[current.component])
+    for (const child of current.children ?? []) walk(child)
+  }
+  walk(node)
+  return imports
+}
+
+export function renderComponentNode(node: ComponentNode, ctx: RenderContext): string {
+  const component = isAllowedComponentNode(node.component) ? node.component : "Container"
+  const children = nodeChildren(node, ctx)
+  const valueProps = propString(node.props, new Set(["value", "type", "placeholder", "alt", "src", "width", "height", "defaultValue"]))
+  switch (component) {
+    case "Page":
+      return `<div${classProp(node.props, "space-y-0")}>${children}</div>`
+    case "Section":
+      return `<section${node.id ? ` id=${jsxStr(node.id)}` : ""}${classProp(node.props, "relative w-full py-20 md:py-24")}>${children}</section>`
+    case "Container":
+      return `<div${classProp(node.props, "mx-auto max-w-7xl px-4 sm:px-6 lg:px-8")}>${children}</div>`
+    case "Grid":
+      return `<div${classProp(node.props, "grid gap-6 md:grid-cols-2 lg:grid-cols-3")}>${children}</div>`
+    case "Stack":
+      return `<div${classProp(node.props, "flex flex-col gap-4")}>${children}</div>`
+    case "Heading": {
+      const level = typeof node.props?.level === "number" && node.props.level >= 1 && node.props.level <= 4 ? node.props.level : 2
+      return `<h${level}${classProp(node.props, "text-balance text-3xl font-semibold tracking-tight sm:text-4xl")}>${children}</h${level}>`
+    }
+    case "Text":
+      return `<p${classProp(node.props, "text-pretty text-muted-foreground")}>${children}</p>`
+    case "Link":
+      return `<Link${hrefProp(node.props)}${classProp(node.props)}>${children}</Link>`
+    case "Button":
+      return `<Button${propString(node.props, new Set(["variant", "size"]))}${classProp(node.props)}>${children}</Button>`
+    case "Accordion":
+      return `<Accordion${propString(node.props, new Set(["type", "defaultValue", "collapsible"]))}${classProp(node.props)}>${children}</Accordion>`
+    case "AccordionItem":
+      return `<AccordionItem${propString(node.props, new Set(["value"]))}${classProp(node.props)}>${children}</AccordionItem>`
+    case "Tabs":
+      return `<Tabs${propString(node.props, new Set(["defaultValue", "value"]))}${classProp(node.props)}>${children}</Tabs>`
+    case "TabsTrigger":
+    case "TabsContent":
+      return `<${component}${propString(node.props, new Set(["value"]))}${classProp(node.props)}>${children}</${component}>`
+    case "Image":
+      return `<Image${valueProps}${classProp(node.props, "rounded-2xl object-cover")} />`
+    case "Stat":
+      return `<div${classProp(node.props, "rounded-2xl border bg-card p-6")}><div className="text-3xl font-semibold">${esc(node.props?.value ?? node.text)}</div>${children ? `<div className="text-sm text-muted-foreground">${children}</div>` : ""}</div>`
+    case "PricingCard":
+      return `<Card${classProp(node.props, "border-border/60")}><CardHeader><CardTitle>${esc(node.props?.title ?? node.text)}</CardTitle></CardHeader><CardContent>${children}</CardContent><CardFooter>${node.props?.cta ? `<Button>${esc(node.props.cta)}</Button>` : ""}</CardFooter></Card>`
+    case "FeatureCard":
+      return `<Card${classProp(node.props, "border-border/60")}><CardHeader><CardTitle>${esc(node.props?.title ?? node.text)}</CardTitle>${node.props?.description ? `<CardDescription>${esc(node.props.description)}</CardDescription>` : ""}</CardHeader><CardContent>${children}</CardContent></Card>`
+    case "Avatar":
+      return `<Avatar${classProp(node.props)}>${node.props?.src ? `<AvatarImage src=${jsxStr(node.props.src)} alt=${jsxStr(node.props.alt ?? "")} />` : ""}<AvatarFallback>${esc(node.text || node.props?.fallback || "SY")}</AvatarFallback></Avatar>`
+    case "Separator":
+      return `<Separator${classProp(node.props)} />`
+    default:
+      return `<${component}${valueProps}${classProp(node.props)}>${children}</${component}>`
+  }
 }
 
 // ---------- HERO ----------
@@ -1555,6 +1724,14 @@ function renderBlogPreview(section: SectionPlan, ctx: RenderContext): RenderedSe
 // ---------- DISPATCHER ----------
 
 export function renderSection(section: SectionPlan, ctx: RenderContext): RenderedSection {
+  if (section.componentTree) {
+    return {
+      tsx: renderComponentNode(section.componentTree, ctx),
+      imports: componentNodeImports(section.componentTree),
+      needsClient: false,
+      iconsUsed: [],
+    }
+  }
   switch (section.kind) {
     case "hero":
       return renderHero(section, ctx)
