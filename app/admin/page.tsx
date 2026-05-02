@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,17 @@ import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,15 +102,97 @@ const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
   { id: "server" as const, label: "Server", icon: Server },
-  { id: "vps" as const, label: "VPS Runner", icon: Activity },
+  { id: "runner" as const, label: "Runner", icon: Activity },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "paptos"
+type TabId = "overview" | "users" | "server" | "runner" | "tickets" | "paptos"
+
+type RunnerStatus = {
+  success: boolean
+  online: boolean
+  version?: string
+  uptimeSeconds?: number
+  hostname?: string
+  nodeVersion?: string
+  npmVersion?: string
+  cloudflared?: {
+    installed: boolean
+    running: boolean
+    tunnelName?: string
+  }
+  proxy?: {
+    type: "nginx" | "caddy"
+    running: boolean
+  }
+  cpu?: {
+    usagePercent: number
+    cores: number
+    loadAvg: number[]
+  }
+  memory?: {
+    totalMb: number
+    usedMb: number
+    freeMb: number
+    usagePercent: number
+  }
+  disk?: {
+    totalGb: number
+    usedGb: number
+    freeGb: number
+    usagePercent: number
+  }
+  websites?: {
+    total: number
+    running: number
+    stopped: number
+    failed: number
+    healthy: number
+    unhealthy: number
+  }
+  updatedAt?: string
+  error?: string
+}
+
+type RunnerSetupStatus = {
+  setupComplete: boolean
+  nodeOk: boolean
+  npmOk: boolean
+  pm2Ok: boolean
+  proxyOk: boolean
+  cloudflaredOk: boolean
+  directoriesOk: boolean
+  serviceOk: boolean
+  missingDependencies: string[]
+  lastSetupAt?: string
+  logs?: string[]
+}
+
+type RunnerWebsite = {
+  id: string
+  projectId?: string
+  name?: string
+  domain?: string
+  port?: number
+  processName?: string
+  status?: string
+  health?: string
+  cpu?: string | number
+  memory?: string | number
+  restartCount?: number
+  lastDeploy?: string
+  lastHealthCheck?: string
+  lastError?: string
+}
+
+type RunnerAction = "start" | "stop" | "setup" | "destroy"
+type WebsiteAction = "start" | "stop" | "restart" | "health-check" | "destroy-runtime"
+type RunnerLogType = "deploy" | "build" | "runtime" | "error" | "health"
 
 export default function AdminPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session } = useSession()
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
@@ -113,14 +206,26 @@ export default function AdminPage() {
   const [uploadingIcon, setUploadingIcon] = useState<string | null>(null)
 
   // VPS Runner State
-  const [vpsStatus, setVpsStatus] = useState<any>(null)
+  const [vpsStatus, setVpsStatus] = useState<RunnerStatus | null>(null)
   const [vpsLoading, setVpsLoading] = useState(false)
   const [vpsLogs, setVpsLogs] = useState<string[]>([])
-  const [vpsAction, setVpsAction] = useState<string | null>(null)
-  const [vpsLogType, setVpsLogType] = useState<string>("all")
+  const [vpsAction, setVpsAction] = useState<RunnerAction | null>(null)
+  const [vpsLogType, setVpsLogType] = useState<RunnerLogType>("runtime")
   const [vpsLogLines, setVpsLogLines] = useState<number>(200)
-  const [vpsWebsites, setVpsWebsites] = useState<any[]>([])
+  const [vpsWebsites, setVpsWebsites] = useState<RunnerWebsite[]>([])
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
+  const [runnerSetupStatus, setRunnerSetupStatus] = useState<RunnerSetupStatus | null>(null)
+  const [runnerSetupLoading, setRunnerSetupLoading] = useState(false)
+  const [runnerSetupLogs, setRunnerSetupLogs] = useState<string[]>([])
+  const [runnerSetupLogsOpen, setRunnerSetupLogsOpen] = useState(false)
+  const [logsAutoRefresh, setLogsAutoRefresh] = useState(false)
+  const [destroyDialogOpen, setDestroyDialogOpen] = useState(false)
+  const [destroyConfirm, setDestroyConfirm] = useState("")
+  const [destroyOptions, setDestroyOptions] = useState({
+    deleteRuntime: false,
+    deleteLogs: false,
+    deleteProxy: false,
+  })
 
   // PAP & TOS State
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
@@ -137,6 +242,18 @@ export default function AdminPage() {
   }, [session, router])
 
   useEffect(() => {
+    const tabParam = searchParams.get("tab")
+    if (!tabParam) return
+    if (tabParam === "runner" || tabParam === "vps") {
+      setActiveTab("runner")
+      return
+    }
+    if (["overview", "users", "server", "tickets", "paptos"].includes(tabParam)) {
+      setActiveTab(tabParam as TabId)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     const query = searchQuery.toLowerCase()
     const filtered = users.filter(
       (user) =>
@@ -146,6 +263,35 @@ export default function AdminPage() {
     )
     setFilteredUsers(filtered)
   }, [searchQuery, users])
+
+  useEffect(() => {
+    if (activeTab === "runner") {
+      refreshRunner()
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (!selectedWebsiteId) {
+      setVpsLogs([])
+      return
+    }
+    fetchVpsLogs(selectedWebsiteId)
+  }, [selectedWebsiteId, vpsLogType, vpsLogLines])
+
+  useEffect(() => {
+    if (!logsAutoRefresh || !selectedWebsiteId) return
+    const interval = setInterval(() => {
+      fetchVpsLogs(selectedWebsiteId)
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [logsAutoRefresh, selectedWebsiteId, vpsLogType, vpsLogLines])
+
+  useEffect(() => {
+    if (!vpsWebsites.length) return
+    if (!selectedWebsiteId || !vpsWebsites.some((site) => site.id === selectedWebsiteId)) {
+      setSelectedWebsiteId(vpsWebsites[0].id)
+    }
+  }, [vpsWebsites, selectedWebsiteId])
 
   const fetchUsers = async () => {
     try {
@@ -280,6 +426,29 @@ export default function AdminPage() {
     })
   }
 
+  const formatDateTime = (value?: string) => {
+    if (!value) return "—"
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return "—"
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const formatUptime = (seconds?: number) => {
+    if (!seconds || Number.isNaN(seconds)) return "—"
+    const days = Math.floor(seconds / 86400)
+    const hours = Math.floor((seconds % 86400) / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    if (days > 0) return `${days}d ${hours}h`
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes}m`
+  }
+
   const toggleBlock = async (userId: string, isBlocked: boolean) => {
     try {
       setUpdatingUser(userId)
@@ -335,30 +504,60 @@ export default function AdminPage() {
   const fetchVpsStatus = async () => {
     setVpsLoading(true)
     try {
-      const res = await fetch("/api/admin/vps-runner/status")
-      if (res.ok) {
-        const data = await res.json()
-        setVpsStatus(data)
+      const [statusRes, websitesRes] = await Promise.all([
+        fetch("/api/admin/vps-runner/status"),
+        fetch("/api/admin/vps-runner/websites"),
+      ])
+      const statusData = await statusRes.json().catch(() => null)
+      if (statusData) {
+        setVpsStatus(statusData)
       }
-      const websitesRes = await fetch("/api/admin/vps-runner/websites")
-      if (websitesRes.ok) {
-        setVpsWebsites(await websitesRes.json())
+      const websitesData = await websitesRes.json().catch(() => null)
+      if (websitesData?.websites) {
+        setVpsWebsites(websitesData.websites)
+      } else if (Array.isArray(websitesData)) {
+        setVpsWebsites(websitesData)
       }
     } catch (err) {
       console.error("Failed to fetch VPS status:", err)
+      setVpsStatus({ success: false, online: false, error: "Runner offline" })
     } finally {
       setVpsLoading(false)
     }
   }
 
-  const handleWebsiteAction = async (id: string, action: "start" | "stop" | "restart" | "destroy") => {
+  const fetchRunnerSetupStatus = async (includeLogs: boolean = false) => {
+    setRunnerSetupLoading(true)
+    try {
+      const res = await fetch(`/api/admin/vps-runner/setup${includeLogs ? "?logs=1" : ""}`)
+      const data = await res.json().catch(() => null)
+      if (data?.success) {
+        setRunnerSetupStatus(data)
+        if (Array.isArray(data.logs)) {
+          setRunnerSetupLogs(data.logs)
+        }
+      } else if (data?.error) {
+        toast.error(data.error)
+      }
+    } catch (err) {
+      console.error("Failed to fetch setup status:", err)
+    } finally {
+      setRunnerSetupLoading(false)
+    }
+  }
+
+  const refreshRunner = async () => {
+    await Promise.all([fetchVpsStatus(), fetchRunnerSetupStatus()])
+  }
+
+  const handleWebsiteAction = async (id: string, action: WebsiteAction) => {
     try {
       const res = await fetch(`/api/admin/vps-runner/websites/${id}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (data.success) {
         toast.success(`Website ${action} successful`)
         setTimeout(fetchVpsStatus, 1000)
@@ -374,28 +573,34 @@ export default function AdminPage() {
     try {
       const targetId = id || selectedWebsiteId
       if (!targetId) return
-      const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs`)
-      if (res.ok) {
-        const data = await res.json()
-        setVpsLogs(Array.isArray(data.logs) ? data.logs : [])
-      }
+      const res = await fetch(
+        `/api/admin/vps-runner/websites/${targetId}/logs?type=${vpsLogType}&limit=${vpsLogLines}`,
+      )
+      const data = await res.json().catch(() => null)
+      setVpsLogs(Array.isArray(data?.logs) ? data.logs : [])
     } catch (err) {
       console.error("Failed to fetch VPS logs:", err)
     }
   }
 
-  const handleVpsAction = async (action: "start" | "stop" | "restart") => {
+  const handleVpsAction = async (
+    action: RunnerAction,
+    options?: { deleteRuntime: boolean; deleteLogs: boolean; deleteProxy: boolean },
+  ) => {
     setVpsAction(action)
     try {
-      const res = await fetch("/api/vps/restart", {
+      const res = await fetch("/api/admin/vps-runner/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, options }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (data.success) {
         toast.success(`Runner ${action} successful`)
         setTimeout(fetchVpsStatus, 2000)
+        if (action === "setup") {
+          setTimeout(() => fetchRunnerSetupStatus(true), 2000)
+        }
       } else {
         toast.error(data.error || `Failed to ${action} runner`)
       }
@@ -405,6 +610,86 @@ export default function AdminPage() {
       setVpsAction(null)
     }
   }
+
+  const runSetupWizard = async () => {
+    setRunnerSetupLoading(true)
+    try {
+      const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (data.success) {
+        toast.success(data.message || "Setup completed")
+        await fetchRunnerSetupStatus(true)
+        await fetchVpsStatus()
+      } else {
+        toast.error(data.error || "Setup failed")
+      }
+    } catch (error) {
+      toast.error("Setup failed")
+    } finally {
+      setRunnerSetupLoading(false)
+    }
+  }
+
+  const handleCopyLogs = async () => {
+    if (!vpsLogs.length) return
+    try {
+      await navigator.clipboard.writeText(vpsLogs.join("\n"))
+      toast.success("Logs copied to clipboard")
+    } catch (error) {
+      toast.error("Failed to copy logs")
+    }
+  }
+
+  const handleDownloadLogs = () => {
+    if (!vpsLogs.length) return
+    const content = vpsLogs.join("\n")
+    const blob = new Blob([content], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    const fileName = `${selectedWebsiteId || "runner"}-${vpsLogType}.log`
+    anchor.href = url
+    anchor.download = fileName
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleDestroyRunner = async () => {
+    if (destroyConfirm !== "DESTROY") return
+    await handleVpsAction("destroy", destroyOptions)
+    setDestroyDialogOpen(false)
+    setDestroyConfirm("")
+    setDestroyOptions({ deleteRuntime: false, deleteLogs: false, deleteProxy: false })
+  }
+
+  const selectedWebsite = vpsWebsites.find((site) => site.id === selectedWebsiteId)
+  const websiteStats = {
+    total: vpsStatus?.websites?.total ?? vpsWebsites.length,
+    running:
+      vpsStatus?.websites?.running ??
+      vpsWebsites.filter((site) => site.status === "running").length,
+    failed:
+      vpsStatus?.websites?.failed ??
+      vpsWebsites.filter((site) => site.status === "failed").length,
+    healthy:
+      vpsStatus?.websites?.healthy ??
+      vpsWebsites.filter((site) => site.health === "healthy").length,
+    unhealthy:
+      vpsStatus?.websites?.unhealthy ??
+      vpsWebsites.filter((site) => site.health === "unhealthy").length,
+  }
+
+  const cpuUsage = vpsStatus?.cpu?.usagePercent
+  const memoryUsage = vpsStatus?.memory?.usagePercent
+  const diskUsage = vpsStatus?.disk?.usagePercent
+  const setupChecks = [
+    { key: "nodeOk", label: "Node.js LTS" },
+    { key: "npmOk", label: "npm" },
+    { key: "pm2Ok", label: "PM2 / service" },
+    { key: "proxyOk", label: "Proxy (Nginx/Caddy)" },
+    { key: "cloudflaredOk", label: "Cloudflared" },
+    { key: "directoriesOk", label: "Directories" },
+    { key: "serviceOk", label: "Runner service" },
+  ] as const
 
   return (
     <div className="min-h-screen bg-[#101010]">
@@ -888,256 +1173,600 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* VPS Runner Tab */}
-        {activeTab === "vps" && (
+        {/* Runner Tab */}
+        {activeTab === "runner" && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-white">VPS Runner</h2>
-                <p className="text-sm text-white/40">Manage the Flask deployment runner on VPS</p>
+                <h2 className="text-lg font-semibold text-white">Runner</h2>
+                <p className="text-sm text-white/40">
+                  Manage the Ubuntu mini-server that builds and runs generated Next.js websites.
+                </p>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { fetchVpsStatus(); fetchVpsLogs(); }}
-                className="text-white/40 hover:text-white"
-              >
-                <RotateCcw className="h-4 w-4 mr-1.5" />
-                Refresh
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {vpsLoading ? (
+                  <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-white/10 text-white/40 bg-white/5 rounded-full">
+                    Checking...
+                  </Badge>
+                ) : vpsStatus?.online ? (
+                  <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-green-500/30 text-green-500 bg-green-500/5 rounded-full">
+                    Online
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-red-500/30 text-red-500 bg-red-500/5 rounded-full">
+                    Offline
+                  </Badge>
+                )}
+                <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-white/10 text-white/50 bg-white/5 rounded-full">
+                  Version: {vpsStatus?.version || "—"}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] px-2 py-0 h-5 border-white/10 text-white/50 bg-white/5 rounded-full">
+                  Heartbeat: {formatDateTime(vpsStatus?.updatedAt)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] px-2 py-0 h-5 rounded-full ${
+                    vpsStatus?.cloudflared?.running
+                      ? "border-blue-500/30 text-blue-400 bg-blue-500/5"
+                      : "border-white/10 text-white/40 bg-white/5"
+                  }`}
+                >
+                  Tunnel: {vpsStatus?.cloudflared?.running ? "Online" : "Offline"}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshRunner}
+                  className="text-white/40 hover:text-white"
+                >
+                  <RotateCcw className="h-4 w-4 mr-1.5" />
+                  Refresh
+                </Button>
+              </div>
             </div>
 
-            {/* Connection Status */}
-            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="h-12 w-12 rounded-xl bg-white/[0.06] flex items-center justify-center">
-                  <Server className="h-6 w-6 text-zinc-400" />
+            {/* Performance cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <Cpu className="h-4 w-4 text-blue-400" />
+                  CPU Usage
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold text-white">Ubuntu Server</h3>
-                    {vpsLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
-                    ) : vpsStatus?.online ? (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-green-500/30 text-green-500 bg-green-500/5 rounded-full">
-                        Connected
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-red-500/30 text-red-500 bg-red-500/5 rounded-full">
-                        Offline
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-white/30 mt-0.5">
-                    {vpsStatus?.uptime ? `Uptime: ${vpsStatus.uptime}` : "Click refresh to check status"}
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{cpuUsage != null ? `${cpuUsage}%` : "—"}</p>
+                  <p className="text-[11px] text-white/30">{vpsStatus?.cpu?.cores ? `${vpsStatus.cpu.cores} cores` : "—"}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <Activity className="h-4 w-4 text-purple-400" />
+                  Memory Usage
+                </div>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">
+                    {memoryUsage != null ? `${memoryUsage}%` : "—"}
+                  </p>
+                  <p className="text-[11px] text-white/30">
+                    {vpsStatus?.memory?.usedMb != null && vpsStatus?.memory?.totalMb != null
+                      ? `${vpsStatus.memory.usedMb} / ${vpsStatus.memory.totalMb} MB`
+                      : "—"}
                   </p>
                 </div>
               </div>
-
-              {/* Runner Status Indicators */}
-              {vpsStatus && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/[0.04]">
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.runner ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">Flask Runner</p>
-                  </div>
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.tunnel ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">Tunnel</p>
-                  </div>
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.httpOk ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">HTTP</p>
-                  </div>
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.npmInstalled ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                    <p className="text-[11px] text-white/40">npm</p>
-                  </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <HardDrive className="h-4 w-4 text-emerald-400" />
+                  Disk Usage
                 </div>
-              )}
-
-              {/* CPU / RAM / Disk Stats */}
-              {vpsStatus?.online && (vpsStatus.cpu !== null || vpsStatus.mem?.percent !== null) && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/[0.04]">
-                  {/* CPU */}
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Cpu className="h-3.5 w-3.5 text-blue-400" />
-                      <span className="text-[11px] font-medium text-white/50">CPU</span>
-                      <span className="ml-auto text-xs font-semibold text-white">{vpsStatus.cpu != null ? `${vpsStatus.cpu}%` : "—"}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          (vpsStatus.cpu ?? 0) > 80 ? 'bg-red-500' : (vpsStatus.cpu ?? 0) > 50 ? 'bg-yellow-500' : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${Math.min(vpsStatus.cpu ?? 0, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* RAM */}
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Activity className="h-3.5 w-3.5 text-purple-400" />
-                      <span className="text-[11px] font-medium text-white/50">RAM</span>
-                      <span className="ml-auto text-xs font-semibold text-white">
-                        {vpsStatus.mem?.used != null && vpsStatus.mem?.total != null
-                          ? `${vpsStatus.mem.used} / ${vpsStatus.mem.total} MB`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          (vpsStatus.mem?.percent ?? 0) > 85 ? 'bg-red-500' : (vpsStatus.mem?.percent ?? 0) > 60 ? 'bg-yellow-500' : 'bg-purple-500'
-                        }`}
-                        style={{ width: `${Math.min(vpsStatus.mem?.percent ?? 0, 100)}%` }}
-                      />
-                    </div>
-                    {vpsStatus.mem?.percent != null && (
-                      <p className="text-[10px] text-white/30 mt-1">{vpsStatus.mem.percent}% used</p>
-                    )}
-                  </div>
-
-                  {/* Disk */}
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <HardDrive className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[11px] font-medium text-white/50">Disk</span>
-                      <span className="ml-auto text-xs font-semibold text-white">
-                        {vpsStatus.disk?.used && vpsStatus.disk?.total
-                          ? `${vpsStatus.disk.used} / ${vpsStatus.disk.total}`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          parseInt(vpsStatus.disk?.percent || "0") > 85 ? 'bg-red-500' : parseInt(vpsStatus.disk?.percent || "0") > 60 ? 'bg-yellow-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: vpsStatus.disk?.percent || "0%" }}
-                      />
-                    </div>
-                    {vpsStatus.disk?.percent && (
-                      <p className="text-[10px] text-white/30 mt-1">{vpsStatus.disk.percent} used</p>
-                    )}
-                  </div>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{diskUsage != null ? `${diskUsage}%` : "—"}</p>
+                  <p className="text-[11px] text-white/30">
+                    {vpsStatus?.disk?.usedGb != null && vpsStatus?.disk?.totalGb != null
+                      ? `${vpsStatus.disk.usedGb} / ${vpsStatus.disk.totalGb} GB`
+                      : "—"}
+                  </p>
                 </div>
-              )}
-
-              {/* Warnings */}
-              {vpsStatus?.warnings && vpsStatus.warnings.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-white/[0.04]">
-                  {vpsStatus.warnings.map((w: string, i: number) => (
-                    <p key={i} className="text-xs text-yellow-500/70 flex items-center gap-1.5">
-                      <AlertCircle className="h-3 w-3 shrink-0" />
-                      {w}
-                    </p>
-                  ))}
+              </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <Calendar className="h-4 w-4 text-white/40" />
+                  Uptime
                 </div>
-              )}
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center justify-between mb-4 mt-6">
-              <h3 className="text-base font-semibold text-white">VPS Setup & Actions</h3>
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={async () => {
-                    const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
-                    if (res.ok) toast.success("VPS Setup complete")
-                  }}
-                  variant="outline"
-                  className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10 rounded-xl"
-                >
-                  Run Setup
-                </Button>
-                <Button
-                  onClick={() => handleVpsAction("start")}
-                  disabled={!!vpsAction}
-                  className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
-                >
-                  {vpsAction === "start" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                  Start
-                </Button>
-                <Button
-                  onClick={() => handleVpsAction("restart")}
-                  disabled={!!vpsAction}
-                  variant="outline"
-                  className="border-white/10 text-white/60 hover:text-white rounded-xl"
-                >
-                  {vpsAction === "restart" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <RotateCcw className="h-4 w-4 mr-1.5" />}
-                  Restart
-                </Button>
-                <Button
-                  onClick={() => handleVpsAction("stop")}
-                  disabled={!!vpsAction}
-                  variant="outline"
-                  className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-xl"
-                >
-                  Stop
-                </Button>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{formatUptime(vpsStatus?.uptimeSeconds)}</p>
+                  <p className="text-[11px] text-white/30">{vpsStatus?.hostname || "—"}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <Server className="h-4 w-4 text-blue-300" />
+                  Running Websites
+                </div>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{websiteStats.running}</p>
+                  <p className="text-[11px] text-white/30">Total {websiteStats.total}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <AlertCircle className="h-4 w-4 text-red-400" />
+                  Failed Websites
+                </div>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{websiteStats.failed}</p>
+                  <p className="text-[11px] text-white/30">Stopped {vpsStatus?.websites?.stopped ?? "—"}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <Check className="h-4 w-4 text-green-400" />
+                  Healthy
+                </div>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">{websiteStats.healthy}</p>
+                  <p className="text-[11px] text-white/30">Unhealthy {websiteStats.unhealthy}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4">
+                <div className="flex items-center gap-2 text-xs text-white/40">
+                  <Cloud className="h-4 w-4 text-blue-400" />
+                  Cloudflared
+                </div>
+                <div className="mt-3 flex items-end justify-between">
+                  <p className="text-2xl font-semibold text-white">
+                    {vpsStatus?.cloudflared?.running ? "Running" : "Stopped"}
+                  </p>
+                  <p className="text-[11px] text-white/30">
+                    {vpsStatus?.cloudflared?.tunnelName || "Tunnel"}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Websites List */}
-            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-6 mt-6">
-              <h3 className="text-base font-semibold text-white mb-4">Websites Running</h3>
-              <div className="space-y-4">
-                {vpsWebsites.length === 0 ? (
-                  <p className="text-xs text-white/40">No websites deployed to VPS.</p>
-                ) : (
-                  vpsWebsites.map(site => (
-                    <div key={site.id} className="p-4 bg-black/20 rounded-xl border border-white/[0.06] flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-white">{site.domain || site.subdomain}</p>
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 rounded-full ${site.health_ok ? 'border-green-500/30 text-green-500 bg-green-500/5' : 'border-red-500/30 text-red-500 bg-red-500/5'}`}>
-                            {site.health_ok ? "Healthy" : "Failing"}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-full border-blue-500/30 text-blue-500 bg-blue-500/5">
-                            Port: {site.port}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-full border-white/10 text-white/50 bg-white/5">
-                            Mem: {site.memory || "—"} / CPU: {site.cpu || "—"}
-                          </Badge>
+            {/* Action bar */}
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-white">Runner Actions</h3>
+                  <p className="text-xs text-white/40">Start, stop, setup, or destroy the mini-server runtime.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => handleVpsAction("start")}
+                    disabled={!!vpsAction}
+                    className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
+                  >
+                    {vpsAction === "start" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                    Start
+                  </Button>
+                  <Button
+                    onClick={() => handleVpsAction("stop")}
+                    disabled={!!vpsAction}
+                    variant="outline"
+                    className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10 rounded-xl"
+                  >
+                    {vpsAction === "stop" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                    Stop
+                  </Button>
+                  <Button
+                    onClick={() => handleVpsAction("setup")}
+                    disabled={!!vpsAction}
+                    variant="outline"
+                    className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 rounded-xl"
+                  >
+                    {vpsAction === "setup" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                    Setup
+                  </Button>
+                  <Dialog open={destroyDialogOpen} onOpenChange={setDestroyDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        disabled={!!vpsAction}
+                        variant="outline"
+                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1.5" />
+                        Destroy
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-[#141414] border-white/10 text-white">
+                      <DialogHeader>
+                        <DialogTitle>Destroy runner runtime?</DialogTitle>
+                        <DialogDescription className="text-white/40">
+                          This stops websites and removes runtime artifacts. Type DESTROY to confirm.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <Input
+                          placeholder="Type DESTROY to confirm"
+                          value={destroyConfirm}
+                          onChange={(event) => setDestroyConfirm(event.target.value)}
+                          className="bg-white/[0.03] border-white/10 text-white placeholder:text-white/30"
+                        />
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-xs text-white/60">
+                            <Checkbox
+                              checked={destroyOptions.deleteRuntime}
+                              onCheckedChange={(value) =>
+                                setDestroyOptions((prev) => ({ ...prev, deleteRuntime: Boolean(value) }))
+                              }
+                            />
+                            Delete runtime files
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-white/60">
+                            <Checkbox
+                              checked={destroyOptions.deleteLogs}
+                              onCheckedChange={(value) =>
+                                setDestroyOptions((prev) => ({ ...prev, deleteLogs: Boolean(value) }))
+                              }
+                            />
+                            Delete logs (optional)
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-white/60">
+                            <Checkbox
+                              checked={destroyOptions.deleteProxy}
+                              onCheckedChange={(value) =>
+                                setDestroyOptions((prev) => ({ ...prev, deleteProxy: Boolean(value) }))
+                              }
+                            />
+                            Delete proxy configs
+                          </label>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => { setSelectedWebsiteId(site.id); fetchVpsLogs(site.id); }}>
-                          Logs
+                      <DialogFooter>
+                        <Button
+                          variant="ghost"
+                          className="text-white/60"
+                          onClick={() => setDestroyDialogOpen(false)}
+                        >
+                          Cancel
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => handleWebsiteAction(site.id, 'restart')}>
-                          Restart
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8 border-red-500/20 text-red-400 hover:bg-red-500/10" onClick={() => handleWebsiteAction(site.id, 'destroy')}>
+                        <Button
+                          onClick={handleDestroyRunner}
+                          disabled={destroyConfirm !== "DESTROY" || vpsAction === "destroy"}
+                          className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                          {vpsAction === "destroy" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
                           Destroy
                         </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
             </div>
-            
-            {/* Logs Section */}
-            <div className="rounded-2xl bg-black/40 border border-white/[0.06] p-4 mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">
-                  {selectedWebsiteId ? `Logs for ${selectedWebsiteId}` : "Select a website to view logs"}
-                </p>
-                <Button size="sm" variant="ghost" className="h-6" onClick={() => fetchVpsLogs()}>Refresh Logs</Button>
-              </div>
-              {vpsLogs.length > 0 ? (
-                <div className="max-h-[600px] overflow-y-auto font-mono text-xs text-zinc-400 space-y-0.5 custom-scrollbar">
-                  {vpsLogs.map((line, i) => (
-                    <p key={i}>{line}</p>
-                  ))}
+
+            {/* Setup wizard panel */}
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6 space-y-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-white">Setup Wizard</h3>
+                  <p className="text-xs text-white/40">Verify dependencies and provisioning steps for the mini-server.</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-2 py-0 h-5 rounded-full ${
+                        runnerSetupStatus?.setupComplete
+                          ? "border-green-500/30 text-green-400 bg-green-500/5"
+                          : "border-yellow-500/30 text-yellow-400 bg-yellow-500/5"
+                      }`}
+                    >
+                      {runnerSetupStatus?.setupComplete ? "Setup complete" : "Setup incomplete"}
+                    </Badge>
+                    <span className="text-[11px] text-white/30">
+                      Last run: {formatDateTime(runnerSetupStatus?.lastSetupAt)}
+                    </span>
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs text-white/20 text-center py-8">No logs available.</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={runSetupWizard}
+                    disabled={runnerSetupLoading}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl"
+                  >
+                    {runnerSetupLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                    Run setup wizard
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white/10 text-white/60 hover:text-white rounded-xl"
+                    onClick={() => fetchRunnerSetupStatus()}
+                    disabled={runnerSetupLoading}
+                  >
+                    Refresh status
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-white/40 hover:text-white"
+                    onClick={() => {
+                      const nextOpen = !runnerSetupLogsOpen
+                      setRunnerSetupLogsOpen(nextOpen)
+                      if (nextOpen) {
+                        fetchRunnerSetupStatus(true)
+                      }
+                    }}
+                  >
+                    {runnerSetupLogsOpen ? "Hide setup logs" : "View setup logs"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {setupChecks.map((check) => {
+                  const ok = runnerSetupStatus ? runnerSetupStatus[check.key] : false
+                  return (
+                    <div key={check.key} className="rounded-xl bg-black/20 border border-white/[0.06] p-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-white">{check.label}</p>
+                        <p className="text-[11px] text-white/30">{ok ? "Ready" : "Needs setup"}</p>
+                      </div>
+                      {ok ? (
+                        <Check className="h-4 w-4 text-green-400" />
+                      ) : (
+                        <X className="h-4 w-4 text-yellow-400" />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {runnerSetupStatus?.missingDependencies?.length ? (
+                <div className="rounded-xl bg-yellow-500/5 border border-yellow-500/20 p-3 text-xs text-yellow-200">
+                  Missing dependencies: {runnerSetupStatus.missingDependencies.join(", ")}
+                </div>
+              ) : null}
+
+              {runnerSetupLogsOpen && (
+                <div className="rounded-xl bg-black/50 border border-white/[0.08] p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Setup Logs</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-white/40 hover:text-white"
+                      onClick={() => fetchRunnerSetupStatus(true)}
+                    >
+                      Refresh Logs
+                    </Button>
+                  </div>
+                  {runnerSetupLogs.length ? (
+                    <div className="max-h-64 overflow-y-auto font-mono text-xs text-zinc-400 space-y-0.5 custom-scrollbar">
+                      {runnerSetupLogs.map((line, index) => (
+                        <p key={index}>{line}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/20 text-center py-6">No setup logs available.</p>
+                  )}
+                </div>
               )}
+            </div>
+
+            {/* Website health table */}
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-white">Websites</h3>
+                  <p className="text-xs text-white/40">Deployment health for each project on the runner.</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/10 text-white/60 hover:text-white rounded-xl"
+                  onClick={fetchVpsStatus}
+                >
+                  Refresh list
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-white/60">
+                  <thead>
+                    <tr className="text-left text-[11px] text-white/30">
+                      <th className="py-2 pr-4">Project</th>
+                      <th className="py-2 pr-4">Domain</th>
+                      <th className="py-2 pr-4">Port</th>
+                      <th className="py-2 pr-4">Process</th>
+                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4">Health</th>
+                      <th className="py-2 pr-4">CPU</th>
+                      <th className="py-2 pr-4">Memory</th>
+                      <th className="py-2 pr-4">Restarts</th>
+                      <th className="py-2 pr-4">Last Deploy</th>
+                      <th className="py-2 pr-4">Last Health</th>
+                      <th className="py-2 pr-4">Last Error</th>
+                      <th className="py-2 pr-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vpsWebsites.length === 0 ? (
+                      <tr>
+                        <td colSpan={13} className="py-6 text-center text-white/30">
+                          No websites deployed.
+                        </td>
+                      </tr>
+                    ) : (
+                      vpsWebsites.map((site) => (
+                        <tr key={site.id} className="border-t border-white/[0.04]">
+                          <td className="py-3 pr-4">
+                            <div>
+                              <p className="text-white/80 font-medium">{site.name || site.projectId || site.id}</p>
+                              <p className="text-[10px] text-white/30">{site.id}</p>
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4">{site.domain || "—"}</td>
+                          <td className="py-3 pr-4">{site.port ?? "—"}</td>
+                          <td className="py-3 pr-4">{site.processName || "—"}</td>
+                          <td className="py-3 pr-4">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 h-5 rounded-full ${
+                                site.status === "running"
+                                  ? "border-green-500/30 text-green-500 bg-green-500/5"
+                                  : site.status === "failed"
+                                    ? "border-red-500/30 text-red-500 bg-red-500/5"
+                                    : "border-white/10 text-white/40 bg-white/5"
+                              }`}
+                            >
+                              {site.status || "unknown"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 h-5 rounded-full ${
+                                site.health === "healthy"
+                                  ? "border-green-500/30 text-green-500 bg-green-500/5"
+                                  : site.health === "unhealthy"
+                                    ? "border-red-500/30 text-red-500 bg-red-500/5"
+                                    : "border-white/10 text-white/40 bg-white/5"
+                              }`}
+                            >
+                              {site.health || "unknown"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 pr-4">{site.cpu ?? "—"}</td>
+                          <td className="py-3 pr-4">{site.memory ?? "—"}</td>
+                          <td className="py-3 pr-4">{site.restartCount ?? "—"}</td>
+                          <td className="py-3 pr-4">{site.lastDeploy ? formatDateTime(site.lastDeploy) : "—"}</td>
+                          <td className="py-3 pr-4">
+                            {site.lastHealthCheck ? formatDateTime(site.lastHealthCheck) : "—"}
+                          </td>
+                          <td className="py-3 pr-4 text-red-400">{site.lastError || "—"}</td>
+                          <td className="py-3 pr-4">
+                            <div className="flex flex-wrap gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-white/10 text-white/60"
+                                onClick={() => handleWebsiteAction(site.id, "start")}
+                              >
+                                Start
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-white/10 text-white/60"
+                                onClick={() => handleWebsiteAction(site.id, "stop")}
+                              >
+                                Stop
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-white/10 text-white/60"
+                                onClick={() => handleWebsiteAction(site.id, "restart")}
+                              >
+                                Restart
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-white/10 text-white/60"
+                                onClick={() => handleWebsiteAction(site.id, "health-check")}
+                              >
+                                Health Check
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-white/10 text-white/60"
+                                onClick={() => {
+                                  setSelectedWebsiteId(site.id)
+                                  fetchVpsLogs(site.id)
+                                }}
+                              >
+                                Logs
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-red-500/20 text-red-400 hover:bg-red-500/10"
+                                onClick={() => handleWebsiteAction(site.id, "destroy-runtime")}
+                              >
+                                Destroy Runtime
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Logs viewer */}
+            <div className="rounded-2xl bg-black/40 border border-white/[0.06] p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">Logs</p>
+                  <p className="text-xs text-white/40">
+                    {selectedWebsite ? `${selectedWebsite.name || selectedWebsite.id} • ${selectedWebsite.domain || "—"}` : "Select a website to view logs"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1 rounded-full bg-white/[0.03] border border-white/[0.06] p-1">
+                    {(["deploy", "build", "runtime", "error", "health"] as RunnerLogType[]).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => setVpsLogType(type)}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                          vpsLogType === type
+                            ? "bg-white/10 text-white"
+                            : "text-white/40 hover:text-white/70"
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-white/40">
+                    Auto-refresh
+                    <Switch checked={logsAutoRefresh} onCheckedChange={setLogsAutoRefresh} />
+                  </div>
+                  <Input
+                    type="number"
+                    min={50}
+                    max={1000}
+                    value={vpsLogLines}
+                    onChange={(event) => {
+                      const value = Number.parseInt(event.target.value, 10)
+                      if (Number.isNaN(value)) return
+                      setVpsLogLines(Math.min(Math.max(value, 50), 1000))
+                    }}
+                    className="h-8 w-24 bg-white/[0.03] border-white/10 text-xs text-white/60"
+                  />
+                  <Button size="sm" variant="ghost" className="h-7" onClick={() => fetchVpsLogs()}>
+                    Refresh
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7" onClick={handleCopyLogs}>
+                    Copy
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7" onClick={handleDownloadLogs}>
+                    Download
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-4">
+                {vpsLogs.length > 0 ? (
+                  <div className="max-h-[600px] overflow-y-auto font-mono text-xs space-y-0.5 custom-scrollbar">
+                    {vpsLogs.map((line, i) => {
+                      const lowered = line.toLowerCase()
+                      const lineClass = lowered.includes("error")
+                        ? "text-red-400"
+                        : lowered.includes("warn")
+                          ? "text-yellow-400"
+                          : "text-zinc-400"
+                      return (
+                        <p key={i} className={lineClass}>
+                          {line}
+                        </p>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/20 text-center py-8">No logs available.</p>
+                )}
+              </div>
             </div>
           </div>
         )}
