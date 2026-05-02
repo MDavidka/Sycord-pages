@@ -86,6 +86,10 @@ const availableIcons = [
   { name: "Activity", icon: Activity },
 ]
 
+const DEFAULT_LOG_LINES = 200
+const MIN_LOG_LINES = 50
+const MAX_LOG_LINES = 1000
+
 interface User {
   userId: string
   email: string
@@ -212,8 +216,8 @@ export default function AdminPage() {
   const [vpsLogs, setVpsLogs] = useState<string[]>([])
   const [vpsAction, setVpsAction] = useState<RunnerAction | null>(null)
   const [vpsLogType, setVpsLogType] = useState<RunnerLogType>("runtime")
-  const [vpsLogLines, setVpsLogLines] = useState<number>(200)
-  const [vpsLogLinesInput, setVpsLogLinesInput] = useState<string>("200")
+  const [vpsLogLines, setVpsLogLines] = useState<number>(DEFAULT_LOG_LINES)
+  const [vpsLogLinesInput, setVpsLogLinesInput] = useState<string>(String(DEFAULT_LOG_LINES))
   const [vpsWebsites, setVpsWebsites] = useState<RunnerWebsite[]>([])
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
   const [runnerSetupStatus, setRunnerSetupStatus] = useState<RunnerSetupStatus | null>(null)
@@ -269,10 +273,9 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (activeTab === "runner") {
-      fetchVpsStatus()
-      fetchRunnerSetupStatus()
+      refreshRunner()
     }
-  }, [activeTab, fetchRunnerSetupStatus, fetchVpsStatus])
+  }, [activeTab, refreshRunner])
 
   useEffect(() => {
     if (!selectedWebsiteId) {
@@ -1728,20 +1731,20 @@ export default function AdminPage() {
                   </div>
                   <Input
                     type="number"
-                    min={50}
-                    max={1000}
+                    min={MIN_LOG_LINES}
+                    max={MAX_LOG_LINES}
                     value={vpsLogLinesInput}
                     onChange={(event) => {
                       const nextValue = event.target.value
                       setVpsLogLinesInput(nextValue)
                       const parsed = Number.parseInt(nextValue, 10)
-                      if (!Number.isNaN(parsed) && parsed >= 50 && parsed <= 1000) {
+                      if (!Number.isNaN(parsed) && parsed >= MIN_LOG_LINES && parsed <= MAX_LOG_LINES) {
                         setVpsLogLines(parsed)
                       }
                     }}
                     onBlur={() => {
                       const parsed = Number.parseInt(vpsLogLinesInput, 10)
-                      if (Number.isNaN(parsed) || parsed < 50 || parsed > 1000) {
+                      if (Number.isNaN(parsed) || parsed < MIN_LOG_LINES || parsed > MAX_LOG_LINES) {
                         setVpsLogLinesInput(String(vpsLogLines))
                       }
                     }}
