@@ -76,7 +76,7 @@ export const buildProject = async (currentDir: string, buildLogPath: string) => 
        // Ignore if package.json doesn't exist or is invalid
     }
 
-    const command = 'npm install --no-fund --no-audit --legacy-peer-deps && npm run build';
+    const command = `set -a && source ${path.join(path.dirname(currentDir), '..', '..', 'env', path.basename(path.dirname(currentDir)) + '.env')} || true && set +a && npm install --no-fund --no-audit --legacy-peer-deps && npm run build`;
     const { stdout, stderr } = await execAsync(command, { cwd: currentDir });
 
     // We append the logs, but first redact env values if they somehow get printed

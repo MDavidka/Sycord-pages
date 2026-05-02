@@ -53,7 +53,21 @@ export default function VpsRunnerAdmin() {
 
   const handleAction = async (action: string) => {
     try {
-      await fetch(`/api/admin/vps-runner/runner/${action}`, { method: 'POST' })
+      if (action === 'start' || action === 'setup') {
+         // Use the SSH setup endpoint to reliably start the runner or run setup
+         await fetch('/api/vps/setup', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ action: action === 'start' ? 'start_server' : 'init' })
+         });
+      } else {
+         await fetch(`/api/admin/vps-runner/runner/${action}`, { method: 'POST' })
+      }
+      fetchStatus()
+    } catch (e) {
+      console.error(e)
+    }
+  }`, { method: 'POST' })
       fetchStatus()
     } catch (e) {
       console.error(e)

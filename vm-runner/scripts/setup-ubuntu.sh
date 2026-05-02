@@ -30,6 +30,12 @@ sudo mkdir -p /srv/sycord/proxy
 
 sudo chown -R $USER:$USER /srv/sycord
 
+# Configure Nginx to include our proxy configs
+if ! grep -q 'include /srv/sycord/proxy/\*\.conf;' /etc/nginx/nginx.conf; then
+    sudo sed -i '/include \/etc\/nginx\/conf\.d\/\*\.conf;/a \    include \/srv\/sycord\/proxy\/\*\.conf;' /etc/nginx/nginx.conf
+    sudo systemctl restart nginx || true
+fi
+
 # Check cloudflared
 if ! command -v cloudflared &> /dev/null; then
     echo "Warning: cloudflared not found. Please install it to use Cloudflare Tunnels."
@@ -41,5 +47,9 @@ echo "Installing VM runner service..."
 cd "$(dirname "$0")/.."
 npm install
 npm run build
+
+# Install and enable the systemd service
+chmod +x $(dirname "$0")/install-service.sh
+bash $(dirname "$0")/install-service.sh
 
 echo "Setup Complete!"

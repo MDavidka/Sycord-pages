@@ -1,3 +1,4 @@
+import path from 'path';
 import { exec } from 'child_process';
 import util from 'util';
 import { loadState } from './state';
@@ -14,9 +15,11 @@ export const startProcess = async (projectId: string, currentDir: string, port: 
     const exists = pm2List.some((p: any) => p.name === processName);
 
     if (exists) {
-       await execAsync(`PORT=${port} pm2 restart ${processName} --update-env`, { cwd: currentDir });
+       const envFile = path.join(path.dirname(currentDir), '..', '..', 'env', path.basename(path.dirname(currentDir)) + '.env');
+       await execAsync(`PORT=${port} pm2 restart ${processName} --update-env`, { cwd: currentDir, env: { ...process.env, DOTENV_CONFIG_PATH: envFile, PORT: port.toString() } });
     } else {
-       await execAsync(`PORT=${port} pm2 start npm --name ${processName} -- run start`, { cwd: currentDir });
+       const envFile = path.join(path.dirname(currentDir), '..', '..', 'env', path.basename(path.dirname(currentDir)) + '.env');
+       await execAsync(`PORT=${port} pm2 start npm --name ${processName} --node-args="-r dotenv/config" -- run start`, { cwd: currentDir, env: { ...process.env, DOTENV_CONFIG_PATH: envFile, PORT: port.toString() } });
     }
 
     await execAsync(`pm2 save`);
