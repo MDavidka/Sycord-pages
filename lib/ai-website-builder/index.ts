@@ -16,6 +16,7 @@ import { callModel, extractJson, type ChatMessage, type ModelSelection } from "@
 
 import type {
   BuilderFile,
+  BuilderEvent,
   BuilderOptions,
   ComponentNode,
   CtaPlan,
@@ -39,11 +40,13 @@ import type {
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
 import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
+import { autoFixGeneratedProject } from "./auto-fix"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
 export type {
+  BuilderEvent,
   BuilderOptions,
   EnvVarRequirement,
   GeneratedProjectManifest,
@@ -111,6 +114,18 @@ const ALLOWED_COMPONENTS: ReadonlySet<ComponentNode["component"]> = new Set<Comp
   "PricingCard",
   "FeatureCard",
 ])
+
+function pushEvent(events: BuilderEvent[], stage: BuilderEvent["stage"], status: BuilderEvent["status"], title: string, message: string, extra?: Partial<BuilderEvent>) {
+  events.push({
+    id: `${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    stage,
+    status,
+    title,
+    message,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  })
+}
 
 function isProvidedModel(model: ModelSelection | undefined): model is ModelSelection {
   return Boolean(model && typeof model.id === "string" && typeof model.provider === "string")
@@ -1040,20 +1055,26 @@ export async function runAIWebsiteBuilder(
   options: BuilderOptions = {},
 ): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
+  const events: BuilderEvent[] = []
+  pushEvent(events, "queued", "running", "Queued", "Builder queued and starting")
   logs.push({
     step: "start",
     detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
   })
 
   // 1. Plan (with repair).
+  pushEvent(events, "planning", "running", "Building plan", "Planning website structure")
   const manifest = await planManifest(prompt, options, logs)
+  pushEvent(events, "planning", "success", "Plan complete", `Planned ${manifest.pages.length} pages`)
   logs.push({
     step: "plan",
     detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
   })
 
   // 2. Render pages.
+  pushEvent(events, "designing", "running", "Creating shadcn component tree", "Preparing sections and component plan")
   const required = pickRequiredUiComponents(manifest)
+  pushEvent(events, "coding", "running", "Generating Next.js files", "Rendering page files")
   const pageFiles: BuilderFile[] = []
   for (const page of manifest.pages) {
     const { file } = renderPageFile(manifest, page)
@@ -1077,13 +1098,37 @@ export async function runAIWebsiteBuilder(
     ...(options.project?.connectedIntegrationIds ?? []),
     ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
-  const build = runBuildValidation(allFiles, {
+  pushEvent(events, "validating", "running", "Checking TypeScript safety", "Running generated file validation")
+  let build = runBuildValidation(allFiles, {
     needsDatabase: manifest.needsDatabase,
     deploymentMode: manifest.deploymentMode,
     connectedIntegrationIds,
   })
   if (!build.ok) {
     logs.push({ step: "build-validate", detail: `Build validation failed: ${build.errors.join("; ")}` })
+    pushEvent(events, "error-detected", "error", "Build failed: analyzing logs", `Detected ${build.errors.length} issues`)
+    const autoFix = await autoFixGeneratedProject({
+      files: allFiles,
+      manifest,
+      errors: build.errors,
+      warnings: build.warnings,
+      logs,
+      model: options.model,
+      maxAttempts: 2,
+    })
+    events.push(...autoFix.events)
+    if (autoFix.fixed) {
+      pushEvent(events, "rebuilding", "running", "Re-running validation", "Validating after fixes")
+      build = runBuildValidation(autoFix.files, {
+        needsDatabase: manifest.needsDatabase,
+        deploymentMode: manifest.deploymentMode,
+        connectedIntegrationIds,
+      })
+      allFiles.length = 0
+      allFiles.push(...autoFix.files)
+      pushEvent(events, build.ok ? "ready" : "failed", build.ok ? "success" : "error", build.ok ? "Build is clean" : "Build still failing", build.ok ? "Auto-fix repaired generated code" : "Auto-fix could not resolve all issues")
+    }
+    ;(build as any).autoFix = autoFix
   } else {
     logs.push({ step: "build-validate", detail: `Build validation passed (${build.warnings.length} warnings)` })
   }
@@ -1119,6 +1164,7 @@ export async function runAIWebsiteBuilder(
 
   const qualityScore = computeQualityScore(manifest, build)
   logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
+  if (build.ok) pushEvent(events, "ready", "success", "Ready to deploy", "Build and validation completed")
 
   // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
@@ -1137,6 +1183,15 @@ export async function runAIWebsiteBuilder(
     manifest,
     files: allFiles,
     logs,
+    events,
+    autoFix: (build as any).autoFix ? {
+      attempted: true,
+      attempts: (build as any).autoFix.attempts,
+      fixed: (build as any).autoFix.fixed,
+      errorsBefore: (build as any).autoFix.errorsBefore,
+      errorsAfter: build.errors,
+      changedFiles: (build as any).autoFix.changedFiles,
+    } : undefined,
     build,
     warnings: advisoryWarnings,
     qualityScore,
