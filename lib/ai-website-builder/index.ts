@@ -116,10 +116,9 @@ function isProvidedModel(model: ModelSelection | undefined): model is ModelSelec
   return Boolean(model && typeof model.id === "string" && typeof model.provider === "string")
 }
 
-function pickModel(opts: BuilderOptions, role: "planner" | "page" | "repair"): ModelSelection {
+function pickModel(opts: BuilderOptions): ModelSelection {
   if (isProvidedModel(opts.model)) return opts.model
-  if (role === "page") return DEFAULT_BEST_MODEL
-  return FALLBACK_MODEL
+  return DEFAULT_BEST_MODEL
 }
 
 async function callAIAgent(
@@ -894,7 +893,7 @@ function buildPlannerUserContent(prompt: string, project?: ProjectContext): stri
 }
 
 async function planManifest(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<GeneratedProjectManifest> {
-  const model = pickModel(opts, "planner")
+  const model = pickModel(opts)
   let raw = ""
   try {
     raw = await callAIAgent(
@@ -933,7 +932,7 @@ async function repairManifest(
   opts: BuilderOptions,
   logs: PipelineLog[],
 ): Promise<GeneratedProjectManifest | null> {
-  const model = pickModel(opts, "repair")
+  const model = pickModel(opts)
   try {
     const raw = await callAIAgent(
       [

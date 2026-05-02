@@ -125,7 +125,7 @@ function parseModelSelection(value: unknown): ModelSelection | undefined {
   const id = typeof v.id === "string" ? v.id.trim() : ""
   const provider = typeof v.provider === "string" ? v.provider.trim() : ""
   if (!id || !provider) return undefined
-  const allowedProviders = new Set(["xAI", "OpenRouter", "Google"])
+  const allowedProviders = new Set(["xAI", "OpenRouter", "Google", "DeepSeek"])
   if (!allowedProviders.has(provider)) return undefined
   return {
     id,
