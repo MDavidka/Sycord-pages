@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
@@ -270,7 +270,7 @@ export default function AdminPage() {
     if (activeTab === "runner") {
       refreshRunner()
     }
-  }, [activeTab])
+  }, [activeTab, refreshRunner])
 
   useEffect(() => {
     if (!selectedWebsiteId) {
@@ -278,7 +278,7 @@ export default function AdminPage() {
       return
     }
     fetchVpsLogs(selectedWebsiteId)
-  }, [selectedWebsiteId, vpsLogType, vpsLogLines])
+  }, [selectedWebsiteId, fetchVpsLogs])
 
   useEffect(() => {
     if (!logsAutoRefresh || !selectedWebsiteId) return
@@ -286,7 +286,7 @@ export default function AdminPage() {
       fetchVpsLogs(selectedWebsiteId)
     }, 8000)
     return () => clearInterval(interval)
-  }, [logsAutoRefresh, selectedWebsiteId, vpsLogType, vpsLogLines])
+  }, [logsAutoRefresh, selectedWebsiteId, fetchVpsLogs])
 
   useEffect(() => {
     if (!vpsWebsites.length) return
@@ -503,7 +503,7 @@ export default function AdminPage() {
   const blockedCount = users.filter(u => u.isBlocked).length
 
   // VPS Runner functions
-  const fetchVpsStatus = async () => {
+  const fetchVpsStatus = useCallback(async () => {
     setVpsLoading(true)
     try {
       const [statusRes, websitesRes] = await Promise.all([
@@ -526,9 +526,9 @@ export default function AdminPage() {
     } finally {
       setVpsLoading(false)
     }
-  }
+  }, [])
 
-  const fetchRunnerSetupStatus = async (includeLogs: boolean = false) => {
+  const fetchRunnerSetupStatus = useCallback(async (includeLogs: boolean = false) => {
     setRunnerSetupLoading(true)
     try {
       const res = await fetch(`/api/admin/vps-runner/setup${includeLogs ? "?logs=1" : ""}`)
@@ -546,11 +546,11 @@ export default function AdminPage() {
     } finally {
       setRunnerSetupLoading(false)
     }
-  }
+  }, [])
 
-  const refreshRunner = async () => {
+  const refreshRunner = useCallback(async () => {
     await Promise.all([fetchVpsStatus(), fetchRunnerSetupStatus()])
-  }
+  }, [fetchRunnerSetupStatus, fetchVpsStatus])
 
   const handleWebsiteAction = async (id: string, action: WebsiteAction) => {
     try {
@@ -571,7 +571,7 @@ export default function AdminPage() {
     }
   }
 
-  const fetchVpsLogs = async (id?: string) => {
+  const fetchVpsLogs = useCallback(async (id?: string) => {
     try {
       const targetId = id || selectedWebsiteId
       if (!targetId) return
@@ -583,7 +583,7 @@ export default function AdminPage() {
     } catch (err) {
       console.error("Failed to fetch VPS logs:", err)
     }
-  }
+  }, [selectedWebsiteId, vpsLogLines, vpsLogType])
 
   const handleVpsAction = async (
     action: RunnerAction,
