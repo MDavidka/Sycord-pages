@@ -213,6 +213,7 @@ export default function AdminPage() {
   const [vpsAction, setVpsAction] = useState<RunnerAction | null>(null)
   const [vpsLogType, setVpsLogType] = useState<RunnerLogType>("runtime")
   const [vpsLogLines, setVpsLogLines] = useState<number>(200)
+  const [vpsLogLinesInput, setVpsLogLinesInput] = useState<string>("200")
   const [vpsWebsites, setVpsWebsites] = useState<RunnerWebsite[]>([])
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
   const [runnerSetupStatus, setRunnerSetupStatus] = useState<RunnerSetupStatus | null>(null)
@@ -268,25 +269,26 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (activeTab === "runner") {
-      refreshRunner()
+      fetchVpsStatus()
+      fetchRunnerSetupStatus()
     }
-  }, [activeTab, refreshRunner])
+  }, [activeTab, fetchRunnerSetupStatus, fetchVpsStatus])
 
   useEffect(() => {
     if (!selectedWebsiteId) {
       setVpsLogs([])
       return
     }
-    fetchVpsLogs(selectedWebsiteId)
-  }, [selectedWebsiteId, fetchVpsLogs])
+    fetchVpsLogs(selectedWebsiteId, vpsLogType, vpsLogLines)
+  }, [selectedWebsiteId, vpsLogLines, vpsLogType, fetchVpsLogs])
 
   useEffect(() => {
     if (!logsAutoRefresh || !selectedWebsiteId) return
     const interval = setInterval(() => {
-      fetchVpsLogs(selectedWebsiteId)
+      fetchVpsLogs(selectedWebsiteId, vpsLogType, vpsLogLines)
     }, 8000)
     return () => clearInterval(interval)
-  }, [logsAutoRefresh, selectedWebsiteId, fetchVpsLogs])
+  }, [logsAutoRefresh, selectedWebsiteId, vpsLogLines, vpsLogType, fetchVpsLogs])
 
   useEffect(() => {
     if (!vpsWebsites.length) return
@@ -571,19 +573,18 @@ export default function AdminPage() {
     }
   }
 
-  const fetchVpsLogs = useCallback(async (id?: string) => {
+  const fetchVpsLogs = useCallback(async (id: string, logType: RunnerLogType, logLines: number) => {
     try {
-      const targetId = id || selectedWebsiteId
-      if (!targetId) return
+      if (!id) return
       const res = await fetch(
-        `/api/admin/vps-runner/websites/${targetId}/logs?type=${vpsLogType}&limit=${vpsLogLines}`,
+        `/api/admin/vps-runner/websites/${id}/logs?type=${logType}&limit=${logLines}`,
       )
       const data = await res.json().catch(() => null)
       setVpsLogs(Array.isArray(data?.logs) ? data.logs : [])
     } catch (err) {
       console.error("Failed to fetch VPS logs:", err)
     }
-  }, [selectedWebsiteId, vpsLogLines, vpsLogType])
+  }, [])
 
   const handleVpsAction = async (
     action: RunnerAction,
@@ -1673,7 +1674,7 @@ export default function AdminPage() {
                                 className="h-7 border-white/10 text-white/60"
                                 onClick={() => {
                                   setSelectedWebsiteId(site.id)
-                                  fetchVpsLogs(site.id)
+                                  fetchVpsLogs(site.id, vpsLogType, vpsLogLines)
                                 }}
                               >
                                 Logs
@@ -1729,15 +1730,33 @@ export default function AdminPage() {
                     type="number"
                     min={50}
                     max={1000}
-                    value={vpsLogLines}
+                    value={vpsLogLinesInput}
                     onChange={(event) => {
-                      const value = Number.parseInt(event.target.value, 10)
-                      if (Number.isNaN(value)) return
-                      setVpsLogLines(Math.min(Math.max(value, 50), 1000))
+                      const nextValue = event.target.value
+                      setVpsLogLinesInput(nextValue)
+                      const parsed = Number.parseInt(nextValue, 10)
+                      if (!Number.isNaN(parsed) && parsed >= 50 && parsed <= 1000) {
+                        setVpsLogLines(parsed)
+                      }
+                    }}
+                    onBlur={() => {
+                      const parsed = Number.parseInt(vpsLogLinesInput, 10)
+                      if (Number.isNaN(parsed) || parsed < 50 || parsed > 1000) {
+                        setVpsLogLinesInput(String(vpsLogLines))
+                      }
                     }}
                     className="h-8 w-24 bg-white/[0.03] border-white/10 text-xs text-white/60"
                   />
-                  <Button size="sm" variant="ghost" className="h-7" onClick={() => fetchVpsLogs()}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7"
+                    onClick={() => {
+                      if (selectedWebsiteId) {
+                        fetchVpsLogs(selectedWebsiteId, vpsLogType, vpsLogLines)
+                      }
+                    }}
+                  >
                     Refresh
                   </Button>
                   <Button size="sm" variant="ghost" className="h-7" onClick={handleCopyLogs}>

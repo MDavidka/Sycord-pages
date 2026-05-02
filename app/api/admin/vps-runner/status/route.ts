@@ -83,7 +83,9 @@ const normalizeStatus = (data: any, ok: boolean): RunnerStatus => {
   const cpuUsage = parseNumber(cpuRaw?.usagePercent ?? cpuRaw?.percent ?? cpuRaw)
   const cpuCores = parseNumber(cpuRaw?.cores ?? data.cpuCores ?? data.cores)
   const cpuLoadAvg = Array.isArray(cpuRaw?.loadAvg ?? data.loadAvg)
-    ? (cpuRaw?.loadAvg ?? data.loadAvg).map((entry: unknown) => parseNumber(entry)).filter((entry) => entry != null)
+    ? (cpuRaw?.loadAvg ?? data.loadAvg)
+        .map((entry: unknown) => parseNumber(entry))
+        .filter((entry): entry is number => entry != null && !Number.isNaN(entry))
     : []
   const cpu =
     cpuUsage == null && cpuCores == null && cpuLoadAvg.length === 0
