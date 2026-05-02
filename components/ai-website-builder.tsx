@@ -43,6 +43,8 @@ const DEFAULT_MODEL_ID = "grok-4-1-fast-non-reasoning"
 const MODELS: ModelOption[] = [
   { id: "grok-4-1-fast-non-reasoning", name: "Grok 4.1 Fast", provider: "xAI", fast: true },
   { id: "openai/gpt-oss-20b:free", name: "GPT-OSS 20B Free", provider: "OpenRouter" },
+  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "DeepSeek", fast: true },
+  { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "DeepSeek" },
   { id: "gemini-3.1-flash-preview", name: "Gemini 3.1 Flash (Fast)", provider: "Google", fast: true },
   { id: "gemini-3.1-pro-preview", name: "Gemini 3.1 Pro Preview (Smart)", provider: "Google" },
 ]

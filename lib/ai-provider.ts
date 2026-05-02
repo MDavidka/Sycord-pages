@@ -59,6 +59,12 @@ function providerConfig(provider: string): ProviderConfig {
       apiKey: process.env.XAI_API_KEY,
     }
   }
+  if (provider === "DeepSeek") {
+    return {
+      url: "https://api.deepseek.com/v1/chat/completions",
+      apiKey: process.env.DEEPSEEK_API,
+    }
+  }
   // Default to OpenRouter for any other provider string.
   return {
     url: "https://openrouter.ai/api/v1/chat/completions",
