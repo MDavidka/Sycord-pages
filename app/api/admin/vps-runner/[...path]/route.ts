@@ -13,7 +13,8 @@ async function proxyRequest(request: Request, path: string[]) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const url = `${VPS_SERVER_URL}/api/${path.join("/")}`
+    const query = new URL(request.url).search
+    const url = `${VPS_SERVER_URL}/api/${path.join("/")}${query}`
     
     let body = undefined
     if (request.method !== "GET" && request.method !== "HEAD") {

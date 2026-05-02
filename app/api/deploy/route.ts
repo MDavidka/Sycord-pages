@@ -231,12 +231,10 @@ function validateFilesForDeployment(
 
 function deployErrorFromResponse(data: any): string | null {
   if (!data?.success) return data?.error || "VM deployment failed"
-  if (data?.build?.built === false || data?.build?.error || data?.build === false) {
-    return data?.build?.error || "VM build failed"
-  }
-  if (data?.build !== true && data?.build?.built !== true) return "VM build did not complete successfully"
-  if (data?.running !== true && data?.health?.ok !== true) return data?.health?.error || "Next server process is not running"
-  if (data?.health_ok !== true && data?.health?.ok !== true) return data?.health?.error || "Next server health check failed"
+  if (data?.build?.ok === false) return data?.build?.error || "VM build failed"
+  if (data?.running !== true) return "Next server process is not running"
+  if (data?.health?.ok !== true) return data?.health?.error || "Next server health check failed"
+  if (data?.health?.htmlOk === false) return "Next server root does not serve valid HTML"
   if (!data?.domain) return "VM deploy did not return a live domain"
   return null
 }
@@ -375,7 +373,10 @@ export async function POST(request: Request) {
         }
         const triggerRes = await fetch(`${SYCORD_DEPLOY_API_BASE}/api/deploy/${projectId}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.VPS_RUNNER_TOKEN || ""}`
+          },
           body: JSON.stringify(deployBody),
         })
         const triggerData = await triggerRes.json().catch(() => ({}))

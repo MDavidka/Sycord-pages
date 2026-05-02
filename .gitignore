@@ -33,3 +33,7 @@ next-env.d.ts
 __pycache__/
 *.py[cod]
 *$py.class
+vm-runner/node_modules
+vm-runner/dist
+vm-runner/node_modules/
+vm-runner/dist/
