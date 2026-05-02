@@ -659,6 +659,7 @@ export default function SiteSettingsPage() {
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
+  const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
   const deploymentMode = useMemo(
     () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
     [generatedPages, project],
@@ -817,6 +818,7 @@ export default function SiteSettingsPage() {
             console.log("[v0] Project data fetched:", data ? "Success" : "Empty")
             if (data.message) throw new Error(data.message)
             setProject(data)
+            if (data.deploymentRuntime) setDeploymentRuntime(data.deploymentRuntime)
             setShopName(data.businessName || "")
             setProfileImage(data.profileImage || "")
             setLogoLoadError(false) // Reset error state when loading new data
@@ -2440,12 +2442,12 @@ export default function SiteSettingsPage() {
                         Deployments run npm install, npm run build, then PORT=&lt;allocated&gt; npm run start. Live status requires build, server process, and health check success.
                       </CardDescription>
                     </CardHeader>
-                    {deployResult && (
+                    {(deployResult || deploymentRuntime) && (
                       <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                        <div>Build: {deployResult.build ? "ok" : "pending"}</div>
-                        <div>Server: {deployResult.running ? "running" : "pending"}</div>
-                        <div>Health: {deployResult.health_ok ? "ok" : "pending"}</div>
-                        <div>Port: {deployResult.port ?? "allocated by VM"}</div>
+                        <div>Build: {deployResult?.build ?? deploymentRuntime?.build ? "ok" : "pending"}</div>
+                        <div>Server: {deployResult?.running ?? deploymentRuntime?.running ? "running" : "pending"}</div>
+                        <div>Health: {deployResult?.health_ok ?? deploymentRuntime?.health_ok ? "ok" : "pending"}</div>
+                        <div>Port: {deployResult?.port ?? deploymentRuntime?.port ?? "allocated by VM"}</div>
                       </CardContent>
                     )}
                   </Card>
