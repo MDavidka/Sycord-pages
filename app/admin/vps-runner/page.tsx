@@ -67,12 +67,7 @@ export default function VpsRunnerAdmin() {
     } catch (e) {
       console.error(e)
     }
-  }`, { method: 'POST' })
-      fetchStatus()
-    } catch (e) {
-      console.error(e)
-    }
-  }
+
 
   const handleSiteAction = async (projectId: string, action: string) => {
     try {
@@ -211,4 +206,5 @@ export default function VpsRunnerAdmin() {
       )}
     </div>
   )
+}
 }
