@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 
-const VPS_SERVER_URL = process.env.VPS_SERVER_URL || ""
+const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
 const VPS_RUNNER_TOKEN = process.env.VPS_RUNNER_TOKEN || ""
 
 export async function assertAdmin() {
@@ -12,16 +12,12 @@ export async function assertAdmin() {
 }
 
 export async function proxyRunner(path: string, init?: RequestInit) {
-  if (!VPS_SERVER_URL || !VPS_RUNNER_TOKEN) {
-    return new Response(JSON.stringify({ success: false, error: "Runner is not configured" }), { status: 500 })
-  }
-
   try {
     const res = await fetch(`${VPS_SERVER_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${VPS_RUNNER_TOKEN}`,
+        ...(VPS_RUNNER_TOKEN ? { "Authorization": `Bearer ${VPS_RUNNER_TOKEN}` } : {}),
         ...(init?.headers || {}),
       },
     })
