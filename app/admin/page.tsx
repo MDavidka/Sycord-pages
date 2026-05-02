@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -91,15 +91,16 @@ const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
   { id: "server" as const, label: "Server", icon: Server },
-  { id: "vps" as const, label: "VPS Runner", icon: Activity },
+  { id: "runner" as const, label: "Runner", icon: Activity },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "vps" | "tickets" | "paptos"
+type TabId = "overview" | "users" | "server" | "runner" | "tickets" | "paptos"
 
 export default function AdminPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { data: session } = useSession()
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
@@ -112,12 +113,12 @@ export default function AdminPage() {
   const [editingIcon, setEditingIcon] = useState<string | null>(null)
   const [uploadingIcon, setUploadingIcon] = useState<string | null>(null)
 
-  // VPS Runner State
+  // Runner State
   const [vpsStatus, setVpsStatus] = useState<any>(null)
   const [vpsLoading, setVpsLoading] = useState(false)
   const [vpsLogs, setVpsLogs] = useState<string[]>([])
   const [vpsAction, setVpsAction] = useState<string | null>(null)
-  const [vpsLogType, setVpsLogType] = useState<string>("all")
+  const [vpsLogType, setVpsLogType] = useState<string>("runtime")
   const [vpsLogLines, setVpsLogLines] = useState<number>(200)
   const [vpsWebsites, setVpsWebsites] = useState<any[]>([])
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
@@ -331,7 +332,7 @@ export default function AdminPage() {
 
   const blockedCount = users.filter(u => u.isBlocked).length
 
-  // VPS Runner functions
+  // Runner functions
   const fetchVpsStatus = async () => {
     setVpsLoading(true)
     try {
@@ -351,7 +352,7 @@ export default function AdminPage() {
     }
   }
 
-  const handleWebsiteAction = async (id: string, action: "start" | "stop" | "restart" | "destroy") => {
+  const handleWebsiteAction = async (id: string, action: "start" | "stop" | "restart" | "health-check" | "destroy-runtime") => {
     try {
       const res = await fetch(`/api/admin/vps-runner/websites/${id}/action`, {
         method: "POST",
@@ -374,7 +375,7 @@ export default function AdminPage() {
     try {
       const targetId = id || selectedWebsiteId
       if (!targetId) return
-      const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs`)
+      const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs?type=${vpsLogType}&limit=${vpsLogLines}`)
       if (res.ok) {
         const data = await res.json()
         setVpsLogs(Array.isArray(data.logs) ? data.logs : [])
@@ -384,10 +385,10 @@ export default function AdminPage() {
     }
   }
 
-  const handleVpsAction = async (action: "start" | "stop" | "restart") => {
+  const handleVpsAction = async (action: "start" | "stop" | "setup" | "destroy") => {
     setVpsAction(action)
     try {
-      const res = await fetch("/api/vps/restart", {
+      const res = await fetch("/api/admin/vps-runner/action", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
@@ -406,6 +407,11 @@ export default function AdminPage() {
     }
   }
 
+
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab === "runner") setActiveTab("runner")
+  }, [searchParams])
   return (
     <div className="min-h-screen bg-[#101010]">
       {/* Header */}
@@ -888,13 +894,13 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* VPS Runner Tab */}
-        {activeTab === "vps" && (
+        {/* Runner Tab */}
+        {activeTab === "runner" && (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-white">VPS Runner</h2>
-                <p className="text-sm text-white/40">Manage the Flask deployment runner on VPS</p>
+                <h2 className="text-lg font-semibold text-white">Runner</h2>
+                <p className="text-sm text-white/40">Manage the Ubuntu mini-server that builds and runs generated Next.js websites.</p>
               </div>
               <Button
                 variant="ghost"
@@ -1062,13 +1068,13 @@ export default function AdminPage() {
                   Start
                 </Button>
                 <Button
-                  onClick={() => handleVpsAction("restart")}
+                  onClick={() => handleVpsAction("setup")}
                   disabled={!!vpsAction}
                   variant="outline"
                   className="border-white/10 text-white/60 hover:text-white rounded-xl"
                 >
                   {vpsAction === "restart" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <RotateCcw className="h-4 w-4 mr-1.5" />}
-                  Restart
+                  Setup
                 </Button>
                 <Button
                   onClick={() => handleVpsAction("stop")}
@@ -1108,10 +1114,10 @@ export default function AdminPage() {
                         <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => { setSelectedWebsiteId(site.id); fetchVpsLogs(site.id); }}>
                           Logs
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => handleWebsiteAction(site.id, 'restart')}>
-                          Restart
+                        <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => handleWebsiteAction(site.id, 'health-check')}>
+                          Health Check
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8 border-red-500/20 text-red-400 hover:bg-red-500/10" onClick={() => handleWebsiteAction(site.id, 'destroy')}>
+                        <Button size="sm" variant="outline" className="h-8 border-red-500/20 text-red-400 hover:bg-red-500/10" onClick={() => handleWebsiteAction(site.id, 'destroy-runtime')}>
                           Destroy
                         </Button>
                       </div>
