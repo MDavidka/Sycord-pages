@@ -945,7 +945,7 @@ export default function AdminPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/[0.04]">
                   <div className="text-center">
                     <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.runner ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">Flask Runner</p>
+                    <p className="text-[11px] text-white/40">Mini-server</p>
                   </div>
                   <div className="text-center">
                     <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.tunnel ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -953,7 +953,7 @@ export default function AdminPage() {
                   </div>
                   <div className="text-center">
                     <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.httpOk ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">HTTP</p>
+                    <p className="text-[11px] text-white/40">Health</p>
                   </div>
                   <div className="text-center">
                     <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.npmInstalled ? 'bg-green-500' : 'bg-yellow-500'}`} />
