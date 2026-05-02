@@ -482,7 +482,7 @@ export async function POST(request: Request) {
                 "projects.$.cloudflareUrl": vpsUrl,
                 "projects.$.deploymentMode": deploymentMode,
                 "projects.$.lastDeployError": null,
-                "projects.$.lastDeployRuntime": {
+                "projects.$.deploymentRuntime": {
                   build: true,
                   running: true,
                   health_ok: true,
