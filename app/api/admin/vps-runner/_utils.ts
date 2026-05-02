@@ -1,12 +1,13 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { ADMIN_EMAIL } from "@/lib/admin-email"
 
 const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5000"
 const VPS_RUNNER_TOKEN = process.env.VPS_RUNNER_TOKEN || ""
 
 export async function ensureAdmin() {
   const session = await getServerSession(authOptions)
-  return session?.user?.email === "dmarton336@gmail.com"
+  return session?.user?.email === ADMIN_EMAIL
 }
 
 export async function requestRunner(path: string, init: RequestInit = {}) {

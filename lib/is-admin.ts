@@ -1,7 +1,8 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { ADMIN_EMAIL } from "@/lib/admin-email"
 
-const ADMIN_EMAILS = ["dmarton336@gmail.com"]
+const ADMIN_EMAILS = [ADMIN_EMAIL]
 
 export async function isAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)

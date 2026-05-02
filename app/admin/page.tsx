@@ -21,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { ADMIN_EMAIL } from "@/lib/admin-email"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -232,7 +233,7 @@ export default function AdminPage() {
   const [termsOfService, setTermsOfService] = useState("Edit your terms of service here...")
 
   useEffect(() => {
-    if (session?.user?.email !== "dmarton336@gmail.com") {
+    if (session?.user?.email !== ADMIN_EMAIL) {
       router.push("/dashboard")
       return
     }
@@ -244,6 +245,7 @@ export default function AdminPage() {
   useEffect(() => {
     const tabParam = searchParams.get("tab")
     if (!tabParam) return
+    // Support legacy vps tab links.
     if (tabParam === "runner" || tabParam === "vps") {
       setActiveTab("runner")
       return
