@@ -199,7 +199,7 @@ const InputBar = ({
                   className="bg-[#1c1c1c]/95 backdrop-blur-xl border border-white/10 min-w-[280px] rounded-2xl p-2 shadow-2xl"
                 >
                   <div className="px-2.5 pt-1 pb-2 text-[10px] text-zinc-500 leading-relaxed border-b border-white/10 mb-1.5">
-                    Planning always runs on <span className="text-zinc-300">Gemini 3.1 Flash-Lite</span> for fast reasoning. Pick Gemini Pro for quality or Flash for speed when generating code.
+                    Planning and generation both use your selected model for consistent output across the full build pipeline.
                   </div>
                   {bestModels.length > 0 && (
                     <>
