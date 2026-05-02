@@ -897,253 +897,87 @@ export default function AdminPage() {
         {/* Runner Tab */}
         {activeTab === "runner" && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-white">Runner</h2>
-                <p className="text-sm text-white/40">Manage the Ubuntu mini-server that builds and runs generated Next.js websites.</p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { fetchVpsStatus(); fetchVpsLogs(); }}
-                className="text-white/40 hover:text-white"
-              >
-                <RotateCcw className="h-4 w-4 mr-1.5" />
-                Refresh
-              </Button>
-            </div>
-
-            {/* Connection Status */}
-            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="h-12 w-12 rounded-xl bg-white/[0.06] flex items-center justify-center">
-                  <Server className="h-6 w-6 text-zinc-400" />
+            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6 md:p-8">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-semibold text-white">Runner</h2>
+                  <p className="text-sm text-white/50 mt-1">Manage the Ubuntu mini-server that builds and runs generated Next.js websites.</p>
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold text-white">Ubuntu Server</h3>
-                    {vpsLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
-                    ) : vpsStatus?.online ? (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-green-500/30 text-green-500 bg-green-500/5 rounded-full">
-                        Connected
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 border-red-500/30 text-red-500 bg-red-500/5 rounded-full">
-                        Offline
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-white/30 mt-0.5">
-                    {vpsStatus?.uptime ? `Uptime: ${vpsStatus.uptime}` : "Click refresh to check status"}
-                  </p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={`rounded-full ${vpsStatus?.online ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-red-500/30 text-red-400 bg-red-500/10"}`}>
+                    {vpsStatus?.online ? "VM Online" : "VM Offline"}
+                  </Badge>
+                  <Button variant="ghost" size="sm" onClick={() => { fetchVpsStatus(); fetchVpsLogs(); }} className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl">
+                    <RotateCcw className="h-4 w-4 mr-1.5" />Refresh
+                  </Button>
                 </div>
-              </div>
-
-              {/* Runner Status Indicators */}
-              {vpsStatus && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 pt-4 border-t border-white/[0.04]">
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.runner ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">Mini-server</p>
-                  </div>
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.tunnel ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">Tunnel</p>
-                  </div>
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.httpOk ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <p className="text-[11px] text-white/40">Health</p>
-                  </div>
-                  <div className="text-center">
-                    <div className={`h-2 w-2 rounded-full mx-auto mb-1.5 ${vpsStatus.npmInstalled ? 'bg-green-500' : 'bg-yellow-500'}`} />
-                    <p className="text-[11px] text-white/40">npm</p>
-                  </div>
-                </div>
-              )}
-
-              {/* CPU / RAM / Disk Stats */}
-              {vpsStatus?.online && (vpsStatus.cpu !== null || vpsStatus.mem?.percent !== null) && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/[0.04]">
-                  {/* CPU */}
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Cpu className="h-3.5 w-3.5 text-blue-400" />
-                      <span className="text-[11px] font-medium text-white/50">CPU</span>
-                      <span className="ml-auto text-xs font-semibold text-white">{vpsStatus.cpu != null ? `${vpsStatus.cpu}%` : "—"}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          (vpsStatus.cpu ?? 0) > 80 ? 'bg-red-500' : (vpsStatus.cpu ?? 0) > 50 ? 'bg-yellow-500' : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${Math.min(vpsStatus.cpu ?? 0, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* RAM */}
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Activity className="h-3.5 w-3.5 text-purple-400" />
-                      <span className="text-[11px] font-medium text-white/50">RAM</span>
-                      <span className="ml-auto text-xs font-semibold text-white">
-                        {vpsStatus.mem?.used != null && vpsStatus.mem?.total != null
-                          ? `${vpsStatus.mem.used} / ${vpsStatus.mem.total} MB`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          (vpsStatus.mem?.percent ?? 0) > 85 ? 'bg-red-500' : (vpsStatus.mem?.percent ?? 0) > 60 ? 'bg-yellow-500' : 'bg-purple-500'
-                        }`}
-                        style={{ width: `${Math.min(vpsStatus.mem?.percent ?? 0, 100)}%` }}
-                      />
-                    </div>
-                    {vpsStatus.mem?.percent != null && (
-                      <p className="text-[10px] text-white/30 mt-1">{vpsStatus.mem.percent}% used</p>
-                    )}
-                  </div>
-
-                  {/* Disk */}
-                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <HardDrive className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[11px] font-medium text-white/50">Disk</span>
-                      <span className="ml-auto text-xs font-semibold text-white">
-                        {vpsStatus.disk?.used && vpsStatus.disk?.total
-                          ? `${vpsStatus.disk.used} / ${vpsStatus.disk.total}`
-                          : "—"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          parseInt(vpsStatus.disk?.percent || "0") > 85 ? 'bg-red-500' : parseInt(vpsStatus.disk?.percent || "0") > 60 ? 'bg-yellow-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: vpsStatus.disk?.percent || "0%" }}
-                      />
-                    </div>
-                    {vpsStatus.disk?.percent && (
-                      <p className="text-[10px] text-white/30 mt-1">{vpsStatus.disk.percent} used</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Warnings */}
-              {vpsStatus?.warnings && vpsStatus.warnings.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-white/[0.04]">
-                  {vpsStatus.warnings.map((w: string, i: number) => (
-                    <p key={i} className="text-xs text-yellow-500/70 flex items-center gap-1.5">
-                      <AlertCircle className="h-3 w-3 shrink-0" />
-                      {w}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center justify-between mb-4 mt-6">
-              <h3 className="text-base font-semibold text-white">VPS Setup & Actions</h3>
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={async () => {
-                    const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
-                    if (res.ok) toast.success("VPS Setup complete")
-                  }}
-                  variant="outline"
-                  className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10 rounded-xl"
-                >
-                  Run Setup
-                </Button>
-                <Button
-                  onClick={() => handleVpsAction("start")}
-                  disabled={!!vpsAction}
-                  className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
-                >
-                  {vpsAction === "start" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                  Start
-                </Button>
-                <Button
-                  onClick={() => handleVpsAction("setup")}
-                  disabled={!!vpsAction}
-                  variant="outline"
-                  className="border-white/10 text-white/60 hover:text-white rounded-xl"
-                >
-                  {vpsAction === "restart" ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <RotateCcw className="h-4 w-4 mr-1.5" />}
-                  Setup
-                </Button>
-                <Button
-                  onClick={() => handleVpsAction("stop")}
-                  disabled={!!vpsAction}
-                  variant="outline"
-                  className="border-red-500/20 text-red-400 hover:bg-red-500/10 rounded-xl"
-                >
-                  Stop
-                </Button>
               </div>
             </div>
 
-            {/* Websites List */}
-            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-6 mt-6">
-              <h3 className="text-base font-semibold text-white mb-4">Websites Running</h3>
-              <div className="space-y-4">
-                {vpsWebsites.length === 0 ? (
-                  <p className="text-xs text-white/40">No websites deployed to VPS.</p>
-                ) : (
-                  vpsWebsites.map(site => (
-                    <div key={site.id} className="p-4 bg-black/20 rounded-xl border border-white/[0.06] flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-white">{site.domain || site.subdomain}</p>
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 rounded-full ${site.health_ok ? 'border-green-500/30 text-green-500 bg-green-500/5' : 'border-red-500/30 text-red-500 bg-red-500/5'}`}>
-                            {site.health_ok ? "Healthy" : "Failing"}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-full border-blue-500/30 text-blue-500 bg-blue-500/5">
-                            Port: {site.port}
-                          </Badge>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 rounded-full border-white/10 text-white/50 bg-white/5">
-                            Mem: {site.memory || "—"} / CPU: {site.cpu || "—"}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => { setSelectedWebsiteId(site.id); fetchVpsLogs(site.id); }}>
-                          Logs
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8 border-white/10" onClick={() => handleWebsiteAction(site.id, 'health-check')}>
-                          Health Check
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8 border-red-500/20 text-red-400 hover:bg-red-500/10" onClick={() => handleWebsiteAction(site.id, 'destroy-runtime')}>
-                          Destroy
-                        </Button>
-                      </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {[
+                { label: "CPU", value: vpsStatus?.cpu != null ? `${vpsStatus.cpu}%` : "—", icon: Cpu },
+                { label: "Memory", value: vpsStatus?.mem?.percent != null ? `${vpsStatus.mem.percent}%` : "—", icon: Activity },
+                { label: "Disk", value: vpsStatus?.disk?.percent || "—", icon: HardDrive },
+                { label: "Websites", value: `${vpsWebsites.length}`, icon: Globe2 },
+              ].map((card) => {
+                const Icon = card.icon
+                return (
+                  <div key={card.label} className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs uppercase tracking-wide text-white/40">{card.label}</p>
+                      <Icon className="h-4 w-4 text-white/40" />
                     </div>
-                  ))
-                )}
+                    <p className="text-2xl font-semibold text-white">{card.value}</p>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5">
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => handleVpsAction("start")} disabled={!!vpsAction} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Start</Button>
+                <Button onClick={() => handleVpsAction("stop")} disabled={!!vpsAction} variant="outline" className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 rounded-xl">Stop</Button>
+                <Button onClick={() => handleVpsAction("setup")} disabled={!!vpsAction} variant="outline" className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10 rounded-xl">Setup</Button>
+                <Button onClick={() => { if (prompt('Type DESTROY to confirm') === 'DESTROY') handleVpsAction("destroy") }} disabled={!!vpsAction} variant="outline" className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl">Destroy</Button>
               </div>
             </div>
-            
-            {/* Logs Section */}
-            <div className="rounded-2xl bg-black/40 border border-white/[0.06] p-4 mt-6">
+
+            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-6">
+              <h3 className="text-base font-semibold text-white mb-4">Websites</h3>
+              <div className="space-y-3">
+                {vpsWebsites.length === 0 ? <p className="text-sm text-white/40">No websites reported by runner.</p> : vpsWebsites.map((site) => (
+                  <div key={site.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <p className="text-white font-medium">{site.domain || site.subdomain || site.id}</p>
+                      <p className="text-xs text-white/40">Port {site.port || "—"} · {site.processName || "process unknown"}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "start")}>Start</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "stop")}>Stop</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "restart")}>Restart</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "health-check")}>Health</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-red-500/30 text-red-300" onClick={() => handleWebsiteAction(site.id, "destroy-runtime")}>Destroy</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => { setSelectedWebsiteId(site.id); fetchVpsLogs(site.id) }}>Logs</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-black/40 border border-white/[0.08] p-4">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[11px] text-white/30 uppercase tracking-wider font-semibold">
-                  {selectedWebsiteId ? `Logs for ${selectedWebsiteId}` : "Select a website to view logs"}
-                </p>
-                <Button size="sm" variant="ghost" className="h-6" onClick={() => fetchVpsLogs()}>Refresh Logs</Button>
-              </div>
-              {vpsLogs.length > 0 ? (
-                <div className="max-h-[600px] overflow-y-auto font-mono text-xs text-zinc-400 space-y-0.5 custom-scrollbar">
-                  {vpsLogs.map((line, i) => (
-                    <p key={i}>{line}</p>
-                  ))}
+                <p className="text-xs text-white/40 uppercase tracking-wider">{selectedWebsiteId ? `Logs · ${selectedWebsiteId}` : "Select a website for logs"}</p>
+                <div className="flex items-center gap-2">
+                  <select value={vpsLogType} onChange={(e) => setVpsLogType(e.target.value)} className="bg-black/40 border border-white/20 text-xs rounded px-2 py-1">
+                    <option value="deploy">deploy</option><option value="build">build</option><option value="runtime">runtime</option><option value="error">error</option><option value="health">health</option>
+                  </select>
+                  <Button size="sm" variant="ghost" className="h-7" onClick={() => fetchVpsLogs()}>Refresh</Button>
                 </div>
-              ) : (
-                <p className="text-xs text-white/20 text-center py-8">No logs available.</p>
-              )}
+              </div>
+              <div className="max-h-[420px] overflow-y-auto font-mono text-xs custom-scrollbar">
+                {vpsLogs.length ? vpsLogs.map((line, i) => <p key={i} className={`${/error|fail/i.test(line) ? "text-red-300" : /warn/i.test(line) ? "text-amber-300" : "text-zinc-300"}`}>{line}</p>) : <p className="text-white/30">No logs yet.</p>}
+              </div>
             </div>
           </div>
         )}
