@@ -9,6 +9,7 @@ const defaultDbName = process.env.MONGO_DB_NAME || "main";
 function connectMongo(): Promise<MongoClient> {
   const uri = process.env.MONGO_URI;
   if (!uri) {
+    console.warn("Missing MONGO_URI environment variable");
     return Promise.reject(new Error("Missing MONGO_URI environment variable"));
   }
 

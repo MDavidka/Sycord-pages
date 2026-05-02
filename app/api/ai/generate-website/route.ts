@@ -33,11 +33,10 @@ interface ProjectDoc {
 }
 
 // Anything inside `.sycord/` is debug-only. Lockfiles and other non-source
-// JSON we never plan to emit are skipped here as well so deployments stay
-// lean. `package.json` and `tsconfig.json` are explicitly allowed because
-// the static-export deployer needs both.
+// JSON we never plan to emit are skipped here as well so deployments stay lean.
 function isDeployableFilePath(filePath: string) {
   if (!filePath || filePath.startsWith(".sycord/")) return false
+  if (/^\.env(?:\.|$)/.test(filePath) || /\/\.env(?:\.|$)/.test(filePath)) return false
   if (filePath.endsWith(".json")) {
     return filePath === "package.json" || filePath === "tsconfig.json"
   }
@@ -64,6 +63,10 @@ async function saveGeneratedFilesToProject(
       typeof file.content === "string" &&
       isDeployableFilePath(file.path),
   )
+  const envFile = files.find((file) => /^\.env(?:\.|$)/.test(file.path) || /\/\.env(?:\.|$)/.test(file.path))
+  if (envFile) {
+    throw new Error(`Generated env file is not allowed: ${envFile.path}`)
+  }
 
   const normalizedPages = deployable.map((file) => {
     const safeName = file.path.replace(/^\/+/, "").slice(0, 255)
@@ -87,6 +90,7 @@ async function saveGeneratedFilesToProject(
     {
       $set: {
         "projects.$.pages": normalizedPages,
+        "projects.$.deploymentMode": readDeploymentMode(files),
         "projects.$.updatedAt": new Date(),
       },
     },
@@ -97,6 +101,22 @@ async function saveGeneratedFilesToProject(
   }
 
   return { saved: normalizedPages.length, files: deployable }
+}
+
+function readDeploymentMode(files: GeneratedFile[]): "next-server" {
+  const manifestFile = files.find((file) => file.path === "lib/generated-manifest.ts")
+  if (manifestFile) {
+    const match = manifestFile.content.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
+    if (match) {
+      try {
+        const manifest = JSON.parse(match[1]) as { deploymentMode?: unknown }
+        if (manifest.deploymentMode === "next-server") return "next-server"
+      } catch {
+        // Fall through to file detection.
+      }
+    }
+  }
+  return "next-server"
 }
 
 // Validate the model JSON the client sends. Anything malformed is dropped
@@ -238,9 +258,8 @@ async function saveAiGenerationSentryIssues(userId: string, projectId: string, e
   )
 }
 
-// Redact secret values out of files we return to the UI. The `.env` file
-// is saved to MongoDB with real values (so the deployer can use them),
-// but we never echo the values back to the browser.
+// Defensive redaction for legacy generated files. New builder output never
+// emits `.env`; deploy env vars come from project settings/server env only.
 function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
   return files.map((f) => {
     if (f.path !== ".env") return f
@@ -325,8 +344,7 @@ export async function POST(req: Request) {
       ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
       : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
-    // Redact any real secret values from files we send back to the UI.
-    // MongoDB already has the real values stored under projects.$.pages.
+    // Redact any legacy secret file values from files we send back to the UI.
     const safeFiles = redactEnvFiles(result.files)
 
     if (projectId) {
@@ -358,6 +376,7 @@ export async function POST(req: Request) {
       requiredEnvVars: result.requiredEnvVars,
       missingEnvVars: result.missingEnvVars,
       unconnectedIntegrations: result.unconnectedIntegrations,
+      deploymentMode: result.deploymentMode,
       envVarsAdded,
     })
   } catch (error) {

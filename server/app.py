@@ -25,6 +25,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -101,6 +102,7 @@ _load_env_server()
 BASE_DIR = Path(os.environ.get("SYCORD_DATA_DIR", "/var/sycord/data"))
 PROJECTS_DIR = BASE_DIR / "projects"
 LOG_FILE = BASE_DIR / "server.log"
+NEXT_SERVER_PORT_BASE = int(os.environ.get("SYCORD_NEXT_SERVER_PORT_BASE", "6100"))
 
 # Ensure directories exist
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -247,7 +249,7 @@ def _build_project(project_id: str, project_dir: Path) -> dict:
         "Detected buildable project %s – starting build", project_id,
     )
 
-    install_cmd = ["npm", "install", "--no-fund", "--no-audit"]
+    install_cmd = ["npm", "install", "--no-fund", "--no-audit", "--legacy-peer-deps"]
     logger.info(
         "Build [install] project %s – running: %s",
         project_id, " ".join(install_cmd),
@@ -345,16 +347,105 @@ def _build_project(project_id: str, project_dir: Path) -> dict:
     logger.info("Build completed successfully for %s", project_id)
 
     # If there's a dist/ or build/ directory, serve from there instead
-    for output_dir_name in ("dist", "build", "out", ".next"):
-        output_dir = project_dir / output_dir_name
+    output_dir_name: str | None = None
+    for candidate_name in ("dist", "build", "out", ".next"):
+        output_dir = project_dir / candidate_name
         if output_dir.is_dir():
+            output_dir_name = candidate_name
             logger.info(
                 "Build [output] project %s – found %s/ directory, will serve from it",
-                project_id, output_dir_name,
+                project_id, candidate_name,
             )
             break
 
-    return {"built": True, "logs": build_logs}
+    return {"built": True, "logs": build_logs, "output_dir": output_dir_name}
+
+
+def _port_for_project(project_id: str) -> int:
+    return NEXT_SERVER_PORT_BASE + (abs(hash(project_id)) % 1000)
+
+
+def _next_pid_path(project_dir: Path) -> Path:
+    return project_dir / ".next-server.pid"
+
+
+def _stop_next_server(project_dir: Path) -> None:
+    pid_path = _next_pid_path(project_dir)
+    if not pid_path.is_file():
+        return
+    try:
+        pid = int(pid_path.read_text().strip())
+        os.kill(pid, signal.SIGTERM)
+    except Exception:
+        pass
+    try:
+        pid_path.unlink()
+    except Exception:
+        pass
+
+
+def _start_next_server(project_id: str, project_dir: Path, env_vars: dict) -> dict:
+    if not (project_dir / ".next").is_dir():
+        return {"ok": False, "error": "Missing .next directory for Next server deployment"}
+
+    _stop_next_server(project_dir)
+    port = _port_for_project(project_id)
+    env = os.environ.copy()
+    env.update({str(k): str(v) for k, v in env_vars.items()})
+    env["PORT"] = str(port)
+    env["HOSTNAME"] = "0.0.0.0"
+    env["PATH"] = str(project_dir / "node_modules" / ".bin") + os.pathsep + env.get("PATH", "")
+
+    log_file = open(project_dir / ".next-server.log", "a", encoding="utf-8")
+    proc = subprocess.Popen(
+        ["npm", "run", "start"],
+        cwd=str(project_dir),
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+        env=env,
+        start_new_session=True,
+        text=True,
+    )
+    _next_pid_path(project_dir).write_text(str(proc.pid))
+    for _ in range(20):
+        try:
+            check = subprocess.run(
+                ["python3", "-c", f"import urllib.request; urllib.request.urlopen('http://127.0.0.1:{port}/', timeout=1).read(1)"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if check.returncode == 0:
+                return {"ok": True, "port": port, "url": f"http://127.0.0.1:{port}"}
+        except Exception:
+            pass
+        if proc.poll() is not None:
+            return {"ok": False, "error": f"next start exited with code {proc.returncode}", "port": port}
+    return {"ok": False, "error": "Next server health check timed out", "port": port}
+
+
+def _proxy_next_request(target_base: str):
+    import urllib.error
+    import urllib.request
+
+    target = target_base.rstrip("/") + "/" + request.full_path.lstrip("/")
+    if target.endswith("?"):
+        target = target[:-1]
+    try:
+        req = urllib.request.Request(target, method=request.method)
+        for key, value in request.headers.items():
+            if key.lower() not in {"host", "content-length"}:
+                req.add_header(key, value)
+        body = request.get_data() if request.method not in {"GET", "HEAD"} else None
+        with urllib.request.urlopen(req, data=body, timeout=15) as resp:
+            excluded = {"transfer-encoding", "connection", "content-encoding"}
+            headers = [(k, v) for k, v in resp.headers.items() if k.lower() not in excluded]
+            return Response(resp.read(), status=resp.status, headers=headers)
+    except urllib.error.HTTPError as exc:
+        return Response(exc.read(), status=exc.code)
+    except Exception as exc:
+        logger.error("Next server proxy failed for %s: %s", target_base, exc)
+        abort(502)
 
 
 # ---------------------------------------------------------------------------
@@ -379,6 +470,11 @@ def _read_meta(project_id: str) -> dict | None:
     meta = _meta_path(project_id)
     if meta.exists():
         return json.loads(meta.read_text())
+    project_dir = _project_dir(project_id)
+    if project_dir.is_symlink():
+        resolved_meta = project_dir.resolve() / ".meta.json"
+        if resolved_meta.exists():
+            return json.loads(resolved_meta.read_text())
     return None
 
 
@@ -479,6 +575,10 @@ def serve_subdomain_content():
     except ValueError:
         abort(403)
 
+    meta = _read_meta(subdomain) or _read_meta(project_dir.resolve().name)
+    if meta and meta.get("deployment_mode") == "next-server" and meta.get("next_server_url"):
+        return _proxy_next_request(meta["next_server_url"])
+
     if target.is_file():
         return send_from_directory(str(project_dir), rel_path)
 
@@ -541,10 +641,16 @@ def deploy(project_id: str):
     files: list[dict] = data["files"]
     subdomain: str | None = data.get("subdomain")
     env_vars: dict = data.get("env_vars", {})
+    deployment_mode: str = data.get("deployment_mode") or data.get("deploymentMode") or "next-server"
+    if deployment_mode != "next-server":
+        return jsonify(success=False, error=f"Unsupported deployment mode: {deployment_mode}"), 400
 
     if not files:
         logger.error("Deploy %s: empty files list", project_id)
         return jsonify(success=False, error="No files provided"), 400
+    env_files = [f.get("path", "") for f in files if str(f.get("path", "")).split("/")[-1].startswith(".env")]
+    if env_files:
+        return jsonify(success=False, error=f"Env files must not be deployed: {env_files[0]}"), 400
 
     logger.info(
         "Deploy started for %s (%d files, subdomain=%s, env_vars=%d)",
@@ -552,6 +658,7 @@ def deploy(project_id: str):
     )
 
     project_dir = _project_dir(project_id)
+    _stop_next_server(project_dir)
 
     # Clean previous deployment
     if project_dir.exists():
@@ -565,13 +672,6 @@ def deploy(project_id: str):
         logger.info("Deploy %s: cleaned previous deployment", project_id)
     else:
         project_dir.mkdir(parents=True, exist_ok=True)
-
-    # Write .env file if env vars provided
-    if env_vars:
-        env_content = "\n".join(f"{k}={v}" for k, v in env_vars.items())
-        env_path = project_dir / ".env"
-        env_path.write_text(env_content, encoding="utf-8")
-        logger.info("Deploy %s: wrote .env with %d variables", project_id, len(env_vars))
 
     # Write files
     written = 0
@@ -596,19 +696,66 @@ def deploy(project_id: str):
     # Build step – run npm install + npm run build if package.json exists
     build_result = _build_project(project_id, project_dir)
     built = build_result.get("built", False)
+    if not built:
+        meta = _read_meta(project_id) or {}
+        meta.update(
+            {
+                "project_id": project_id,
+                "subdomain": subdomain,
+                "domain": None,
+                "files_count": written,
+                "env_vars_count": len(env_vars),
+                "deployment_mode": deployment_mode,
+                "deployed_at": datetime.now(timezone.utc).isoformat(),
+                "build": False,
+                "running": False,
+                "health_ok": False,
+                "build_error": build_result.get("error"),
+            },
+        )
+        _write_meta(project_id, meta)
+        return jsonify(
+            success=False,
+            error=build_result.get("error") or "Build failed",
+            project_id=project_id,
+            files_count=written,
+            build=build_result,
+            running=False,
+            health_ok=False,
+        ), 400
 
-    # Subdomain symlink – point to build output dir if it exists
     serve_dir = project_dir
-    if built:
-        for output_dir_name in ("dist", "build", "out"):
-            candidate = project_dir / output_dir_name
-            if candidate.is_dir():
-                serve_dir = candidate
-                logger.info(
-                    "Deploy %s: serving from %s/ build output",
-                    project_id, output_dir_name,
-                )
-                break
+    health_result = _start_next_server(project_id, project_dir, env_vars)
+    if not health_result.get("ok"):
+        meta = _read_meta(project_id) or {}
+        meta.update(
+            {
+                "project_id": project_id,
+                "subdomain": subdomain,
+                "domain": None,
+                "files_count": written,
+                "env_vars_count": len(env_vars),
+                "deployment_mode": deployment_mode,
+                "deployed_at": datetime.now(timezone.utc).isoformat(),
+                "build": True,
+                "running": False,
+                "health_ok": False,
+                "build_error": health_result.get("error"),
+                "health": health_result,
+            },
+        )
+        _write_meta(project_id, meta)
+        return jsonify(
+            success=False,
+            error=health_result.get("error") or "Next server health check failed",
+            project_id=project_id,
+            files_count=written,
+            build=build_result,
+            running=False,
+            health_ok=False,
+            health=health_result,
+            port=health_result.get("port"),
+        ), 400
 
     if subdomain:
         link = PROJECTS_DIR / subdomain
@@ -644,10 +791,16 @@ def deploy(project_id: str):
             "domain": domain,
             "files_count": written,
             "env_vars_count": len(env_vars),
+            "deployment_mode": deployment_mode,
             "deployed_at": datetime.now(timezone.utc).isoformat(),
             "dns_status": dns_result.get("action", "skipped"),
             "build": build_result.get("built", False),
             "build_error": build_result.get("error"),
+            "health": health_result,
+            "next_server_url": health_result.get("url") if health_result else None,
+            "running": True,
+            "health_ok": True,
+            "port": health_result.get("port") if health_result else None,
         },
     )
     _write_meta(project_id, meta)
@@ -664,6 +817,11 @@ def deploy(project_id: str):
         files_count=written,
         dns=dns_result,
         build=build_result,
+        running=True,
+        health_ok=True,
+        port=health_result.get("port") if health_result else None,
+        deployment_mode=deployment_mode,
+        health=health_result,
     )
 
 

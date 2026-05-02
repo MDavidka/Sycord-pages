@@ -59,6 +59,7 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
     "socialLinks"?: [ { "label": string, "href": string } ],
     "contact"?: { "email"?: string, "phone"?: string, "address"?: string }
   },
+  "deploymentMode": "next-server",
   "needsDatabase": boolean,
   "integrations": [
     {
@@ -81,11 +82,15 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
 }
 
 Integration & database rules:
+- Every generated site runs as a small Next.js server. Always set "deploymentMode": "next-server".
+- Do NOT plan static export, out/ artifacts, or next.config output: "export".
+- Runtime routes are allowed only when actually needed. Database apps may use app/api/**; simple landing pages should not.
 - Set "needsDatabase": true for bookings, ecommerce, orders, cart, dashboards, accounts, admin panels, CMS/blog editing, marketplaces, saved forms, inventory, or any user-generated/persistent data.
 - Set "needsDatabase": false for purely static landing pages, marketing sites, brochure sites, or one-off event pages without signups.
 - If "needsDatabase" is true, ALWAYS include exactly one integration with "provider": "turso", "kind": "database", "name": "Turso", and "envVars": ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"].
 - Only add non-database integrations (payments, email, auth, etc.) if the requested app clearly needs them. Do NOT invent analytics or marketing tools the user didn't ask for.
 - Never hard-code secret values anywhere in the plan. Only env var NAMES may appear.
+- Never output .env, .env.local, .env.production, .env.example, or any env file. Secrets are runtime process.env only.
 
 SectionPlan rules:
 - "kind" must be one of: ${SECTION_KINDS.map((k) => `"${k}"`).join(" | ")}
@@ -103,6 +108,11 @@ ${Object.entries(VARIANTS_BY_KIND)
 - For gallery / product-grid / blog-preview / team: include title, description, optional category/tag/price.
 - For process: include eyebrow ("Step 01"), title, description.
 - For contact: prefer variant "form" or "split-form".
+- Every SectionPlan should include "componentTree": a JSON tree rendered by the deterministic renderer.
+- componentTree node shape: { "id": string, "component": one of allowed components, "props"?: JSON object, "text"?: string, "children"?: ComponentNode[] }.
+- Allowed components: "Page", "Section", "Container", "Grid", "Stack", "Button", "Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter", "Badge", "Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent", "Tabs", "TabsList", "TabsTrigger", "TabsContent", "Input", "Textarea", "Label", "Avatar", "Separator", "Image", "Link", "Heading", "Text", "Stat", "PricingCard", "FeatureCard".
+- Prefer shadcn components (Button, Card*, Badge, Accordion*, Tabs*, Input, Textarea, Label, Avatar, Separator) inside Section/Container/Grid/Stack layout primitives.
+- Do not output raw TSX, JSX strings, markdown, function bodies, imports, or invented component names in componentTree.
 
 Page structure rules:
 - Home page ("/") MUST have at least 5 sections from DIFFERENT kinds. A clean rhythm:

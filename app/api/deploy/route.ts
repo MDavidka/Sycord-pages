@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId, type Db } from "mongodb"
+import * as Sentry from "@sentry/nextjs"
 import { classifySentryIssuesSequentially } from "@/lib/sentry-ai"
 import {
   createSentryLogHash,
@@ -226,6 +227,112 @@ async function deployViaGitTree(
     console.log(`[Deploy] Atomic deployment complete. New commit: ${commitData.sha}`)
 }
 
+type DeploymentMode = "next-server"
+
+function readGeneratedManifest(files: { path: string; content: string }[]): Record<string, unknown> | null {
+  const manifestFile = files.find((file) => file.path === "lib/generated-manifest.ts")
+  if (!manifestFile) return null
+  const match = manifestFile.content.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
+  if (!match) return null
+  try {
+    return JSON.parse(match[1]) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function resolveDeploymentMode(files: { path: string; content: string }[]): DeploymentMode {
+  const manifest = readGeneratedManifest(files)
+  if (manifest?.deploymentMode && manifest.deploymentMode !== "next-server") {
+    return "next-server"
+  }
+  return "next-server"
+}
+
+function validateFilesForDeployment(
+  files: { path: string; content: string }[],
+  deploymentMode: DeploymentMode,
+): string[] {
+  const errors: string[] = []
+  if (deploymentMode !== "next-server") {
+    errors.push('Deployment mode must be "next-server"')
+  }
+  const nextConfig = files.find((file) => file.path === "next.config.mjs")?.content ?? ""
+  if (!nextConfig) {
+    errors.push("Missing next.config.mjs")
+  } else if (/output\s*:\s*["']export["']/.test(nextConfig)) {
+    errors.push('next.config.mjs must not contain output: "export"')
+  }
+  const packageJson = files.find((file) => file.path === "package.json")?.content ?? ""
+  try {
+    const pkg = JSON.parse(packageJson) as { scripts?: Record<string, string> }
+    if (!pkg.scripts?.start || !pkg.scripts.start.includes("next start")) {
+      errors.push('package.json must include a "start" script using next start')
+    }
+  } catch {
+    errors.push("Missing or invalid package.json")
+  }
+  const envFile = files.find((file) => /^\.env(?:\.|$)/.test(file.path) || /\/\.env(?:\.|$)/.test(file.path))
+  if (envFile) {
+    errors.push(`Env files must not be deployed: ${envFile.path}`)
+  }
+  return errors
+}
+
+function deployErrorFromResponse(data: any): string | null {
+  if (!data?.success) return data?.error || "VM deployment failed"
+  if (data?.build?.built === false || data?.build?.error || data?.build === false) {
+    return data?.build?.error || "VM build failed"
+  }
+  if (data?.build !== true && data?.build?.built !== true) return "VM build did not complete successfully"
+  if (data?.running !== true && data?.health?.ok !== true) return data?.health?.error || "Next server process is not running"
+  if (data?.health_ok !== true && data?.health?.ok !== true) return data?.health?.error || "Next server health check failed"
+  if (!data?.domain) return "VM deploy did not return a live domain"
+  return null
+}
+
+function captureDeployFailure(input: {
+  error: string
+  projectId: string
+  repo: string
+  subdomain: string
+  data?: any
+}) {
+  Sentry.captureException(new Error(`AI website deploy failed: ${input.error}`), {
+    tags: {
+      area: "ai-website-builder",
+      deployment_mode: "next-server",
+      project_id: input.projectId,
+      repo: input.repo,
+      subdomain: input.subdomain,
+    },
+    extra: {
+      buildLogs: input.data?.buildLogs ?? input.data?.build?.logs,
+      deployLogs: input.data?.deployLogs ?? input.data?.logs,
+      health: input.data?.health,
+      health_ok: input.data?.health_ok,
+      running: input.data?.running,
+      port: input.data?.port,
+    },
+  })
+}
+
+function deployFailurePayload(data: any, error: string, deploymentMode: DeploymentMode) {
+  return {
+    success: false,
+    error,
+    buildLogs: data?.buildLogs ?? data?.build?.logs,
+    deployLogs: data?.deployLogs ?? data?.logs,
+    build: data?.build,
+    running: data?.running,
+    health_ok: data?.health_ok,
+    health: data?.health,
+    domain: data?.domain,
+    port: data?.port,
+    deploymentMode,
+  }
+}
+
 export async function POST(request: Request) {
   let sentryContext: { db: Db; userId: string; projectId: string; deploymentId: string } | null = null
   try {
@@ -293,25 +400,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
     }
 
-    // 6. Deploy using Git Tree Strategy (Atomic & Cleaner)
-    await deployViaGitTree(owner, repo, files, token)
+    const deploymentMode = resolveDeploymentMode(files)
+    const deploymentErrors = validateFilesForDeployment(files, deploymentMode)
+    if (deploymentErrors.length > 0) {
+      return NextResponse.json(
+        { success: false, error: deploymentErrors.join("; "), deploymentMode },
+        { status: 400 },
+      )
+    }
 
-    // 7. Save Meta
     const gitUrl = `https://github.com/${owner}/${repo}`
-
-    // Update User/Project DB
-    await db.collection("users").updateOne(
-        { id: session.user.id, "projects._id": new ObjectId(projectId) },
-        {
-            $set: {
-                "projects.$.githubOwner": owner,
-                "projects.$.githubRepo": repo,
-                "projects.$.githubRepoId": repoId,
-                "projects.$.githubUrl": gitUrl,
-                "projects.$.deployedAt": new Date()
-            }
-        }
-    )
 
     // Collect env vars for this project to pass to the deployer
     const envVars: Record<string, string> = {}
@@ -323,21 +421,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Save Git Connection for Sycord Deployer
-    await db.collection("users").updateOne({ id: session.user.id }, {
-        $set: { [`git_connection.${repoId}`]: {
-            username: owner,
-            repo_id: repoId.toString(),
-            git_url: gitUrl,
-            git_token: token,
-            repo_name: repo,
-            project_id: projectId,
-            deployed_at: new Date(),
-            env_vars: envVars,
-        }}
-    })
-
-    // 8. Trigger Sycord VPS Deploy
+    // 6. Trigger Sycord VPS deploy before marking the project live.
     let vpsUrl = null
     let deployMessage = "Deployed to GitHub"
 
@@ -347,6 +431,7 @@ export async function POST(request: Request) {
         const deployBody: any = {
           files,
           subdomain: repo,
+          deployment_mode: "next-server",
         }
         if (Object.keys(envVars).length > 0) {
           deployBody.env_vars = envVars
@@ -358,8 +443,9 @@ export async function POST(request: Request) {
         })
         const triggerData = await triggerRes.json().catch(() => ({}))
         console.log(`[Deploy] Trigger status: ${triggerRes.status}`, triggerData)
-        
-        if (!triggerRes.ok) {
+
+        const deployFailure = triggerRes.ok ? deployErrorFromResponse(triggerData) : (triggerData.error || `VM deploy failed with HTTP ${triggerRes.status}`)
+        if (deployFailure) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
           await saveDeploymentSentryIssue({
             db,
@@ -369,6 +455,24 @@ export async function POST(request: Request) {
             rawLog: `Downstream VPS deploy failed with HTTP ${triggerRes.status}:\n${JSON.stringify(triggerData, null, 2)}`,
             deploymentId,
           })
+          captureDeployFailure({ error: deployFailure, projectId, repo, subdomain: repo, data: triggerData })
+          await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": new ObjectId(projectId) },
+              {
+                $set: {
+                  "projects.$.lastDeployError": deployFailure,
+                  "projects.$.lastDeployBuild": triggerData.build ?? null,
+                  "projects.$.deploymentMode": deploymentMode,
+                },
+                $unset: { "projects.$.cloudflareUrl": "" },
+              }
+          )
+          return NextResponse.json({
+            ...deployFailurePayload(triggerData, deployFailure, deploymentMode),
+            githubUrl: gitUrl,
+            filesCount: files.length,
+            repoId: repoId.toString(),
+          }, { status: 502 })
         } else if (triggerData.domain) {
           vpsUrl = triggerData.domain.startsWith('http') ? triggerData.domain : `https://${triggerData.domain}`
         }
@@ -387,13 +491,7 @@ export async function POST(request: Request) {
             }
         }
 
-        if (vpsUrl) {
-            deployMessage = "Deployed to Sycord VPS!"
-            await db.collection("users").updateOne(
-                { id: session.user.id, "projects._id": new ObjectId(projectId) },
-                { $set: { "projects.$.cloudflareUrl": vpsUrl } } // Using cloudflareUrl for backward compatibility in DB schema
-            )
-        }
+        if (vpsUrl) deployMessage = "Deployed to Sycord VPS!"
     } catch (e) {
         console.error("Sycord Deploy Error:", e)
         await saveDeploymentSentryIssue({
@@ -404,7 +502,88 @@ export async function POST(request: Request) {
           rawLog: `Sycord Deploy Error:\n${e instanceof Error ? e.stack || e.message : String(e)}`,
           deploymentId,
         })
+        const message = e instanceof Error ? e.message : String(e)
+        captureDeployFailure({ error: message, projectId, repo, subdomain: repo })
+        await db.collection("users").updateOne(
+            { id: session.user.id, "projects._id": new ObjectId(projectId) },
+            {
+              $set: {
+                "projects.$.lastDeployError": message,
+                "projects.$.deploymentMode": deploymentMode,
+              },
+              $unset: { "projects.$.cloudflareUrl": "" },
+            }
+        )
+        return NextResponse.json({
+          success: false,
+          error: message,
+          githubUrl: gitUrl,
+          filesCount: files.length,
+          repoId: repoId.toString(),
+          deploymentMode,
+        }, { status: 502 })
     }
+
+    if (!vpsUrl) {
+      const message = "Next server health check did not produce a live domain"
+      captureDeployFailure({ error: message, projectId, repo, subdomain: repo })
+      await db.collection("users").updateOne(
+          { id: session.user.id, "projects._id": new ObjectId(projectId) },
+          {
+            $set: {
+              "projects.$.lastDeployError": message,
+              "projects.$.deploymentMode": deploymentMode,
+            },
+            $unset: { "projects.$.cloudflareUrl": "" },
+          }
+      )
+      return NextResponse.json({
+        success: false,
+        error: message,
+        githubUrl: gitUrl,
+        filesCount: files.length,
+        repoId: repoId.toString(),
+        deploymentMode,
+      }, { status: 502 })
+    }
+
+    // 7. Deploy source to GitHub only after the VM verified the live server.
+    await deployViaGitTree(owner, repo, files, token)
+
+    await db.collection("users").updateOne(
+        { id: session.user.id, "projects._id": new ObjectId(projectId) },
+        {
+            $set: {
+                "projects.$.githubOwner": owner,
+                "projects.$.githubRepo": repo,
+                "projects.$.githubRepoId": repoId,
+                "projects.$.githubUrl": gitUrl,
+                "projects.$.cloudflareUrl": vpsUrl,
+                "projects.$.deploymentMode": deploymentMode,
+                "projects.$.lastDeployError": null,
+                "projects.$.lastDeployRuntime": {
+                  build: true,
+                  running: true,
+                  health_ok: true,
+                  domain: vpsUrl,
+                },
+                "projects.$.deployedAt": new Date()
+            }
+        }
+    )
+
+    await db.collection("users").updateOne({ id: session.user.id }, {
+        $set: { [`git_connection.${repoId}`]: {
+            username: owner,
+            repo_id: repoId.toString(),
+            git_url: gitUrl,
+            git_token: token,
+            repo_name: repo,
+            project_id: projectId,
+            deployed_at: new Date(),
+            env_vars: envVars,
+        }}
+    })
 
     return NextResponse.json({
         success: true,
@@ -413,7 +592,12 @@ export async function POST(request: Request) {
         cloudflareUrl: vpsUrl,
         filesCount: files.length,
         message: deployMessage,
-        repoId: repoId.toString()
+        repoId: repoId.toString(),
+        deploymentMode,
+        build: true,
+        running: true,
+        health_ok: true,
+        domain: vpsUrl.replace(/^https?:\/\//, ""),
     })
 
   } catch (error: any) {

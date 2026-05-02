@@ -115,6 +115,16 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
+type DeploymentMode = "next-server"
+
+const formatDeploymentMode = (_mode?: string | null) => (
+  "Next server"
+)
+
+const detectDeploymentModeFromPages = (_pages: GeneratedPage[]): DeploymentMode => {
+  return "next-server"
+}
+
 // File tree node interface
 interface FileTreeNode {
   name: string
@@ -649,7 +659,11 @@ export default function SiteSettingsPage() {
   const [deployProgress, setDeployProgress] = useState(0)
   const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
-  const [deployResult, setDeployResult] = useState<{ url?: string; message?: string } | null>(null)
+  const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
+  const deploymentMode = useMemo(
+    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
+    [generatedPages, project],
+  )
 
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
@@ -860,6 +874,10 @@ export default function SiteSettingsPage() {
                   usedFor: p.usedFor || ''
                 })),
               )
+            }
+            if (data.lastDeployError) {
+              setDeployError(data.lastDeployError)
+              setHasDeployError(true)
             }
             setProjectLoading(false)
           })
@@ -1196,16 +1214,24 @@ export default function SiteSettingsPage() {
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Deployment failed")
+        throw new Error(errorData.error || errorData.build?.error || errorData.health?.error || "Deployment failed")
       }
 
       const result = await response.json()
+      if (result?.success !== true || result?.health_ok !== true) {
+        throw new Error(result.error || result.build?.error || result.health?.error || "Deployment failed")
+      }
 
       setDeployProgress(100)
       setDeploySuccess(true)
       setDeployResult({
         url: result.url,
-        message: result.message || `Successfully deployed ${result.filesCount} file(s) to GitHub`
+        message: `${result.message || `Successfully deployed ${result.filesCount} file(s)`} (${formatDeploymentMode(result.deploymentMode || deploymentMode)})`,
+        build: result.build === true || result.build?.built === true,
+        running: result.running === true,
+        health_ok: result.health_ok === true,
+        domain: result.domain || result.cloudflareUrl?.replace(/^https?:\/\//, ""),
+        port: result.port,
       })
 
       if (result.repoId) {
@@ -2413,7 +2439,9 @@ export default function SiteSettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-semibold">Site Pages</h2>
-                      <p className="text-muted-foreground">Manage AI-generated content (Vite + TypeScript)</p>
+                      <p className="text-muted-foreground">
+                        Manage AI-generated content · Deployment mode: {formatDeploymentMode(deploymentMode)}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {generatedPages.length > 0 && (
@@ -2460,6 +2488,26 @@ export default function SiteSettingsPage() {
                       </Button>
                     </div>
                   </div>
+
+                  <Card className="border-primary/30 bg-primary/5">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Rocket className="h-4 w-4 text-primary" />
+                        Next server runtime
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Deployments run npm install, npm run build, then PORT=&lt;allocated&gt; npm run start. Live status requires build, server process, and health check success.
+                      </CardDescription>
+                    </CardHeader>
+                    {deployResult && (
+                      <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                        <div>Build: {deployResult.build ? "ok" : "pending"}</div>
+                        <div>Server: {deployResult.running ? "running" : "pending"}</div>
+                        <div>Health: {deployResult.health_ok ? "ok" : "pending"}</div>
+                        <div>Port: {deployResult.port ?? "allocated by VM"}</div>
+                      </CardContent>
+                    )}
+                  </Card>
 
                   {(deployError || runnerErrorDetails || hasDeployError) && (
                     <Card className="border-destructive/40 bg-destructive/5">

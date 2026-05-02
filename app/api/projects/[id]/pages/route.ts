@@ -21,6 +21,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!name || !content) {
       return NextResponse.json({ message: "Name and content required" }, { status: 400 })
     }
+    if (/^\.env(?:\.|$)/.test(name) || /\/\.env(?:\.|$)/.test(name)) {
+      return NextResponse.json({ message: "Env files must not be saved" }, { status: 400 })
+    }
 
     // Validate path - prevent directory traversal and other security issues
     const decodedName = decodeURIComponent(name)
