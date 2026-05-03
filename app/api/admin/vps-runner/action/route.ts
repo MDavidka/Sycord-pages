@@ -21,7 +21,9 @@ export async function POST(request: Request) {
   }
 
   const upstream = await proxyRunner(path, { method: "POST" })
-  if (upstream.status !== 503) {
+  const shouldFallback = upstream.status >= 400
+
+  if (!shouldFallback) {
     return upstream
   }
 
@@ -35,28 +37,40 @@ export async function POST(request: Request) {
   }
 
   if (action === "start" || action === "stop") {
-    const result = await manageDeployVmRunnerService(action)
-    return NextResponse.json(
-      {
-        success: result.success,
-        message:
-          action === "start"
-            ? result.success
-              ? "Runner service is active on the deploy VM"
-              : "Failed to start runner service over SSH"
-            : result.success
-              ? "Runner service stopped on the deploy VM"
-              : "Failed to stop runner service over SSH",
-        logs: result.logs,
-        runner: result.diagnostics.runner,
-        nginx: result.diagnostics.nginx,
-        cloudflared: result.diagnostics.cloudflared,
-        diagnostics: result.diagnostics.diagnostics,
-        degraded: true,
-        apiOnline: false,
-      },
-      { status: result.success ? 200 : 500 },
-    )
+    try {
+      const result = await manageDeployVmRunnerService(action)
+      return NextResponse.json(
+        {
+          success: result.success,
+          message:
+            action === "start"
+              ? result.success
+                ? "Runner service is active on the deploy VM"
+                : "Failed to start runner service over SSH"
+              : result.success
+                ? "Runner service stopped on the deploy VM"
+                : "Failed to stop runner service over SSH",
+          logs: result.logs,
+          runner: result.diagnostics.runner,
+          nginx: result.diagnostics.nginx,
+          cloudflared: result.diagnostics.cloudflared,
+          diagnostics: result.diagnostics.diagnostics,
+          degraded: true,
+          apiOnline: false,
+        },
+        { status: result.success ? 200 : 500 },
+      )
+    } catch (error: any) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: error?.message || "Failed to control runner service over SSH",
+          degraded: true,
+          apiOnline: false,
+        },
+        { status: 500 },
+      )
+    }
   }
 
   const diagnostics = await readDeployVmDiagnostics().catch(() => null)

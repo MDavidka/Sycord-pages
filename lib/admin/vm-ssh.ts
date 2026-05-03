@@ -126,16 +126,33 @@ export async function manageDeployVmRunnerService(action: "start" | "stop" | "re
         : `systemctl ${action} sycord-vm-runner && systemctl status sycord-vm-runner --no-pager || true`
 
     const result = await ssh.execCommand(command)
-    const diagnostics = await readDeployVmDiagnostics()
+    const runnerSocket = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
+    const nginxSocket = await ssh.execCommand("ss -ltnp | grep ':80' || true")
+    const cloudflared = await ssh.execCommand("pgrep -af cloudflared || true")
 
     return {
       success:
         action === "stop"
-          ? !diagnostics.runner.running
-          : diagnostics.runner.running,
+          ? !runnerSocket.stdout.trim()
+          : Boolean(runnerSocket.stdout.trim()),
       action,
       logs: [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
-      diagnostics,
+      diagnostics: {
+        runner: {
+          running: Boolean(runnerSocket.stdout.trim()),
+          port: 5050,
+          portOwner: runnerSocket.stdout.trim() || null,
+        },
+        nginx: {
+          running: Boolean(nginxSocket.stdout.includes("nginx")),
+          port80Owner: nginxSocket.stdout.trim() || null,
+        },
+        cloudflared: {
+          running: Boolean(cloudflared.stdout.trim()),
+          processes: cloudflared.stdout.split("\n").filter(Boolean),
+        },
+        diagnostics: {},
+      },
     }
   })
 }
