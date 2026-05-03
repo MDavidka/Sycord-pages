@@ -221,12 +221,13 @@ export async function bootstrapDeployVmRunner() {
 
     phase = "install-service"
     emit("Running install-service.sh (npm install, tsc build, systemd)...")
+    const runnerToken = process.env.VPS_RUNNER_TOKEN || ""
     const installResult = await ssh.execCommand(
       [
         "set -e",
         `cd ${remoteRunnerDir}`,
         "chmod +x scripts/install-service.sh",
-        "bash scripts/install-service.sh 2>&1",
+        `VPS_RUNNER_TOKEN="${runnerToken}" bash scripts/install-service.sh 2>&1`,
       ].join(" && "),
       { cwd: remoteRunnerDir },
     )

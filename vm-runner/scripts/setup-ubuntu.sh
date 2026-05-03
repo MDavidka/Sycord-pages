@@ -287,10 +287,16 @@ fi
 
 if port_80_is_busy; then
   OWNER_TEXT="$(port_80_owner_text)"
-  log
-  log "SETUP ERROR: Port 80 is already in use. Nginx cannot start."
-  log "${OWNER_TEXT}"
-  exit 1
+  # If nginx itself owns port 80, that's the correct state — proceed
+  if grep -Eiq 'nginx' <<<"${OWNER_TEXT}"; then
+    log
+    log "Port 80 is held by nginx — this is the expected state. Proceeding to ensure nginx config is correct."
+  else
+    log
+    log "SETUP ERROR: Port 80 is already in use by a non-nginx process. Nginx cannot start."
+    log "${OWNER_TEXT}"
+    exit 1
+  fi
 fi
 
 ensure_nginx
