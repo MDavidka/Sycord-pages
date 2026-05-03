@@ -4,7 +4,7 @@ set -euo pipefail
 AUTO_FIX_PORT_80="${SYCORD_AUTO_FIX_PORT_80:-1}"
 
 log() {
-  printf '%s\n' "$1"
+  printf '%s\n' "${1:-}"
 }
 
 diagnostics() {
