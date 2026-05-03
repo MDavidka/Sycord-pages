@@ -50,13 +50,25 @@ service_for_pid() {
   grep -oE '[^/[:space:]]+\.service' "/proc/${pid}/cgroup" 2>/dev/null | head -n1 || true
 }
 
+exe_for_pid() {
+  local pid="$1"
+  [[ -z "${pid}" ]] && return 0
+  readlink -f "/proc/${pid}/exe" 2>/dev/null || true
+}
+
+process_line_for_pid() {
+  local pid="$1"
+  [[ -z "${pid}" ]] && return 0
+  ps -p "${pid}" -o pid=,ppid=,comm=,args= 2>/dev/null || true
+}
+
 print_port_80_pid_details() {
   local pid service exe ps_line
   pid="$(port_80_pid)"
   [[ -z "${pid}" ]] && return 0
   service="$(service_for_pid "${pid}")"
-  exe="$(readlink -f "/proc/${pid}/exe" 2>/dev/null || true)"
-  ps_line="$(ps -p "${pid}" -o pid=,ppid=,comm=,args= 2>/dev/null || true)"
+  exe="$(exe_for_pid "${pid}")"
+  ps_line="$(process_line_for_pid "${pid}")"
   log "PID: ${pid}"
   [[ -n "${service}" ]] && log "Service: ${service}"
   [[ -n "${exe}" ]] && log "Executable: ${exe}"
@@ -68,7 +80,28 @@ looks_like_old_sycord_stack() {
   if [[ -z "${owner_text}" ]]; then
     return 1
   fi
-  grep -Eiq 'flask|python|gunicorn|caddy|sycord|server|runner|main' <<<"${owner_text}"
+  grep -Eiq 'flask|python|gunicorn|caddy|sycord|server|runner|main|node|static' <<<"${owner_text}"
+}
+
+kill_port_80_pid() {
+  local pid exe ps_line
+  pid="$(port_80_pid)"
+  [[ -z "${pid}" ]] && return 0
+  exe="$(exe_for_pid "${pid}")"
+  ps_line="$(process_line_for_pid "${pid}")"
+
+  if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${exe} ${ps_line}"; then
+    log "Refusing to kill protected port 80 owner: ${ps_line}"
+    return 0
+  fi
+
+  log "Stopping raw port 80 owner PID ${pid}"
+  kill "${pid}" || true
+  sleep 2
+  if kill -0 "${pid}" 2>/dev/null; then
+    log "PID ${pid} still alive, sending SIGKILL"
+    kill -9 "${pid}" || true
+  fi
 }
 
 stop_old_services() {
@@ -93,6 +126,8 @@ stop_old_services() {
     log "Disabling port 80 owning service: ${service}"
     systemctl disable "${service}" || true
   fi
+
+  kill_port_80_pid
 }
 
 ensure_nginx() {

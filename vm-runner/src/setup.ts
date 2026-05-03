@@ -33,6 +33,14 @@ async function checkSystemdService(service: string): Promise<ServiceDiagnostics>
   }
 }
 
+async function checkProcessRunning(pattern: string) {
+  const result = await commandOutput("bash", ["-lc", `pgrep -af '${pattern}' || true`])
+  return {
+    running: Boolean(result.stdout),
+    processes: result.stdout ? result.stdout.split("\n").filter(Boolean) : [],
+  }
+}
+
 async function diskUsage() {
   const result = await runCommand("bash", ["-lc", `df -h ${config.sitesDir} | tail -1 | awk '{print $5}'`])
   return result.stdout.join("").trim() || null
@@ -86,6 +94,7 @@ export async function getSetupStatus() {
 
   const nginxService = await checkSystemdService("nginx")
   const cloudflaredService = await checkSystemdService("cloudflared")
+  const cloudflaredProcess = await checkProcessRunning("cloudflared")
   const runnerListener = await portListenerDetails(config.port)
   const port80 = await portListenerDetails(80)
   const port80Owner = port80.owner
@@ -122,12 +131,14 @@ export async function getSetupStatus() {
     nginx,
     tunnel: {
       ...cloudflaredService,
-      ok: cloudflaredService.running,
+      ok: cloudflaredService.running || cloudflaredProcess.running,
+      status: cloudflaredService.running || cloudflaredProcess.running ? "online" : "offline",
     },
     cloudflared: {
       ...cloudflaredService,
-      ok: cloudflaredService.running,
-      running: cloudflaredService.running,
+      ok: cloudflaredService.running || cloudflaredProcess.running,
+      running: cloudflaredService.running || cloudflaredProcess.running,
+      processes: cloudflaredProcess.processes,
     },
     proxy: {
       ok: nginx.running,
@@ -146,6 +157,7 @@ export async function getSetupStatus() {
     diagnostics: {
       port80,
       runnerPort: runnerListener,
+      cloudflaredProcesses: cloudflaredProcess.processes,
       relatedServices: await relatedServices(),
     },
     warning: nginx.error

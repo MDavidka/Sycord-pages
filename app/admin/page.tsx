@@ -1026,6 +1026,9 @@ export default function AdminPage() {
                 <p>{vpsStatus.warning}</p>
                 {vpsStatus?.nginx?.port80Owner && <p className="text-amber-100/90">Port 80 owner: {vpsStatus.nginx.port80Owner}</p>}
                 {vpsStatus?.debug?.sshError && <p className="text-amber-300/90">SSH debug: {vpsStatus.debug.sshError}</p>}
+                {Array.isArray(vpsStatus?.cloudflared?.processes) && vpsStatus.cloudflared.processes.length > 0 && (
+                  <p className="text-amber-100/90">cloudflared process detected: {vpsStatus.cloudflared.processes[0]}</p>
+                )}
               </div>
             )}
 

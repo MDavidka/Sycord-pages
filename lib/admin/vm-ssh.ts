@@ -56,6 +56,7 @@ export async function readDeployVmDiagnostics() {
     const port5050 = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
     const nginx = await ssh.execCommand("systemctl is-active nginx || true")
     const cloudflared = await ssh.execCommand("systemctl is-active cloudflared || true")
+    const cloudflaredProcess = await ssh.execCommand("pgrep -af cloudflared || true")
     const related = await ssh.execCommand("systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true")
     const port80Pid = port80.stdout.match(/pid=(\d+)/)?.[1] || null
     const port80Process = port80Pid ? await ssh.execCommand(`ps -p ${port80Pid} -o pid=,ppid=,comm=,args= || true`) : { stdout: "", stderr: "" }
@@ -92,9 +93,11 @@ export async function readDeployVmDiagnostics() {
         portOwner: port5050.stdout.trim() || null,
       },
       cloudflared: {
-        running: cloudflared.stdout.trim() === "active",
+        running: cloudflared.stdout.trim() === "active" || Boolean(cloudflaredProcess.stdout.trim()),
+        processes: cloudflaredProcess.stdout.split("\n").filter(Boolean),
       },
       diagnostics: {
+        cloudflaredProcesses: cloudflaredProcess.stdout.split("\n").filter(Boolean),
         relatedServices: related.stdout.split("\n").filter(Boolean),
       },
     }
