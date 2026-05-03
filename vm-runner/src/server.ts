@@ -32,7 +32,13 @@ app.get("/api/status", async () => {
 })
 
 app.get("/api/setup/status", async () => getSetupStatus())
-app.post("/api/setup", async () => runSetup())
+app.post("/api/setup", async (_request, reply) => {
+  const result = await runSetup()
+  if (!result.success) {
+    return reply.code(500).send(result)
+  }
+  return result
+})
 app.post("/api/runner/start", async () => ({ success: true, message: "Runner API already active" }))
 app.post("/api/runner/stop", async () => ({ success: true, message: "Use systemd to stop the runner service" }))
 app.post("/api/runner/destroy", async () => {

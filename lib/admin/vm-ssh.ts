@@ -50,6 +50,58 @@ export async function probeDeployVmSsh() {
   }
 }
 
+export async function readDeployVmDiagnostics() {
+  return withRootSsh(async (ssh) => {
+    const port80 = await ssh.execCommand("ss -ltnp | grep ':80' || true")
+    const port5050 = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
+    const nginx = await ssh.execCommand("systemctl is-active nginx || true")
+    const cloudflared = await ssh.execCommand("systemctl is-active cloudflared || true")
+    const related = await ssh.execCommand("systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true")
+
+    return {
+      nginx: {
+        running: nginx.stdout.trim() === "active",
+        port80Available: !port80.stdout.trim() || port80.stdout.includes("nginx"),
+        port80Owner: port80.stdout.trim() || null,
+        error: port80.stdout.trim() && !port80.stdout.includes("nginx") ? "Port 80 already in use" : null,
+      },
+      runner: {
+        running: Boolean(port5050.stdout.trim()),
+        port: 5050,
+        portOwner: port5050.stdout.trim() || null,
+      },
+      cloudflared: {
+        running: cloudflared.stdout.trim() === "active",
+      },
+      diagnostics: {
+        relatedServices: related.stdout.split("\n").filter(Boolean),
+      },
+    }
+  })
+}
+
+export async function manageDeployVmRunnerService(action: "start" | "stop" | "restart" | "status") {
+  return withRootSsh(async (ssh) => {
+    const command =
+      action === "status"
+        ? "systemctl status sycord-vm-runner --no-pager || true"
+        : `systemctl ${action} sycord-vm-runner && systemctl status sycord-vm-runner --no-pager || true`
+
+    const result = await ssh.execCommand(command)
+    const diagnostics = await readDeployVmDiagnostics()
+
+    return {
+      success:
+        action === "stop"
+          ? !diagnostics.runner.running
+          : diagnostics.runner.running,
+      action,
+      logs: [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
+      diagnostics,
+    }
+  })
+}
+
 export async function bootstrapDeployVmRunner() {
   const localRunnerDir = path.join(process.cwd(), "vm-runner")
   const remoteRunnerDir = "/srv/sycord/vm-runner"

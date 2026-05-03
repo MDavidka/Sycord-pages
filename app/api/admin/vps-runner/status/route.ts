@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { probeDeployVmSsh } from "@/lib/admin/vm-ssh"
+import { probeDeployVmSsh, readDeployVmDiagnostics } from "@/lib/admin/vm-ssh"
 import { proxyRunner, requireAdminResponse } from "../_shared"
 
 export async function GET() {
@@ -13,17 +13,23 @@ export async function GET() {
 
   const ssh = await probeDeployVmSsh()
   if (ssh.reachable) {
+    const diagnostics = await readDeployVmDiagnostics().catch(() => null)
     return NextResponse.json(
       {
         success: true,
         online: true,
+        apiOnline: false,
         degraded: true,
         warning: "Runner API offline, but deploy VM is reachable over root SSH",
-        tunnel: { ok: false, status: "unknown" },
-        proxy: { ok: false, status: "unknown" },
+        tunnel: { ok: diagnostics?.cloudflared?.running ?? false, status: diagnostics?.cloudflared?.running ? "online" : "offline" },
+        proxy: { ok: diagnostics?.nginx?.running ?? false, status: diagnostics?.nginx?.running ? "online" : "offline" },
+        nginx: diagnostics?.nginx ?? null,
+        runner: diagnostics?.runner ?? { running: false, port: 5050 },
+        cloudflared: diagnostics?.cloudflared ?? { running: false },
         cpu: null,
         mem: { percent: null },
         disk: { percent: null },
+        diagnostics: diagnostics?.diagnostics ?? null,
         debug: {
           sshReachable: true,
           sshError: ssh.error,
@@ -38,6 +44,7 @@ export async function GET() {
     {
       success: false,
       online: false,
+      apiOnline: false,
       error: "Runner API and deploy VM SSH are unavailable",
       debug: {
         sshReachable: false,

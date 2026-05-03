@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { bootstrapDeployVmRunner, probeDeployVmSsh } from "@/lib/admin/vm-ssh"
+import { bootstrapDeployVmRunner, probeDeployVmSsh, readDeployVmDiagnostics } from "@/lib/admin/vm-ssh"
 import { proxyRunner, requireAdminResponse } from "../_shared"
 
 export async function GET() {
@@ -12,13 +12,19 @@ export async function GET() {
   }
 
   const ssh = await probeDeployVmSsh()
+  const diagnostics = ssh.reachable ? await readDeployVmDiagnostics().catch(() => null) : null
   return NextResponse.json(
     {
       success: ssh.reachable,
       online: ssh.reachable,
+      apiOnline: false,
       degraded: ssh.reachable,
       setupComplete: false,
       warning: ssh.reachable ? "Runner API offline, but deploy VM SSH login works" : "Deploy VM SSH login failed",
+      nginx: diagnostics?.nginx ?? null,
+      runner: diagnostics?.runner ?? { running: false, port: 5050 },
+      cloudflared: diagnostics?.cloudflared ?? { running: false },
+      diagnostics: diagnostics?.diagnostics ?? null,
       debug: {
         sshReachable: ssh.reachable,
         sshError: ssh.error,
@@ -31,6 +37,11 @@ export async function GET() {
 export async function POST() {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
+
+  const upstream = await proxyRunner("/api/setup", { method: "POST" })
+  if (upstream.status !== 503) {
+    return upstream
+  }
 
   try {
     const ssh = await probeDeployVmSsh()

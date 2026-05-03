@@ -408,6 +408,54 @@ export default function AdminPage() {
     }
   }
 
+  const runRunnerSetup = async () => {
+    setVpsAction("setup")
+    setRunnerSetupError(null)
+    setRunnerSetupLogs("")
+    try {
+      const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      const logs = data?.logs ? (Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs)) : ""
+
+      if (!res.ok || data.success === false) {
+        const msg = data?.details || data?.error || data?.message || "Setup failed"
+        setRunnerSetupError(msg)
+        if (logs) setRunnerSetupLogs(logs)
+        openDebugger({
+          title: "Runner setup failed",
+          message: msg,
+          phase: data?.phase || null,
+          logs,
+          details: {
+            ...(data?.debug || {}),
+            nginx: data?.nginx || null,
+            cloudflared: data?.cloudflared || null,
+            runner: data?.runner || null,
+          },
+        })
+        toast.error(msg)
+        return
+      }
+
+      if (logs) setRunnerSetupLogs(logs)
+      toast.success(data?.message || "Runner setup completed")
+      fetchVpsStatus()
+    } catch (error: any) {
+      const msg = error?.message || "Setup failed"
+      setRunnerSetupError(msg)
+      openDebugger({
+        title: "Runner setup failed",
+        message: msg,
+        phase: "client",
+        logs: "",
+        details: null,
+      })
+      toast.error(msg)
+    } finally {
+      setVpsAction(null)
+    }
+  }
+
   const handleVpsAction = async (action: "start" | "stop" | "setup" | "destroy") => {
     setVpsAction(action)
     try {
@@ -976,16 +1024,50 @@ export default function AdminPage() {
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 space-y-1">
                 <p className="font-semibold">Runner status warning</p>
                 <p>{vpsStatus.warning}</p>
+                {vpsStatus?.nginx?.port80Owner && <p className="text-amber-100/90">Port 80 owner: {vpsStatus.nginx.port80Owner}</p>}
                 {vpsStatus?.debug?.sshError && <p className="text-amber-300/90">SSH debug: {vpsStatus.debug.sshError}</p>}
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {vpsStatus?.nginx?.port80Available === false && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100 space-y-3">
+                <p className="font-semibold">Port 80 is already in use. Nginx cannot start. Cloudflare Tunnel may be routing to the wrong service.</p>
+                {vpsStatus?.nginx?.port80Owner && (
+                  <pre className="whitespace-pre-wrap rounded-lg border border-red-400/20 bg-black/30 p-3 text-xs text-red-100/90">
+                    {vpsStatus.nginx.port80Owner}
+                  </pre>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={runRunnerSetup} disabled={!!vpsAction} className="bg-red-500 text-white hover:bg-red-400 rounded-xl">
+                    Fix port 80 conflict
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-red-400/30 text-red-100 hover:bg-red-500/20 rounded-xl"
+                    onClick={() =>
+                      openDebugger({
+                        title: "Port 80 conflict debugger",
+                        message: vpsStatus?.nginx?.error || "Port 80 conflict detected",
+                        phase: "nginx-port-80",
+                        logs: vpsStatus?.nginx?.port80Owner || "",
+                        details: vpsStatus?.diagnostics || null,
+                      })
+                    }
+                  >
+                    Open debugger
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {[
                 { label: "CPU", value: vpsStatus?.cpu != null ? `${vpsStatus.cpu}%` : "—", icon: Cpu },
                 { label: "Memory", value: vpsStatus?.mem?.percent != null ? `${vpsStatus.mem.percent}%` : "—", icon: Activity },
                 { label: "Disk", value: vpsStatus?.disk?.percent || "—", icon: HardDrive },
-                { label: "Cloudflare Tunnel", value: vpsStatus?.tunnel?.status || (vpsStatus?.tunnelOnline ? "online" : "—"), icon: Cloud },
+                { label: "Nginx :80", value: vpsStatus?.nginx?.running ? "active" : vpsStatus?.nginx?.port80Available === false ? "blocked" : "offline", icon: Server },
+                { label: "Runner :5050", value: vpsStatus?.runner?.running ? "active" : "offline", icon: Activity },
+                { label: "Cloudflare Tunnel", value: vpsStatus?.cloudflared?.running ? "active" : (vpsStatus?.tunnel?.status || "offline"), icon: Cloud },
                 { label: "Running sites", value: `${vpsWebsites.filter((site) => site?.status === "running" || site?.running).length}`, icon: Globe2 },
                 { label: "Failed sites", value: `${vpsWebsites.filter((site) => site?.status === "failed" || site?.health === "unhealthy").length}`, icon: AlertCircle },
               ].map((card) => {
@@ -1007,49 +1089,14 @@ export default function AdminPage() {
                 <Button onClick={() => handleVpsAction("start")} disabled={!!vpsAction} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Start</Button>
                 <Button onClick={() => handleVpsAction("stop")} disabled={!!vpsAction} variant="outline" className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 rounded-xl">Stop</Button>
                 <Button
-                  onClick={async () => {
-                    setRunnerSetupError(null)
-                    setRunnerSetupLogs("")
-                    try {
-                      const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
-                      const data = await res.json().catch(() => ({}))
-                      if (!res.ok || data.success === false) {
-                        const msg = data?.details || data?.error || data?.message || "Setup failed"
-                        const logs = data?.logs ? (Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs)) : ""
-                        setRunnerSetupError(msg)
-                        if (logs) setRunnerSetupLogs(logs)
-                        openDebugger({
-                          title: "Runner setup failed",
-                          message: msg,
-                          phase: data?.phase || null,
-                          logs,
-                          details: data?.debug || null,
-                        })
-                        toast.error(msg)
-                        return
-                      }
-                      if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs))
-                      toast.success(data?.message || "Runner setup completed")
-                      fetchVpsStatus()
-                    } catch (error: any) {
-                      const msg = error?.message || "Setup failed"
-                      setRunnerSetupError(msg)
-                      openDebugger({
-                        title: "Runner setup failed",
-                        message: msg,
-                        phase: "client",
-                        logs: "",
-                        details: null,
-                      })
-                      toast.error(msg)
-                    }
-                  }}
-                                    disabled={!!vpsAction}
+                  onClick={runRunnerSetup}
+                  disabled={!!vpsAction}
                   variant="outline"
                   className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10 rounded-xl"
                 >
                   Setup
                 </Button>
+                <Button onClick={runRunnerSetup} disabled={!!vpsAction} variant="outline" className="border-red-500/30 text-red-200 hover:bg-red-500/10 rounded-xl">Fix port 80 conflict</Button>
                 <Button onClick={() => { if (prompt('Type DESTROY to confirm') === 'DESTROY') handleVpsAction("destroy") }} disabled={!!vpsAction} variant="outline" className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl">Destroy</Button>
               </div>
             </div>
@@ -1059,9 +1106,11 @@ export default function AdminPage() {
                 <h3 className="text-base font-semibold text-white mb-4">Setup checklist</h3>
                 <div className="space-y-3 text-sm">
                   {[
-                    { label: "Runner API reachable", ok: !!vpsStatus?.online },
-                    { label: "Cloudflare Tunnel connected", ok: vpsStatus?.tunnel?.ok ?? vpsStatus?.tunnelOnline },
-                    { label: "Proxy configured", ok: vpsStatus?.proxy?.ok ?? vpsStatus?.proxyOnline },
+                    { label: "Runner API reachable", ok: vpsStatus?.apiOnline ?? !!vpsStatus?.online },
+                    { label: "Runner listening on 5050", ok: vpsStatus?.runner?.running },
+                    { label: "Port 80 free for Nginx", ok: vpsStatus?.nginx?.port80Available },
+                    { label: "Nginx active on 80", ok: vpsStatus?.nginx?.running },
+                    { label: "Cloudflare Tunnel connected", ok: vpsStatus?.cloudflared?.running ?? vpsStatus?.tunnel?.ok ?? vpsStatus?.tunnelOnline },
                     { label: "Sites directory ready", ok: vpsStatus?.setup?.sitesDirReady ?? vpsStatus?.setupComplete },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
