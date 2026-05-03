@@ -273,7 +273,9 @@ export async function POST(req: Request) {
       project: projectContext,
     }
 
+    const startedAt = new Date()
     const result = await runAIWebsiteBuilder(prompt, opts)
+    const finishedAt = new Date()
 
     let savedPages = 0
     let savedFileNames: string[] = []
@@ -302,6 +304,29 @@ export async function POST(req: Request) {
       ? `Generated ${result.manifest.pages.length} polished pages: ${routeSummary}${dbMsg}`
       : `Generated ${result.manifest.pages.length} pages with ${result.build.errors.length} build issue(s): ${routeSummary}${dbMsg}`
 
+
+    if (projectId && ObjectId.isValid(projectId)) {
+      const client = await clientPromise
+      const db = client.db()
+      await db.collection("users").updateOne(
+        { id: session.user.id, "projects._id": new ObjectId(projectId) },
+        {
+          $set: {
+            "projects.$.lastBuilderRun": {
+              startedAt,
+              finishedAt,
+              status: result.autoFix?.fixed ? "fixed" : result.build.ok ? "success" : "failed",
+              events: result.events,
+              autoFix: result.autoFix,
+              build: result.build,
+              warnings: result.warnings,
+              qualityScore: result.qualityScore,
+            },
+          },
+        },
+      )
+    }
+
     // Redact any legacy secret file values from files we send back to the UI.
     const safeFiles = redactEnvFiles(result.files)
 
@@ -313,6 +338,8 @@ export async function POST(req: Request) {
       savedFileNames,
       build: result.build,
       logs: result.logs,
+      events: result.events,
+      autoFix: result.autoFix,
       warnings: result.warnings,
       qualityScore: result.qualityScore,
       needsDatabase: result.needsDatabase,

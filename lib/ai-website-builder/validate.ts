@@ -23,6 +23,18 @@ const FORBIDDEN_PHRASES = [
   "responsive behavior",
 ]
 
+
+function looksBinary(content: string): boolean {
+  if (!content) return false
+  const sample = content.slice(0, 4000)
+  let weird = 0
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i)
+    if (code === 0 || code > 65500) weird++
+  }
+  return weird > 0
+}
+
 const ALLOWED_KINDS: ReadonlySet<string> = new Set([
   "hero",
   "feature-grid",
@@ -458,6 +470,27 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   if (!postcss.includes("@tailwindcss/postcss")) {
     errors.push("postcss.config.js must use @tailwindcss/postcss plugin")
   }
+  // Large base64/data URLs in source often break rendering/compression.
+  for (const [p, c] of fileMap) {
+    if (/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]{5000,}/.test(c)) {
+      errors.push(`${p} contains an oversized inline base64 image; use public assets/URLs instead`)
+    }
+    if (looksBinary(c)) {
+      errors.push(`${p} appears to contain raw binary-like content`)
+    }
+    if (/\bgrid-cols-[^\s"']+/.test(c) && !/\bgrid\b/.test(c)) {
+      warnings.push(`${p} uses grid-cols-* without grid class`)
+    }
+    if (/\bflex-col\b/.test(c) && !/\bflex\b/.test(c)) {
+      warnings.push(`${p} uses flex-col without flex class`)
+    }
+  }
+
+  const rootPage = fileMap.get("app/page.tsx")
+  if (!rootPage || !/export\s+default\s+function/.test(rootPage)) {
+    errors.push('root route must define app/page.tsx with a default export')
+  }
+
   // Duplicate routes.
   const routes = new Set<string>()
   for (const f of routeFiles) {

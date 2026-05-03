@@ -240,7 +240,7 @@ function buildPostcssConfig(): string {
 
 function buildLayout(manifest: GeneratedProjectManifest): string {
   const projectName = manifest.brief.projectName
-  const logoUrl = manifest.brief.logoUrl
+  const logoUrl = typeof manifest.brief.logoUrl === "string" && !manifest.brief.logoUrl.startsWith("data:image/") ? manifest.brief.logoUrl : undefined
   const metaIcons = logoUrl
     ? `,\n  icons: { icon: ${JSON.stringify(logoUrl)}, apple: ${JSON.stringify(logoUrl)} }`
     : ""

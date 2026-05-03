@@ -308,6 +308,35 @@ export interface PipelineLog {
   detail: string
 }
 
+
+export type BuilderStage =
+  | "queued"
+  | "planning"
+  | "designing"
+  | "generating-json"
+  | "coding"
+  | "validating"
+  | "building"
+  | "error-detected"
+  | "auto-fixing"
+  | "rebuilding"
+  | "saving"
+  | "ready"
+  | "failed"
+
+export type BuilderEvent = {
+  id: string
+  stage: BuilderStage
+  status: "pending" | "running" | "success" | "warning" | "error"
+  title: string
+  message: string
+  timestamp: string
+  durationMs?: number
+  filesChanged?: string[]
+  errors?: string[]
+  warnings?: string[]
+}
+
 export interface BuildValidationResult {
   ok: boolean
   errors: string[]
@@ -315,10 +344,21 @@ export interface BuildValidationResult {
   attempts: number
 }
 
+export interface AutoFixSummary {
+  attempted: boolean
+  attempts: number
+  fixed: boolean
+  errorsBefore: string[]
+  errorsAfter: string[]
+  changedFiles: string[]
+}
+
 export interface RunBuilderResult {
   manifest: GeneratedProjectManifest
   files: BuilderFile[]
   logs: PipelineLog[]
+  events: BuilderEvent[]
+  autoFix?: AutoFixSummary
   build: BuildValidationResult
   warnings: string[]
   qualityScore: number

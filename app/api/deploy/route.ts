@@ -226,6 +226,13 @@ function validateFilesForDeployment(
   if (envFile) {
     errors.push(`Env files must not be deployed: ${envFile.path}`)
   }
+  for (const f of files) {
+    if (f.path.startsWith(".next/") || f.path.endsWith(".br") || f.path.endsWith(".gz")) {
+      errors.push(`Build artifacts/compressed assets must not be deployed directly: ${f.path}`)
+    }
+  }
+  const hasRoot = files.some((f) => f.path === "app/page.tsx")
+  if (!hasRoot) errors.push("Missing app/page.tsx in deployed source")
   return errors
 }
 

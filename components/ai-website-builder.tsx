@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -352,6 +353,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     return () => { cancelled = true }
   }, [])
 
+  const [builderEvents, setBuilderEvents] = useState<any[]>([])
+  const [autoFixEnabled, setAutoFixEnabled] = useState(true)
+  const [changedFiles, setChangedFiles] = useState<string[]>([])
+
   const [messageFeedback, setMessageFeedback] = useState<Record<string, 'like' | 'dislike' | 'report' | null>>({})
 
   const giveFeedback = (msgId: string, kind: 'like' | 'dislike' | 'report') => {
@@ -413,10 +418,13 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       const res = await fetch('/api/ai/generate-website', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel, projectId }),
+        body: JSON.stringify({ prompt: input + attachmentNote, model: selectedModel, projectId, autoFix: autoFixEnabled }),
       })
 
       const data = await res.json()
+
+      if (Array.isArray(data?.events)) setBuilderEvents(data.events)
+      if (Array.isArray(data?.autoFix?.changedFiles)) setChangedFiles(data.autoFix.changedFiles)
 
       if (Array.isArray(data?.files)) {
         const nextPages: GeneratedPage[] = data.files
@@ -597,6 +605,35 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
 
                 {messages.length > 0 && (
                     <div className="flex flex-col pt-6 sm:pt-8 pb-4">
+                {builderEvents.length > 0 && (
+                  <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-white">AI Builder Process</h3>
+                      <div className="flex items-center gap-2 text-xs text-zinc-300">
+                        <span>Auto-fix build errors</span>
+                        <Switch checked={autoFixEnabled} onCheckedChange={setAutoFixEnabled} />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {builderEvents.map((e, idx) => (
+                        <details key={e.id || idx} className={`rounded-lg border p-2 ${e.status === "error" ? "border-red-500/40 bg-red-500/10" : e.status === "warning" ? "border-yellow-500/40 bg-yellow-500/10" : "border-emerald-500/20 bg-emerald-500/5"}`}>
+                          <summary className="cursor-pointer text-xs text-zinc-200">{e.title} · {e.stage} · {e.status}</summary>
+                          <p className="text-xs text-zinc-400 mt-1">{e.message}</p>
+                        </details>
+                      ))}
+                    </div>
+                    {changedFiles.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs text-zinc-300 mb-1">Changed files ({changedFiles.length})</p>
+                        <div className="text-xs text-zinc-500">{changedFiles.join(", ")}</div>
+                      </div>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      <Button className="h-7 text-xs" onClick={startGeneration}>Run auto-fix again</Button>
+                    </div>
+                  </div>
+                )}
+
                         {messages
                             .filter(m => m.role === 'user' || (m.role === 'assistant' && !m.plan && !m.isIntermediate))
                             .map((msg, i) => (
