@@ -11,12 +11,12 @@ async function checkVmReachable() {
   const host = process.env.VPS_SSH_HOST
   const password = process.env.VPS_SSH_ROOT_PASSWORD
   const port = process.env.VPS_SSH_PORT || "22"
-  if (!host || !password) return false
+  if (!host || !password) return { reachable: false, error: "Missing VPS_SSH_HOST or VPS_SSH_ROOT_PASSWORD" }
   try {
     await execAsync(`sshpass -p '${password.replace(/'/g, "'\\''")}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p ${port} root@${host} 'echo ok'`)
-    return true
-  } catch {
-    return false
+    return { reachable: true, error: null }
+  } catch (error: any) {
+    return { reachable: false, error: error?.stderr || error?.message || "SSH check failed" }
   }
 }
 
@@ -25,7 +25,8 @@ export async function GET() {
   const upstream = await proxyRunner("/api/status")
   if (upstream.status !== 503) return upstream
 
-  const reachable = await checkVmReachable()
+  const sshProbe = await checkVmReachable()
+  const reachable = sshProbe.reachable
 
   let cachedSetup: any = null
   try {
@@ -46,6 +47,7 @@ export async function GET() {
         : "VM is offline or SSH is unreachable.",
     debug: {
       sshReachable: reachable,
+      sshError: sshProbe.error,
       hasCachedSetupState: Boolean(cachedSetup),
       setupAt: cachedSetup?.setupAt || null,
     },

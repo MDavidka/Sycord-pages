@@ -914,6 +914,15 @@ export default function AdminPage() {
               </div>
             </div>
 
+
+            {vpsStatus?.warning && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 space-y-1">
+                <p className="font-semibold">Runner status warning</p>
+                <p>{vpsStatus.warning}</p>
+                {vpsStatus?.debug?.sshError && <p className="text-amber-300/90">SSH debug: {vpsStatus.debug.sshError}</p>}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {[
                 { label: "CPU", value: vpsStatus?.cpu != null ? `${vpsStatus.cpu}%` : "—", icon: Cpu },
