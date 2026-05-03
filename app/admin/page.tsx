@@ -122,6 +122,8 @@ export default function AdminPage() {
   const [vpsLogLines, setVpsLogLines] = useState<number>(200)
   const [vpsWebsites, setVpsWebsites] = useState<any[]>([])
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
+  const [runnerSetupError, setRunnerSetupError] = useState<string | null>(null)
+  const [runnerSetupLogs, setRunnerSetupLogs] = useState<string>("")
 
   // PAP & TOS State
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
@@ -947,10 +949,47 @@ export default function AdminPage() {
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => handleVpsAction("start")} disabled={!!vpsAction} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Start</Button>
                 <Button onClick={() => handleVpsAction("stop")} disabled={!!vpsAction} variant="outline" className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 rounded-xl">Stop</Button>
-                <Button onClick={() => handleVpsAction("setup")} disabled={!!vpsAction} variant="outline" className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10 rounded-xl">Setup</Button>
+                <Button
+                  onClick={async () => {
+                    setRunnerSetupError(null)
+                    setRunnerSetupLogs("")
+                    try {
+                      const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
+                      const data = await res.json().catch(() => ({}))
+                      if (!res.ok || data.success === false) {
+                        const msg = data?.details || data?.error || "Setup failed"
+                        setRunnerSetupError(msg)
+                        if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("
+") : String(data.logs))
+                        toast.error(msg)
+                        return
+                      }
+                      if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("
+") : String(data.logs))
+                      toast.success(data?.message || "Runner setup completed")
+                      fetchVpsStatus()
+                    } catch (error: any) {
+                      const msg = error?.message || "Setup failed"
+                      setRunnerSetupError(msg)
+                      toast.error(msg)
+                    }
+                  }}
+                  disabled={!!vpsAction}
+                  variant="outline"
+                  className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10 rounded-xl"
+                >
+                  Setup
+                </Button>
                 <Button onClick={() => { if (prompt('Type DESTROY to confirm') === 'DESTROY') handleVpsAction("destroy") }} disabled={!!vpsAction} variant="outline" className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl">Destroy</Button>
               </div>
             </div>
+
+            {(runnerSetupError || runnerSetupLogs) && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
+                {runnerSetupError && <p className="text-sm text-red-200 font-medium">Setup error: {runnerSetupError}</p>}
+                {runnerSetupLogs && <pre className="text-xs text-red-100/90 whitespace-pre-wrap max-h-48 overflow-y-auto">{runnerSetupLogs}</pre>}
+              </div>
+            )}
 
             <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-6">
               <h3 className="text-base font-semibold text-white mb-4">Websites</h3>
