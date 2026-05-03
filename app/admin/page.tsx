@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Image from "next/image"
 import Link from "next/link"
+import { RunnerTabContent } from "@/components/admin-runner-tab"
 import {
   AlertCircle,
   Users,
@@ -1000,192 +1001,27 @@ export default function AdminPage() {
         )}
 
         {/* Runner Tab */}
-        {activeTab === "runner" && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6 md:p-8">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-semibold text-white">Runner</h2>
-                  <p className="text-sm text-white/50 mt-1">Manage the Ubuntu mini-server that builds and runs generated Next.js websites.</p>
-                </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={`rounded-full ${vpsStatus?.online ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-red-500/30 text-red-400 bg-red-500/10"}`}>
-                    {vpsStatus?.online ? "Runner online" : "Runner offline"}
-                  </Badge>
-                  <Button variant="ghost" size="sm" onClick={() => { fetchVpsStatus(); fetchVpsLogs(); }} className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl">
-                    <RotateCcw className="h-4 w-4 mr-1.5" />Refresh
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-
-            {vpsStatus?.warning && (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 space-y-1">
-                <p className="font-semibold">Runner status warning</p>
-                <p>{vpsStatus.warning}</p>
-                {vpsStatus?.nginx?.port80Owner && <p className="text-amber-100/90">Port 80 owner: {vpsStatus.nginx.port80Owner}</p>}
-                {vpsStatus?.debug?.sshError && <p className="text-amber-300/90">SSH debug: {vpsStatus.debug.sshError}</p>}
-                {Array.isArray(vpsStatus?.cloudflared?.processes) && vpsStatus.cloudflared.processes.length > 0 && (
-                  <p className="text-amber-100/90">cloudflared process detected: {vpsStatus.cloudflared.processes[0]}</p>
-                )}
-              </div>
-            )}
-
-            {vpsStatus?.nginx?.port80Available === false && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100 space-y-3">
-                <p className="font-semibold">Port 80 is already in use. Nginx cannot start. Cloudflare Tunnel may be routing to the wrong service.</p>
-                {vpsStatus?.nginx?.port80Owner && (
-                  <pre className="whitespace-pre-wrap rounded-lg border border-red-400/20 bg-black/30 p-3 text-xs text-red-100/90">
-                    {vpsStatus.nginx.port80Owner}
-                  </pre>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={runRunnerSetup} disabled={!!vpsAction} className="bg-red-500 text-white hover:bg-red-400 rounded-xl">
-                    Fix port 80 conflict
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-red-400/30 text-red-100 hover:bg-red-500/20 rounded-xl"
-                    onClick={() =>
-                      openDebugger({
-                        title: "Port 80 conflict debugger",
-                        message: vpsStatus?.nginx?.error || "Port 80 conflict detected",
-                        phase: "nginx-port-80",
-                        logs: vpsStatus?.nginx?.port80Owner || "",
-                        details: vpsStatus?.diagnostics || null,
-                      })
-                    }
-                  >
-                    Open debugger
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {[
-                { label: "CPU", value: vpsStatus?.cpu != null ? `${vpsStatus.cpu}%` : "—", icon: Cpu },
-                { label: "Memory", value: vpsStatus?.mem?.percent != null ? `${vpsStatus.mem.percent}%` : "—", icon: Activity },
-                { label: "Disk", value: vpsStatus?.disk?.percent || "—", icon: HardDrive },
-                { label: "Nginx :80", value: vpsStatus?.nginx?.running ? "active" : vpsStatus?.nginx?.port80Available === false ? "blocked" : "offline", icon: Server },
-                { label: "Runner :5050", value: vpsStatus?.runner?.running ? "active" : "offline", icon: Activity },
-                { label: "Cloudflare Tunnel", value: vpsStatus?.cloudflared?.running ? "active" : (vpsStatus?.tunnel?.status || "offline"), icon: Cloud },
-                { label: "Running sites", value: `${vpsWebsites.filter((site) => site?.status === "running" || site?.running).length}`, icon: Globe2 },
-                { label: "Failed sites", value: `${vpsWebsites.filter((site) => site?.status === "failed" || site?.health === "unhealthy").length}`, icon: AlertCircle },
-              ].map((card) => {
-                const Icon = card.icon
-                return (
-                  <div key={card.label} className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs uppercase tracking-wide text-white/40">{card.label}</p>
-                      <Icon className="h-4 w-4 text-white/40" />
-                    </div>
-                    <p className="text-2xl font-semibold text-white">{card.value}</p>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5">
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => handleVpsAction("start")} disabled={!!vpsAction} className="bg-emerald-600 hover:bg-emerald-700 rounded-xl">Start</Button>
-                <Button onClick={() => handleVpsAction("stop")} disabled={!!vpsAction} variant="outline" className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 rounded-xl">Stop</Button>
-                <Button
-                  onClick={runRunnerSetup}
-                  disabled={!!vpsAction}
-                  variant="outline"
-                  className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10 rounded-xl"
-                >
-                  Setup
-                </Button>
-                <Button onClick={runRunnerSetup} disabled={!!vpsAction} variant="outline" className="border-red-500/30 text-red-200 hover:bg-red-500/10 rounded-xl">Fix port 80 conflict</Button>
-                <Button onClick={() => { if (prompt('Type DESTROY to confirm') === 'DESTROY') handleVpsAction("destroy") }} disabled={!!vpsAction} variant="outline" className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl">Destroy</Button>
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5">
-                <h3 className="text-base font-semibold text-white mb-4">Setup checklist</h3>
-                <div className="space-y-3 text-sm">
-                  {[
-                    { label: "Runner API reachable", ok: vpsStatus?.apiOnline ?? !!vpsStatus?.online },
-                    { label: "Runner listening on 5050", ok: vpsStatus?.runner?.running },
-                    { label: "Port 80 free for Nginx", ok: vpsStatus?.nginx?.port80Available },
-                    { label: "Nginx active on 80", ok: vpsStatus?.nginx?.running },
-                    { label: "Cloudflare Tunnel connected", ok: vpsStatus?.cloudflared?.running ?? vpsStatus?.tunnel?.ok ?? vpsStatus?.tunnelOnline },
-                    { label: "Sites directory ready", ok: vpsStatus?.setup?.sitesDirReady ?? vpsStatus?.setupComplete },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
-                      <span className="text-white/80">{item.label}</span>
-                      <span className={item.ok ? "text-emerald-300" : "text-zinc-500"}>{item.ok ? "ready" : "pending"}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {(runnerSetupError || runnerSetupLogs) && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
-                {runnerSetupError && <p className="text-sm text-red-200 font-medium">Setup error: {runnerSetupError}</p>}
-                {runnerSetupLogs && <pre className="text-xs text-red-100/90 whitespace-pre-wrap max-h-48 overflow-y-auto">{runnerSetupLogs}</pre>}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-red-400/30 text-red-100 hover:bg-red-500/20"
-                  onClick={() =>
-                    openDebugger({
-                      title: "Runner setup debugger",
-                      message: runnerSetupError || "Setup logs",
-                      phase: "setup",
-                      logs: runnerSetupLogs,
-                      details: null,
-                    })
-                  }
-                >
-                  Open debugger
-                </Button>
-              </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-6">
-              <h3 className="text-base font-semibold text-white mb-4">Websites</h3>
-              <div className="space-y-3">
-                {vpsWebsites.length === 0 ? <p className="text-sm text-white/40">No websites reported by runner.</p> : vpsWebsites.map((site) => (
-                  <div key={site.id} className="rounded-xl border border-white/[0.08] bg-black/20 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div>
-                      <p className="text-white font-medium">{site.domain || site.subdomain || site.id}</p>
-                      <p className="text-xs text-white/40">Port {site.port || "—"} · {site.processName || "process unknown"}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "start")}>Start</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "stop")}>Stop</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "restart")}>Restart</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "health")}>Health</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-red-500/30 text-red-300" onClick={() => handleWebsiteAction(site.id, "destroy")}>Destroy</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => { setSelectedWebsiteId(site.id); fetchVpsLogs(site.id) }}>Logs</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-black/40 border border-white/[0.08] p-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-white/40 uppercase tracking-wider">{selectedWebsiteId ? `Logs · ${selectedWebsiteId}` : "Select a website for logs"}</p>
-                <div className="flex items-center gap-2">
-                  <select value={vpsLogType} onChange={(e) => setVpsLogType(e.target.value)} className="bg-black/40 border border-white/20 text-xs rounded px-2 py-1">
-                    <option value="deploy">deploy</option><option value="build">build</option><option value="runtime">runtime</option><option value="error">error</option><option value="health">health</option>
-                  </select>
-                  <Button size="sm" variant="ghost" className="h-7" onClick={() => fetchVpsLogs()}>Refresh</Button>
-                </div>
-              </div>
-              <div className="max-h-[420px] overflow-y-auto font-mono text-xs custom-scrollbar">
-                {vpsLogs.length ? vpsLogs.map((line, i) => <p key={i} className={`${/error|fail/i.test(line) ? "text-red-300" : /warn/i.test(line) ? "text-amber-300" : "text-zinc-300"}`}>{line}</p>) : <p className="text-white/30">No logs yet.</p>}
-              </div>
-            </div>
-          </div>
-        )}
+        {activeTab === "runner" && <RunnerTabContent
+          vpsStatus={vpsStatus}
+          vpsLoading={vpsLoading}
+          vpsWebsites={vpsWebsites}
+          vpsAction={vpsAction}
+          vpsLogs={vpsLogs}
+          vpsLogType={vpsLogType}
+          vpsLogLines={vpsLogLines}
+          selectedWebsiteId={selectedWebsiteId}
+          runnerSetupError={runnerSetupError}
+          runnerSetupLogs={runnerSetupLogs}
+          fetchVpsStatus={fetchVpsStatus}
+          handleVpsAction={handleVpsAction}
+          handleWebsiteAction={handleWebsiteAction}
+          fetchVpsLogs={fetchVpsLogs}
+          runRunnerSetup={runRunnerSetup}
+          setVpsLogType={setVpsLogType}
+          setSelectedWebsiteId={setSelectedWebsiteId}
+          openDebugger={openDebugger}
+          onAutoFix={() => runRunnerSetup()}
+        />}
 
         {/* Tickets Tab */}
         {activeTab === "tickets" && (
