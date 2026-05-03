@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { exec } from "node:child_process"
+import { promises as fs } from "node:fs"
+import path from "node:path"
 import { promisify } from "node:util"
 import { assertAdmin, proxyRunner } from "../_shared"
 
@@ -44,6 +46,8 @@ export async function POST() {
 
   try {
     const logs = await runRootSetupOverSsh()
+    const statePath = path.join(process.cwd(), ".runner-setup-state.json")
+    await fs.writeFile(statePath, JSON.stringify({ setupComplete: true, setupAt: new Date().toISOString(), logs: logs.slice(-4000) }, null, 2))
     return NextResponse.json({
       success: true,
       setupComplete: true,
