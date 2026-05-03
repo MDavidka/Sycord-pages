@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process"
 import { once } from "node:events"
+import { readFile } from "node:fs/promises"
 import { config } from "./config.js"
 
 export async function runCommand(
@@ -36,6 +37,27 @@ export async function runCommand(
   return { code, stdout, stderr }
 }
 
+async function loadEnvFile(envFile: string): Promise<NodeJS.ProcessEnv> {
+  const env: NodeJS.ProcessEnv = {}
+  try {
+    const content = await readFile(envFile, "utf8")
+    const lines = content.split("\n").filter(Boolean)
+    for (const line of lines) {
+      const eq = line.indexOf("=")
+      if (eq <= 0) continue
+      const key = line.slice(0, eq).trim()
+      let value = line.slice(eq + 1).trim()
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+      }
+      env[key] = value
+    }
+  } catch {
+    // env file may not exist yet; that's fine
+  }
+  return env
+}
+
 export async function pm2Describe(processName: string) {
   return runCommand(config.pm2Binary, ["jlist"])
     .then(({ stdout }) => {
@@ -46,8 +68,15 @@ export async function pm2Describe(processName: string) {
 }
 
 export async function startOrRestartProcess(projectId: string, processName: string, port: number, cwd: string, envFile: string) {
+  const envFileVars = await loadEnvFile(envFile)
   const existing = await pm2Describe(processName)
-  const env = { PORT: String(port), HOSTNAME: "0.0.0.0", NODE_ENV: "production", ENV_FILE: envFile }
+  const env = {
+    PORT: String(port),
+    HOSTNAME: "0.0.0.0",
+    NODE_ENV: "production",
+    ENV_FILE: envFile,
+    ...envFileVars,
+  }
 
   if (existing) {
     return runCommand(config.pm2Binary, ["restart", processName, "--update-env"], { cwd, env })

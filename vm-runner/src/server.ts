@@ -145,10 +145,22 @@ app.post("/api/deploy/:projectId", async (request, reply) => {
   try {
     const payload = request.body as any
     const result = await deployProject(projectId, payload, null)
+    if (!result.success) {
+      return reply.code(400).send(result)
+    }
     return result
   } catch (error: any) {
     await appendLog(projectId, "error", error?.message || "Deployment failed")
-    await reply.code(500).send({ success: false, error: error?.message || "Deployment failed" })
+    return await reply.code(500).send({
+      success: false,
+      deployment_mode: "next-server",
+      project_id: projectId,
+      build: { ok: false, logs: [], error: error?.message || "Deployment failed" },
+      running: false,
+      health: { ok: false, htmlOk: false },
+      logs: [],
+      error: error?.message || "Deployment failed",
+    })
   }
 })
 
@@ -156,7 +168,16 @@ app.post("/api/deploy/:projectId/stream", async (request, reply) => {
   const { projectId } = request.params as { projectId: string }
   const stream = createSseReply(reply)
   try {
-    await deployProject(projectId, request.body as any, stream)
+    const result = await deployProject(projectId, request.body as any, stream)
+    if (!result.success) {
+      stream.stage("failed", "error", result.error || "Deployment failed")
+      stream.error({
+        error: result.error || "Deployment failed",
+        stage: result.health?.ok ? "build" : "health-check",
+        logs: result.build?.logs || [],
+        health: result.health,
+      })
+    }
   } catch (error: any) {
     await appendLog(projectId, "error", error?.message || "Deployment failed")
     stream.stage("failed", "error", error?.message || "Deployment failed")

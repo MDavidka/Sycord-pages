@@ -1,17 +1,19 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { CheckCircle2, ChevronDown, ChevronUp, Copy, Download, ExternalLink, Loader2, Terminal, XCircle } from "lucide-react"
+import { CheckCircle2, ChevronDown, ChevronUp, Copy, Download, ExternalLink, Loader2, Terminal, XCircle, Clock, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 type StageId =
   | "queued"
-  | "preparing"
+  | "preparing-files"
   | "installing"
   | "building"
+  | "allocating-port"
   | "starting-server"
+  | "configuring-proxy"
   | "health-check"
   | "complete"
 
@@ -35,7 +37,7 @@ type DeployStreamEvent =
       url: string
       domain: string
       port?: number
-      health: unknown
+      health?: any
       timestamp: string
     }
   | {
@@ -55,27 +57,40 @@ export type DeployLiveLogPanelProps = {
   onFinish?: (outcome: { success: boolean; result?: { url: string; domain: string }; error?: string; stage?: string }) => void
 }
 
-const STAGES: Array<{ id: StageId; label: string }> = [
-  { id: "queued", label: "Queued" },
-  { id: "preparing", label: "Preparing" },
-  { id: "installing", label: "Installing" },
-  { id: "building", label: "Building" },
-  { id: "starting-server", label: "Starting server" },
-  { id: "health-check", label: "Health check" },
-  { id: "complete", label: "Complete" },
+const STAGES: Array<{ id: StageId; label: string; description: string }> = [
+  { id: "queued", label: "Queued", description: "Deployment request received" },
+  { id: "preparing-files", label: "Preparing files", description: "Writing project files to disk" },
+  { id: "installing", label: "Installing dependencies", description: "Running npm install" },
+  { id: "building", label: "Building Next.js", description: "Running next build" },
+  { id: "allocating-port", label: "Allocating port", description: "Finding available port" },
+  { id: "starting-server", label: "Starting server", description: "Launching Next.js via PM2" },
+  { id: "configuring-proxy", label: "Configuring proxy", description: "Setting up nginx reverse proxy" },
+  { id: "health-check", label: "Health check", description: "Verifying root HTML response" },
+  { id: "complete", label: "Complete", description: "Site is live" },
 ]
 
+const KNOWN_STAGES = new Set(STAGES.map((s) => s.id))
+
 function normalizeStage(stage: string): StageId {
-  if (stage === "vm-connect" || stage === "github" || stage === "writing-files" || stage === "configuring-proxy" || stage === "saving") {
-    return "preparing"
+  // Map runner stage names to UI stage ids
+  const map: Record<string, StageId> = {
+    queued: "queued",
+    "preparing-files": "preparing-files",
+    preparing: "preparing-files",
+    "writing-files": "preparing-files",
+    installing: "installing",
+    building: "building",
+    "allocating-port": "allocating-port",
+    "starting-server": "starting-server",
+    "configuring-proxy": "configuring-proxy",
+    "health-check": "health-check",
+    complete: "complete",
+    failed: "complete",
   }
-  if (stage === "failed") {
-    return "health-check"
-  }
-  if (stage === "complete") {
-    return "complete"
-  }
-  return STAGES.some((item) => item.id === stage) ? (stage as StageId) : "preparing"
+  const normalized = map[stage]
+  if (normalized && KNOWN_STAGES.has(normalized)) return normalized
+  // For any unknown stage, don't normalize — use as-is and add to stages dynamically
+  return "preparing-files"
 }
 
 export function DeployLiveLogPanel({
@@ -87,15 +102,12 @@ export function DeployLiveLogPanel({
   onFinish,
 }: DeployLiveLogPanelProps) {
   const [logs, setLogs] = useState<string[]>([])
-  const [stageState, setStageState] = useState<Record<string, "pending" | "running" | "success" | "error">>({
-    queued: "pending",
-    preparing: "pending",
-    installing: "pending",
-    building: "pending",
-    "starting-server": "pending",
-    "health-check": "pending",
-    complete: "pending",
+  const [stageState, setStageState] = useState<Record<string, "pending" | "running" | "success" | "error">>(() => {
+    const initial: Record<string, "pending" | "running" | "success" | "error"> = {}
+    for (const s of STAGES) initial[s.id] = "pending"
+    return initial
   })
+  const [stageTimes, setStageTimes] = useState<Record<string, number>>({})
   const [result, setResult] = useState<{ url: string; domain: string } | null>(null)
   const [error, setError] = useState<{ stage?: string; message: string } | null>(null)
   const [collapsed, setCollapsed] = useState(false)
@@ -114,15 +126,11 @@ export function DeployLiveLogPanel({
     setError(null)
     setIsRunning(true)
     setLastMessage("Connecting to deploy stream")
-    setStageState({
-      queued: "running",
-      preparing: "pending",
-      installing: "pending",
-      building: "pending",
-      "starting-server": "pending",
-      "health-check": "pending",
-      complete: "pending",
-    })
+    const initial: Record<string, "pending" | "running" | "success" | "error"> = {}
+    for (const s of STAGES) initial[s.id] = "pending"
+    initial.queued = "running"
+    setStageState(initial)
+    setStageTimes({})
 
     const abortController = new AbortController()
     abortRef.current = abortController
@@ -186,16 +194,29 @@ export function DeployLiveLogPanel({
       setLastMessage(event.message)
       setStageState((current) => {
         const next = { ...current, [normalized]: event.status }
-        if (normalized === "complete" && event.status === "success") {
-          next["health-check"] = next["health-check"] === "pending" ? "success" : next["health-check"]
+        // Mark all previous stages as success when a new stage starts
+        const stageOrder = STAGES.map((s) => s.id)
+        const idx = stageOrder.indexOf(normalized)
+        if (idx >= 0 && event.status === "running") {
+          for (let i = 0; i < idx; i++) {
+            const prevStage = stageOrder[i]
+            if (next[prevStage] === "running") {
+              next[prevStage] = "success"
+            }
+          }
+        }
+        return next
+      })
+      // Track stage timing
+      setStageTimes((current) => {
+        const next = { ...current }
+        if (!next[normalized] && event.status === "running") {
+          next[normalized] = Date.now()
         }
         return next
       })
       if (event.status === "error") {
         setError({ stage: event.stage, message: event.message })
-        setIsRunning(false)
-      }
-      if (event.stage === "complete" && event.status === "success") {
         setIsRunning(false)
       }
       return
@@ -208,7 +229,15 @@ export function DeployLiveLogPanel({
 
     if (event.type === "result") {
       setResult({ url: event.url, domain: event.domain })
-      setStageState((current) => ({ ...current, complete: "success" }))
+      setStageState((current) => {
+        const next = { ...current }
+        for (const s of STAGES) {
+          if (next[s.id] === "running" || next[s.id] === "pending") {
+            next[s.id] = "success"
+          }
+        }
+        return next
+      })
       setLastMessage("Deployment complete")
       setIsRunning(false)
       onSuccess?.({ url: event.url, domain: event.domain })
@@ -216,6 +245,7 @@ export function DeployLiveLogPanel({
       return
     }
 
+    // type === "error"
     setError({ stage: event.stage, message: event.error })
     if (Array.isArray(event.logs) && event.logs.length > 0) {
       setLogs((current) => current.concat(event.logs.map((line) => `[error] ${line}`)))
@@ -229,7 +259,13 @@ export function DeployLiveLogPanel({
     const dataLine = block.split("\n").find((line) => line.startsWith("data:"))
     if (!eventLine || !dataLine) return null
     try {
-      return JSON.parse(dataLine.slice(5).trim()) as DeployStreamEvent
+      const parsed = JSON.parse(dataLine.slice(5).trim())
+      // Ensure type field exists - it may be embedded in data
+      if (!parsed.type) {
+        const eventType = eventLine.slice(6).trim()
+        return { type: eventType, ...parsed } as DeployStreamEvent
+      }
+      return parsed as DeployStreamEvent
     } catch {
       return null
     }
@@ -254,6 +290,14 @@ export function DeployLiveLogPanel({
       abortRef.current?.abort()
     }
     onOpenChange(nextOpen)
+  }
+
+  function getStageDuration(stageId: StageId): string {
+    const start = stageTimes[stageId]
+    if (!start) return ""
+    const ms = Date.now() - start
+    if (ms < 1000) return `${ms}ms`
+    return `${(ms / 1000).toFixed(1)}s`
   }
 
   return (
@@ -286,44 +330,83 @@ export function DeployLiveLogPanel({
             </div>
           </div>
 
-          <div className="relative grid flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <div className="relative grid flex-1 gap-0 lg:grid-cols-[300px_minmax(0,1fr)]">
+            {/* Stage panel */}
             <div className="border-b border-white/6 bg-white/[0.02] px-4 py-4 lg:border-r lg:border-b-0 lg:px-5 lg:py-5">
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500 mb-4">Stages</p>
+              <div className="space-y-1">
                 {STAGES.map((stage) => {
-                  const state = stageState[stage.id]
+                  const state = stageState[stage.id] || "pending"
+                  const StageIcon =
+                    state === "success" ? CheckCircle2 :
+                    state === "running" ? Loader2 :
+                    state === "error" ? XCircle :
+                    Clock
                   return (
-                    <div key={stage.id} className="flex items-center gap-3 rounded-xl border border-white/6 bg-black/20 px-3 py-3">
-                      <div
+                    <div
+                      key={stage.id}
+                      className={cn(
+                        "flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors",
+                        state === "running" && "border-amber-500/40 bg-amber-500/5",
+                        state === "success" && "border-emerald-500/20 bg-emerald-500/5",
+                        state === "error" && "border-red-500/40 bg-red-500/5",
+                        state === "pending" && "border-white/4 bg-transparent",
+                      )}
+                    >
+                      <StageIcon
                         className={cn(
-                          "h-2.5 w-2.5 rounded-full",
-                          state === "success" && "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]",
-                          state === "running" && "bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.8)]",
-                          state === "error" && "bg-red-400 shadow-[0_0_12px_rgba(248,113,113,0.8)]",
-                          state === "pending" && "bg-zinc-700",
+                          "mt-0.5 h-4 w-4 shrink-0",
+                          state === "success" && "text-emerald-400",
+                          state === "running" && "animate-spin text-amber-300",
+                          state === "error" && "text-red-400",
+                          state === "pending" && "text-zinc-700",
                         )}
                       />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white">{stage.label}</p>
-                        <p className="text-xs text-zinc-500">{state}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p
+                            className={cn(
+                              "text-sm font-medium",
+                              state === "success" && "text-emerald-200",
+                              state === "running" && "text-amber-200",
+                              state === "error" && "text-red-200",
+                              state === "pending" && "text-zinc-500",
+                            )}
+                          >
+                            {stage.label}
+                          </p>
+                          {state === "running" && getStageDuration(stage.id) && (
+                            <span className="text-xs text-amber-400 tabular-nums">
+                              {getStageDuration(stage.id)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-0.5">{stage.description}</p>
                       </div>
                     </div>
                   )
                 })}
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/6 bg-black/25 p-4 lg:mt-6">
+              <div className="mt-4 rounded-2xl border border-white/6 bg-black/25 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Status</p>
                 <p className="mt-2 text-sm text-zinc-200">{error?.message || lastMessage}</p>
-                {error?.stage && <p className="mt-2 text-xs text-red-300">Failing stage: {error.stage}</p>}
+                {error?.stage && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-red-300">
+                    <AlertTriangle className="h-3 w-3" />
+                    Failing stage: {error.stage}
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* Log terminal */}
             {!collapsed && (
               <div className="flex min-h-[42dvh] flex-col sm:min-h-[520px]">
                 <div className="flex flex-col gap-2 border-b border-white/6 px-4 py-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                   <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4" />
-                    Live terminal
+                    Live build output
                   </div>
                   <button className="text-zinc-400 hover:text-white" onClick={() => setAutoScroll((value) => !value)}>
                     Auto-scroll: {autoScroll ? "on" : "off"}
@@ -339,10 +422,16 @@ export function DeployLiveLogPanel({
                       <div
                         key={`${line}-${index}`}
                         className={cn(
-                          "border-b border-white/[0.03] py-0.5 text-zinc-400",
-                          /error|failed|exception/i.test(line) && "text-red-300",
-                          /warn/i.test(line) && "text-amber-300",
-                          /success|complete|ready|healthy/i.test(line) && "text-emerald-300",
+                          "border-b border-white/[0.03] py-0.5",
+                          /\[error\]|error|failed|exception/i.test(line) && "text-red-300",
+                          /\[warn\]|warn/i.test(line) && "text-amber-300",
+                          /\[runner\]|success|complete|ready|healthy/i.test(line) && "text-emerald-300",
+                          /\[install\]/i.test(line) && "text-cyan-300",
+                          /\[build\]/i.test(line) && "text-violet-300",
+                          /\[runtime\]/i.test(line) && "text-blue-300",
+                          /\[health\]/i.test(line) && "text-pink-300",
+                          /\[proxy\]/i.test(line) && "text-orange-300",
+                          !/\[error\]|\[warn\]|\[runner\]|\[install\]|\[build\]|\[runtime\]|\[health\]|\[proxy\]|error|failed|exception|warn|success|complete|ready|healthy/i.test(line) && "text-zinc-400",
                         )}
                       >
                         {line}
@@ -351,9 +440,10 @@ export function DeployLiveLogPanel({
                   )}
                 </div>
               </div>
-              )}
+            )}
           </div>
 
+          {/* Footer */}
           <div className="relative flex flex-col gap-3 border-t border-white/8 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
             <div className="flex items-center gap-2">
               {result ? (
@@ -369,7 +459,7 @@ export function DeployLiveLogPanel({
               ) : (
                 <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm text-amber-200">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Deploying
+                  Deploying...
                 </span>
               )}
             </div>
@@ -395,7 +485,7 @@ export function DeployLiveLogPanel({
                     Close
                   </Button>
                   <Button onClick={() => setAttempt((value) => value + 1)} className="bg-red-500 text-white hover:bg-red-400">
-                    Try redeploy again
+                    Retry deploy
                   </Button>
                 </>
               )}

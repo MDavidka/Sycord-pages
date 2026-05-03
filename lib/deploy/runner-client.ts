@@ -206,7 +206,7 @@ export function normalizeRunnerDeployResponse(input: any): RunnerDeployResponse 
     health: {
       ok: healthOk,
       htmlOk,
-      status: typeof input?.health?.status === "number" ? input.health.status : null,
+      status: typeof input?.health?.status === "number" ? input.health.status : (typeof input?.health?.statusCode === "number" ? input.health.statusCode : null),
       contentType: input?.health?.contentType || input?.health?.content_type || null,
       error: input?.health?.error || null,
     },

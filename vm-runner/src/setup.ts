@@ -198,11 +198,12 @@ export async function runSetup() {
   const logs = [...result.stdout, ...result.stderr].join("\n").trim()
   const status = await getSetupStatus()
 
+  const { success: _statusSuccess, ...restStatus } = status
   return {
     success: result.code === 0 && status.nginx.running,
     phase: result.code === 0 ? "complete" : "nginx-port-80",
     logs,
-    ...status,
+    ...restStatus,
     error: result.code === 0 ? null : status.nginx.error || "Setup failed",
   }
 }
