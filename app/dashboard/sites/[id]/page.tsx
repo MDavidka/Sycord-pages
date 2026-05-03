@@ -84,6 +84,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
+import { DeployLiveLogPanel } from "@/components/deploy-live-log-panel"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -660,6 +661,7 @@ export default function SiteSettingsPage() {
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
   const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
+  const [deployPanelOpen, setDeployPanelOpen] = useState(false)
   const deploymentMode = useMemo(
     () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
     [generatedPages, project],
@@ -780,7 +782,7 @@ export default function SiteSettingsPage() {
                 if (urlMatch && urlMatch[1]) {
                     const url = urlMatch[1].trim().replace(/\.$/, '')
                     setProject((prev: any) => ({ ...prev, cloudflareUrl: url }))
-                    setDeployResult((prev: any) => ({ ...prev, url, message: "Deployed to Cloudflare Pages!" }))
+                    setDeployResult((prev: any) => ({ ...prev, url, message: "Deployment complete" }))
                     setDeploySuccess(true)
                     setHasDeployError(false)
                 }
@@ -1096,44 +1098,10 @@ export default function SiteSettingsPage() {
     setActiveTab("ai")
   }
 
-  const pollForDomain = async (repoId: string, attempts = 0) => {
-    if (attempts >= 40) return
-
-    try {
-      const res = await fetch(`/api/deploy/${repoId}/domain`)
-      const data = await res.json()
-
-      if (data.success && data.domain) {
-        setProject((prev: any) => ({ ...prev, cloudflareUrl: data.domain }))
-        setDeployResult((prev: any) => ({
-            ...prev,
-            url: data.domain,
-            message: "Deployed to Cloudflare Pages!"
-        }))
-        fetchLogs(repoId)
-      } else {
-        setTimeout(() => pollForDomain(repoId, attempts + 1), 3000)
-      }
-    } catch (e) {
-      console.error("Polling error:", e)
-    }
-  }
-
   const handleDeploy = async () => {
     if (isDeploying) return
-    
-    setIsDeploying(true)
-    setDeployProgress(0)
-    setDeploySuccess(false)
-    setDeployResult(null)
-    setDeployError(null)
-
-    const PROGRESS_INTERVAL_MS = 400
-    const PROGRESS_INCREMENT = 10
-    const MAX_SIMULATED_PROGRESS = 80
 
     try {
-      // Save all current pages to DB before deploying so the backend has the latest files
       if (generatedPages.length > 0) {
         for (const page of generatedPages) {
           await fetch(`/api/projects/${id}/pages`, {
@@ -1147,76 +1115,17 @@ export default function SiteSettingsPage() {
           })
         }
       }
-
-      const progressInterval = setInterval(() => {
-        setDeployProgress(prev => {
-          const nextProgress = prev + PROGRESS_INCREMENT
-          if (nextProgress >= MAX_SIMULATED_PROGRESS) {
-            clearInterval(progressInterval)
-            return MAX_SIMULATED_PROGRESS
-          }
-          return nextProgress
-        })
-      }, PROGRESS_INTERVAL_MS)
-
-      const logPolling = setInterval(() => {
-        fetchLogs((project?._id || id) as string)
-      }, 1500)
-
-      const response = await fetch("/api/deploy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id }),
-      })
-
-      clearInterval(progressInterval)
-      clearInterval(logPolling)
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || errorData.build?.error || errorData.health?.error || "Deployment failed")
-      }
-
-      const result = await response.json()
-      if (result?.success !== true || result?.health_ok !== true) {
-        throw new Error(result.error || result.build?.error || result.health?.error || "Deployment failed")
-      }
-
-      setDeployProgress(100)
-      setDeploySuccess(true)
-      setDeployResult({
-        url: result.url,
-        message: `${result.message || `Successfully deployed ${result.filesCount} file(s)`} (${formatDeploymentMode(result.deploymentMode || deploymentMode)})`,
-        build: result.build === true || result.build?.built === true,
-        running: result.running === true,
-        health_ok: result.health_ok === true,
-        domain: result.domain || result.cloudflareUrl?.replace(/^https?:\/\//, ""),
-        port: result.port,
-      })
-
-      if (result.repoId) {
-          setProject((prev: any) => ({ ...prev, githubRepoId: result.repoId }))
-          if (!result.cloudflareUrl) {
-              pollForDomain(result.repoId)
-          } else {
-              setProject((prev: any) => ({ ...prev, cloudflareUrl: result.cloudflareUrl }))
-          }
-          fetchLogs(result.repoId)
-      }
-
-      const SUCCESS_DISPLAY_DURATION_MS = 5000
-      setTimeout(() => {
-        setDeploySuccess(false)
-        setDeployProgress(0)
-      }, SUCCESS_DISPLAY_DURATION_MS)
-
+      setIsDeploying(true)
+      setDeployProgress(0)
+      setDeploySuccess(false)
+      setDeployResult(null)
+      setDeployError(null)
+      setHasDeployError(false)
+      setDeployPanelOpen(true)
     } catch (err: any) {
       setDeployError(err.message || "Deployment failed")
       setDeployProgress(0)
       setHasDeployError(true)
-      setTimeout(fetchLogs, 1000)
-    } finally {
-      setIsDeploying(false)
     }
   }
 
@@ -1330,6 +1239,55 @@ export default function SiteSettingsPage() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
+      <DeployLiveLogPanel
+        open={deployPanelOpen}
+        onOpenChange={(open) => {
+          setDeployPanelOpen(open)
+          if (!open) {
+            setIsDeploying(false)
+          }
+        }}
+        projectId={String(id)}
+        projectName={project?.businessName || project?.name}
+        onSuccess={(streamResult) => {
+          setIsDeploying(false)
+          setDeploySuccess(true)
+          setDeployProgress(100)
+          setDeployResult({
+            url: streamResult.url,
+            domain: streamResult.domain,
+            message: `Deployment complete (${formatDeploymentMode(deploymentMode)})`,
+            build: true,
+            running: true,
+            health_ok: true,
+          })
+          setDeploymentRuntime((current: any) => ({
+            ...(current || {}),
+            mode: "next-server",
+            domain: streamResult.domain,
+            status: "running",
+            health: "healthy",
+          }))
+          setProject((prev: any) => ({ ...prev, cloudflareUrl: streamResult.url }))
+          setHasDeployError(false)
+          fetchLogs((project?._id || id) as string)
+        }}
+        onFinish={(outcome) => {
+          setIsDeploying(false)
+          if (!outcome.success) {
+            setDeployError(outcome.error || "Deployment failed")
+            setHasDeployError(true)
+            setDeploymentRuntime((current: any) => ({
+              ...(current || {}),
+              mode: "next-server",
+              status: "failed",
+              health: "unhealthy",
+              lastDeployError: outcome.error || "Deployment failed",
+            }))
+            fetchLogs((project?._id || id) as string)
+          }
+        }}
+      />
       {/* Desktop Sidebar - Rolling Animation Style */}
       <aside 
         className="hidden md:block shrink-0 transition-[width] duration-300 ease-out" 
@@ -2449,9 +2407,9 @@ export default function SiteSettingsPage() {
                     </CardHeader>
                     {(deployResult || deploymentRuntime) && (
                       <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                        <div>Build: {deployResult?.build ?? deploymentRuntime?.build ? "ok" : "pending"}</div>
-                        <div>Server: {deployResult?.running ?? deploymentRuntime?.running ? "running" : "pending"}</div>
-                        <div>Health: {deployResult?.health_ok ?? deploymentRuntime?.health_ok ? "ok" : "pending"}</div>
+                        <div>Build: {deployResult?.build || deploymentRuntime?.status === "running" ? "ok" : "pending"}</div>
+                        <div>Server: {deployResult?.running || deploymentRuntime?.status === "running" ? "running" : deploymentRuntime?.status || "pending"}</div>
+                        <div>Health: {deployResult?.health_ok || deploymentRuntime?.health === "healthy" ? "ok" : deploymentRuntime?.health || "pending"}</div>
                         <div>Port: {deployResult?.port ?? deploymentRuntime?.port ?? "allocated by VM"}</div>
                       </CardContent>
                     )}

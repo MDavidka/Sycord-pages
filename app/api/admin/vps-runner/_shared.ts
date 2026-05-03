@@ -1,30 +1,50 @@
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { NextResponse } from "next/server"
+import { isAdmin } from "@/lib/is-admin"
 
 const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
-const VPS_RUNNER_TOKEN = process.env.VPS_RUNNER_TOKEN || ""
 
 export async function assertAdmin() {
-  const session = await getServerSession(authOptions)
-  const email = session?.user?.email
-  const allowed = email && (email === process.env.ADMIN_EMAIL || email === "dmarton336@gmail.com")
-  return Boolean(allowed)
+  return isAdmin()
+}
+
+export function runnerHeaders(extra?: HeadersInit) {
+  const headers = new Headers(extra)
+  headers.set("Content-Type", "application/json")
+  if (process.env.VPS_RUNNER_TOKEN) {
+    headers.set("Authorization", `Bearer ${process.env.VPS_RUNNER_TOKEN}`)
+  }
+  return headers
 }
 
 export async function proxyRunner(path: string, init?: RequestInit) {
   try {
-    const res = await fetch(`${VPS_SERVER_URL}${path}`, {
+    const response = await fetch(`${VPS_SERVER_URL}${path}`, {
       ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(VPS_RUNNER_TOKEN ? { "Authorization": `Bearer ${VPS_RUNNER_TOKEN}` } : {}),
-        ...(init?.headers || {}),
-      },
+      headers: runnerHeaders(init?.headers),
     })
 
-    const data = await res.json().catch(() => ({ success: false, error: "Invalid runner response" }))
-    return new Response(JSON.stringify(data), { status: res.status, headers: { "Content-Type": "application/json" } })
+    const text = await response.text()
+    return new Response(text || JSON.stringify({ success: response.ok }), {
+      status: response.status,
+      headers: {
+        "Content-Type": response.headers.get("content-type") || "application/json",
+      },
+    })
   } catch {
-    return new Response(JSON.stringify({ success: false, online: false, error: "Runner VM appears offline" }), { status: 503, headers: { "Content-Type": "application/json" } })
+    return NextResponse.json(
+      {
+        success: false,
+        online: false,
+        error: "Runner VM appears offline",
+      },
+      { status: 503 },
+    )
   }
+}
+
+export async function requireAdminResponse() {
+  if (!(await assertAdmin())) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  return null
 }

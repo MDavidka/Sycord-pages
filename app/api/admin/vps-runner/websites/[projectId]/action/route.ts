@@ -1,8 +1,27 @@
 import { NextResponse } from "next/server"
-import { assertAdmin, proxyRunner } from "../../../_shared"
+import { proxyRunner, requireAdminResponse } from "../../../_shared"
 
-export async function POST(request: Request, { params }: { params: { projectId: string } }) {
-  if (!(await assertAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const body = await request.text()
-  return proxyRunner(`/api/websites/${params.projectId}/action`, { method: "POST", body })
+const ACTION_PATHS: Record<string, (projectId: string) => string> = {
+  start: (projectId) => `/api/websites/${projectId}/start`,
+  stop: (projectId) => `/api/websites/${projectId}/stop`,
+  restart: (projectId) => `/api/websites/${projectId}/restart`,
+  health: (projectId) => `/api/websites/${projectId}/health`,
+  destroy: (projectId) => `/api/websites/${projectId}`,
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
+  const unauthorized = await requireAdminResponse()
+  if (unauthorized) return unauthorized
+
+  const { projectId } = await params
+  const body = await request.json().catch(() => ({}))
+  const action = typeof body.action === "string" ? body.action : ""
+  const pathFactory = ACTION_PATHS[action]
+  if (!pathFactory) {
+    return NextResponse.json({ success: false, error: "Invalid website action" }, { status: 400 })
+  }
+
+  return proxyRunner(pathFactory(projectId), {
+    method: action === "destroy" ? "DELETE" : "POST",
+  })
 }

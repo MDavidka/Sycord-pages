@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server"
-import { assertAdmin, proxyRunner } from "../_shared"
+import { proxyRunner, requireAdminResponse } from "../_shared"
 
 export async function GET() {
-  if (!(await assertAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const unauthorized = await requireAdminResponse()
+  if (unauthorized) return unauthorized
   return proxyRunner("/api/websites")
 }

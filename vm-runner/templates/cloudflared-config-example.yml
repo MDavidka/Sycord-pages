@@ -1,0 +1,7 @@
+tunnel: your-tunnel-id
+credentials-file: /etc/cloudflared/your-tunnel-id.json
+
+ingress:
+  - hostname: "*.sycord.site"
+    service: http://127.0.0.1:80
+  - service: http_status:404

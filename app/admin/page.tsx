@@ -345,7 +345,8 @@ export default function AdminPage() {
       }
       const websitesRes = await fetch("/api/admin/vps-runner/websites")
       if (websitesRes.ok) {
-        setVpsWebsites(await websitesRes.json())
+        const data = await websitesRes.json()
+        setVpsWebsites(Array.isArray(data) ? data : data.websites || [])
       }
     } catch (err) {
       console.error("Failed to fetch VPS status:", err)
@@ -354,7 +355,7 @@ export default function AdminPage() {
     }
   }
 
-  const handleWebsiteAction = async (id: string, action: "start" | "stop" | "restart" | "health-check" | "destroy-runtime") => {
+  const handleWebsiteAction = async (id: string, action: "start" | "stop" | "restart" | "health" | "destroy") => {
     try {
       const res = await fetch(`/api/admin/vps-runner/websites/${id}/action`, {
         method: "POST",
@@ -905,9 +906,9 @@ export default function AdminPage() {
                   <h2 className="text-2xl font-semibold text-white">Runner</h2>
                   <p className="text-sm text-white/50 mt-1">Manage the Ubuntu mini-server that builds and runs generated Next.js websites.</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className={`rounded-full ${vpsStatus?.online ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-red-500/30 text-red-400 bg-red-500/10"}`}>
-                    {vpsStatus?.online ? "VM Online" : "VM Offline"}
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={`rounded-full ${vpsStatus?.online ? "border-green-500/30 text-green-400 bg-green-500/10" : "border-red-500/30 text-red-400 bg-red-500/10"}`}>
+                    {vpsStatus?.online ? "Runner online" : "Runner offline"}
                   </Badge>
                   <Button variant="ghost" size="sm" onClick={() => { fetchVpsStatus(); fetchVpsLogs(); }} className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl">
                     <RotateCcw className="h-4 w-4 mr-1.5" />Refresh
@@ -930,7 +931,9 @@ export default function AdminPage() {
                 { label: "CPU", value: vpsStatus?.cpu != null ? `${vpsStatus.cpu}%` : "—", icon: Cpu },
                 { label: "Memory", value: vpsStatus?.mem?.percent != null ? `${vpsStatus.mem.percent}%` : "—", icon: Activity },
                 { label: "Disk", value: vpsStatus?.disk?.percent || "—", icon: HardDrive },
-                { label: "Websites", value: `${vpsWebsites.length}`, icon: Globe2 },
+                { label: "Cloudflare Tunnel", value: vpsStatus?.tunnel?.status || (vpsStatus?.tunnelOnline ? "online" : "—"), icon: Cloud },
+                { label: "Running sites", value: `${vpsWebsites.filter((site) => site?.status === "running" || site?.running).length}`, icon: Globe2 },
+                { label: "Failed sites", value: `${vpsWebsites.filter((site) => site?.status === "failed" || site?.health === "unhealthy").length}`, icon: AlertCircle },
               ].map((card) => {
                 const Icon = card.icon
                 return (
@@ -982,12 +985,31 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {(runnerSetupError || runnerSetupLogs) && (
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+              <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5">
+                <h3 className="text-base font-semibold text-white mb-4">Setup checklist</h3>
+                <div className="space-y-3 text-sm">
+                  {[
+                    { label: "Runner API reachable", ok: !!vpsStatus?.online },
+                    { label: "Cloudflare Tunnel connected", ok: vpsStatus?.tunnel?.ok ?? vpsStatus?.tunnelOnline },
+                    { label: "Proxy configured", ok: vpsStatus?.proxy?.ok ?? vpsStatus?.proxyOnline },
+                    { label: "Sites directory ready", ok: vpsStatus?.setup?.sitesDirReady ?? vpsStatus?.setupComplete },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-black/20 px-3 py-3">
+                      <span className="text-white/80">{item.label}</span>
+                      <span className={item.ok ? "text-emerald-300" : "text-zinc-500"}>{item.ok ? "ready" : "pending"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {(runnerSetupError || runnerSetupLogs) && (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
                 {runnerSetupError && <p className="text-sm text-red-200 font-medium">Setup error: {runnerSetupError}</p>}
                 {runnerSetupLogs && <pre className="text-xs text-red-100/90 whitespace-pre-wrap max-h-48 overflow-y-auto">{runnerSetupLogs}</pre>}
               </div>
-            )}
+              )}
+            </div>
 
             <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-6">
               <h3 className="text-base font-semibold text-white mb-4">Websites</h3>
@@ -1002,8 +1024,8 @@ export default function AdminPage() {
                       <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "start")}>Start</Button>
                       <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "stop")}>Stop</Button>
                       <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "restart")}>Restart</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "health-check")}>Health</Button>
-                      <Button size="sm" variant="outline" className="h-8 border-red-500/30 text-red-300" onClick={() => handleWebsiteAction(site.id, "destroy-runtime")}>Destroy</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => handleWebsiteAction(site.id, "health")}>Health</Button>
+                      <Button size="sm" variant="outline" className="h-8 border-red-500/30 text-red-300" onClick={() => handleWebsiteAction(site.id, "destroy")}>Destroy</Button>
                       <Button size="sm" variant="outline" className="h-8 border-white/20" onClick={() => { setSelectedWebsiteId(site.id); fetchVpsLogs(site.id) }}>Logs</Button>
                     </div>
                   </div>
