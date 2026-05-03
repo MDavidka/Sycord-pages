@@ -192,7 +192,16 @@ ensure_nginx() {
 }
 
 apt-get update
-apt-get install -y nginx curl git lsof
+apt-get install -y nginx curl git lsof ca-certificates
+
+if ! command -v node &>/dev/null; then
+  log "Node.js not found, installing LTS..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+fi
+
+log "Node.js $(node --version) / npm $(npm --version)"
+
 npm install -g pm2
 mkdir -p /srv/sycord/sites /srv/sycord/logs /srv/sycord/env /srv/sycord/runner
 chmod 700 /srv/sycord/env

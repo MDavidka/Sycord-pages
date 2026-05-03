@@ -164,6 +164,11 @@ export async function bootstrapDeployVmRunner() {
   return withRootSsh(async (ssh) => {
     const steps: string[] = []
     let phase = "prepare"
+    let errorMsg: string | null = null
+
+    const emit = (text: string) => {
+      steps.push(text)
+    }
 
     const prep = await ssh.execCommand(
       [
@@ -173,44 +178,90 @@ export async function bootstrapDeployVmRunner() {
         "mkdir -p /srv/sycord/vm-runner",
       ].join(" && "),
     )
-    steps.push(prep.stdout, prep.stderr)
+    emit(prep.stdout)
+    emit(prep.stderr)
     if (prep.code !== 0) {
-      return {
-        success: false,
-        phase,
-        logs: steps.filter(Boolean).join("\n").trim(),
-      }
+      errorMsg = `Failed to create directories (exit ${prep.code}): ${prep.stderr || prep.stdout}`
+      return { success: false, phase, error: errorMsg, logs: steps.filter(Boolean).join("\n").trim() }
     }
 
     phase = "upload"
-    await ssh.putDirectory(localRunnerDir, remoteRunnerDir, {
-      recursive: true,
-      concurrency: 4,
-      validate: (itemPath) => !/node_modules|dist|\.git/.test(itemPath),
-    })
+    emit(`Uploading vm-runner/ to ${remoteRunnerDir}...`)
+    try {
+      await ssh.putDirectory(localRunnerDir, remoteRunnerDir, {
+        recursive: true,
+        concurrency: 4,
+        validate: (itemPath) => !/node_modules|dist|\.git|package-lock/.test(itemPath),
+      })
+      emit("Uploaded vm-runner files successfully")
+    } catch (err: any) {
+      errorMsg = `SCP upload failed: ${err?.message || "Unknown error"}`
+      emit(errorMsg)
+      return { success: false, phase, error: errorMsg, logs: steps.filter(Boolean).join("\n").trim() }
+    }
 
-    phase = "install"
-    const install = await ssh.execCommand(
+    phase = "setup-script"
+    emit("Running setup-ubuntu.sh...")
+    const setupResult = await ssh.execCommand(
       [
         "set -e",
         `cd ${remoteRunnerDir}`,
-        "chmod +x scripts/*.sh",
-        "bash scripts/setup-ubuntu.sh",
-        "bash scripts/install-service.sh",
-        "systemctl restart sycord-vm-runner",
-        "systemctl is-active sycord-vm-runner",
+        "chmod +x scripts/setup-ubuntu.sh",
+        "bash scripts/setup-ubuntu.sh 2>&1",
       ].join(" && "),
       { cwd: remoteRunnerDir },
     )
-    steps.push(install.stdout, install.stderr)
+    emit(setupResult.stdout)
+    emit(setupResult.stderr)
+    if (setupResult.code !== 0) {
+      errorMsg = `setup-ubuntu.sh failed (exit ${setupResult.code})`
+      emit(errorMsg)
+      return { success: false, phase, error: errorMsg, logs: steps.filter(Boolean).join("\n").trim() }
+    }
+
+    phase = "install-service"
+    emit("Running install-service.sh (npm install, tsc build, systemd)...")
+    const installResult = await ssh.execCommand(
+      [
+        "set -e",
+        `cd ${remoteRunnerDir}`,
+        "chmod +x scripts/install-service.sh",
+        "bash scripts/install-service.sh 2>&1",
+      ].join(" && "),
+      { cwd: remoteRunnerDir },
+    )
+    emit(installResult.stdout)
+    emit(installResult.stderr)
+    if (installResult.code !== 0) {
+      errorMsg = `install-service.sh failed (exit ${installResult.code})`
+      emit(errorMsg)
+      return { success: false, phase, error: errorMsg, logs: steps.filter(Boolean).join("\n").trim() }
+    }
+
+    phase = "start-service"
+    emit("Starting sycord-vm-runner service...")
+    const startResult = await ssh.execCommand("systemctl restart sycord-vm-runner 2>&1 && sleep 2 && systemctl is-active sycord-vm-runner 2>&1")
+    emit(startResult.stdout)
+    emit(startResult.stderr)
+    if (!startResult.stdout.includes("active")) {
+      const journal = await ssh.execCommand("journalctl -u sycord-vm-runner --no-pager -n 30 2>&1 || true")
+      emit(journal.stdout)
+      emit(journal.stderr)
+      errorMsg = `Runner service failed to start: ${startResult.stdout.trim() || startResult.stderr.trim()}`
+      return { success: false, phase, error: errorMsg, logs: steps.filter(Boolean).join("\n").trim() }
+    }
 
     phase = "verify"
-    const verify = await ssh.execCommand("systemctl is-active sycord-vm-runner && ss -ltnp | grep ':5050 ' || true")
-    steps.push(verify.stdout, verify.stderr)
+    emit("Verifying runner is listening on port 5050...")
+    const verify = await ssh.execCommand("ss -ltnp | grep ':5050 ' || true")
+    emit(verify.stdout)
+    emit(verify.stderr)
 
+    const success = Boolean(verify.stdout.trim())
     return {
-      success: install.code === 0,
+      success,
       phase,
+      error: success ? null : "Runner process not found on port 5050 after start",
       logs: steps.filter(Boolean).join("\n").trim(),
     }
   })
