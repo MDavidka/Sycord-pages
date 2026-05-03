@@ -157,29 +157,91 @@ kill_port_80_pid() {
 }
 
 stop_old_services() {
-  local units
-  units="$(related_service_units)"
-  if [[ -n "${units}" ]]; then
-    while read -r unit; do
-      [[ -z "${unit}" ]] && continue
-      log "Stopping old service: ${unit}"
-      systemctl stop "${unit}" || true
-      log "Disabling old service: ${unit}"
-      systemctl disable "${unit}" || true
-    done <<<"${units}"
-  fi
-
-  local pid service
+  local pid service exe
   pid="$(port_80_pid)"
-  service="$(service_for_pid "${pid}")"
-  if [[ -n "${service}" ]] && ! grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${service}"; then
-    log "Stopping port 80 owning service: ${service}"
-    systemctl stop "${service}" || true
-    log "Disabling port 80 owning service: ${service}"
-    systemctl disable "${service}" || true
+  if [[ -z "${pid}" ]]; then
+    log "No process found on port 80"
+    return 0
   fi
 
-  kill_port_80_pid
+  service="$(service_for_pid "${pid}")"
+  exe="$(exe_for_pid "${pid}")"
+
+  if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${exe} ${service}"; then
+    log "Port 80 is held by a protected service (nginx/cloudflared/runner) — skipping cleanup"
+    return 0
+  fi
+
+  log "Port 80 owner: PID=${pid} service=${service:-none} exe=${exe:-unknown}"
+
+  # Step 1: Stop and mask the systemd service if we can find it
+  if [[ -n "${service}" ]]; then
+    log "Stopping systemd unit: ${service}"
+    systemctl stop "${service}" 2>/dev/null || true
+    log "Disabling systemd unit: ${service}"
+    systemctl disable "${service}" 2>/dev/null || true
+    log "Masking systemd unit to prevent restart: ${service}"
+    systemctl mask "${service}" 2>/dev/null || true
+    sleep 1
+  fi
+
+  # Step 2: Also search for and disable any startup references
+  disable_startup_references
+
+  # Step 3: If still running, kill directly
+  if kill -0 "${pid}" 2>/dev/null; then
+    log "PID ${pid} still alive, sending SIGTERM"
+    kill "${pid}" 2>/dev/null || true
+    sleep 3
+  fi
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    log "PID ${pid} still alive after SIGTERM, sending SIGKILL"
+    kill -9 "${pid}" 2>/dev/null || true
+    sleep 2
+  fi
+
+  # Step 4: If STILL running, kill everything on port 80
+  if kill -0 "${pid}" 2>/dev/null; then
+    log "PID ${pid} refuses to die, using fuser -k 80/tcp as last resort"
+    fuser -k 80/tcp 2>/dev/null || true
+    sleep 2
+  fi
+
+  # Step 5: Kill parent
+  local ppid parent_line
+  ppid="$(ppid_for_pid "${pid}")"
+  if [[ -n "${ppid}" ]] && [[ "${ppid}" != "1" ]]; then
+    parent_line="$(process_line_for_pid "${ppid}")"
+    if ! grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${parent_line}"; then
+      log "Stopping parent PID ${ppid}"
+      kill "${ppid}" 2>/dev/null || true
+      sleep 1
+      kill -9 "${ppid}" 2>/dev/null || true
+    fi
+  fi
+
+  # Step 6: Additional — find any service by scanning systemd for this executable
+  if [[ -n "${exe}" ]]; then
+    local extra_units
+    extra_units="$(systemctl list-units --type=service --all --no-legend 2>/dev/null | awk '{print $1}' | while read -r u; do
+      local ep
+      ep="$(systemctl show -p ExecStart "${u}" 2>/dev/null | head -1 || true)"
+      if [[ "${ep}" == *"${exe}"* ]]; then
+        echo "${u}"
+      fi
+    done || true)"
+    if [[ -n "${extra_units}" ]]; then
+      while read -r unit; do
+        [[ -z "${unit}" ]] && continue
+        if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${unit}"; then continue; fi
+        log "Found additional service matching exe: ${unit}"
+        systemctl stop "${unit}" 2>/dev/null || true
+        systemctl disable "${unit}" 2>/dev/null || true
+        systemctl mask "${unit}" 2>/dev/null || true
+      done <<<"${extra_units}"
+    fi
+  fi
 }
 
 ensure_nginx() {
