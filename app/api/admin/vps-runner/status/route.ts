@@ -10,11 +10,30 @@ const execAsync = promisify(exec)
 async function checkVmReachable() {
   const host = process.env.VPS_SSH_HOST
   const password = process.env.VPS_SSH_ROOT_PASSWORD
+  const privateKey = process.env.VPS_SSH_PRIVATE_KEY
   const port = process.env.VPS_SSH_PORT || "22"
-  if (!host || !password) return { reachable: false, error: "Missing VPS_SSH_HOST or VPS_SSH_ROOT_PASSWORD" }
+  if (!host) return { reachable: false, error: "Missing VPS_SSH_HOST" }
+
   try {
-    await execAsync(`sshpass -p '${password.replace(/'/g, "'\\''")}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p ${port} root@${host} 'echo ok'`)
-    return { reachable: true, error: null }
+    const check = await execAsync("command -v sshpass || true")
+    if (check.stdout.trim() && password) {
+      await execAsync(`sshpass -p '${password.replace(/'/g, "'\\''")}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p ${port} root@${host} 'echo ok'`)
+      return { reachable: true, error: null }
+    }
+
+    if (privateKey) {
+      const keyPath = path.join(process.cwd(), ".tmp-runner-ssh-key")
+      await fs.writeFile(keyPath, privateKey.replace(/\n/g, "
+"), { mode: 0o600 })
+      try {
+        await execAsync(`ssh -i ${keyPath} -o StrictHostKeyChecking=no -o ConnectTimeout=5 -p ${port} root@${host} 'echo ok'`)
+      } finally {
+        await fs.unlink(keyPath).catch(() => {})
+      }
+      return { reachable: true, error: null }
+    }
+
+    return { reachable: false, error: "sshpass not installed and VPS_SSH_PRIVATE_KEY missing" }
   } catch (error: any) {
     return { reachable: false, error: error?.stderr || error?.message || "SSH check failed" }
   }

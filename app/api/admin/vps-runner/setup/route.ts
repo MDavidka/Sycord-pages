@@ -10,10 +10,11 @@ const execAsync = promisify(exec)
 async function runRootSetupOverSsh() {
   const host = process.env.VPS_SSH_HOST
   const password = process.env.VPS_SSH_ROOT_PASSWORD
+  const privateKey = process.env.VPS_SSH_PRIVATE_KEY
   const port = process.env.VPS_SSH_PORT || "22"
 
-  if (!host || !password) {
-    throw new Error("Missing VPS_SSH_HOST or VPS_SSH_ROOT_PASSWORD env values")
+  if (!host) {
+    throw new Error("Missing VPS_SSH_HOST env value")
   }
 
   const remoteScript = [
@@ -28,9 +29,31 @@ async function runRootSetupOverSsh() {
     "echo 'Legacy Flask scripts destroyed. VM runner folder prepared.'"
   ].join(" && ")
 
-  const cmd = `sshpass -p '${password.replace(/'/g, "'\\''")}' ssh -o StrictHostKeyChecking=no -p ${port} root@${host} \"${remoteScript.replace(/\"/g, '\\\"')}\"`
-  const { stdout, stderr } = await execAsync(cmd, { timeout: 120000, maxBuffer: 1024 * 1024 })
-  return `${stdout}\n${stderr}`.trim()
+  const sshCheck = await execAsync("command -v sshpass || true")
+  const hasSshpass = sshCheck.stdout.trim().length > 0
+
+  if (hasSshpass && password) {
+    const cmd = `sshpass -p '${password.replace(/'/g, "'\\''")}' ssh -o StrictHostKeyChecking=no -p ${port} root@${host} "${remoteScript.replace(/\"/g, '\\\"')}"`
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 120000, maxBuffer: 1024 * 1024 })
+    return `${stdout}
+${stderr}`.trim()
+  }
+
+  if (privateKey) {
+    const keyPath = path.join(process.cwd(), ".tmp-runner-ssh-key")
+    await fs.writeFile(keyPath, privateKey.replace(/\n/g, "
+"), { mode: 0o600 })
+    try {
+      const cmd = `ssh -i ${keyPath} -o StrictHostKeyChecking=no -p ${port} root@${host} "${remoteScript.replace(/\"/g, '\\\"')}"`
+      const { stdout, stderr } = await execAsync(cmd, { timeout: 120000, maxBuffer: 1024 * 1024 })
+      return `${stdout}
+${stderr}`.trim()
+    } finally {
+      await fs.unlink(keyPath).catch(() => {})
+    }
+  }
+
+  throw new Error("SSH setup unavailable: sshpass is not installed and VPS_SSH_PRIVATE_KEY is missing. Add VPS_SSH_PRIVATE_KEY (recommended) or provide sshpass in runtime.")
 }
 
 export async function GET() {
