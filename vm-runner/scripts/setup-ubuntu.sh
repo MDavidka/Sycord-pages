@@ -272,30 +272,37 @@ diagnostics
 
 if port_80_is_busy; then
   OWNER_TEXT="$(port_80_owner_text)"
-  log
-  log "Port 80 is currently blocked:"
-  log "${OWNER_TEXT}"
 
-  if [[ "${AUTO_FIX_PORT_80}" == "1" ]] && looks_like_old_sycord_stack "${OWNER_TEXT}"; then
-    log
-    log "Detected old Flask/static/Sycord traffic owner on port 80. Attempting automatic cleanup."
-    stop_old_services
-    sleep 2
-    diagnostics
-  fi
-fi
-
-if port_80_is_busy; then
-  OWNER_TEXT="$(port_80_owner_text)"
-  # If nginx itself owns port 80, that's the correct state — proceed
+  # Nginx on port 80 is the desired state. Skip cleanup.
   if grep -Eiq 'nginx' <<<"${OWNER_TEXT}"; then
     log
-    log "Port 80 is held by nginx — this is the expected state. Proceeding to ensure nginx config is correct."
+    log "Port 80 is held by nginx — correct. Cloudflare Tunnel → Nginx → Next.js sites."
   else
     log
-    log "SETUP ERROR: Port 80 is already in use by a non-nginx process. Nginx cannot start."
+    log "Port 80 is occupied by a non-nginx process:"
     log "${OWNER_TEXT}"
-    exit 1
+
+    if [[ "${AUTO_FIX_PORT_80}" == "1" ]]; then
+      log
+      log "Attempting automatic cleanup of port 80 owner..."
+      stop_old_services
+      sleep 2
+    fi
+
+    # Re-check after cleanup
+    if port_80_is_busy; then
+      local final_owner
+      final_owner="$(port_80_owner_text)"
+      if grep -Eiq 'nginx' <<<"${final_owner}"; then
+        log "Cleanup succeeded — nginx now holds port 80."
+      else
+        log
+        log "SETUP ERROR: Port 80 still occupied after cleanup. Nginx cannot start."
+        log "${final_owner}"
+        exit 1
+      fi
+    fi
+    diagnostics
   fi
 fi
 
