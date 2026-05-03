@@ -62,6 +62,19 @@ process_line_for_pid() {
   ps -p "${pid}" -o pid=,ppid=,comm=,args= 2>/dev/null || true
 }
 
+ppid_for_pid() {
+  local pid="$1"
+  [[ -z "${pid}" ]] && return 0
+  ps -p "${pid}" -o ppid= 2>/dev/null | tr -d ' '
+}
+
+startup_references_for_pattern() {
+  local pattern="$1"
+  grep -RInE "${pattern}" /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system /etc/rc.local /etc/crontab /var/spool/cron/crontabs/root /root/.config/systemd /root 2>/dev/null \
+    | grep -vE '/root/myapp/cloudflared|/srv/sycord/vm-runner|sycord-vm-runner' \
+    || true
+}
+
 print_port_80_pid_details() {
   local pid service exe ps_line
   pid="$(port_80_pid)"
@@ -73,6 +86,8 @@ print_port_80_pid_details() {
   [[ -n "${service}" ]] && log "Service: ${service}"
   [[ -n "${exe}" ]] && log "Executable: ${exe}"
   [[ -n "${ps_line}" ]] && log "Process: ${ps_line}"
+  log "Startup references:"
+  startup_references_for_pattern "${exe:-/go/bin/main}|/go/bin/main|main /go/bin/main" || true
 }
 
 looks_like_old_sycord_stack() {
@@ -83,17 +98,44 @@ looks_like_old_sycord_stack() {
   grep -Eiq 'flask|python|gunicorn|caddy|sycord|server|runner|main|node|static' <<<"${owner_text}"
 }
 
+disable_startup_references() {
+  local service_lines matched_service
+  service_lines="$(startup_references_for_pattern '/go/bin/main|main /go/bin/main|/root/myapp')"
+  if [[ -n "${service_lines}" ]]; then
+    log "Found startup references for old public app:"
+    log "${service_lines}"
+  fi
+
+  matched_service="$(grep -oE '[[:alnum:]_.@-]+\.service' <<<"${service_lines}" | sort -u || true)"
+  if [[ -n "${matched_service}" ]]; then
+    while read -r unit; do
+      [[ -z "${unit}" ]] && continue
+      if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${unit}"; then
+        continue
+      fi
+      log "Stopping startup unit: ${unit}"
+      systemctl stop "${unit}" || true
+      log "Disabling startup unit: ${unit}"
+      systemctl disable "${unit}" || true
+    done <<<"${matched_service}"
+  fi
+}
+
 kill_port_80_pid() {
-  local pid exe ps_line
+  local pid ppid exe ps_line parent_line
   pid="$(port_80_pid)"
   [[ -z "${pid}" ]] && return 0
+  ppid="$(ppid_for_pid "${pid}")"
   exe="$(exe_for_pid "${pid}")"
   ps_line="$(process_line_for_pid "${pid}")"
+  parent_line="$(process_line_for_pid "${ppid}")"
 
   if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${exe} ${ps_line}"; then
     log "Refusing to kill protected port 80 owner: ${ps_line}"
     return 0
   fi
+
+  disable_startup_references
 
   log "Stopping raw port 80 owner PID ${pid}"
   kill "${pid}" || true
@@ -101,6 +143,16 @@ kill_port_80_pid() {
   if kill -0 "${pid}" 2>/dev/null; then
     log "PID ${pid} still alive, sending SIGKILL"
     kill -9 "${pid}" || true
+  fi
+
+  if [[ -n "${ppid}" ]] && [[ "${ppid}" != "1" ]] && ! grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${parent_line}"; then
+    log "Stopping parent PID ${ppid}: ${parent_line}"
+    kill "${ppid}" || true
+    sleep 1
+    if kill -0 "${ppid}" 2>/dev/null; then
+      log "Parent PID ${ppid} still alive, sending SIGKILL"
+      kill -9 "${ppid}" || true
+    fi
   fi
 }
 

@@ -59,9 +59,19 @@ export async function readDeployVmDiagnostics() {
     const cloudflaredProcess = await ssh.execCommand("pgrep -af cloudflared || true")
     const related = await ssh.execCommand("systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true")
     const port80Pid = port80.stdout.match(/pid=(\d+)/)?.[1] || null
+    const port80ParentPid = port80Pid ? await ssh.execCommand(`ps -p ${port80Pid} -o ppid= | tr -d ' ' || true`) : { stdout: "", stderr: "" }
     const port80Process = port80Pid ? await ssh.execCommand(`ps -p ${port80Pid} -o pid=,ppid=,comm=,args= || true`) : { stdout: "", stderr: "" }
+    const port80ParentProcess = port80ParentPid.stdout.trim()
+      ? await ssh.execCommand(`ps -p ${port80ParentPid.stdout.trim()} -o pid=,ppid=,comm=,args= || true`)
+      : { stdout: "", stderr: "" }
     const port80Exe = port80Pid ? await ssh.execCommand(`readlink -f /proc/${port80Pid}/exe || true`) : { stdout: "", stderr: "" }
     const port80Service = port80Pid ? await ssh.execCommand(`grep -oE '[^/[:space:]]+\\.service' /proc/${port80Pid}/cgroup | head -n1 || true`) : { stdout: "", stderr: "" }
+    const port80StartupRefs =
+      port80Pid && (port80Exe.stdout.trim() || port80Process.stdout.trim())
+        ? await ssh.execCommand(
+            `grep -RInE '${(port80Exe.stdout.trim() || "").replace(/[.[\]{}()*+?^$|\\]/g, "\\$&")}|/go/bin/main|main /go/bin/main|/root/myapp' /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system /etc/rc.local /etc/crontab /var/spool/cron/crontabs/root /root/.config/systemd /root 2>/dev/null | grep -vE '/root/myapp/cloudflared|/srv/sycord/vm-runner|sycord-vm-runner' || true`,
+          )
+        : { stdout: "", stderr: "" }
 
     return {
       nginx: {
@@ -76,6 +86,7 @@ export async function readDeployVmDiagnostics() {
           port80Service.stdout.trim() ? `service=${port80Service.stdout.trim()}` : "",
           port80Exe.stdout.trim() ? `exe=${port80Exe.stdout.trim()}` : "",
           port80Process.stdout.trim() ? `process=${port80Process.stdout.trim()}` : "",
+          port80ParentProcess.stdout.trim() ? `parent=${port80ParentProcess.stdout.trim()}` : "",
         ]
           .filter(Boolean)
           .join("\n") || null,
@@ -97,6 +108,9 @@ export async function readDeployVmDiagnostics() {
         processes: cloudflaredProcess.stdout.split("\n").filter(Boolean),
       },
       diagnostics: {
+        port80ParentPid: port80ParentPid.stdout.trim() || null,
+        port80ParentProcess: port80ParentProcess.stdout.trim() || null,
+        port80StartupReferences: port80StartupRefs.stdout.split("\n").filter(Boolean),
         cloudflaredProcesses: cloudflaredProcess.stdout.split("\n").filter(Boolean),
         relatedServices: related.stdout.split("\n").filter(Boolean),
       },

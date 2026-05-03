@@ -51,14 +51,29 @@ async function portListenerDetails(port: number) {
   const lsof = await commandOutput("bash", ["-lc", `lsof -nP -iTCP:${port} -sTCP:LISTEN || true`])
   const pidMatch = ss.stdout.match(/pid=(\d+)/)
   const pid = pidMatch ? Number(pidMatch[1]) : null
+  const parentPid = pid
+    ? await commandOutput("bash", ["-lc", `ps -p ${pid} -o ppid= | tr -d ' ' || true`])
+    : { ok: false, stdout: "", stderr: "" }
   const process = pid
     ? await commandOutput("bash", ["-lc", `ps -p ${pid} -o pid=,ppid=,comm=,args= || true`])
+    : { ok: false, stdout: "", stderr: "" }
+  const parentProcess = parentPid.stdout
+    ? await commandOutput("bash", ["-lc", `ps -p ${parentPid.stdout} -o pid=,ppid=,comm=,args= || true`])
     : { ok: false, stdout: "", stderr: "" }
   const executable = pid
     ? await commandOutput("bash", ["-lc", `readlink -f /proc/${pid}/exe || true`])
     : { ok: false, stdout: "", stderr: "" }
   const service = pid
     ? await commandOutput("bash", ["-lc", `grep -oE '[^/[:space:]]+\\.service' /proc/${pid}/cgroup | head -n1 || true`])
+    : { ok: false, stdout: "", stderr: "" }
+  const startupRefs = executable.stdout || process.stdout
+    ? await commandOutput(
+        "bash",
+        [
+          "-lc",
+          `grep -RInE '${(executable.stdout || "").replace(/[.[\]{}()*+?^$|\\]/g, "\\$&")}|/go/bin/main|main /go/bin/main|/root/myapp' /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system /etc/rc.local /etc/crontab /var/spool/cron/crontabs/root /root/.config/systemd /root 2>/dev/null | grep -vE '/root/myapp/cloudflared|/srv/sycord/vm-runner|sycord-vm-runner' || true`,
+        ],
+      )
     : { ok: false, stdout: "", stderr: "" }
   const owner = [ss.stdout, lsof.stdout, service.stdout && `service=${service.stdout}`, executable.stdout && `exe=${executable.stdout}`, process.stdout && `process=${process.stdout}`]
     .filter(Boolean)
@@ -68,9 +83,12 @@ async function portListenerDetails(port: number) {
     listening: Boolean(owner),
     owner: owner || null,
     pid,
+    parentPid: parentPid.stdout ? Number(parentPid.stdout) : null,
     service: service.stdout || null,
     executable: executable.stdout || null,
     process: process.stdout || null,
+    parentProcess: parentProcess.stdout || null,
+    startupReferences: startupRefs.stdout ? startupRefs.stdout.split("\n").filter(Boolean) : [],
     ss: ss.stdout || null,
     lsof: lsof.stdout || null,
   }
