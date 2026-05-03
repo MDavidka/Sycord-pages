@@ -768,14 +768,14 @@ export default function SiteSettingsPage() {
     if (!targetId) return
 
     try {
-        const res = await fetch(`https://micro1.sycord.com/api/logs?project_id=${targetId}&limit=50`)
+        const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs?type=deploy&limit=120`)
         if (res.ok) {
             const data = await res.json()
             if (data.success && Array.isArray(data.logs)) {
                 setLogs(data.logs)
                 // Extract URL from logs if present
                 const combinedLogs = data.logs.join('\n')
-                const urlMatch = combinedLogs.match(/Take a peek over at[\s\S]*?(https:\/\/[a-zA-Z0-9.-]+\.pages\.dev)/)
+                const urlMatch = combinedLogs.match(/(https:\/\/[a-zA-Z0-9.-]+)/)
 
                 if (urlMatch && urlMatch[1]) {
                     const url = urlMatch[1].trim().replace(/\.$/, '')
@@ -787,7 +787,7 @@ export default function SiteSettingsPage() {
 
                 // Simple error detection in logs
                 const combined = combinedLogs.toLowerCase()
-                const successFound = combined.includes('take a peek over at') || combined.includes('deployment complete')
+                const successFound = combined.includes('deployment complete') || combined.includes('health check passed') || combined.includes('runner ready')
 
                 const errorFound = !successFound && data.logs.some((log: string) =>
                     log.toLowerCase().includes('error') ||
@@ -1159,6 +1159,10 @@ export default function SiteSettingsPage() {
         })
       }, PROGRESS_INTERVAL_MS)
 
+      const logPolling = setInterval(() => {
+        fetchLogs((project?._id || id) as string)
+      }, 1500)
+
       const response = await fetch("/api/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1166,6 +1170,7 @@ export default function SiteSettingsPage() {
       })
 
       clearInterval(progressInterval)
+      clearInterval(logPolling)
 
       if (!response.ok) {
         const errorData = await response.json()
