@@ -19,6 +19,7 @@ export const config = {
   proxy: process.env.SYCORD_PROXY || "nginx",
   nginxSitesDir: process.env.SYCORD_NGINX_SITES_DIR || "/etc/nginx/sites-enabled",
   nginxTemplatePath: path.join(process.cwd(), "templates", "nginx-site.conf"),
+  nginxRunnerTemplatePath: path.join(process.cwd(), "templates", "nginx-runner.conf"),
   pm2Binary: process.env.SYCORD_PM2_BIN || "pm2",
   setupScriptPath: path.join(process.cwd(), "scripts", "setup-ubuntu.sh"),
 }

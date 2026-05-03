@@ -253,6 +253,22 @@ ensure_nginx() {
   systemctl is-active nginx >/dev/null
 }
 
+ensure_runner_nginx_config() {
+  local runner_conf="/etc/nginx/sites-enabled/sycord-runner.conf"
+  if [[ -f "${runner_conf}" ]]; then
+    log "Runner nginx config already exists"
+    return 0
+  fi
+
+  if [[ -f "/srv/sycord/vm-runner/templates/nginx-runner.conf" ]]; then
+    log "Installing runner proxy config (server.sycord.site → :5050)"
+    cp /srv/sycord/vm-runner/templates/nginx-runner.conf "${runner_conf}"
+    nginx -t && systemctl reload nginx
+  else
+    log "Runner proxy template not found — the runner will create it on startup"
+  fi
+}
+
 apt-get update
 apt-get install -y nginx curl git lsof ca-certificates
 
@@ -307,10 +323,12 @@ if port_80_is_busy; then
 fi
 
 ensure_nginx
+ensure_runner_nginx_config
 
 log
 log "Ubuntu setup complete"
 log "Expected final state:"
-log "- nginx active on :80"
+log "- nginx active on :80 → proxies *.sycord.site to Next.js sites"
+log "- server.sycord.site → :5050 (runner API)"
 log "- sycord-vm-runner active on :5050"
-log "- cloudflared active"
+log "- cloudflared active (optional)"

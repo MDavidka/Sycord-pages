@@ -11,7 +11,7 @@ import { getProcessName, getProjectRoot, validateProjectId } from "./paths.js"
 import { deleteProcess, pm2Describe, stopProcess } from "./processes.js"
 import { getWebsiteState, readState, removeWebsiteState, upsertWebsiteState } from "./state.js"
 import { runHealthCheck } from "./health.js"
-import { removeProxyConfig, reloadProxy } from "./proxy.js"
+import { ensureRunnerProxyConfig, reloadProxy, removeProxyConfig } from "./proxy.js"
 
 const app = Fastify({ logger: true })
 
@@ -192,6 +192,8 @@ app.post("/api/deploy/:projectId/stream", async (request, reply) => {
 })
 
 ensureBaseDirectories()
+  .then(() => ensureRunnerProxyConfig())
+  .then(() => reloadProxy().catch(() => undefined))
   .then(() => app.listen({ host: config.host, port: config.port }))
   .catch((error) => {
     app.log.error(error)

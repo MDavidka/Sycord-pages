@@ -12,6 +12,23 @@ export async function writeProxyConfig(projectId: string, serverName: string, po
   await fs.writeFile(getProxyConfigPath(projectId), rendered)
 }
 
+export async function ensureRunnerProxyConfig() {
+  const runnerConfPath = `${config.nginxSitesDir}/sycord-runner.conf`
+  try {
+    await fs.access(runnerConfPath)
+    return // already exists
+  } catch {
+    // create it
+  }
+  try {
+    const template = await fs.readFile(config.nginxRunnerTemplatePath, "utf8")
+    await fs.mkdir(config.nginxSitesDir, { recursive: true })
+    await fs.writeFile(runnerConfPath, template)
+  } catch {
+    // template missing is OK on first boot before bootstrap
+  }
+}
+
 export async function removeProxyConfig(projectId: string) {
   await fs.rm(getProxyConfigPath(projectId), { force: true })
 }
