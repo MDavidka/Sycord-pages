@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -124,6 +125,14 @@ export default function AdminPage() {
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
   const [runnerSetupError, setRunnerSetupError] = useState<string | null>(null)
   const [runnerSetupLogs, setRunnerSetupLogs] = useState<string>("")
+  const [debuggerOpen, setDebuggerOpen] = useState(false)
+  const [debuggerPayload, setDebuggerPayload] = useState<{
+    title: string
+    message: string
+    phase?: string | null
+    logs?: string
+    details?: Record<string, unknown> | null
+  } | null>(null)
 
   // PAP & TOS State
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
@@ -334,6 +343,17 @@ export default function AdminPage() {
 
   const blockedCount = users.filter(u => u.isBlocked).length
 
+  const openDebugger = (payload: {
+    title: string
+    message: string
+    phase?: string | null
+    logs?: string
+    details?: Record<string, unknown> | null
+  }) => {
+    setDebuggerPayload(payload)
+    setDebuggerOpen(true)
+  }
+
   // Runner functions
   const fetchVpsStatus = async () => {
     setVpsLoading(true)
@@ -417,6 +437,40 @@ export default function AdminPage() {
   }, [searchParams])
   return (
     <div className="min-h-screen bg-[#101010]">
+      <Dialog open={debuggerOpen} onOpenChange={setDebuggerOpen}>
+        <DialogContent className="border-white/10 bg-[#111111] p-0 text-white sm:max-w-2xl">
+          <div className="border-b border-white/8 px-6 py-5">
+            <DialogHeader>
+              <DialogTitle className="text-white">{debuggerPayload?.title || "Error debugger"}</DialogTitle>
+              <DialogDescription className="text-white/50">
+                {debuggerPayload?.message || "No debugger payload available"}
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+          <div className="space-y-4 px-6 py-5">
+            {debuggerPayload?.phase && (
+              <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-white/35">Phase</p>
+                <p className="mt-1 text-sm text-white/85">{debuggerPayload.phase}</p>
+              </div>
+            )}
+            {debuggerPayload?.details && (
+              <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-white/35">Details</p>
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-blue-100/90">
+                  {JSON.stringify(debuggerPayload.details, null, 2)}
+                </pre>
+              </div>
+            )}
+            <div className="rounded-xl border border-white/8 bg-black/40 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-white/35">Logs</p>
+              <pre className="mt-2 max-h-[50dvh] overflow-auto whitespace-pre-wrap text-xs text-red-100/90">
+                {debuggerPayload?.logs || "No logs returned"}
+              </pre>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* Header */}
       <header className="border-b border-white/5 sticky top-0 bg-[#101010]/95 backdrop-blur-xl z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
@@ -960,9 +1014,17 @@ export default function AdminPage() {
                       const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
                       const data = await res.json().catch(() => ({}))
                       if (!res.ok || data.success === false) {
-                        const msg = data?.details || data?.error || "Setup failed"
+                        const msg = data?.details || data?.error || data?.message || "Setup failed"
+                        const logs = data?.logs ? (Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs)) : ""
                         setRunnerSetupError(msg)
-                        if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs))
+                        if (logs) setRunnerSetupLogs(logs)
+                        openDebugger({
+                          title: "Runner setup failed",
+                          message: msg,
+                          phase: data?.phase || null,
+                          logs,
+                          details: data?.debug || null,
+                        })
                         toast.error(msg)
                         return
                       }
@@ -972,6 +1034,13 @@ export default function AdminPage() {
                     } catch (error: any) {
                       const msg = error?.message || "Setup failed"
                       setRunnerSetupError(msg)
+                      openDebugger({
+                        title: "Runner setup failed",
+                        message: msg,
+                        phase: "client",
+                        logs: "",
+                        details: null,
+                      })
                       toast.error(msg)
                     }
                   }}
@@ -1007,6 +1076,22 @@ export default function AdminPage() {
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
                 {runnerSetupError && <p className="text-sm text-red-200 font-medium">Setup error: {runnerSetupError}</p>}
                 {runnerSetupLogs && <pre className="text-xs text-red-100/90 whitespace-pre-wrap max-h-48 overflow-y-auto">{runnerSetupLogs}</pre>}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-400/30 text-red-100 hover:bg-red-500/20"
+                  onClick={() =>
+                    openDebugger({
+                      title: "Runner setup debugger",
+                      message: runnerSetupError || "Setup logs",
+                      phase: "setup",
+                      logs: runnerSetupLogs,
+                      details: null,
+                    })
+                  }
+                >
+                  Open debugger
+                </Button>
               </div>
               )}
             </div>

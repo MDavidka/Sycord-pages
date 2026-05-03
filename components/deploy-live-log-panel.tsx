@@ -260,35 +260,35 @@ export function DeployLiveLogPanel({
     <Dialog open={open} onOpenChange={closePanel}>
       <DialogContent
         showCloseButton={!isRunning}
-        className="max-w-5xl border-zinc-800 bg-[#05070b] p-0 text-zinc-100 shadow-[0_40px_120px_rgba(0,0,0,0.65)]"
+        className="h-[100dvh] max-w-none border-zinc-800 bg-[#05070b] p-0 text-zinc-100 shadow-[0_40px_120px_rgba(0,0,0,0.65)] sm:h-auto sm:max-w-5xl"
       >
-        <div className="relative overflow-hidden rounded-xl">
+        <div className="relative flex h-full flex-col overflow-hidden sm:rounded-xl">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(66,153,225,0.18),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_28%)]" />
-          <div className="relative flex items-start justify-between gap-4 border-b border-white/8 px-6 py-5">
+          <div className="relative flex flex-col gap-4 border-b border-white/8 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-5">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Deploying</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">{projectName || projectId}</h2>
+              <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">{projectName || projectId}</h2>
               <p className="mt-1 text-sm text-zinc-400">{result?.domain || `${projectId}.sycord.site`}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={copyLogs} className="text-zinc-300 hover:bg-white/8">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+              <Button variant="ghost" size="sm" onClick={copyLogs} className="justify-start text-zinc-300 hover:bg-white/8 sm:justify-center">
                 <Copy className="mr-2 h-4 w-4" />
                 Copy logs
               </Button>
-              <Button variant="ghost" size="sm" onClick={downloadLogs} className="text-zinc-300 hover:bg-white/8">
+              <Button variant="ghost" size="sm" onClick={downloadLogs} className="justify-start text-zinc-300 hover:bg-white/8 sm:justify-center">
                 <Download className="mr-2 h-4 w-4" />
                 Download
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setCollapsed((value) => !value)} className="text-zinc-300 hover:bg-white/8">
+              <Button variant="ghost" size="sm" onClick={() => setCollapsed((value) => !value)} className="col-span-2 justify-start text-zinc-300 hover:bg-white/8 sm:col-span-1 sm:justify-center">
                 {collapsed ? <ChevronDown className="mr-2 h-4 w-4" /> : <ChevronUp className="mr-2 h-4 w-4" />}
                 {collapsed ? "Expand" : "Collapse"}
               </Button>
             </div>
           </div>
 
-          <div className="relative grid gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
-            <div className="border-r border-white/6 bg-white/[0.02] px-5 py-5">
-              <div className="space-y-3">
+          <div className="relative grid flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="border-b border-white/6 bg-white/[0.02] px-4 py-4 lg:border-r lg:border-b-0 lg:px-5 lg:py-5">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
                 {STAGES.map((stage) => {
                   const state = stageState[stage.id]
                   return (
@@ -311,7 +311,7 @@ export function DeployLiveLogPanel({
                 })}
               </div>
 
-              <div className="mt-6 rounded-2xl border border-white/6 bg-black/25 p-4">
+              <div className="mt-4 rounded-2xl border border-white/6 bg-black/25 p-4 lg:mt-6">
                 <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Status</p>
                 <p className="mt-2 text-sm text-zinc-200">{error?.message || lastMessage}</p>
                 {error?.stage && <p className="mt-2 text-xs text-red-300">Failing stage: {error.stage}</p>}
@@ -319,8 +319,8 @@ export function DeployLiveLogPanel({
             </div>
 
             {!collapsed && (
-              <div className="flex min-h-[520px] flex-col">
-                <div className="flex items-center justify-between border-b border-white/6 px-5 py-3 text-xs text-zinc-500">
+              <div className="flex min-h-[42dvh] flex-col sm:min-h-[520px]">
+                <div className="flex flex-col gap-2 border-b border-white/6 px-4 py-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                   <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4" />
                     Live terminal
@@ -329,7 +329,7 @@ export function DeployLiveLogPanel({
                     Auto-scroll: {autoScroll ? "on" : "off"}
                   </button>
                 </div>
-                <div ref={logViewportRef} className="flex-1 overflow-y-auto bg-[#020409] px-5 py-4 font-mono text-[12px] leading-6">
+                <div ref={logViewportRef} className="flex-1 overflow-y-auto bg-[#020409] px-4 py-4 font-mono text-[12px] leading-6 sm:px-5">
                   {logs.length === 0 ? (
                     <div className="flex h-full items-center justify-center text-zinc-600">
                       {isRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : "No logs captured"}
@@ -351,10 +351,10 @@ export function DeployLiveLogPanel({
                   )}
                 </div>
               </div>
-            )}
+              )}
           </div>
 
-          <div className="relative flex flex-wrap items-center justify-between gap-3 border-t border-white/8 px-6 py-4">
+          <div className="relative flex flex-col gap-3 border-t border-white/8 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
             <div className="flex items-center gap-2">
               {result ? (
                 <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300">
@@ -374,7 +374,7 @@ export function DeployLiveLogPanel({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
               {result?.url && (
                 <>
                   <Button asChild className="bg-white text-black hover:bg-zinc-200">

@@ -35,7 +35,7 @@ export async function proxyRunner(path: string, init?: RequestInit) {
       {
         success: false,
         online: false,
-        error: "Runner VM appears offline",
+        error: "Runner API is unavailable",
       },
       { status: 503 },
     )
