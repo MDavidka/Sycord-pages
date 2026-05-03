@@ -41,10 +41,28 @@ async function diskUsage() {
 async function portListenerDetails(port: number) {
   const ss = await commandOutput("bash", ["-lc", `ss -ltnp | grep ':${port}\\b' || true`])
   const lsof = await commandOutput("bash", ["-lc", `lsof -nP -iTCP:${port} -sTCP:LISTEN || true`])
-  const owner = [ss.stdout, lsof.stdout].filter(Boolean).join("\n").trim()
+  const pidMatch = ss.stdout.match(/pid=(\d+)/)
+  const pid = pidMatch ? Number(pidMatch[1]) : null
+  const process = pid
+    ? await commandOutput("bash", ["-lc", `ps -p ${pid} -o pid=,ppid=,comm=,args= || true`])
+    : { ok: false, stdout: "", stderr: "" }
+  const executable = pid
+    ? await commandOutput("bash", ["-lc", `readlink -f /proc/${pid}/exe || true`])
+    : { ok: false, stdout: "", stderr: "" }
+  const service = pid
+    ? await commandOutput("bash", ["-lc", `grep -oE '[^/[:space:]]+\\.service' /proc/${pid}/cgroup | head -n1 || true`])
+    : { ok: false, stdout: "", stderr: "" }
+  const owner = [ss.stdout, lsof.stdout, service.stdout && `service=${service.stdout}`, executable.stdout && `exe=${executable.stdout}`, process.stdout && `process=${process.stdout}`]
+    .filter(Boolean)
+    .join("\n")
+    .trim()
   return {
     listening: Boolean(owner),
     owner: owner || null,
+    pid,
+    service: service.stdout || null,
+    executable: executable.stdout || null,
+    process: process.stdout || null,
     ss: ss.stdout || null,
     lsof: lsof.stdout || null,
   }
@@ -71,7 +89,7 @@ export async function getSetupStatus() {
   const runnerListener = await portListenerDetails(config.port)
   const port80 = await portListenerDetails(80)
   const port80Owner = port80.owner
-  const port80Available = !port80.listening || Boolean(port80Owner?.includes("nginx"))
+  const port80Available = !port80.listening || Boolean(port80.service?.includes("nginx.service")) || Boolean(port80.process?.includes("nginx"))
 
   const nginx = {
     installed: nginxService.installed,

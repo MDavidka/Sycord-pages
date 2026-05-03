@@ -57,13 +57,34 @@ export async function readDeployVmDiagnostics() {
     const nginx = await ssh.execCommand("systemctl is-active nginx || true")
     const cloudflared = await ssh.execCommand("systemctl is-active cloudflared || true")
     const related = await ssh.execCommand("systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true")
+    const port80Pid = port80.stdout.match(/pid=(\d+)/)?.[1] || null
+    const port80Process = port80Pid ? await ssh.execCommand(`ps -p ${port80Pid} -o pid=,ppid=,comm=,args= || true`) : { stdout: "", stderr: "" }
+    const port80Exe = port80Pid ? await ssh.execCommand(`readlink -f /proc/${port80Pid}/exe || true`) : { stdout: "", stderr: "" }
+    const port80Service = port80Pid ? await ssh.execCommand(`grep -oE '[^/[:space:]]+\\.service' /proc/${port80Pid}/cgroup | head -n1 || true`) : { stdout: "", stderr: "" }
 
     return {
       nginx: {
         running: nginx.stdout.trim() === "active",
-        port80Available: !port80.stdout.trim() || port80.stdout.includes("nginx"),
-        port80Owner: port80.stdout.trim() || null,
-        error: port80.stdout.trim() && !port80.stdout.includes("nginx") ? "Port 80 already in use" : null,
+        port80Available:
+          !port80.stdout.trim() ||
+          port80.stdout.includes("nginx") ||
+          port80Service.stdout.includes("nginx.service") ||
+          port80Process.stdout.includes("nginx"),
+        port80Owner: [
+          port80.stdout.trim(),
+          port80Service.stdout.trim() ? `service=${port80Service.stdout.trim()}` : "",
+          port80Exe.stdout.trim() ? `exe=${port80Exe.stdout.trim()}` : "",
+          port80Process.stdout.trim() ? `process=${port80Process.stdout.trim()}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n") || null,
+        error:
+          port80.stdout.trim() &&
+          !port80.stdout.includes("nginx") &&
+          !port80Service.stdout.includes("nginx.service") &&
+          !port80Process.stdout.includes("nginx")
+            ? "Port 80 already in use"
+            : null,
       },
       runner: {
         running: Boolean(port5050.stdout.trim()),

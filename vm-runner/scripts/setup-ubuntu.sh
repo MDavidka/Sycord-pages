@@ -16,6 +16,9 @@ diagnostics() {
   log
   log "== Related services =="
   systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true
+  log
+  log "== Port 80 PID details =="
+  print_port_80_pid_details || true
 }
 
 related_service_units() {
@@ -33,7 +36,31 @@ port_80_owner_text() {
   {
     ss -ltnp | grep ':80' || true
     lsof -nP -iTCP:80 -sTCP:LISTEN || true
+    print_port_80_pid_details || true
   } | sed '/^\s*$/d'
+}
+
+port_80_pid() {
+  ss -ltnp | grep ':80' | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n1
+}
+
+service_for_pid() {
+  local pid="$1"
+  [[ -z "${pid}" ]] && return 0
+  grep -oE '[^/[:space:]]+\.service' "/proc/${pid}/cgroup" 2>/dev/null | head -n1 || true
+}
+
+print_port_80_pid_details() {
+  local pid service exe ps_line
+  pid="$(port_80_pid)"
+  [[ -z "${pid}" ]] && return 0
+  service="$(service_for_pid "${pid}")"
+  exe="$(readlink -f "/proc/${pid}/exe" 2>/dev/null || true)"
+  ps_line="$(ps -p "${pid}" -o pid=,ppid=,comm=,args= 2>/dev/null || true)"
+  log "PID: ${pid}"
+  [[ -n "${service}" ]] && log "Service: ${service}"
+  [[ -n "${exe}" ]] && log "Executable: ${exe}"
+  [[ -n "${ps_line}" ]] && log "Process: ${ps_line}"
 }
 
 looks_like_old_sycord_stack() {
@@ -41,7 +68,7 @@ looks_like_old_sycord_stack() {
   if [[ -z "${owner_text}" ]]; then
     return 1
   fi
-  grep -Eiq 'flask|python|gunicorn|caddy|sycord|server|runner' <<<"${owner_text}"
+  grep -Eiq 'flask|python|gunicorn|caddy|sycord|server|runner|main' <<<"${owner_text}"
 }
 
 stop_old_services() {
@@ -55,6 +82,16 @@ stop_old_services() {
       log "Disabling old service: ${unit}"
       systemctl disable "${unit}" || true
     done <<<"${units}"
+  fi
+
+  local pid service
+  pid="$(port_80_pid)"
+  service="$(service_for_pid "${pid}")"
+  if [[ -n "${service}" ]] && ! grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${service}"; then
+    log "Stopping port 80 owning service: ${service}"
+    systemctl stop "${service}" || true
+    log "Disabling port 80 owning service: ${service}"
+    systemctl disable "${service}" || true
   fi
 }
 
