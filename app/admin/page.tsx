@@ -959,13 +959,11 @@ export default function AdminPage() {
                       if (!res.ok || data.success === false) {
                         const msg = data?.details || data?.error || "Setup failed"
                         setRunnerSetupError(msg)
-                        if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("
-") : String(data.logs))
+                        if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs))
                         toast.error(msg)
                         return
                       }
-                      if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("
-") : String(data.logs))
+                      if (data?.logs) setRunnerSetupLogs(Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs))
                       toast.success(data?.message || "Runner setup completed")
                       fetchVpsStatus()
                     } catch (error: any) {
@@ -974,7 +972,7 @@ export default function AdminPage() {
                       toast.error(msg)
                     }
                   }}
-                  disabled={!!vpsAction}
+                                    disabled={!!vpsAction}
                   variant="outline"
                   className="border-blue-500/30 text-blue-300 hover:bg-blue-500/10 rounded-xl"
                 >
