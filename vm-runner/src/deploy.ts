@@ -16,6 +16,18 @@ export type DeployPayload = {
   env_vars?: Record<string, string>
 }
 
+export type DeployHealth = {
+  ok: boolean
+  htmlOk: boolean
+  statusCode?: number
+  contentType?: string
+  latencyMs?: number
+  error?: string
+  detail?: string
+  url?: string
+  protocol?: "https" | "http"
+}
+
 export type DeployResponse = {
   success: boolean
   deployment_mode: "next-server"
@@ -30,19 +42,9 @@ export type DeployResponse = {
     error?: string
   }
   running: boolean
-  health: {
-    ok: boolean
-    htmlOk: boolean
-    statusCode?: number
-    contentType?: string
-    latencyMs?: number
-    error?: string
-    detail?: string
-    url?: string
-    protocol?: "https" | "http"
-  }
-  localHealth?: DeployResponse["health"]
-  publicHealth?: DeployResponse["health"]
+  health: DeployHealth
+  localHealth?: DeployHealth
+  publicHealth?: DeployHealth
   logs: string[]
   error?: string
   warning?: string
