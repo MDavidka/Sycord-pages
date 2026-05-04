@@ -2,7 +2,7 @@ import type { FastifyReply } from "fastify"
 
 export type StreamStage =
   | "queued"
-  | "preparing-files"
+  | "git-sync"
   | "installing"
   | "building"
   | "allocating-port"

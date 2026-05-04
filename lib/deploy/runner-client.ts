@@ -13,11 +13,17 @@ export type ProjectEnvVar = {
 }
 
 export type RunnerDeployPayload = {
-  files: DeployFile[]
+  projectId?: string
+  repoUrl: string
+  branch: string
+  repoName?: string
   subdomain: string
   deployment_mode: DeploymentMode
   env_vars?: Record<string, string>
+  files?: DeployFile[]
 }
+
+export type DeployStageStatus = "pending" | "running" | "success" | "error"
 
 export type RunnerHealth = {
   ok: boolean
@@ -63,21 +69,18 @@ export type DeployStreamEvent =
       type: "stage"
       stage:
         | "queued"
-        | "preparing"
-        | "preparing-files"
         | "github"
         | "vm-connect"
-        | "writing-files"
+        | "runner-git"
         | "installing"
         | "building"
-        | "allocating-port"
         | "starting-server"
         | "configuring-proxy"
-        | "health-check"
+        | "public-health"
         | "saving"
         | "complete"
         | "failed"
-      status: "pending" | "running" | "success" | "error"
+      status: DeployStageStatus
       message: string
       timestamp: string
     }

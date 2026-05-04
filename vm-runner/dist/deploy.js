@@ -3,10 +3,53 @@ import path from "node:path";
 import { config } from "./config.js";
 import { appendLog, ensureBaseDirectories, resetProjectLogs } from "./logs.js";
 import { getEnvFilePath, getProcessName, getProjectRoot, validateDeployPath, validateProjectId, validateSubdomain } from "./paths.js";
-import { runHealthCheck } from "./health.js";
+import { runHealthCheck, runPublicHealthCheck } from "./health.js";
 import { startOrRestartProcess } from "./processes.js";
 import { reloadProxy, writeProxyConfig } from "./proxy.js";
 import { allocatePort, getWebsiteState, retryAllocatePort, upsertWebsiteState } from "./state.js";
+const STEP_TIMEOUTS_MS = {
+    git: 90_000,
+    install: 180_000,
+    build: 180_000,
+    pm2: 60_000,
+    proxy: 45_000,
+    localHealth: 20_000,
+    publicHealth: 35_000,
+};
+async function runWithTimeout(stage, action, timeoutMs) {
+    let timeoutId = null;
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(`${stage} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs);
+    });
+    try {
+        return await Promise.race([action(), timeout]);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw Object.assign(new Error(`${stage} failed: ${message}`), { stage });
+    }
+    finally {
+        if (timeoutId)
+            clearTimeout(timeoutId);
+    }
+}
+function runnerStageForError(stage) {
+    if (!stage)
+        return "failed";
+    if (stage.startsWith("git "))
+        return "git-sync";
+    if (stage.startsWith("npm install"))
+        return "installing";
+    if (stage.startsWith("npm run build"))
+        return "building";
+    if (stage.startsWith("pm2"))
+        return "starting-server";
+    if (stage.startsWith("nginx"))
+        return "configuring-proxy";
+    if (stage.startsWith("local health") || stage.startsWith("public health"))
+        return "health-check";
+    return "failed";
+}
 async function writeFiles(projectId, files) {
     const root = getProjectRoot(projectId);
     await fs.rm(root, { recursive: true, force: true });
@@ -17,6 +60,72 @@ async function writeFiles(projectId, files) {
         await fs.mkdir(path.dirname(outputPath), { recursive: true });
         await fs.writeFile(outputPath, file.content);
     }
+    return root;
+}
+function redactRepoUrl(repoUrl) {
+    return repoUrl.replace(/\/\/([^/@]+)@/, "//***@");
+}
+function sanitizeBranch(branch) {
+    const value = branch || "main";
+    if (!/^[A-Za-z0-9._/-]+$/.test(value) || value.includes("..")) {
+        throw new Error("Invalid git branch");
+    }
+    return value;
+}
+async function syncRepo(projectId, payload, stream) {
+    if (!payload.repoUrl) {
+        if (!payload.files)
+            throw new Error("repoUrl is required");
+        stream?.stage("git-sync", "running", "Using direct file deploy fallback");
+        const cwd = await writeFiles(projectId, payload.files);
+        stream?.stage("git-sync", "success", `Wrote ${payload.files.length} files`);
+        stream?.log("runner", `Direct file fallback wrote ${payload.files.length} files`);
+        return cwd;
+    }
+    const branch = sanitizeBranch(payload.branch);
+    const root = getProjectRoot(projectId);
+    const { runCommand } = await import("./processes.js");
+    stream?.stage("git-sync", "running", `Syncing ${payload.repoName || payload.repoUrl}#${branch}`);
+    await appendLog(projectId, "deploy", `Syncing Git repository ${redactRepoUrl(payload.repoUrl)}#${branch}`);
+    try {
+        await fs.access(path.join(root, ".git"));
+        const fetch = await runWithTimeout("git fetch", () => runCommand("git", ["fetch", "--prune", "origin", branch], {
+            cwd: root,
+            onLine: (line) => {
+                void appendLog(projectId, "deploy", line);
+                stream?.log("runner", line);
+            },
+        }), STEP_TIMEOUTS_MS.git);
+        if (fetch.code !== 0) {
+            throw new Error(fetch.stderr.concat(fetch.stdout).slice(-20).join("\n") || `git fetch exited ${fetch.code}`);
+        }
+        const reset = await runWithTimeout("git reset", () => runCommand("git", ["reset", "--hard", `origin/${branch}`], {
+            cwd: root,
+            onLine: (line) => {
+                void appendLog(projectId, "deploy", line);
+                stream?.log("runner", line);
+            },
+        }), STEP_TIMEOUTS_MS.git);
+        if (reset.code !== 0) {
+            throw new Error(reset.stderr.concat(reset.stdout).slice(-20).join("\n") || `git reset exited ${reset.code}`);
+        }
+    }
+    catch (error) {
+        const existingRepoError = error instanceof Error ? error.message : String(error);
+        stream?.log("runner", `Existing checkout unavailable, cloning fresh: ${existingRepoError}`);
+        await fs.rm(root, { recursive: true, force: true });
+        await fs.mkdir(path.dirname(root), { recursive: true });
+        const clone = await runWithTimeout("git clone", () => runCommand("git", ["clone", "--depth", "1", "--branch", branch, payload.repoUrl, root], {
+            onLine: (line) => {
+                void appendLog(projectId, "deploy", line);
+                stream?.log("runner", line);
+            },
+        }), STEP_TIMEOUTS_MS.git);
+        if (clone.code !== 0) {
+            throw new Error(clone.stderr.concat(clone.stdout).slice(-20).join("\n") || `git clone exited ${clone.code}`);
+        }
+    }
+    stream?.stage("git-sync", "success", "Repository synced");
     return root;
 }
 async function writeEnvFile(projectId, envVars = {}) {
@@ -31,9 +140,9 @@ async function writeEnvFile(projectId, envVars = {}) {
 }
 async function runBuildStep(projectId, cwd, stream) {
     const buildLogs = [];
-    stream?.stage("installing", "running", "Installing dependencies");
+    stream?.stage("installing", "running", "Running npm install");
     const { runCommand } = await import("./processes.js");
-    const install = await runCommand("npm", ["install", "--no-fund", "--no-audit", "--legacy-peer-deps"], {
+    const install = await runWithTimeout("npm install", () => runCommand("npm", ["install", "--no-fund", "--no-audit", "--legacy-peer-deps"], {
         cwd,
         onLine: (line) => {
             buildLogs.push(line);
@@ -41,20 +150,20 @@ async function runBuildStep(projectId, cwd, stream) {
             void appendLog(projectId, "build", line);
             stream?.log("install", line);
         },
-    });
+    }), STEP_TIMEOUTS_MS.install);
     if (install.code !== 0) {
         const lastLines = buildLogs.slice(-20).join("\n");
         throw new Error(`npm install failed (exit ${install.code}): ${lastLines}`);
     }
     stream?.stage("building", "running", "Running next build");
-    const build = await runCommand("npm", ["run", "build"], {
+    const build = await runWithTimeout("npm run build", () => runCommand("npm", ["run", "build"], {
         cwd,
         onLine: (line) => {
             buildLogs.push(line);
             void appendLog(projectId, "build", line);
             stream?.log("build", line);
         },
-    });
+    }), STEP_TIMEOUTS_MS.build);
     if (build.code !== 0) {
         const lastLines = buildLogs.slice(-20).join("\n");
         throw new Error(`npm run build failed (exit ${build.code}): ${lastLines}`);
@@ -71,13 +180,28 @@ export async function deployProject(projectId, payload, stream = null) {
     await ensureBaseDirectories();
     await resetProjectLogs(projectId);
     stream?.stage("queued", "pending", "Deployment queued");
-    stream?.stage("preparing-files", "running", "Preparing project directory");
     await appendLog(projectId, "deploy", `Preparing deployment for ${projectId}`);
-    const cwd = await writeFiles(projectId, payload.files);
-    stream?.stage("preparing-files", "success", `Wrote ${payload.files.length} files`);
-    stream?.log("runner", `Writing ${payload.files.length} files`);
+    let cwd;
+    try {
+        cwd = await syncRepo(projectId, payload, stream);
+    }
+    catch (error) {
+        stream?.stage("git-sync", "error", error?.message || "Git sync failed");
+        stream?.error({ error: error?.message || "Git sync failed", stage: "git-sync" });
+        throw error;
+    }
     const envFile = await writeEnvFile(projectId, payload.env_vars);
-    const buildResult = await runBuildStep(projectId, cwd, stream);
+    stream?.log("runner", `Wrote runtime env file ${envFile}`);
+    let buildResult;
+    try {
+        buildResult = await runBuildStep(projectId, cwd, stream);
+    }
+    catch (error) {
+        const stage = runnerStageForError(error?.stage);
+        stream?.stage(stage, "error", error?.message || "Build failed");
+        stream?.error({ error: error?.message || "Build failed", stage, logs: await Promise.resolve([]) });
+        throw error;
+    }
     stream?.stage("allocating-port", "running", "Allocating port for website");
     const previous = await getWebsiteState(projectId);
     const port = previous?.port || (await allocatePort(projectId));
@@ -90,7 +214,16 @@ export async function deployProject(projectId, payload, stream = null) {
     let runtimeErr = [];
     let currentPort = port;
     for (let attempt = 0; attempt < MAX_START_RETRIES; attempt += 1) {
-        const result = await startOrRestartProcess(projectId, processName, currentPort, cwd, envFile);
+        stream?.log("runtime", `PM2 ${attempt === 0 ? "start/restart" : "retry"} on port ${currentPort}`);
+        let result;
+        try {
+            result = await runWithTimeout("pm2 start/restart", () => startOrRestartProcess(projectId, processName, currentPort, cwd, envFile), STEP_TIMEOUTS_MS.pm2);
+        }
+        catch (error) {
+            stream?.stage("starting-server", "error", error?.message || "Failed to start Next.js server");
+            stream?.error({ error: error?.message || "Failed to start Next.js server", stage: "starting-server" });
+            throw error;
+        }
         startCode = result.code;
         runtimeOut = result.stdout;
         runtimeErr = result.stderr;
@@ -115,11 +248,23 @@ export async function deployProject(projectId, payload, stream = null) {
     }
     const domain = `${payload.subdomain}.${config.baseDomain}`;
     stream?.stage("configuring-proxy", "running", "Configuring nginx reverse proxy");
-    await writeProxyConfig(projectId, domain, currentPort);
-    await reloadProxy();
+    try {
+        await runWithTimeout("nginx config", async () => {
+            await writeProxyConfig(projectId, domain, currentPort);
+            stream?.log("proxy", `Wrote nginx config for ${domain} -> ${currentPort}`);
+            await reloadProxy();
+            stream?.log("proxy", "nginx configuration reloaded");
+        }, STEP_TIMEOUTS_MS.proxy);
+    }
+    catch (error) {
+        stream?.stage("configuring-proxy", "error", error?.message || "Proxy configuration failed");
+        stream?.error({ error: error?.message || "Proxy configuration failed", stage: "configuring-proxy" });
+        throw error;
+    }
     stream?.stage("configuring-proxy", "success", "Proxy configured");
-    stream?.stage("health-check", "running", "Checking root HTML response");
-    const health = await runHealthCheck(projectId, currentPort);
+    stream?.stage("health-check", "running", "Checking local Next.js HTML response");
+    const health = await runWithTimeout("local health", () => runHealthCheck(projectId, currentPort), STEP_TIMEOUTS_MS.localHealth);
+    stream?.log("health", health.detail || health.error || "Local health completed");
     if (!health.ok || !health.htmlOk) {
         stream?.stage("health-check", "error", health.error || "Root response invalid");
         stream?.error({
@@ -143,7 +288,9 @@ export async function deployProject(projectId, payload, stream = null) {
                 contentType: health.contentType,
                 latencyMs: health.latencyMs,
                 error: health.error || undefined,
+                detail: health.detail,
             },
+            localHealth: health,
             logs: [],
             error: health.error || "Health check failed: root route did not return valid HTML",
         };
@@ -161,7 +308,65 @@ export async function deployProject(projectId, payload, stream = null) {
         });
         return failResponse;
     }
-    stream?.stage("health-check", "success", `Root returns valid HTML (HTTP ${health.statusCode})`);
+    stream?.stage("health-check", "success", `Local root returns valid HTML (HTTP ${health.statusCode})`);
+    stream?.stage("health-check", "running", `Checking public subdomain ${domain}`);
+    const publicHealth = await runWithTimeout("public health", () => runPublicHealthCheck(projectId, domain), STEP_TIMEOUTS_MS.publicHealth);
+    stream?.log("health", publicHealth.detail || publicHealth.error || "Public health completed");
+    const publicUrl = publicHealth.url || `https://${domain}`;
+    const insecurePublicUrlWarning = publicHealth.ok && publicHealth.protocol === "http"
+        ? "Public subdomain only passed over HTTP. Configure Cloudflare/TLS before advertising it as HTTPS."
+        : undefined;
+    if (!publicHealth.ok || !publicHealth.htmlOk) {
+        const error = publicHealth.error || "Public subdomain did not return valid HTML";
+        stream?.stage("health-check", "error", error);
+        stream?.error({
+            error,
+            stage: "public-health-check",
+            logs: [publicHealth.detail || ""],
+            localHealth: health,
+            publicHealth,
+        });
+        const failResponse = {
+            success: false,
+            deployment_mode: "next-server",
+            project_id: projectId,
+            domain,
+            url: publicUrl,
+            port: currentPort,
+            processName,
+            build: { ok: true, logs: buildResult.logs },
+            running: true,
+            health: {
+                ok: publicHealth.ok,
+                htmlOk: publicHealth.htmlOk,
+                statusCode: publicHealth.statusCode,
+                contentType: publicHealth.contentType,
+                latencyMs: publicHealth.latencyMs,
+                error,
+                detail: publicHealth.detail,
+                url: publicUrl,
+                protocol: publicHealth.protocol,
+            },
+            localHealth: health,
+            publicHealth,
+            logs: [],
+            error,
+        };
+        await upsertWebsiteState({
+            projectId,
+            subdomain: payload.subdomain,
+            domain,
+            port: currentPort,
+            processName,
+            status: "failed",
+            health: "unhealthy",
+            lastDeployAt: new Date().toISOString(),
+            lastHealthCheckAt: new Date().toISOString(),
+            lastDeployError: `${error}${publicHealth.detail ? `: ${publicHealth.detail}` : ""}`,
+        });
+        return failResponse;
+    }
+    stream?.stage("health-check", "success", `Public subdomain returns valid HTML (${publicHealth.protocol?.toUpperCase() || "HTTPS"})`);
     await upsertWebsiteState({
         projectId,
         subdomain: payload.subdomain,
@@ -174,34 +379,42 @@ export async function deployProject(projectId, payload, stream = null) {
         lastHealthCheckAt: new Date().toISOString(),
         lastDeployError: null,
     });
-    stream?.stage("complete", "success", "Deployment complete");
+    stream?.stage("complete", "success", insecurePublicUrlWarning || "Deployment complete");
     stream?.result({
         success: true,
         domain,
-        url: `https://${domain}`,
+        url: publicUrl,
         port: currentPort,
         processName,
         running: true,
         build: { ok: true },
-        health,
+        health: publicHealth,
+        localHealth: health,
+        publicHealth,
+        warning: insecurePublicUrlWarning,
     });
     return {
         success: true,
         deployment_mode: "next-server",
         project_id: projectId,
         domain,
-        url: `https://${domain}`,
+        url: publicUrl,
         port: currentPort,
         processName,
         build: { ok: true, logs: buildResult.logs },
         running: true,
         health: {
-            ok: health.ok,
-            htmlOk: health.htmlOk,
-            statusCode: health.statusCode,
-            contentType: health.contentType,
-            latencyMs: health.latencyMs,
+            ok: publicHealth.ok,
+            htmlOk: publicHealth.htmlOk,
+            statusCode: publicHealth.statusCode,
+            contentType: publicHealth.contentType,
+            latencyMs: publicHealth.latencyMs,
+            url: publicUrl,
+            protocol: publicHealth.protocol,
         },
+        localHealth: health,
+        publicHealth,
         logs: [],
+        warning: insecurePublicUrlWarning,
     };
 }

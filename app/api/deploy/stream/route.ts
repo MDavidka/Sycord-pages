@@ -31,6 +31,55 @@ function summarizeLogs(logs: string[]) {
   return logs.slice(-40)
 }
 
+function timeoutError(stage: string, timeoutMs: number) {
+  return Object.assign(new Error(`${stage} timed out after ${Math.round(timeoutMs / 1000)}s`), { meta: { stage } })
+}
+
+async function runStage<T>(
+  stage: string,
+  action: () => Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void,
+): Promise<T> {
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      onTimeout?.()
+      reject(timeoutError(stage, timeoutMs))
+    }, timeoutMs)
+  })
+  try {
+    return await Promise.race([action(), timeout])
+  } catch (error: any) {
+    const meta = { ...(error?.meta || {}), stage: error?.meta?.stage || error?.stage || stage }
+    throw Object.assign(error instanceof Error ? error : new Error(String(error)), { meta })
+  }
+}
+
+function normalizeRunnerStage(stage: string) {
+  const map: Record<string, string> = {
+    "git-sync": "runner-git",
+    "runner-git": "runner-git",
+    installing: "installing",
+    building: "building",
+    "allocating-port": "starting-server",
+    "starting-server": "starting-server",
+    starting: "starting-server",
+    "configuring-proxy": "configuring-proxy",
+    "health-check": "public-health",
+    "public-health": "public-health",
+    complete: "complete",
+    failed: "failed",
+  }
+  return map[stage] || "runner-git"
+}
+
+function failedStageFromNormalized(normalized: ReturnType<typeof normalizeRunnerDeployResponse>) {
+  if (normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)) return "public-health"
+  if (normalized.health && (!normalized.health.ok || !normalized.health.htmlOk)) return "public-health"
+  if (!normalized.running) return normalized.build.ok ? "starting-server" : "building"
+  return "runner-git"
+}
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -62,7 +111,6 @@ export async function POST(request: Request) {
   }
 
   const repo = slugifyRepoName(project, projectId)
-  const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
   const envVars = getProjectEnvVars(project)
   const encoder = new TextEncoder()
 
@@ -80,19 +128,30 @@ export async function POST(request: Request) {
       const logSummary: string[] = []
 
       try {
-        write("message", createStageEvent("queued", "running", "Queued for deployment"))
+        write("message", createStageEvent("queued", "success", "Deployment request accepted"))
         write("message", createStageEvent("github", "running", "Preparing GitHub repository"))
+        const { repoId, gitUrl } = await runStage("github", () => ensureRepo(github.owner, repo, github.token), 60_000, () => {
+          write("message", createLogEvent("github", "GitHub repository setup timed out"))
+        })
         write("message", createLogEvent("github", `Repository ${repo} ready`))
-        write("message", createStageEvent("preparing", "running", "Preparing project files"))
         write("message", createLogEvent("sycord", `Prepared ${files.length} files for next-server runtime`))
+        write("message", createStageEvent("github", "running", "Pushing source to GitHub"))
+        await runStage("github-push", () => deployViaGitTree(github.owner, repo, files, github.token), 120_000, () => {
+          write("message", createLogEvent("github", "GitHub source push timed out"))
+        })
+        write("message", createLogEvent("github", `Updated ${gitUrl}`))
+        write("message", createStageEvent("github", "success", "Source pushed to GitHub"))
         write("message", createStageEvent("vm-connect", "running", "Connecting to VM runner"))
 
-        const runnerResponse = await callRunnerDeployStream(projectId, {
-          files,
+        const runnerResponse = await runStage("vm-connect", () => callRunnerDeployStream(projectId, {
+          projectId,
+          repoUrl: gitUrl,
+          repoName: repo,
+          branch: "main",
           subdomain: repo,
           deployment_mode: "next-server",
           ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
-        })
+        }), 30_000)
 
         if (!runnerResponse.ok || !runnerResponse.body) {
           const errorText = await runnerResponse.text().catch(() => "")
@@ -118,19 +177,7 @@ export async function POST(request: Request) {
 
               if (event.event === "stage") {
                 const mappedStage =
-                  payload.stage === "starting" ? "starting-server" :
-                  payload.stage === "starting-server" ? "starting-server" :
-                  payload.stage === "configuring-proxy" ? "configuring-proxy" :
-                  payload.stage === "health-check" ? "health-check" :
-                  payload.stage === "writing-files" ? "writing-files" :
-                  payload.stage === "preparing-files" ? "preparing-files" :
-                  payload.stage === "allocating-port" ? "allocating-port" :
-                  payload.stage === "installing" ? "installing" :
-                  payload.stage === "building" ? "building" :
-                  payload.stage === "preparing" ? "preparing" :
-                  payload.stage === "complete" ? "complete" :
-                  payload.stage === "failed" ? "failed" :
-                  "preparing"
+                  normalizeRunnerStage(String(payload.stage || "runner-git"))
                 write(
                   "message",
                   createStageEvent(
@@ -178,9 +225,7 @@ export async function POST(request: Request) {
           throw Object.assign(new Error(error), {
             meta: {
               error,
-              stage: normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)
-                ? "public-health-check"
-                : normalized.build.ok ? "health-check" : "building",
+              stage: failedStageFromNormalized(normalized),
               logs: summarizeLogs([
                 ...normalized.logs.deploy,
                 ...normalized.logs.build,
@@ -192,9 +237,6 @@ export async function POST(request: Request) {
           })
         }
 
-        write("message", createStageEvent("github", "running", "Pushing source to GitHub"))
-        await deployViaGitTree(github.owner, repo, files, github.token)
-        write("message", createLogEvent("github", `Updated ${gitUrl}`))
         write("message", createStageEvent("saving", "running", "Saving deployment result"))
 
         await db.collection("users").updateOne(
@@ -203,7 +245,7 @@ export async function POST(request: Request) {
             $set: {
               "projects.$.githubOwner": github.owner,
               "projects.$.githubRepo": repo,
-              "projects.$.githubRepoId": repoId,
+              "projects.$.githubRepoId": Number(repoId),
               "projects.$.githubUrl": gitUrl,
               "projects.$.cloudflareUrl": normalized.url,
               "projects.$.deploymentMode": "next-server",
@@ -282,9 +324,9 @@ export async function POST(request: Request) {
               "projects.$.deploymentMode": "next-server",
               "projects.$.deploymentRuntime": {
                 mode: "next-server",
-                domain: null,
-                port: null,
-                processName: null,
+                domain: finalResult?.domain || null,
+                port: finalResult?.port || null,
+                processName: finalResult?.processName || null,
                 status: "failed",
                 health: "unhealthy",
                 localHealth: meta.localHealth || null,

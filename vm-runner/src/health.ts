@@ -93,7 +93,7 @@ export async function runHealthCheck(projectId: string, port: number) {
     response = await fetch(`http://127.0.0.1:${port}/`, {
       headers: { Accept: "text/html" },
       redirect: "follow",
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(5000),
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
@@ -136,7 +136,7 @@ export async function runPublicHealthCheck(projectId: string, domainOrUrl: strin
       response = await fetch(candidate, {
         headers: { Accept: "text/html" },
         redirect: "follow",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(10000),
       })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)

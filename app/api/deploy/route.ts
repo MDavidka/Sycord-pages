@@ -26,6 +26,24 @@ function summarizeLogs(logs: string[]) {
   return logs.slice(-40)
 }
 
+async function runStage<T>(stage: string, action: () => Promise<T>, timeoutMs = 60_000): Promise<T> {
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(Object.assign(new Error(`${stage} timed out after ${Math.round(timeoutMs / 1000)}s`), { stage })), timeoutMs)
+  })
+  try {
+    return await Promise.race([action(), timeout])
+  } catch (error: any) {
+    throw Object.assign(error instanceof Error ? error : new Error(String(error)), { stage: error?.stage || stage })
+  }
+}
+
+function stageFromNormalized(normalized: ReturnType<typeof normalizeRunnerDeployResponse>) {
+  if (normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)) return "public-health"
+  if (normalized.health && (!normalized.health.ok || !normalized.health.htmlOk)) return "public-health"
+  if (!normalized.running) return normalized.build.ok ? "server" : "build"
+  return "runner"
+}
+
 function captureDeployFailure(input: {
   projectId: string
   repo: string
@@ -80,22 +98,22 @@ export async function POST(request: Request) {
     }
 
     const repo = slugifyRepoName(project, projectId)
-    const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
+    const { repoId, gitUrl } = await runStage("github", () => ensureRepo(github.owner, repo, github.token))
     const envVars = getProjectEnvVars(project)
+    await runStage("github-push", () => deployViaGitTree(github.owner, repo, files, github.token), 120_000)
 
-    const runner = await callRunnerDeploy(projectId, {
-      files,
+    const runner = await runStage("runner", () => callRunnerDeploy(projectId, {
+      projectId,
+      repoUrl: gitUrl,
+      repoName: repo,
+      branch: "main",
       subdomain: repo,
       deployment_mode: "next-server",
       ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
-    })
+    }), 15 * 60_000)
 
     const normalized = normalizeRunnerDeployResponse(runner.raw)
-    const failedStage = normalized.build.ok
-      ? normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)
-        ? "public-health-check"
-        : "health-check"
-      : "building"
+    const failedStage = stageFromNormalized(normalized)
 
     if (!isSuccessfulRunnerDeployResponse(normalized.raw)) {
       const error = normalized.error || normalized.build.error || normalized.health.error || "Runner deployment failed"
@@ -157,8 +175,6 @@ export async function POST(request: Request) {
         { status: 502 },
       )
     }
-
-    await deployViaGitTree(github.owner, repo, files, github.token)
 
     await db.collection("users").updateOne(
       { id: session.user.id, "projects._id": new ObjectId(projectId) },
@@ -237,6 +253,6 @@ export async function POST(request: Request) {
       processName: normalized.processName,
     })
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || "Deploy failed" }, { status: 500 })
+    return NextResponse.json({ success: false, stage: error?.stage || "deploy", error: error?.message || "Deploy failed" }, { status: 500 })
   }
 }
