@@ -19,6 +19,18 @@ export type RunnerDeployPayload = {
   env_vars?: Record<string, string>
 }
 
+export type RunnerHealth = {
+  ok: boolean
+  htmlOk: boolean
+  status?: number | null
+  contentType?: string | null
+  latencyMs?: number | null
+  error?: string | null
+  detail?: string | null
+  url?: string | null
+  protocol?: "https" | "http" | null
+}
+
 export type RunnerDeployResponse = {
   success: boolean
   domain: string | null
@@ -30,13 +42,9 @@ export type RunnerDeployResponse = {
     logs: string[]
     error?: string | null
   }
-  health: {
-    ok: boolean
-    htmlOk: boolean
-    status?: number | null
-    contentType?: string | null
-    error?: string | null
-  }
+  health: RunnerHealth
+  localHealth?: RunnerHealth | null
+  publicHealth?: RunnerHealth | null
   processName: string | null
   logs: {
     deploy: string[]
@@ -46,6 +54,7 @@ export type RunnerDeployResponse = {
     health: string[]
   }
   error?: string | null
+  warning?: string | null
   raw: any
 }
 
@@ -55,11 +64,13 @@ export type DeployStreamEvent =
       stage:
         | "queued"
         | "preparing"
+        | "preparing-files"
         | "github"
         | "vm-connect"
         | "writing-files"
         | "installing"
         | "building"
+        | "allocating-port"
         | "starting-server"
         | "configuring-proxy"
         | "health-check"
@@ -72,7 +83,7 @@ export type DeployStreamEvent =
     }
   | {
       type: "log"
-      source: "sycord" | "vm" | "install" | "build" | "runtime" | "proxy" | "health" | "github"
+      source: "sycord" | "vm" | "runner" | "install" | "build" | "runtime" | "proxy" | "health" | "github"
       line: string
       timestamp: string
     }
@@ -83,6 +94,9 @@ export type DeployStreamEvent =
       domain: string
       port?: number
       health: unknown
+      localHealth?: unknown
+      publicHealth?: unknown
+      warning?: string
       timestamp: string
     }
   | {
@@ -90,6 +104,8 @@ export type DeployStreamEvent =
       error: string
       stage?: string
       logs?: string[]
+      localHealth?: unknown
+      publicHealth?: unknown
       timestamp: string
     }
 
@@ -180,12 +196,33 @@ function toStringArray(input: unknown): string[] {
   return Array.isArray(input) ? input.map((value) => String(value)) : []
 }
 
+function toNumberOrNull(input: unknown) {
+  return typeof input === "number" && Number.isFinite(input) ? input : null
+}
+
+function normalizeHealth(input: any, topLevelFallback?: any): RunnerHealth {
+  const source = input || {}
+  const fallback = topLevelFallback || {}
+  return {
+    ok: source?.ok === true || fallback?.health_ok === true,
+    htmlOk: source?.htmlOk === true || source?.html_ok === true || fallback?.html_ok === true,
+    status: toNumberOrNull(source?.status ?? source?.statusCode),
+    contentType: source?.contentType || source?.content_type || null,
+    latencyMs: toNumberOrNull(source?.latencyMs ?? source?.latency_ms),
+    error: source?.error || null,
+    detail: source?.detail || null,
+    url: source?.url || null,
+    protocol: source?.protocol === "https" || source?.protocol === "http" ? source.protocol : null,
+  }
+}
+
 export function normalizeRunnerDeployResponse(input: any): RunnerDeployResponse {
   const domain = input?.domain ? String(input.domain).replace(/^https?:\/\//, "") : null
-  const url = toAbsoluteUrl(input?.url || input?.domain || input?.cloudflareUrl || null)
+  const localHealth = input?.localHealth ? normalizeHealth(input.localHealth) : null
+  const publicHealth = input?.publicHealth ? normalizeHealth(input.publicHealth) : null
+  const health = normalizeHealth(input?.health, input)
+  const url = toAbsoluteUrl(input?.url || publicHealth?.url || input?.domain || input?.cloudflareUrl || null)
   const buildOk = input?.build?.ok === true || input?.build?.built === true || input?.build === true
-  const healthOk = input?.health?.ok === true || input?.health_ok === true
-  const htmlOk = input?.health?.htmlOk === true || input?.health?.html_ok === true || input?.html_ok === true
   const runtimeLogs = toStringArray(input?.runtimeLogs ?? input?.logs?.runtime)
   const buildLogs = toStringArray(input?.buildLogs ?? input?.build?.logs)
   const deployLogs = toStringArray(input?.deployLogs ?? input?.logs)
@@ -203,13 +240,9 @@ export function normalizeRunnerDeployResponse(input: any): RunnerDeployResponse 
       logs: buildLogs,
       error: input?.build?.error || null,
     },
-    health: {
-      ok: healthOk,
-      htmlOk,
-      status: typeof input?.health?.status === "number" ? input.health.status : (typeof input?.health?.statusCode === "number" ? input.health.statusCode : null),
-      contentType: input?.health?.contentType || input?.health?.content_type || null,
-      error: input?.health?.error || null,
-    },
+    health,
+    localHealth,
+    publicHealth,
     processName: input?.processName || input?.process_name || null,
     logs: {
       deploy: deployLogs,
@@ -218,19 +251,24 @@ export function normalizeRunnerDeployResponse(input: any): RunnerDeployResponse 
       error: errorLogs,
       health: healthLogs,
     },
-    error: input?.error || input?.message || null,
+    error: input?.error || input?.message || health.error || publicHealth?.error || null,
+    warning: input?.warning || null,
     raw: input,
   }
 }
 
 export function isSuccessfulRunnerDeployResponse(input: any): boolean {
   const normalized = normalizeRunnerDeployResponse(input)
+  const publicHealthOk = normalized.publicHealth
+    ? normalized.publicHealth.ok && normalized.publicHealth.htmlOk
+    : true
   return (
     normalized.success &&
     normalized.build.ok &&
     normalized.running &&
     normalized.health.ok &&
     normalized.health.htmlOk &&
+    publicHealthOk &&
     Boolean(normalized.domain)
   )
 }
@@ -297,6 +335,9 @@ export function createResultEvent(result: {
   domain: string
   port?: number | null
   health: unknown
+  localHealth?: unknown
+  publicHealth?: unknown
+  warning?: string
 }): DeployStreamEvent {
   return {
     type: "result",
@@ -305,6 +346,9 @@ export function createResultEvent(result: {
     domain: result.domain,
     port: result.port ?? undefined,
     health: result.health,
+    localHealth: result.localHealth,
+    publicHealth: result.publicHealth,
+    warning: result.warning,
     timestamp: now(),
   }
 }

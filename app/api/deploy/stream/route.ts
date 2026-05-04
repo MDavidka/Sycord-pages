@@ -70,7 +70,13 @@ export async function POST(request: Request) {
     async start(controller) {
       const write = (event: string, data: unknown) => controller.enqueue(encoder.encode(toSseChunk(event, data)))
       let finalResult: any = null
-      let finalError: { error: string; stage?: string; logs?: string[] } | null = null
+      let finalError: {
+        error: string
+        stage?: string
+        logs?: string[]
+        localHealth?: unknown
+        publicHealth?: unknown
+      } | null = null
       const logSummary: string[] = []
 
       try {
@@ -113,9 +119,12 @@ export async function POST(request: Request) {
               if (event.event === "stage") {
                 const mappedStage =
                   payload.stage === "starting" ? "starting-server" :
+                  payload.stage === "starting-server" ? "starting-server" :
                   payload.stage === "configuring-proxy" ? "configuring-proxy" :
                   payload.stage === "health-check" ? "health-check" :
                   payload.stage === "writing-files" ? "writing-files" :
+                  payload.stage === "preparing-files" ? "preparing-files" :
+                  payload.stage === "allocating-port" ? "allocating-port" :
                   payload.stage === "installing" ? "installing" :
                   payload.stage === "building" ? "building" :
                   payload.stage === "preparing" ? "preparing" :
@@ -137,6 +146,7 @@ export async function POST(request: Request) {
                   payload.source === "runtime" ? "runtime" :
                   payload.source === "proxy" ? "proxy" :
                   payload.source === "health" ? "health" :
+                  payload.source === "runner" ? "runner" :
                   "vm"
                 const line = redactSecrets(String(payload.line || ""))
                 if (line) {
@@ -150,6 +160,8 @@ export async function POST(request: Request) {
                   error: redactSecrets(String(payload.error || "Runner deployment failed")),
                   stage: payload.stage ? String(payload.stage) : undefined,
                   logs: Array.isArray(payload.logs) ? payload.logs.map((line: string) => redactSecrets(line)) : undefined,
+                  localHealth: payload.localHealth,
+                  publicHealth: payload.publicHealth,
                 }
               }
             }
@@ -166,12 +178,16 @@ export async function POST(request: Request) {
           throw Object.assign(new Error(error), {
             meta: {
               error,
-              stage: normalized.build.ok ? "health-check" : "building",
+              stage: normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)
+                ? "public-health-check"
+                : normalized.build.ok ? "health-check" : "building",
               logs: summarizeLogs([
                 ...normalized.logs.deploy,
                 ...normalized.logs.build,
                 ...normalized.logs.error,
               ]),
+              localHealth: normalized.localHealth,
+              publicHealth: normalized.publicHealth,
             },
           })
         }
@@ -194,10 +210,14 @@ export async function POST(request: Request) {
               "projects.$.deploymentRuntime": {
                 mode: "next-server",
                 domain: normalized.domain,
+                url: normalized.url,
                 port: normalized.port,
                 processName: normalized.processName,
                 status: "running",
                 health: "healthy",
+                localHealth: normalized.localHealth || null,
+                publicHealth: normalized.publicHealth || null,
+                warning: normalized.warning || null,
                 lastHealthCheckAt: new Date(),
                 lastDeployAt: new Date(),
                 lastDeployError: null,
@@ -205,6 +225,7 @@ export async function POST(request: Request) {
               "projects.$.lastDeployLogsSummary": summarizeLogs(logSummary),
               "projects.$.lastFailedStage": null,
               "projects.$.lastDeployError": null,
+              "projects.$.lastDeployWarning": normalized.warning || null,
               "projects.$.deployedAt": new Date(),
             },
           },
@@ -229,7 +250,7 @@ export async function POST(request: Request) {
         )
 
         write("message", createStageEvent("saving", "success", "Deployment result saved"))
-        write("message", createStageEvent("complete", "success", "Deployment finished"))
+        write("message", createStageEvent("complete", "success", normalized.warning || "Deployment finished"))
         write(
           "message",
           createResultEvent({
@@ -237,6 +258,9 @@ export async function POST(request: Request) {
             domain: normalized.domain,
             port: normalized.port,
             health: normalized.health,
+            localHealth: normalized.localHealth,
+            publicHealth: normalized.publicHealth,
+            warning: normalized.warning || undefined,
           }),
         )
       } catch (error: any) {
@@ -263,6 +287,8 @@ export async function POST(request: Request) {
                 processName: null,
                 status: "failed",
                 health: "unhealthy",
+                localHealth: meta.localHealth || null,
+                publicHealth: meta.publicHealth || null,
                 lastHealthCheckAt: new Date(),
                 lastDeployAt: new Date(),
                 lastDeployError: message,

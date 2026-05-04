@@ -91,9 +91,15 @@ export async function POST(request: Request) {
     })
 
     const normalized = normalizeRunnerDeployResponse(runner.raw)
+    const failedStage = normalized.build.ok
+      ? normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)
+        ? "public-health-check"
+        : "health-check"
+      : "building"
+
     if (!isSuccessfulRunnerDeployResponse(normalized.raw)) {
       const error = normalized.error || normalized.build.error || normalized.health.error || "Runner deployment failed"
-      captureDeployFailure({ projectId, repo, error, response: normalized.raw })
+      captureDeployFailure({ projectId, repo, error, stage: failedStage, response: normalized.raw })
       await db.collection("users").updateOne(
         { id: session.user.id, "projects._id": new ObjectId(projectId) },
         {
@@ -102,10 +108,14 @@ export async function POST(request: Request) {
             "projects.$.deploymentRuntime": {
               mode: "next-server",
               domain: normalized.domain,
+              url: normalized.url,
               port: normalized.port,
               processName: normalized.processName,
               status: "failed",
               health: normalized.health.ok && normalized.health.htmlOk ? "healthy" : "unhealthy",
+              localHealth: normalized.localHealth || null,
+              publicHealth: normalized.publicHealth || null,
+              warning: normalized.warning || null,
               lastHealthCheckAt: new Date(),
               lastDeployAt: new Date(),
               lastDeployError: error,
@@ -115,8 +125,9 @@ export async function POST(request: Request) {
               ...normalized.logs.build,
               ...normalized.logs.error,
             ]),
-            "projects.$.lastFailedStage": normalized.build.ok ? "health-check" : "building",
+            "projects.$.lastFailedStage": failedStage,
             "projects.$.lastDeployError": error,
+            "projects.$.lastDeployWarning": normalized.warning || null,
           },
           $unset: {
             "projects.$.cloudflareUrl": "",
@@ -131,8 +142,12 @@ export async function POST(request: Request) {
           build: normalized.build,
           running: normalized.running,
           health: normalized.health,
+          localHealth: normalized.localHealth,
+          publicHealth: normalized.publicHealth,
+          warning: normalized.warning,
           health_ok: normalized.health.ok,
           domain: normalized.domain,
+          url: normalized.url,
           port: normalized.port,
           logs: normalized.logs,
           githubUrl: gitUrl,
@@ -158,10 +173,14 @@ export async function POST(request: Request) {
           "projects.$.deploymentRuntime": {
             mode: "next-server",
             domain: normalized.domain,
+            url: normalized.url,
             port: normalized.port,
             processName: normalized.processName,
             status: "running",
             health: "healthy",
+            localHealth: normalized.localHealth || null,
+            publicHealth: normalized.publicHealth || null,
+            warning: normalized.warning || null,
             lastHealthCheckAt: new Date(),
             lastDeployAt: new Date(),
             lastDeployError: null,
@@ -173,6 +192,7 @@ export async function POST(request: Request) {
           ]),
           "projects.$.lastFailedStage": null,
           "projects.$.lastDeployError": null,
+          "projects.$.lastDeployWarning": normalized.warning || null,
           "projects.$.deployedAt": new Date(),
         },
       },
@@ -202,13 +222,16 @@ export async function POST(request: Request) {
       githubUrl: gitUrl,
       cloudflareUrl: normalized.url,
       filesCount: files.length,
-      message: "Deployment complete",
+      message: normalized.warning || "Deployment complete",
       repoId: String(repoId),
       deploymentMode: "next-server",
       build: { ok: true },
       running: true,
       health_ok: true,
       health: normalized.health,
+      localHealth: normalized.localHealth,
+      publicHealth: normalized.publicHealth,
+      warning: normalized.warning,
       domain: normalized.domain,
       port: normalized.port,
       processName: normalized.processName,

@@ -3,7 +3,7 @@ import path from "node:path"
 import { config } from "./config.js"
 import { appendLog, ensureBaseDirectories, resetProjectLogs } from "./logs.js"
 import { getEnvFilePath, getProcessName, getProjectRoot, validateDeployPath, validateProjectId, validateSubdomain } from "./paths.js"
-import { runHealthCheck } from "./health.js"
+import { runHealthCheck, runPublicHealthCheck } from "./health.js"
 import { startOrRestartProcess } from "./processes.js"
 import { reloadProxy, writeProxyConfig } from "./proxy.js"
 import { allocatePort, getWebsiteState, retryAllocatePort, upsertWebsiteState } from "./state.js"
@@ -14,6 +14,18 @@ export type DeployPayload = {
   subdomain: string
   deployment_mode: "next-server"
   env_vars?: Record<string, string>
+}
+
+export type DeployHealth = {
+  ok: boolean
+  htmlOk: boolean
+  statusCode?: number
+  contentType?: string
+  latencyMs?: number
+  error?: string
+  detail?: string
+  url?: string
+  protocol?: "https" | "http"
 }
 
 export type DeployResponse = {
@@ -30,16 +42,12 @@ export type DeployResponse = {
     error?: string
   }
   running: boolean
-  health: {
-    ok: boolean
-    htmlOk: boolean
-    statusCode?: number
-    contentType?: string
-    latencyMs?: number
-    error?: string
-  }
+  health: DeployHealth
+  localHealth?: DeployHealth
+  publicHealth?: DeployHealth
   logs: string[]
   error?: string
+  warning?: string
 }
 
 async function writeFiles(projectId: string, files: DeployPayload["files"]) {
@@ -173,7 +181,7 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
   await reloadProxy()
   stream?.stage("configuring-proxy", "success", "Proxy configured")
 
-  stream?.stage("health-check", "running", "Checking root HTML response")
+  stream?.stage("health-check", "running", "Checking local Next.js HTML response")
   const health = await runHealthCheck(projectId, currentPort)
   if (!health.ok || !health.htmlOk) {
     stream?.stage("health-check", "error", health.error || "Root response invalid")
@@ -198,7 +206,9 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
         contentType: health.contentType,
         latencyMs: health.latencyMs,
         error: health.error || undefined,
+        detail: health.detail,
       },
+      localHealth: health,
       logs: [],
       error: health.error || "Health check failed: root route did not return valid HTML",
     }
@@ -217,7 +227,66 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
     return failResponse
   }
 
-  stream?.stage("health-check", "success", `Root returns valid HTML (HTTP ${health.statusCode})`)
+  stream?.stage("health-check", "success", `Local root returns valid HTML (HTTP ${health.statusCode})`)
+  stream?.stage("health-check", "running", `Checking public subdomain ${domain}`)
+  const publicHealth = await runPublicHealthCheck(projectId, domain)
+  const publicUrl = publicHealth.url || `https://${domain}`
+  const insecurePublicUrlWarning = publicHealth.ok && publicHealth.protocol === "http"
+    ? "Public subdomain only passed over HTTP. Configure Cloudflare/TLS before advertising it as HTTPS."
+    : undefined
+
+  if (!publicHealth.ok || !publicHealth.htmlOk) {
+    const error = publicHealth.error || "Public subdomain did not return valid HTML"
+    stream?.stage("health-check", "error", error)
+    stream?.error({
+      error,
+      stage: "public-health-check",
+      logs: [publicHealth.detail || ""],
+      localHealth: health,
+      publicHealth,
+    })
+    const failResponse: DeployResponse = {
+      success: false,
+      deployment_mode: "next-server",
+      project_id: projectId,
+      domain,
+      url: publicUrl,
+      port: currentPort,
+      processName,
+      build: { ok: true, logs: buildResult.logs },
+      running: true,
+      health: {
+        ok: publicHealth.ok,
+        htmlOk: publicHealth.htmlOk,
+        statusCode: publicHealth.statusCode,
+        contentType: publicHealth.contentType,
+        latencyMs: publicHealth.latencyMs,
+        error,
+        detail: publicHealth.detail,
+        url: publicUrl,
+        protocol: publicHealth.protocol,
+      },
+      localHealth: health,
+      publicHealth,
+      logs: [],
+      error,
+    }
+    await upsertWebsiteState({
+      projectId,
+      subdomain: payload.subdomain,
+      domain,
+      port: currentPort,
+      processName,
+      status: "failed",
+      health: "unhealthy",
+      lastDeployAt: new Date().toISOString(),
+      lastHealthCheckAt: new Date().toISOString(),
+      lastDeployError: `${error}${publicHealth.detail ? `: ${publicHealth.detail}` : ""}`,
+    })
+    return failResponse
+  }
+
+  stream?.stage("health-check", "success", `Public subdomain returns valid HTML (${publicHealth.protocol?.toUpperCase() || "HTTPS"})`)
 
   await upsertWebsiteState({
     projectId,
@@ -232,16 +301,19 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
     lastDeployError: null,
   })
 
-  stream?.stage("complete", "success", "Deployment complete")
+  stream?.stage("complete", "success", insecurePublicUrlWarning || "Deployment complete")
   stream?.result({
     success: true,
     domain,
-    url: `https://${domain}`,
+    url: publicUrl,
     port: currentPort,
     processName,
     running: true,
     build: { ok: true },
-    health,
+    health: publicHealth,
+    localHealth: health,
+    publicHealth,
+    warning: insecurePublicUrlWarning,
   })
 
   return {
@@ -249,18 +321,23 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
     deployment_mode: "next-server",
     project_id: projectId,
     domain,
-    url: `https://${domain}`,
+    url: publicUrl,
     port: currentPort,
     processName,
     build: { ok: true, logs: buildResult.logs },
     running: true,
     health: {
-      ok: health.ok,
-      htmlOk: health.htmlOk,
-      statusCode: health.statusCode,
-      contentType: health.contentType,
-      latencyMs: health.latencyMs,
+      ok: publicHealth.ok,
+      htmlOk: publicHealth.htmlOk,
+      statusCode: publicHealth.statusCode,
+      contentType: publicHealth.contentType,
+      latencyMs: publicHealth.latencyMs,
+      url: publicUrl,
+      protocol: publicHealth.protocol,
     },
+    localHealth: health,
+    publicHealth,
     logs: [],
+    warning: insecurePublicUrlWarning,
   }
 }
