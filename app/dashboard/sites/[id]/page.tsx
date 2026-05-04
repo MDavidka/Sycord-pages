@@ -116,6 +116,17 @@ const paymentOptions = [
 ]
 
 type DeploymentMode = "next-server"
+type DeployStageStatus = "pending" | "running" | "success" | "error"
+
+const RUNTIME_STAGE_LABELS: Array<[string, string]> = [
+  ["github", "GitHub push"],
+  ["runner-git", "Runner git pull"],
+  ["installing", "Install"],
+  ["building", "Build"],
+  ["starting-server", "Server"],
+  ["configuring-proxy", "Proxy"],
+  ["public-health", "Public health"],
+]
 
 const formatDeploymentMode = (_mode?: string | null) => (
   "Next server"
@@ -661,6 +672,7 @@ export default function SiteSettingsPage() {
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
   const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
+  const [deploymentStages, setDeploymentStages] = useState<Record<string, DeployStageStatus>>({})
   const [deployPanelOpen, setDeployPanelOpen] = useState(false)
   const deploymentMode = useMemo(
     () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
@@ -820,7 +832,12 @@ export default function SiteSettingsPage() {
             console.log("[v0] Project data fetched:", data ? "Success" : "Empty")
             if (data.message) throw new Error(data.message)
             setProject(data)
-            if (data.deploymentRuntime) setDeploymentRuntime(data.deploymentRuntime)
+            if (data.deploymentRuntime) {
+              setDeploymentRuntime(data.deploymentRuntime)
+              if (data.deploymentRuntime.status === "running") {
+                setDeploymentStages(Object.fromEntries(RUNTIME_STAGE_LABELS.map(([stage]) => [stage, "success"])))
+              }
+            }
             setShopName(data.businessName || "")
             setProfileImage(data.profileImage || "")
             setLogoLoadError(false) // Reset error state when loading new data
@@ -1230,6 +1247,31 @@ export default function SiteSettingsPage() {
   const userInitials = session?.user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "U"
   const previewUrl = project?.cloudflareUrl || null
   const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : null
+  const runtimeStages = useMemo(() => {
+    const current = { ...deploymentStages }
+    if (deploySuccess || deploymentRuntime?.status === "running") {
+      for (const [id] of RUNTIME_STAGE_LABELS) current[id] = "success"
+    } else if (deploymentRuntime?.status === "failed") {
+      const failedStage = project?.lastFailedStage || "public-health"
+      for (const [id] of RUNTIME_STAGE_LABELS) {
+        if (!current[id]) current[id] = id === failedStage ? "error" : "pending"
+      }
+    }
+    return current
+  }, [deploySuccess, deploymentRuntime, deploymentStages, project])
+
+  const renderStageBadge = (status: DeployStageStatus = "pending") => {
+    const className =
+      status === "success" ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300" :
+      status === "running" ? "border-amber-500/25 bg-amber-500/10 text-amber-300" :
+      status === "error" ? "border-red-500/30 bg-red-500/10 text-red-300" :
+      "border-white/10 bg-white/[0.03] text-muted-foreground"
+    return (
+      <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize", className)}>
+        {status}
+      </span>
+    )
+  }
 
   return (
     <div 
@@ -1249,6 +1291,9 @@ export default function SiteSettingsPage() {
         }}
         projectId={String(id)}
         projectName={project?.businessName || project?.name}
+        onStageChange={(stage, status) => {
+          setDeploymentStages((current) => ({ ...current, [stage]: status }))
+        }}
         onSuccess={(streamResult) => {
           setIsDeploying(false)
           setDeploySuccess(true)
@@ -1270,6 +1315,7 @@ export default function SiteSettingsPage() {
           }))
           setProject((prev: any) => ({ ...prev, cloudflareUrl: streamResult.url }))
           setHasDeployError(false)
+          setDeploymentStages(Object.fromEntries(RUNTIME_STAGE_LABELS.map(([stage]) => [stage, "success"])))
           fetchLogs((project?._id || id) as string)
         }}
         onFinish={(outcome) => {
@@ -1277,6 +1323,9 @@ export default function SiteSettingsPage() {
           if (!outcome.success) {
             setDeployError(outcome.error || "Deployment failed")
             setHasDeployError(true)
+            if (outcome.stage) {
+              setDeploymentStages((current) => ({ ...current, [outcome.stage as string]: "error" }))
+            }
             setDeploymentRuntime((current: any) => ({
               ...(current || {}),
               mode: "next-server",
@@ -2342,14 +2391,14 @@ export default function SiteSettingsPage() {
             {/* TAB CONTENT: PAGES */}
             {activeTab === "pages" && (
                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
                       <h2 className="text-lg font-semibold">Site Pages</h2>
-                      <p className="text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         Manage AI-generated content · Deployment mode: {formatDeploymentMode(deploymentMode)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                       {generatedPages.length > 0 && (
                         <>
                           <Button
@@ -2357,6 +2406,7 @@ export default function SiteSettingsPage() {
                             size="sm"
                             onClick={handleDeploy}
                             disabled={isDeploying}
+                            className="min-w-0 flex-1 sm:flex-none"
                           >
                             {isDeploying ? (
                               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -2382,37 +2432,46 @@ export default function SiteSettingsPage() {
                                 alert(e.message);
                               }
                             }}
+                            className="min-w-0 flex-1 sm:flex-none"
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete All
                           </Button>
                         </>
                       )}
-                      <Button onClick={() => setActiveTab("ai")}>
+                      <Button onClick={() => setActiveTab("ai")} className="min-w-0 flex-[1_1_100%] sm:flex-none">
                          <Sparkles className="h-4 w-4 mr-2" />
                          Generate New
                       </Button>
                     </div>
                   </div>
 
-                  <Card className="border-primary/30 bg-primary/5">
+                  <Card className="w-full min-w-0 overflow-hidden border-primary/30 bg-primary/5">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
+                      <CardTitle className="flex min-w-0 items-center gap-2 text-sm">
                         <Rocket className="h-4 w-4 text-primary" />
                         Next server runtime
                       </CardTitle>
-                      <CardDescription className="text-xs">
+                      <CardDescription className="text-xs leading-relaxed">
                         Deployments run npm install, npm run build, then PORT=&lt;allocated&gt; npm run start. Live status requires build, server process, and health check success.
                       </CardDescription>
                     </CardHeader>
-                    {(deployResult || deploymentRuntime) && (
-                      <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                        <div>Build: {deployResult?.build || deploymentRuntime?.status === "running" ? "ok" : "pending"}</div>
-                        <div>Server: {deployResult?.running || deploymentRuntime?.status === "running" ? "running" : deploymentRuntime?.status || "pending"}</div>
-                        <div>Health: {deployResult?.health_ok || deploymentRuntime?.health === "healthy" ? "ok" : deploymentRuntime?.health || "pending"}</div>
-                        <div>Port: {deployResult?.port ?? deploymentRuntime?.port ?? "allocated by VM"}</div>
-                      </CardContent>
-                    )}
+                    <CardContent className="space-y-3">
+                      <div className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                        {RUNTIME_STAGE_LABELS.map(([stage, label]) => (
+                          <div key={stage} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-white/10 bg-background/40 px-3 py-2">
+                            <span className="truncate text-muted-foreground">{label}</span>
+                            {renderStageBadge(runtimeStages[stage])}
+                          </div>
+                        ))}
+                      </div>
+                      {(deployResult?.domain || deploymentRuntime?.domain || displayUrl || deployResult?.port || deploymentRuntime?.port) && (
+                        <div className="flex min-w-0 flex-col gap-1 rounded-lg border border-white/10 bg-background/40 px-3 py-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                          <span className="min-w-0 truncate">Domain: {deployResult?.domain || deploymentRuntime?.domain || displayUrl || "not ready"}</span>
+                          <span className="shrink-0">Port: {deployResult?.port ?? deploymentRuntime?.port ?? "after runner deploy"}</span>
+                        </div>
+                      )}
+                    </CardContent>
                   </Card>
 
                   {(deployError || runnerErrorDetails || hasDeployError) && (

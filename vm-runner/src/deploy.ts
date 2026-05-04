@@ -10,10 +10,14 @@ import { allocatePort, getWebsiteState, retryAllocatePort, upsertWebsiteState } 
 import type { DeployStreamWriter } from "./stream.js"
 
 export type DeployPayload = {
-  files: Array<{ path: string; content: string }>
+  projectId?: string
+  repoUrl?: string
+  branch?: string
+  repoName?: string
   subdomain: string
   deployment_mode: "next-server"
   env_vars?: Record<string, string>
+  files?: Array<{ path: string; content: string }>
 }
 
 export type DeployHealth = {
@@ -50,7 +54,43 @@ export type DeployResponse = {
   warning?: string
 }
 
-async function writeFiles(projectId: string, files: DeployPayload["files"]) {
+const STEP_TIMEOUTS_MS = {
+  git: 90_000,
+  install: 180_000,
+  build: 180_000,
+  pm2: 60_000,
+  proxy: 45_000,
+  localHealth: 20_000,
+  publicHealth: 35_000,
+}
+
+async function runWithTimeout<T>(stage: string, action: () => Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: NodeJS.Timeout | null = null
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${stage} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs)
+  })
+  try {
+    return await Promise.race([action(), timeout])
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw Object.assign(new Error(`${stage} failed: ${message}`), { stage })
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+}
+
+function runnerStageForError(stage?: string) {
+  if (!stage) return "failed"
+  if (stage.startsWith("git ")) return "git-sync"
+  if (stage.startsWith("npm install")) return "installing"
+  if (stage.startsWith("npm run build")) return "building"
+  if (stage.startsWith("pm2")) return "starting-server"
+  if (stage.startsWith("nginx")) return "configuring-proxy"
+  if (stage.startsWith("local health") || stage.startsWith("public health")) return "health-check"
+  return "failed"
+}
+
+async function writeFiles(projectId: string, files: Array<{ path: string; content: string }>) {
   const root = getProjectRoot(projectId)
   await fs.rm(root, { recursive: true, force: true })
   await fs.mkdir(root, { recursive: true })
@@ -62,6 +102,84 @@ async function writeFiles(projectId: string, files: DeployPayload["files"]) {
     await fs.writeFile(outputPath, file.content)
   }
 
+  return root
+}
+
+function redactRepoUrl(repoUrl: string) {
+  return repoUrl.replace(/\/\/([^/@]+)@/, "//***@")
+}
+
+function sanitizeBranch(branch?: string) {
+  const value = branch || "main"
+  if (!/^[A-Za-z0-9._/-]+$/.test(value) || value.includes("..")) {
+    throw new Error("Invalid git branch")
+  }
+  return value
+}
+
+async function syncRepo(projectId: string, payload: DeployPayload, stream: DeployStreamWriter | null) {
+  if (!payload.repoUrl) {
+    if (!payload.files) throw new Error("repoUrl is required")
+    stream?.stage("git-sync", "running", "Using direct file deploy fallback")
+    const cwd = await writeFiles(projectId, payload.files)
+    stream?.stage("git-sync", "success", `Wrote ${payload.files.length} files`)
+    stream?.log("runner", `Direct file fallback wrote ${payload.files.length} files`)
+    return cwd
+  }
+
+  const branch = sanitizeBranch(payload.branch)
+  const root = getProjectRoot(projectId)
+  const { runCommand } = await import("./processes.js")
+
+  stream?.stage("git-sync", "running", `Syncing ${payload.repoName || payload.repoUrl}#${branch}`)
+  await appendLog(projectId, "deploy", `Syncing Git repository ${redactRepoUrl(payload.repoUrl)}#${branch}`)
+
+  try {
+    await fs.access(path.join(root, ".git"))
+    const fetch = await runWithTimeout("git fetch", () =>
+      runCommand("git", ["fetch", "--prune", "origin", branch], {
+        cwd: root,
+        onLine: (line) => {
+          void appendLog(projectId, "deploy", line)
+          stream?.log("runner", line)
+        },
+      }),
+    STEP_TIMEOUTS_MS.git)
+    if (fetch.code !== 0) {
+      throw new Error(fetch.stderr.concat(fetch.stdout).slice(-20).join("\n") || `git fetch exited ${fetch.code}`)
+    }
+
+    const reset = await runWithTimeout("git reset", () =>
+      runCommand("git", ["reset", "--hard", `origin/${branch}`], {
+        cwd: root,
+        onLine: (line) => {
+          void appendLog(projectId, "deploy", line)
+          stream?.log("runner", line)
+        },
+      }),
+    STEP_TIMEOUTS_MS.git)
+    if (reset.code !== 0) {
+      throw new Error(reset.stderr.concat(reset.stdout).slice(-20).join("\n") || `git reset exited ${reset.code}`)
+    }
+  } catch (error: unknown) {
+    const existingRepoError = error instanceof Error ? error.message : String(error)
+    stream?.log("runner", `Existing checkout unavailable, cloning fresh: ${existingRepoError}`)
+    await fs.rm(root, { recursive: true, force: true })
+    await fs.mkdir(path.dirname(root), { recursive: true })
+    const clone = await runWithTimeout("git clone", () =>
+      runCommand("git", ["clone", "--depth", "1", "--branch", branch, payload.repoUrl as string, root], {
+        onLine: (line) => {
+          void appendLog(projectId, "deploy", line)
+          stream?.log("runner", line)
+        },
+      }),
+    STEP_TIMEOUTS_MS.git)
+    if (clone.code !== 0) {
+      throw new Error(clone.stderr.concat(clone.stdout).slice(-20).join("\n") || `git clone exited ${clone.code}`)
+    }
+  }
+
+  stream?.stage("git-sync", "success", "Repository synced")
   return root
 }
 
@@ -79,9 +197,9 @@ async function writeEnvFile(projectId: string, envVars: Record<string, string> =
 async function runBuildStep(projectId: string, cwd: string, stream: DeployStreamWriter | null): Promise<{ logs: string[] }> {
   const buildLogs: string[] = []
 
-  stream?.stage("installing", "running", "Installing dependencies")
+  stream?.stage("installing", "running", "Running npm install")
   const { runCommand } = await import("./processes.js")
-  const install = await runCommand("npm", ["install", "--no-fund", "--no-audit", "--legacy-peer-deps"], {
+  const install = await runWithTimeout("npm install", () => runCommand("npm", ["install", "--no-fund", "--no-audit", "--legacy-peer-deps"], {
     cwd,
     onLine: (line) => {
       buildLogs.push(line)
@@ -89,21 +207,21 @@ async function runBuildStep(projectId: string, cwd: string, stream: DeployStream
       void appendLog(projectId, "build", line)
       stream?.log("install", line)
     },
-  })
+  }), STEP_TIMEOUTS_MS.install)
   if (install.code !== 0) {
     const lastLines = buildLogs.slice(-20).join("\n")
     throw new Error(`npm install failed (exit ${install.code}): ${lastLines}`)
   }
 
   stream?.stage("building", "running", "Running next build")
-  const build = await runCommand("npm", ["run", "build"], {
+  const build = await runWithTimeout("npm run build", () => runCommand("npm", ["run", "build"], {
     cwd,
     onLine: (line) => {
       buildLogs.push(line)
       void appendLog(projectId, "build", line)
       stream?.log("build", line)
     },
-  })
+  }), STEP_TIMEOUTS_MS.build)
   if (build.code !== 0) {
     const lastLines = buildLogs.slice(-20).join("\n")
     throw new Error(`npm run build failed (exit ${build.code}): ${lastLines}`)
@@ -124,16 +242,29 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
   await ensureBaseDirectories()
   await resetProjectLogs(projectId)
   stream?.stage("queued", "pending", "Deployment queued")
-  stream?.stage("preparing-files", "running", "Preparing project directory")
 
   await appendLog(projectId, "deploy", `Preparing deployment for ${projectId}`)
-  const cwd = await writeFiles(projectId, payload.files)
-  stream?.stage("preparing-files", "success", `Wrote ${payload.files.length} files`)
-  stream?.log("runner", `Writing ${payload.files.length} files`)
+  let cwd: string
+  try {
+    cwd = await syncRepo(projectId, payload, stream)
+  } catch (error: any) {
+    stream?.stage("git-sync", "error", error?.message || "Git sync failed")
+    stream?.error({ error: error?.message || "Git sync failed", stage: "git-sync" })
+    throw error
+  }
 
   const envFile = await writeEnvFile(projectId, payload.env_vars)
+  stream?.log("runner", `Wrote runtime env file ${envFile}`)
 
-  const buildResult = await runBuildStep(projectId, cwd, stream)
+  let buildResult: { logs: string[] }
+  try {
+    buildResult = await runBuildStep(projectId, cwd, stream)
+  } catch (error: any) {
+    const stage = runnerStageForError(error?.stage)
+    stream?.stage(stage as any, "error", error?.message || "Build failed")
+    stream?.error({ error: error?.message || "Build failed", stage, logs: await Promise.resolve([]) })
+    throw error
+  }
 
   stream?.stage("allocating-port", "running", "Allocating port for website")
   const previous = await getWebsiteState(projectId)
@@ -149,7 +280,15 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
   let currentPort = port
 
   for (let attempt = 0; attempt < MAX_START_RETRIES; attempt += 1) {
-    const result = await startOrRestartProcess(projectId, processName, currentPort, cwd, envFile)
+    stream?.log("runtime", `PM2 ${attempt === 0 ? "start/restart" : "retry"} on port ${currentPort}`)
+    let result: Awaited<ReturnType<typeof startOrRestartProcess>>
+    try {
+      result = await runWithTimeout("pm2 start/restart", () => startOrRestartProcess(projectId, processName, currentPort, cwd, envFile), STEP_TIMEOUTS_MS.pm2)
+    } catch (error: any) {
+      stream?.stage("starting-server", "error", error?.message || "Failed to start Next.js server")
+      stream?.error({ error: error?.message || "Failed to start Next.js server", stage: "starting-server" })
+      throw error
+    }
     startCode = result.code
     runtimeOut = result.stdout
     runtimeErr = result.stderr
@@ -177,12 +316,23 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
 
   const domain = `${payload.subdomain}.${config.baseDomain}`
   stream?.stage("configuring-proxy", "running", "Configuring nginx reverse proxy")
-  await writeProxyConfig(projectId, domain, currentPort)
-  await reloadProxy()
+  try {
+    await runWithTimeout("nginx config", async () => {
+      await writeProxyConfig(projectId, domain, currentPort)
+      stream?.log("proxy", `Wrote nginx config for ${domain} -> ${currentPort}`)
+      await reloadProxy()
+      stream?.log("proxy", "nginx configuration reloaded")
+    }, STEP_TIMEOUTS_MS.proxy)
+  } catch (error: any) {
+    stream?.stage("configuring-proxy", "error", error?.message || "Proxy configuration failed")
+    stream?.error({ error: error?.message || "Proxy configuration failed", stage: "configuring-proxy" })
+    throw error
+  }
   stream?.stage("configuring-proxy", "success", "Proxy configured")
 
   stream?.stage("health-check", "running", "Checking local Next.js HTML response")
-  const health = await runHealthCheck(projectId, currentPort)
+  const health = await runWithTimeout("local health", () => runHealthCheck(projectId, currentPort), STEP_TIMEOUTS_MS.localHealth)
+  stream?.log("health", health.detail || health.error || "Local health completed")
   if (!health.ok || !health.htmlOk) {
     stream?.stage("health-check", "error", health.error || "Root response invalid")
     stream?.error({
@@ -229,7 +379,8 @@ export async function deployProject(projectId: string, payload: DeployPayload, s
 
   stream?.stage("health-check", "success", `Local root returns valid HTML (HTTP ${health.statusCode})`)
   stream?.stage("health-check", "running", `Checking public subdomain ${domain}`)
-  const publicHealth = await runPublicHealthCheck(projectId, domain)
+  const publicHealth = await runWithTimeout("public health", () => runPublicHealthCheck(projectId, domain), STEP_TIMEOUTS_MS.publicHealth)
+  stream?.log("health", publicHealth.detail || publicHealth.error || "Public health completed")
   const publicUrl = publicHealth.url || `https://${domain}`
   const insecurePublicUrlWarning = publicHealth.ok && publicHealth.protocol === "http"
     ? "Public subdomain only passed over HTTP. Configure Cloudflare/TLS before advertising it as HTTPS."

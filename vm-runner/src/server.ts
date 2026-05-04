@@ -15,6 +15,25 @@ import { ensureRunnerProxyConfig, reloadProxy, removeProxyConfig } from "./proxy
 
 const app = Fastify({ logger: true })
 
+function runnerStageForError(error: any) {
+  const stage = String(error?.stage || "")
+  if (stage.startsWith("git ")) return "git-sync"
+  if (stage.startsWith("npm install")) return "installing"
+  if (stage.startsWith("npm run build")) return "building"
+  if (stage.startsWith("pm2")) return "starting-server"
+  if (stage.startsWith("nginx")) return "configuring-proxy"
+  if (stage.startsWith("local health") || stage.startsWith("public health")) return "health-check"
+  return stage || "failed"
+}
+
+function logTypeForStage(stage: string): "deploy" | "build" | "runtime" | "error" | "health" {
+  if (stage === "installing" || stage === "building") return "build"
+  if (stage === "starting-server") return "runtime"
+  if (stage === "health-check") return "health"
+  if (stage === "git-sync" || stage === "configuring-proxy") return "deploy"
+  return "error"
+}
+
 app.addHook("preHandler", requireBearerToken)
 
 app.get("/api/status", async () => {
@@ -173,18 +192,20 @@ app.post("/api/deploy/:projectId/stream", async (request, reply) => {
       stream.stage("failed", "error", result.error || "Deployment failed")
       stream.error({
         error: result.error || "Deployment failed",
-        stage: result.health?.ok ? "build" : "health-check",
+        stage: result.running ? "health-check" : result.build?.ok ? "starting-server" : "building",
         logs: result.build?.logs || [],
         health: result.health,
       })
     }
   } catch (error: any) {
     await appendLog(projectId, "error", error?.message || "Deployment failed")
+    const stage = runnerStageForError(error)
+    stream.stage(stage as any, "error", error?.message || "Deployment failed")
     stream.stage("failed", "error", error?.message || "Deployment failed")
     stream.error({
       error: error?.message || "Deployment failed",
-      stage: "failed",
-      logs: await readLog(projectId, "error", 50),
+      stage,
+      logs: await readLog(projectId, logTypeForStage(stage), 50),
     })
   } finally {
     reply.raw.end()

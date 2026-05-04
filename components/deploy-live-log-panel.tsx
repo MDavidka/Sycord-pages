@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils"
 
 type StageId =
   | "queued"
-  | "preparing-files"
+  | "github"
+  | "runner-git"
   | "installing"
   | "building"
-  | "allocating-port"
   | "starting-server"
   | "configuring-proxy"
-  | "health-check"
+  | "public-health"
   | "complete"
 
 type DeployStreamEvent =
@@ -55,17 +55,18 @@ export type DeployLiveLogPanelProps = {
   projectName?: string
   onSuccess?: (result: { url: string; domain: string }) => void
   onFinish?: (outcome: { success: boolean; result?: { url: string; domain: string }; error?: string; stage?: string }) => void
+  onStageChange?: (stage: string, status: "pending" | "running" | "success" | "error") => void
 }
 
 const STAGES: Array<{ id: StageId; label: string; description: string }> = [
   { id: "queued", label: "Queued", description: "Deployment request received" },
-  { id: "preparing-files", label: "Preparing files", description: "Writing project files to disk" },
-  { id: "installing", label: "Installing dependencies", description: "Running npm install" },
-  { id: "building", label: "Building Next.js", description: "Running next build" },
-  { id: "allocating-port", label: "Allocating port", description: "Finding available port" },
-  { id: "starting-server", label: "Starting server", description: "Launching Next.js via PM2" },
-  { id: "configuring-proxy", label: "Configuring proxy", description: "Setting up nginx reverse proxy" },
-  { id: "health-check", label: "Health check", description: "Verifying root HTML response" },
+  { id: "github", label: "GitHub push", description: "Writing generated source to GitHub" },
+  { id: "runner-git", label: "Runner git pull", description: "Cloning or resetting the VM checkout" },
+  { id: "installing", label: "Install", description: "Running npm install" },
+  { id: "building", label: "Build", description: "Running npm run build" },
+  { id: "starting-server", label: "Server", description: "Launching Next.js via PM2" },
+  { id: "configuring-proxy", label: "Proxy", description: "Configuring nginx" },
+  { id: "public-health", label: "Public health", description: "Checking sycord.site HTML" },
   { id: "complete", label: "Complete", description: "Site is live" },
 ]
 
@@ -75,22 +76,26 @@ function normalizeStage(stage: string): StageId {
   // Map runner stage names to UI stage ids
   const map: Record<string, StageId> = {
     queued: "queued",
-    "preparing-files": "preparing-files",
-    preparing: "preparing-files",
-    "writing-files": "preparing-files",
+    github: "github",
+    "github-push": "github",
+    "vm-connect": "runner-git",
+    "runner-git": "runner-git",
+    "git-sync": "runner-git",
     installing: "installing",
     building: "building",
-    "allocating-port": "allocating-port",
+    "allocating-port": "starting-server",
     "starting-server": "starting-server",
     "configuring-proxy": "configuring-proxy",
-    "health-check": "health-check",
+    "health-check": "public-health",
+    "public-health": "public-health",
+    "public-health-check": "public-health",
     complete: "complete",
     failed: "complete",
   }
   const normalized = map[stage]
   if (normalized && KNOWN_STAGES.has(normalized)) return normalized
   // For any unknown stage, don't normalize — use as-is and add to stages dynamically
-  return "preparing-files"
+  return "runner-git"
 }
 
 export function DeployLiveLogPanel({
@@ -100,6 +105,7 @@ export function DeployLiveLogPanel({
   projectName,
   onSuccess,
   onFinish,
+  onStageChange,
 }: DeployLiveLogPanelProps) {
   const [logs, setLogs] = useState<string[]>([])
   const [stageState, setStageState] = useState<Record<string, "pending" | "running" | "success" | "error">>(() => {
@@ -192,6 +198,9 @@ export function DeployLiveLogPanel({
     if (event.type === "stage") {
       const normalized = normalizeStage(event.stage)
       setLastMessage(event.message)
+      if (normalized !== "queued" && normalized !== "complete") {
+        onStageChange?.(normalized, event.status)
+      }
       setStageState((current) => {
         const next = { ...current, [normalized]: event.status }
         // Mark all previous stages as success when a new stage starts
@@ -202,6 +211,9 @@ export function DeployLiveLogPanel({
             const prevStage = stageOrder[i]
             if (next[prevStage] === "running") {
               next[prevStage] = "success"
+              if (prevStage !== "queued" && prevStage !== "complete") {
+                onStageChange?.(prevStage, "success")
+              }
             }
           }
         }
@@ -229,6 +241,9 @@ export function DeployLiveLogPanel({
 
     if (event.type === "result") {
       setResult({ url: event.url, domain: event.domain })
+      for (const stage of STAGES) {
+        if (stage.id !== "queued" && stage.id !== "complete") onStageChange?.(stage.id, "success")
+      }
       setStageState((current) => {
         const next = { ...current }
         for (const s of STAGES) {
@@ -247,8 +262,9 @@ export function DeployLiveLogPanel({
 
     // type === "error"
     setError({ stage: event.stage, message: event.error })
-    if (Array.isArray(event.logs) && event.logs.length > 0) {
-      setLogs((current) => current.concat(event.logs.map((line) => `[error] ${line}`)))
+    const errorLogs = "logs" in event ? event.logs : undefined
+    if (Array.isArray(errorLogs) && errorLogs.length > 0) {
+      setLogs((current) => current.concat(errorLogs.map((line) => `[error] ${line}`)))
     }
     setIsRunning(false)
     onFinish?.({ success: false, error: event.error, stage: event.stage })
@@ -304,37 +320,37 @@ export function DeployLiveLogPanel({
     <Dialog open={open} onOpenChange={closePanel}>
       <DialogContent
         showCloseButton={!isRunning}
-        className="h-[100dvh] max-w-none border-zinc-800 bg-[#05070b] p-0 text-zinc-100 shadow-[0_40px_120px_rgba(0,0,0,0.65)] sm:h-auto sm:max-w-5xl"
+        className="h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden border-zinc-800 bg-[#05070b] p-0 text-zinc-100 shadow-[0_40px_120px_rgba(0,0,0,0.65)] sm:h-[min(760px,calc(100dvh-2rem))] sm:max-w-5xl"
       >
-        <div className="relative flex h-full flex-col overflow-hidden sm:rounded-xl">
+        <div className="relative flex h-full min-h-0 flex-col overflow-hidden sm:rounded-xl">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(66,153,225,0.18),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_28%)]" />
-          <div className="relative flex flex-col gap-4 border-b border-white/8 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-5">
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Deploying</p>
-              <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">{projectName || projectId}</h2>
-              <p className="mt-1 text-sm text-zinc-400">{result?.domain || `${projectId}.sycord.site`}</p>
+          <div className="relative flex shrink-0 flex-col gap-3 border-b border-white/8 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-5">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.24em] text-zinc-500 sm:text-xs sm:tracking-[0.28em]">Deploying</p>
+              <h2 className="mt-1 truncate text-lg font-semibold text-white sm:mt-2 sm:text-2xl">{projectName || projectId}</h2>
+              <p className="mt-1 truncate text-xs text-zinc-400 sm:text-sm">{result?.domain || `${projectId}.sycord.site`}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-              <Button variant="ghost" size="sm" onClick={copyLogs} className="justify-start text-zinc-300 hover:bg-white/8 sm:justify-center">
+              <Button variant="ghost" size="sm" onClick={copyLogs} className="h-8 justify-start text-xs text-zinc-300 hover:bg-white/8 sm:h-9 sm:justify-center sm:text-sm">
                 <Copy className="mr-2 h-4 w-4" />
                 Copy logs
               </Button>
-              <Button variant="ghost" size="sm" onClick={downloadLogs} className="justify-start text-zinc-300 hover:bg-white/8 sm:justify-center">
+              <Button variant="ghost" size="sm" onClick={downloadLogs} className="h-8 justify-start text-xs text-zinc-300 hover:bg-white/8 sm:h-9 sm:justify-center sm:text-sm">
                 <Download className="mr-2 h-4 w-4" />
                 Download
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setCollapsed((value) => !value)} className="col-span-2 justify-start text-zinc-300 hover:bg-white/8 sm:col-span-1 sm:justify-center">
+              <Button variant="ghost" size="sm" onClick={() => setCollapsed((value) => !value)} className="col-span-2 h-8 justify-start text-xs text-zinc-300 hover:bg-white/8 sm:col-span-1 sm:h-9 sm:justify-center sm:text-sm">
                 {collapsed ? <ChevronDown className="mr-2 h-4 w-4" /> : <ChevronUp className="mr-2 h-4 w-4" />}
                 {collapsed ? "Expand" : "Collapse"}
               </Button>
             </div>
           </div>
 
-          <div className="relative grid flex-1 gap-0 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="relative grid min-h-0 flex-1 gap-0 overflow-hidden lg:grid-cols-[300px_minmax(0,1fr)]">
             {/* Stage panel */}
-            <div className="border-b border-white/6 bg-white/[0.02] px-4 py-4 lg:border-r lg:border-b-0 lg:px-5 lg:py-5">
-              <p className="text-xs uppercase tracking-[0.18em] text-zinc-500 mb-4">Stages</p>
-              <div className="space-y-1">
+            <div className="max-h-[36dvh] overflow-y-auto border-b border-white/6 bg-white/[0.02] px-3 py-3 lg:max-h-none lg:border-r lg:border-b-0 lg:px-5 lg:py-5">
+              <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-zinc-500 sm:mb-4 sm:text-xs">Stages</p>
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:block lg:space-y-1">
                 {STAGES.map((stage) => {
                   const state = stageState[stage.id] || "pending"
                   const StageIcon =
@@ -346,7 +362,7 @@ export function DeployLiveLogPanel({
                     <div
                       key={stage.id}
                       className={cn(
-                        "flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors",
+                        "flex items-start gap-2 rounded-xl border px-2.5 py-2 transition-colors sm:gap-3 sm:px-3 sm:py-3",
                         state === "running" && "border-amber-500/40 bg-amber-500/5",
                         state === "success" && "border-emerald-500/20 bg-emerald-500/5",
                         state === "error" && "border-red-500/40 bg-red-500/5",
@@ -366,7 +382,7 @@ export function DeployLiveLogPanel({
                         <div className="flex items-center justify-between gap-2">
                           <p
                             className={cn(
-                              "text-sm font-medium",
+                              "text-xs font-medium sm:text-sm",
                               state === "success" && "text-emerald-200",
                               state === "running" && "text-amber-200",
                               state === "error" && "text-red-200",
@@ -381,16 +397,16 @@ export function DeployLiveLogPanel({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-zinc-500 mt-0.5">{stage.description}</p>
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500 sm:text-xs">{stage.description}</p>
                       </div>
                     </div>
                   )
                 })}
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/6 bg-black/25 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Status</p>
-                <p className="mt-2 text-sm text-zinc-200">{error?.message || lastMessage}</p>
+              <div className="mt-3 rounded-2xl border border-white/6 bg-black/25 p-3 sm:mt-4 sm:p-4">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 sm:text-xs">Status</p>
+                <p className="mt-2 break-words text-xs text-zinc-200 sm:text-sm">{error?.message || lastMessage}</p>
                 {error?.stage && (
                   <div className="mt-2 flex items-center gap-2 text-xs text-red-300">
                     <AlertTriangle className="h-3 w-3" />
@@ -402,7 +418,7 @@ export function DeployLiveLogPanel({
 
             {/* Log terminal */}
             {!collapsed && (
-              <div className="flex min-h-[42dvh] flex-col sm:min-h-[520px]">
+              <div className="flex min-h-0 flex-col">
                 <div className="flex flex-col gap-2 border-b border-white/6 px-4 py-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                   <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4" />
@@ -412,7 +428,7 @@ export function DeployLiveLogPanel({
                     Auto-scroll: {autoScroll ? "on" : "off"}
                   </button>
                 </div>
-                <div ref={logViewportRef} className="flex-1 overflow-y-auto bg-[#020409] px-4 py-4 font-mono text-[12px] leading-6 sm:px-5">
+                <div ref={logViewportRef} className="min-h-[24dvh] flex-1 overflow-y-auto bg-[#020409] px-3 py-3 font-mono text-[11px] leading-5 sm:px-5 sm:py-4 sm:text-[12px] sm:leading-6">
                   {logs.length === 0 ? (
                     <div className="flex h-full items-center justify-center text-zinc-600">
                       {isRunning ? <Loader2 className="h-5 w-5 animate-spin" /> : "No logs captured"}
@@ -444,7 +460,7 @@ export function DeployLiveLogPanel({
           </div>
 
           {/* Footer */}
-          <div className="relative flex flex-col gap-3 border-t border-white/8 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
+          <div className="relative flex shrink-0 flex-col gap-3 border-t border-white/8 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6 sm:py-4">
             <div className="flex items-center gap-2">
               {result ? (
                 <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-sm text-emerald-300">
@@ -467,13 +483,13 @@ export function DeployLiveLogPanel({
             <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
               {result?.url && (
                 <>
-                  <Button asChild className="bg-white text-black hover:bg-zinc-200">
+                  <Button asChild className="h-9 bg-white text-black hover:bg-zinc-200">
                     <a href={result.url} target="_blank" rel="noreferrer">
                       <ExternalLink className="mr-2 h-4 w-4" />
                       Open website
                     </a>
                   </Button>
-                  <Button variant="outline" onClick={() => navigator.clipboard.writeText(result.url)} className="border-white/10 bg-transparent text-white hover:bg-white/8">
+                  <Button variant="outline" onClick={() => navigator.clipboard.writeText(result.url)} className="h-9 border-white/10 bg-transparent text-white hover:bg-white/8">
                     <Copy className="mr-2 h-4 w-4" />
                     Copy URL
                   </Button>
@@ -481,10 +497,10 @@ export function DeployLiveLogPanel({
               )}
               {error && (
                 <>
-                  <Button variant="outline" onClick={() => onOpenChange(false)} className="border-white/10 bg-transparent text-white hover:bg-white/8">
+                  <Button variant="outline" onClick={() => onOpenChange(false)} className="h-9 border-white/10 bg-transparent text-white hover:bg-white/8">
                     Close
                   </Button>
-                  <Button onClick={() => setAttempt((value) => value + 1)} className="bg-red-500 text-white hover:bg-red-400">
+                  <Button onClick={() => setAttempt((value) => value + 1)} className="h-9 bg-red-500 text-white hover:bg-red-400">
                     Retry deploy
                   </Button>
                 </>
