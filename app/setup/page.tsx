@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
 
 export default function SetupPage() {
-  redirect("/admin?tab=runner")
+  redirect("/admin")
 }

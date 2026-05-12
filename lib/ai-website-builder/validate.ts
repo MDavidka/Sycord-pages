@@ -300,7 +300,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   }
   for (const path of fileMap.keys()) {
     if (/^\.env(?:\.|$)/.test(path) || /\/\.env(?:\.|$)/.test(path)) {
-      errors.push(`${path} must not be generated; use project env vars / VM deploy env`)
+      errors.push(`${path} must not be generated; use project env vars / hosted runtime env`)
     }
   }
 
@@ -346,7 +346,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     if (!pkg.scripts?.start || !pkg.scripts.start.includes("next start")) {
       errors.push('package.json must include a working "start" script using next start')
     } else if (!pkg.scripts.start.includes("-H 0.0.0.0")) {
-      errors.push('package.json start script must bind to 0.0.0.0 for VM runner compatibility')
+      errors.push('package.json start script must bind to 0.0.0.0 for hosted runtime compatibility')
     }
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) }
     for (const dep of ["next", "react", "react-dom"]) {
@@ -376,7 +376,7 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
   }
 
   // Hard-coded secret detection. Generated output must not include `.env`
-  // files; runtime secrets come from project settings / deploy env only.
+  // files; runtime secrets come from project settings / hosted runtime env only.
   const secretSkip = new Set(["package.json"])
   for (const [p, c] of fileMap) {
     if (secretSkip.has(p)) continue

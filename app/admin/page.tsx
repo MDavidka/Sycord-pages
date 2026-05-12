@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,7 +10,6 @@ import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +20,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Image from "next/image"
 import Link from "next/link"
-import { RunnerTabContent } from "@/components/admin-runner-tab"
 import {
   AlertCircle,
   Users,
@@ -93,16 +91,14 @@ const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
   { id: "server" as const, label: "Server", icon: Server },
-  { id: "runner" as const, label: "Runner", icon: Activity },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "runner" | "tickets" | "paptos"
+type TabId = "overview" | "users" | "server" | "tickets" | "paptos"
 
 export default function AdminPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { data: session } = useSession()
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
@@ -114,26 +110,6 @@ export default function AdminPage() {
   const [monitorsLoading, setMonitorsLoading] = useState(false)
   const [editingIcon, setEditingIcon] = useState<string | null>(null)
   const [uploadingIcon, setUploadingIcon] = useState<string | null>(null)
-
-  // Runner State
-  const [vpsStatus, setVpsStatus] = useState<any>(null)
-  const [vpsLoading, setVpsLoading] = useState(false)
-  const [vpsLogs, setVpsLogs] = useState<string[]>([])
-  const [vpsAction, setVpsAction] = useState<string | null>(null)
-  const [vpsLogType, setVpsLogType] = useState<string>("runtime")
-  const [vpsLogLines, setVpsLogLines] = useState<number>(200)
-  const [vpsWebsites, setVpsWebsites] = useState<any[]>([])
-  const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
-  const [runnerSetupError, setRunnerSetupError] = useState<string | null>(null)
-  const [runnerSetupLogs, setRunnerSetupLogs] = useState<string>("")
-  const [debuggerOpen, setDebuggerOpen] = useState(false)
-  const [debuggerPayload, setDebuggerPayload] = useState<{
-    title: string
-    message: string
-    phase?: string | null
-    logs?: string
-    details?: Record<string, unknown> | null
-  } | null>(null)
 
   // PAP & TOS State
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
@@ -344,182 +320,11 @@ export default function AdminPage() {
 
   const blockedCount = users.filter(u => u.isBlocked).length
 
-  const openDebugger = (payload: {
-    title: string
-    message: string
-    phase?: string | null
-    logs?: string
-    details?: Record<string, unknown> | null
-  }) => {
-    setDebuggerPayload(payload)
-    setDebuggerOpen(true)
-  }
-
-  // Runner functions
-  const fetchVpsStatus = async () => {
-    setVpsLoading(true)
-    try {
-      const res = await fetch("/api/admin/vps-runner/status")
-      if (res.ok) {
-        const data = await res.json()
-        setVpsStatus(data)
-      }
-      const websitesRes = await fetch("/api/admin/vps-runner/websites")
-      if (websitesRes.ok) {
-        const data = await websitesRes.json()
-        setVpsWebsites(Array.isArray(data) ? data : data.websites || [])
-      }
-    } catch (err) {
-      console.error("Failed to fetch VPS status:", err)
-    } finally {
-      setVpsLoading(false)
-    }
-  }
-
-  const handleWebsiteAction = async (id: string, action: "start" | "stop" | "restart" | "health" | "destroy") => {
-    try {
-      const res = await fetch(`/api/admin/vps-runner/websites/${id}/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success(`Website ${action} successful`)
-        setTimeout(fetchVpsStatus, 1000)
-      } else {
-        toast.error(data.error || `Failed to ${action} website`)
-      }
-    } catch (err) {
-      toast.error(`Failed to ${action} website`)
-    }
-  }
-
-  const fetchVpsLogs = async (id?: string) => {
-    try {
-      const targetId = id || selectedWebsiteId
-      if (!targetId) return
-      const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs?type=${vpsLogType}&limit=${vpsLogLines}`)
-      if (res.ok) {
-        const data = await res.json()
-        setVpsLogs(Array.isArray(data.logs) ? data.logs : [])
-      }
-    } catch (err) {
-      console.error("Failed to fetch VPS logs:", err)
-    }
-  }
-
-  const runRunnerSetup = async () => {
-    setVpsAction("setup")
-    setRunnerSetupError(null)
-    setRunnerSetupLogs("")
-    try {
-      const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
-      const data = await res.json().catch(() => ({}))
-      const logs = data?.logs ? (Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs)) : ""
-
-      if (!res.ok || data.success === false) {
-        const msg = data?.details || data?.error || data?.message || "Setup failed"
-        setRunnerSetupError(msg)
-        if (logs) setRunnerSetupLogs(logs)
-        openDebugger({
-          title: "Runner setup failed",
-          message: msg,
-          phase: data?.phase || null,
-          logs,
-          details: {
-            ...(data?.debug || {}),
-            nginx: data?.nginx || null,
-            cloudflared: data?.cloudflared || null,
-            runner: data?.runner || null,
-          },
-        })
-        toast.error(msg)
-        return
-      }
-
-      if (logs) setRunnerSetupLogs(logs)
-      toast.success(data?.message || "Runner setup completed")
-      fetchVpsStatus()
-    } catch (error: any) {
-      const msg = error?.message || "Setup failed"
-      setRunnerSetupError(msg)
-      openDebugger({
-        title: "Runner setup failed",
-        message: msg,
-        phase: "client",
-        logs: "",
-        details: null,
-      })
-      toast.error(msg)
-    } finally {
-      setVpsAction(null)
-    }
-  }
-
-  const handleVpsAction = async (action: "start" | "stop" | "setup" | "destroy") => {
-    setVpsAction(action)
-    try {
-      const res = await fetch("/api/admin/vps-runner/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast.success(`Runner ${action} successful`)
-        setTimeout(fetchVpsStatus, 2000)
-      } else {
-        toast.error(data.error || `Failed to ${action} runner`)
-      }
-    } catch (err) {
-      toast.error(`Failed to ${action} runner`)
-    } finally {
-      setVpsAction(null)
-    }
-  }
 
 
-  useEffect(() => {
-    const tab = searchParams.get("tab")
-    if (tab === "runner") setActiveTab("runner")
-  }, [searchParams])
+
   return (
     <div className="min-h-screen bg-[#101010]">
-      <Dialog open={debuggerOpen} onOpenChange={setDebuggerOpen}>
-        <DialogContent className="border-white/10 bg-[#111111] p-0 text-white sm:max-w-2xl">
-          <div className="border-b border-white/8 px-6 py-5">
-            <DialogHeader>
-              <DialogTitle className="text-white">{debuggerPayload?.title || "Error debugger"}</DialogTitle>
-              <DialogDescription className="text-white/50">
-                {debuggerPayload?.message || "No debugger payload available"}
-              </DialogDescription>
-            </DialogHeader>
-          </div>
-          <div className="space-y-4 px-6 py-5">
-            {debuggerPayload?.phase && (
-              <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-white/35">Phase</p>
-                <p className="mt-1 text-sm text-white/85">{debuggerPayload.phase}</p>
-              </div>
-            )}
-            {debuggerPayload?.details && (
-              <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-white/35">Details</p>
-                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-blue-100/90">
-                  {JSON.stringify(debuggerPayload.details, null, 2)}
-                </pre>
-              </div>
-            )}
-            <div className="rounded-xl border border-white/8 bg-black/40 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-white/35">Logs</p>
-              <pre className="mt-2 max-h-[50dvh] overflow-auto whitespace-pre-wrap text-xs text-red-100/90">
-                {debuggerPayload?.logs || "No logs returned"}
-              </pre>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
       {/* Header */}
       <header className="border-b border-white/5 sticky top-0 bg-[#101010]/95 backdrop-blur-xl z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
@@ -1000,30 +805,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Runner Tab */}
-        {activeTab === "runner" && <RunnerTabContent
-          vpsStatus={vpsStatus}
-          vpsLoading={vpsLoading}
-          vpsWebsites={vpsWebsites}
-          vpsAction={vpsAction}
-          vpsLogs={vpsLogs}
-          vpsLogType={vpsLogType}
-          vpsLogLines={vpsLogLines}
-          selectedWebsiteId={selectedWebsiteId}
-          runnerSetupError={runnerSetupError}
-          runnerSetupLogs={runnerSetupLogs}
-          fetchVpsStatus={fetchVpsStatus}
-          handleVpsAction={handleVpsAction}
-          handleWebsiteAction={handleWebsiteAction}
-          fetchVpsLogs={fetchVpsLogs}
-          runRunnerSetup={runRunnerSetup}
-          setVpsLogType={setVpsLogType}
-          setSelectedWebsiteId={setSelectedWebsiteId}
-          openDebugger={openDebugger}
-          onAutoFix={() => runRunnerSetup()}
-        />}
-
-        {/* Tickets Tab */}
         {activeTab === "tickets" && (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div>
