@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +29,6 @@ import {
   CreditCard,
   LogOut,
   User,
-  Rocket,
   Globe,
   Save,
   Smartphone,
@@ -53,7 +52,6 @@ import {
   Wallet,
   BadgeCheck,
   Coins,
-  RefreshCw,
   Key,
   Mail,
   Github,
@@ -84,7 +82,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
-import { DeployLiveLogPanel } from "@/components/deploy-live-log-panel"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -115,15 +112,6 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
-type DeploymentMode = "next-server"
-
-const formatDeploymentMode = (_mode?: string | null) => (
-  "Next server"
-)
-
-const detectDeploymentModeFromPages = (_pages: GeneratedPage[]): DeploymentMode => {
-  return "next-server"
-}
 
 // File tree node interface
 interface FileTreeNode {
@@ -654,31 +642,6 @@ export default function SiteSettingsPage() {
   // Selected page for preview in Pages tab
   const [selectedPage, setSelectedPage] = useState<GeneratedPage | null>(null)
 
-  // Deployment State
-  const [isDeploying, setIsDeploying] = useState(false)
-  const [deployProgress, setDeployProgress] = useState(0)
-  const [deploySuccess, setDeploySuccess] = useState(false)
-  const [deployError, setDeployError] = useState<string | null>(null)
-  const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
-  const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
-  const [deployPanelOpen, setDeployPanelOpen] = useState(false)
-  const deploymentMode = useMemo(
-    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
-    [generatedPages, project],
-  )
-
-  // Auto-Fix State
-  const [logs, setLogs] = useState<string[]>([])
-  const [hasDeployError, setHasDeployError] = useState(false)
-
-  const runnerErrorDetails = useMemo(() => {
-    if (!Array.isArray(logs) || logs.length === 0) return null
-    const errorPattern = /(build error occurred|turbopack build failed|failed to type check|module not found|cannot find module|npm run build exited|error evaluating node\.js code)/i
-    const relevant = logs.filter((line) => errorPattern.test(line))
-    if (relevant.length === 0) return null
-    return relevant.slice(-10).join("\n")
-  }, [logs])
-
   // Database / Firebase connection state
   const [databaseConnected, setDatabaseConnected] = useState(false)
 
@@ -765,49 +728,6 @@ export default function SiteSettingsPage() {
     ? domainTldPrices
     : FALLBACK_TLD_OPTIONS.map(t => ({ tld: t.tld, price: t.price, currency: "USD" }))
 
-  const fetchLogs = async (repoIdOverride?: string) => {
-    const targetId = repoIdOverride || project?.githubRepoId
-    if (!targetId) return
-
-    try {
-        const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs?type=deploy&limit=120`)
-        if (res.ok) {
-            const data = await res.json()
-            if (data.success && Array.isArray(data.logs)) {
-                setLogs(data.logs)
-                // Extract URL from logs if present
-                const combinedLogs = data.logs.join('\n')
-                const urlMatch = combinedLogs.match(/(https:\/\/[a-zA-Z0-9.-]+)/)
-
-                if (urlMatch && urlMatch[1]) {
-                    const url = urlMatch[1].trim().replace(/\.$/, '')
-                    setProject((prev: any) => ({ ...prev, cloudflareUrl: url }))
-                    setDeployResult((prev: any) => ({ ...prev, url, message: "Deployment complete" }))
-                    setDeploySuccess(true)
-                    setHasDeployError(false)
-                }
-
-                // Simple error detection in logs
-                const combined = combinedLogs.toLowerCase()
-                const successFound = combined.includes('deployment complete') || combined.includes('health check passed') || combined.includes('runner ready')
-
-                const errorFound = !successFound && data.logs.some((log: string) =>
-                    log.toLowerCase().includes('error') ||
-                    log.toLowerCase().includes('fail') ||
-                    log.toLowerCase().includes('exception')
-                )
-
-                // Only set error if we haven't already found success (URL extraction above sets it to false)
-                if (!urlMatch) {
-                    setHasDeployError(errorFound)
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Failed to fetch logs", e)
-    }
-  }
-
   useEffect(() => {
     if (!id) return
 
@@ -820,7 +740,6 @@ export default function SiteSettingsPage() {
             console.log("[v0] Project data fetched:", data ? "Success" : "Empty")
             if (data.message) throw new Error(data.message)
             setProject(data)
-            if (data.deploymentRuntime) setDeploymentRuntime(data.deploymentRuntime)
             setShopName(data.businessName || "")
             setProfileImage(data.profileImage || "")
             setLogoLoadError(false) // Reset error state when loading new data
@@ -835,10 +754,6 @@ export default function SiteSettingsPage() {
                   usedFor: p.usedFor || ''
                 })),
               )
-            }
-            if (data.lastDeployError) {
-              setDeployError(data.lastDeployError)
-              setHasDeployError(true)
             }
             setProjectLoading(false)
           })
@@ -873,7 +788,6 @@ export default function SiteSettingsPage() {
 
         await Promise.all([fetchProject, fetchSettings, fetchProducts])
         console.log("[v0] All data fetches completed")
-        fetchLogs()
       } catch (error) {
         console.error("[v0] Error in fetchAllData:", error)
       } finally {
@@ -1098,36 +1012,6 @@ export default function SiteSettingsPage() {
     setActiveTab("ai")
   }
 
-  const handleDeploy = async () => {
-    if (isDeploying) return
-
-    try {
-      if (generatedPages.length > 0) {
-        for (const page of generatedPages) {
-          await fetch(`/api/projects/${id}/pages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: page.name,
-              content: page.code,
-              usedFor: page.usedFor || "",
-            }),
-          })
-        }
-      }
-      setIsDeploying(true)
-      setDeployProgress(0)
-      setDeploySuccess(false)
-      setDeployResult(null)
-      setDeployError(null)
-      setHasDeployError(false)
-      setDeployPanelOpen(true)
-    } catch (err: any) {
-      setDeployError(err.message || "Deployment failed")
-      setDeployProgress(0)
-      setHasDeployError(true)
-    }
-  }
 
   if (isInitialLoading) {
     return (
@@ -1182,7 +1066,7 @@ export default function SiteSettingsPage() {
       items: [
         { id: "overview", label: "Overview", icon: Layout },
         { id: "domain", label: "Domain", icon: Globe },
-        { id: "pages", label: "Pages", icon: FileText },
+        { id: "pages", label: "Pages", icon: Layers },
         { id: "ai", label: "Syra", icon: Zap },
       ],
     },
@@ -1228,6 +1112,15 @@ export default function SiteSettingsPage() {
   const planCredit = PLAN_CREDITS[subscription] ?? DEFAULT_PLAN_CREDIT
 
   const userInitials = session?.user?.name?.split(" ").map((n) => n[0]).join("").toUpperCase() || "U"
+  const sidebarSession = session?.user
+    ? {
+        user: {
+          name: session.user.name ?? undefined,
+          image: session.user.image ?? undefined,
+          email: session.user.email ?? undefined,
+        },
+      }
+    : undefined
   const previewUrl = project?.cloudflareUrl || null
   const displayUrl = previewUrl ? previewUrl.replace(/^https?:\/\//, "") : null
 
@@ -1239,55 +1132,6 @@ export default function SiteSettingsPage() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <DeployLiveLogPanel
-        open={deployPanelOpen}
-        onOpenChange={(open) => {
-          setDeployPanelOpen(open)
-          if (!open) {
-            setIsDeploying(false)
-          }
-        }}
-        projectId={String(id)}
-        projectName={project?.businessName || project?.name}
-        onSuccess={(streamResult) => {
-          setIsDeploying(false)
-          setDeploySuccess(true)
-          setDeployProgress(100)
-          setDeployResult({
-            url: streamResult.url,
-            domain: streamResult.domain,
-            message: `Deployment complete (${formatDeploymentMode(deploymentMode)})`,
-            build: true,
-            running: true,
-            health_ok: true,
-          })
-          setDeploymentRuntime((current: any) => ({
-            ...(current || {}),
-            mode: "next-server",
-            domain: streamResult.domain,
-            status: "running",
-            health: "healthy",
-          }))
-          setProject((prev: any) => ({ ...prev, cloudflareUrl: streamResult.url }))
-          setHasDeployError(false)
-          fetchLogs((project?._id || id) as string)
-        }}
-        onFinish={(outcome) => {
-          setIsDeploying(false)
-          if (!outcome.success) {
-            setDeployError(outcome.error || "Deployment failed")
-            setHasDeployError(true)
-            setDeploymentRuntime((current: any) => ({
-              ...(current || {}),
-              mode: "next-server",
-              status: "failed",
-              health: "unhealthy",
-              lastDeployError: outcome.error || "Deployment failed",
-            }))
-            fetchLogs((project?._id || id) as string)
-          }
-        }}
-      />
       {/* Desktop Sidebar - Rolling Animation Style */}
       <aside 
         className="hidden md:block shrink-0 transition-[width] duration-300 ease-out" 
@@ -1300,11 +1144,11 @@ export default function SiteSettingsPage() {
           onExpandChange={setIsDesktopSidebarExpanded}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
-          session={session}
+          session={sidebarSession}
           subscription={subscription}
           planCredit={planCredit}
           userInitials={userInitials}
@@ -1320,11 +1164,11 @@ export default function SiteSettingsPage() {
           onClose={() => setIsSidebarOpen(false)}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
-          session={session}
+          session={sidebarSession}
           subscription={subscription}
           planCredit={planCredit}
           userInitials={userInitials}
@@ -1623,8 +1467,8 @@ export default function SiteSettingsPage() {
                           <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "#2e2e30" }}>
                             <Globe className="h-6 w-6 text-zinc-500" />
                           </div>
-                          <p className="text-sm font-semibold text-zinc-300">No deployment yet</p>
-                          <p className="text-xs text-zinc-600 max-w-[200px] text-center">Deploy your site to see a live preview</p>
+                          <p className="text-sm font-semibold text-zinc-300">No live preview yet</p>
+                          <p className="text-xs text-zinc-600 max-w-[200px] text-center">Generate pages to preview your site</p>
                         </div>
                       )}
 
@@ -1680,7 +1524,7 @@ export default function SiteSettingsPage() {
                           <div
                             className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl flex items-center justify-center overflow-hidden"
                             role="status"
-                            aria-label={previewUrl ? "Site is live" : "Site not deployed"}
+                            aria-label={previewUrl ? "Site is live" : "Site not live"}
                           >
                             {profileImage && !logoLoadError ? (
                               <img
@@ -1708,7 +1552,7 @@ export default function SiteSettingsPage() {
                           title={displayUrl ? "Click to copy" : undefined}
                         >
                           <h2 className="text-[18px] sm:text-[22px] lg:text-[26px] leading-tight font-bold text-zinc-100 truncate min-w-0 group-hover/dom:text-white transition-colors">
-                            {displayUrl || "Not deployed"}
+                            {displayUrl || "Not live"}
                           </h2>
                           {displayUrl && (
                             <span
@@ -2208,7 +2052,7 @@ export default function SiteSettingsPage() {
                                   <h4 className="font-medium truncate">{product.name}</h4>
                                   <p className="text-sm text-muted-foreground truncate">{product.category || 'Uncategorized'}</p>
                                   <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-sm font-semibold">{currencySymbols[settings?.currency || "USD"]}{product.price}</span>
+                                    <span className="text-sm font-semibold">{currencySymbols[(settings?.currency as keyof typeof currencySymbols) || "USD"]}{product.price}</span>
                                     <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${product.inStock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                                       {product.inStock ? 'In Stock' : 'Out of Stock'}
                                     </span>
@@ -2342,29 +2186,22 @@ export default function SiteSettingsPage() {
             {/* TAB CONTENT: PAGES */}
             {activeTab === "pages" && (
                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold">Site Pages</h2>
-                      <p className="text-muted-foreground">
-                        Manage AI-generated content · Deployment mode: {formatDeploymentMode(deploymentMode)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {generatedPages.length > 0 && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDeploy}
-                            disabled={isDeploying}
-                          >
-                            {isDeploying ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                            )}
-                            Redeploy
-                          </Button>
+                  <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.09] via-white/[0.04] to-transparent p-5 md:p-6">
+                    <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/20 blur-3xl" />
+                    <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/30 bg-primary/15 shadow-lg shadow-primary/10">
+                          <Layers className="h-7 w-7 text-primary" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-semibold tracking-tight">Pages</h2>
+                          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                            Browse, preview, and maintain the AI-generated files that make up this website.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {generatedPages.length > 0 && (
                           <Button
                             variant="destructive"
                             size="sm"
@@ -2386,59 +2223,50 @@ export default function SiteSettingsPage() {
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete All
                           </Button>
-                        </>
-                      )}
-                      <Button onClick={() => setActiveTab("ai")}>
-                         <Sparkles className="h-4 w-4 mr-2" />
-                         Generate New
-                      </Button>
+                        )}
+                        <Button onClick={() => setActiveTab("ai")}>
+                           <Sparkles className="h-4 w-4 mr-2" />
+                           Generate New
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
-                  <Card className="border-primary/30 bg-primary/5">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Rocket className="h-4 w-4 text-primary" />
-                        Next server runtime
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Deployments run npm install, npm run build, then PORT=&lt;allocated&gt; npm run start. Live status requires build, server process, and health check success.
-                      </CardDescription>
-                    </CardHeader>
-                    {(deployResult || deploymentRuntime) && (
-                      <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                        <div>Build: {deployResult?.build || deploymentRuntime?.status === "running" ? "ok" : "pending"}</div>
-                        <div>Server: {deployResult?.running || deploymentRuntime?.status === "running" ? "running" : deploymentRuntime?.status || "pending"}</div>
-                        <div>Health: {deployResult?.health_ok || deploymentRuntime?.health === "healthy" ? "ok" : deploymentRuntime?.health || "pending"}</div>
-                        <div>Port: {deployResult?.port ?? deploymentRuntime?.port ?? "allocated by VM"}</div>
-                      </CardContent>
-                    )}
-                  </Card>
-
-                  {(deployError || runnerErrorDetails || hasDeployError) && (
-                    <Card className="border-destructive/40 bg-destructive/5">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-destructive flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4" />
-                          Runner Build Error
-                        </CardTitle>
-                        <CardDescription className="text-xs">
-                          Latest deployment/build issue captured from runner logs.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <pre className="text-xs whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 text-red-100 border border-red-500/20 max-h-64 overflow-y-auto">
-                          {deployError || runnerErrorDetails || "Deployment failed. Check runner logs for details."}
-                        </pre>
-                        <div className="mt-3">
-                          <Button variant="outline" size="sm" onClick={() => fetchLogs()}>
-                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                            Refresh Runner Logs
-                          </Button>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <Card className="border-white/10 bg-white/[0.04]">
+                      <CardContent className="flex items-center gap-3 p-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 text-blue-300">
+                          <FolderOpen className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Files</p>
+                          <p className="text-xl font-semibold">{generatedPages.length}</p>
                         </div>
                       </CardContent>
                     </Card>
-                  )}
+                    <Card className="border-white/10 bg-white/[0.04]">
+                      <CardContent className="flex items-center gap-3 p-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
+                          <FileCode className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Selected</p>
+                          <p className="text-sm font-semibold truncate max-w-[180px]">{selectedPage?.name || "No file selected"}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-white/10 bg-white/[0.04]">
+                      <CardContent className="flex items-center gap-3 p-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
+                          <Clock className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Last update</p>
+                          <p className="text-sm font-semibold">{generatedPages.length ? new Date(Math.max(...generatedPages.map((page) => page.timestamp || 0))).toLocaleDateString() : "Not generated"}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
 
                   {generatedPages.length === 0 ? (
                     <div className="border-2 border-dashed border-white/10 rounded-xl p-12 text-center bg-white/5">

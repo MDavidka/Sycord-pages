@@ -221,12 +221,6 @@ export default function CreateProjectPage() {
       const newProject = await response.json()
       setCreatedProjectId(newProject._id)
 
-      await fetch("/api/deploy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: newProject._id }),
-      }).catch((err) => console.error("Initial auto-deploy failed", err))
-
       toast.success("Project created successfully!")
       setIsSubmitted(true)
       setIsLoading(false)
