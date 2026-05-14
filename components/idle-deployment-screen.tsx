@@ -34,8 +34,6 @@ export function IdleDeploymentScreen({
   isDeploying = false,
   recentDeploys = [],
 }: IdleDeploymentScreenProps) {
-  const lastDeploy = recentDeploys[0]
-  const isSuccessful = lastDeploy?.status === "success"
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 flex flex-col">

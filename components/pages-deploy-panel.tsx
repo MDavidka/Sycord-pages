@@ -235,7 +235,8 @@ export function PagesDeployPanel({
   const [selectedPage, setSelectedPage] = useState<GeneratedPage | null>(null)
   const [activeFileTab, setActiveFileTab] = useState<GeneratedPage | null>(null)
   const [copiedCode, setCopiedCode] = useState(false)
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => {
+
+  const computeExpandedFolders = useMemo(() => {
     const folders = new Set<string>()
     for (const page of pages) {
       const parts = page.name.split("/")
@@ -244,7 +245,9 @@ export function PagesDeployPanel({
       }
     }
     return folders
-  })
+  }, [pages])
+
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(computeExpandedFolders)
 
   const handleSelectFile = (page: GeneratedPage) => {
     setSelectedPage(page)
