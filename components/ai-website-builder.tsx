@@ -317,13 +317,15 @@ interface AIWebsiteBuilderProps {
   projectId: string
   generatedPages: GeneratedPage[]
   setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
+  onDeploy?: () => void
 }
 
-const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
+const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDeploy }: AIWebsiteBuilderProps) => {
   const { data: session } = useSession()
   const userName = session?.user?.name?.split(' ')[0] || "there"
 
   const [messages, setMessages] = useState<Message[]>([])
+  const [generationComplete, setGenerationComplete] = useState(false)
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -561,6 +563,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
       }
 
       setMessages(prev => [...prev, ...assistantMessages])
+      setGenerationComplete(true)
     } catch (err: any) {
       setError(err.message || "Failed to send message")
     } finally {
@@ -665,6 +668,22 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                                     <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
                                     </div>
                                     <span className="text-xs text-zinc-500 ml-1">{currentPipelineStep}...</span>
+                                </div>
+                            </div>
+                        )}
+                        {generationComplete && onDeploy && (
+                            <div className="py-2 sm:py-2.5 flex flex-col items-start mt-2">
+                                <div className="inline-flex items-center gap-4 px-4 py-3 rounded-2xl bg-white/[0.06] border border-white/[0.1] max-w-[88%] sm:max-w-[82%]">
+                                    <div className="flex flex-col gap-1">
+                                        <p className="text-sm font-medium text-zinc-100">Ready to deploy</p>
+                                        <p className="text-xs text-zinc-400">Push these changes to your live site.</p>
+                                    </div>
+                                    <Button
+                                        onClick={onDeploy}
+                                        className="h-8 px-4 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold whitespace-nowrap"
+                                    >
+                                        Deploy changes
+                                    </Button>
                                 </div>
                             </div>
                         )}

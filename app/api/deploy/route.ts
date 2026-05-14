@@ -5,14 +5,12 @@ import * as Sentry from "@sentry/nextjs"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import {
-  callRunnerDeploy,
   getProjectEnvVars,
-  isSuccessfulRunnerDeployResponse,
-  normalizeRunnerDeployResponse,
   prepareProjectDeployFiles,
   validateNextServerDeployFiles,
 } from "@/lib/deploy/runner-client"
 import { deployViaGitTree, ensureRepo, getEnvGitHubCredentials } from "@/lib/deploy/github"
+import { deployToVm } from "@/lib/deploy/vm-deploy"
 
 function slugifyRepoName(project: any, projectId: string) {
   return (
@@ -83,23 +81,22 @@ export async function POST(request: Request) {
     const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
     const envVars = getProjectEnvVars(project)
 
-    const runner = await callRunnerDeploy(projectId, {
-      files,
+    await deployViaGitTree(github.owner, repo, files, github.token)
+
+    const deployResult = await deployToVm({
+      githubOwner: github.owner,
+      githubRepo: repo,
+      githubToken: github.token,
       subdomain: repo,
-      deployment_mode: "next-server",
-      ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
+      envVars,
     })
 
-    const normalized = normalizeRunnerDeployResponse(runner.raw)
-    const failedStage = normalized.build.ok
-      ? normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)
-        ? "public-health-check"
-        : "health-check"
-      : "building"
+    const domain = `${repo}.sycord.site`
+    const url = `https://${domain}`
 
-    if (!isSuccessfulRunnerDeployResponse(normalized.raw)) {
-      const error = normalized.error || normalized.build.error || normalized.health.error || "Runner deployment failed"
-      captureDeployFailure({ projectId, repo, error, stage: failedStage, response: normalized.raw })
+    if (!deployResult.success) {
+      const error = deployResult.error || "Runner deployment failed"
+      captureDeployFailure({ projectId, repo, error, stage: "building", response: deployResult })
       await db.collection("users").updateOne(
         { id: session.user.id, "projects._id": new ObjectId(projectId) },
         {
@@ -107,27 +104,23 @@ export async function POST(request: Request) {
             "projects.$.deploymentMode": "next-server",
             "projects.$.deploymentRuntime": {
               mode: "next-server",
-              domain: normalized.domain,
-              url: normalized.url,
-              port: normalized.port,
-              processName: normalized.processName,
+              domain,
+              url,
+              port: deployResult.port || null,
+              processName: `sycord-site-${repo}`,
               status: "failed",
-              health: normalized.health.ok && normalized.health.htmlOk ? "healthy" : "unhealthy",
-              localHealth: normalized.localHealth || null,
-              publicHealth: normalized.publicHealth || null,
-              warning: normalized.warning || null,
+              health: "unhealthy",
+              localHealth: null,
+              publicHealth: null,
+              warning: null,
               lastHealthCheckAt: new Date(),
               lastDeployAt: new Date(),
               lastDeployError: error,
             },
-            "projects.$.lastDeployLogsSummary": summarizeLogs([
-              ...normalized.logs.deploy,
-              ...normalized.logs.build,
-              ...normalized.logs.error,
-            ]),
-            "projects.$.lastFailedStage": failedStage,
+            "projects.$.lastDeployLogsSummary": summarizeLogs(deployResult.logs),
+            "projects.$.lastFailedStage": "building",
             "projects.$.lastDeployError": error,
-            "projects.$.lastDeployWarning": normalized.warning || null,
+            "projects.$.lastDeployWarning": null,
           },
           $unset: {
             "projects.$.cloudflareUrl": "",
@@ -139,17 +132,17 @@ export async function POST(request: Request) {
         {
           success: false,
           error,
-          build: normalized.build,
-          running: normalized.running,
-          health: normalized.health,
-          localHealth: normalized.localHealth,
-          publicHealth: normalized.publicHealth,
-          warning: normalized.warning,
-          health_ok: normalized.health.ok,
-          domain: normalized.domain,
-          url: normalized.url,
-          port: normalized.port,
-          logs: normalized.logs,
+          build: { ok: false },
+          running: false,
+          health: { ok: false, htmlOk: false },
+          localHealth: null,
+          publicHealth: null,
+          warning: null,
+          health_ok: false,
+          domain,
+          url,
+          port: deployResult.port || null,
+          logs: { deploy: deployResult.logs, build: [], runtime: [], error: [], health: [] },
           githubUrl: gitUrl,
           repoId: String(repoId),
           deploymentMode: "next-server",
@@ -157,8 +150,6 @@ export async function POST(request: Request) {
         { status: 502 },
       )
     }
-
-    await deployViaGitTree(github.owner, repo, files, github.token)
 
     await db.collection("users").updateOne(
       { id: session.user.id, "projects._id": new ObjectId(projectId) },
@@ -168,31 +159,27 @@ export async function POST(request: Request) {
           "projects.$.githubRepo": repo,
           "projects.$.githubRepoId": repoId,
           "projects.$.githubUrl": gitUrl,
-          "projects.$.cloudflareUrl": normalized.url,
+          "projects.$.cloudflareUrl": url,
           "projects.$.deploymentMode": "next-server",
           "projects.$.deploymentRuntime": {
             mode: "next-server",
-            domain: normalized.domain,
-            url: normalized.url,
-            port: normalized.port,
-            processName: normalized.processName,
+            domain,
+            url,
+            port: deployResult.port,
+            processName: `sycord-site-${repo}`,
             status: "running",
             health: "healthy",
-            localHealth: normalized.localHealth || null,
-            publicHealth: normalized.publicHealth || null,
-            warning: normalized.warning || null,
+            localHealth: null,
+            publicHealth: null,
+            warning: null,
             lastHealthCheckAt: new Date(),
             lastDeployAt: new Date(),
             lastDeployError: null,
           },
-          "projects.$.lastDeployLogsSummary": summarizeLogs([
-            ...normalized.logs.deploy,
-            ...normalized.logs.build,
-            ...normalized.logs.health,
-          ]),
+          "projects.$.lastDeployLogsSummary": summarizeLogs(deployResult.logs),
           "projects.$.lastFailedStage": null,
           "projects.$.lastDeployError": null,
-          "projects.$.lastDeployWarning": normalized.warning || null,
+          "projects.$.lastDeployWarning": null,
           "projects.$.deployedAt": new Date(),
         },
       },
@@ -218,23 +205,23 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      url: normalized.url,
+      url,
       githubUrl: gitUrl,
-      cloudflareUrl: normalized.url,
+      cloudflareUrl: url,
       filesCount: files.length,
-      message: normalized.warning || "Deployment complete",
+      message: "Deployment complete",
       repoId: String(repoId),
       deploymentMode: "next-server",
       build: { ok: true },
       running: true,
       health_ok: true,
-      health: normalized.health,
-      localHealth: normalized.localHealth,
-      publicHealth: normalized.publicHealth,
-      warning: normalized.warning,
-      domain: normalized.domain,
-      port: normalized.port,
-      processName: normalized.processName,
+      health: { ok: true, htmlOk: true },
+      localHealth: null,
+      publicHealth: null,
+      warning: null,
+      domain,
+      port: deployResult.port,
+      processName: `sycord-site-${repo}`,
     })
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Deploy failed" }, { status: 500 })

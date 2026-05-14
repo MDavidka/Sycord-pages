@@ -2307,6 +2307,7 @@ export default function SiteSettingsPage() {
                         projectId={id}
                         generatedPages={generatedPages}
                         setGeneratedPages={setGeneratedPages}
+                        onDeploy={handleDeploy}
                       />
                     </div>
                   ) : (
@@ -2449,8 +2450,8 @@ export default function SiteSettingsPage() {
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                       {/* File Tree View */}
-                      <Card className="lg:col-span-1 bg-card/50 backdrop-blur-sm border-white/10">
-                        <CardHeader className="pb-3">
+                      <Card className="lg:col-span-1 bg-card/50 backdrop-blur-sm border-white/10 flex flex-col h-[600px]">
+                        <CardHeader className="pb-3 shrink-0">
                           <CardTitle className="text-sm flex items-center gap-2">
                             <Folder className="h-4 w-4 text-primary" />
                             Project Structure
@@ -2459,27 +2460,29 @@ export default function SiteSettingsPage() {
                             {generatedPages.length} files generated
                           </CardDescription>
                         </CardHeader>
-                        <CardContent className="p-0">
-                          <FileTreeView
-                            pages={generatedPages}
-                            onSelectFile={(page) => setSelectedPage(page)}
-                            selectedPage={selectedPage}
-                            onDeleteFile={handleDeletePage}
-                          />
+                        <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
+                          <div className="flex-1 overflow-y-auto custom-scrollbar relative px-2">
+                            <FileTreeView
+                              pages={generatedPages}
+                              onSelectFile={(page) => setSelectedPage(page)}
+                              selectedPage={selectedPage}
+                              onDeleteFile={handleDeletePage}
+                            />
+                          </div>
                         </CardContent>
                       </Card>
 
                       {/* File Preview */}
-                      <Card className="lg:col-span-2 bg-card/50 backdrop-blur-sm border-white/10">
-                        <CardHeader className="pb-3">
+                      <Card className="lg:col-span-2 bg-card/50 backdrop-blur-sm border-white/10 flex flex-col h-[600px]">
+                        <CardHeader className="pb-3 shrink-0">
                           <CardTitle className="text-sm flex items-center justify-between">
-                            <span className="flex items-center gap-2">
-                              <FileCode className="h-4 w-4 text-primary" />
-                              {selectedPage ? selectedPage.name : 'Select a file'}
+                            <span className="flex items-center gap-2 truncate">
+                              <FileCode className="h-4 w-4 text-primary shrink-0" />
+                              <span className="truncate">{selectedPage ? selectedPage.name : 'Select a file'}</span>
                             </span>
                             {selectedPage && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="hidden sm:inline-flex text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
                                   {new Date(selectedPage.timestamp).toLocaleDateString()}
                                 </span>
                                 <Button
@@ -2495,23 +2498,26 @@ export default function SiteSettingsPage() {
                           </CardTitle>
                           {selectedPage?.usedFor && (
                             <CardDescription className="text-xs flex items-center gap-1">
-                              <Code className="h-3 w-3" />
-                              Purpose: {selectedPage.usedFor}
+                              <Code className="h-3 w-3 shrink-0" />
+                              <span className="truncate">Purpose: {selectedPage.usedFor}</span>
                             </CardDescription>
                           )}
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="flex-1 overflow-hidden p-0 relative border-t border-white/5">
                           {selectedPage ? (
-                            <div className="relative">
-                              <pre className="bg-black/40 rounded-lg border border-white/5 p-4 overflow-auto max-h-[500px] text-xs font-mono text-muted-foreground custom-scrollbar">
-                                <code>{selectedPage.code}</code>
-                              </pre>
-                              <div className="absolute bottom-2 right-2 text-[10px] text-muted-foreground/50 bg-black/60 px-2 py-1 rounded">
+                            <div className="h-full w-full bg-black/40">
+                              <div className="h-full overflow-auto custom-scrollbar p-4 relative">
+                                <pre className="text-xs font-mono text-muted-foreground m-0 w-max min-w-full">
+                                  <code>{selectedPage.code}</code>
+                                </pre>
+                              </div>
+                              <div className="absolute bottom-2 right-4 text-[10px] text-muted-foreground/50 bg-black/60 px-2 py-1 rounded shadow-sm border border-white/10 backdrop-blur-md">
                                 {selectedPage.code.length} bytes
                               </div>
                             </div>
                           ) : (
-                            <div className="h-64 bg-black/20 rounded-lg border border-white/5 flex items-center justify-center">
+                            <div className="h-full bg-black/20 flex flex-col items-center justify-center text-center p-6">
+                              <FileCode className="h-10 w-10 text-muted-foreground/30 mb-3" />
                               <p className="text-muted-foreground text-sm">Select a file from the tree to preview</p>
                             </div>
                           )}
