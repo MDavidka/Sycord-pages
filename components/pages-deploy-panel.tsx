@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -248,6 +248,10 @@ export function PagesDeployPanel({
   }, [pages])
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(computeExpandedFolders)
+
+  useEffect(() => {
+    setExpandedFolders(computeExpandedFolders)
+  }, [computeExpandedFolders])
 
   const handleSelectFile = (page: GeneratedPage) => {
     setSelectedPage(page)

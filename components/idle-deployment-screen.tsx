@@ -184,7 +184,7 @@ export function IdleDeploymentScreen({
                 <h3 className="text-sm font-semibold text-zinc-200">Recent Deployments</h3>
                 <div className="space-y-3 max-h-48 overflow-y-auto">
                   {recentDeploys.slice(0, 3).map((deploy, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                    <div key={`${deploy.timestamp}-${idx}`} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div
                           className={cn(
