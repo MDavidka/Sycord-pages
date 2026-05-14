@@ -25,6 +25,7 @@ import {
   X,
   Coins,
   Gem,
+  Rocket,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
@@ -317,9 +318,10 @@ interface AIWebsiteBuilderProps {
   projectId: string
   generatedPages: GeneratedPage[]
   setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
+  onDeploy?: () => void
 }
 
-const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWebsiteBuilderProps) => {
+const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDeploy }: AIWebsiteBuilderProps) => {
   const { data: session } = useSession()
   const userName = session?.user?.name?.split(' ')[0] || "there"
 
@@ -352,6 +354,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
     return () => { cancelled = true }
   }, [])
 
+  const [isGenerationComplete, setIsGenerationComplete] = useState(false)
   const [messageFeedback, setMessageFeedback] = useState<Record<string, 'like' | 'dislike' | 'report' | null>>({})
 
   const giveFeedback = (msgId: string, kind: 'like' | 'dislike' | 'report') => {
@@ -429,6 +432,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
           }))
         if (nextPages.length > 0) {
           setGeneratedPages(nextPages)
+          setIsGenerationComplete(true)
         }
       }
 
@@ -673,6 +677,29 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages }: AIWe
                 )}
             </div>
         </div>
+
+        {isGenerationComplete && onDeploy && generatedPages.length > 0 && (
+          <div className="mx-auto w-full max-w-2xl px-3 sm:px-4 md:px-0 mb-2 relative z-20">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-emerald-300/90">Ready</p>
+                  <p className="text-sm text-emerald-100">{generatedPages.length} file{generatedPages.length !== 1 ? "s" : ""} generated</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={onDeploy}
+                  className="gap-2 font-medium shadow-lg shadow-emerald-500/20"
+                >
+                  <Rocket className="h-4 w-4" />
+                  Deploy Changes
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
             <div className="mx-auto w-full max-w-2xl px-3 sm:px-4 md:px-0 mb-2 relative z-20">

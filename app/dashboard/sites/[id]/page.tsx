@@ -85,6 +85,7 @@ import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
 import { DeployLiveLogPanel } from "@/components/deploy-live-log-panel"
+import { PagesDeployPanel } from "@/components/pages-deploy-panel"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -2307,6 +2308,7 @@ export default function SiteSettingsPage() {
                         projectId={id}
                         generatedPages={generatedPages}
                         setGeneratedPages={setGeneratedPages}
+                        onDeploy={handleDeploy}
                       />
                     </div>
                   ) : (
@@ -2341,185 +2343,35 @@ export default function SiteSettingsPage() {
 
             {/* TAB CONTENT: PAGES */}
             {activeTab === "pages" && (
-               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold">Site Pages</h2>
-                      <p className="text-muted-foreground">
-                        Manage AI-generated content · Deployment mode: {formatDeploymentMode(deploymentMode)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {generatedPages.length > 0 && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDeploy}
-                            disabled={isDeploying}
-                          >
-                            {isDeploying ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                            )}
-                            Redeploy
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={async () => {
-                              if (!confirm("Are you sure you want to delete ALL generated pages? This cannot be undone.")) return;
-                              try {
-                                const res = await fetch(`/api/projects/${id}/pages?all=true`, { method: "DELETE" });
-                                if (res.ok) {
-                                  setGeneratedPages([]);
-                                  setSelectedPage(null);
-                                } else {
-                                  throw new Error("Failed to delete all pages");
-                                }
-                              } catch (e: any) {
-                                alert(e.message);
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete All
-                          </Button>
-                        </>
-                      )}
-                      <Button onClick={() => setActiveTab("ai")}>
-                         <Sparkles className="h-4 w-4 mr-2" />
-                         Generate New
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Card className="border-primary/30 bg-primary/5">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Rocket className="h-4 w-4 text-primary" />
-                        Next server runtime
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Deployments run npm install, npm run build, then PORT=&lt;allocated&gt; npm run start. Live status requires build, server process, and health check success.
-                      </CardDescription>
-                    </CardHeader>
-                    {(deployResult || deploymentRuntime) && (
-                      <CardContent className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                        <div>Build: {deployResult?.build || deploymentRuntime?.status === "running" ? "ok" : "pending"}</div>
-                        <div>Server: {deployResult?.running || deploymentRuntime?.status === "running" ? "running" : deploymentRuntime?.status || "pending"}</div>
-                        <div>Health: {deployResult?.health_ok || deploymentRuntime?.health === "healthy" ? "ok" : deploymentRuntime?.health || "pending"}</div>
-                        <div>Port: {deployResult?.port ?? deploymentRuntime?.port ?? "allocated by VM"}</div>
-                      </CardContent>
-                    )}
-                  </Card>
-
-                  {(deployError || runnerErrorDetails || hasDeployError) && (
-                    <Card className="border-destructive/40 bg-destructive/5">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-destructive flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4" />
-                          Runner Build Error
-                        </CardTitle>
-                        <CardDescription className="text-xs">
-                          Latest deployment/build issue captured from runner logs.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <pre className="text-xs whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 text-red-100 border border-red-500/20 max-h-64 overflow-y-auto">
-                          {deployError || runnerErrorDetails || "Deployment failed. Check runner logs for details."}
-                        </pre>
-                        <div className="mt-3">
-                          <Button variant="outline" size="sm" onClick={() => fetchLogs()}>
-                            <RefreshCw className="h-3.5 w-3.5 mr-2" />
-                            Refresh Runner Logs
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {generatedPages.length === 0 ? (
-                    <div className="border-2 border-dashed border-white/10 rounded-xl p-12 text-center bg-white/5">
-                       <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-50" />
-                       <h3 className="text-lg font-medium mb-2">No pages yet</h3>
-                       <Button variant="link" onClick={() => setActiveTab("ai")}>Go to Syra</Button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* File Tree View */}
-                      <Card className="lg:col-span-1 bg-card/50 backdrop-blur-sm border-white/10">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <Folder className="h-4 w-4 text-primary" />
-                            Project Structure
-                          </CardTitle>
-                          <CardDescription className="text-xs">
-                            {generatedPages.length} files generated
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                          <FileTreeView
-                            pages={generatedPages}
-                            onSelectFile={(page) => setSelectedPage(page)}
-                            selectedPage={selectedPage}
-                            onDeleteFile={handleDeletePage}
-                          />
-                        </CardContent>
-                      </Card>
-
-                      {/* File Preview */}
-                      <Card className="lg:col-span-2 bg-card/50 backdrop-blur-sm border-white/10">
-                        <CardHeader className="pb-3">
-                          <CardTitle className="text-sm flex items-center justify-between">
-                            <span className="flex items-center gap-2">
-                              <FileCode className="h-4 w-4 text-primary" />
-                              {selectedPage ? selectedPage.name : 'Select a file'}
-                            </span>
-                            {selectedPage && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded">
-                                  {new Date(selectedPage.timestamp).toLocaleDateString()}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                  onClick={() => handleDeletePage(selectedPage.name)}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            )}
-                          </CardTitle>
-                          {selectedPage?.usedFor && (
-                            <CardDescription className="text-xs flex items-center gap-1">
-                              <Code className="h-3 w-3" />
-                              Purpose: {selectedPage.usedFor}
-                            </CardDescription>
-                          )}
-                        </CardHeader>
-                        <CardContent>
-                          {selectedPage ? (
-                            <div className="relative">
-                              <pre className="bg-black/40 rounded-lg border border-white/5 p-4 overflow-auto max-h-[500px] text-xs font-mono text-muted-foreground custom-scrollbar">
-                                <code>{selectedPage.code}</code>
-                              </pre>
-                              <div className="absolute bottom-2 right-2 text-[10px] text-muted-foreground/50 bg-black/60 px-2 py-1 rounded">
-                                {selectedPage.code.length} bytes
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="h-64 bg-black/20 rounded-lg border border-white/5 flex items-center justify-center">
-                              <p className="text-muted-foreground text-sm">Select a file from the tree to preview</p>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
-               </div>
+              <PagesDeployPanel
+                pages={generatedPages}
+                projectId={id}
+                projectName={shopName}
+                onDeletePage={handleDeletePage}
+                onDeleteAll={async () => {
+                  if (!confirm("Delete ALL generated pages? This cannot be undone.")) return
+                  try {
+                    const res = await fetch(`/api/projects/${id}/pages?all=true`, { method: "DELETE" })
+                    if (res.ok) {
+                      setGeneratedPages([])
+                      setSelectedPage(null)
+                    } else {
+                      throw new Error("Failed to delete all pages")
+                    }
+                  } catch (e: any) {
+                    alert(e.message)
+                  }
+                }}
+                onDeploy={handleDeploy}
+                onGoToAI={() => setActiveTab("ai")}
+                isDeploying={isDeploying}
+                deployError={deployError}
+                deployResult={deployResult}
+                deploymentRuntime={deploymentRuntime}
+                hasDeployError={hasDeployError}
+                onFetchLogs={() => fetchLogs()}
+                runnerErrorDetails={runnerErrorDetails}
+              />
             )}
 
             {/* TAB CONTENT: INTEGRATIONS */}
