@@ -247,7 +247,7 @@ export function PagesDeployPanel({
     return folders
   }
 
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(computeExpandedFolders)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => computeExpandedFolders())
 
   const handleSelectFile = (page: GeneratedPage) => {
     setSelectedPage(page)
