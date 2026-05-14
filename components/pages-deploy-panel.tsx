@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -236,7 +236,7 @@ export function PagesDeployPanel({
   const [activeFileTab, setActiveFileTab] = useState<GeneratedPage | null>(null)
   const [copiedCode, setCopiedCode] = useState(false)
 
-  const computeExpandedFolders = useMemo(() => {
+  const computeExpandedFolders = () => {
     const folders = new Set<string>()
     for (const page of pages) {
       const parts = page.name.split("/")
@@ -245,13 +245,9 @@ export function PagesDeployPanel({
       }
     }
     return folders
-  }, [pages])
+  }
 
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(computeExpandedFolders)
-
-  useEffect(() => {
-    setExpandedFolders(computeExpandedFolders)
-  }, [computeExpandedFolders])
 
   const handleSelectFile = (page: GeneratedPage) => {
     setSelectedPage(page)
