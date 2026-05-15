@@ -43,7 +43,7 @@ export default function ReleasesPage() {
             Dashboard
           </span>
           <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#0f1012] text-sm font-semibold text-white">
-            M
+            <Sparkles className="h-4 w-4" />
           </span>
         </Link>
       </header>
