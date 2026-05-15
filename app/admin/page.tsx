@@ -124,8 +124,6 @@ export default function AdminPage() {
   const [vpsLogLines, setVpsLogLines] = useState<number>(200)
   const [vpsWebsites, setVpsWebsites] = useState<any[]>([])
   const [selectedWebsiteId, setSelectedWebsiteId] = useState<string | null>(null)
-  const [runnerSetupError, setRunnerSetupError] = useState<string | null>(null)
-  const [runnerSetupLogs, setRunnerSetupLogs] = useState<string>("")
   const [debuggerOpen, setDebuggerOpen] = useState(false)
   const [debuggerPayload, setDebuggerPayload] = useState<{
     title: string
@@ -409,55 +407,7 @@ export default function AdminPage() {
     }
   }
 
-  const runRunnerSetup = async () => {
-    setVpsAction("setup")
-    setRunnerSetupError(null)
-    setRunnerSetupLogs("")
-    try {
-      const res = await fetch("/api/admin/vps-runner/setup", { method: "POST" })
-      const data = await res.json().catch(() => ({}))
-      const logs = data?.logs ? (Array.isArray(data.logs) ? data.logs.join("\n") : String(data.logs)) : ""
-
-      if (!res.ok || data.success === false) {
-        const msg = data?.details || data?.error || data?.message || "Setup failed"
-        setRunnerSetupError(msg)
-        if (logs) setRunnerSetupLogs(logs)
-        openDebugger({
-          title: "Runner setup failed",
-          message: msg,
-          phase: data?.phase || null,
-          logs,
-          details: {
-            ...(data?.debug || {}),
-            nginx: data?.nginx || null,
-            cloudflared: data?.cloudflared || null,
-            runner: data?.runner || null,
-          },
-        })
-        toast.error(msg)
-        return
-      }
-
-      if (logs) setRunnerSetupLogs(logs)
-      toast.success(data?.message || "Runner setup completed")
-      fetchVpsStatus()
-    } catch (error: any) {
-      const msg = error?.message || "Setup failed"
-      setRunnerSetupError(msg)
-      openDebugger({
-        title: "Runner setup failed",
-        message: msg,
-        phase: "client",
-        logs: "",
-        details: null,
-      })
-      toast.error(msg)
-    } finally {
-      setVpsAction(null)
-    }
-  }
-
-  const handleVpsAction = async (action: "start" | "stop" | "setup" | "destroy") => {
+  const handleVpsAction = async (action: "start" | "stop" | "destroy") => {
     setVpsAction(action)
     try {
       const res = await fetch("/api/admin/vps-runner/action", {
@@ -1010,17 +960,13 @@ export default function AdminPage() {
           vpsLogType={vpsLogType}
           vpsLogLines={vpsLogLines}
           selectedWebsiteId={selectedWebsiteId}
-          runnerSetupError={runnerSetupError}
-          runnerSetupLogs={runnerSetupLogs}
           fetchVpsStatus={fetchVpsStatus}
           handleVpsAction={handleVpsAction}
           handleWebsiteAction={handleWebsiteAction}
           fetchVpsLogs={fetchVpsLogs}
-          runRunnerSetup={runRunnerSetup}
           setVpsLogType={setVpsLogType}
           setSelectedWebsiteId={setSelectedWebsiteId}
           openDebugger={openDebugger}
-          onAutoFix={() => runRunnerSetup()}
         />}
 
         {/* Tickets Tab */}

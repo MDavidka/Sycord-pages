@@ -29,7 +29,6 @@ import {
   CreditCard,
   LogOut,
   User,
-  Rocket,
   Globe,
   Save,
   Smartphone,
@@ -84,7 +83,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
-import { DeployLiveLogPanel } from "@/components/deploy-live-log-panel"
 import { PagesDeployPanel } from "@/components/pages-deploy-panel"
 
 const headerComponents = {
@@ -115,16 +113,6 @@ const paymentOptions = [
   { id: "paypal", name: "PayPal", description: "PayPal payments" },
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
-
-type DeploymentMode = "next-server"
-
-const formatDeploymentMode = (_mode?: string | null) => (
-  "Next server"
-)
-
-const detectDeploymentModeFromPages = (_pages: GeneratedPage[]): DeploymentMode => {
-  return "next-server"
-}
 
 // File tree node interface
 interface FileTreeNode {
@@ -656,17 +644,9 @@ export default function SiteSettingsPage() {
   const [selectedPage, setSelectedPage] = useState<GeneratedPage | null>(null)
 
   // Deployment State
-  const [isDeploying, setIsDeploying] = useState(false)
-  const [deployProgress, setDeployProgress] = useState(0)
-  const [deploySuccess, setDeploySuccess] = useState(false)
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
   const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
-  const [deployPanelOpen, setDeployPanelOpen] = useState(false)
-  const deploymentMode = useMemo(
-    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
-    [generatedPages, project],
-  )
 
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
@@ -1099,37 +1079,6 @@ export default function SiteSettingsPage() {
     setActiveTab("ai")
   }
 
-  const handleDeploy = async () => {
-    if (isDeploying) return
-
-    try {
-      if (generatedPages.length > 0) {
-        for (const page of generatedPages) {
-          await fetch(`/api/projects/${id}/pages`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: page.name,
-              content: page.code,
-              usedFor: page.usedFor || "",
-            }),
-          })
-        }
-      }
-      setIsDeploying(true)
-      setDeployProgress(0)
-      setDeploySuccess(false)
-      setDeployResult(null)
-      setDeployError(null)
-      setHasDeployError(false)
-      setDeployPanelOpen(true)
-    } catch (err: any) {
-      setDeployError(err.message || "Deployment failed")
-      setDeployProgress(0)
-      setHasDeployError(true)
-    }
-  }
-
   if (isInitialLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -1240,55 +1189,6 @@ export default function SiteSettingsPage() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <DeployLiveLogPanel
-        open={deployPanelOpen}
-        onOpenChange={(open) => {
-          setDeployPanelOpen(open)
-          if (!open) {
-            setIsDeploying(false)
-          }
-        }}
-        projectId={String(id)}
-        projectName={project?.businessName || project?.name}
-        onSuccess={(streamResult) => {
-          setIsDeploying(false)
-          setDeploySuccess(true)
-          setDeployProgress(100)
-          setDeployResult({
-            url: streamResult.url,
-            domain: streamResult.domain,
-            message: `Deployment complete (${formatDeploymentMode(deploymentMode)})`,
-            build: true,
-            running: true,
-            health_ok: true,
-          })
-          setDeploymentRuntime((current: any) => ({
-            ...(current || {}),
-            mode: "next-server",
-            domain: streamResult.domain,
-            status: "running",
-            health: "healthy",
-          }))
-          setProject((prev: any) => ({ ...prev, cloudflareUrl: streamResult.url }))
-          setHasDeployError(false)
-          fetchLogs((project?._id || id) as string)
-        }}
-        onFinish={(outcome) => {
-          setIsDeploying(false)
-          if (!outcome.success) {
-            setDeployError(outcome.error || "Deployment failed")
-            setHasDeployError(true)
-            setDeploymentRuntime((current: any) => ({
-              ...(current || {}),
-              mode: "next-server",
-              status: "failed",
-              health: "unhealthy",
-              lastDeployError: outcome.error || "Deployment failed",
-            }))
-            fetchLogs((project?._id || id) as string)
-          }
-        }}
-      />
       {/* Desktop Sidebar - Rolling Animation Style */}
       <aside 
         className="hidden md:block shrink-0 transition-[width] duration-300 ease-out" 
@@ -2308,7 +2208,6 @@ export default function SiteSettingsPage() {
                         projectId={id}
                         generatedPages={generatedPages}
                         setGeneratedPages={setGeneratedPages}
-                        onDeploy={handleDeploy}
                       />
                     </div>
                   ) : (
@@ -2362,9 +2261,7 @@ export default function SiteSettingsPage() {
                     alert(e.message)
                   }
                 }}
-                onDeploy={handleDeploy}
                 onGoToAI={() => setActiveTab("ai")}
-                isDeploying={isDeploying}
                 deployError={deployError}
                 deployResult={deployResult}
                 deploymentRuntime={deploymentRuntime}

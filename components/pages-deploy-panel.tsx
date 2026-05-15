@@ -6,10 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
-  Rocket,
   AlertCircle,
   CheckCircle2,
-  Loader2,
   RefreshCw,
   Trash2,
   Sparkles,
@@ -254,9 +252,7 @@ export type PagesDeployPanelProps = {
   projectName?: string
   onDeletePage: (name: string) => void
   onDeleteAll: () => void
-  onDeploy: () => void
   onGoToAI: () => void
-  isDeploying: boolean
   deployError: string | null
   deployResult?: DeployStatus | null
   deploymentRuntime?: DeployStatus | null
@@ -270,9 +266,7 @@ export function PagesDeployPanel({
   projectName,
   onDeletePage,
   onDeleteAll,
-  onDeploy,
   onGoToAI,
-  isDeploying,
   deployError,
   deployResult,
   deploymentRuntime,
@@ -311,31 +305,17 @@ export function PagesDeployPanel({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {pages.length > 0 && (
-            <>
-              <Button
-                onClick={onDeploy}
-                disabled={isDeploying}
-                className="gap-2 font-medium shadow-lg shadow-emerald-500/20"
-              >
-                {isDeploying ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Rocket className="h-4 w-4" />
-                )}
-                Deploy Changes
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onDeleteAll}
-                className="gap-2 border-zinc-700/50 text-zinc-400 hover:text-red-400 hover:border-red-500/30"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete All
-              </Button>
-            </>
-          )}
+        {pages.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDeleteAll}
+            className="gap-2 border-zinc-700/50 text-zinc-400 hover:text-red-400 hover:border-red-500/30"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete All
+          </Button>
+        )}
           <Button variant="outline" size="sm" onClick={onGoToAI} className="gap-2 border-zinc-700/50">
             <Sparkles className="h-3.5 w-3.5" />
             Generate

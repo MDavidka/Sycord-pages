@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { toast } from "sonner"
 import {
   Activity,
   AlertCircle,
@@ -11,20 +10,16 @@ import {
   Cpu,
   Globe2,
   HardDrive,
-  Loader2,
   RotateCcw,
   Server,
-  Wrench,
   Play,
   Square,
   RefreshCw,
   Heart,
   Trash2,
   FileText,
-  Terminal,
   CheckCircle2,
   XCircle,
-  Clock,
 } from "lucide-react"
 
 type RunnerTabProps = {
@@ -36,13 +31,10 @@ type RunnerTabProps = {
   vpsLogType: string
   vpsLogLines: number
   selectedWebsiteId: string | null
-  runnerSetupError: string | null
-  runnerSetupLogs: string
   fetchVpsStatus: () => void
-  handleVpsAction: (action: "start" | "stop" | "setup" | "destroy") => void
+  handleVpsAction: (action: "start" | "stop" | "destroy") => void
   handleWebsiteAction: (id: string, action: "start" | "stop" | "restart" | "health" | "destroy") => void
   fetchVpsLogs: (id?: string) => void
-  runRunnerSetup: () => void
   setVpsLogType: (type: string) => void
   setSelectedWebsiteId: (id: string | null) => void
   openDebugger: (payload: {
@@ -52,24 +44,7 @@ type RunnerTabProps = {
     logs?: string
     details?: Record<string, unknown> | null
   }) => void
-  onAutoFix: () => void
 }
-
-type SetupStep = {
-  id: string
-  label: string
-  description: string
-  status: "pending" | "running" | "success" | "error"
-  message: string
-}
-
-const SETUP_STEPS: SetupStep[] = [
-  { id: "ssh-check", label: "SSH Connectivity", description: "Root SSH to deploy VM", status: "pending", message: "" },
-  { id: "runner-check", label: "Runner API", description: "Check if runner is already running", status: "pending", message: "" },
-  { id: "bootstrap", label: "Bootstrap", description: "Upload files and run setup scripts", status: "pending", message: "" },
-  { id: "diagnostics", label: "Diagnostics", description: "Collect final system diagnostics", status: "pending", message: "" },
-  { id: "complete", label: "Complete", description: "Runner is ready to deploy websites", status: "pending", message: "" },
-]
 
 export function RunnerTabContent(props: RunnerTabProps) {
   const {
@@ -80,93 +55,21 @@ export function RunnerTabContent(props: RunnerTabProps) {
     vpsLogs,
     vpsLogType,
     selectedWebsiteId,
-    runnerSetupError,
-    runnerSetupLogs,
     fetchVpsStatus,
     handleVpsAction,
     handleWebsiteAction,
     fetchVpsLogs,
-    runRunnerSetup,
     setVpsLogType,
     setSelectedWebsiteId,
     openDebugger,
-    onAutoFix,
   } = props
-
-  const [setupStreaming, setSetupStreaming] = useState(false)
-  const [setupSteps, setSetupSteps] = useState<SetupStep[]>(SETUP_STEPS.map(s => ({ ...s })))
-  const [setupLogs, setSetupLogs] = useState<string[]>([])
-  const [setupResult, setSetupResult] = useState<any>(null)
-  const [setupError, setSetupError] = useState<string | null>(null)
-  const [setupPanelOpen, setSetupPanelOpen] = useState(false)
-  const logRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [setupLogs])
 
   useEffect(() => {
     fetchVpsStatus()
   }, [])
 
-  const startStreamingSetup = async () => {
-    setSetupStreaming(true)
-    setSetupPanelOpen(true)
-    setSetupLogs([])
-    setSetupResult(null)
-    setSetupError(null)
-    setSetupSteps(SETUP_STEPS.map(s => ({ ...s, message: "" })))
-
-    try {
-      const res = await fetch("/api/admin/vps-runner/setup/stream")
-      if (!res.ok || !res.body) throw new Error("Setup stream failed")
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ""
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const blocks = buffer.split("\n\n")
-        buffer = blocks.pop() || ""
-
-        for (const block of blocks) {
-          const eventLine = block.split("\n").find(l => l.startsWith("event:"))
-          const dataLine = block.split("\n").find(l => l.startsWith("data:"))
-          if (!eventLine || !dataLine) continue
-          const eventType = eventLine.slice(6).trim()
-          try {
-            const data = JSON.parse(dataLine.slice(5).trim())
-            if (eventType === "stage") {
-              setSetupSteps(prev => prev.map(s =>
-                s.id === data.stage ? { ...s, status: data.status, message: data.message } : s
-              ))
-            } else if (eventType === "log") {
-              setSetupLogs(prev => [...prev, data.line || ""])
-            } else if (eventType === "result") {
-              setSetupResult(data)
-              toast.success("Runner setup completed")
-            } else if (eventType === "error") {
-              setSetupError(data.error || "Setup failed")
-              toast.error(data.error || "Setup failed")
-            }
-          } catch {}
-        }
-      }
-    } catch (err: any) {
-      setSetupError(err?.message || "Setup stream failed")
-      toast.error(err?.message || "Setup stream failed")
-    } finally {
-      setSetupStreaming(false)
-      fetchVpsStatus()
-    }
-  }
-
   const isOnline = !!vpsStatus?.online
   const isDegraded = !isOnline && !!(vpsStatus?.degraded || vpsStatus?.debug?.sshReachable)
-  const needsSetup = !isOnline && !isDegraded && !vpsStatus?.apiOnline && !vpsStatus?.nginx?.running
 
   const runningSites = vpsWebsites.filter(s => s?.status === "running" || s?.running).length
   const failedSites = vpsWebsites.filter(s => s?.status === "failed" || s?.health === "unhealthy").length
@@ -223,16 +126,6 @@ export function RunnerTabContent(props: RunnerTabProps) {
       ok: failedSites === 0,
     },
   ]
-
-  const setupChecklist = [
-    { label: "Runner API reachable", ok: !!vpsStatus?.apiOnline || isOnline },
-    { label: "Runner listening on 5050", ok: !!vpsStatus?.runner?.running },
-    { label: "Port 80 free for Nginx", ok: vpsStatus?.nginx?.port80Available !== false },
-    { label: "Nginx active on :80", ok: !!vpsStatus?.nginx?.running },
-    { label: "Cloudflare Tunnel connected", ok: !!(vpsStatus?.cloudflared?.running || vpsStatus?.tunnel?.ok) },
-    { label: "Sites directory ready", ok: !!(vpsStatus?.setup?.sitesDirReady || vpsStatus?.setupComplete) },
-  ]
-  const allSetupOk = setupChecklist.every(i => i.ok)
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -298,10 +191,6 @@ export function RunnerTabContent(props: RunnerTabProps) {
             </pre>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button onClick={onAutoFix} disabled={!!vpsAction || setupStreaming} className="bg-red-500 text-white hover:bg-red-400 rounded-xl">
-              <Wrench className="h-4 w-4 mr-1.5" />
-              Fix port 80 conflict
-            </Button>
             <Button
               variant="outline"
               className="border-red-400/30 text-red-100 hover:bg-red-500/20 rounded-xl"
@@ -344,14 +233,6 @@ export function RunnerTabContent(props: RunnerTabProps) {
       <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5">
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-xs uppercase tracking-wide text-white/40 mr-2">Actions</p>
-          <Button
-            onClick={startStreamingSetup}
-            disabled={!!vpsAction || setupStreaming}
-            className="bg-blue-600 hover:bg-blue-700 rounded-xl"
-          >
-            {setupStreaming ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wrench className="h-4 w-4 mr-1.5" />}
-            Setup Runner
-          </Button>
           <Button onClick={() => handleVpsAction("start")} disabled={!!vpsAction} variant="outline" className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 rounded-xl">
             <Play className="h-4 w-4 mr-1.5" />Start
           </Button>
@@ -368,169 +249,6 @@ export function RunnerTabContent(props: RunnerTabProps) {
           </Button>
         </div>
       </div>
-
-      {/* Setup wizard panel */}
-      {setupPanelOpen && (
-        <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-blue-400" />
-                Runner Setup
-              </h3>
-              <p className="text-sm text-white/40 mt-1">Installing dependencies and configuring the deploy VM</p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setSetupPanelOpen(false)} className="text-white/60">
-              Hide
-            </Button>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-            {/* Steps */}
-            <div className="space-y-2">
-              {setupSteps.map((step) => {
-                const Icon =
-                  step.status === "success" ? CheckCircle2 :
-                  step.status === "running" ? Loader2 :
-                  step.status === "error" ? XCircle :
-                  Clock
-                return (
-                  <div key={step.id} className={`rounded-xl border px-3 py-3 text-sm transition-colors ${
-                    step.status === "running" ? "border-amber-500/40 bg-amber-500/5" :
-                    step.status === "success" ? "border-emerald-500/20 bg-emerald-500/5" :
-                    step.status === "error" ? "border-red-500/40 bg-red-500/5" :
-                    "border-white/[0.06] bg-black/10"
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 shrink-0 ${
-                        step.status === "success" ? "text-emerald-400" :
-                        step.status === "running" ? "text-amber-300 animate-spin" :
-                        step.status === "error" ? "text-red-400" :
-                        "text-zinc-600"
-                      }`} />
-                      <span className={`font-medium ${
-                        step.status === "running" ? "text-amber-200" :
-                        step.status === "success" ? "text-emerald-200" :
-                        step.status === "error" ? "text-red-200" :
-                        "text-zinc-500"
-                      }`}>{step.label}</span>
-                    </div>
-                    <p className="text-xs text-zinc-500 mt-1 ml-6">{step.description}</p>
-                    {step.message && (
-                      <p className="text-xs text-zinc-400 mt-1 ml-6">{step.message}</p>
-                    )}
-                  </div>
-                )
-              })}
-
-              {setupResult && (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
-                  <p className="text-emerald-300 font-medium flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Setup complete
-                  </p>
-                  <Button onClick={() => setSetupPanelOpen(false)} variant="ghost" size="sm" className="mt-2 text-emerald-300">
-                    Close panel
-                  </Button>
-                </div>
-              )}
-              {setupError && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-3 text-sm">
-                  <p className="text-red-300 font-medium flex items-center gap-2">
-                    <XCircle className="h-4 w-4" />
-                    Setup failed
-                  </p>
-                  <p className="text-xs text-red-200 mt-1">{setupError}</p>
-                  <Button onClick={() => startStreamingSetup()} variant="outline" size="sm" className="mt-2 border-red-500/30 text-red-300 hover:bg-red-500/10">
-                    Retry
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Live terminal */}
-            <div className="rounded-xl border border-white/[0.08] bg-black/40 flex flex-col min-h-[300px]">
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2">
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <Terminal className="h-3.5 w-3.5" />
-                  Setup output
-                </div>
-                {setupStreaming && <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />}
-              </div>
-              <div ref={logRef} className="flex-1 overflow-y-auto p-4 font-mono text-[11px] leading-5 max-h-[360px]">
-                {setupLogs.length === 0 ? (
-                  <p className="text-zinc-600 text-center py-8">
-                    {setupStreaming ? "Waiting for output..." : "No output yet"}
-                  </p>
-                ) : (
-                  setupLogs.map((line, i) => (
-                    <p key={i} className={`${
-                      /error|fail|ERR/i.test(line) ? "text-red-300" :
-                      /warn/i.test(line) ? "text-amber-300" :
-                      /success|complete|ok|active/i.test(line) ? "text-emerald-300" :
-                      "text-zinc-400"
-                    }`}>{line}</p>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Setup checklist (collapsible, shown when runner is offline) */}
-      {!allSetupOk && !setupPanelOpen && (
-        <div className="rounded-2xl bg-white/[0.03] border border-amber-500/20 bg-amber-500/[0.03] p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-white flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-amber-400" />
-              Runner needs setup
-            </h3>
-            <Button onClick={startStreamingSetup} disabled={setupStreaming} className="bg-blue-600 hover:bg-blue-700 rounded-xl" size="sm">
-              {setupStreaming ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wrench className="h-4 w-4 mr-1.5" />}
-              Setup now
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {setupChecklist.map((item) => (
-              <div key={item.label} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
-                {item.ok ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                ) : (
-                  <div className="h-3.5 w-3.5 rounded-full border border-zinc-600 shrink-0" />
-                )}
-                <span className={`text-xs ${item.ok ? "text-emerald-300" : "text-zinc-500"}`}>{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Error display */}
-      {(runnerSetupError || runnerSetupLogs) && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-2">
-          {runnerSetupError && <p className="text-sm text-red-200 font-medium">Setup error: {runnerSetupError}</p>}
-          {runnerSetupLogs && (
-            <pre className="text-xs text-red-100/90 whitespace-pre-wrap max-h-48 overflow-y-auto rounded-lg border border-red-400/20 bg-black/30 p-3">
-              {runnerSetupLogs}
-            </pre>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-red-400/30 text-red-100 hover:bg-red-500/20"
-            onClick={() => openDebugger({
-              title: "Runner setup error",
-              message: runnerSetupError || "Setup logs",
-              phase: "setup",
-              logs: runnerSetupLogs,
-              details: null,
-            })}
-          >
-            Open debugger
-          </Button>
-        </div>
-      )}
 
       {/* Website table */}
       <div className="rounded-2xl bg-white/[0.03] border border-white/[0.08] overflow-hidden">
@@ -645,5 +363,3 @@ export function RunnerTabContent(props: RunnerTabProps) {
     </div>
   )
 }
-
-
