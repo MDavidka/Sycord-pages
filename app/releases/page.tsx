@@ -107,8 +107,8 @@ export default function ReleasesPage() {
             This month
           </div>
           <p className="mt-3 text-base text-white">
-            We are shipping a fresh deployment experience and more guided setup
-            tools — stay tuned for the full breakdown.
+            We are focusing on smoother generation flows, sharper visuals, and
+            faster performance improvements — stay tuned for the full breakdown.
           </p>
         </div>
       </section>
