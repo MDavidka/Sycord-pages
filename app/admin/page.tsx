@@ -2,23 +2,17 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import Image from "next/image"
 import Link from "next/link"
 import { RunnerTabContent } from "@/components/admin-runner-tab"
@@ -27,17 +21,14 @@ import {
   Users,
   Zap,
   Shield,
-  Trash2,
   Mail,
   Search,
   Menu,
   X,
   ArrowLeft,
-  LogOut,
   BarChart3,
   Server,
   Activity,
-  Check,
   Cloud,
   Database,
   Globe2,
@@ -50,15 +41,8 @@ import {
   Image as ImageIcon,
   Loader2,
   Save,
-  RotateCcw,
   BookOpen,
-  ArrowRight,
   Ban,
-  UserCheck,
-  Settings,
-  User,
-  ChevronDown,
-  Calendar,
   ExternalLink
 } from "lucide-react"
 
@@ -107,7 +91,6 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
-  const [updatingUser, setUpdatingUser] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<TabId>("overview")
   const [monitors, setMonitors] = useState<any[]>([])
@@ -241,50 +224,6 @@ export default function AdminPage() {
     }
   }
 
-  const togglePremium = async (userId: string, isPremium: boolean) => {
-    try {
-      setUpdatingUser(userId)
-      const response = await fetch(`/api/admin/users/${userId}/premium`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isPremium: !isPremium }),
-      })
-
-      if (!response.ok) throw new Error("Failed to update premium status")
-
-      setUsers(users.map((user) => (user.userId === userId ? { ...user, isPremium: !isPremium } : user)))
-
-      console.log("[v0] Premium status updated for user:", userId)
-    } catch (error) {
-      console.error("[v0] Error updating premium:", error)
-    } finally {
-      setUpdatingUser(null)
-    }
-  }
-
-  const deleteUser = async (userId: string, userName: string) => {
-    if (!confirm(`Are you sure you want to delete ${userName} and all their websites? This cannot be undone.`)) {
-      return
-    }
-
-    try {
-      setUpdatingUser(userId)
-      const response = await fetch(`/api/admin/users/${userId}/delete`, {
-        method: "DELETE",
-      })
-
-      if (!response.ok) throw new Error("Failed to delete user")
-
-      setUsers(users.filter((user) => user.userId !== userId))
-      console.log("[v0] User deleted:", userId)
-    } catch (error) {
-      console.error("[v0] Error deleting user:", error)
-      alert("Failed to delete user")
-    } finally {
-      setUpdatingUser(null)
-    }
-  }
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -292,55 +231,6 @@ export default function AdminPage() {
       day: "numeric",
     })
   }
-
-  const toggleBlock = async (userId: string, isBlocked: boolean) => {
-    try {
-      setUpdatingUser(userId)
-      const response = await fetch(`/api/admin/users/${userId}/block`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isBlocked: !isBlocked }),
-      })
-
-      if (!response.ok) throw new Error("Failed to update block status")
-
-      setUsers(users.map((user) => (user.userId === userId ? { ...user, isBlocked: !isBlocked } : user)))
-      toast.success(`User ${!isBlocked ? "blocked" : "unblocked"} successfully`)
-    } catch (error) {
-      console.error("[v0] Error updating block status:", error)
-      toast.error("Failed to update block status")
-    } finally {
-      setUpdatingUser(null)
-    }
-  }
-
-  const saveSubscription = async (userId: string, subscription: string) => {
-    try {
-      setUpdatingUser(userId)
-      const response = await fetch(`/api/admin/users/${userId}/subscription`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription }),
-      })
-
-      if (!response.ok) throw new Error("Failed to update subscription")
-
-      const isPremium = subscription !== "Free"
-      setUsers(users.map((user) => (user.userId === userId ? { ...user, subscription, isPremium } : user)))
-      toast.success(`Subscription updated to ${subscription}`)
-    } catch (error) {
-      console.error("[v0] Error updating subscription:", error)
-      toast.error("Failed to update subscription")
-    } finally {
-      setUpdatingUser(null)
-    }
-  }
-
-  const userInitials = session?.user?.name
-    ?.split(" ")
-    .map((n: string) => n[0])
-    .join("")
-    .toUpperCase() || "A"
 
   const blockedCount = users.filter(u => u.isBlocked).length
 
@@ -555,6 +445,10 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Badge variant="outline" className="hidden border-white/10 bg-white/[0.03] text-xs font-medium text-white/50 sm:inline-flex">
+              Read-only admin view
+            </Badge>
+
             {/* Mobile Navigation */}
             <Sheet>
               <SheetTrigger asChild>
@@ -597,43 +491,6 @@ export default function AdminPage() {
                 </nav>
               </SheetContent>
             </Sheet>
-
-            {/* User Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
-                    <AvatarFallback className="bg-purple-500 text-white text-xs font-semibold">{userInitials}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{session?.user?.name}</p>
-                    <p className="text-xs leading-none text-muted-foreground">{session?.user?.email}</p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  <span>Dashboard</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/subscriptions")}>
-                  <Zap className="mr-2 h-4 w-4" />
-                  <span>Plans</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign Out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -649,42 +506,27 @@ export default function AdminPage() {
               <p className="text-sm text-white/40">Platform statistics at a glance</p>
             </div>
 
-            <div className="overflow-x-auto scrollbar-hide pb-2">
-              <div className="flex gap-4 w-max md:w-full md:grid md:grid-cols-4">
-                <div className="w-40 md:w-auto rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5">
-                  <div className="h-9 w-9 rounded-xl bg-white/5 flex items-center justify-center mb-3">
-                    <Users className="h-4 w-4 text-white/60" />
-                  </div>
-                  <p className="text-2xl font-bold text-white">{users.length}</p>
-                  <p className="text-xs text-white/30 mt-1">Total Users</p>
-                </div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Total Users", value: users.length, icon: Users, tone: "bg-white/5 text-white/60" },
+                { label: "Premium", value: users.filter((u) => u.isPremium).length, icon: Zap, tone: "bg-yellow-500/10 text-yellow-500" },
+                { label: "Websites", value: users.reduce((acc, u) => acc + u.projectCount, 0), icon: Globe2, tone: "bg-blue-500/10 text-blue-500" },
+                { label: "Blocked", value: blockedCount, icon: Ban, tone: "bg-red-500/10 text-red-500" },
+              ].map((metric) => {
+                const Icon = metric.icon
 
-                <div className="w-40 md:w-auto rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5">
-                  <div className="h-9 w-9 rounded-xl bg-yellow-500/10 flex items-center justify-center mb-3">
-                    <Zap className="h-4 w-4 text-yellow-500" />
-                  </div>
-                  <p className="text-2xl font-bold text-white">{users.filter((u) => u.isPremium).length}</p>
-                  <p className="text-xs text-white/30 mt-1">Premium</p>
-                </div>
-
-                <div className="w-40 md:w-auto rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5">
-                  <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center mb-3">
-                    <Globe2 className="h-4 w-4 text-blue-500" />
-                  </div>
-                  <p className="text-2xl font-bold text-white">
-                    {users.reduce((acc, u) => acc + u.projectCount, 0)}
-                  </p>
-                  <p className="text-xs text-white/30 mt-1">Websites</p>
-                </div>
-
-                <div className="w-40 md:w-auto rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5">
-                  <div className="h-9 w-9 rounded-xl bg-red-500/10 flex items-center justify-center mb-3">
-                    <Ban className="h-4 w-4 text-red-500" />
-                  </div>
-                  <p className="text-2xl font-bold text-white">{blockedCount}</p>
-                  <p className="text-xs text-white/30 mt-1">Blocked</p>
-                </div>
-              </div>
+                return (
+                  <Card key={metric.label} className="border-white/[0.06] bg-white/[0.03] py-5 text-white shadow-none backdrop-blur-xl">
+                    <CardHeader className="px-5 pb-0">
+                      <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${metric.tone}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <CardTitle className="text-2xl font-bold text-white">{metric.value}</CardTitle>
+                      <CardDescription className="text-xs text-white/30">{metric.label}</CardDescription>
+                    </CardHeader>
+                  </Card>
+                )
+              })}
             </div>
           </div>
         )}
@@ -722,8 +564,8 @@ export default function AdminPage() {
             ) : (
               <div className="space-y-3">
                 {filteredUsers.map((user) => (
-                  <div key={user.userId} className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] overflow-hidden">
-                    <div className="p-4 sm:p-5">
+                  <Card key={user.userId} className="overflow-hidden border-white/[0.06] bg-white/[0.03] py-0 text-white shadow-none backdrop-blur-xl">
+                    <CardContent className="p-4 sm:p-5">
                       <div className="flex items-start gap-4">
                         {/* Avatar */}
                         <Avatar className="h-12 w-12 flex-shrink-0">
@@ -783,71 +625,23 @@ export default function AdminPage() {
                         </div>
                       </div>
 
-                      {/* Actions row */}
-                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/[0.04]">
-                        {/* Plan selector dropdown */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              disabled={updatingUser === user.userId}
-                              className="h-8 flex items-center gap-2 px-3 rounded-lg bg-white/[0.04] border border-white/[0.06] text-xs font-medium text-white/50 hover:bg-white/[0.08] hover:text-white/70 transition-colors disabled:opacity-50"
-                            >
-                              <Settings className="h-3.5 w-3.5" />
-                              {user.subscription || (user.isPremium ? "Sycord+" : "Free")}
-                              <ChevronDown className="h-3 w-3 text-white/30" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="min-w-[140px]">
-                            <DropdownMenuLabel className="text-[10px] text-muted-foreground">Change Plan</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => saveSubscription(user.userId, "Free")} className="text-xs">
-                              Free
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => saveSubscription(user.userId, "Sycord+")} className="text-xs">
-                              <Zap className="h-3 w-3 mr-1.5 text-yellow-500" />
-                              Sycord+
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => saveSubscription(user.userId, "Sycord Enterprise")} className="text-xs">
-                              <Shield className="h-3 w-3 mr-1.5 text-purple-500" />
-                              Enterprise
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <div className="flex-1" />
-
-                        {/* Suspend button */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleBlock(user.userId, user.isBlocked)}
-                          disabled={updatingUser === user.userId}
-                          className={`h-8 px-3 rounded-lg text-[11px] font-medium border transition-colors ${
-                            user.isBlocked
-                              ? "bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 hover:text-green-300"
-                              : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
-                          }`}
-                        >
-                          {user.isBlocked ? (
-                            <><UserCheck className="h-3 w-3 mr-1.5" />Unsuspend</>
-                          ) : (
-                            <><Ban className="h-3 w-3 mr-1.5" />Suspend</>
-                          )}
-                        </Button>
-
-                        {/* Delete */}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 rounded-lg bg-white/[0.03] border border-white/[0.06] text-white/20 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20"
-                          onClick={() => deleteUser(user.userId, user.name)}
-                          disabled={updatingUser === user.userId}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                      <Separator className="my-4 bg-white/[0.04]" />
+                      <div className="grid gap-3 text-xs sm:grid-cols-3">
+                        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-white/25">Plan</p>
+                          <p className="mt-1 font-medium text-white/60">{user.subscription || (user.isPremium ? "Sycord+" : "Free")}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-white/25">Projects</p>
+                          <p className="mt-1 font-medium text-white/60">{user.projectCount}</p>
+                        </div>
+                        <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-wide text-white/25">IP</p>
+                          <p className="mt-1 truncate font-mono text-white/60">{user.ip || "Unknown"}</p>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             )}
