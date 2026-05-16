@@ -12,6 +12,11 @@ export type ProjectEnvVar = {
   value?: string
 }
 
+export type RunnerConfig = {
+  runnerUrl?: string
+  runnerToken?: string
+}
+
 export type RunnerDeployPayload = {
   files: DeployFile[]
   subdomain: string
@@ -273,19 +278,37 @@ export function isSuccessfulRunnerDeployResponse(input: any): boolean {
   )
 }
 
-function getRunnerHeaders(extra?: HeadersInit): HeadersInit {
-  const headers = new Headers(extra)
+function getRunnerHeaders(tokenOrExtra?: string | HeadersInit, extra?: HeadersInit): HeadersInit {
+  const headers = new Headers(typeof tokenOrExtra === "string" ? extra : tokenOrExtra)
   headers.set("Content-Type", "application/json")
-  if (process.env.VPS_RUNNER_TOKEN) {
-    headers.set("Authorization", `Bearer ${process.env.VPS_RUNNER_TOKEN}`)
+  const token = typeof tokenOrExtra === "string" ? tokenOrExtra : process.env.VPS_RUNNER_TOKEN
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`)
   }
   return headers
 }
 
-export async function callRunnerDeploy(projectId: string, payload: RunnerDeployPayload): Promise<RunnerDeployResponse> {
-  const response = await fetch(`${DEFAULT_RUNNER_URL}/api/deploy/${projectId}`, {
+export function getRunnerUrl(project?: { deploymentVm?: RunnerConfig } | null): string {
+  return (
+    project?.deploymentVm?.runnerUrl ||
+    process.env.VPS_SERVER_URL ||
+    DEFAULT_RUNNER_URL
+  )
+}
+
+export function getRunnerToken(project?: { deploymentVm?: RunnerConfig } | null): string | undefined {
+  return project?.deploymentVm?.runnerToken || process.env.VPS_RUNNER_TOKEN
+}
+
+export async function callRunnerDeploy(
+  projectId: string,
+  payload: RunnerDeployPayload,
+  config?: RunnerConfig,
+): Promise<RunnerDeployResponse> {
+  const runnerUrl = config?.runnerUrl || DEFAULT_RUNNER_URL
+  const response = await fetch(`${runnerUrl}/api/deploy/${projectId}`, {
     method: "POST",
-    headers: getRunnerHeaders(),
+    headers: getRunnerHeaders(config?.runnerToken),
     body: JSON.stringify(payload),
   })
 
@@ -297,10 +320,15 @@ export async function callRunnerDeploy(projectId: string, payload: RunnerDeployP
   return normalized
 }
 
-export async function callRunnerDeployStream(projectId: string, payload: RunnerDeployPayload): Promise<Response> {
-  return fetch(`${DEFAULT_RUNNER_URL}/api/deploy/${projectId}/stream`, {
+export async function callRunnerDeployStream(
+  projectId: string,
+  payload: RunnerDeployPayload,
+  config?: RunnerConfig,
+): Promise<Response> {
+  const runnerUrl = config?.runnerUrl || DEFAULT_RUNNER_URL
+  return fetch(`${runnerUrl}/api/deploy/${projectId}/stream`, {
     method: "POST",
-    headers: getRunnerHeaders({ Accept: "text/event-stream" }),
+    headers: getRunnerHeaders(config?.runnerToken, { Accept: "text/event-stream" }),
     body: JSON.stringify(payload),
   })
 }

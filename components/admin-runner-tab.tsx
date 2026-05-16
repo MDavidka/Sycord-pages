@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import {
   Activity,
@@ -25,6 +26,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Eye,
+  EyeOff,
+  Network,
 } from "lucide-react"
 
 type RunnerTabProps = {
@@ -101,6 +105,16 @@ export function RunnerTabContent(props: RunnerTabProps) {
   const [setupPanelOpen, setSetupPanelOpen] = useState(false)
   const logRef = useRef<HTMLDivElement | null>(null)
 
+  // VM Configuration state
+  const [vmConfigOpen, setVmConfigOpen] = useState(false)
+  const [vmHost, setVmHost] = useState("")
+  const [vmPort, setVmPort] = useState("22")
+  const [vmPassword, setVmPassword] = useState("")
+  const [vmBaseDomain, setVmBaseDomain] = useState("sycord.site")
+  const [showPassword, setShowPassword] = useState(false)
+  const [testingSsh, setTestingSsh] = useState(false)
+  const [sshTestResult, setSshTestResult] = useState<{ success: boolean; error?: string } | null>(null)
+
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [setupLogs])
@@ -109,7 +123,42 @@ export function RunnerTabContent(props: RunnerTabProps) {
     fetchVpsStatus()
   }, [])
 
-  const startStreamingSetup = async () => {
+  // Test SSH connection to a custom VM
+  const testSshConnection = async () => {
+    if (!vmHost || !vmPassword) {
+      toast.error("Please enter VM IP and root password")
+      return
+    }
+    setTestingSsh(true)
+    setSshTestResult(null)
+    try {
+      const res = await fetch("/api/admin/vps-runner/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: vmHost,
+          port: parseInt(vmPort) || 22,
+          rootPassword: vmPassword,
+          baseDomain: vmBaseDomain,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSshTestResult({ success: true })
+        toast.success("SSH connection successful!")
+      } else {
+        setSshTestResult({ success: false, error: data.error || "SSH connection failed" })
+        toast.error(data.error || "SSH connection failed")
+      }
+    } catch (err: any) {
+      setSshTestResult({ success: false, error: err?.message || "Test failed" })
+      toast.error(err?.message || "Test failed")
+    } finally {
+      setTestingSsh(false)
+    }
+  }
+
+  const startStreamingSetup = async (useCustomVm = false) => {
     setSetupStreaming(true)
     setSetupPanelOpen(true)
     setSetupLogs([])
@@ -118,7 +167,21 @@ export function RunnerTabContent(props: RunnerTabProps) {
     setSetupSteps(SETUP_STEPS.map(s => ({ ...s, message: "" })))
 
     try {
-      const res = await fetch("/api/admin/vps-runner/setup/stream")
+      // If custom VM credentials are provided, use POST with body
+      const fetchOptions: RequestInit = useCustomVm && vmHost && vmPassword
+        ? {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              host: vmHost,
+              port: parseInt(vmPort) || 22,
+              rootPassword: vmPassword,
+              baseDomain: vmBaseDomain,
+            }),
+          }
+        : { method: "GET" }
+
+      const res = await fetch("/api/admin/vps-runner/setup/stream", fetchOptions)
       if (!res.ok || !res.body) throw new Error("Setup stream failed")
 
       const reader = res.body.getReader()
@@ -345,12 +408,20 @@ export function RunnerTabContent(props: RunnerTabProps) {
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-xs uppercase tracking-wide text-white/40 mr-2">Actions</p>
           <Button
-            onClick={startStreamingSetup}
+            onClick={() => startStreamingSetup(false)}
             disabled={!!vpsAction || setupStreaming}
             className="bg-blue-600 hover:bg-blue-700 rounded-xl"
           >
             {setupStreaming ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wrench className="h-4 w-4 mr-1.5" />}
             Setup Runner
+          </Button>
+          <Button
+            onClick={() => setVmConfigOpen(!vmConfigOpen)}
+            variant="outline"
+            className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10 rounded-xl"
+          >
+            <Network className="h-4 w-4 mr-1.5" />
+            Custom VM
           </Button>
           <Button onClick={() => handleVpsAction("start")} disabled={!!vpsAction} variant="outline" className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 rounded-xl">
             <Play className="h-4 w-4 mr-1.5" />Start
@@ -368,6 +439,135 @@ export function RunnerTabContent(props: RunnerTabProps) {
           </Button>
         </div>
       </div>
+
+      {/* Custom VM Configuration Panel */}
+      {vmConfigOpen && (
+        <div className="rounded-2xl bg-white/[0.03] border border-purple-500/20 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                <Network className="h-4 w-4 text-purple-400" />
+                Custom VM Configuration
+              </h3>
+              <p className="text-sm text-white/40 mt-1">Connect to your own VPS with root access to deploy websites</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setVmConfigOpen(false)} className="text-white/60">
+              Hide
+            </Button>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Form fields */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-white/70">VM IP Address</label>
+                <Input
+                  type="text"
+                  placeholder="e.g., 192.168.1.100 or server.example.com"
+                  value={vmHost}
+                  onChange={(e) => setVmHost(e.target.value)}
+                  className="bg-black/40 border-white/10 text-white placeholder:text-white/30"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-white/70">SSH Port</label>
+                <Input
+                  type="number"
+                  placeholder="22"
+                  value={vmPort}
+                  onChange={(e) => setVmPort(e.target.value)}
+                  className="bg-black/40 border-white/10 text-white placeholder:text-white/30 w-32"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-white/70">Root Password</label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Root password for SSH"
+                    value={vmPassword}
+                    onChange={(e) => setVmPassword(e.target.value)}
+                    className="bg-black/40 border-white/10 text-white placeholder:text-white/30 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/30">Password is only used during setup and never stored</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-white/70">Base Domain</label>
+                <Input
+                  type="text"
+                  placeholder="sycord.site"
+                  value={vmBaseDomain}
+                  onChange={(e) => setVmBaseDomain(e.target.value)}
+                  className="bg-black/40 border-white/10 text-white placeholder:text-white/30"
+                />
+                <p className="text-[10px] text-white/30">Sites will be deployed as subdomain.{vmBaseDomain || "yourdomain.com"}</p>
+              </div>
+            </div>
+
+            {/* Status and actions */}
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
+                <h4 className="text-sm font-medium text-white/70 mb-3">Connection Status</h4>
+                {sshTestResult ? (
+                  <div className={`flex items-center gap-2 text-sm ${sshTestResult.success ? "text-emerald-400" : "text-red-400"}`}>
+                    {sshTestResult.success ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        SSH connection successful
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4" />
+                        {sshTestResult.error || "Connection failed"}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/40">Not tested yet</p>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={testSshConnection}
+                  disabled={testingSsh || !vmHost || !vmPassword}
+                  variant="outline"
+                  className="border-white/10 text-white hover:bg-white/10 rounded-xl"
+                >
+                  {testingSsh ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Activity className="h-4 w-4 mr-1.5" />}
+                  Test SSH
+                </Button>
+                <Button
+                  onClick={() => startStreamingSetup(true)}
+                  disabled={setupStreaming || !vmHost || !vmPassword}
+                  className="bg-purple-600 hover:bg-purple-700 rounded-xl"
+                >
+                  {setupStreaming ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wrench className="h-4 w-4 mr-1.5" />}
+                  Install Sycord Runner
+                </Button>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                <p className="text-xs text-amber-200/80">
+                  <AlertCircle className="h-3.5 w-3.5 inline mr-1.5" />
+                  Ensure your VM has a fresh Ubuntu 22.04+ installation with root access and ports 22, 80, and 5050 open.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Setup wizard panel */}
       {setupPanelOpen && (
@@ -486,7 +686,7 @@ export function RunnerTabContent(props: RunnerTabProps) {
               <AlertCircle className="h-4 w-4 text-amber-400" />
               Runner needs setup
             </h3>
-            <Button onClick={startStreamingSetup} disabled={setupStreaming} className="bg-blue-600 hover:bg-blue-700 rounded-xl" size="sm">
+            <Button onClick={() => startStreamingSetup(false)} disabled={setupStreaming} className="bg-blue-600 hover:bg-blue-700 rounded-xl" size="sm">
               {setupStreaming ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Wrench className="h-4 w-4 mr-1.5" />}
               Setup now
             </Button>
