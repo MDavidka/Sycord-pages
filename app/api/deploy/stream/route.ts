@@ -11,6 +11,8 @@ import {
   createResultEvent,
   createStageEvent,
   getProjectEnvVars,
+  getRunnerToken,
+  getRunnerUrl,
   normalizeRunnerDeployResponse,
   parseSseChunk,
   prepareProjectDeployFiles,
@@ -87,12 +89,18 @@ export async function POST(request: Request) {
         write("message", createLogEvent("sycord", `Prepared ${files.length} files for next-server runtime`))
         write("message", createStageEvent("vm-connect", "running", "Connecting to VM runner"))
 
+        // Get runner configuration from project or env vars
+        const runnerConfig = {
+          runnerUrl: getRunnerUrl(project),
+          runnerToken: getRunnerToken(project),
+        }
+
         const runnerResponse = await callRunnerDeployStream(projectId, {
           files,
           subdomain: repo,
           deployment_mode: "next-server",
           ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
-        })
+        }, runnerConfig)
 
         if (!runnerResponse.ok || !runnerResponse.body) {
           const errorText = await runnerResponse.text().catch(() => "")

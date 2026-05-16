@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server"
-import { bootstrapDeployVmRunner, probeDeployVmSsh, readDeployVmDiagnostics } from "@/lib/admin/vm-ssh"
+import {
+  bootstrapDeployVmRunner,
+  generateRunnerToken,
+  probeDeployVmSsh,
+  readDeployVmDiagnostics,
+  type VmSetupInput,
+} from "@/lib/admin/vm-ssh"
 import { proxyRunner, requireAdminResponse, runnerHeaders } from "../../_shared"
 
 const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
@@ -24,11 +30,38 @@ function errorEvent(error: string, stage?: string) {
   return event(`event: error\ndata: ${JSON.stringify({ error, stage, timestamp: new Date().toISOString() })}`)
 }
 
+// Legacy GET endpoint - uses env vars
 export async function GET() {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
 
-  const encoder = new TextEncoder()
+  return runSetupStream()
+}
+
+// New POST endpoint - accepts user-provided credentials
+export async function POST(request: Request) {
+  const unauthorized = await requireAdminResponse()
+  if (unauthorized) return unauthorized
+
+  const body = await request.json().catch(() => ({}))
+  const host = String(body.host || "").trim()
+  const password = String(body.rootPassword || body.password || "")
+  const port = Number(body.port || 22)
+  const baseDomain = String(body.baseDomain || "sycord.site").trim()
+
+  // If credentials provided, use them; otherwise fall back to env vars
+  const sshInput: VmSetupInput | undefined = host && password
+    ? { host, password, port, baseDomain, runnerToken: generateRunnerToken() }
+    : undefined
+
+  return runSetupStream(sshInput)
+}
+
+async function runSetupStream(sshInput?: VmSetupInput) {
+  const runnerUrl = sshInput?.host
+    ? `http://${sshInput.host}:5050`
+    : VPS_SERVER_URL
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: Uint8Array) => controller.enqueue(data)
@@ -36,20 +69,28 @@ export async function GET() {
       try {
         send(stageEvent("ssh-check", "running", "Checking SSH connectivity to deploy VM"))
 
-        const ssh = await probeDeployVmSsh()
+        const ssh = await probeDeployVmSsh(sshInput)
         if (!ssh.reachable) {
           send(stageEvent("ssh-check", "error", "SSH connection to deploy VM failed"))
           send(logEvent(`SSH error: ${ssh.error || "Unknown SSH error"}`))
-          send(errorEvent("Deploy VM SSH login failed. Check VPS_SSH_HOST and VPS_SSH_ROOT_PASSWORD.", "ssh-check"))
+          send(errorEvent(
+            sshInput
+              ? "SSH login failed. Check VM IP and root password."
+              : "Deploy VM SSH login failed. Check VPS_SSH_HOST and VPS_SSH_ROOT_PASSWORD.",
+            "ssh-check"
+          ))
           controller.close()
           return
         }
         send(stageEvent("ssh-check", "success", "SSH connection to deploy VM established"))
         send(logEvent("Root SSH access to deploy VM confirmed"))
+        if (sshInput?.host) {
+          send(logEvent(`Connected to VM at ${sshInput.host}:${sshInput.port || 22}`))
+        }
 
         // Try to reach the runner API first
         send(stageEvent("runner-check", "running", "Checking if runner API is already online"))
-        const runnerCheck = await fetch(`${VPS_SERVER_URL}/api/status`, {
+        const runnerCheck = await fetch(`${runnerUrl}/api/status`, {
           headers: runnerHeaders({ Accept: "application/json" }),
         }).catch(() => null)
 
@@ -58,7 +99,7 @@ export async function GET() {
           send(stageEvent("runner-check", "success", "Runner API is online - running setup scripts on VM"))
           send(logEvent("Runner API reachable, triggering setup via API"))
 
-          const setupRes = await fetch(`${VPS_SERVER_URL}/api/setup`, {
+          const setupRes = await fetch(`${runnerUrl}/api/setup`, {
             method: "POST",
             headers: runnerHeaders(),
           }).catch(() => null)
@@ -76,6 +117,9 @@ export async function GET() {
               nginx: data.nginx || { running: true },
               runner: data.runner || { running: true },
               cloudflared: data.cloudflared || { running: true },
+              runnerUrl,
+              runnerToken: sshInput?.runnerToken,
+              baseDomain: sshInput?.baseDomain,
             }))
             controller.close()
             return
@@ -87,7 +131,7 @@ export async function GET() {
         send(stageEvent("bootstrap", "running", "Uploading vm-runner to deploy VM via SCP"))
         send(logEvent("Starting full bootstrap: copy vm-runner/, run setup scripts, install service"))
 
-        const result = await bootstrapDeployVmRunner()
+        const result = await bootstrapDeployVmRunner(sshInput)
         if (result.logs) {
           for (const line of result.logs.split("\n").filter(Boolean)) {
             send(logEvent(line))
@@ -99,7 +143,7 @@ export async function GET() {
 
           // Read final diagnostics
           send(stageEvent("diagnostics", "running", "Collecting final diagnostics"))
-          const diag = await readDeployVmDiagnostics().catch(() => null)
+          const diag = await readDeployVmDiagnostics(sshInput).catch(() => null)
           send(stageEvent("diagnostics", "success", "Diagnostics collected"))
           send(stageEvent("complete", "success", "Runner setup complete"))
           send(resultEvent({
@@ -109,6 +153,9 @@ export async function GET() {
             nginx: diag?.nginx || { running: true },
             runner: diag?.runner || { running: true },
             cloudflared: diag?.cloudflared || { running: true },
+            runnerUrl: result.runnerUrl,
+            runnerToken: result.runnerToken,
+            baseDomain: result.baseDomain,
           }))
         } else {
           send(stageEvent("bootstrap", "error", result.error || "Bootstrap failed"))

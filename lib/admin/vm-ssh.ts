@@ -1,4 +1,5 @@
 import path from "node:path"
+import * as crypto from "node:crypto"
 import { NodeSSH } from "node-ssh"
 
 type SshConfig = {
@@ -8,13 +9,31 @@ type SshConfig = {
   username: string
 }
 
-function getSshConfig(): SshConfig {
-  const host = process.env.VPS_SSH_HOST
-  const password = process.env.VPS_SSH_ROOT_PASSWORD
-  const port = Number(process.env.VPS_SSH_PORT || "22")
+export type VmSetupInput = {
+  host: string
+  password: string
+  port?: number
+  baseDomain?: string
+  runnerToken?: string
+}
+
+export type VmSetupResult = {
+  success: boolean
+  phase: string
+  error: string | null
+  logs: string
+  runnerUrl?: string
+  runnerToken?: string
+  baseDomain?: string
+}
+
+function getSshConfig(input?: VmSetupInput): SshConfig {
+  const host = input?.host || process.env.VPS_SSH_HOST
+  const password = input?.password || process.env.VPS_SSH_ROOT_PASSWORD
+  const port = Number(input?.port || process.env.VPS_SSH_PORT || "22")
 
   if (!host || !password) {
-    throw new Error("Missing VPS_SSH_HOST or VPS_SSH_ROOT_PASSWORD")
+    throw new Error("Missing VM host or root password")
   }
 
   return {
@@ -25,19 +44,22 @@ function getSshConfig(): SshConfig {
   }
 }
 
-async function withRootSsh<T>(fn: (ssh: NodeSSH) => Promise<T>) {
+async function withRootSsh<T>(fn: (ssh: NodeSSH) => Promise<T>, input?: VmSetupInput) {
   const ssh = new NodeSSH()
   try {
-    await ssh.connect(getSshConfig())
+    await ssh.connect(getSshConfig(input))
     return await fn(ssh)
   } finally {
     ssh.dispose()
   }
 }
 
-export async function probeDeployVmSsh() {
+export async function probeDeployVmSsh(input?: VmSetupInput) {
   try {
-    const result = await withRootSsh(async (ssh) => ssh.execCommand("echo connected"))
+    const result = await withRootSsh(
+      async (ssh) => ssh.execCommand("echo connected"),
+      input,
+    )
     return {
       reachable: result.stdout.trim() === "connected",
       error: result.stderr || null,
@@ -50,7 +72,7 @@ export async function probeDeployVmSsh() {
   }
 }
 
-export async function readDeployVmDiagnostics() {
+export async function readDeployVmDiagnostics(input?: VmSetupInput) {
   return withRootSsh(async (ssh) => {
     const port80 = await ssh.execCommand("ss -ltnp | grep ':80' || true")
     const port5050 = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
@@ -115,10 +137,10 @@ export async function readDeployVmDiagnostics() {
         relatedServices: related.stdout.split("\n").filter(Boolean),
       },
     }
-  })
+  }, input)
 }
 
-export async function manageDeployVmRunnerService(action: "start" | "stop" | "restart" | "status") {
+export async function manageDeployVmRunnerService(action: "start" | "stop" | "restart" | "status", input?: VmSetupInput) {
   return withRootSsh(async (ssh) => {
     const command =
       action === "status"
@@ -154,12 +176,19 @@ export async function manageDeployVmRunnerService(action: "start" | "stop" | "re
         diagnostics: {},
       },
     }
-  })
+  }, input)
 }
 
-export async function bootstrapDeployVmRunner() {
+export function generateRunnerToken(): string {
+  return crypto.randomBytes(32).toString("hex")
+}
+
+export async function bootstrapDeployVmRunner(input?: VmSetupInput): Promise<VmSetupResult> {
   const localRunnerDir = path.join(process.cwd(), "vm-runner")
   const remoteRunnerDir = "/srv/sycord/vm-runner"
+  const runnerToken = input?.runnerToken || process.env.VPS_RUNNER_TOKEN || generateRunnerToken()
+  const baseDomain = input?.baseDomain || "sycord.site"
+  const host = input?.host || process.env.VPS_SSH_HOST || ""
 
   return withRootSsh(async (ssh) => {
     const steps: string[] = []
@@ -221,13 +250,14 @@ export async function bootstrapDeployVmRunner() {
 
     phase = "install-service"
     emit("Running install-service.sh (npm install, tsc build, systemd)...")
-    const runnerToken = process.env.VPS_RUNNER_TOKEN || ""
+    emit(`Using runner token: ${runnerToken.slice(0, 8)}...`)
+    emit(`Using base domain: ${baseDomain}`)
     const installResult = await ssh.execCommand(
       [
         "set -e",
         `cd ${remoteRunnerDir}`,
         "chmod +x scripts/install-service.sh",
-        `VPS_RUNNER_TOKEN="${runnerToken}" bash scripts/install-service.sh 2>&1`,
+        `VPS_RUNNER_TOKEN="${runnerToken}" SYCORD_BASE_DOMAIN="${baseDomain}" bash scripts/install-service.sh 2>&1`,
       ].join(" && "),
       { cwd: remoteRunnerDir },
     )
@@ -259,11 +289,16 @@ export async function bootstrapDeployVmRunner() {
     emit(verify.stderr)
 
     const success = Boolean(verify.stdout.trim())
+    const runnerUrl = `http://${host}:5050`
+    
     return {
       success,
       phase,
       error: success ? null : "Runner process not found on port 5050 after start",
       logs: steps.filter(Boolean).join("\n").trim(),
+      runnerUrl: success ? runnerUrl : undefined,
+      runnerToken: success ? runnerToken : undefined,
+      baseDomain: success ? baseDomain : undefined,
     }
-  })
+  }, input)
 }

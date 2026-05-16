@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server"
-import { bootstrapDeployVmRunner, probeDeployVmSsh, readDeployVmDiagnostics } from "@/lib/admin/vm-ssh"
+import {
+  bootstrapDeployVmRunner,
+  generateRunnerToken,
+  probeDeployVmSsh,
+  readDeployVmDiagnostics,
+  type VmSetupInput,
+} from "@/lib/admin/vm-ssh"
 import { proxyRunner, requireAdminResponse } from "../_shared"
 
 export async function GET() {
@@ -34,22 +40,42 @@ export async function GET() {
   )
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
 
-  const upstream = await proxyRunner("/api/setup", { method: "POST" })
-  if (upstream.status !== 503) {
-    return upstream
+  // Parse request body for user-provided credentials
+  const body = await request.json().catch(() => ({}))
+  const host = String(body.host || "").trim()
+  const password = String(body.rootPassword || body.password || "")
+  const port = Number(body.port || 22)
+  const baseDomain = String(body.baseDomain || "sycord.site").trim()
+
+  // If credentials provided, use them; otherwise fall back to env vars and proxy
+  const hasUserCredentials = Boolean(host && password)
+
+  if (!hasUserCredentials) {
+    // Try to proxy to existing runner first
+    const upstream = await proxyRunner("/api/setup", { method: "POST" })
+    if (upstream.status !== 503) {
+      return upstream
+    }
   }
 
   try {
-    const ssh = await probeDeployVmSsh()
+    // Build SSH input from user credentials or env vars
+    const sshInput: VmSetupInput | undefined = hasUserCredentials
+      ? { host, password, port, baseDomain, runnerToken: generateRunnerToken() }
+      : undefined
+
+    const ssh = await probeDeployVmSsh(sshInput)
     if (!ssh.reachable) {
       return NextResponse.json(
         {
           success: false,
-          error: "Root SSH login to deploy VM failed",
+          error: hasUserCredentials
+            ? "SSH login failed. Check VM IP and root password."
+            : "Root SSH login to deploy VM failed",
           phase: "ssh-login",
           debug: {
             sshReachable: false,
@@ -60,13 +86,16 @@ export async function POST() {
       )
     }
 
-    const result = await bootstrapDeployVmRunner()
+    const result = await bootstrapDeployVmRunner(sshInput)
     return NextResponse.json(
       {
         success: result.success,
         message: result.success ? "Deploy VM runner bootstrapped over root SSH" : "Deploy VM runner bootstrap failed",
         phase: result.phase,
         logs: result.logs,
+        runnerUrl: result.runnerUrl,
+        runnerToken: result.runnerToken,
+        baseDomain: result.baseDomain,
         debug: {
           sshReachable: true,
           sshError: ssh.error,
