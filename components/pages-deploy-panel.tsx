@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import {
   Rocket,
@@ -258,6 +259,7 @@ export type PagesDeployPanelProps = {
   onDeploy: () => void
   onGoToAI: () => void
   isDeploying: boolean
+  deployProgress?: number
   deployError: string | null
   deployResult?: DeployStatus | null
   deploymentRuntime?: DeployStatus | null
@@ -274,6 +276,7 @@ export function PagesDeployPanel({
   onDeploy,
   onGoToAI,
   isDeploying,
+  deployProgress = 0,
   deployError,
   deployResult,
   deploymentRuntime,
@@ -343,6 +346,15 @@ export function PagesDeployPanel({
           </Button>
         </div>
       </div>
+
+
+      {isDeploying && (
+        <Progress
+          value={Math.max(deployProgress, 8)}
+          className="h-2 overflow-hidden rounded-full bg-zinc-800/80"
+          aria-label="Deployment progress"
+        />
+      )}
 
       {runtime && (
         <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden">

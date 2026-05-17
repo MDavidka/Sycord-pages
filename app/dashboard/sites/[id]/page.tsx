@@ -84,7 +84,6 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
-import { DeployLiveLogPanel } from "@/components/deploy-live-log-panel"
 import { PagesDeployPanel } from "@/components/pages-deploy-panel"
 
 const headerComponents = {
@@ -662,7 +661,6 @@ export default function SiteSettingsPage() {
   const [deployError, setDeployError] = useState<string | null>(null)
   const [deployResult, setDeployResult] = useState<{ url?: string; message?: string; build?: boolean; running?: boolean; health_ok?: boolean; domain?: string; port?: number } | null>(null)
   const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
-  const [deployPanelOpen, setDeployPanelOpen] = useState(false)
   const deploymentMode = useMemo(
     () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "api") as DeploymentMode,
     [generatedPages, project],
@@ -1102,10 +1100,23 @@ export default function SiteSettingsPage() {
   const handleDeploy = async () => {
     if (isDeploying) return
 
+    let progressTimer: ReturnType<typeof setInterval> | null = null
+
     try {
+      setIsDeploying(true)
+      setDeployProgress(8)
+      setDeploySuccess(false)
+      setDeployResult(null)
+      setDeployError(null)
+      setHasDeployError(false)
+
+      progressTimer = setInterval(() => {
+        setDeployProgress((current) => Math.min(current + 8, 88))
+      }, 900)
+
       if (generatedPages.length > 0) {
         for (const page of generatedPages) {
-          await fetch(`/api/projects/${id}/pages`, {
+          const saveResponse = await fetch(`/api/projects/${id}/pages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1114,19 +1125,68 @@ export default function SiteSettingsPage() {
               usedFor: page.usedFor || "",
             }),
           })
+
+          if (!saveResponse.ok) {
+            const error = await saveResponse.json().catch(() => ({}))
+            throw new Error(error?.message || error?.error || `Failed to save ${page.name}`)
+          }
         }
       }
-      setIsDeploying(true)
-      setDeployProgress(0)
-      setDeploySuccess(false)
-      setDeployResult(null)
-      setDeployError(null)
+
+      setDeployProgress((current) => Math.max(current, 35))
+
+      const response = await fetch("/api/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id }),
+      })
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok || data.success === false) {
+        throw new Error(data?.error || data?.message || "Deployment failed")
+      }
+
+      setDeployProgress(100)
+      setDeploySuccess(true)
+      setDeployResult({
+        url: data.url || data.cloudflareUrl,
+        domain: data.domain,
+        message: data.message || `Deployment complete (${formatDeploymentMode(deploymentMode)})`,
+        build: true,
+        running: true,
+        health_ok: true,
+      })
+      setDeploymentRuntime((current: any) => ({
+        ...(current || {}),
+        mode: "api",
+        domain: data.domain,
+        url: data.url || data.cloudflareUrl,
+        status: "deployed",
+        health: "healthy",
+        message: data.message || null,
+        repoId: data.repoId || current?.repoId || null,
+      }))
+      if (data.url || data.cloudflareUrl) {
+        setProject((prev: any) => ({ ...prev, cloudflareUrl: data.url || data.cloudflareUrl, githubRepoId: data.repoId || prev?.githubRepoId }))
+      }
       setHasDeployError(false)
-      setDeployPanelOpen(true)
+      fetchLogs(data.repoId || project?.githubRepoId)
     } catch (err: any) {
-      setDeployError(err.message || "Deployment failed")
+      const message = err?.message || "Deployment failed"
+      setDeployError(message)
       setDeployProgress(0)
       setHasDeployError(true)
+      setDeploymentRuntime((current: any) => ({
+        ...(current || {}),
+        mode: "api",
+        status: "failed",
+        health: "unhealthy",
+        lastDeployError: message,
+      }))
+      fetchLogs(project?.githubRepoId)
+    } finally {
+      if (progressTimer) clearInterval(progressTimer)
+      setIsDeploying(false)
     }
   }
 
@@ -1240,55 +1300,14 @@ export default function SiteSettingsPage() {
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
     >
-      <DeployLiveLogPanel
-        open={deployPanelOpen}
-        onOpenChange={(open) => {
-          setDeployPanelOpen(open)
-          if (!open) {
-            setIsDeploying(false)
-          }
-        }}
-        projectId={String(id)}
-        projectName={project?.businessName || project?.name}
-        onSuccess={(streamResult) => {
-          setIsDeploying(false)
-          setDeploySuccess(true)
-          setDeployProgress(100)
-          setDeployResult({
-            url: streamResult.url,
-            domain: streamResult.domain,
-            message: `Deployment complete (${formatDeploymentMode(deploymentMode)})`,
-            build: true,
-            running: true,
-            health_ok: true,
-          })
-          setDeploymentRuntime((current: any) => ({
-            ...(current || {}),
-            mode: "api",
-            domain: streamResult.domain,
-            status: "running",
-            health: "healthy",
-          }))
-          setProject((prev: any) => ({ ...prev, cloudflareUrl: streamResult.url }))
-          setHasDeployError(false)
-          fetchLogs(streamResult.repoId || project?.githubRepoId)
-        }}
-        onFinish={(outcome) => {
-          setIsDeploying(false)
-          if (!outcome.success) {
-            setDeployError(outcome.error || "Deployment failed")
-            setHasDeployError(true)
-            setDeploymentRuntime((current: any) => ({
-              ...(current || {}),
-              mode: "api",
-              status: "failed",
-              health: "unhealthy",
-              lastDeployError: outcome.error || "Deployment failed",
-            }))
-            fetchLogs(outcome.result?.repoId || project?.githubRepoId)
-          }
-        }}
-      />
+      {isDeploying && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[70] h-1 bg-white/10">
+          <div
+            className="h-full rounded-r-full bg-primary transition-[width] duration-500 ease-out"
+            style={{ width: `${Math.max(deployProgress, 8)}%` }}
+          />
+        </div>
+      )}
       {/* Desktop Sidebar - Rolling Animation Style */}
       <aside 
         className="hidden md:block shrink-0 transition-[width] duration-300 ease-out" 
@@ -2365,6 +2384,7 @@ export default function SiteSettingsPage() {
                 onDeploy={handleDeploy}
                 onGoToAI={() => setActiveTab("ai")}
                 isDeploying={isDeploying}
+                deployProgress={deployProgress}
                 deployError={deployError}
                 deployResult={deployResult}
                 deploymentRuntime={deploymentRuntime}
