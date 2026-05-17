@@ -116,14 +116,14 @@ const paymentOptions = [
   { id: "bank", name: "Bank Transfer", description: "Direct bank transfers" },
 ]
 
-type DeploymentMode = "next-server"
+type DeploymentMode = "api"
 
 const formatDeploymentMode = (_mode?: string | null) => (
-  "Next server"
+  "API deployment"
 )
 
 const detectDeploymentModeFromPages = (_pages: GeneratedPage[]): DeploymentMode => {
-  return "next-server"
+  return "api"
 }
 
 // File tree node interface
@@ -664,7 +664,7 @@ export default function SiteSettingsPage() {
   const [deploymentRuntime, setDeploymentRuntime] = useState<any>(null)
   const [deployPanelOpen, setDeployPanelOpen] = useState(false)
   const deploymentMode = useMemo(
-    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "next-server") as DeploymentMode,
+    () => (generatedPages.length > 0 ? detectDeploymentModeFromPages(generatedPages) : "api") as DeploymentMode,
     [generatedPages, project],
   )
 
@@ -674,7 +674,7 @@ export default function SiteSettingsPage() {
 
   const runnerErrorDetails = useMemo(() => {
     if (!Array.isArray(logs) || logs.length === 0) return null
-    const errorPattern = /(build error occurred|turbopack build failed|failed to type check|module not found|cannot find module|npm run build exited|error evaluating node\.js code)/i
+    const errorPattern = /(deployment failed|companion server|repo not found|missing git credentials|invalid repo_id|error|exception)/i
     const relevant = logs.filter((line) => errorPattern.test(line))
     if (relevant.length === 0) return null
     return relevant.slice(-10).join("\n")
@@ -771,7 +771,7 @@ export default function SiteSettingsPage() {
     if (!targetId) return
 
     try {
-        const res = await fetch(`/api/admin/vps-runner/websites/${targetId}/logs?type=deploy&limit=120`)
+        const res = await fetch(`/api/deploy/${targetId}/logs?limit=120`)
         if (res.ok) {
             const data = await res.json()
             if (data.success && Array.isArray(data.logs)) {
@@ -790,7 +790,7 @@ export default function SiteSettingsPage() {
 
                 // Simple error detection in logs
                 const combined = combinedLogs.toLowerCase()
-                const successFound = combined.includes('deployment complete') || combined.includes('health check passed') || combined.includes('runner ready')
+                const successFound = combined.includes('deployment complete') || combined.includes('success') || combined.includes('companion server')
 
                 const errorFound = !successFound && data.logs.some((log: string) =>
                     log.toLowerCase().includes('error') ||
@@ -1264,14 +1264,14 @@ export default function SiteSettingsPage() {
           })
           setDeploymentRuntime((current: any) => ({
             ...(current || {}),
-            mode: "next-server",
+            mode: "api",
             domain: streamResult.domain,
             status: "running",
             health: "healthy",
           }))
           setProject((prev: any) => ({ ...prev, cloudflareUrl: streamResult.url }))
           setHasDeployError(false)
-          fetchLogs((project?._id || id) as string)
+          fetchLogs(streamResult.repoId || project?.githubRepoId)
         }}
         onFinish={(outcome) => {
           setIsDeploying(false)
@@ -1280,12 +1280,12 @@ export default function SiteSettingsPage() {
             setHasDeployError(true)
             setDeploymentRuntime((current: any) => ({
               ...(current || {}),
-              mode: "next-server",
+              mode: "api",
               status: "failed",
               health: "unhealthy",
               lastDeployError: outcome.error || "Deployment failed",
             }))
-            fetchLogs((project?._id || id) as string)
+            fetchLogs(outcome.result?.repoId || project?.githubRepoId)
           }
         }}
       />

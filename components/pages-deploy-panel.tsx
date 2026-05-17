@@ -246,6 +246,7 @@ export type DeployStatus = {
   lastDeployError?: string | null
   lastDeployAt?: string
   warning?: string | null
+  message?: string | null
 }
 
 export type PagesDeployPanelProps = {
@@ -297,7 +298,7 @@ export function PagesDeployPanel({
   }
 
   const runtime = deployResult || deploymentRuntime
-  const isRunning = runtime?.status === "running" || runtime?.running === true
+  const isRunning = runtime?.status === "running" || runtime?.status === "deployed" || runtime?.running === true
   const isHealthy = runtime?.health === "healthy" || runtime?.health_ok === true
   const hasLiveUrl = Boolean(runtime?.url)
 
@@ -307,7 +308,7 @@ export function PagesDeployPanel({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Pages</h2>
           <p className="text-sm text-zinc-500 mt-0.5">
-            {pages.length} file{pages.length !== 1 ? "s" : ""} · Next.js server deployment
+            {pages.length} file{pages.length !== 1 ? "s" : ""} · Companion Server API deployment
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -356,18 +357,18 @@ export function PagesDeployPanel({
                 )}
               />
               <span className="text-sm font-medium text-zinc-200">
-                {isRunning && isHealthy ? "Live" : isRunning ? "Running" : "Offline"}
+                {isRunning && isHealthy ? "Live" : isRunning ? "Deploying" : "Offline"}
               </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
               <span className="flex items-center gap-1">
                 <Activity className="h-3 w-3" />
-                Build: {runtime?.build || (isRunning ? "ok" : "—")}
+                API: {runtime?.message || (isRunning ? "deployed" : "—")}
               </span>
               <span className="flex items-center gap-1">
                 <Server className="h-3 w-3" />
-                Server: {runtime?.status || runtime?.running ? "running" : "stopped"}
+                Status: {runtime?.status || (runtime?.running ? "running" : "—")}
               </span>
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="h-3 w-3" />
@@ -436,7 +437,7 @@ export function PagesDeployPanel({
                   Deployment Error
                 </p>
                 <pre className="mt-2 text-xs whitespace-pre-wrap break-words rounded-lg bg-black/40 border border-red-500/15 p-3 text-red-200/80 max-h-48 overflow-y-auto font-mono">
-                  {deployError || runnerErrorDetails || "Deployment failed. Check runner logs for details."}
+                  {deployError || runnerErrorDetails || "Deployment failed. Check Companion Server logs for details."}
                 </pre>
                 {onFetchLogs && (
                   <Button
@@ -446,7 +447,7 @@ export function PagesDeployPanel({
                     className="mt-3 h-7 text-xs gap-1.5 border-red-500/20 text-red-300 hover:text-red-200"
                   >
                     <RefreshCw className="h-3 w-3" />
-                    Refresh Runner Logs
+                    Refresh API Logs
                   </Button>
                 )}
               </div>

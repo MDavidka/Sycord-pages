@@ -5,12 +5,11 @@ import * as Sentry from "@sentry/nextjs"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import {
-  callRunnerDeploy,
+  callCompanionDeploy,
+  callCompanionHealth,
   getProjectEnvVars,
-  isSuccessfulRunnerDeployResponse,
-  normalizeRunnerDeployResponse,
   prepareProjectDeployFiles,
-  validateNextServerDeployFiles,
+  validateApiDeployFiles,
 } from "@/lib/deploy/runner-client"
 import { deployViaGitTree, ensureRepo, getEnvGitHubCredentials } from "@/lib/deploy/github"
 
@@ -33,13 +32,13 @@ function captureDeployFailure(input: {
   stage?: string
   response?: any
 }) {
-  Sentry.captureException(new Error(`Runner deploy failed: ${input.error}`), {
+  Sentry.captureException(new Error(`Companion deploy failed: ${input.error}`), {
     tags: {
       area: "deploy",
       project_id: input.projectId,
       repo: input.repo,
       stage: input.stage || "unknown",
-      deployment_mode: "next-server",
+      deployment_mode: "api",
     },
     extra: {
       response: input.response,
@@ -48,13 +47,18 @@ function captureDeployFailure(input: {
 }
 
 export async function POST(request: Request) {
+  let sentryProjectId = "unknown"
+  let sentryRepo = "unknown"
+
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
+    const userId = (session?.user as { id?: string } | undefined)?.id
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { projectId } = await request.json()
+    sentryProjectId = projectId || "unknown"
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
     }
@@ -66,7 +70,7 @@ export async function POST(request: Request) {
 
     const client = await clientPromise
     const db = client.db()
-    const user = await db.collection("users").findOne({ id: session.user.id })
+    const user = await db.collection("users").findOne({ id: userId })
     const project = user?.projects?.find((item: any) => item._id.toString() === projectId)
 
     if (!project) {
@@ -74,132 +78,20 @@ export async function POST(request: Request) {
     }
 
     const files = prepareProjectDeployFiles(project)
-    const validationErrors = validateNextServerDeployFiles(files)
+    const validationErrors = validateApiDeployFiles(files)
     if (validationErrors.length > 0) {
       return NextResponse.json({ success: false, error: validationErrors.join("; ") }, { status: 400 })
     }
 
     const repo = slugifyRepoName(project, projectId)
+    sentryRepo = repo
     const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
     const envVars = getProjectEnvVars(project)
-
-    const runner = await callRunnerDeploy(projectId, {
-      files,
-      subdomain: repo,
-      deployment_mode: "next-server",
-      ...(Object.keys(envVars).length > 0 ? { env_vars: envVars } : {}),
-    })
-
-    const normalized = normalizeRunnerDeployResponse(runner.raw)
-    const failedStage = normalized.build.ok
-      ? normalized.publicHealth && (!normalized.publicHealth.ok || !normalized.publicHealth.htmlOk)
-        ? "public-health-check"
-        : "health-check"
-      : "building"
-
-    if (!isSuccessfulRunnerDeployResponse(normalized.raw)) {
-      const error = normalized.error || normalized.build.error || normalized.health.error || "Runner deployment failed"
-      captureDeployFailure({ projectId, repo, error, stage: failedStage, response: normalized.raw })
-      await db.collection("users").updateOne(
-        { id: session.user.id, "projects._id": new ObjectId(projectId) },
-        {
-          $set: {
-            "projects.$.deploymentMode": "next-server",
-            "projects.$.deploymentRuntime": {
-              mode: "next-server",
-              domain: normalized.domain,
-              url: normalized.url,
-              port: normalized.port,
-              processName: normalized.processName,
-              status: "failed",
-              health: normalized.health.ok && normalized.health.htmlOk ? "healthy" : "unhealthy",
-              localHealth: normalized.localHealth || null,
-              publicHealth: normalized.publicHealth || null,
-              warning: normalized.warning || null,
-              lastHealthCheckAt: new Date(),
-              lastDeployAt: new Date(),
-              lastDeployError: error,
-            },
-            "projects.$.lastDeployLogsSummary": summarizeLogs([
-              ...normalized.logs.deploy,
-              ...normalized.logs.build,
-              ...normalized.logs.error,
-            ]),
-            "projects.$.lastFailedStage": failedStage,
-            "projects.$.lastDeployError": error,
-            "projects.$.lastDeployWarning": normalized.warning || null,
-          },
-          $unset: {
-            "projects.$.cloudflareUrl": "",
-          },
-        },
-      )
-
-      return NextResponse.json(
-        {
-          success: false,
-          error,
-          build: normalized.build,
-          running: normalized.running,
-          health: normalized.health,
-          localHealth: normalized.localHealth,
-          publicHealth: normalized.publicHealth,
-          warning: normalized.warning,
-          health_ok: normalized.health.ok,
-          domain: normalized.domain,
-          url: normalized.url,
-          port: normalized.port,
-          logs: normalized.logs,
-          githubUrl: gitUrl,
-          repoId: String(repoId),
-          deploymentMode: "next-server",
-        },
-        { status: 502 },
-      )
-    }
 
     await deployViaGitTree(github.owner, repo, files, github.token)
 
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": new ObjectId(projectId) },
-      {
-        $set: {
-          "projects.$.githubOwner": github.owner,
-          "projects.$.githubRepo": repo,
-          "projects.$.githubRepoId": repoId,
-          "projects.$.githubUrl": gitUrl,
-          "projects.$.cloudflareUrl": normalized.url,
-          "projects.$.deploymentMode": "next-server",
-          "projects.$.deploymentRuntime": {
-            mode: "next-server",
-            domain: normalized.domain,
-            url: normalized.url,
-            port: normalized.port,
-            processName: normalized.processName,
-            status: "running",
-            health: "healthy",
-            localHealth: normalized.localHealth || null,
-            publicHealth: normalized.publicHealth || null,
-            warning: normalized.warning || null,
-            lastHealthCheckAt: new Date(),
-            lastDeployAt: new Date(),
-            lastDeployError: null,
-          },
-          "projects.$.lastDeployLogsSummary": summarizeLogs([
-            ...normalized.logs.deploy,
-            ...normalized.logs.build,
-            ...normalized.logs.health,
-          ]),
-          "projects.$.lastFailedStage": null,
-          "projects.$.lastDeployError": null,
-          "projects.$.lastDeployWarning": normalized.warning || null,
-          "projects.$.deployedAt": new Date(),
-        },
-      },
-    )
-
-    await db.collection("users").updateOne(
-      { id: session.user.id },
+      { id: userId },
       {
         $set: {
           [`git_connection.${repoId}`]: {
@@ -216,27 +108,67 @@ export async function POST(request: Request) {
       },
     )
 
+    await callCompanionHealth()
+    const companion = await callCompanionDeploy(repoId)
+    const liveUrl = companion.url
+
+    await db.collection("users").updateOne(
+      { id: userId, "projects._id": new ObjectId(projectId) },
+      {
+        $set: {
+          "projects.$.githubOwner": github.owner,
+          "projects.$.githubRepo": repo,
+          "projects.$.githubRepoId": repoId,
+          "projects.$.githubUrl": gitUrl,
+          "projects.$.cloudflareUrl": liveUrl,
+          "projects.$.deploymentMode": "api",
+          "projects.$.deploymentRuntime": {
+            mode: "api",
+            domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
+            url: liveUrl,
+            status: "deployed",
+            health: "healthy",
+            message: companion.message,
+            projectName: companion.projectName,
+            username: companion.username,
+            repoId: companion.repoId || String(repoId),
+            lastHealthCheckAt: new Date(),
+            lastDeployAt: new Date(),
+            lastDeployError: null,
+          },
+          "projects.$.lastDeployLogsSummary": summarizeLogs([companion.message || "Companion Server deployment complete"]),
+          "projects.$.lastFailedStage": null,
+          "projects.$.lastDeployError": null,
+          "projects.$.lastDeployWarning": null,
+          "projects.$.deployedAt": new Date(),
+        },
+      },
+    )
+
     return NextResponse.json({
       success: true,
-      url: normalized.url,
+      url: liveUrl,
       githubUrl: gitUrl,
-      cloudflareUrl: normalized.url,
+      cloudflareUrl: liveUrl,
       filesCount: files.length,
-      message: normalized.warning || "Deployment complete",
+      message: companion.message || "Deployment complete",
       repoId: String(repoId),
-      deploymentMode: "next-server",
-      build: { ok: true },
+      deploymentMode: "api",
       running: true,
       health_ok: true,
-      health: normalized.health,
-      localHealth: normalized.localHealth,
-      publicHealth: normalized.publicHealth,
-      warning: normalized.warning,
-      domain: normalized.domain,
-      port: normalized.port,
-      processName: normalized.processName,
+      health: { ok: true, htmlOk: true },
+      domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
+      projectName: companion.projectName,
+      username: companion.username,
     })
   } catch (error: any) {
+    captureDeployFailure({
+      projectId: sentryProjectId,
+      repo: sentryRepo,
+      error: error?.message || "Deploy failed",
+      stage: "companion-api",
+      response: error?.response,
+    })
     return NextResponse.json({ error: error?.message || "Deploy failed" }, { status: 500 })
   }
 }

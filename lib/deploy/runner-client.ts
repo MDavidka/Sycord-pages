@@ -1,6 +1,6 @@
-const DEFAULT_RUNNER_URL = process.env.VPS_SERVER_URL || "https://server.sycord.site"
+const DEFAULT_COMPANION_API_BASE = process.env.SYCORD_DEPLOY_API_BASE || "https://sycord.site"
 
-export type DeploymentMode = "next-server"
+export type DeploymentMode = "api"
 
 export type DeployFile = {
   path: string
@@ -12,54 +12,13 @@ export type ProjectEnvVar = {
   value?: string
 }
 
-export type RunnerConfig = {
-  runnerUrl?: string
-  runnerToken?: string
-}
-
-export type RunnerDeployPayload = {
-  files: DeployFile[]
-  subdomain: string
-  deployment_mode: DeploymentMode
-  env_vars?: Record<string, string>
-}
-
-export type RunnerHealth = {
-  ok: boolean
-  htmlOk: boolean
-  status?: number | null
-  contentType?: string | null
-  latencyMs?: number | null
-  error?: string | null
-  detail?: string | null
-  url?: string | null
-  protocol?: "https" | "http" | null
-}
-
-export type RunnerDeployResponse = {
+export type CompanionDeployResponse = {
   success: boolean
-  domain: string | null
+  message: string | null
+  projectName: string | null
   url: string | null
-  port: number | null
-  running: boolean
-  build: {
-    ok: boolean
-    logs: string[]
-    error?: string | null
-  }
-  health: RunnerHealth
-  localHealth?: RunnerHealth | null
-  publicHealth?: RunnerHealth | null
-  processName: string | null
-  logs: {
-    deploy: string[]
-    build: string[]
-    runtime: string[]
-    error: string[]
-    health: string[]
-  }
-  error?: string | null
-  warning?: string | null
+  username: string | null
+  repoId: string | null
   raw: any
 }
 
@@ -71,14 +30,8 @@ export type DeployStreamEvent =
         | "preparing"
         | "preparing-files"
         | "github"
-        | "vm-connect"
-        | "writing-files"
-        | "installing"
-        | "building"
-        | "allocating-port"
-        | "starting-server"
-        | "configuring-proxy"
         | "health-check"
+        | "deploy-api"
         | "saving"
         | "complete"
         | "failed"
@@ -88,7 +41,7 @@ export type DeployStreamEvent =
     }
   | {
       type: "log"
-      source: "sycord" | "vm" | "runner" | "install" | "build" | "runtime" | "proxy" | "health" | "github"
+      source: "sycord" | "api" | "health" | "github"
       line: string
       timestamp: string
     }
@@ -97,10 +50,8 @@ export type DeployStreamEvent =
       success: true
       url: string
       domain: string
-      port?: number
+      repoId?: string
       health: unknown
-      localHealth?: unknown
-      publicHealth?: unknown
       warning?: string
       timestamp: string
     }
@@ -109,8 +60,6 @@ export type DeployStreamEvent =
       error: string
       stage?: string
       logs?: string[]
-      localHealth?: unknown
-      publicHealth?: unknown
       timestamp: string
     }
 
@@ -120,6 +69,23 @@ function now() {
 
 function stripLeadingSlash(input: string) {
   return input.replace(/^\/+/, "")
+}
+
+function toAbsoluteUrl(urlOrDomain: string | null | undefined) {
+  if (!urlOrDomain) return null
+  return /^https?:\/\//.test(urlOrDomain) ? urlOrDomain : `https://${urlOrDomain}`
+}
+
+function getCompanionApiBase() {
+  return (process.env.SYCORD_DEPLOY_API_BASE || DEFAULT_COMPANION_API_BASE).replace(/\/+$/, "")
+}
+
+function assertNumericRepoId(repoId: string | number) {
+  const value = String(repoId)
+  if (!/^\d+$/.test(value)) {
+    throw new Error("Companion Server repository IDs must be numeric strings")
+  }
+  return value
 }
 
 export function prepareProjectDeployFiles(project: any): DeployFile[] {
@@ -132,9 +98,8 @@ export function prepareProjectDeployFiles(project: any): DeployFile[] {
     }))
 }
 
-export function validateNextServerDeployFiles(files: DeployFile[]): string[] {
+export function validateApiDeployFiles(files: DeployFile[]): string[] {
   const errors: string[] = []
-  const fileMap = new Map(files.map((file) => [file.path, file.content]))
 
   if (!files.length) {
     errors.push("No files to deploy")
@@ -151,33 +116,6 @@ export function validateNextServerDeployFiles(files: DeployFile[]): string[] {
     }
   }
 
-  const nextConfig = fileMap.get("next.config.mjs") || ""
-  if (!nextConfig) {
-    errors.push("Missing next.config.mjs")
-  } else if (/output\s*:\s*["']export["']/.test(nextConfig)) {
-    errors.push('next.config.mjs must not contain output: "export"')
-  }
-
-  const packageJson = fileMap.get("package.json") || ""
-  try {
-    const pkg = JSON.parse(packageJson) as { scripts?: Record<string, string> }
-    if (pkg.scripts?.build !== "next build") {
-      errors.push('package.json must include `build: "next build"`')
-    }
-    if (!pkg.scripts?.start || !/next start\b/.test(pkg.scripts.start) || !/-H 0\.0\.0\.0/.test(pkg.scripts.start)) {
-      errors.push('package.json must include `start: "next start -H 0.0.0.0"`')
-    }
-  } catch {
-    errors.push("Missing or invalid package.json")
-  }
-
-  if (!fileMap.has("app/page.tsx")) {
-    errors.push("Missing app/page.tsx")
-  }
-  if (!fileMap.has("app/layout.tsx")) {
-    errors.push("Missing app/layout.tsx")
-  }
-
   return errors
 }
 
@@ -192,145 +130,42 @@ export function getProjectEnvVars(project: any): Record<string, string> {
   return envVars
 }
 
-function toAbsoluteUrl(urlOrDomain: string | null | undefined) {
-  if (!urlOrDomain) return null
-  return /^https?:\/\//.test(urlOrDomain) ? urlOrDomain : `https://${urlOrDomain}`
-}
-
-function toStringArray(input: unknown): string[] {
-  return Array.isArray(input) ? input.map((value) => String(value)) : []
-}
-
-function toNumberOrNull(input: unknown) {
-  return typeof input === "number" && Number.isFinite(input) ? input : null
-}
-
-function normalizeHealth(input: any, topLevelFallback?: any): RunnerHealth {
-  const source = input || {}
-  const fallback = topLevelFallback || {}
-  return {
-    ok: source?.ok === true || fallback?.health_ok === true,
-    htmlOk: source?.htmlOk === true || source?.html_ok === true || fallback?.html_ok === true,
-    status: toNumberOrNull(source?.status ?? source?.statusCode),
-    contentType: source?.contentType || source?.content_type || null,
-    latencyMs: toNumberOrNull(source?.latencyMs ?? source?.latency_ms),
-    error: source?.error || null,
-    detail: source?.detail || null,
-    url: source?.url || null,
-    protocol: source?.protocol === "https" || source?.protocol === "http" ? source.protocol : null,
-  }
-}
-
-export function normalizeRunnerDeployResponse(input: any): RunnerDeployResponse {
-  const domain = input?.domain ? String(input.domain).replace(/^https?:\/\//, "") : null
-  const localHealth = input?.localHealth ? normalizeHealth(input.localHealth) : null
-  const publicHealth = input?.publicHealth ? normalizeHealth(input.publicHealth) : null
-  const health = normalizeHealth(input?.health, input)
-  const url = toAbsoluteUrl(input?.url || publicHealth?.url || input?.domain || input?.cloudflareUrl || null)
-  const buildOk = input?.build?.ok === true || input?.build?.built === true || input?.build === true
-  const runtimeLogs = toStringArray(input?.runtimeLogs ?? input?.logs?.runtime)
-  const buildLogs = toStringArray(input?.buildLogs ?? input?.build?.logs)
-  const deployLogs = toStringArray(input?.deployLogs ?? input?.logs)
-  const errorLogs = toStringArray(input?.errorLogs ?? input?.logs?.error)
-  const healthLogs = toStringArray(input?.healthLogs ?? input?.logs?.health)
-
+export function normalizeCompanionDeployResponse(input: any, repoId?: string): CompanionDeployResponse {
+  const url = toAbsoluteUrl(input?.url || input?.domain || input?.cloudflareUrl || null)
   return {
     success: input?.success === true,
-    domain,
+    message: input?.message ? String(input.message) : null,
+    projectName: input?.project || input?.projectName || input?.name || null,
     url,
-    port: typeof input?.port === "number" ? input.port : null,
-    running: input?.running === true,
-    build: {
-      ok: buildOk,
-      logs: buildLogs,
-      error: input?.build?.error || null,
-    },
-    health,
-    localHealth,
-    publicHealth,
-    processName: input?.processName || input?.process_name || null,
-    logs: {
-      deploy: deployLogs,
-      build: buildLogs,
-      runtime: runtimeLogs,
-      error: errorLogs,
-      health: healthLogs,
-    },
-    error: input?.error || input?.message || health.error || publicHealth?.error || null,
-    warning: input?.warning || null,
+    username: input?.username || null,
+    repoId: input?.repo_id ? String(input.repo_id) : repoId || null,
     raw: input,
   }
 }
 
-export function isSuccessfulRunnerDeployResponse(input: any): boolean {
-  const normalized = normalizeRunnerDeployResponse(input)
-  const publicHealthOk = normalized.publicHealth
-    ? normalized.publicHealth.ok && normalized.publicHealth.htmlOk
-    : true
-  return (
-    normalized.success &&
-    normalized.build.ok &&
-    normalized.running &&
-    normalized.health.ok &&
-    normalized.health.htmlOk &&
-    publicHealthOk &&
-    Boolean(normalized.domain)
-  )
-}
-
-function getRunnerHeaders(tokenOrExtra?: string | HeadersInit, extra?: HeadersInit): HeadersInit {
-  const headers = new Headers(typeof tokenOrExtra === "string" ? extra : tokenOrExtra)
-  headers.set("Content-Type", "application/json")
-  const token = typeof tokenOrExtra === "string" ? tokenOrExtra : process.env.VPS_RUNNER_TOKEN
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`)
+export async function callCompanionHealth() {
+  const response = await fetch(`${getCompanionApiBase()}/api/health`, { headers: { Accept: "application/json" } })
+  const json = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(json?.error || json?.message || `Companion Server health check failed with HTTP ${response.status}`)
   }
-  return headers
+  return json
 }
 
-export function getRunnerUrl(project?: { deploymentVm?: RunnerConfig } | null): string {
-  return (
-    project?.deploymentVm?.runnerUrl ||
-    process.env.VPS_SERVER_URL ||
-    DEFAULT_RUNNER_URL
-  )
-}
-
-export function getRunnerToken(project?: { deploymentVm?: RunnerConfig } | null): string | undefined {
-  return project?.deploymentVm?.runnerToken || process.env.VPS_RUNNER_TOKEN
-}
-
-export async function callRunnerDeploy(
-  projectId: string,
-  payload: RunnerDeployPayload,
-  config?: RunnerConfig,
-): Promise<RunnerDeployResponse> {
-  const runnerUrl = config?.runnerUrl || DEFAULT_RUNNER_URL
-  const response = await fetch(`${runnerUrl}/api/deploy/${projectId}`, {
+export async function callCompanionDeploy(repoId: string | number): Promise<CompanionDeployResponse> {
+  const numericRepoId = assertNumericRepoId(repoId)
+  const response = await fetch(`${getCompanionApiBase()}/api/deploy/${numericRepoId}`, {
     method: "POST",
-    headers: getRunnerHeaders(config?.runnerToken),
-    body: JSON.stringify(payload),
+    headers: { Accept: "application/json" },
   })
-
-  const json = await response.json().catch(() => ({ success: false, error: "Invalid runner response" }))
-  const normalized = normalizeRunnerDeployResponse(json)
-  if (!response.ok && !normalized.error) {
-    normalized.error = `Runner request failed with HTTP ${response.status}`
+  const json = await response.json().catch(() => ({ success: false, error: "Invalid Companion Server response" }))
+  const normalized = normalizeCompanionDeployResponse(json, numericRepoId)
+  if (!response.ok || !normalized.success) {
+    throw Object.assign(new Error(json?.error || json?.message || `Companion Server deployment failed with HTTP ${response.status}`), {
+      response: json,
+    })
   }
   return normalized
-}
-
-export async function callRunnerDeployStream(
-  projectId: string,
-  payload: RunnerDeployPayload,
-  config?: RunnerConfig,
-): Promise<Response> {
-  const runnerUrl = config?.runnerUrl || DEFAULT_RUNNER_URL
-  return fetch(`${runnerUrl}/api/deploy/${projectId}/stream`, {
-    method: "POST",
-    headers: getRunnerHeaders(config?.runnerToken, { Accept: "text/event-stream" }),
-    body: JSON.stringify(payload),
-  })
 }
 
 export function createStageEvent(
@@ -361,10 +196,8 @@ export function createErrorEvent(error: string, stage?: string, logs?: string[])
 export function createResultEvent(result: {
   url: string
   domain: string
-  port?: number | null
+  repoId?: string | null
   health: unknown
-  localHealth?: unknown
-  publicHealth?: unknown
   warning?: string
 }): DeployStreamEvent {
   return {
@@ -372,10 +205,8 @@ export function createResultEvent(result: {
     success: true,
     url: result.url,
     domain: result.domain,
-    port: result.port ?? undefined,
+    repoId: result.repoId ?? undefined,
     health: result.health,
-    localHealth: result.localHealth,
-    publicHealth: result.publicHealth,
     warning: result.warning,
     timestamp: now(),
   }
@@ -385,30 +216,10 @@ export function toSseChunk(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
-export function parseSseChunk(chunk: string): Array<{ event: string; data: any }> {
-  const events: Array<{ event: string; data: any }> = []
-  const blocks = chunk.split("\n\n")
-  for (const block of blocks) {
-    if (!block.trim()) continue
-    const lines = block.split("\n")
-    const eventLine = lines.find((line) => line.startsWith("event:"))
-    const dataLine = lines.find((line) => line.startsWith("data:"))
-    if (!eventLine || !dataLine) continue
-    const event = eventLine.slice(6).trim()
-    const rawData = dataLine.slice(5).trim()
-    try {
-      events.push({ event, data: JSON.parse(rawData) })
-    } catch {
-      events.push({ event, data: { raw: rawData } })
-    }
-  }
-  return events
-}
-
 export function redactSecrets(input: string): string {
   return input
     .replace(/(token|secret|apikey|api_key|password)\s*[:=]\s*([^\s]+)/gi, "$1=[redacted]")
-    .replace(/(TURSO_AUTH_TOKEN|GITHUB_TOKEN|GITHUB_API_TOKEN|DATABASE_URL|VPS_RUNNER_TOKEN)=([^\s]+)/g, "$1=[redacted]")
+    .replace(/(TURSO_AUTH_TOKEN|GITHUB_TOKEN|GITHUB_API_TOKEN|DATABASE_URL)=([^\s]+)/g, "$1=[redacted]")
     .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "[redacted-database-url]")
     .replace(/libsql:\/\/[^\s]+/gi, "[redacted-database-url]")
 }
