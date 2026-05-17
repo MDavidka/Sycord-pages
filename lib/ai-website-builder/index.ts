@@ -20,6 +20,7 @@ import type {
   ComponentNode,
   CtaPlan,
   DesignBrief,
+  DesignDirection,
   EnvVarRequirement,
   GeneratedProjectManifest,
   IntegrationKind,
@@ -38,6 +39,7 @@ import type {
 } from "./types"
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
 import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
+import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection } from "./design-directions"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
@@ -45,6 +47,7 @@ import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBase
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
 export type {
   BuilderOptions,
+  DesignDirection,
   EnvVarRequirement,
   GeneratedProjectManifest,
   IntegrationPlan,
@@ -118,7 +121,7 @@ function isProvidedModel(model: ModelSelection | undefined): model is ModelSelec
 
 function pickModel(opts: BuilderOptions): ModelSelection {
   if (isProvidedModel(opts.model)) return opts.model
-  return DEFAULT_BEST_MODEL
+  return opts.quality === "fast" ? FALLBACK_MODEL : DEFAULT_BEST_MODEL
 }
 
 async function callAIAgent(
@@ -310,9 +313,10 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
   const kind: SectionKind = ALLOWED_KINDS.has(kindCandidate) ? kindCandidate : fallbackKind
   const items = normalizeSectionItems(r.items)
   const highlights = Array.isArray(r.highlights) ? (r.highlights as unknown[]).map((h) => safeText(h, "")).filter(Boolean) : undefined
+  const variant = safeText(r.variant, "") || undefined
   return {
     kind,
-    variant: safeText(r.variant, "") || undefined,
+    variant,
     eyebrow: safeText(r.eyebrow, "") || undefined,
     heading: safeText(r.heading, "") || undefined,
     subheading: safeText(r.subheading, "") || undefined,
@@ -325,7 +329,7 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
     components: Array.isArray(r.components) ? (r.components as unknown[]).map((c) => safeText(c, "")).filter(Boolean) : undefined,
     items,
     imageHint: safeText(r.imageHint, "") || undefined,
-    componentTree: normalizeComponentNode(r.componentTree),
+    componentTree: variant === "custom" ? normalizeComponentNode(r.componentTree) : undefined,
     anchor: safeText(r.anchor, "") || undefined,
   }
 }
@@ -336,7 +340,7 @@ function defaultSectionsForRoute(routePath: string, brief: DesignBrief): Section
     return [
       {
         kind: "hero",
-        variant: "split",
+        variant: "cinematic",
         eyebrow: `Introducing ${brief.projectName}`,
         heading: brief.tagline,
         description: brief.description,
@@ -345,7 +349,7 @@ function defaultSectionsForRoute(routePath: string, brief: DesignBrief): Section
         anchor: "top",
       },
       { kind: "logos", heading: "Trusted by teams worldwide" },
-      { kind: "feature-grid", variant: "cards", eyebrow: "Why teams choose us", heading: "Built for the way you work", description: brief.description },
+      { kind: "feature-grid", variant: "asymmetric-bento", eyebrow: "Why teams choose us", heading: "Built for the way you work", description: brief.description },
       { kind: "stats", variant: "row", eyebrow: "By the numbers", heading: "Real results, week after week" },
       { kind: "testimonials", variant: "grid-cards", eyebrow: "Customer stories", heading: `What customers say about ${brief.projectName}` },
       { kind: "pricing", eyebrow: "Pricing", heading: "Simple pricing for every team" },
@@ -371,7 +375,7 @@ function defaultSectionsForRoute(routePath: string, brief: DesignBrief): Section
       ]
     case "about":
       return [
-        { kind: "hero", variant: "editorial", heading: `About ${brief.projectName}`, description: brief.description },
+        { kind: "hero", variant: "magazine-cover", heading: `About ${brief.projectName}`, description: brief.description },
         { kind: "stats", variant: "split-callout" },
         { kind: "process", variant: "timeline", heading: "How we work" },
         { kind: "team" },
@@ -396,7 +400,7 @@ function defaultSectionsForRoute(routePath: string, brief: DesignBrief): Section
     default:
       return [
         { kind: "hero", variant: "centered", heading: prettifyPath(routePath), description: brief.description, primaryCta: brief.primaryCta },
-        { kind: "feature-grid", variant: "cards" },
+        { kind: "feature-grid", variant: "proof-led" },
         { kind: "testimonials", variant: "spotlight" },
         { kind: "cta", variant: "split" },
       ]
@@ -443,10 +447,11 @@ function fallbackPagesFromBrief(brief: DesignBrief): PagePlan[] {
   }))
 }
 
-function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext): GeneratedProjectManifest {
+function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext, direction?: DesignDirection): GeneratedProjectManifest {
   const fallbackBrief = fallbackBriefFromPrompt(prompt, project)
   const root = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
   const briefRaw = (root.brief as Record<string, unknown> | undefined) ?? {}
+  const designDirection = normalizeDesignDirection(root.designDirection, direction || fallbackDesignDirection(prompt, project))
 
   const themePreset = (() => {
     const fromAi = safeText(briefRaw.themePreset, "")
@@ -581,6 +586,7 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
   return {
     brief: briefSeed,
     theme: buildTheme(themePreset),
+    designDirection,
     pages,
     deploymentMode: "next-server",
     needsDatabase,
@@ -876,7 +882,7 @@ function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
   return out
 }
 
-function buildPlannerUserContent(prompt: string, project?: ProjectContext): string {
+function buildPlannerUserContent(prompt: string, project?: ProjectContext, direction?: DesignDirection): string {
   if (!project) return prompt
   const projectBits: string[] = []
   if (project.name) projectBits.push(`Project name: ${project.name}`)
@@ -892,14 +898,43 @@ function buildPlannerUserContent(prompt: string, project?: ProjectContext): stri
   return `${prompt}\n\nHost project context (branding & existing setup — keep the project name/description consistent):\n${projectBits.join("\n")}`
 }
 
-async function planManifest(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<GeneratedProjectManifest> {
+async function planDesignDirection(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<DesignDirection> {
+  const fallback = fallbackDesignDirection(prompt, opts.project)
+  if (opts.quality === "fast") {
+    logs.push({ step: "design-direction", detail: `Fast mode using deterministic concept: ${fallback.concept}` })
+    return fallback
+  }
+
+  const model = pickModel(opts)
+  try {
+    const raw = await callAIAgent(
+      [
+        { role: "system", content: DESIGN_DIRECTION_SYSTEM_PROMPT },
+        { role: "user", content: buildPlannerUserContent(prompt, opts.project) },
+      ],
+      { model, temperature: 0.75, retries: 0 },
+    )
+    const parsed = extractJson<unknown>(raw)
+    const direction = normalizeDesignDirection(parsed, fallback)
+    logs.push({ step: "design-direction", detail: `Concept: ${direction.concept}` })
+    return direction
+  } catch (error) {
+    logs.push({
+      step: "design-direction",
+      detail: `Direction planning failed: ${error instanceof Error ? error.message : String(error)}. Using deterministic concept: ${fallback.concept}`,
+    })
+    return fallback
+  }
+}
+
+async function planManifest(prompt: string, opts: BuilderOptions, logs: PipelineLog[], direction?: DesignDirection): Promise<GeneratedProjectManifest> {
   const model = pickModel(opts)
   let raw = ""
   try {
     raw = await callAIAgent(
       [
         { role: "system", content: PLAN_SYSTEM_PROMPT },
-        { role: "user", content: buildPlannerUserContent(prompt, opts.project) },
+        { role: "user", content: buildPlannerUserContent(prompt, opts.project, direction) },
       ],
       { model, temperature: 0.6 },
     )
@@ -912,11 +947,11 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
   }
 
   const parsed = extractJson<unknown>(raw)
-  const manifest = normalizeManifest(parsed, prompt, opts.project)
+  const manifest = normalizeManifest(parsed, prompt, opts.project, direction)
   const validation = validateManifest(manifest)
   if (!validation.ok) {
     logs.push({ step: "plan-validate", detail: `Manifest invalid: ${validation.errors.join("; ")}. Repairing...` })
-    const repaired = await repairManifest(prompt, raw, validation.errors, opts, logs)
+    const repaired = await repairManifest(prompt, raw, validation.errors, opts, logs, direction)
     if (repaired) return repaired
     logs.push({ step: "plan-repair", detail: "Repair failed, using normalized fallback." })
   } else if (validation.warnings.length) {
@@ -931,6 +966,7 @@ async function repairManifest(
   errors: string[],
   opts: BuilderOptions,
   logs: PipelineLog[],
+  direction?: DesignDirection,
 ): Promise<GeneratedProjectManifest | null> {
   const model = pickModel(opts)
   try {
@@ -940,14 +976,14 @@ async function repairManifest(
         { role: "system", content: PLAN_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Original prompt:\n${buildPlannerUserContent(prompt, opts.project)}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
+          content: `Original prompt:\n${buildPlannerUserContent(prompt, opts.project, direction)}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
         },
       ],
       { model, temperature: 0.2, retries: 0 },
     )
     const parsed = extractJson<unknown>(raw)
     if (!parsed) return null
-    const manifest = normalizeManifest(parsed, prompt, opts.project)
+    const manifest = normalizeManifest(parsed, prompt, opts.project, direction)
     const v = validateManifest(manifest)
     if (v.ok) {
       logs.push({ step: "plan-repair", detail: "Repair succeeded." })
@@ -1045,8 +1081,12 @@ export async function runAIWebsiteBuilder(
     detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
   })
 
-  // 1. Plan (with repair).
-  const manifest = await planManifest(prompt, options, logs)
+  const quality = options.quality || "best"
+  logs.push({ step: "quality", detail: `${quality === "fast" ? "Fast" : "Best"} generation pipeline selected` })
+
+  // 1. Design direction + plan (with repair).
+  const direction = await planDesignDirection(prompt, { ...options, quality }, logs)
+  const manifest = await planManifest(prompt, { ...options, quality }, logs, direction)
   logs.push({
     step: "plan",
     detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,

@@ -6,6 +6,8 @@
 // downstream renderer never has to deal with malformed AI output.
 
 import type { ModelSelection } from "@/lib/ai-provider"
+import type { DesignDirection } from "./design-directions"
+export type { DesignDirection } from "./design-directions"
 
 export type SectionKind =
   | "hero"
@@ -198,6 +200,8 @@ export interface SectionPlan {
   components?: string[]
   items?: SectionItem[]
   imageHint?: string
+  // Custom component trees are reserved for intentionally custom sections.
+  // Built-in kind/variant renderers should handle the normal path.
   componentTree?: ComponentNode
   // Free-form ID is helpful for in-page anchors (#pricing, #faq, etc.).
   anchor?: string
@@ -242,6 +246,7 @@ export interface PagePlan {
 export interface GeneratedProjectManifest {
   brief: DesignBrief
   theme: ThemeTokens
+  designDirection: DesignDirection
   pages: PagePlan[]
   deploymentMode: DeploymentMode
   // Planning metadata (populated by the orchestrator even when the raw AI
