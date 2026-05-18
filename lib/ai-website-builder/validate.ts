@@ -100,6 +100,12 @@ function pageWarnings(
       errors.push(`pages[${page.path}].sections[${i}].kind missing`)
       continue
     }
+    if (section.componentTree && section.variant !== "custom") {
+      warnings.push(`pages[${page.path}].sections[${i}](${section.kind}): componentTree will be ignored unless variant is "custom"`)
+    }
+    if (section.variant === "custom" && !section.componentTree) {
+      warnings.push(`pages[${page.path}].sections[${i}](${section.kind}): variant "custom" should include componentTree`)
+    }
     if (section.componentTree) {
       validateComponentTree(section.componentTree, `pages[${page.path}].sections[${i}].componentTree`, componentIds, errors, warnings)
     }
@@ -111,6 +117,22 @@ function pageWarnings(
 
   if (page.path === "/" && page.sections.length < 5) {
     warnings.push(`home page has only ${page.sections.length} sections (target 5+)`)
+  }
+  if (page.path === "/") {
+    const cardHeavy = page.sections.filter((s) => {
+      const v = s.variant ?? ""
+      if (s.kind === "feature-grid" && v === "cards") return true
+      if (s.kind === "testimonials" && v === "grid-cards") return true
+      if (s.kind === "product-grid" && v === "card-grid") return true
+      if (s.kind === "blog-preview" && v === "card-grid") return true
+      if (s.kind === "team" && v === "card-grid") return true
+      if (s.kind === "cta" && v === "boxed-card") return true
+      if (s.kind === "pricing" && (v === "" || v === "three-tier")) return true
+      return false
+    }).length
+    if (cardHeavy >= 4) {
+      warnings.push("home page may feel card-heavy; consider more varied section variants")
+    }
   }
   // Detect repeated kind+variant combos in a row.
   let prev = ""

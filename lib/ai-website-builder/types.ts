@@ -6,6 +6,7 @@
 // downstream renderer never has to deal with malformed AI output.
 
 import type { ModelSelection } from "@/lib/ai-provider"
+import type { DesignDirection } from "./design-directions"
 
 export type SectionKind =
   | "hero"
@@ -244,6 +245,7 @@ export interface GeneratedProjectManifest {
   theme: ThemeTokens
   pages: PagePlan[]
   deploymentMode: DeploymentMode
+  designDirection?: DesignDirection
   // Planning metadata (populated by the orchestrator even when the raw AI
   // output omits it).
   needsDatabase: boolean
@@ -335,3 +337,5 @@ export interface RunBuilderResult {
   unconnectedIntegrations: string[]
   deploymentMode: DeploymentMode
 }
+
+export type { DesignDirection }

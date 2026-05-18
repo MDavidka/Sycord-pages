@@ -176,6 +176,10 @@ async function main() {
     const buildOk = result.build.ok
     const noEnvFile = !filePaths.has(".env")
     const logsHaveNoSecret = !result.logs.some((l) => /eyJhbGciOi/.test(l.detail) || /libsql:\/\/[a-z0-9-]+\.turso\.io/.test(l.detail))
+    const componentTreeOk = !result.manifest.pages.some((p) =>
+      p.sections.some((s) => Boolean(s.componentTree) && s.variant !== "custom"),
+    )
+    const designDirectionOk = Boolean(result.manifest.designDirection?.concept) && Boolean(result.manifest.designDirection?.visualStyle)
 
     const unconnectedOk = c.expectUnconnected
       ? c.expectUnconnected.every((name) => result.unconnectedIntegrations.includes(name))
@@ -208,6 +212,8 @@ async function main() {
       ["build validation ok", buildOk],
       ["no .env file generated", noEnvFile],
       ["logs contain no secret values", logsHaveNoSecret],
+      ["componentTree used only for custom variants", componentTreeOk],
+      ["design direction attached", designDirectionOk],
       ["unconnected integrations surfaced", unconnectedOk],
     ]
     for (const [label, ok] of checks) {

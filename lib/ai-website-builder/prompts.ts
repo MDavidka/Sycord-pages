@@ -24,8 +24,8 @@ const SECTION_KINDS = [
 ] as const
 
 const VARIANTS_BY_KIND: Record<(typeof SECTION_KINDS)[number], string[]> = {
-  hero: ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial"],
-  "feature-grid": ["cards", "bento", "icon-grid", "alternating"],
+  hero: ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial", "cinematic", "magazine-cover"],
+  "feature-grid": ["cards", "bento", "icon-grid", "alternating", "asymmetric-bento", "sidebar-story"],
   stats: ["row", "card-row", "split-callout"],
   testimonials: ["grid-cards", "spotlight", "marquee-static"],
   pricing: ["three-tier", "two-tier-toggle"],
@@ -98,6 +98,7 @@ SectionPlan rules:
 ${Object.entries(VARIANTS_BY_KIND)
   .map(([k, v]) => `    ${k}: ${v.map((x) => `"${x}"`).join(" | ")}`)
   .join("\n")}
+- You may set "variant": "custom" ONLY when the desired layout cannot be expressed by the built-in kind+variant renderers.
 - Provide concrete, on-brand copy. NEVER use "Lorem ipsum", "production-ready responsive", "blah blah", or vague filler.
 - "items" should be a meaningful array for content-heavy kinds (feature-grid, stats, testimonials, pricing, faq, gallery, product-grid, comparison, process, logos, team, blog-preview).
 - For pricing items, set price, period, features (3-5 strings), and exactly one item with "highlighted": true.
@@ -108,7 +109,7 @@ ${Object.entries(VARIANTS_BY_KIND)
 - For gallery / product-grid / blog-preview / team: include title, description, optional category/tag/price.
 - For process: include eyebrow ("Step 01"), title, description.
 - For contact: prefer variant "form" or "split-form".
-- Every SectionPlan should include "componentTree": a JSON tree rendered by the deterministic renderer.
+- Use "componentTree" ONLY when "variant": "custom".
 - componentTree node shape: { "id": string, "component": one of allowed components, "props"?: JSON object, "text"?: string, "children"?: ComponentNode[] }.
 - Allowed components: "Page", "Section", "Container", "Grid", "Stack", "Button", "Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter", "Badge", "Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent", "Tabs", "TabsList", "TabsTrigger", "TabsContent", "Input", "Textarea", "Label", "Avatar", "Separator", "Image", "Link", "Heading", "Text", "Stat", "PricingCard", "FeatureCard".
 - Prefer shadcn components (Button, Card*, Badge, Accordion*, Tabs*, Input, Textarea, Label, Avatar, Separator) inside Section/Container/Grid/Stack layout primitives.
@@ -132,6 +133,26 @@ Voice & copy rules:
 
 Output strict JSON. No comments, no trailing commas, no markdown.`
 
+export const DESIGN_DIRECTION_PROMPT = `You are a senior creative director.
+Given the user's request, choose a crisp creative concept and design direction for a shadcn/ui website plan.
+
+Return ONLY one JSON object (no prose, no markdown), matching this shape:
+{
+  "concept": string,
+  "visualStyle": "minimal-editorial" | "bold-saas" | "luxury-dark" | "playful-bento" | "warm-local" | "commerce-catalog" | "creator-magazine" | "event-impact",
+  "layoutRhythm": "immersive" | "editorial" | "conversion-focused" | "portfolio-showcase" | "product-led",
+  "density": "airy" | "balanced" | "dense",
+  "motionLevel": "none" | "subtle" | "expressive",
+  "trustStrategy": "logos" | "testimonials" | "stats" | "case-studies" | "social-proof",
+  "imageStrategy": "abstract" | "product" | "people" | "editorial" | "none",
+  "avoid": string[]
+}
+
+Rules:
+- Make the concept specific to the business and audience (not generic).
+- "avoid" should list 3-6 things that would make the site feel generic for this prompt.
+- Output strict JSON only.`
+
 export const PAGE_REPAIR_PROMPT = `You are repairing JSON for a website-builder pipeline.
 The previous output was not valid JSON or did not match the schema described.
 Return ONLY the fixed JSON object — no markdown, no commentary.
@@ -144,4 +165,6 @@ so it is specific, vivid, and on-brand for: {brief}.
 Replace any of these phrases that appear: "Lorem ipsum", "production-ready", "responsive behavior",
 "blah", "placeholder", "TODO", "etc.", "Coming soon".
 Return the SAME JSON shape with the same paths/structure — only the copy strings change.
+Do NOT change theme, deploymentMode, integrations, needsDatabase, or designDirection.
+Do NOT restructure or re-layout componentTree nodes; only change visible text strings.
 Do NOT add or remove sections. Output JSON only.`

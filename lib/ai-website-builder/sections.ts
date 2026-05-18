@@ -348,7 +348,7 @@ export function renderComponentNode(node: ComponentNode, ctx: RenderContext): st
 function renderHero(section: SectionPlan, ctx: RenderContext): RenderedSection {
   const variant = pickVariant(
     section,
-    ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial"],
+    ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial", "cinematic", "magazine-cover"],
     ctx.sectionIndex,
   )
   const eyebrow = esc(section.eyebrow || "")
@@ -367,6 +367,89 @@ function renderHero(section: SectionPlan, ctx: RenderContext): RenderedSection {
   const icons: string[] = []
 
   switch (variant) {
+    case "cinematic": {
+      const proof = (items.length ? items : [{ title: "4.9/5", description: "Average rating" }, { title: "48h", description: "Typical turnaround" }, { title: "12k+", description: "Happy customers" }]).slice(0, 3)
+      return {
+        tsx: `${sectionWrapperOpen(section.anchor, "overflow-hidden")}
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.22),_transparent_55%)]" aria-hidden="true" />
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,_hsl(var(--background)),_transparent_35%,_hsl(var(--background)))]" aria-hidden="true" />
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-28 lg:px-8">
+        <div className="grid gap-12 lg:grid-cols-12 lg:items-end">
+          <div className="space-y-6 lg:col-span-7">
+            ${eyebrow ? `<Badge variant="secondary" className="rounded-full">${eyebrow}</Badge>` : ""}
+            <h1 className="text-balance text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">${heading}</h1>
+            ${description ? `<p className="max-w-2xl text-pretty text-lg text-muted-foreground">${description}</p>` : ""}
+            ${buttons}
+            ${highlights.length ? `<ul className="grid gap-2 pt-2 sm:grid-cols-2">${highlights.map((h) => `<li className="flex items-center gap-2 text-sm text-muted-foreground"><span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />${h}</li>`).join("")}</ul>` : ""}
+          </div>
+          <div className="lg:col-span-5">
+            <div className="relative rounded-3xl border bg-card p-6 shadow-2xl shadow-primary/10">
+              <div className="absolute inset-0 -z-10 rounded-3xl bg-gradient-to-br from-primary/25 via-accent/15 to-transparent blur-2xl" aria-hidden="true" />
+              <div className="aspect-[16/10] w-full rounded-2xl bg-gradient-to-br from-accent/35 via-primary/10 to-background" aria-hidden="true"></div>
+              <div className="mt-6 grid gap-3">
+                ${proof
+                  .map(
+                    (p) => `<div className="flex items-center justify-between rounded-xl border bg-background/60 px-4 py-3">
+                  <p className="text-sm font-medium">${esc(p.description || p.label || "")}</p>
+                  <p className="text-lg font-semibold tracking-tight">${esc(p.title || p.value || "")}</p>
+                </div>`,
+                  )
+                  .join("\n                ")}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>`,
+        imports,
+        needsClient: false,
+        iconsUsed: icons,
+      }
+    }
+
+    case "magazine-cover": {
+      const coverLines = (items.length ? items : [{ title: "Issue 01", description: "A sharper way to tell your story." }, { title: "Inside", description: "Proof, process, and the details that convert." }, { title: "Next", description: "A site that feels like a brand, not a template." }]).slice(0, 4)
+      return {
+        tsx: `${sectionWrapperOpen(section.anchor, "overflow-hidden")}
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,_hsl(var(--primary)/0.10),_transparent_55%)]" aria-hidden="true" />
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-28 lg:px-8">
+        <div className="grid gap-12 lg:grid-cols-12">
+          <div className="space-y-6 lg:col-span-7">
+            ${eyebrow ? `<p className="text-sm font-semibold uppercase tracking-wider text-primary">${eyebrow}</p>` : ""}
+            <h1 className="text-balance text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">${heading}</h1>
+            ${description ? `<p className="max-w-2xl text-pretty text-lg text-muted-foreground">${description}</p>` : ""}
+            ${buttons}
+          </div>
+          <div className="lg:col-span-5">
+            <div className="relative overflow-hidden rounded-[2rem] border bg-card">
+              <div className="absolute inset-0 bg-gradient-to-br from-accent/25 via-primary/10 to-background" aria-hidden="true" />
+              <div className="relative space-y-6 p-8">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">${esc(section.subheading || "Cover story")}</p>
+                  <span className="inline-flex items-center rounded-full border bg-background/60 px-3 py-1 text-xs">${esc(section.eyebrow || "New")}</span>
+                </div>
+                <div className="space-y-4">
+                  ${coverLines
+                    .map(
+                      (l) => `<div className="rounded-2xl border bg-background/60 p-4">
+                    <p className="text-sm font-semibold">${esc(l.title || "")}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">${esc(l.description || "")}</p>
+                  </div>`,
+                    )
+                    .join("\n                  ")}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>`,
+        imports,
+        needsClient: false,
+        iconsUsed: icons,
+      }
+    }
+
     case "split": {
       const itemList = items.length
         ? items.slice(0, 3)
@@ -560,7 +643,7 @@ function renderHero(section: SectionPlan, ctx: RenderContext): RenderedSection {
 // ---------- FEATURE GRID ----------
 
 function renderFeatureGrid(section: SectionPlan, ctx: RenderContext): RenderedSection {
-  const variant = pickVariant(section, ["cards", "bento", "icon-grid", "alternating"], ctx.sectionIndex)
+  const variant = pickVariant(section, ["cards", "bento", "icon-grid", "alternating", "asymmetric-bento", "sidebar-story"], ctx.sectionIndex)
   const heading = esc(section.heading || "Built for teams who care about the details")
   const eyebrow = esc(section.eyebrow || "")
   const description = esc(section.description || "")
@@ -575,6 +658,81 @@ function renderFeatureGrid(section: SectionPlan, ctx: RenderContext): RenderedSe
   ]
   const icons = items.map((it) => safeIcon(it.icon))
   imports.push({ from: "lucide-react", named: Array.from(new Set(icons)) })
+
+  if (variant === "asymmetric-bento") {
+    const tiles = items.length ? items : defaultFeatureItems()
+    const layout = ["lg:col-span-2 lg:row-span-2", "lg:col-span-1", "lg:col-span-1", "lg:col-span-2", "lg:col-span-1", "lg:col-span-1"]
+    return {
+      tsx: `${sectionWrapperOpen(section.anchor)}
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-24 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center space-y-4">
+          ${eyebrow ? `<Badge variant="secondary" className="rounded-full">${eyebrow}</Badge>` : ""}
+          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">${heading}</h2>
+          ${description ? `<p className="mx-auto max-w-2xl text-pretty text-muted-foreground">${description}</p>` : ""}
+        </div>
+        <div className="mt-12 grid gap-4 lg:grid-cols-4 lg:auto-rows-fr">
+          ${tiles
+            .slice(0, 6)
+            .map((it, i) => {
+              const Icon = safeIcon(it.icon)
+              const span = layout[i % layout.length]
+              return `<Card className="${span} relative overflow-hidden border-border/60">
+            <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/12 via-accent/10 to-transparent" aria-hidden="true" />
+            <CardHeader>
+              <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><${Icon} className="h-5 w-5" /></div>
+              <CardTitle className="text-xl">${esc(it.title || "")}</CardTitle>
+              <CardDescription className="text-base">${esc(it.description || "")}</CardDescription>
+            </CardHeader>
+            ${it.features?.length ? `<CardContent><ul className="space-y-2 text-sm text-muted-foreground">${it.features.slice(0, 4).map((f) => `<li className="flex items-center gap-2"><span className="inline-block h-1 w-1 rounded-full bg-primary" />${esc(f)}</li>`).join("")}</ul></CardContent>` : ""}
+          </Card>`
+            })
+            .join("\n          ")}
+        </div>
+      </div>
+    </section>`,
+      imports,
+      needsClient: false,
+      iconsUsed: icons,
+    }
+  }
+
+  if (variant === "sidebar-story") {
+    const tiles = items.length ? items : defaultFeatureItems()
+    return {
+      tsx: `${sectionWrapperOpen(section.anchor)}
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-24 lg:px-8">
+        <div className="grid gap-12 lg:grid-cols-12 lg:items-start">
+          <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24">
+            ${eyebrow ? `<Badge variant="secondary" className="rounded-full">${eyebrow}</Badge>` : ""}
+            <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">${heading}</h2>
+            ${description ? `<p className="text-pretty text-muted-foreground">${description}</p>` : ""}
+          </div>
+          <div className="lg:col-span-8 space-y-6">
+            ${tiles
+              .slice(0, 5)
+              .map((it) => {
+                const Icon = safeIcon(it.icon)
+                return `<div className="rounded-3xl border bg-card p-6">
+              <div className="flex items-start gap-4">
+                <div className="mt-1 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><${Icon} className="h-5 w-5" /></div>
+                <div className="space-y-2">
+                  <p className="text-xl font-semibold tracking-tight">${esc(it.title || "")}</p>
+                  <p className="text-sm text-muted-foreground">${esc(it.description || "")}</p>
+                  ${it.features?.length ? `<ul className="mt-3 grid gap-2 sm:grid-cols-2">${it.features.slice(0, 4).map((f) => `<li className="flex items-center gap-2 text-sm text-muted-foreground"><span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />${esc(f)}</li>`).join("")}</ul>` : ""}
+                </div>
+              </div>
+            </div>`
+              })
+              .join("\n            ")}
+          </div>
+        </div>
+      </div>
+    </section>`,
+      imports,
+      needsClient: false,
+      iconsUsed: icons,
+    }
+  }
 
   if (variant === "bento") {
     const tiles = items.length ? items : defaultFeatureItems()
@@ -1724,7 +1882,7 @@ function renderBlogPreview(section: SectionPlan, ctx: RenderContext): RenderedSe
 // ---------- DISPATCHER ----------
 
 export function renderSection(section: SectionPlan, ctx: RenderContext): RenderedSection {
-  if (section.componentTree) {
+  if (section.componentTree && section.variant === "custom") {
     return {
       tsx: renderComponentNode(section.componentTree, ctx),
       imports: componentNodeImports(section.componentTree),

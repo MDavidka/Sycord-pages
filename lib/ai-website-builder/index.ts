@@ -37,10 +37,11 @@ import type {
   ThemeTokens,
 } from "./types"
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
-import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
+import { COPY_POLISH_PROMPT, DESIGN_DIRECTION_PROMPT, PAGE_REPAIR_PROMPT, PLAN_SYSTEM_PROMPT } from "./prompts"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
+import { formatDesignDirection, type DesignDirection } from "./design-directions"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
 export type {
@@ -118,6 +119,7 @@ function isProvidedModel(model: ModelSelection | undefined): model is ModelSelec
 
 function pickModel(opts: BuilderOptions): ModelSelection {
   if (isProvidedModel(opts.model)) return opts.model
+  if (opts.quality === "fast") return FALLBACK_MODEL
   return DEFAULT_BEST_MODEL
 }
 
@@ -308,11 +310,13 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
   const r = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
   const kindCandidate = safeText(r.kind, "") as SectionKind
   const kind: SectionKind = ALLOWED_KINDS.has(kindCandidate) ? kindCandidate : fallbackKind
+  const variant = safeText(r.variant, "") || undefined
   const items = normalizeSectionItems(r.items)
   const highlights = Array.isArray(r.highlights) ? (r.highlights as unknown[]).map((h) => safeText(h, "")).filter(Boolean) : undefined
+  const componentTree = variant === "custom" ? normalizeComponentNode(r.componentTree) : undefined
   return {
     kind,
-    variant: safeText(r.variant, "") || undefined,
+    variant,
     eyebrow: safeText(r.eyebrow, "") || undefined,
     heading: safeText(r.heading, "") || undefined,
     subheading: safeText(r.subheading, "") || undefined,
@@ -325,7 +329,7 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
     components: Array.isArray(r.components) ? (r.components as unknown[]).map((c) => safeText(c, "")).filter(Boolean) : undefined,
     items,
     imageHint: safeText(r.imageHint, "") || undefined,
-    componentTree: normalizeComponentNode(r.componentTree),
+    componentTree,
     anchor: safeText(r.anchor, "") || undefined,
   }
 }
@@ -876,30 +880,215 @@ function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
   return out
 }
 
-function buildPlannerUserContent(prompt: string, project?: ProjectContext): string {
-  if (!project) return prompt
+function buildPlannerUserContent(prompt: string, project?: ProjectContext, direction?: DesignDirection): string {
+  if (!project && !direction) return prompt
   const projectBits: string[] = []
-  if (project.name) projectBits.push(`Project name: ${project.name}`)
-  if (project.description) projectBits.push(`Project description: ${project.description}`)
-  if (project.category) projectBits.push(`Category: ${project.category}`)
-  if (project.envVarKeys?.length) projectBits.push(`Existing env var keys: ${project.envVarKeys.join(", ")}`)
-  if (project.integrations?.length) {
+  if (project?.name) projectBits.push(`Project name: ${project.name}`)
+  if (project?.description) projectBits.push(`Project description: ${project.description}`)
+  if (project?.category) projectBits.push(`Category: ${project.category}`)
+  if (project?.envVarKeys?.length) projectBits.push(`Existing env var keys: ${project.envVarKeys.join(", ")}`)
+  if (project?.integrations?.length) {
     projectBits.push(
       `Connected integrations: ${project.integrations.map((i) => i.name).join(", ")}`,
     )
   }
+  if (direction) {
+    projectBits.push(`Design direction (follow this concept closely):\n${formatDesignDirection(direction)}`)
+  }
   if (projectBits.length === 0) return prompt
-  return `${prompt}\n\nHost project context (branding & existing setup — keep the project name/description consistent):\n${projectBits.join("\n")}`
+  return `${prompt}\n\nContext:\n${projectBits.join("\n")}`
 }
 
-async function planManifest(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<GeneratedProjectManifest> {
+function fallbackDesignDirection(prompt: string, project?: ProjectContext): DesignDirection {
+  const preset = detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`)
+  const baseConcept = project?.name
+    ? `${project.name} — ${project.description ?? prompt}`.slice(0, 180)
+    : prompt.slice(0, 180)
+  switch (preset) {
+    case "restaurant":
+      return {
+        concept: baseConcept,
+        visualStyle: "luxury-dark",
+        layoutRhythm: "editorial",
+        density: "airy",
+        motionLevel: "subtle",
+        trustStrategy: "social-proof",
+        imageStrategy: "editorial",
+        avoid: ["generic card grids", "overly bright colors", "stocky SaaS language", "too many centered sections"],
+      }
+    case "ecommerce":
+      return {
+        concept: baseConcept,
+        visualStyle: "commerce-catalog",
+        layoutRhythm: "product-led",
+        density: "balanced",
+        motionLevel: "subtle",
+        trustStrategy: "stats",
+        imageStrategy: "product",
+        avoid: ["generic hero copy", "no prices", "all sections centered", "repeated card layouts"],
+      }
+    case "portfolio":
+      return {
+        concept: baseConcept,
+        visualStyle: "minimal-editorial",
+        layoutRhythm: "portfolio-showcase",
+        density: "airy",
+        motionLevel: "none",
+        trustStrategy: "case-studies",
+        imageStrategy: "editorial",
+        avoid: ["template-y layouts", "generic buzzwords", "too many cards", "weak project details"],
+      }
+    case "event":
+      return {
+        concept: baseConcept,
+        visualStyle: "event-impact",
+        layoutRhythm: "immersive",
+        density: "balanced",
+        motionLevel: "expressive",
+        trustStrategy: "social-proof",
+        imageStrategy: "people",
+        avoid: ["low energy hero", "missing date/location", "generic agenda", "no clear registration CTA"],
+      }
+    case "creator":
+      return {
+        concept: baseConcept,
+        visualStyle: "creator-magazine",
+        layoutRhythm: "editorial",
+        density: "balanced",
+        motionLevel: "subtle",
+        trustStrategy: "testimonials",
+        imageStrategy: "people",
+        avoid: ["corporate SaaS tone", "generic headlines", "feature grids only", "no personality"],
+      }
+    case "local-business":
+      return {
+        concept: baseConcept,
+        visualStyle: "warm-local",
+        layoutRhythm: "conversion-focused",
+        density: "balanced",
+        motionLevel: "none",
+        trustStrategy: "social-proof",
+        imageStrategy: "people",
+        avoid: ["cold corporate tone", "missing service area", "no phone/email", "generic CTAs"],
+      }
+    case "agency":
+      return {
+        concept: baseConcept,
+        visualStyle: "minimal-editorial",
+        layoutRhythm: "conversion-focused",
+        density: "balanced",
+        motionLevel: "subtle",
+        trustStrategy: "case-studies",
+        imageStrategy: "abstract",
+        avoid: ["buzzword-heavy copy", "feature-only pages", "generic testimonials", "no clear offer"],
+      }
+    default:
+      return {
+        concept: baseConcept,
+        visualStyle: "bold-saas",
+        layoutRhythm: "product-led",
+        density: "balanced",
+        motionLevel: "subtle",
+        trustStrategy: "logos",
+        imageStrategy: "abstract",
+        avoid: ["generic template copy", "repeated cards", "weak CTAs", "no proof elements"],
+      }
+  }
+}
+
+function normalizeDesignDirection(raw: unknown, prompt: string, project?: ProjectContext): DesignDirection {
+  const fallback = fallbackDesignDirection(prompt, project)
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback
+  const r = raw as Record<string, unknown>
+  const visualStyleSet: ReadonlySet<DesignDirection["visualStyle"]> = new Set([
+    "minimal-editorial",
+    "bold-saas",
+    "luxury-dark",
+    "playful-bento",
+    "warm-local",
+    "commerce-catalog",
+    "creator-magazine",
+    "event-impact",
+  ])
+  const layoutRhythmSet: ReadonlySet<DesignDirection["layoutRhythm"]> = new Set([
+    "immersive",
+    "editorial",
+    "conversion-focused",
+    "portfolio-showcase",
+    "product-led",
+  ])
+  const densitySet: ReadonlySet<DesignDirection["density"]> = new Set(["airy", "balanced", "dense"])
+  const motionSet: ReadonlySet<DesignDirection["motionLevel"]> = new Set(["none", "subtle", "expressive"])
+  const trustSet: ReadonlySet<DesignDirection["trustStrategy"]> = new Set([
+    "logos",
+    "testimonials",
+    "stats",
+    "case-studies",
+    "social-proof",
+  ])
+  const imageSet: ReadonlySet<DesignDirection["imageStrategy"]> = new Set([
+    "abstract",
+    "product",
+    "people",
+    "editorial",
+    "none",
+  ])
+  const avoid = Array.isArray(r.avoid) ? r.avoid.map((a) => safeText(a, "")).filter(Boolean).slice(0, 8) : fallback.avoid
+  const visualStyleCandidate = safeText(r.visualStyle, "") as DesignDirection["visualStyle"]
+  const layoutRhythmCandidate = safeText(r.layoutRhythm, "") as DesignDirection["layoutRhythm"]
+  const densityCandidate = safeText(r.density, "") as DesignDirection["density"]
+  const motionCandidate = safeText(r.motionLevel, "") as DesignDirection["motionLevel"]
+  const trustCandidate = safeText(r.trustStrategy, "") as DesignDirection["trustStrategy"]
+  const imageCandidate = safeText(r.imageStrategy, "") as DesignDirection["imageStrategy"]
+  return {
+    concept: safeText(r.concept, fallback.concept),
+    visualStyle: visualStyleSet.has(visualStyleCandidate) ? visualStyleCandidate : fallback.visualStyle,
+    layoutRhythm: layoutRhythmSet.has(layoutRhythmCandidate) ? layoutRhythmCandidate : fallback.layoutRhythm,
+    density: densitySet.has(densityCandidate) ? densityCandidate : fallback.density,
+    motionLevel: motionSet.has(motionCandidate) ? motionCandidate : fallback.motionLevel,
+    trustStrategy: trustSet.has(trustCandidate) ? trustCandidate : fallback.trustStrategy,
+    imageStrategy: imageSet.has(imageCandidate) ? imageCandidate : fallback.imageStrategy,
+    avoid: avoid.length ? avoid : fallback.avoid,
+  }
+}
+
+async function planDesignDirection(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<DesignDirection> {
+  const model = pickModel(opts)
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: DESIGN_DIRECTION_PROMPT },
+        { role: "user", content: buildPlannerUserContent(prompt, opts.project) },
+      ],
+      { model, temperature: 0.8, retries: 0 },
+    )
+    logs.push({ step: "design-direction", detail: `Design direction planned (${raw.length} chars)` })
+  } catch (error) {
+    logs.push({
+      step: "design-direction",
+      detail: `Design direction failed: ${error instanceof Error ? error.message : String(error)}. Using fallback direction.`,
+    })
+  }
+  const parsed = extractJson<unknown>(raw)
+  const direction = normalizeDesignDirection(parsed, prompt, opts.project)
+  logs.push({ step: "design-direction", detail: `Direction: ${direction.visualStyle}, ${direction.layoutRhythm}, density=${direction.density}` })
+  return direction
+}
+
+async function planManifest(
+  prompt: string,
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+  direction?: DesignDirection,
+): Promise<GeneratedProjectManifest> {
   const model = pickModel(opts)
   let raw = ""
   try {
     raw = await callAIAgent(
       [
         { role: "system", content: PLAN_SYSTEM_PROMPT },
-        { role: "user", content: buildPlannerUserContent(prompt, opts.project) },
+        { role: "user", content: buildPlannerUserContent(prompt, opts.project, direction) },
       ],
       { model, temperature: 0.6 },
     )
@@ -916,7 +1105,7 @@ async function planManifest(prompt: string, opts: BuilderOptions, logs: Pipeline
   const validation = validateManifest(manifest)
   if (!validation.ok) {
     logs.push({ step: "plan-validate", detail: `Manifest invalid: ${validation.errors.join("; ")}. Repairing...` })
-    const repaired = await repairManifest(prompt, raw, validation.errors, opts, logs)
+    const repaired = await repairManifest(prompt, raw, validation.errors, opts, logs, direction)
     if (repaired) return repaired
     logs.push({ step: "plan-repair", detail: "Repair failed, using normalized fallback." })
   } else if (validation.warnings.length) {
@@ -931,6 +1120,7 @@ async function repairManifest(
   errors: string[],
   opts: BuilderOptions,
   logs: PipelineLog[],
+  direction?: DesignDirection,
 ): Promise<GeneratedProjectManifest | null> {
   const model = pickModel(opts)
   try {
@@ -940,7 +1130,7 @@ async function repairManifest(
         { role: "system", content: PLAN_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Original prompt:\n${buildPlannerUserContent(prompt, opts.project)}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
+          content: `Original prompt:\n${buildPlannerUserContent(prompt, opts.project, direction)}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
         },
       ],
       { model, temperature: 0.2, retries: 0 },
@@ -962,6 +1152,63 @@ async function repairManifest(
     })
     return null
   }
+}
+
+function structureSignature(manifest: GeneratedProjectManifest): string {
+  return JSON.stringify(
+    manifest.pages.map((p) => ({
+      path: p.path,
+      sections: p.sections.map((s) => ({ kind: s.kind, variant: s.variant ?? "", anchor: s.anchor ?? "" })),
+    })),
+  )
+}
+
+async function polishCopy(
+  manifest: GeneratedProjectManifest,
+  prompt: string,
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+): Promise<GeneratedProjectManifest> {
+  const model = pickModel(opts)
+  const system = COPY_POLISH_PROMPT.replace("{brief}", JSON.stringify(manifest.brief))
+  const beforeSig = structureSignature(manifest)
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(manifest) },
+      ],
+      { model, temperature: 0.4, retries: 0 },
+    )
+    logs.push({ step: "copy-polish", detail: `Copy polish returned ${raw.length} chars` })
+  } catch (error) {
+    logs.push({
+      step: "copy-polish",
+      detail: `Copy polish failed: ${error instanceof Error ? error.message : String(error)}. Skipping.`,
+    })
+    return manifest
+  }
+  const parsed = extractJson<unknown>(raw)
+  if (!parsed) {
+    logs.push({ step: "copy-polish", detail: "Copy polish returned no JSON. Skipping." })
+    return manifest
+  }
+  const polished = normalizeManifest(parsed, prompt, opts.project)
+  const afterSig = structureSignature(polished)
+  if (beforeSig !== afterSig) {
+    logs.push({ step: "copy-polish", detail: "Copy polish attempted to change structure. Skipping." })
+    return manifest
+  }
+  polished.theme = manifest.theme
+  polished.deploymentMode = manifest.deploymentMode
+  polished.needsDatabase = manifest.needsDatabase
+  polished.databaseProvider = manifest.databaseProvider
+  polished.integrations = manifest.integrations
+  polished.requiredEnvVars = manifest.requiredEnvVars
+  polished.unconnectedIntegrations = manifest.unconnectedIntegrations
+  polished.designDirection = manifest.designDirection
+  return polished
 }
 
 // ---------- rendering ----------
@@ -1040,13 +1287,24 @@ export async function runAIWebsiteBuilder(
   options: BuilderOptions = {},
 ): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
+  const quality = options.quality ?? "best"
+  const planningOpts: BuilderOptions = { ...options, quality }
   logs.push({
     step: "start",
-    detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
+    detail: `Builder started (quality=${quality})${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
   })
 
   // 1. Plan (with repair).
-  const manifest = await planManifest(prompt, options, logs)
+  let manifest: GeneratedProjectManifest
+  if (quality === "fast") {
+    manifest = await planManifest(prompt, planningOpts, logs)
+  } else {
+    const direction = await planDesignDirection(prompt, planningOpts, logs)
+    manifest = await planManifest(prompt, planningOpts, logs, direction)
+    manifest.designDirection = direction
+    manifest = await polishCopy(manifest, prompt, planningOpts, logs)
+    manifest.designDirection = manifest.designDirection ?? direction
+  }
   logs.push({
     step: "plan",
     detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
@@ -1063,7 +1321,7 @@ export async function runAIWebsiteBuilder(
 
   // Resolve env var values (project envVars ⟶ server env fallback) for
   // missing-env checks only. Never echo or write these values to files.
-  const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
+  const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, planningOpts.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
   const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
@@ -1074,8 +1332,8 @@ export async function runAIWebsiteBuilder(
 
   // 4. File-level validation.
   const connectedIntegrationIds = Array.from(new Set([
-    ...(options.project?.connectedIntegrationIds ?? []),
-    ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
+    ...(planningOpts.project?.connectedIntegrationIds ?? []),
+    ...(planningOpts.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
   const build = runBuildValidation(allFiles, {
     needsDatabase: manifest.needsDatabase,
@@ -1093,7 +1351,7 @@ export async function runAIWebsiteBuilder(
   // nor the server provided a non-empty value.
   const missingEnvVars = computeMissingEnvVars(
     manifest.requiredEnvVars,
-    options.project?.envVarKeys,
+    planningOpts.project?.envVarKeys,
     resolvedEnv,
   )
   if (manifest.needsDatabase) {
