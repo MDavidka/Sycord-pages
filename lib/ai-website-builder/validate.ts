@@ -23,6 +23,14 @@ const FORBIDDEN_PHRASES = [
   "responsive behavior",
 ]
 
+const GENERIC_FALLBACK_COPY = [
+  "ship something people remember",
+  "built for teams who care about the details",
+  "ready to get started",
+  "trusted by teams worldwide",
+  "simple pricing for every team",
+]
+
 const ALLOWED_KINDS: ReadonlySet<string> = new Set([
   "hero",
   "feature-grid",
@@ -474,6 +482,9 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     const lower = c.toLowerCase()
     for (const bad of FORBIDDEN_PHRASES) {
       if (lower.includes(bad)) warnings.push(`${p} contains "${bad}"`)
+    }
+    for (const phrase of GENERIC_FALLBACK_COPY) {
+      if (lower.includes(phrase)) warnings.push(`${p} contains generic fallback copy: "${phrase}"`)
     }
   }
 

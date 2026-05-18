@@ -232,6 +232,24 @@ export interface SectionItem {
   date?: string
 }
 
+export type CompositionGoal = "convert" | "explain" | "sell" | "book" | "showcase" | "trust"
+export type CompositionLayoutStyle = "editorial" | "bento" | "product-led" | "story" | "minimal" | "immersive"
+
+export interface CompositionSection {
+  id: string
+  purpose: string
+  componentIds: string[]
+  copy: Record<string, unknown>
+  layoutInstructions: string
+}
+
+export interface PageComposition {
+  path: string
+  goal: CompositionGoal
+  layoutStyle: CompositionLayoutStyle
+  sections: CompositionSection[]
+}
+
 export interface PagePlan {
   path: string
   title: string
@@ -246,6 +264,7 @@ export interface GeneratedProjectManifest {
   pages: PagePlan[]
   deploymentMode: DeploymentMode
   designDirection?: DesignDirection
+  composition?: PageComposition[]
   // Planning metadata (populated by the orchestrator even when the raw AI
   // output omits it).
   needsDatabase: boolean
@@ -296,6 +315,7 @@ export interface ProjectContext {
 export interface BuilderOptions {
   model?: ModelSelection
   quality?: "fast" | "best"
+  creativity?: "safe" | "balanced" | "creative"
   projectId?: string
   project?: ProjectContext
 }

@@ -25,6 +25,7 @@ import type {
   IntegrationKind,
   IntegrationPlan,
   NavLink,
+  PageComposition,
   PagePlan,
   PipelineLog,
   ProjectContext,
@@ -37,11 +38,19 @@ import type {
   ThemeTokens,
 } from "./types"
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
-import { COPY_POLISH_PROMPT, DESIGN_DIRECTION_PROMPT, PAGE_REPAIR_PROMPT, PLAN_SYSTEM_PROMPT } from "./prompts"
+import {
+  COPY_POLISH_PROMPT,
+  DESIGN_DIRECTION_PROMPT,
+  PAGE_REPAIR_PROMPT,
+  PLAN_COMPOSITION_PROMPT,
+  PLAN_SYSTEM_PROMPT,
+  SELECT_COMPONENTS_PROMPT,
+} from "./prompts"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 import { formatDesignDirection, type DesignDirection } from "./design-directions"
+import { CREATIVE_COMPONENTS, pickRecipe, registryForPrompt, type CreativeComponent } from "./component-registry"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
 export type {
@@ -1076,6 +1085,284 @@ async function planDesignDirection(prompt: string, opts: BuilderOptions, logs: P
   return direction
 }
 
+function normalizeComponentIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const v of value) {
+    if (typeof v !== "string") continue
+    const id = v.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
+}
+
+function compositionLayoutFromDirection(direction: DesignDirection | undefined): PageComposition["layoutStyle"] {
+  switch (direction?.layoutRhythm) {
+    case "immersive":
+      return "immersive"
+    case "editorial":
+      return "editorial"
+    case "portfolio-showcase":
+      return "story"
+    case "product-led":
+      return "product-led"
+    default:
+      return "minimal"
+  }
+}
+
+function fallbackCompositionFromRecipe(
+  prompt: string,
+  recipeComponentIds: string[],
+  direction: DesignDirection | undefined,
+  project?: ProjectContext,
+): PageComposition[] {
+  const preset = detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`)
+  const internal: string[] = (() => {
+    switch (preset) {
+      case "restaurant":
+        return ["/menu", "/about", "/contact"]
+      case "ecommerce":
+        return ["/shop", "/about", "/contact"]
+      case "portfolio":
+        return ["/work", "/about", "/contact"]
+      default:
+        return ["/about", "/pricing", "/contact"]
+    }
+  })()
+  const homeSections = recipeComponentIds.map((id, i) => ({
+    id: i === 0 ? "top" : `section-${i + 1}`,
+    purpose: "Primary narrative beat",
+    componentIds: [id],
+    copy: {},
+    layoutInstructions: "Use strong hierarchy and specific copy. Avoid generic filler.",
+  }))
+  while (homeSections.length < 5) {
+    homeSections.push({
+      id: `section-${homeSections.length + 1}`,
+      purpose: "Additional supporting content",
+      componentIds: ["cta-full-bleed-banner"],
+      copy: {},
+      layoutInstructions: "Keep it short, with a clear CTA.",
+    })
+  }
+  const layoutStyle = compositionLayoutFromDirection(direction)
+  const pages: PageComposition[] = [
+    {
+      path: "/",
+      goal: "convert",
+      layoutStyle,
+      sections: homeSections,
+    },
+  ]
+  for (const path of internal) {
+    pages.push({
+      path,
+      goal: path === "/contact" ? "book" : path === "/pricing" ? "sell" : "explain",
+      layoutStyle,
+      sections: [
+        {
+          id: path.replace(/^\//, "") || "page",
+          purpose: "Page-specific content",
+          componentIds: [recipeComponentIds[0] ?? "hero-split"],
+          copy: {},
+          layoutInstructions: "Do not clone the homepage; focus on the page's job.",
+        },
+      ],
+    })
+  }
+  return pages
+}
+
+function normalizeComposition(raw: unknown, fallback: PageComposition[]): PageComposition[] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback
+  const root = raw as Record<string, unknown>
+  const pagesRaw = Array.isArray(root.pages) ? (root.pages as unknown[]) : []
+  const out: PageComposition[] = []
+  const seen = new Set<string>()
+  for (const p of pagesRaw) {
+    const r = (p && typeof p === "object" ? (p as Record<string, unknown>) : {}) as Record<string, unknown>
+    const path = sanitizeRoute(safeText(r.path, ""))
+    if (!path || seen.has(path)) continue
+    seen.add(path)
+    const goal = safeText(r.goal, "convert") as PageComposition["goal"]
+    const layoutStyle = safeText(r.layoutStyle, "minimal") as PageComposition["layoutStyle"]
+    const sectionsRaw = Array.isArray(r.sections) ? (r.sections as unknown[]) : []
+    const sections = sectionsRaw
+      .map((s) => {
+        const sr = (s && typeof s === "object" ? (s as Record<string, unknown>) : {}) as Record<string, unknown>
+        const id = safeText(sr.id, "")
+        const componentIds = normalizeComponentIds(sr.componentIds)
+        if (!id || componentIds.length === 0) return null
+        return {
+          id,
+          purpose: safeText(sr.purpose, ""),
+          componentIds,
+          copy: sr.copy && typeof sr.copy === "object" && !Array.isArray(sr.copy) ? (sr.copy as Record<string, unknown>) : {},
+          layoutInstructions: safeText(sr.layoutInstructions, ""),
+        }
+      })
+      .filter((x): x is PageComposition["sections"][number] => Boolean(x))
+    if (!sections.length) continue
+    out.push({
+      path,
+      goal: (["convert", "explain", "sell", "book", "showcase", "trust"] as const).includes(goal) ? goal : "convert",
+      layoutStyle: (["editorial", "bento", "product-led", "story", "minimal", "immersive"] as const).includes(layoutStyle) ? layoutStyle : "minimal",
+      sections: sections.slice(0, 12),
+    })
+  }
+  return out.length ? out : fallback
+}
+
+async function selectComponents(
+  prompt: string,
+  direction: DesignDirection | undefined,
+  recipeComponentIds: string[],
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+): Promise<string[]> {
+  const model = pickModel(opts)
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: SELECT_COMPONENTS_PROMPT },
+        {
+          role: "user",
+          content: JSON.stringify({
+            prompt,
+            direction,
+            registry: registryForPrompt(),
+            suggested: recipeComponentIds,
+          }),
+        },
+      ],
+      { model, temperature: 0.7, retries: 0 },
+    )
+    logs.push({ step: "component-select", detail: `Selected components (${raw.length} chars)` })
+  } catch (error) {
+    logs.push({
+      step: "component-select",
+      detail: `Component selection failed: ${error instanceof Error ? error.message : String(error)}. Using recipe defaults.`,
+    })
+    return recipeComponentIds
+  }
+  const parsed = extractJson<unknown>(raw)
+  const obj = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? (parsed as Record<string, unknown>) : {}
+  const ids = normalizeComponentIds(obj.componentIds)
+  const allowed = new Set(CREATIVE_COMPONENTS.map((c) => c.id))
+  const filtered = ids.filter((id) => allowed.has(id)).slice(0, 12)
+  return filtered.length ? filtered : recipeComponentIds
+}
+
+async function planComposition(
+  prompt: string,
+  direction: DesignDirection | undefined,
+  componentIds: string[],
+  fallback: PageComposition[],
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+): Promise<PageComposition[]> {
+  const model = pickModel(opts)
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: PLAN_COMPOSITION_PROMPT },
+        {
+          role: "user",
+          content: JSON.stringify({
+            prompt,
+            direction,
+            componentIds,
+          }),
+        },
+      ],
+      { model, temperature: 0.7, retries: 0 },
+    )
+    logs.push({ step: "composition", detail: `Composition planned (${raw.length} chars)` })
+  } catch (error) {
+    logs.push({
+      step: "composition",
+      detail: `Composition planning failed: ${error instanceof Error ? error.message : String(error)}. Using fallback recipe composition.`,
+    })
+    return fallback
+  }
+  const parsed = extractJson<unknown>(raw)
+  const normalized = normalizeComposition(parsed, fallback)
+  const allowed = new Set(componentIds)
+  for (const p of normalized) {
+    for (const s of p.sections) {
+      s.componentIds = s.componentIds.filter((id) => allowed.has(id))
+      if (s.componentIds.length === 0) s.componentIds = [componentIds[0] ?? "hero-split"]
+    }
+  }
+  return normalized
+}
+
+function sectionPlanFromComposition(
+  comp: CreativeComponent,
+  section: PageComposition["sections"][number],
+  fallbackKind: SectionKind,
+): SectionPlan {
+  const copy = section.copy ?? {}
+  const heading = safeText(copy.heading, "")
+  const description = safeText(copy.description, "")
+  const eyebrow = safeText(copy.eyebrow, "")
+  return {
+    kind: comp.legacy.kind ?? fallbackKind,
+    variant: comp.legacy.variant,
+    eyebrow: eyebrow || undefined,
+    heading: heading || undefined,
+    description: description || undefined,
+    anchor: section.id,
+  }
+}
+
+function compositionToManifest(
+  prompt: string,
+  composition: PageComposition[],
+  direction: DesignDirection | undefined,
+  project?: ProjectContext,
+): GeneratedProjectManifest {
+  const brief = fallbackBriefFromPrompt(prompt, project)
+  const navLinks = composition.map((p) => ({ label: prettifyPath(p.path), href: p.path })).slice(0, 6)
+  const raw = {
+    brief: {
+      ...brief,
+      themePreset: brief.themePreset,
+      navLinks,
+    },
+    deploymentMode: "next-server",
+    integrations: [],
+    pages: composition.map((p) => {
+      const sections: SectionPlan[] = []
+      const byId = new Map(CREATIVE_COMPONENTS.map((c) => [c.id, c]))
+      for (const s of p.sections) {
+        for (const id of s.componentIds) {
+          const comp = byId.get(id)
+          if (!comp) continue
+          sections.push(sectionPlanFromComposition(comp, s, "cta"))
+        }
+      }
+      return {
+        path: p.path,
+        title: prettifyPath(p.path),
+        metaTitle: `${prettifyPath(p.path)} — ${brief.projectName}`,
+        metaDescription: brief.description,
+        sections,
+      }
+    }),
+  }
+  const manifest = normalizeManifest(raw, prompt, project)
+  manifest.designDirection = direction
+  manifest.composition = composition
+  return manifest
+}
+
 async function planManifest(
   prompt: string,
   opts: BuilderOptions,
@@ -1288,22 +1575,44 @@ export async function runAIWebsiteBuilder(
 ): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
   const quality = options.quality ?? "best"
-  const planningOpts: BuilderOptions = { ...options, quality }
+  const creativity = options.creativity ?? "safe"
+  const planningOpts: BuilderOptions = { ...options, quality, creativity }
   logs.push({
     step: "start",
-    detail: `Builder started (quality=${quality})${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
+    detail: `Builder started (quality=${quality}, creativity=${creativity})${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
   })
 
   // 1. Plan (with repair).
   let manifest: GeneratedProjectManifest
-  if (quality === "fast") {
-    manifest = await planManifest(prompt, planningOpts, logs)
+  if (creativity === "safe") {
+    if (quality === "fast") {
+      manifest = await planManifest(prompt, planningOpts, logs)
+    } else {
+      const direction = await planDesignDirection(prompt, planningOpts, logs)
+      manifest = await planManifest(prompt, planningOpts, logs, direction)
+      manifest.designDirection = direction
+      manifest = await polishCopy(manifest, prompt, planningOpts, logs)
+      manifest.designDirection = manifest.designDirection ?? direction
+    }
   } else {
-    const direction = await planDesignDirection(prompt, planningOpts, logs)
-    manifest = await planManifest(prompt, planningOpts, logs, direction)
-    manifest.designDirection = direction
-    manifest = await polishCopy(manifest, prompt, planningOpts, logs)
-    manifest.designDirection = manifest.designDirection ?? direction
+    const direction = quality === "best"
+      ? await planDesignDirection(prompt, planningOpts, logs)
+      : fallbackDesignDirection(prompt, planningOpts.project)
+    const recipe = pickRecipe(prompt, direction, planningOpts.project)
+    const baseComponentIds = recipe.components
+    const componentIds = quality === "best"
+      ? await selectComponents(prompt, direction, baseComponentIds, planningOpts, logs)
+      : baseComponentIds
+    const fallbackComp = fallbackCompositionFromRecipe(prompt, componentIds, direction, planningOpts.project)
+    const composition = quality === "best"
+      ? await planComposition(prompt, direction, componentIds, fallbackComp, planningOpts, logs)
+      : fallbackComp
+    manifest = compositionToManifest(prompt, composition, direction, planningOpts.project)
+    if (quality === "best") {
+      manifest = await polishCopy(manifest, prompt, planningOpts, logs)
+      manifest.designDirection = manifest.designDirection ?? direction
+      manifest.composition = manifest.composition ?? composition
+    }
   }
   logs.push({
     step: "plan",

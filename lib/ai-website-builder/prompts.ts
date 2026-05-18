@@ -153,6 +153,45 @@ Rules:
 - "avoid" should list 3-6 things that would make the site feel generic for this prompt.
 - Output strict JSON only.`
 
+export const SELECT_COMPONENTS_PROMPT = `You are selecting website components from an approved registry.
+Return ONLY one JSON object:
+{
+  "componentIds": string[]
+}
+
+Rules:
+- Choose 6 to 10 componentIds that match the business, audience, and design direction.
+- Prefer variety across categories (hero, feature, proof, pricing, CTA).
+- Do not include duplicates. Output JSON only.`
+
+export const PLAN_COMPOSITION_PROMPT = `You are composing pages from approved components.
+Return ONLY one JSON object:
+{
+  "pages": [
+    {
+      "path": string,
+      "goal": "convert" | "explain" | "sell" | "book" | "showcase" | "trust",
+      "layoutStyle": "editorial" | "bento" | "product-led" | "story" | "minimal" | "immersive",
+      "sections": [
+        {
+          "id": string,
+          "purpose": string,
+          "componentIds": string[],
+          "copy": object,
+          "layoutInstructions": string
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Use only the provided componentIds.
+- Homepage must have 5+ sections with varied purposes and rhythm.
+- Internal pages must not clone the homepage.
+- "copy" should include concrete headings/descriptions where helpful (no generic filler).
+- Output strict JSON only.`
+
 export const PAGE_REPAIR_PROMPT = `You are repairing JSON for a website-builder pipeline.
 The previous output was not valid JSON or did not match the schema described.
 Return ONLY the fixed JSON object — no markdown, no commentary.
