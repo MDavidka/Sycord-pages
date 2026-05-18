@@ -348,7 +348,7 @@ export function renderComponentNode(node: ComponentNode, ctx: RenderContext): st
 function renderHero(section: SectionPlan, ctx: RenderContext): RenderedSection {
   const variant = pickVariant(
     section,
-    ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial"],
+    ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial", "cinematic", "magazine-cover"],
     ctx.sectionIndex,
   )
   const eyebrow = esc(section.eyebrow || "")
@@ -446,6 +446,59 @@ function renderHero(section: SectionPlan, ctx: RenderContext): RenderedSection {
             ${buttons}
           </div>
         </div>
+      </div>
+    </section>`,
+        imports,
+        needsClient: false,
+        iconsUsed: icons,
+      }
+    }
+
+
+    case "cinematic": {
+      const proof = items[0] || { title: "4.9/5", description: "guest-rated experience" }
+      return {
+        tsx: `${sectionWrapperOpen(section.anchor, "overflow-hidden bg-foreground text-background")}
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_10%,_hsl(var(--primary)/0.45),_transparent_34%),linear-gradient(135deg,_hsl(var(--foreground)),_hsl(var(--foreground)/0.86))]" aria-hidden="true" />
+      <div className="mx-auto grid min-h-[720px] max-w-7xl items-end gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+        <div className="space-y-8 pb-8">
+          ${eyebrow ? `<Badge variant="secondary" className="rounded-full bg-background/10 text-background backdrop-blur">${eyebrow}</Badge>` : ""}
+          <h1 className="max-w-5xl text-balance text-5xl font-semibold tracking-[-0.06em] sm:text-7xl lg:text-8xl">${heading}</h1>
+          ${description ? `<p className="max-w-2xl text-pretty text-lg text-background/70 sm:text-xl">${description}</p>` : ""}
+          <div className="flex flex-wrap gap-3">${ctaButton(ensureCta(section.primaryCta, fallbackPrimary), "secondary")}${section.secondaryCta?.label ? ctaButton(section.secondaryCta, "outline") : ""}</div>
+        </div>
+        <div className="relative mb-4 rounded-[2rem] border border-background/15 bg-background/10 p-5 backdrop-blur-xl">
+          <div className="aspect-[4/5] rounded-[1.4rem] bg-[linear-gradient(140deg,_hsl(var(--background)/0.16),_transparent),radial-gradient(circle_at_70%_20%,_hsl(var(--primary)/0.55),_transparent_32%)]" />
+          <div className="absolute -left-5 bottom-10 max-w-[15rem] rounded-2xl border border-background/15 bg-background/90 p-4 text-foreground shadow-2xl">
+            <p className="text-2xl font-semibold tracking-tight">${esc(proof.title || proof.value || "Proof")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">${esc(proof.description || proof.label || "Trusted by people who notice the details.")}</p>
+          </div>
+        </div>
+      </div>
+    </section>`,
+        imports,
+        needsClient: false,
+        iconsUsed: icons,
+      }
+    }
+
+    case "magazine-cover": {
+      const kicker = highlights[0] || esc(section.subheading || "A more memorable first impression")
+      return {
+        tsx: `${sectionWrapperOpen(section.anchor, "overflow-hidden")}
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 sm:px-6 md:py-28 lg:grid-cols-12 lg:px-8">
+        <div className="lg:col-span-8">
+          ${eyebrow ? `<p className="mb-5 text-xs font-semibold uppercase tracking-[0.35em] text-primary">${eyebrow}</p>` : ""}
+          <h1 className="text-balance text-6xl font-semibold tracking-[-0.075em] sm:text-7xl lg:text-8xl">${heading}</h1>
+        </div>
+        <div className="flex flex-col justify-between gap-8 border-l pl-6 lg:col-span-4">
+          <p className="text-sm font-medium uppercase tracking-[0.28em] text-muted-foreground">${kicker}</p>
+          ${description ? `<p className="text-pretty text-lg text-muted-foreground">${description}</p>` : ""}
+          ${buttons}
+        </div>
+      </div>
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 pb-16 sm:px-6 lg:grid-cols-3 lg:px-8">
+        ${(items.slice(0, 3).length ? items.slice(0, 3) : [{ title: "01", description: "Distinct point of view" }, { title: "02", description: "Clear proof" }, { title: "03", description: "Easy next step" }]).map((item) => `<div className="rounded-3xl border bg-card/60 p-5"><p className="text-sm font-semibold text-primary">${esc(item.title || item.value || "Feature")}</p><p className="mt-2 text-sm text-muted-foreground">${esc(item.description || item.label || "")}</p></div>`).join("\n        ")}
       </div>
     </section>`,
         imports,
@@ -560,7 +613,7 @@ function renderHero(section: SectionPlan, ctx: RenderContext): RenderedSection {
 // ---------- FEATURE GRID ----------
 
 function renderFeatureGrid(section: SectionPlan, ctx: RenderContext): RenderedSection {
-  const variant = pickVariant(section, ["cards", "bento", "icon-grid", "alternating"], ctx.sectionIndex)
+  const variant = pickVariant(section, ["cards", "bento", "icon-grid", "alternating", "asymmetric-bento", "proof-led"], ctx.sectionIndex)
   const heading = esc(section.heading || "Built for teams who care about the details")
   const eyebrow = esc(section.eyebrow || "")
   const description = esc(section.description || "")
@@ -575,6 +628,71 @@ function renderFeatureGrid(section: SectionPlan, ctx: RenderContext): RenderedSe
   ]
   const icons = items.map((it) => safeIcon(it.icon))
   imports.push({ from: "lucide-react", named: Array.from(new Set(icons)) })
+
+
+  if (variant === "asymmetric-bento") {
+    const tiles = items.length ? items : defaultFeatureItems()
+    return {
+      tsx: `${sectionWrapperOpen(section.anchor, "overflow-hidden")}
+      <div className="absolute inset-x-0 top-1/4 -z-10 h-80 bg-[radial-gradient(circle,_hsl(var(--primary)/0.12),_transparent_65%)]" aria-hidden="true" />
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 sm:px-6 md:py-24 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
+        <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          ${eyebrow ? `<Badge variant="secondary" className="rounded-full">${eyebrow}</Badge>` : ""}
+          <h2 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">${heading}</h2>
+          ${description ? `<p className="text-pretty text-muted-foreground">${description}</p>` : ""}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          ${tiles.slice(0, 5).map((it, i) => {
+            const Icon = safeIcon(it.icon)
+            return `<div className="${i === 0 ? "sm:col-span-2" : ""} rounded-[1.75rem] border bg-card/70 p-6 shadow-sm">
+            <div className="mb-8 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><${Icon} className="h-5 w-5" /></div>
+            <h3 className="text-xl font-semibold tracking-tight">${esc(it.title || "")}</h3>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">${esc(it.description || "")}</p>
+          </div>`
+          }).join("\n          ")}
+        </div>
+      </div>
+    </section>`,
+      imports,
+      needsClient: false,
+      iconsUsed: icons,
+    }
+  }
+
+  if (variant === "proof-led") {
+    const tiles = items.length ? items : defaultFeatureItems()
+    const proof = tiles[0]
+    return {
+      tsx: `${sectionWrapperOpen(section.anchor)}
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 md:py-24 lg:px-8">
+        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-[2rem] border bg-primary p-8 text-primary-foreground lg:p-10">
+            ${eyebrow ? `<p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary-foreground/70">${eyebrow}</p>` : ""}
+            <h2 className="mt-5 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">${heading}</h2>
+            ${description ? `<p className="mt-5 text-pretty text-primary-foreground/75">${description}</p>` : ""}
+            <div className="mt-10 rounded-2xl bg-primary-foreground/10 p-5">
+              <p className="text-3xl font-semibold">${esc(proof?.value || proof?.title || "Proof")}</p>
+              <p className="mt-1 text-sm text-primary-foreground/70">${esc(proof?.description || proof?.label || "Proof that the offer works in the real world.")}</p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            ${tiles.slice(1, 5).map((it) => {
+              const Icon = safeIcon(it.icon)
+              return `<div className="rounded-3xl border bg-card p-6">
+              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><${Icon} className="h-5 w-5" /></div>
+              <h3 className="font-semibold">${esc(it.title || "")}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">${esc(it.description || "")}</p>
+            </div>`
+            }).join("\n            ")}
+          </div>
+        </div>
+      </div>
+    </section>`,
+      imports,
+      needsClient: false,
+      iconsUsed: icons,
+    }
+  }
 
   if (variant === "bento") {
     const tiles = items.length ? items : defaultFeatureItems()
@@ -1724,7 +1842,7 @@ function renderBlogPreview(section: SectionPlan, ctx: RenderContext): RenderedSe
 // ---------- DISPATCHER ----------
 
 export function renderSection(section: SectionPlan, ctx: RenderContext): RenderedSection {
-  if (section.componentTree) {
+  if (section.componentTree && section.variant === "custom") {
     return {
       tsx: renderComponentNode(section.componentTree, ctx),
       imports: componentNodeImports(section.componentTree),

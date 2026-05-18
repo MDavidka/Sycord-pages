@@ -288,7 +288,14 @@ export async function GET() {
 
   try {
     const userDoc = await db.collection("users").findOne({ id: session.user.id })
-    const projects = userDoc?.projects || []
+    const projects = (userDoc?.projects || []).map((project: any) => {
+      const deployedUrl = project.cloudflareUrl || project.deploymentRuntime?.url || project.deployment?.domain || null
+      return {
+        ...project,
+        cloudflareUrl: deployedUrl || project.cloudflareUrl || null,
+        domain: project.domain || deployedUrl || null,
+      }
+    })
 
     return NextResponse.json(projects)
   } catch (error: any) {

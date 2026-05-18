@@ -24,6 +24,21 @@ import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite
 // Maximum number of projects a user can have on the free plan.
 const MAX_FREE_PROJECTS = 3
 
+function getValidProjectUrl(project: any): string | null {
+  const candidate = project?.cloudflareUrl || project?.deploymentRuntime?.url || project?.domain || project?.deployment?.domain
+  if (!candidate || typeof candidate !== "string") return null
+
+  const withProtocol = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`
+  try {
+    const url = new URL(withProtocol)
+    if (!url.hostname.includes(".")) return null
+    if (url.hostname === "example.com") return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 function DashboardContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
@@ -358,37 +373,44 @@ function DashboardContent() {
                   </button>
                 )}
 
-                {filtered.map((project: any) => (
-                  <div
-                    key={project._id}
-                    className="group relative border border-border/50 bg-card/30 backdrop-blur-sm rounded-xl overflow-hidden flex flex-col hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
-                  >
-                    {((project.domain && project.deploymentId) || (project.pages && project.pages.some((p: any) => p.name === 'index.html'))) ? (
-                      <WebsitePreviewCard
-                        domain={project.cloudflareUrl || project.domain || "example.com"}
-                        isLive={!!project.deploymentId && !flaggedDeployments.has(project.deploymentId)}
-                        deploymentId={project.deploymentId}
-                        projectId={project._id}
-                        businessName={project.businessName}
-                        createdAt={project.createdAt}
-                        style={project.style || "default"}
-                        fallbackHtml={project.pages?.find((p: any) => p.name === 'index.html')?.content}
-                        onDelete={() => handleDeleteProject(project._id)}
-                      />
-                    ) : (
-                      <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors">
-                        <div className="h-16 w-16 rounded-full bg-background/50 flex items-center justify-center mb-4 shadow-sm border border-border/50">
-                          <LayoutTemplate className="h-8 w-8 text-muted-foreground/50" />
+                {filtered.map((project: any) => {
+                  const liveUrl = getValidProjectUrl(project)
+                  const fallbackHtml = project.pages?.find((p: any) => p.name === 'index.html')?.content
+                  const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
+                  const shouldShowPreview = Boolean(liveUrl || fallbackHtml)
+
+                  return (
+                    <div
+                      key={project._id}
+                      className="group relative border border-border/50 bg-card/30 backdrop-blur-sm rounded-xl overflow-hidden flex flex-col hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
+                    >
+                      {shouldShowPreview ? (
+                        <WebsitePreviewCard
+                          domain={liveUrl || project.cloudflareUrl || project.domain || "example.com"}
+                          isLive={Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)}
+                          deploymentId={deploymentKey}
+                          projectId={project._id}
+                          businessName={project.businessName}
+                          createdAt={project.createdAt}
+                          style={project.style || "default"}
+                          fallbackHtml={fallbackHtml}
+                          onDelete={() => handleDeleteProject(project._id)}
+                        />
+                      ) : (
+                        <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors">
+                          <div className="h-16 w-16 rounded-full bg-background/50 flex items-center justify-center mb-4 shadow-sm border border-border/50">
+                            <LayoutTemplate className="h-8 w-8 text-muted-foreground/50" />
+                          </div>
+                          <h3 className="font-medium text-foreground mb-1">{project.businessName}</h3>
+                          <p className="text-xs text-muted-foreground mb-4">Még nincs publikálva</p>
+                          <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/sites/${project._id}`)}>
+                            Szerkesztés
+                          </Button>
                         </div>
-                        <h3 className="font-medium text-foreground mb-1">{project.businessName}</h3>
-                        <p className="text-xs text-muted-foreground mb-4">Még nincs publikálva</p>
-                        <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/sites/${project._id}`)}>
-                          Szerkesztés
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )
           })()}

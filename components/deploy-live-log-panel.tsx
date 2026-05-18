@@ -9,12 +9,10 @@ import { cn } from "@/lib/utils"
 type StageId =
   | "queued"
   | "preparing-files"
-  | "installing"
-  | "building"
-  | "allocating-port"
-  | "starting-server"
-  | "configuring-proxy"
+  | "github"
+  | "saving"
   | "health-check"
+  | "deploy-api"
   | "complete"
 
 type DeployStreamEvent =
@@ -37,6 +35,7 @@ type DeployStreamEvent =
       url: string
       domain: string
       port?: number
+      repoId?: string
       health?: any
       timestamp: string
     }
@@ -53,37 +52,33 @@ export type DeployLiveLogPanelProps = {
   onOpenChange: (open: boolean) => void
   projectId: string
   projectName?: string
-  onSuccess?: (result: { url: string; domain: string }) => void
-  onFinish?: (outcome: { success: boolean; result?: { url: string; domain: string }; error?: string; stage?: string }) => void
+  onSuccess?: (result: { url: string; domain: string; repoId?: string }) => void
+  onFinish?: (outcome: { success: boolean; result?: { url: string; domain: string; repoId?: string }; error?: string; stage?: string }) => void
 }
 
 const STAGES: Array<{ id: StageId; label: string; description: string }> = [
   { id: "queued", label: "Queued", description: "Deployment request received" },
-  { id: "preparing-files", label: "Preparing files", description: "Writing project files to disk" },
-  { id: "installing", label: "Installing dependencies", description: "Running npm install" },
-  { id: "building", label: "Building Next.js", description: "Running next build" },
-  { id: "allocating-port", label: "Allocating port", description: "Finding available port" },
-  { id: "starting-server", label: "Starting server", description: "Launching Next.js via PM2" },
-  { id: "configuring-proxy", label: "Configuring proxy", description: "Setting up nginx reverse proxy" },
-  { id: "health-check", label: "Health check", description: "Verifying root HTML response" },
+  { id: "preparing-files", label: "Preparing files", description: "Collecting generated files" },
+  { id: "github", label: "GitHub sync", description: "Updating the repository source" },
+  { id: "saving", label: "Registering repo", description: "Saving numeric repo credentials" },
+  { id: "health-check", label: "API health", description: "Checking Companion Server availability" },
+  { id: "deploy-api", label: "Deploy API", description: "Calling /api/deploy/:repo_id" },
   { id: "complete", label: "Complete", description: "Site is live" },
 ]
 
 const KNOWN_STAGES = new Set(STAGES.map((s) => s.id))
 
 function normalizeStage(stage: string): StageId {
-  // Map runner stage names to UI stage ids
+  // Map server stage names to UI stage ids
   const map: Record<string, StageId> = {
     queued: "queued",
     "preparing-files": "preparing-files",
     preparing: "preparing-files",
     "writing-files": "preparing-files",
-    installing: "installing",
-    building: "building",
-    "allocating-port": "allocating-port",
-    "starting-server": "starting-server",
-    "configuring-proxy": "configuring-proxy",
+    github: "github",
+    saving: "saving",
     "health-check": "health-check",
+    "deploy-api": "deploy-api",
     complete: "complete",
     failed: "complete",
   }
@@ -108,7 +103,7 @@ export function DeployLiveLogPanel({
     return initial
   })
   const [stageTimes, setStageTimes] = useState<Record<string, number>>({})
-  const [result, setResult] = useState<{ url: string; domain: string } | null>(null)
+  const [result, setResult] = useState<{ url: string; domain: string; repoId?: string } | null>(null)
   const [error, setError] = useState<{ stage?: string; message: string } | null>(null)
   const [collapsed, setCollapsed] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -228,7 +223,7 @@ export function DeployLiveLogPanel({
     }
 
     if (event.type === "result") {
-      setResult({ url: event.url, domain: event.domain })
+      setResult({ url: event.url, domain: event.domain, repoId: event.repoId })
       setStageState((current) => {
         const next = { ...current }
         for (const s of STAGES) {
@@ -240,15 +235,15 @@ export function DeployLiveLogPanel({
       })
       setLastMessage("Deployment complete")
       setIsRunning(false)
-      onSuccess?.({ url: event.url, domain: event.domain })
-      onFinish?.({ success: true, result: { url: event.url, domain: event.domain } })
+      onSuccess?.({ url: event.url, domain: event.domain, repoId: event.repoId })
+      onFinish?.({ success: true, result: { url: event.url, domain: event.domain, repoId: event.repoId } })
       return
     }
 
     // type === "error"
     setError({ stage: event.stage, message: event.error })
     if (Array.isArray(event.logs) && event.logs.length > 0) {
-      setLogs((current) => current.concat(event.logs.map((line) => `[error] ${line}`)))
+      setLogs((current) => current.concat((event.logs || []).map((line) => `[error] ${line}`)))
     }
     setIsRunning(false)
     onFinish?.({ success: false, error: event.error, stage: event.stage })
@@ -312,7 +307,7 @@ export function DeployLiveLogPanel({
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-zinc-500">Deploying</p>
               <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">{projectName || projectId}</h2>
-              <p className="mt-1 text-sm text-zinc-400">{result?.domain || `${projectId}.sycord.site`}</p>
+              <p className="mt-1 text-sm text-zinc-400">{result?.domain || "Companion Server API deployment"}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
               <Button variant="ghost" size="sm" onClick={copyLogs} className="justify-start text-zinc-300 hover:bg-white/8 sm:justify-center">
@@ -406,7 +401,7 @@ export function DeployLiveLogPanel({
                 <div className="flex flex-col gap-2 border-b border-white/6 px-4 py-3 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                   <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4" />
-                    Live build output
+                    Deployment output
                   </div>
                   <button className="text-zinc-400 hover:text-white" onClick={() => setAutoScroll((value) => !value)}>
                     Auto-scroll: {autoScroll ? "on" : "off"}
@@ -425,13 +420,13 @@ export function DeployLiveLogPanel({
                           "border-b border-white/[0.03] py-0.5",
                           /\[error\]|error|failed|exception/i.test(line) && "text-red-300",
                           /\[warn\]|warn/i.test(line) && "text-amber-300",
-                          /\[runner\]|success|complete|ready|healthy/i.test(line) && "text-emerald-300",
+                          /\[api\]|success|complete|ready|healthy/i.test(line) && "text-emerald-300",
                           /\[install\]/i.test(line) && "text-cyan-300",
                           /\[build\]/i.test(line) && "text-violet-300",
                           /\[runtime\]/i.test(line) && "text-blue-300",
                           /\[health\]/i.test(line) && "text-pink-300",
                           /\[proxy\]/i.test(line) && "text-orange-300",
-                          !/\[error\]|\[warn\]|\[runner\]|\[install\]|\[build\]|\[runtime\]|\[health\]|\[proxy\]|error|failed|exception|warn|success|complete|ready|healthy/i.test(line) && "text-zinc-400",
+                          !/\[error\]|\[warn\]|\[api\]|\[install\]|\[build\]|\[runtime\]|\[health\]|\[proxy\]|error|failed|exception|warn|success|complete|ready|healthy/i.test(line) && "text-zinc-400",
                         )}
                       >
                         {line}

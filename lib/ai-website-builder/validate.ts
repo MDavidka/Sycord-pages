@@ -52,6 +52,7 @@ export function validateManifest(manifest: GeneratedProjectManifest): ManifestVa
   const warnings: string[] = []
 
   if (!manifest?.brief?.projectName) errors.push("brief.projectName missing")
+  if (!manifest?.designDirection?.concept) warnings.push("designDirection.concept missing")
   if (manifest?.deploymentMode !== "next-server") errors.push('deploymentMode must be "next-server"')
   if (!Array.isArray(manifest?.pages) || manifest.pages.length === 0) {
     errors.push("pages array missing or empty")
@@ -101,6 +102,9 @@ function pageWarnings(
       continue
     }
     if (section.componentTree) {
+      if (section.variant !== "custom") {
+        warnings.push(`pages[${page.path}].sections[${i}] has componentTree without variant custom; built-in renderer will be used`)
+      }
       validateComponentTree(section.componentTree, `pages[${page.path}].sections[${i}].componentTree`, componentIds, errors, warnings)
     }
     if (!ALLOWED_KINDS.has(section.kind)) {
@@ -111,6 +115,17 @@ function pageWarnings(
 
   if (page.path === "/" && page.sections.length < 5) {
     warnings.push(`home page has only ${page.sections.length} sections (target 5+)`)
+  }
+  if (page.path === "/") {
+    const conservative = new Set(["hero:centered", "hero:split", "feature-grid:cards", "feature-grid:icon-grid", "cta:banner"])
+    const conservativeCount = page.sections.filter((section) => conservative.has(`${section.kind}:${section.variant ?? ""}`)).length
+    const uniqueKinds = new Set(page.sections.map((section) => section.kind))
+    if (conservativeCount >= Math.max(3, Math.ceil(page.sections.length * 0.6))) {
+      warnings.push("home page uses mostly conservative variants; consider cinematic, magazine-cover, asymmetric-bento, proof-led, gallery, or process sections")
+    }
+    if (uniqueKinds.size < Math.min(5, page.sections.length)) {
+      warnings.push(`home page has only ${uniqueKinds.size} distinct section kinds`)
+    }
   }
   // Detect repeated kind+variant combos in a row.
   let prev = ""

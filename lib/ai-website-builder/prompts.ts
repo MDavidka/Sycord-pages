@@ -24,8 +24,8 @@ const SECTION_KINDS = [
 ] as const
 
 const VARIANTS_BY_KIND: Record<(typeof SECTION_KINDS)[number], string[]> = {
-  hero: ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial"],
-  "feature-grid": ["cards", "bento", "icon-grid", "alternating"],
+  hero: ["split", "centered", "gradient-card", "saas-dashboard", "ecommerce", "editorial", "cinematic", "magazine-cover", "custom"],
+  "feature-grid": ["cards", "bento", "icon-grid", "alternating", "asymmetric-bento", "proof-led", "custom"],
   stats: ["row", "card-row", "split-callout"],
   testimonials: ["grid-cards", "spotlight", "marquee-static"],
   pricing: ["three-tier", "two-tier-toggle"],
@@ -60,6 +60,16 @@ Return ONLY one JSON object, no prose, no markdown fences, matching this shape:
     "contact"?: { "email"?: string, "phone"?: string, "address"?: string }
   },
   "deploymentMode": "next-server",
+  "designDirection": {
+    "concept": string,
+    "visualStyle": "minimal-editorial" | "bold-saas" | "luxury-dark" | "playful-bento" | "warm-local" | "commerce-catalog" | "creator-magazine" | "event-impact",
+    "layoutRhythm": "immersive" | "editorial" | "conversion-focused" | "portfolio-showcase" | "product-led",
+    "density": "airy" | "balanced" | "dense",
+    "motionLevel": "none" | "subtle" | "expressive",
+    "trustStrategy": "logos" | "testimonials" | "stats" | "case-studies" | "social-proof",
+    "imageStrategy": "abstract" | "product" | "people" | "editorial" | "none",
+    "avoid": string[]
+  },
   "needsDatabase": boolean,
   "integrations": [
     {
@@ -108,11 +118,17 @@ ${Object.entries(VARIANTS_BY_KIND)
 - For gallery / product-grid / blog-preview / team: include title, description, optional category/tag/price.
 - For process: include eyebrow ("Step 01"), title, description.
 - For contact: prefer variant "form" or "split-form".
-- Every SectionPlan should include "componentTree": a JSON tree rendered by the deterministic renderer.
-- componentTree node shape: { "id": string, "component": one of allowed components, "props"?: JSON object, "text"?: string, "children"?: ComponentNode[] }.
+- Use built-in section kind/variant renderers for at least 80% of sections. They are more polished than generic card stacks.
+- Use "componentTree" ONLY when "variant": "custom" and the desired layout cannot be expressed by a built-in section kind/variant.
+- componentTree node shape, only for custom sections: { "id": string, "component": one of allowed components, "props"?: JSON object, "text"?: string, "children"?: ComponentNode[] }.
 - Allowed components: "Page", "Section", "Container", "Grid", "Stack", "Button", "Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter", "Badge", "Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent", "Tabs", "TabsList", "TabsTrigger", "TabsContent", "Input", "Textarea", "Label", "Avatar", "Separator", "Image", "Link", "Heading", "Text", "Stat", "PricingCard", "FeatureCard".
 - Prefer shadcn components (Button, Card*, Badge, Accordion*, Tabs*, Input, Textarea, Label, Avatar, Separator) inside Section/Container/Grid/Stack layout primitives.
 - Do not output raw TSX, JSX strings, markdown, function bodies, imports, or invented component names in componentTree.
+
+Design direction rules:
+- The plan must follow the supplied design direction concept when present.
+- Pick themePreset, variants, copy voice, image hints, and proof strategy to reinforce that concept.
+- Avoid the design-direction "avoid" items, especially generic shadcn card-stack repetition.
 
 Page structure rules:
 - Home page ("/") MUST have at least 5 sections from DIFFERENT kinds. A clean rhythm:

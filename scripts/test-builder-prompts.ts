@@ -146,7 +146,7 @@ async function main() {
     }
     let result
     try {
-      result = await runAIWebsiteBuilder(c.prompt, c.project)
+      result = await runAIWebsiteBuilder(c.prompt, { ...(c.project || {}), quality: "fast" })
     } finally {
       if (c.serverEnv) {
         for (const [k] of Object.entries(c.serverEnv)) {
@@ -176,6 +176,12 @@ async function main() {
     const buildOk = result.build.ok
     const noEnvFile = !filePaths.has(".env")
     const logsHaveNoSecret = !result.logs.some((l) => /eyJhbGciOi/.test(l.detail) || /libsql:\/\/[a-z0-9-]+\.turso\.io/.test(l.detail))
+    const designDirectionOk = Boolean(result.manifest.designDirection?.concept)
+    const customTreeOk = result.manifest.pages.every((page) =>
+      page.sections.every((section) => !section.componentTree || section.variant === "custom"),
+    )
+    const homeSections = result.manifest.pages.find((page) => page.path === "/")?.sections ?? []
+    const homeVarietyOk = new Set(homeSections.map((section) => section.kind)).size >= Math.min(5, homeSections.length)
 
     const unconnectedOk = c.expectUnconnected
       ? c.expectUnconnected.every((name) => result.unconnectedIntegrations.includes(name))
@@ -194,6 +200,7 @@ async function main() {
       buildErrors: result.build.errors,
       theme: result.manifest.theme.preset,
       deploymentMode: result.deploymentMode,
+      designConcept: result.manifest.designDirection.concept,
     }
     console.log(summary)
 
@@ -209,6 +216,9 @@ async function main() {
       ["no .env file generated", noEnvFile],
       ["logs contain no secret values", logsHaveNoSecret],
       ["unconnected integrations surfaced", unconnectedOk],
+      ["design direction recorded", designDirectionOk],
+      ["componentTree custom-only", customTreeOk],
+      ["home section variety", homeVarietyOk],
     ]
     for (const [label, ok] of checks) {
       console.log(`  [${ok ? "OK" : "FAIL"}] ${label}`)

@@ -101,20 +101,20 @@ async function saveGeneratedFilesToProject(
   return { saved: normalizedPages.length, files: deployable }
 }
 
-function readDeploymentMode(files: GeneratedFile[]): "next-server" {
+function readDeploymentMode(files: GeneratedFile[]): "api" {
   const manifestFile = files.find((file) => file.path === "lib/generated-manifest.ts")
   if (manifestFile) {
     const match = manifestFile.content.match(/generatedManifest\s*=\s*({[\s\S]*?})\s+as const/)
     if (match) {
       try {
         const manifest = JSON.parse(match[1]) as { deploymentMode?: unknown }
-        if (manifest.deploymentMode === "next-server") return "next-server"
+        if (manifest.deploymentMode === "next-server") return "api"
       } catch {
         // Fall through to file detection.
       }
     }
   }
-  return "next-server"
+  return "api"
 }
 
 // Validate the model JSON the client sends. Anything malformed is dropped
