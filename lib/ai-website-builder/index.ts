@@ -1,16 +1,22 @@
-// Top-level orchestrator for the AI website builder.
+// ============================================================
+// Syra Website Builder — Orchestrator (v2)
 //
-// Pipeline:
-//   1. callPlannerModel(prompt, opts) → raw JSON string from selected model.
-//   2. parse + normalize → GeneratedProjectManifest (deterministic fallbacks
-//      kick in if any field is missing or malformed).
-//   3. validate manifest → if errors, run a single repair pass against the AI.
-//   4. render every page deterministically with sections.ts.
-//   5. scaffold project files (configs, layout, header/footer, ui components).
-//   6. file-level validation → quality score + diagnostics.
+// 3-Node AI Pipeline:
 //
-// `runAIWebsiteBuilder(prompt, opts?)` is the entry point used by the API
-// route and by older callers that pass only a prompt.
+//   Node A: callNodeA(prompt) → SiteArchitecture
+//           Establishes routes, DB schema, global theme.
+//
+//   Node B: callNodeB(route, arch) × N (concurrent) → PageUITree[]
+//           Generates primitive JSON AST per route.
+//
+//   Node C: callNodeC(arch, pageTrees) → ServerActionPlan
+//           Bridges UI forms to database server actions.
+//
+//   Compiler (deterministic, no AI):
+//           Traverses JSON trees → writes .tsx files.
+//
+//   Scaffold + validate → RunBuilderResult
+// ============================================================
 
 import { callModel, extractJson, type ChatMessage, type ModelSelection } from "@/lib/ai-provider"
 
@@ -19,30 +25,29 @@ import type {
   BuilderOptions,
   ComponentNode,
   CtaPlan,
-  DesignBrief,
-  DesignDirection,
   EnvVarRequirement,
   GeneratedProjectManifest,
   IntegrationKind,
   IntegrationPlan,
   NavLink,
-  PagePlan,
+  PageUITree,
   PipelineLog,
   ProjectContext,
   RequiredComponent,
+  RouteProgress,
   RunBuilderResult,
-  SectionItem,
-  SectionKind,
-  SectionPlan,
+  ServerActionPlan,
+  SiteArchitecture,
+  StateVar,
   ThemePreset,
   ThemeTokens,
 } from "./types"
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
-import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
-import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection } from "./design-directions"
-import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
-import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
-import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
+import { NODE_A_SYSTEM_PROMPT, NODE_B_SYSTEM_PROMPT, NODE_C_SYSTEM_PROMPT, DESIGN_DIRECTION_PROMPT, REPAIR_PROMPT } from "./prompts"
+import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection, type DesignDirection } from "./design-directions"
+import { computeQualityScore, runBuildValidation } from "./validate"
+import { ALL_UI_COMPONENTS, buildUiComponentFiles, scaffoldBaseFiles, computeInitials } from "./scaffold"
+import { compileAllPages, routeToFilePath } from "./compiler"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
 export type {
@@ -51,78 +56,26 @@ export type {
   EnvVarRequirement,
   GeneratedProjectManifest,
   IntegrationPlan,
-  PagePlan,
+  PageUITree,
   ProjectContext,
+  RouteProgress,
   RunBuilderResult,
-  SectionPlan,
+  SiteArchitecture,
   ThemeTokens,
 } from "./types"
+
+// ─── Model selection ──────────────────────────────────────────────────────────
 
 const FALLBACK_MODEL: ModelSelection = { id: "gemini-3.1-flash-preview", provider: "Google" }
 const DEFAULT_BEST_MODEL: ModelSelection = { id: "gemini-3.1-pro-preview", provider: "Google" }
 
-const ALLOWED_KINDS: ReadonlySet<SectionKind> = new Set<SectionKind>([
-  "hero",
-  "feature-grid",
-  "stats",
-  "testimonials",
-  "pricing",
-  "faq",
-  "contact",
-  "gallery",
-  "product-grid",
-  "comparison",
-  "process",
-  "cta",
-  "logos",
-  "team",
-  "blog-preview",
-])
-
-const ALLOWED_COMPONENTS: ReadonlySet<ComponentNode["component"]> = new Set<ComponentNode["component"]>([
-  "Page",
-  "Section",
-  "Container",
-  "Grid",
-  "Stack",
-  "Button",
-  "Card",
-  "CardHeader",
-  "CardTitle",
-  "CardDescription",
-  "CardContent",
-  "CardFooter",
-  "Badge",
-  "Accordion",
-  "AccordionItem",
-  "AccordionTrigger",
-  "AccordionContent",
-  "Tabs",
-  "TabsList",
-  "TabsTrigger",
-  "TabsContent",
-  "Input",
-  "Textarea",
-  "Label",
-  "Avatar",
-  "Separator",
-  "Image",
-  "Link",
-  "Heading",
-  "Text",
-  "Stat",
-  "PricingCard",
-  "FeatureCard",
-])
-
-function isProvidedModel(model: ModelSelection | undefined): model is ModelSelection {
-  return Boolean(model && typeof model.id === "string" && typeof model.provider === "string")
-}
-
 function pickModel(opts: BuilderOptions): ModelSelection {
-  if (isProvidedModel(opts.model)) return opts.model
+  const m = opts.model
+  if (m && typeof m.id === "string" && typeof m.provider === "string") return m
   return opts.quality === "fast" ? FALLBACK_MODEL : DEFAULT_BEST_MODEL
 }
+
+// ─── AI agent helper ──────────────────────────────────────────────────────────
 
 async function callAIAgent(
   messages: ChatMessage[],
@@ -130,14 +83,12 @@ async function callAIAgent(
 ): Promise<string> {
   const temperature = opts.temperature ?? 0.4
   const retries = opts.retries ?? 1
-
   let lastError = "Unknown AI error"
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await callModel({ model: opts.model, messages, temperature })
     if (res.ok) return res.content
     lastError = `${res.message}${res.details ? `: ${res.details}` : ""}`
-    // If the selected model is not available (e.g. missing key), fall back
-    // to Google so the pipeline still produces something useful.
     if (attempt === retries && opts.model.provider !== "Google") {
       const fallback = await callModel({ model: FALLBACK_MODEL, messages, temperature })
       if (fallback.ok) return fallback.content
@@ -145,6 +96,8 @@ async function callAIAgent(
   }
   throw new Error(lastError)
 }
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function safeText(value: unknown, fallback: string): string {
   if (typeof value !== "string") return fallback
@@ -161,513 +114,264 @@ function sanitizeRoute(routePath: string): string {
   return cleaned || "/"
 }
 
-function slugToComponentName(routePath: string): string {
-  if (routePath === "/") return "HomePage"
-  const parts = routePath.replace(/^\//, "").split("/").filter(Boolean)
-  const camel = parts
-    .map((segment) =>
-      segment
-        .split("-")
-        .map((p) => (p[0]?.toUpperCase() ?? "") + p.slice(1))
-        .join(""),
-    )
-    .join("")
-  return `${camel || "Page"}Page`
-}
-
-function routeToFilePath(routePath: string): string {
-  return routePath === "/" ? "app/page.tsx" : `app${routePath}/page.tsx`
-}
-
-function asNavLinks(value: unknown, pagePaths: string[]): NavLink[] {
-  if (!Array.isArray(value)) {
-    return pagePaths.slice(0, 5).map((p, i) => ({ label: i === 0 ? "Home" : prettifyPath(p), href: p }))
-  }
-  const cleaned: NavLink[] = []
-  const seen = new Set<string>()
-  for (const v of value) {
-    const label = safeText((v as { label?: unknown })?.label, "")
-    const href = safeText((v as { href?: unknown })?.href, "")
-    if (!label || !href) continue
-    if (seen.has(href)) continue
-    seen.add(href)
-    cleaned.push({ label, href: href.startsWith("#") || href.startsWith("http") ? href : sanitizeRoute(href) })
-  }
-  // Always include the home route
-  if (!cleaned.some((l) => l.href === "/")) {
-    cleaned.unshift({ label: "Home", href: "/" })
-  }
-  return cleaned.slice(0, 6)
-}
-
 function prettifyPath(path: string): string {
   if (path === "/") return "Home"
   const last = path.split("/").filter(Boolean).pop() ?? path
-  return last
-    .split("-")
-    .map((w) => w[0]?.toUpperCase() + w.slice(1))
-    .join(" ")
+  return last.split("-").map((w) => w[0]?.toUpperCase() + w.slice(1)).join(" ")
 }
 
-function asCta(value: unknown, fallback: CtaPlan): CtaPlan {
-  const obj = value as { label?: unknown; href?: unknown } | undefined
-  const label = safeText(obj?.label, "")
-  const href = safeText(obj?.href, "")
-  if (!label) return fallback
+// ─── Node A parser ────────────────────────────────────────────────────────────
+
+function normalizeSiteArchitecture(
+  raw: unknown,
+  prompt: string,
+  project?: ProjectContext,
+): SiteArchitecture {
+  const root = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
+
+  const projectName = safeText(root.project_name, project?.name?.trim() || prompt.split(/\s+/).slice(0, 3).join(" ") || "My Site")
+
+  // Theme config
+  const themeRaw = (root.theme_config as Record<string, unknown> | undefined) ?? {}
+  const primaryColor = safeText(themeRaw.primary_color, "#6366f1")
+
+  // Database schema
+  const dbSchema = Array.isArray(root.database_schema)
+    ? (root.database_schema as unknown[]).map((m) => {
+        const r = (m && typeof m === "object" ? (m as Record<string, unknown>) : {}) as Record<string, unknown>
+        const fields = Array.isArray(r.fields)
+          ? (r.fields as unknown[]).map((f) => {
+              const fRaw = (f && typeof f === "object" ? (f as Record<string, unknown>) : {}) as Record<string, unknown>
+              return {
+                name: safeText(fRaw.name, "id"),
+                type: safeText(fRaw.type, "string"),
+              }
+            })
+          : []
+        return { model_name: safeText(r.model_name, "Entry"), fields }
+      })
+    : []
+
+  // Routes
+  const rawRoutes = Array.isArray(root.routes) ? (root.routes as unknown[]) : []
+  const seen = new Set<string>()
+  const routes: SiteArchitecture["routes"] = []
+
+  for (let i = 0; i < rawRoutes.length; i++) {
+    const r = (rawRoutes[i] && typeof rawRoutes[i] === "object" ? (rawRoutes[i] as Record<string, unknown>) : {}) as Record<string, unknown>
+    const rawPath = safeText(r.path, "")
+    const normalized = i === 0 ? "/" : sanitizeRoute(rawPath || `/page-${i + 1}`)
+    if (seen.has(normalized)) continue
+    seen.add(normalized)
+    routes.push({
+      path: normalized,
+      purpose: safeText(r.purpose, prettifyPath(normalized)),
+    })
+  }
+
+  // Ensure home route always exists
+  if (!seen.has("/")) {
+    routes.unshift({ path: "/", purpose: "Landing page with hero and key features" })
+    seen.add("/")
+  }
+
+  // Minimum 3 routes
+  const defaultRoutes = ["/about", "/pricing", "/contact", "/features"]
+  for (const dr of defaultRoutes) {
+    if (routes.length >= 5) break
+    if (!seen.has(dr)) {
+      routes.push({ path: dr, purpose: prettifyPath(dr) })
+      seen.add(dr)
+    }
+  }
+
+  const themePreset = detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`)
+  const navLinks: NavLink[] = routes.slice(0, 5).map((r, i) => ({
+    label: i === 0 ? "Home" : prettifyPath(r.path),
+    href: r.path,
+  }))
+
+  const needsDatabase = dbSchema.length > 0
+
   return {
-    label,
-    href: href.startsWith("#") || href.startsWith("http") ? href : sanitizeRoute(href || fallback.href),
+    project_name: projectName,
+    theme_config: { primary_color: primaryColor, mode: themeRaw.mode === "dark" ? "dark" : "light" },
+    database_schema: dbSchema,
+    routes,
+    global_components: ["Navbar", "Footer"],
+    themePreset,
+    navLinks,
+    primaryCta: { label: "Get started", href: routes.find(r => r.path === "/contact")?.path ?? routes[1]?.path ?? "/" },
+    secondaryCta: { label: "Learn more", href: routes.find(r => r.path === "/about")?.path ?? "/" },
+    footerCta: { label: "Talk to us", href: routes.find(r => r.path === "/contact")?.path ?? "/" },
+    contact: { email: "hello@example.com" },
+    logoUrl: project?.logoUrl,
+    logoInitials: computeInitials(projectName),
+    category: project?.category,
+    description: project?.description?.trim() || prompt,
+    tagline: `${projectName} — built for modern teams.`,
+    audience: "Modern teams that care about craft.",
+    voice: "Confident, warm, specific.",
+    needsDatabase,
+    deploymentMode: "next-server",
   }
 }
 
-function asTheme(presetRaw: unknown): ThemeTokens {
-  const candidate = (typeof presetRaw === "string" ? presetRaw.toLowerCase().replace(/\s+/g, "-") : "") as ThemePreset
-  const final: ThemePreset = THEME_PRESETS.includes(candidate) ? candidate : "saas"
-  return buildTheme(final)
-}
+// ─── Node B parser ────────────────────────────────────────────────────────────
 
-function normalizeSectionItems(items: unknown): SectionItem[] | undefined {
-  if (!Array.isArray(items)) return undefined
-  const out: SectionItem[] = []
-  for (const raw of items) {
-    if (!raw || typeof raw !== "object") continue
-    const r = raw as Record<string, unknown>
-    const item: SectionItem = {
-      title: safeText(r.title, ""),
-      subtitle: safeText(r.subtitle, ""),
-      description: safeText(r.description, ""),
-      icon: safeText(r.icon, ""),
-      eyebrow: safeText(r.eyebrow, ""),
-      badge: safeText(r.badge, ""),
-      href: safeText(r.href, ""),
-      label: safeText(r.label, ""),
-      value: safeText(r.value, ""),
-      suffix: safeText(r.suffix, ""),
-      prefix: safeText(r.prefix, ""),
-      price: safeText(r.price, ""),
-      period: safeText(r.period, ""),
-      features: Array.isArray(r.features) ? (r.features as unknown[]).map((f) => safeText(f, "")).filter(Boolean) : undefined,
-      cta: r.cta ? asCta(r.cta, { label: "", href: "#" }) : undefined,
-      image: safeText(r.image, ""),
-      quote: safeText(r.quote, ""),
-      author: safeText(r.author, ""),
-      role: safeText(r.role, ""),
-      avatar: safeText(r.avatar, ""),
-      initials: safeText(r.initials, ""),
-      highlighted: Boolean(r.highlighted),
-      category: safeText(r.category, ""),
-      tag: safeText(r.tag, ""),
-      date: safeText(r.date, ""),
-    }
-    // Strip empty strings to keep JSON tidy.
-    for (const k of Object.keys(item) as (keyof SectionItem)[]) {
-      const v = item[k] as unknown
-      if (typeof v === "string" && v === "") delete item[k]
-    }
-    out.push(item)
-  }
-  return out.length ? out : undefined
-}
-
-function jsonSafeProps(input: unknown): Record<string, unknown> | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined
-  const out: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(key)) continue
-    if (typeof value === "string") out[key] = safeText(value, "")
-    else if (typeof value === "number" && Number.isFinite(value)) out[key] = value
-    else if (typeof value === "boolean") out[key] = value
-    else if (value === null) out[key] = null
-    else if (Array.isArray(value)) {
-      const arr = value.filter((v) => typeof v === "string" || typeof v === "number" || typeof v === "boolean" || v === null)
-      if (arr.length === value.length) out[key] = arr
-    }
-  }
-  return Object.keys(out).length ? out : undefined
-}
+const ALLOWED_PRIMITIVES: ReadonlySet<string> = new Set([
+  "main", "section", "div", "header", "footer", "nav", "aside", "article",
+  "h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "a", "ul", "ol", "li",
+  "img", "form", "fieldset", "button", "input", "textarea", "label",
+  "select", "option", "table", "thead", "tbody", "tr", "th", "td",
+  "Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter",
+  "Button", "Badge", "Input", "Textarea", "Label", "Separator", "Avatar",
+  "AvatarImage", "AvatarFallback", "Accordion", "AccordionItem",
+  "AccordionTrigger", "AccordionContent", "Tabs", "TabsList", "TabsTrigger", "TabsContent",
+])
 
 function normalizeComponentNode(raw: unknown, depth = 0): ComponentNode | undefined {
-  if (depth > 8 || !raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  if (depth > 10 || !raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
   const r = raw as Record<string, unknown>
   const component = safeText(r.component, "")
-  if (!ALLOWED_COMPONENTS.has(component as ComponentNode["component"])) return undefined
+  if (!ALLOWED_PRIMITIVES.has(component)) {
+    // Fall back to a safe div so we don't lose the children
+    const children = Array.isArray(r.children)
+      ? r.children.map((c) => normalizeComponentNode(c, depth + 1)).filter((c): c is ComponentNode => Boolean(c))
+      : undefined
+    return {
+      id: `div-${depth}`,
+      component: "div",
+      props: typeof (r as Record<string, unknown>).props === "object" ? (r.props as Record<string, unknown>) : undefined,
+      text: safeText(r.text, "") || undefined,
+      children: children?.length ? children : undefined,
+    }
+  }
+
   const children = Array.isArray(r.children)
     ? r.children
-        .map((child) => normalizeComponentNode(child, depth + 1))
-        .filter((child): child is ComponentNode => Boolean(child))
-        .slice(0, 40)
+        .map((c) => normalizeComponentNode(c, depth + 1))
+        .filter((c): c is ComponentNode => Boolean(c))
+        .slice(0, 50)
     : undefined
+
   const id = safeText(r.id, "") || `${component.toLowerCase()}-${depth}`
+  const props = r.props && typeof r.props === "object" && !Array.isArray(r.props)
+    ? (r.props as Record<string, unknown>)
+    : undefined
+
   return {
     id: id.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80),
     component: component as ComponentNode["component"],
-    props: jsonSafeProps(r.props),
+    props,
     text: safeText(r.text, "") || undefined,
     children: children?.length ? children : undefined,
   }
 }
 
-function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): SectionPlan {
+function normalizePageUITree(raw: unknown, route: string, purpose: string): PageUITree {
   const r = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
-  const kindCandidate = safeText(r.kind, "") as SectionKind
-  const kind: SectionKind = ALLOWED_KINDS.has(kindCandidate) ? kindCandidate : fallbackKind
-  const items = normalizeSectionItems(r.items)
-  const highlights = Array.isArray(r.highlights) ? (r.highlights as unknown[]).map((h) => safeText(h, "")).filter(Boolean) : undefined
-  const variant = safeText(r.variant, "") || undefined
-  return {
-    kind,
-    variant,
-    eyebrow: safeText(r.eyebrow, "") || undefined,
-    heading: safeText(r.heading, "") || undefined,
-    subheading: safeText(r.subheading, "") || undefined,
-    description: safeText(r.description, "") || undefined,
-    highlights,
-    primaryCta: r.primaryCta ? asCta(r.primaryCta, { label: "Learn more", href: "#" }) : undefined,
-    secondaryCta: r.secondaryCta ? asCta(r.secondaryCta, { label: "", href: "#" }) : undefined,
-    align: r.align === "center" || r.align === "left" ? r.align : undefined,
-    tone: typeof r.tone === "string" ? (r.tone as SectionPlan["tone"]) : undefined,
-    components: Array.isArray(r.components) ? (r.components as unknown[]).map((c) => safeText(c, "")).filter(Boolean) : undefined,
-    items,
-    imageHint: safeText(r.imageHint, "") || undefined,
-    componentTree: variant === "custom" ? normalizeComponentNode(r.componentTree) : undefined,
-    anchor: safeText(r.anchor, "") || undefined,
-  }
-}
 
-function defaultSectionsForRoute(routePath: string, brief: DesignBrief): SectionPlan[] {
-  // Route-aware defaults so missing AI output still yields varied pages.
-  if (routePath === "/") {
-    return [
+  const tree = normalizeComponentNode(r.tree) ?? {
+    id: "root",
+    component: "main" as const,
+    props: { className: "flex-1" },
+    children: [
       {
-        kind: "hero",
-        variant: "cinematic",
-        eyebrow: `Introducing ${brief.projectName}`,
-        heading: brief.tagline,
-        description: brief.description,
-        primaryCta: brief.primaryCta,
-        secondaryCta: brief.secondaryCta,
-        anchor: "top",
+        id: "fallback-section",
+        component: "section" as const,
+        props: { className: "py-24 px-4 max-w-4xl mx-auto text-center" },
+        children: [
+          {
+            id: "fallback-h1",
+            component: "h1" as const,
+            props: { className: "text-4xl font-bold mb-4" },
+            text: prettifyPath(route),
+          },
+        ],
       },
-      { kind: "logos", heading: "Trusted by teams worldwide" },
-      { kind: "feature-grid", variant: "asymmetric-bento", eyebrow: "Why teams choose us", heading: "Built for the way you work", description: brief.description },
-      { kind: "stats", variant: "row", eyebrow: "By the numbers", heading: "Real results, week after week" },
-      { kind: "testimonials", variant: "grid-cards", eyebrow: "Customer stories", heading: `What customers say about ${brief.projectName}` },
-      { kind: "pricing", eyebrow: "Pricing", heading: "Simple pricing for every team" },
-      { kind: "faq", variant: "accordion", eyebrow: "FAQ", heading: "Questions before you start?" },
-      { kind: "cta", variant: "boxed-card", heading: "Ready to get started?", description: brief.description, primaryCta: brief.primaryCta },
-    ]
-  }
-  const last = routePath.replace(/^\//, "").split("/").filter(Boolean).pop() ?? ""
-  switch (last) {
-    case "pricing":
-      return [
-        { kind: "hero", variant: "centered", heading: "Simple, predictable pricing", description: "Pick a plan that scales with you.", primaryCta: brief.primaryCta },
-        { kind: "pricing" },
-        { kind: "comparison", heading: "Compare every plan" },
-        { kind: "faq", variant: "two-column", heading: "Pricing FAQ" },
-        { kind: "cta", variant: "banner" },
-      ]
-    case "contact":
-      return [
-        { kind: "hero", variant: "centered", heading: "Let's talk", description: "Tell us about your project and we'll be in touch.", primaryCta: brief.primaryCta },
-        { kind: "contact", variant: "split-form" },
-        { kind: "faq", variant: "two-column", heading: "Common questions" },
-      ]
-    case "about":
-      return [
-        { kind: "hero", variant: "magazine-cover", heading: `About ${brief.projectName}`, description: brief.description },
-        { kind: "stats", variant: "split-callout" },
-        { kind: "process", variant: "timeline", heading: "How we work" },
-        { kind: "team" },
-        { kind: "cta", variant: "split" },
-      ]
-    case "blog":
-      return [
-        { kind: "hero", variant: "centered", heading: "Stories, ideas, and behind-the-scenes", description: "Insights from our team.", primaryCta: { label: "Subscribe", href: "#" } },
-        { kind: "blog-preview", variant: "feature-and-list" },
-        { kind: "blog-preview", variant: "card-grid" },
-        { kind: "cta", variant: "banner" },
-      ]
-    case "shop":
-    case "store":
-    case "menu":
-      return [
-        { kind: "hero", variant: "ecommerce", heading: "Crafted with care", description: brief.description, primaryCta: { label: "Shop now", href: "#" } },
-        { kind: "product-grid", heading: "Bestsellers" },
-        { kind: "stats", variant: "card-row" },
-        { kind: "cta", variant: "boxed-card" },
-      ]
-    default:
-      return [
-        { kind: "hero", variant: "centered", heading: prettifyPath(routePath), description: brief.description, primaryCta: brief.primaryCta },
-        { kind: "feature-grid", variant: "proof-led" },
-        { kind: "testimonials", variant: "spotlight" },
-        { kind: "cta", variant: "split" },
-      ]
-  }
-}
-
-function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): DesignBrief {
-  const seedName = (prompt.split(/\s+/).slice(0, 3).join(" ").trim() || "Sycord Site").replace(/[^A-Za-z0-9 ]/g, "")
-  const derivedName = seedName.length > 2 ? seedName : "Sycord Studio"
-  const projectName = project?.name?.trim() || derivedName
-  const description = project?.description?.trim()
-    || (prompt.length > 30 ? prompt : "A polished, mobile-first website tuned for the brand and audience.")
-  return {
-    projectName,
-    tagline: "Beautiful, fast, on-brand websites.",
-    description,
-    audience: "Modern teams that care about craft.",
-    voice: "Confident, warm, specific.",
-    themePreset: detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`),
-    navLinks: [
-      { label: "Home", href: "/" },
-      { label: "Features", href: "/features" },
-      { label: "Pricing", href: "/pricing" },
-      { label: "About", href: "/about" },
-      { label: "Contact", href: "/contact" },
     ],
-    primaryCta: { label: "Get started", href: "/contact" },
-    secondaryCta: { label: "Learn more", href: "/about" },
-    footerCta: { label: "Talk to us", href: "/contact" },
-    contact: { email: "hello@example.com" },
-    logoUrl: project?.logoUrl,
-    logoInitials: computeInitials(projectName),
-    category: project?.category,
-  }
-}
-
-function fallbackPagesFromBrief(brief: DesignBrief): PagePlan[] {
-  return brief.navLinks.slice(0, 5).map((link, i) => ({
-    path: link.href.startsWith("/") ? sanitizeRoute(link.href) : "/",
-    title: i === 0 ? "Home" : link.label,
-    metaTitle: `${i === 0 ? "Home" : link.label} — ${brief.projectName}`,
-    metaDescription: brief.description,
-    sections: defaultSectionsForRoute(i === 0 ? "/" : sanitizeRoute(link.href), brief),
-  }))
-}
-
-function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext, direction?: DesignDirection): GeneratedProjectManifest {
-  const fallbackBrief = fallbackBriefFromPrompt(prompt, project)
-  const root = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
-  const briefRaw = (root.brief as Record<string, unknown> | undefined) ?? {}
-  const designDirection = normalizeDesignDirection(root.designDirection, direction || fallbackDesignDirection(prompt, project))
-
-  const themePreset = (() => {
-    const fromAi = safeText(briefRaw.themePreset, "")
-    const candidate = fromAi.toLowerCase().replace(/\s+/g, "-") as ThemePreset
-    if (THEME_PRESETS.includes(candidate)) return candidate
-    return detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`)
-  })()
-
-  // Pre-normalize page paths to wire navLinks against real routes.
-  const rawPages = Array.isArray(root.pages) ? (root.pages as unknown[]) : []
-  const normalizedPaths: string[] = []
-  const pages: PagePlan[] = []
-  const seenPaths = new Set<string>()
-
-  rawPages.forEach((rp, i) => {
-    const r = (rp && typeof rp === "object" ? (rp as Record<string, unknown>) : {}) as Record<string, unknown>
-    const rawPath = safeText(r.path, "")
-    const normalized = i === 0 ? "/" : sanitizeRoute(rawPath || `/page-${i + 1}`)
-    if (seenPaths.has(normalized)) return
-    seenPaths.add(normalized)
-    normalizedPaths.push(normalized)
-    const sectionsRaw = Array.isArray(r.sections) ? (r.sections as unknown[]) : []
-    const sections = sectionsRaw.length
-      ? sectionsRaw.map((s) => normalizeSection(s))
-      : []
-    pages.push({
-      path: normalized,
-      title: safeText(r.title, prettifyPath(normalized)),
-      metaTitle: safeText(r.metaTitle, `${prettifyPath(normalized)} — ${safeText(briefRaw.projectName, fallbackBrief.projectName)}`),
-      metaDescription: safeText(r.metaDescription, fallbackBrief.description),
-      sections,
-    })
-  })
-
-  if (!pages.some((p) => p.path === "/")) {
-    pages.unshift({
-      path: "/",
-      title: "Home",
-      metaTitle: `${safeText(briefRaw.projectName, fallbackBrief.projectName)} — ${safeText(briefRaw.tagline, fallbackBrief.tagline)}`,
-      metaDescription: safeText(briefRaw.description, fallbackBrief.description),
-      sections: [],
-    })
-    normalizedPaths.unshift("/")
   }
 
-  // If only the home page exists (e.g. the planner failed entirely), add
-  // the standard secondary pages from the fallback brief so the generated
-  // site still has a real internal structure.
-  if (pages.length < 2) {
-    const seedBrief: DesignBrief = {
-      ...fallbackBrief,
-      themePreset,
-      projectName: safeText(briefRaw.projectName, fallbackBrief.projectName),
-      tagline: safeText(briefRaw.tagline, fallbackBrief.tagline),
-      description: safeText(briefRaw.description, fallbackBrief.description),
-    }
-    for (const extra of fallbackPagesFromBrief(seedBrief)) {
-      if (extra.path === "/" || pages.some((p) => p.path === extra.path)) continue
-      pages.push(extra)
-      normalizedPaths.push(extra.path)
-    }
-  }
-
-  // Host-project branding always wins over AI-invented names/descriptions.
-  // If the planner proposed a different name, keep the real project name
-  // and fold the AI's suggestion into the tagline instead (less disruptive
-  // than renaming the user's business).
-  const aiProjectName = safeText(briefRaw.projectName, "")
-  const resolvedProjectName = project?.name?.trim() || aiProjectName || fallbackBrief.projectName
-  const aiTagline = safeText(briefRaw.tagline, "")
-  const resolvedTagline = aiTagline
-    || (aiProjectName && project?.name && aiProjectName !== project.name ? aiProjectName : fallbackBrief.tagline)
-  const resolvedDescription = project?.description?.trim() || safeText(briefRaw.description, fallbackBrief.description)
-
-  // Fill empty sections from defaults and de-dup consecutive variants.
-  const briefSeed: DesignBrief = {
-    ...fallbackBrief,
-    projectName: resolvedProjectName,
-    tagline: resolvedTagline,
-    description: resolvedDescription,
-    audience: safeText(briefRaw.audience, fallbackBrief.audience),
-    voice: safeText(briefRaw.voice, fallbackBrief.voice),
-    themePreset,
-    navLinks: asNavLinks(briefRaw.navLinks, normalizedPaths),
-    primaryCta: asCta(briefRaw.primaryCta, fallbackBrief.primaryCta),
-    secondaryCta: briefRaw.secondaryCta ? asCta(briefRaw.secondaryCta, fallbackBrief.secondaryCta!) : fallbackBrief.secondaryCta,
-    footerCta: briefRaw.footerCta ? asCta(briefRaw.footerCta, fallbackBrief.footerCta!) : fallbackBrief.footerCta,
-    socialLinks: Array.isArray(briefRaw.socialLinks)
-      ? (briefRaw.socialLinks as unknown[])
-          .map((s) => {
-            const r = (s && typeof s === "object" ? (s as Record<string, unknown>) : {}) as Record<string, unknown>
-            const label = safeText(r.label, "")
-            const href = safeText(r.href, "")
-            if (!label || !href) return null
-            return { label, href }
-          })
-          .filter((x): x is { label: string; href: string } => Boolean(x))
-      : undefined,
-    contact: (() => {
-      const c = (briefRaw.contact as Record<string, unknown> | undefined) ?? undefined
-      if (!c) return fallbackBrief.contact
-      return {
-        email: safeText(c.email, fallbackBrief.contact?.email ?? "") || undefined,
-        phone: safeText(c.phone, "") || undefined,
-        address: safeText(c.address, "") || undefined,
-      }
-    })(),
-    logoUrl: project?.logoUrl || fallbackBrief.logoUrl,
-    logoInitials: computeInitials(resolvedProjectName),
-    category: project?.category || fallbackBrief.category,
-  }
-
-  for (const page of pages) {
-    if (page.sections.length === 0) {
-      page.sections = defaultSectionsForRoute(page.path, briefSeed)
-    }
-    // Ensure home has a hero up front.
-    if (page.path === "/" && page.sections[0]?.kind !== "hero") {
-      page.sections.unshift({ kind: "hero", variant: "split", heading: briefSeed.tagline, description: briefSeed.description, primaryCta: briefSeed.primaryCta, secondaryCta: briefSeed.secondaryCta })
-    }
-    // De-dup consecutive identical kinds.
-    page.sections = dedupConsecutive(page.sections)
-  }
-
-  const { needsDatabase, integrations, databaseProvider, unconnectedRequested } = resolveIntegrations(
-    root,
-    prompt,
-    project,
-  )
-  const requiredEnvVars = buildRequiredEnvVars(integrations, needsDatabase)
+  const state = Array.isArray(r.state)
+    ? (r.state as unknown[]).map((s) => {
+        const sv = (s && typeof s === "object" ? s : {}) as Record<string, unknown>
+        return {
+          name: safeText(sv.name, "value"),
+          type: (["string", "number", "boolean", "array", "object"].includes(safeText(sv.type, "")) ? safeText(sv.type, "string") : "string") as StateVar["type"],
+          default: sv.default ?? "",
+        }
+      })
+    : []
 
   return {
-    brief: briefSeed,
-    theme: buildTheme(themePreset),
-    designDirection,
-    pages,
-    deploymentMode: "next-server",
-    needsDatabase,
-    databaseProvider,
-    integrations,
-    requiredEnvVars,
-    unconnectedIntegrations: unconnectedRequested,
+    route,
+    is_server_component: r.is_server_component === false ? false : !state.length,
+    imports: Array.isArray(r.imports) ? (r.imports as unknown[]).map((i) => safeText(i, "")).filter(Boolean) : [],
+    state,
+    tree,
+    purpose,
   }
 }
 
-// Keywords that unambiguously point at features requiring persistent data.
-const DB_KEYWORDS = [
-  "booking",
-  "reservation",
-  "appointment",
-  "schedule",
-  "dashboard",
-  "account",
-  "sign up",
-  "signup",
-  "login",
-  "admin",
-  "cms",
-  "editor",
-  "marketplace",
-  "orders",
-  "order",
-  "cart",
-  "checkout",
-  "ecommerce",
-  "e-commerce",
-  "storefront",
-  "inventory",
-  "product",
-  "submission",
-  "form",
-  "blog post",
-  "content",
-  "save",
-  "persist",
-]
+// ─── Node C parser ────────────────────────────────────────────────────────────
+
+function normalizeServerActionPlan(raw: unknown): ServerActionPlan {
+  const r = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
+
+  const actions = Array.isArray(r.actions)
+    ? (r.actions as unknown[]).map((a) => {
+        const ar = (a && typeof a === "object" ? a : {}) as Record<string, unknown>
+        const inputFields = Array.isArray(ar.inputFields)
+          ? (ar.inputFields as unknown[]).map((f) => {
+              const fr = (f && typeof f === "object" ? f : {}) as Record<string, unknown>
+              return {
+                name: safeText(fr.name, "value"),
+                type: (["string", "number", "boolean", "date"].includes(safeText(fr.type, "")) ? safeText(fr.type, "string") : "string") as "string" | "number" | "boolean" | "date",
+                required: Boolean(fr.required),
+              }
+            })
+          : []
+        return {
+          name: safeText(ar.name, "handleAction"),
+          kind: ar.kind === "query" ? "query" as const : "mutation" as const,
+          model: safeText(ar.model, "Entry"),
+          inputFields,
+          operation: (["insert", "update", "delete", "select"].includes(safeText(ar.operation, "")) ? safeText(ar.operation, "insert") : "insert") as "insert" | "update" | "delete" | "select",
+          description: safeText(ar.description, ""),
+        }
+      })
+    : []
+
+  const routeBindings: Record<string, string[]> = {}
+  if (r.routeBindings && typeof r.routeBindings === "object" && !Array.isArray(r.routeBindings)) {
+    for (const [k, v] of Object.entries(r.routeBindings as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        routeBindings[k] = v.map((item) => safeText(item, "")).filter(Boolean)
+      }
+    }
+  }
+
+  return { actions, routeBindings }
+}
+
+// ─── Integration resolution ───────────────────────────────────────────────────
 
 const INTEGRATION_KINDS: ReadonlySet<IntegrationKind> = new Set<IntegrationKind>([
-  "database",
-  "auth",
-  "email",
-  "analytics",
-  "storage",
-  "payments",
-  "other",
+  "database", "auth", "email", "analytics", "storage", "payments", "other",
 ])
 
-function promptSuggestsDatabase(prompt: string, project?: ProjectContext): boolean {
-  const blob = `${prompt} ${project?.description ?? ""} ${project?.category ?? ""}`.toLowerCase()
-  return DB_KEYWORDS.some((kw) => blob.includes(kw))
+const INTEGRATION_ID_ALIASES: Record<string, string> = {
+  "turso": "turso", "mongodb": "mongodb", "supabase": "supabase",
+  "firebase": "firebase", "upstash": "upstash", "upstash-redis": "upstash",
+  "redis": "upstash", "nextauth": "nextauth", "auth-js": "nextauth",
+  "clerk": "clerk", "stripe": "stripe", "paypal": "paypal",
+  "openai": "openai", "resend": "resend", "github": "github",
+  "sendgrid": "resend", "postmark": "resend",
 }
 
-function envKeyLooksLikeSecret(key: string): boolean {
-  return /^[A-Z][A-Z0-9_]*$/.test(key.trim())
-}
-
-function normalizeIntegration(raw: unknown): IntegrationPlan | null {
-  if (!raw || typeof raw !== "object") return null
-  const r = raw as Record<string, unknown>
-  const name = safeText(r.name, "")
-  const providerRaw = safeText(r.provider, "").toLowerCase()
-  if (!name) return null
-  const kindCandidate = safeText(r.kind, "").toLowerCase() as IntegrationKind
-  const kind: IntegrationKind = INTEGRATION_KINDS.has(kindCandidate) ? kindCandidate : "other"
-  const envVars = Array.isArray(r.envVars)
-    ? (r.envVars as unknown[])
-        .map((e) => safeText(e, ""))
-        .filter(envKeyLooksLikeSecret)
-    : []
-  return {
-    kind,
-    name,
-    provider: providerRaw || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-    reason: safeText(r.reason, ""),
-    envVars,
-  }
+function normalizeId(raw: string | undefined | null): string {
+  return (raw ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
 }
 
 function tursoIntegration(reason: string): IntegrationPlan {
@@ -680,128 +384,37 @@ function tursoIntegration(reason: string): IntegrationPlan {
   }
 }
 
-// Map integration provider keys (what the planner/us emit) to Sycord
-// integration IDs (what the user has connected in the dashboard).
-// Both sides get normalized to the same dash-separated lowercase form
-// before lookup.
-const INTEGRATION_ID_ALIASES: Record<string, string> = {
-  "turso": "turso",
-  "mongodb": "mongodb",
-  "supabase": "supabase",
-  "supabase-auth": "supabase-auth",
-  "firebase": "firebase",
-  "upstash": "upstash",
-  "upstash-redis": "upstash",
-  "redis": "upstash",
-  "nextauth": "nextauth",
-  "auth-js": "nextauth",
-  "clerk": "clerk",
-  "stripe": "stripe",
-  "paypal": "paypal",
-  "openai": "openai",
-  "resend": "resend",
-  "github": "github",
-  "sendgrid": "resend",
-  "postmark": "resend",
-}
-
-function normalizeId(raw: string | undefined | null): string {
-  return (raw ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-}
-
-function integrationId(plan: IntegrationPlan): string {
-  const p = normalizeId(plan.provider)
-  return INTEGRATION_ID_ALIASES[p] ?? p
-}
-
 function resolveIntegrations(
-  root: Record<string, unknown>,
-  prompt: string,
+  needsDatabase: boolean,
   project?: ProjectContext,
-): {
-  needsDatabase: boolean
-  integrations: IntegrationPlan[]
-  databaseProvider?: "turso" | "none"
-  unconnectedRequested: string[]
-} {
-  const rawIntegrations = Array.isArray(root.integrations)
-    ? (root.integrations as unknown[]).map(normalizeIntegration).filter((i): i is IntegrationPlan => i !== null)
-    : []
-
-  const aiNeedsDb = typeof root.needsDatabase === "boolean" ? (root.needsDatabase as boolean) : undefined
-  // If AI said true, or the prompt clearly implies persistence, we need a DB.
-  const needsDatabase = aiNeedsDb === true || (aiNeedsDb !== false && promptSuggestsDatabase(prompt, project))
-
-  // Connected integration id set. Turso is always treated as "connectable"
-  // because it's the platform's default DB — but we still warn if the env
-  // vars aren't resolved.
+): { integrations: IntegrationPlan[]; databaseProvider: "turso" | "none"; unconnectedRequested: string[] } {
   const connected = new Set<string>(["turso"])
   for (const id of project?.connectedIntegrationIds ?? []) {
     const norm = normalizeId(id)
     if (norm) connected.add(INTEGRATION_ID_ALIASES[norm] ?? norm)
   }
-  for (const projectInt of project?.integrations ?? []) {
-    const provider = normalizeId(projectInt.provider || projectInt.name)
+  for (const pi of project?.integrations ?? []) {
+    const provider = normalizeId(pi.provider || pi.name)
     if (provider) connected.add(INTEGRATION_ID_ALIASES[provider] ?? provider)
   }
 
-  // Dedup planner-requested integrations by normalized id.
-  const byProvider = new Map<string, IntegrationPlan>()
-  const unconnectedRequested: string[] = []
-  for (const integration of rawIntegrations) {
-    const id = integrationId(integration)
-    if (!connected.has(id)) {
-      // Planner asked for a non-connected integration — drop it but
-      // remember the name so we can surface a "not connected" warning
-      // and render a safe UI placeholder instead of real SDK code.
-      if (!unconnectedRequested.includes(integration.name)) {
-        unconnectedRequested.push(integration.name)
-      }
-      continue
-    }
-    if (!byProvider.has(id)) byProvider.set(id, integration)
-  }
-
-  // Promote every connected project integration into the plan so the UI
-  // can echo them back (even if the planner didn't mention them).
-  for (const projectInt of project?.integrations ?? []) {
-    const provider = normalizeId(projectInt.provider || projectInt.name)
-    const id = INTEGRATION_ID_ALIASES[provider] ?? provider
-    if (!id || byProvider.has(id)) continue
-    byProvider.set(id, {
-      kind: "other",
-      name: projectInt.name,
-      provider: id,
-      reason: "Already connected to this project",
-      envVars: [],
-    })
-  }
-
+  const integrations: IntegrationPlan[] = []
   if (needsDatabase) {
-    const existingDb = Array.from(byProvider.values()).find((i) => i.kind === "database")
-    if (!existingDb || existingDb.provider !== "turso") {
-      // Force Turso as the default database even if the planner proposed
-      // another provider — the host infra only has Turso wired up.
-      byProvider.set("turso", tursoIntegration(existingDb?.reason ?? ""))
-      if (existingDb && existingDb.provider !== "turso") {
-        byProvider.delete(existingDb.provider)
-      }
-    } else {
-      // Ensure env var list is correct for Turso.
-      byProvider.set("turso", tursoIntegration(existingDb.reason))
-    }
-  } else {
-    // Strip any database integrations the planner may have added erroneously.
-    for (const [k, v] of Array.from(byProvider.entries())) {
-      if (v.kind === "database") byProvider.delete(k)
-    }
+    integrations.push(tursoIntegration(""))
+  }
+
+  // Include connected project integrations
+  for (const pi of project?.integrations ?? []) {
+    const provider = normalizeId(pi.provider || pi.name)
+    const id = INTEGRATION_ID_ALIASES[provider] ?? provider
+    if (!id || integrations.some((i) => normalizeId(i.provider) === id)) continue
+    integrations.push({ kind: "other", name: pi.name, provider: id, reason: "Already connected", envVars: [] })
   }
 
   return {
-    needsDatabase,
-    integrations: Array.from(byProvider.values()),
+    integrations,
     databaseProvider: needsDatabase ? "turso" : "none",
-    unconnectedRequested,
+    unconnectedRequested: [],
   }
 }
 
@@ -827,90 +440,249 @@ function buildRequiredEnvVars(integrations: IntegrationPlan[], needsDatabase: bo
 function computeMissingEnvVars(
   required: EnvVarRequirement[],
   existingKeys: string[] | undefined,
-  resolvedValues?: Record<string, string>,
+  project?: ProjectContext,
 ): EnvVarRequirement[] {
   const present = new Set((existingKeys ?? []).filter(Boolean))
-  return required.filter((env) => {
-    // If we have a non-empty resolved value (from project envVars or the
-    // server env), the key is no longer missing even if it wasn't in the
-    // project's envVarKeys list.
-    if (resolvedValues && resolvedValues[env.key] && resolvedValues[env.key].trim().length > 0) return false
-    return !present.has(env.key)
-  })
-}
-
-// Build a map of envKey -> real value, sourced from (in order):
-//   1. project.envVars (the user's stored secrets)
-//   2. process.env (server env on the host)
-// Values are only used locally for missing-env checks and are never emitted
-// into generated files.
-function resolveRequiredEnvVarValues(
-  required: EnvVarRequirement[],
-  project: ProjectContext | undefined,
-): Record<string, string> {
-  const out: Record<string, string> = {}
-  const projectValues = new Map<string, string>()
   for (const v of project?.envVars ?? []) {
     if (typeof v?.key === "string" && typeof v?.value === "string" && v.value.length > 0) {
-      projectValues.set(v.key, v.value)
+      present.add(v.key)
     }
   }
-  for (const req of required) {
-    const fromProject = projectValues.get(req.key)
-    if (fromProject && fromProject.length > 0) {
-      out[req.key] = fromProject
-      continue
-    }
-    const fromServer = process.env[req.key]
-    if (typeof fromServer === "string" && fromServer.length > 0) {
-      out[req.key] = fromServer
-    }
+  for (const key of required.map((r) => r.key)) {
+    const fromServer = process.env[key]
+    if (typeof fromServer === "string" && fromServer.length > 0) present.add(key)
   }
-  return out
+  return required.filter((env) => !present.has(env.key))
 }
 
-function dedupConsecutive(sections: SectionPlan[]): SectionPlan[] {
-  if (sections.length < 2) return sections
-  const out: SectionPlan[] = []
-  let prevSig = ""
-  for (const s of sections) {
-    const sig = `${s.kind}:${s.variant ?? ""}`
-    if (sig === prevSig) continue
-    out.push(s)
-    prevSig = sig
+// ─── Fallback page tree ───────────────────────────────────────────────────────
+
+function buildFallbackPageTree(route: string, arch: SiteArchitecture): PageUITree {
+  const name = prettifyPath(route)
+  const purpose = arch.routes.find((r) => r.path === route)?.purpose ?? name
+
+  return {
+    route,
+    is_server_component: true,
+    imports: ["Card", "CardContent", "Button"],
+    state: [],
+    purpose,
+    tree: {
+      id: "main-root",
+      component: "main",
+      props: { className: "flex-1" },
+      children: [
+        {
+          id: "hero-section",
+          component: "section",
+          props: { className: "py-24 px-4 max-w-5xl mx-auto text-center" },
+          children: [
+            {
+              id: "eyebrow",
+              component: "p",
+              props: { className: "text-sm font-semibold uppercase tracking-widest text-primary mb-4" },
+              text: arch.project_name,
+            },
+            {
+              id: "heading",
+              component: "h1",
+              props: { className: "text-5xl font-bold tracking-tight mb-6" },
+              text: name,
+            },
+            {
+              id: "desc",
+              component: "p",
+              props: { className: "text-xl text-muted-foreground max-w-2xl mx-auto mb-8" },
+              text: purpose,
+            },
+            {
+              id: "cta-btn",
+              component: "Button",
+              props: { className: "text-lg px-8 py-4" },
+              text: arch.primaryCta.label,
+            },
+          ],
+        },
+      ],
+    },
   }
-  return out
 }
 
-function buildPlannerUserContent(prompt: string, project?: ProjectContext, direction?: DesignDirection): string {
-  if (!project) return prompt
-  const projectBits: string[] = []
-  if (project.name) projectBits.push(`Project name: ${project.name}`)
-  if (project.description) projectBits.push(`Project description: ${project.description}`)
-  if (project.category) projectBits.push(`Category: ${project.category}`)
-  if (project.envVarKeys?.length) projectBits.push(`Existing env var keys: ${project.envVarKeys.join(", ")}`)
-  if (project.integrations?.length) {
-    projectBits.push(
-      `Connected integrations: ${project.integrations.map((i) => i.name).join(", ")}`,
+// ─── Pipeline context passed to onProgress ───────────────────────────────────
+
+export interface BuilderProgressEvent {
+  stage: string
+  routeStatuses?: RouteProgress[]
+  log?: string
+}
+
+// ─── Node A call ─────────────────────────────────────────────────────────────
+
+async function runNodeA(
+  prompt: string,
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+  onProgress?: (e: BuilderProgressEvent) => void,
+): Promise<SiteArchitecture> {
+  const model = pickModel(opts)
+  onProgress?.({ stage: "node-a", log: "Node A: analyzing site architecture..." })
+
+  const contextParts: string[] = [prompt]
+  if (opts.project?.name) contextParts.push(`Project: ${opts.project.name}`)
+  if (opts.project?.description) contextParts.push(`Description: ${opts.project.description}`)
+  if (opts.project?.category) contextParts.push(`Category: ${opts.project.category}`)
+  const userContent = contextParts.join("\n")
+
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: NODE_A_SYSTEM_PROMPT },
+        { role: "user", content: userContent },
+      ],
+      { model, temperature: 0.5 },
     )
+    logs.push({ step: "node-a", detail: `Site architecture returned ${raw.length} chars` })
+  } catch (err) {
+    logs.push({ step: "node-a", detail: `Node A failed: ${err instanceof Error ? err.message : String(err)}. Using fallback architecture.` })
   }
-  if (projectBits.length === 0) return prompt
-  return `${prompt}\n\nHost project context (branding & existing setup — keep the project name/description consistent):\n${projectBits.join("\n")}`
+
+  const parsed = extractJson<unknown>(raw)
+  const arch = normalizeSiteArchitecture(parsed, prompt, opts.project)
+  logs.push({ step: "node-a", detail: `Architecture: ${arch.routes.length} routes, DB schema: ${arch.database_schema.map((m) => m.model_name).join(", ") || "none"}` })
+  onProgress?.({
+    stage: "node-a",
+    log: `Architecture ready: ${arch.routes.map((r) => r.path).join(", ")}`,
+    routeStatuses: arch.routes.map((r) => ({ path: r.path, purpose: r.purpose, status: "pending" })),
+  })
+  return arch
 }
 
-async function planDesignDirection(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<DesignDirection> {
+// ─── Node B call (single route) ───────────────────────────────────────────────
+
+async function runNodeBForRoute(
+  route: { path: string; purpose: string },
+  arch: SiteArchitecture,
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+  onProgress?: (e: BuilderProgressEvent) => void,
+): Promise<PageUITree> {
+  const model = pickModel(opts)
+  onProgress?.({ stage: "node-b", log: `Generating UI tree for ${route.path}...` })
+
+  const archContext = JSON.stringify({
+    project_name: arch.project_name,
+    theme_config: arch.theme_config,
+    database_schema: arch.database_schema,
+    routes: arch.routes,
+  })
+
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: NODE_B_SYSTEM_PROMPT(route.path, route.purpose) },
+        {
+          role: "user",
+          content: `Site architecture:\n${archContext}\n\nBuild the UI tree for the route: ${route.path}\nPurpose: ${route.purpose}`,
+        },
+      ],
+      { model, temperature: 0.6, retries: 1 },
+    )
+    logs.push({ step: "node-b", detail: `Page tree for ${route.path}: ${raw.length} chars` })
+  } catch (err) {
+    logs.push({ step: "node-b", detail: `Node B failed for ${route.path}: ${err instanceof Error ? err.message : String(err)}. Using fallback.` })
+  }
+
+  const parsed = extractJson<unknown>(raw)
+  if (parsed) {
+    const tree = normalizePageUITree(parsed, route.path, route.purpose)
+    onProgress?.({ stage: "node-b", log: `UI tree ready for ${route.path}` })
+    return tree
+  }
+
+  // Deterministic fallback if Node B fails
+  const fallback = buildFallbackPageTree(route.path, arch)
+  logs.push({ step: "node-b", detail: `Using fallback tree for ${route.path}` })
+  onProgress?.({ stage: "node-b", log: `Fallback tree for ${route.path}` })
+  return fallback
+}
+
+// ─── Node C call ─────────────────────────────────────────────────────────────
+
+async function runNodeC(
+  arch: SiteArchitecture,
+  pageTrees: PageUITree[],
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+  onProgress?: (e: BuilderProgressEvent) => void,
+): Promise<ServerActionPlan | undefined> {
+  if (!arch.needsDatabase || arch.database_schema.length === 0) {
+    logs.push({ step: "node-c", detail: "No database required, skipping server actions." })
+    return undefined
+  }
+
+  onProgress?.({ stage: "node-c", log: "Node C: generating server actions..." })
+  const model = pickModel(opts)
+
+  const archJson = JSON.stringify({
+    project_name: arch.project_name,
+    database_schema: arch.database_schema,
+    routes: arch.routes.map((r) => r.path),
+  })
+  const treesSummary = JSON.stringify(
+    pageTrees.map((t) => ({
+      route: t.route,
+      hasForm: JSON.stringify(t.tree).includes('"form"'),
+      stateVars: t.state.map((s) => s.name),
+    })),
+  )
+
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: NODE_C_SYSTEM_PROMPT(archJson, treesSummary) },
+        {
+          role: "user",
+          content: `Generate server actions for this site. Database models: ${arch.database_schema.map((m) => m.model_name).join(", ")}.`,
+        },
+      ],
+      { model, temperature: 0.3, retries: 1 },
+    )
+    logs.push({ step: "node-c", detail: `Server actions returned ${raw.length} chars` })
+  } catch (err) {
+    logs.push({ step: "node-c", detail: `Node C failed: ${err instanceof Error ? err.message : String(err)}` })
+    return undefined
+  }
+
+  const parsed = extractJson<unknown>(raw)
+  if (!parsed) return undefined
+
+  const plan = normalizeServerActionPlan(parsed)
+  logs.push({ step: "node-c", detail: `Server actions: ${plan.actions.length} action(s)` })
+  onProgress?.({ stage: "node-c", log: `${plan.actions.length} server action(s) planned` })
+  return plan
+}
+
+// ─── Design direction ─────────────────────────────────────────────────────────
+
+async function runDesignDirection(
+  prompt: string,
+  opts: BuilderOptions,
+  logs: PipelineLog[],
+): Promise<DesignDirection> {
   const fallback = fallbackDesignDirection(prompt, opts.project)
   if (opts.quality === "fast") {
-    logs.push({ step: "design-direction", detail: `Fast mode using deterministic concept: ${fallback.concept}` })
+    logs.push({ step: "design-direction", detail: `Fast mode: ${fallback.concept}` })
     return fallback
   }
-
   const model = pickModel(opts)
   try {
     const raw = await callAIAgent(
       [
         { role: "system", content: DESIGN_DIRECTION_SYSTEM_PROMPT },
-        { role: "user", content: buildPlannerUserContent(prompt, opts.project) },
+        { role: "user", content: prompt },
       ],
       { model, temperature: 0.75, retries: 0 },
     )
@@ -918,259 +690,157 @@ async function planDesignDirection(prompt: string, opts: BuilderOptions, logs: P
     const direction = normalizeDesignDirection(parsed, fallback)
     logs.push({ step: "design-direction", detail: `Concept: ${direction.concept}` })
     return direction
-  } catch (error) {
-    logs.push({
-      step: "design-direction",
-      detail: `Direction planning failed: ${error instanceof Error ? error.message : String(error)}. Using deterministic concept: ${fallback.concept}`,
-    })
+  } catch {
+    logs.push({ step: "design-direction", detail: `Direction failed, using fallback: ${fallback.concept}` })
     return fallback
   }
 }
 
-async function planManifest(prompt: string, opts: BuilderOptions, logs: PipelineLog[], direction?: DesignDirection): Promise<GeneratedProjectManifest> {
-  const model = pickModel(opts)
-  let raw = ""
-  try {
-    raw = await callAIAgent(
-      [
-        { role: "system", content: PLAN_SYSTEM_PROMPT },
-        { role: "user", content: buildPlannerUserContent(prompt, opts.project, direction) },
-      ],
-      { model, temperature: 0.6 },
-    )
-    logs.push({ step: "plan", detail: `Planner returned ${raw.length} chars from ${model.provider}/${model.id}` })
-  } catch (error) {
-    logs.push({
-      step: "plan",
-      detail: `Planner failed: ${error instanceof Error ? error.message : String(error)}. Using deterministic fallback.`,
-    })
-  }
+// ─── Manifest assembly ────────────────────────────────────────────────────────
 
-  const parsed = extractJson<unknown>(raw)
-  const manifest = normalizeManifest(parsed, prompt, opts.project, direction)
-  const validation = validateManifest(manifest)
-  if (!validation.ok) {
-    logs.push({ step: "plan-validate", detail: `Manifest invalid: ${validation.errors.join("; ")}. Repairing...` })
-    const repaired = await repairManifest(prompt, raw, validation.errors, opts, logs, direction)
-    if (repaired) return repaired
-    logs.push({ step: "plan-repair", detail: "Repair failed, using normalized fallback." })
-  } else if (validation.warnings.length) {
-    logs.push({ step: "plan-validate", detail: `Manifest warnings: ${validation.warnings.join("; ")}` })
-  }
-  return manifest
-}
-
-async function repairManifest(
-  prompt: string,
-  previousRaw: string,
-  errors: string[],
-  opts: BuilderOptions,
-  logs: PipelineLog[],
-  direction?: DesignDirection,
-): Promise<GeneratedProjectManifest | null> {
-  const model = pickModel(opts)
-  try {
-    const raw = await callAIAgent(
-      [
-        { role: "system", content: PAGE_REPAIR_PROMPT },
-        { role: "system", content: PLAN_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Original prompt:\n${buildPlannerUserContent(prompt, opts.project, direction)}\n\nErrors to fix:\n${errors.map((e) => `- ${e}`).join("\n")}\n\nPrevious malformed JSON:\n${previousRaw.slice(0, 4000)}`,
-        },
-      ],
-      { model, temperature: 0.2, retries: 0 },
-    )
-    const parsed = extractJson<unknown>(raw)
-    if (!parsed) return null
-    const manifest = normalizeManifest(parsed, prompt, opts.project, direction)
-    const v = validateManifest(manifest)
-    if (v.ok) {
-      logs.push({ step: "plan-repair", detail: "Repair succeeded." })
-      return manifest
-    }
-    logs.push({ step: "plan-repair", detail: `Repair still invalid: ${v.errors.join("; ")}` })
-    return manifest // Even if not perfect, the normalized form is renderable.
-  } catch (error) {
-    logs.push({
-      step: "plan-repair",
-      detail: `Repair call failed: ${error instanceof Error ? error.message : String(error)}`,
-    })
-    return null
-  }
-}
-
-// ---------- rendering ----------
-
-function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
-  file: BuilderFile
-  importsNeeded: Set<string>
-  needsClient: boolean
-} {
-  const allImports: RenderedSection["imports"][] = []
-  const tsxBlocks: string[] = []
-  let needsClient = false
-  const importsNeeded = new Set<string>()
-
-  page.sections.forEach((section, sectionIndex) => {
-    const rendered = renderSection(section, { sectionIndex, pagePath: page.path })
-    allImports.push(rendered.imports)
-    tsxBlocks.push(rendered.tsx)
-    if (rendered.needsClient) needsClient = true
-    for (const imp of rendered.imports) {
-      const m = imp.from.match(/^@\/components\/ui\/([a-z-]+)$/)
-      if (m) importsNeeded.add(m[1])
-    }
-  })
-
-  const headerImports = [
-    { from: "next", named: ["type Metadata"] },
-    ...allImports.flat(),
-  ]
-  // Group header imports through buildImportsPreamble for ordering/dedup.
-  const importBlock = buildImportsPreamble([headerImports])
-
-  const clientHeader = needsClient ? '"use client"\n\n' : ""
-  const componentName = slugToComponentName(page.path)
-  const meta = `export const metadata: Metadata = {
-  title: ${JSON.stringify(page.metaTitle)},
-  description: ${JSON.stringify(page.metaDescription)},
-}`
-
-  // The renderer outputs `<section>` blocks at root; we just stack them inside
-  // a wrapping fragment. App layout already provides <main>.
-  const body = tsxBlocks.join("\n\n")
-
-  const tsx = `${clientHeader}${importBlock}\n\n${meta}\n\nexport default function ${componentName}() {\n  return (\n    <>\n${body}\n    </>\n  )\n}\n`
+function assembleManifest(
+  arch: SiteArchitecture,
+  pageTrees: PageUITree[],
+  serverActions: ServerActionPlan | undefined,
+  direction: DesignDirection,
+  project?: ProjectContext,
+): GeneratedProjectManifest {
+  const { integrations, databaseProvider, unconnectedRequested } = resolveIntegrations(arch.needsDatabase, project)
+  const requiredEnvVars = buildRequiredEnvVars(integrations, arch.needsDatabase)
 
   return {
-    file: { path: routeToFilePath(page.path), content: tsx },
-    importsNeeded,
-    needsClient,
+    brief: {
+      projectName: arch.project_name,
+      tagline: arch.tagline ?? `${arch.project_name} — built for modern teams.`,
+      description: arch.description ?? "",
+      audience: arch.audience ?? "Modern teams",
+      voice: arch.voice ?? "Confident, warm, specific.",
+      themePreset: arch.themePreset,
+      navLinks: arch.navLinks,
+      primaryCta: arch.primaryCta,
+      secondaryCta: arch.secondaryCta,
+      footerCta: arch.footerCta,
+      contact: arch.contact,
+      logoUrl: arch.logoUrl,
+      logoInitials: arch.logoInitials,
+      category: arch.category,
+    },
+    theme: buildTheme(arch.themePreset),
+    designDirection: direction,
+    architecture: arch,
+    pageTrees,
+    serverActions,
+    deploymentMode: "next-server",
+    needsDatabase: arch.needsDatabase,
+    databaseProvider,
+    integrations,
+    requiredEnvVars,
+    unconnectedIntegrations: unconnectedRequested,
   }
 }
 
-function pickRequiredUiComponents(manifest: GeneratedProjectManifest): RequiredComponent[] {
-  // Probe-render every page to know which @/components/ui/* slugs are needed,
-  // then return matching component definitions to scaffold.
-  const required = new Set<string>()
-  for (const page of manifest.pages) {
-    for (const section of page.sections) {
-      for (const imp of renderSection(section, { sectionIndex: 0, pagePath: page.path }).imports) {
-        const m = imp.from.match(/^@\/components\/ui\/([a-z-]+)$/)
-        if (m) required.add(m[1])
-      }
-    }
-  }
-  // Always include button/badge/card/separator since the header/footer use them.
-  required.add("button")
-  required.add("badge")
-  required.add("card")
-  required.add("separator")
-  return ALL_UI_COMPONENTS.filter((c) => required.has(c.slug))
+// ─── Required UI components ───────────────────────────────────────────────────
+
+function pickRequiredUiComponents(requiredSlugs: Set<string>): RequiredComponent[] {
+  return ALL_UI_COMPONENTS.filter((c) => requiredSlugs.has(c.slug))
 }
 
-// Public entry point.
+// ─── Public entry point ───────────────────────────────────────────────────────
+
 export async function runAIWebsiteBuilder(
   prompt: string,
   options: BuilderOptions = {},
+  onProgress?: (e: BuilderProgressEvent) => void,
 ): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
-  logs.push({
-    step: "start",
-    detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
+  logs.push({ step: "start", detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}` })
+  onProgress?.({ stage: "node-a", log: "Starting 3-node pipeline..." })
+
+  // ── Step 1: Design Direction ────────────────────────────────────────────────
+  const direction = await runDesignDirection(prompt, options, logs)
+
+  // ── Step 2: Node A — Site Architecture ──────────────────────────────────────
+  const arch = await runNodeA(prompt, options, logs, onProgress)
+
+  // ── Step 3: Node B — Page UI Trees (all routes, concurrent) ─────────────────
+  onProgress?.({
+    stage: "node-b",
+    log: `Building ${arch.routes.length} page trees concurrently...`,
+    routeStatuses: arch.routes.map((r) => ({ path: r.path, purpose: r.purpose, status: "generating" })),
   })
 
-  const quality = options.quality || "best"
-  logs.push({ step: "quality", detail: `${quality === "fast" ? "Fast" : "Best"} generation pipeline selected` })
+  const pageTrees = await Promise.all(
+    arch.routes.map((route) =>
+      runNodeBForRoute(route, arch, options, logs, onProgress),
+    ),
+  )
 
-  // 1. Design direction + plan (with repair).
-  const direction = await planDesignDirection(prompt, { ...options, quality }, logs)
-  const manifest = await planManifest(prompt, { ...options, quality }, logs, direction)
-  logs.push({
-    step: "plan",
-    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
+  logs.push({ step: "node-b", detail: `All ${pageTrees.length} page trees generated` })
+  onProgress?.({
+    stage: "node-b",
+    log: `All ${pageTrees.length} UI trees complete.`,
+    routeStatuses: arch.routes.map((r) => ({ path: r.path, purpose: r.purpose, status: "done" })),
   })
 
-  // 2. Render pages.
-  const required = pickRequiredUiComponents(manifest)
-  const pageFiles: BuilderFile[] = []
-  for (const page of manifest.pages) {
-    const { file } = renderPageFile(manifest, page)
-    pageFiles.push(file)
-    logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
+  // ── Step 4: Node C — Server Actions ─────────────────────────────────────────
+  onProgress?.({ stage: "node-c", log: "Node C: server actions..." })
+  const serverActions = await runNodeC(arch, pageTrees, options, logs, onProgress)
+
+  // ── Step 5: Compile page trees → .tsx files ──────────────────────────────────
+  onProgress?.({ stage: "compiling", log: "Compiling JSON ASTs to TSX files..." })
+  const { pages: compiledPages, requiredSlugs } = compileAllPages(pageTrees, arch.project_name)
+  const pageFiles: BuilderFile[] = compiledPages.map((p) => ({ path: p.path, content: p.content }))
+
+  for (const p of compiledPages) {
+    logs.push({ step: "compile", detail: `Compiled ${p.path} (${p.content.split("\n").length} lines)` })
   }
+  onProgress?.({ stage: "compiling", log: `Compiled ${pageFiles.length} page files.` })
 
-  // Resolve env var values (project envVars ⟶ server env fallback) for
-  // missing-env checks only. Never echo or write these values to files.
-  const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
+  // ── Step 6: Assemble manifest ────────────────────────────────────────────────
+  const manifest = assembleManifest(arch, pageTrees, serverActions, direction, options.project)
 
-  // 3. Scaffold base + ui components (+ optional DB files).
-  const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
-  const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
+  // ── Step 7: Scaffold base + UI files ─────────────────────────────────────────
+  onProgress?.({ stage: "scaffolding", log: "Scaffolding project files..." })
+  const requiredComponents = pickRequiredUiComponents(requiredSlugs)
+  const baseFiles = scaffoldBaseFiles(manifest, requiredComponents, prompt)
+  const uiFiles = buildUiComponentFiles(Array.from(requiredSlugs))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
-  // 4. File-level validation.
-  const connectedIntegrationIds = Array.from(new Set([
+  // ── Step 8: Build validation ─────────────────────────────────────────────────
+  onProgress?.({ stage: "validating", log: "Validating build..." })
+  const connectedIds = Array.from(new Set([
     ...(options.project?.connectedIntegrationIds ?? []),
-    ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
+    ...(options.project?.integrations?.map((i) => i.provider || i.name) ?? []),
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
+
   const build = runBuildValidation(allFiles, {
     needsDatabase: manifest.needsDatabase,
     deploymentMode: manifest.deploymentMode,
-    connectedIntegrationIds,
+    connectedIntegrationIds: connectedIds,
   })
+
   if (!build.ok) {
-    logs.push({ step: "build-validate", detail: `Build validation failed: ${build.errors.join("; ")}` })
+    logs.push({ step: "validate", detail: `Build validation: ${build.errors.length} error(s): ${build.errors.slice(0, 3).join("; ")}` })
   } else {
-    logs.push({ step: "build-validate", detail: `Build validation passed (${build.warnings.length} warnings)` })
+    logs.push({ step: "validate", detail: `Build validation passed (${build.warnings.length} warning(s))` })
   }
 
-  // Missing env var calculation combines project.envVarKeys with the
-  // resolved values map — a key is only "missing" if neither the project
-  // nor the server provided a non-empty value.
+  // ── Step 9: Missing env vars ─────────────────────────────────────────────────
   const missingEnvVars = computeMissingEnvVars(
     manifest.requiredEnvVars,
     options.project?.envVarKeys,
-    resolvedEnv,
+    options.project,
   )
-  if (manifest.needsDatabase) {
-    // NEVER include secret values in the log message — only key names.
-    const missingNames = missingEnvVars.map((e) => e.key)
-    if (missingNames.length) {
-      logs.push({
-        step: "integrations",
-        detail: `Database required (Turso). Missing env vars: ${missingNames.join(", ")}`,
-      })
-    } else {
-      logs.push({ step: "integrations", detail: "Database required (Turso). Turso env loaded." })
-    }
-  } else {
-    logs.push({ step: "integrations", detail: "No database integration required" })
-  }
-  if (manifest.unconnectedIntegrations.length) {
-    logs.push({
-      step: "integrations",
-      detail: `Skipped unconnected integrations: ${manifest.unconnectedIntegrations.join(", ")}`,
-    })
-  }
 
   const qualityScore = computeQualityScore(manifest, build)
-  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
+  logs.push({ step: "done", detail: `Quality: ${qualityScore}/100 | Files: ${allFiles.length} | Deployment: ${manifest.deploymentMode}` })
+  onProgress?.({ stage: "done", log: `Done. ${allFiles.length} files, quality ${qualityScore}/100` })
 
-  // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
   if (manifest.needsDatabase && missingEnvVars.length) {
-    advisoryWarnings.unshift(
-      `Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`,
-    )
-  }
-  if (manifest.unconnectedIntegrations.length) {
-    advisoryWarnings.push(
-      `Integrations not connected (UI placeholders used): ${manifest.unconnectedIntegrations.join(", ")}`,
-    )
+    advisoryWarnings.unshift(`Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`)
   }
 
   return {
