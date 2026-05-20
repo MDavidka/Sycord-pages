@@ -103,9 +103,13 @@ export async function POST(req: NextRequest) {
       const push = (payload: unknown) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`))
       }
+      const fullReplace = patches.length === 1 && patches[0].op === "replace" && patches[0].path === "/"
       if (error) push({ type: "error", message: error })
-      if (patches.length > 0) push({ type: "patches", patches })
-      if (patches.length === 0 && prompt) {
+      if (fullReplace) {
+        push({ type: "document", document: nextDocument })
+      } else if (patches.length > 0) {
+        push({ type: "patches", patches })
+      } else if (prompt) {
         push({
           type: "document",
           document: nextDocument,

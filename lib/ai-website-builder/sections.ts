@@ -50,10 +50,14 @@ function jsxStr(value: unknown): string {
   return JSON.stringify(escMultiline(value))
 }
 
-function sanitizeJsonForJsx(value: unknown): string {
-  return JSON.stringify(value, (_key, val) => (typeof val === "string" ? escMultiline(val) : val))
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
+function escapeJsonForJsx(value: unknown): string {
+  try {
+    const serialized = JSON.stringify(value, (_key, val) => (typeof val === "string" ? escMultiline(val) : val))
+    if (!serialized) return "null"
+    return serialized.replace(/</g, "\\u003c").replace(/>/g, "\\u003e")
+  } catch {
+    return "null"
+  }
 }
 
 function ensureCta(c: CtaPlan | undefined, fallback: CtaPlan): CtaPlan {
@@ -199,7 +203,7 @@ function propString(props: Record<string, unknown> | undefined, allow: ReadonlyS
     if (typeof value === "string") out.push(`${key}=${jsxStr(value)}`)
     else if (typeof value === "number" && Number.isFinite(value)) out.push(`${key}={${value}}`)
     else if (typeof value === "boolean" && value) out.push(key)
-    else if (typeof value === "object") out.push(`${key}={${sanitizeJsonForJsx(value)}}`)
+    else if (typeof value === "object") out.push(`${key}={${escapeJsonForJsx(value)}}`)
   }
   return out.length ? ` ${out.join(" ")}` : ""
 }

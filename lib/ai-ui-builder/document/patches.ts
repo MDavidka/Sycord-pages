@@ -47,11 +47,14 @@ function applyOperation(target: unknown, path: string[], patch: BuilderPatch): u
     if (patch.op === "remove") return null
     return patch.value
   }
+  const fullPath = `/${path.join("/")}`
   const last = path[path.length - 1]
   const parentPath = path.slice(0, -1)
   let parent: unknown = target
   for (const segment of parentPath) {
-    if (parent == null || typeof parent !== "object") throw new Error(`Invalid path segment: ${segment}`)
+    if (parent == null || typeof parent !== "object") {
+      throw new Error(`Invalid path segment "${segment}" in ${fullPath}`)
+    }
     parent = (parent as Record<string, unknown>)[segment]
   }
   if (Array.isArray(parent)) {
@@ -63,7 +66,7 @@ function applyOperation(target: unknown, path: string[], patch: BuilderPatch): u
       throw new Error("Cannot replace/remove '-' array index")
     }
     const index = Number.parseInt(last, 10)
-    if (!Number.isFinite(index)) throw new Error(`Invalid array index: ${last}`)
+    if (!Number.isFinite(index)) throw new Error(`Invalid array index "${last}" in ${fullPath}`)
     if (patch.op === "add") {
       parent.splice(index, 0, patch.value)
     } else if (patch.op === "replace") {

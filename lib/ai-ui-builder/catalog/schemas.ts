@@ -2,7 +2,8 @@ import { z } from "zod"
 import type { ComponentNode } from "./components"
 import type { ActionKind } from "./actions"
 
-const classNameSchema = z.string().max(500)
+const MAX_CLASSNAME_LENGTH = 500
+const classNameSchema = z.string().max(MAX_CLASSNAME_LENGTH)
 
 const actionRefSchema = z
   .object({

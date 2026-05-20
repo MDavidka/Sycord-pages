@@ -63,7 +63,7 @@ export function PromptPanel() {
             const payload = JSON.parse(trimmed) as StreamMessage
             handleStreamMessage(payload)
           } catch {
-            setError(`Malformed stream payload: ${trimmed.slice(0, 120)}`)
+            setError("Invalid stream data received")
           }
         }
       }
