@@ -91,6 +91,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const validation = validateBuilderDocument(nextDocument)
+  if (!validation.ok) {
+    error = validation.errors[0] ?? "Generated document failed validation"
+    patches = []
+  }
+
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder()

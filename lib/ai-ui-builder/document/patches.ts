@@ -22,7 +22,11 @@ function cloneDocument(doc: BuilderDocument): BuilderDocument {
   if (typeof structuredClone === "function") {
     return structuredClone(doc)
   }
-  return JSON.parse(JSON.stringify(doc)) as BuilderDocument
+  const serialized = JSON.stringify(doc)
+  if (!serialized) {
+    throw new Error("BuilderDocument must be JSON-serializable")
+  }
+  return JSON.parse(serialized) as BuilderDocument
 }
 
 function decodePointer(segment: string): string {

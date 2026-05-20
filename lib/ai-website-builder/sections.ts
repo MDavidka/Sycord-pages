@@ -50,7 +50,7 @@ function jsxStr(value: unknown): string {
   return JSON.stringify(escMultiline(value))
 }
 
-function safeJson(value: unknown): string {
+function sanitizeJsonForJsx(value: unknown): string {
   return JSON.stringify(value, (_key, val) => (typeof val === "string" ? escMultiline(val) : val))
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
@@ -199,7 +199,7 @@ function propString(props: Record<string, unknown> | undefined, allow: ReadonlyS
     if (typeof value === "string") out.push(`${key}=${jsxStr(value)}`)
     else if (typeof value === "number" && Number.isFinite(value)) out.push(`${key}={${value}}`)
     else if (typeof value === "boolean" && value) out.push(key)
-    else if (typeof value === "object") out.push(`${key}={${safeJson(value)}}`)
+    else if (typeof value === "object") out.push(`${key}={${sanitizeJsonForJsx(value)}}`)
   }
   return out.length ? ` ${out.join(" ")}` : ""
 }
