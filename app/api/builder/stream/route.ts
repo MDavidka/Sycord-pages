@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     try {
       const result = await runAIWebsiteBuilder(prompt, { quality })
       nextDocument = manifestToBuilderDocument(result.manifest)
-      patches = [{ op: "replace", path: "", value: nextDocument }]
+      patches = [{ op: "replace", path: "/", value: nextDocument }]
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
       patches = buildQuickEditPatches(currentDocument, prompt, selectedNodeId)

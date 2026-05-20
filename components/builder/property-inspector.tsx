@@ -60,7 +60,7 @@ export function PropertyInspector() {
     if (!node.props) {
       patches.push({ op: "add", path: `${path}/props`, value: {} })
     }
-    const op = node.props && Object.prototype.hasOwnProperty.call(node.props, key) ? "replace" : "add"
+    const op = node.props && Object.hasOwn(node.props, key) ? "replace" : "add"
     patches.push({ op, path: `${path}/props/${key}`, value })
     applyPatches(patches)
   }

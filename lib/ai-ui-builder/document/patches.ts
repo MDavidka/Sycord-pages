@@ -45,10 +45,10 @@ function applyOperation(target: unknown, path: string[], patch: BuilderPatch): u
   }
   const last = path[path.length - 1]
   const parentPath = path.slice(0, -1)
-  let parent: any = target
+  let parent: unknown = target
   for (const segment of parentPath) {
-    if (parent == null) throw new Error(`Invalid path segment: ${segment}`)
-    parent = parent[segment]
+    if (parent == null || typeof parent !== "object") throw new Error(`Invalid path segment: ${segment}`)
+    parent = (parent as Record<string, unknown>)[segment]
   }
   if (Array.isArray(parent)) {
     if (last === "-") {
@@ -70,10 +70,11 @@ function applyOperation(target: unknown, path: string[], patch: BuilderPatch): u
     return target
   }
   if (parent && typeof parent === "object") {
+    const record = parent as Record<string, unknown>
     if (patch.op === "remove") {
-      delete parent[last]
+      delete record[last]
     } else {
-      parent[last] = patch.value
+      record[last] = patch.value
     }
     return target
   }
