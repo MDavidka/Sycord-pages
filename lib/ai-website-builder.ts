@@ -3,7 +3,7 @@
 // scaffold, validate, index). Existing imports of "@/lib/ai-website-builder"
 // continue to work unchanged.
 
-export { runAIWebsiteBuilder } from "./ai-website-builder/index"
+export { runAIWebsiteBuilder, runAIWebsiteBuilderFromManifest } from "./ai-website-builder/index"
 export type {
   BuilderOptions,
   EnvVarRequirement,

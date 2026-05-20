@@ -39,6 +39,7 @@ const ALLOWED_KINDS: ReadonlySet<string> = new Set([
   "logos",
   "team",
   "blog-preview",
+  "custom",
 ])
 
 export interface ManifestValidation {
@@ -102,9 +103,6 @@ function pageWarnings(
       continue
     }
     if (section.componentTree) {
-      if (section.variant !== "custom") {
-        warnings.push(`pages[${page.path}].sections[${i}] has componentTree without variant custom; built-in renderer will be used`)
-      }
       validateComponentTree(section.componentTree, `pages[${page.path}].sections[${i}].componentTree`, componentIds, errors, warnings)
     }
     if (!ALLOWED_KINDS.has(section.kind)) {
@@ -156,6 +154,8 @@ function sectionWarnings(
 ) {
   const where = `${page.path} sections[${i}](${section.kind})`
   switch (section.kind) {
+    case "custom":
+      return
     case "hero":
       if (!section.heading) warnings.push(`${where}: missing heading`)
       break

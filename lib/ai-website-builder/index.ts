@@ -37,6 +37,7 @@ import type {
   ThemePreset,
   ThemeTokens,
 } from "./types"
+import { ALLOWED_COMPONENTS } from "@/lib/ai-ui-builder/catalog/components"
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
 import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
 import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection } from "./design-directions"
@@ -77,42 +78,7 @@ const ALLOWED_KINDS: ReadonlySet<SectionKind> = new Set<SectionKind>([
   "logos",
   "team",
   "blog-preview",
-])
-
-const ALLOWED_COMPONENTS: ReadonlySet<ComponentNode["component"]> = new Set<ComponentNode["component"]>([
-  "Page",
-  "Section",
-  "Container",
-  "Grid",
-  "Stack",
-  "Button",
-  "Card",
-  "CardHeader",
-  "CardTitle",
-  "CardDescription",
-  "CardContent",
-  "CardFooter",
-  "Badge",
-  "Accordion",
-  "AccordionItem",
-  "AccordionTrigger",
-  "AccordionContent",
-  "Tabs",
-  "TabsList",
-  "TabsTrigger",
-  "TabsContent",
-  "Input",
-  "Textarea",
-  "Label",
-  "Avatar",
-  "Separator",
-  "Image",
-  "Link",
-  "Heading",
-  "Text",
-  "Stat",
-  "PricingCard",
-  "FeatureCard",
+  "custom",
 ])
 
 function isProvidedModel(model: ModelSelection | undefined): model is ModelSelection {
@@ -1070,29 +1036,12 @@ function pickRequiredUiComponents(manifest: GeneratedProjectManifest): RequiredC
   return ALL_UI_COMPONENTS.filter((c) => required.has(c.slug))
 }
 
-// Public entry point.
-export async function runAIWebsiteBuilder(
+async function buildFromManifest(
+  manifest: GeneratedProjectManifest,
+  options: BuilderOptions,
+  logs: PipelineLog[],
   prompt: string,
-  options: BuilderOptions = {},
 ): Promise<RunBuilderResult> {
-  const logs: PipelineLog[] = []
-  logs.push({
-    step: "start",
-    detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
-  })
-
-  const quality = options.quality || "best"
-  logs.push({ step: "quality", detail: `${quality === "fast" ? "Fast" : "Best"} generation pipeline selected` })
-
-  // 1. Design direction + plan (with repair).
-  const direction = await planDesignDirection(prompt, { ...options, quality }, logs)
-  const manifest = await planManifest(prompt, { ...options, quality }, logs, direction)
-  logs.push({
-    step: "plan",
-    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
-  })
-
-  // 2. Render pages.
   const required = pickRequiredUiComponents(manifest)
   const pageFiles: BuilderFile[] = []
   for (const page of manifest.pages) {
@@ -1101,18 +1050,14 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) for
-  // missing-env checks only. Never echo or write these values to files.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
-  // 3. Scaffold base + ui components (+ optional DB files).
   const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
-  // 4. File-level validation.
   const connectedIntegrationIds = Array.from(new Set([
     ...(options.project?.connectedIntegrationIds ?? []),
     ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
@@ -1128,16 +1073,12 @@ export async function runAIWebsiteBuilder(
     logs.push({ step: "build-validate", detail: `Build validation passed (${build.warnings.length} warnings)` })
   }
 
-  // Missing env var calculation combines project.envVarKeys with the
-  // resolved values map — a key is only "missing" if neither the project
-  // nor the server provided a non-empty value.
   const missingEnvVars = computeMissingEnvVars(
     manifest.requiredEnvVars,
     options.project?.envVarKeys,
     resolvedEnv,
   )
   if (manifest.needsDatabase) {
-    // NEVER include secret values in the log message — only key names.
     const missingNames = missingEnvVars.map((e) => e.key)
     if (missingNames.length) {
       logs.push({
@@ -1160,7 +1101,6 @@ export async function runAIWebsiteBuilder(
   const qualityScore = computeQualityScore(manifest, build)
   logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
 
-  // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
   if (manifest.needsDatabase && missingEnvVars.length) {
     advisoryWarnings.unshift(
@@ -1188,4 +1128,42 @@ export async function runAIWebsiteBuilder(
     unconnectedIntegrations: manifest.unconnectedIntegrations,
     deploymentMode: manifest.deploymentMode,
   }
+}
+
+// Public entry point.
+export async function runAIWebsiteBuilder(
+  prompt: string,
+  options: BuilderOptions = {},
+): Promise<RunBuilderResult> {
+  const logs: PipelineLog[] = []
+  logs.push({
+    step: "start",
+    detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
+  })
+
+  const quality = options.quality || "best"
+  logs.push({ step: "quality", detail: `${quality === "fast" ? "Fast" : "Best"} generation pipeline selected` })
+
+  // 1. Design direction + plan (with repair).
+  const direction = await planDesignDirection(prompt, { ...options, quality }, logs)
+  const manifest = await planManifest(prompt, { ...options, quality }, logs, direction)
+  logs.push({
+    step: "plan",
+    detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
+  })
+
+  return buildFromManifest(manifest, { ...options, quality }, logs, prompt)
+}
+
+export async function runAIWebsiteBuilderFromManifest(
+  manifest: GeneratedProjectManifest,
+  options: BuilderOptions = {},
+): Promise<RunBuilderResult> {
+  const logs: PipelineLog[] = []
+  logs.push({
+    step: "start",
+    detail: "Builder export started from BuilderDocument",
+  })
+  const prompt = options.project?.description ?? manifest.brief.description ?? manifest.brief.projectName
+  return buildFromManifest(manifest, options, logs, prompt)
 }

@@ -25,6 +25,7 @@ export type SectionKind =
   | "logos"
   | "team"
   | "blog-preview"
+  | "custom"
 
 export type ThemePreset =
   | "saas"
@@ -120,46 +121,7 @@ export type IntegrationKind = "database" | "auth" | "email" | "analytics" | "sto
 
 export type DeploymentMode = "next-server"
 
-export type ComponentNode = {
-  id: string
-  component:
-    | "Page"
-    | "Section"
-    | "Container"
-    | "Grid"
-    | "Stack"
-    | "Button"
-    | "Card"
-    | "CardHeader"
-    | "CardTitle"
-    | "CardDescription"
-    | "CardContent"
-    | "CardFooter"
-    | "Badge"
-    | "Accordion"
-    | "AccordionItem"
-    | "AccordionTrigger"
-    | "AccordionContent"
-    | "Tabs"
-    | "TabsList"
-    | "TabsTrigger"
-    | "TabsContent"
-    | "Input"
-    | "Textarea"
-    | "Label"
-    | "Avatar"
-    | "Separator"
-    | "Image"
-    | "Link"
-    | "Heading"
-    | "Text"
-    | "Stat"
-    | "PricingCard"
-    | "FeatureCard"
-  props?: Record<string, unknown>
-  text?: string
-  children?: ComponentNode[]
-}
+export type { ComponentNode } from "@/lib/ai-ui-builder/catalog/components"
 
 export interface IntegrationPlan {
   kind: IntegrationKind

@@ -14,6 +14,7 @@
 // section is used (still better than "Lorem ipsum").
 
 import type { ComponentNode, CtaPlan, SectionItem, SectionPlan } from "./types"
+import { ALLOWED_COMPONENTS, COMPONENT_IMPORTS } from "@/lib/ai-ui-builder/catalog/components"
 
 interface RenderContext {
   sectionIndex: number
@@ -174,72 +175,9 @@ function emptyImport(): RenderedSection["imports"] {
   return []
 }
 
-const ALLOWED_COMPONENT_NODES: ReadonlySet<ComponentNode["component"]> = new Set<ComponentNode["component"]>([
-  "Page",
-  "Section",
-  "Container",
-  "Grid",
-  "Stack",
-  "Button",
-  "Card",
-  "CardHeader",
-  "CardTitle",
-  "CardDescription",
-  "CardContent",
-  "CardFooter",
-  "Badge",
-  "Accordion",
-  "AccordionItem",
-  "AccordionTrigger",
-  "AccordionContent",
-  "Tabs",
-  "TabsList",
-  "TabsTrigger",
-  "TabsContent",
-  "Input",
-  "Textarea",
-  "Label",
-  "Avatar",
-  "Separator",
-  "Image",
-  "Link",
-  "Heading",
-  "Text",
-  "Stat",
-  "PricingCard",
-  "FeatureCard",
-])
-
-const COMPONENT_IMPORTS: Partial<Record<ComponentNode["component"], RenderedSection["imports"][number]>> = {
-  Button: { from: "@/components/ui/button", named: ["Button"] },
-  Card: { from: "@/components/ui/card", named: ["Card"] },
-  CardHeader: { from: "@/components/ui/card", named: ["CardHeader"] },
-  CardTitle: { from: "@/components/ui/card", named: ["CardTitle"] },
-  CardDescription: { from: "@/components/ui/card", named: ["CardDescription"] },
-  CardContent: { from: "@/components/ui/card", named: ["CardContent"] },
-  CardFooter: { from: "@/components/ui/card", named: ["CardFooter"] },
-  Badge: { from: "@/components/ui/badge", named: ["Badge"] },
-  Accordion: { from: "@/components/ui/accordion", named: ["Accordion"] },
-  AccordionItem: { from: "@/components/ui/accordion", named: ["AccordionItem"] },
-  AccordionTrigger: { from: "@/components/ui/accordion", named: ["AccordionTrigger"] },
-  AccordionContent: { from: "@/components/ui/accordion", named: ["AccordionContent"] },
-  Tabs: { from: "@/components/ui/tabs", named: ["Tabs"] },
-  TabsList: { from: "@/components/ui/tabs", named: ["TabsList"] },
-  TabsTrigger: { from: "@/components/ui/tabs", named: ["TabsTrigger"] },
-  TabsContent: { from: "@/components/ui/tabs", named: ["TabsContent"] },
-  Input: { from: "@/components/ui/input", named: ["Input"] },
-  Textarea: { from: "@/components/ui/textarea", named: ["Textarea"] },
-  Label: { from: "@/components/ui/label", named: ["Label"] },
-  Avatar: { from: "@/components/ui/avatar", named: ["Avatar", "AvatarFallback", "AvatarImage"] },
-  Separator: { from: "@/components/ui/separator", named: ["Separator"] },
-  Image: { from: "next/image", named: ["default as Image"] },
-  Link: { from: "next/link", named: ["default as Link"] },
-  PricingCard: { from: "@/components/ui/card", named: ["Card", "CardContent", "CardFooter", "CardHeader", "CardTitle"] },
-  FeatureCard: { from: "@/components/ui/card", named: ["Card", "CardContent", "CardHeader", "CardTitle", "CardDescription"] },
-}
 
 export function isAllowedComponentNode(component: string): component is ComponentNode["component"] {
-  return ALLOWED_COMPONENT_NODES.has(component as ComponentNode["component"])
+  return ALLOWED_COMPONENTS.has(component as ComponentNode["component"])
 }
 
 function cleanClass(value: unknown): string {
@@ -255,6 +193,7 @@ function propString(props: Record<string, unknown> | undefined, allow: ReadonlyS
     if (typeof value === "string") out.push(`${key}=${jsxStr(value)}`)
     else if (typeof value === "number" && Number.isFinite(value)) out.push(`${key}={${value}}`)
     else if (typeof value === "boolean" && value) out.push(key)
+    else if (typeof value === "object") out.push(`${key}={${JSON.stringify(value)}}`)
   }
   return out.length ? ` ${out.join(" ")}` : ""
 }
@@ -1842,7 +1781,7 @@ function renderBlogPreview(section: SectionPlan, ctx: RenderContext): RenderedSe
 // ---------- DISPATCHER ----------
 
 export function renderSection(section: SectionPlan, ctx: RenderContext): RenderedSection {
-  if (section.componentTree && section.variant === "custom") {
+  if (section.componentTree) {
     return {
       tsx: renderComponentNode(section.componentTree, ctx),
       imports: componentNodeImports(section.componentTree),
@@ -1911,6 +1850,7 @@ export function buildImportsPreamble(allImports: RenderedSection["imports"][]): 
     "@/components/ui/input",
     "@/components/ui/textarea",
     "@/components/ui/label",
+    "@/components/ui/line-graph",
   ]
   const allKeys = Array.from(merged.keys())
   allKeys.sort((a, b) => {
