@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import {
-  runAIWebsiteBuilder,
-  type BuilderOptions,
-  type EnvVarRequirement,
-  type ProjectContext,
-} from "@/lib/ai-website-builder"
+import { type BuilderOptions, type EnvVarRequirement, type ProjectContext } from "@/lib/ai-website-builder";
+import { runSyraBuilderPipeline as runAIWebsiteBuilder } from "@/lib/syra-generator";
 import type { ModelSelection } from "@/lib/ai-provider"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
