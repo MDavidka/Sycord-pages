@@ -55,14 +55,14 @@ export async function runSyraBuilderPipeline(prompt: string, opts: BuilderOption
   const pagesUiTrees = [];
 
   for (const route of sitePlan.routes) {
-    logs.push({ step: "Building Page UI Trees", detail: \`Generating UI tree for \${route.path}\` });
+    logs.push({ step: "Building Page UI Trees", detail: `Generating UI tree for ${route.path}` });
     const pageUiTree = await generatePageUITree(route, sitePlan.database_schema, sitePlan.theme_config, opts.model);
 
     if (pageUiTree) {
         pagesUiTrees.push(pageUiTree);
-        logs.push({ step: "Compiling UI Components", detail: \`Compiling UI tree for \${route.path}\` });
+        logs.push({ step: "Compiling UI Components", detail: `Compiling UI tree for ${route.path}` });
         const code = generateFile(pageUiTree);
-        const filePath = \`app\${route.path === '/' ? '/page.tsx' : route.path + '/page.tsx'}\`;
+        const filePath = `app${route.path === '/' ? '/page.tsx' : route.path + '/page.tsx'}`;
         files.push({ path: filePath, content: code });
     }
   }
@@ -71,7 +71,7 @@ export async function runSyraBuilderPipeline(prompt: string, opts: BuilderOption
   const serverActions = await generateServerActions(sitePlan.database_schema, pagesUiTrees, opts.model);
 
   if (serverActions && serverActions.actions && serverActions.actions.length > 0) {
-      const code = serverActions.actions.map((a: any) => a.code).join('\\n\\n');
+      const code = serverActions.actions.map((a: any) => a.code).join('\n\n');
       files.push({ path: "app/api/actions.ts", content: code });
   }
 
@@ -79,12 +79,12 @@ export async function runSyraBuilderPipeline(prompt: string, opts: BuilderOption
   logs.push({ step: "Building and Validating", detail: "Generating layout and configs" });
   files.push({
       path: "app/layout.tsx",
-      content: \`
+      content: `
 import { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '\${sitePlan.project_name}',
+  title: '${sitePlan.project_name}',
 }
 
 export default function RootLayout({
@@ -93,12 +93,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="\${sitePlan.theme_config?.mode === 'dark' ? 'dark' : ''}">
+    <html lang="en" className="${sitePlan.theme_config?.mode === 'dark' ? 'dark' : ''}">
       <body>{children}</body>
     </html>
   )
 }
-\`
+`
   });
 
   return {
