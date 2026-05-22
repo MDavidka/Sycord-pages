@@ -1,17 +1,16 @@
 // Post-generation syntax linting and import repair for generated TSX.
 //
-// The block renderers and AI output can produce minor syntax issues:
+// Handles three critical deployment-breaking issues:
+//   1. Duplicate imports — merges into existing import lines instead of appending
+//   2. Case sensitivity — forces all @/components/ui/* paths to lowercase (Linux-compatible)
+//   3. Lucide-react barrel conflicts — merges ALL lucide-react imports into one line
+//
+// Also fixes common AI syntax errors:
 //   - Single-quotes wrapped in double braces:  className={{'...'}}
 //   - JSX components used without an import
 //   - Backtick nesting inside template literals
 //   - `class=` instead of `className=`, `for=` instead of `htmlFor=`
-//   - Duplicate attribute names (className twice)
-//
-// This module scans every generated file, fixes fixable issues, and
-// injects missing import statements before the content reaches build
-// validation. Only shadcn UI components from @/components/ui/* and
-// known library imports (lucide-react, next/link, next/image) are
-// auto-injected; unknown components trigger a warning.
+//   - Duplicate attribute names
 
 import type { BuilderFile } from "./types"
 
@@ -21,102 +20,61 @@ export interface LintResult {
   warnings: string[]
 }
 
-// All shadcn components we support in generated output. Tags that match
-// these names need a `@/components/ui/<name>` import.
+// All shadcn components we support. Tags matching these names
+// get a lowercase `@/components/ui/<name>` import.
 const SHADCN_TAGS = new Set([
-  "Button",
-  "Badge",
-  "Card",
-  "CardHeader",
-  "CardTitle",
-  "CardDescription",
-  "CardContent",
-  "CardFooter",
-  "Accordion",
-  "AccordionItem",
-  "AccordionTrigger",
-  "AccordionContent",
-  "Tabs",
-  "TabsList",
-  "TabsTrigger",
-  "TabsContent",
-  "Input",
-  "Textarea",
-  "Label",
-  "Avatar",
-  "AvatarImage",
-  "AvatarFallback",
+  "Button", "Badge",
+  "Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter",
+  "Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent",
+  "Tabs", "TabsList", "TabsTrigger", "TabsContent",
+  "Input", "Textarea", "Label",
+  "Avatar", "AvatarImage", "AvatarFallback",
   "Separator",
-  "Select",
-  "SelectTrigger",
-  "SelectValue",
-  "SelectContent",
-  "SelectItem",
-  "SelectGroup",
-  "Checkbox",
-  "Switch",
-  "Skeleton",
-  "Progress",
-  "Alert",
-  "AlertTitle",
-  "AlertDescription",
-  "Dialog",
-  "DialogTrigger",
-  "DialogContent",
-  "DialogHeader",
-  "DialogTitle",
-  "DialogDescription",
-  "Table",
-  "TableHeader",
-  "TableBody",
-  "TableRow",
-  "TableHead",
-  "TableCell",
-  "Sheet",
-  "SheetTrigger",
-  "SheetContent",
-  "Breadcrumb",
-  "BreadcrumbList",
-  "BreadcrumbItem",
-  "BreadcrumbLink",
-  "Pagination",
-  "PaginationContent",
-  "PaginationPrevious",
-  "PaginationNext",
-  "PaginationItem",
-  "PaginationLink",
-  "Tooltip",
-  "TooltipTrigger",
-  "TooltipContent",
-  "HoverCard",
-  "HoverCardTrigger",
-  "HoverCardContent",
+  "Select", "SelectTrigger", "SelectValue", "SelectContent", "SelectItem", "SelectGroup",
+  "Checkbox", "Switch",
+  "Skeleton", "Progress",
+  "Alert", "AlertTitle", "AlertDescription",
+  "Dialog", "DialogTrigger", "DialogContent", "DialogHeader", "DialogTitle", "DialogDescription",
+  "Table", "TableHeader", "TableBody", "TableRow", "TableHead", "TableCell",
+  "Sheet", "SheetTrigger", "SheetContent",
+  "Breadcrumb", "BreadcrumbList", "BreadcrumbItem", "BreadcrumbLink",
+  "Pagination", "PaginationContent", "PaginationPrevious", "PaginationNext", "PaginationItem", "PaginationLink",
+  "Tooltip", "TooltipTrigger", "TooltipContent",
+  "HoverCard", "HoverCardTrigger", "HoverCardContent",
 ])
 
-// Tags that map to known non-shadcn imports we can auto-inject.
-const KNOWN_IMPORTS: Record<string, { from: string; named: boolean }> = {
+// Non-shadcn tags that map to known modules.
+// Maps tag name → import config. All lucide-react icons go here.
+const KNOWN_TAGS: Record<string, { from: string; named: boolean; tags?: string[] }> = {
   "Link": { from: "next/link", named: false },
   "Image": { from: "next/image", named: false },
-  "Check": { from: "lucide-react", named: true },
-  "ChevronRight": { from: "lucide-react", named: true },
-  "ChevronDown": { from: "lucide-react", named: true },
-  "ChevronUp": { from: "lucide-react", named: true },
-  "ArrowRight": { from: "lucide-react", named: true },
-  "ArrowUpRight": { from: "lucide-react", named: true },
-  "BarChart3": { from: "lucide-react", named: true },
-  "X": { from: "lucide-react", named: true },
-  "Star": { from: "lucide-react", named: true },
-  "Heart": { from: "lucide-react", named: true },
-  "Crown": { from: "lucide-react", named: true },
-  "Sparkles": { from: "lucide-react", named: true },
-  "Zap": { from: "lucide-react", named: true },
-  "Rocket": { from: "lucide-react", named: true },
-  "ShieldCheck": { from: "lucide-react", named: true },
-  "Globe": { from: "lucide-react", named: true },
-  "Mail": { from: "lucide-react", named: true },
-  "Phone": { from: "lucide-react", named: true },
-  "MapPin": { from: "lucide-react", named: true },
 }
+
+// All lucide-react icons we might encounter. Any tag not in SHADCN_TAGS
+// or KNOWN_TAGS that starts with uppercase and appears in THIS set gets
+// imported from "lucide-react".
+const LUCIDE_ICONS = new Set([
+  "Check", "ChevronRight", "ChevronDown", "ChevronUp",
+  "ArrowRight", "ArrowUpRight", "ArrowLeft", "ArrowUp",
+  "BarChart3", "LineChart", "TrendingUp",
+  "X", "Menu", "Star", "Heart", "Crown",
+  "Sparkles", "Zap", "Rocket", "Flame",
+  "ShieldCheck", "Shield", "Lock",
+  "Globe", "Map", "MapPin", "Compass", "Target",
+  "Mail", "Phone", "MessageCircle", "MessageSquare",
+  "Users", "User", "UserPlus",
+  "Search", "Filter", "Sliders",
+  "Sun", "Moon", "Cloud", "Rainbow",
+  "Code2", "Wand2", "Brush", "Palette", "Layers",
+  "Play", "Pause", "Volume2",
+  "Download", "Upload", "Share2",
+  "Plus", "Minus", "ExternalLink",
+  "Info", "AlertTriangle", "AlertCircle",
+  "Calendar", "Clock", "Timer",
+  "CreditCard", "DollarSign", "ShoppingCart", "ShoppingBag", "Package",
+  "FileText", "Folder", "Database",
+  "Settings", "Wrench", "Camera", "Video",
+])
 
 // ---- Public API ----
 
@@ -129,8 +87,8 @@ export function lintAndRepairFile(file: BuilderFile): { content: string; result:
   // Phase 1: Fix syntax errors in the body
   content = fixSyntaxErrors(content, result)
 
-  // Phase 2: Fix import block — find used tags and inject missing imports
-  content = fixImports(content, file.path, result)
+  // Phase 2: Fix import block — lowercase paths, deduplicate, merge barrels
+  content = fixImports(content, result)
 
   return { content, result }
 }
@@ -156,34 +114,26 @@ export function lintAllFiles(files: BuilderFile[], log?: (msg: string) => void):
 // ---- Syntax fixers ----
 
 function fixSyntaxErrors(content: string, result: LintResult): string {
-  // Fix: className={{'...'}} -> className="..."
-  // Matches className={{' followed by content until '}}
+  // Fix: className={{'...'}} → className="..."
   content = content.replace(
     /className=\{\{'(.*?)'\}\}/g,
     (_full: string, inner: string) => {
-      result.fixed.push(`className={{'...'}} -> className="..."`)
-      const escaped = inner.replace(/"/g, "&quot;")
-      return `className="${escaped}"`
+      result.fixed.push(`className={{'...'}} → className="..."`)
+      return `className="${inner.replace(/"/g, "&quot;")}"`
     },
   )
 
-  // Fix: className={{"... ..."}} -> className="..."
+  // Fix: className={{"... ..."}} → className="..."
   content = content.replace(
     /className=\{\{"(.*?)"\}\}/g,
     (_full: string, inner: string) => {
-      result.fixed.push(`className={{"..."}} -> className="..."`)
-      const cleaned = inner
-        .replace(/\\"/g, '"')
-        .replace(/['`]/g, "")
-        .replace(/\$\{[^}]+\}/g, "")
-        .trim()
-      if (!cleaned) return `className=""`
-      return `className="${cleaned}"`
+      result.fixed.push(`className={{"..."}} → className="..."`)
+      const cleaned = inner.replace(/\\"/g, '"').replace(/['`]/g, "").replace(/\$\{[^}]+\}/g, "").trim()
+      return cleaned ? `className="${cleaned}"` : `className=""`
     },
   )
 
-  // Fix: Duplicate className — keep only the first one
-  // This catches patterns like className="..." className="..."
+  // Fix: Duplicate className on same element
   const dupClassNames = content.match(/className="[^"]*"\s+className="[^"]*"/g)
   if (dupClassNames) {
     for (const dup of dupClassNames) {
@@ -193,218 +143,292 @@ function fixSyntaxErrors(content: string, result: LintResult): string {
     result.fixed.push("duplicate className removed")
   }
 
-  // Fix: class= -> className= (common mistake in React)
+  // Fix: class= → className=
   if (/\bclass=/.test(content) && !/\bclassName=/.test(content)) {
+    const count = (content.match(/\bclass=/g) || []).length
     content = content.replace(/\bclass=/g, "className=")
-    result.fixed.push("class= -> className=")
+    result.fixed.push(`class= → className= (${count}x)`)
   }
 
-  // Fix: for= -> htmlFor= in JSX context
-  if (/\bfor=/.test(content)) {
-    const forCount = (content.match(/\bfor="/g) || []).length
-    if (forCount > 0) {
-      content = content.replace(/\bfor="/g, "htmlFor=\"")
-      result.fixed.push("for= -> htmlFor=")
-    }
+  // Fix: for= → htmlFor= in JSX context
+  const forMatches = content.match(/\bfor="/g)
+  if (forMatches && forMatches.length > 0) {
+    content = content.replace(/\bfor="/g, `htmlFor="`)
+    result.fixed.push(`for= → htmlFor= (${forMatches.length}x)`)
   }
 
-  // Fix: Backtick inside attribute value — swap to quotes
-  // Pattern: onClick={`...`} where ... contains backticks
-  content = content.replace(
-    /=\{`([^`]*`[^`]*)`\}/g,
-    (_full: string) => {
-      result.fixed.push("nested backtick in template literal")
-      const inner = _full.slice(2, -2)
-      const cleaned = inner.replace(/[`]/g, "'").replace(/\$\{/g, "${")
-      return `={"${cleaned.replace(/"/g, "&quot;")}"}`
-    },
-  )
-
-  // Fix: Template literal with backtick inside — escape or convert
-  // e.g. `translateX(-${100 - (value || 0)}%)` is valid
-  // But `<div className={`...`}>` wrapping JSX is not — those get caught above
-
-  // Fix: Empty style={{}} — remove it
-  content = content.replace(/\s+style=\{\{\}\}/g, "")
-
-  // Fix: Self-closing tags that shadcn doesn't support
-  // <Badge /> is fine, but we never want <img> without alt
-  content = content.replace(
-    /<img\s+(?!.*alt=)/g,
-    (match: string) => match.replace(">", ' alt="" />'),
-  )
-
-  // Fix: Unescaped braces in text content
-  // Pattern: text that accidentally has { or } which JSX interprets as expressions
-  // We already have esc() in blocks.ts, but let's catch edge cases here too
-  content = content.replace(
-    />\s*\{([^{}]*?)\}\s*</g,
-    (_full: string, inner: string) => {
-      if (/^[\s"'A-Za-z0-9.,!?\-:;()]+$/.test(inner)) {
-        result.fixed.push("unescaped brace in text content")
-        return `>${inner}<`
-      }
-      return _full
-    },
-  )
+  // Fix: Empty style={{}} → remove
+  const styleCount = (content.match(/\s+style=\{\{\}\}/g) || []).length
+  if (styleCount > 0) {
+    content = content.replace(/\s+style=\{\{\}\}/g, "")
+    result.fixed.push(`removed empty style={} (${styleCount}x)`)
+  }
 
   return content
 }
 
-// ---- Import repair ----
+// ---- Import repair — the core fixer for all three issues ----
 
-function fixImports(content: string, _filePath: string, result: LintResult): string {
-  // Split: everything before first import/export (preamble) + import block + body
+function fixImports(content: string, result: LintResult): string {
   const lines = content.split("\n")
 
-  // Find the import/export block boundaries
+  // Find import/export block boundaries
+  let preambleEnd = 0
   let importStart = -1
   let importEnd = -1
-  let metaStart = -1
+  let bodyStart = lines.length
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
-    if (importStart === -1 && (line.startsWith("import ") || line.startsWith('"use client"'))) {
-      importStart = line.startsWith('"use client"') ? i : i
+    if (line.startsWith('"use client"') || line.startsWith("'use client'")) {
+      preambleEnd = i + 1
+      continue
     }
-    if (importStart !== -1 && importEnd === -1 && line.startsWith("export const metadata")) {
-      importEnd = i - 1
-      metaStart = i
-      break
+    if (line.startsWith("import ") || line.startsWith("export type {")) {
+      if (importStart === -1) importStart = i
+      importEnd = i
+      continue
     }
-    if (importStart !== -1 && importEnd === -1 && line.startsWith("export default function")) {
-      importEnd = i - 1
+    if (importEnd !== -1 && line.length > 0 && !line.startsWith("import ") && !line.startsWith("export type {")) {
+      bodyStart = i
       break
     }
   }
 
-  if (importStart === -1) {
-    // No imports found — this might be a config file, skip
-    return content
-  }
-  if (importEnd === -1 || importEnd < importStart) {
-    importEnd = importStart
-  }
+  if (importStart === -1) return content
+  if (importEnd < importStart) importEnd = importStart
 
-  const preamble = lines.slice(0, importStart).join("\n")
-  const importBlock = lines.slice(importStart, importEnd + 1).join("\n")
-  const bodyStart = metaStart > 0 ? metaStart : importEnd + 1
+  const preamble = lines.slice(0, preambleEnd).join("\n")
+  const importLines = lines.slice(importStart, importEnd + 1)
   const body = lines.slice(bodyStart).join("\n")
 
-  // Scan the body for JSX component tags
+  // Parse existing imports
+  const existing = parseImportBlock(importLines)
+
+  // Scan body for used JSX component tags
   const usedTags = findUsedComponentTags(body)
 
-  // Check which tags are already imported
-  const existingImports = parseExistingImports(importBlock)
-  const knownImportSlugs = new Map(existingImports.map((i) => [i.slug, i]))
+  // Determine what's missing
+  const missing = computeMissing(usedTags, existing)
 
-  // Build missing imports
-  const missingShadcn: string[] = []
-  const missingKnown: Array<{ tag: string; from: string; named: boolean }> = []
+  if (missing.length === 0) {
+    // Still check for case issues in existing paths
+    const fixedLines = lowercaseShadcnPaths(importLines)
+    const hasPathFix = fixedLines.some((l, i) => l !== importLines[i])
+    if (!hasPathFix) return content
+    const fixed = [...lines.slice(0, importStart), ...fixedLines, ...lines.slice(importEnd + 1)]
+    result.fixed.push("lowercased shadcn import paths")
+    return fixed.join("\n")
+  }
 
-  for (const tag of usedTags) {
-    if (knownImportSlugs.has(tag)) continue
+  // Merge missing tags into existing import lines
+  let hasMerge = false
+  for (const miss of missing) {
+    const wasMerged = mergeIntoExisting(miss, existing)
+    if (wasMerged) hasMerge = true
+  }
 
-    if (SHADCN_TAGS.has(tag)) {
-      missingShadcn.push(tag)
-    } else if (KNOWN_IMPORTS[tag]) {
-      const info = KNOWN_IMPORTS[tag]
-      const slug = info.named ? tag : "default"
-      if (!knownImportSlugs.has(slug) && !importBlock.includes(fromPattern(info.from))) {
-        missingKnown.push({ tag, from: info.from, named: info.named ?? true })
-      }
+  // Rebuild import block from the merged existing state
+  const rebuiltLines = importLinesFromExisting(existing, importLines)
+  const rebuiltBlock = rebuiltLines.join("\n")
+
+  // Count injected
+  const allImported = new Set<string>()
+  for (const imp of existing) {
+    for (const tag of imp.tags) allImported.add(tag)
+  }
+  for (const miss of missing) {
+    if (!allImported.has(miss)) {
+      result.missingImports.push(miss)
     }
   }
 
-  if (missingShadcn.length === 0 && missingKnown.length === 0) {
-    return content
-  }
-
-  // Build new import lines
-  const newImports: string[] = []
-  const deduped = new Set(missingShadcn)
-  if (deduped.size > 0) {
-    const sorted = Array.from(deduped).sort()
-    newImports.push(`import { ${sorted.join(", ")} } from "@/components/ui/${sorted[0]}"`)
-    result.missingImports.push(...sorted.map((s) => `@/components/ui/${s}`))
-  }
-
-  for (const miss of missingKnown) {
-    if (miss.named) {
-      newImports.push(`import { ${miss.tag} } from "${miss.from}"`)
-    } else {
-      newImports.push(`import ${miss.tag} from "${miss.from}"`)
-    }
-    result.missingImports.push(miss.from)
-  }
-
-  // Insert new imports into the import block (after the last existing import)
-  const importLines = importBlock.split("\n").filter((l) => l.trim())
-  const insertionIndex = importLines.length
-  importLines.splice(insertionIndex, 0, ...newImports)
-
-  // Reconstruct
   const before = preamble ? preamble + "\n" : ""
-  const newImportBlock = importLines.join("\n")
-  const after = body
+  return before + rebuiltBlock + "\n\n" + body
+}
 
-  return before + newImportBlock + "\n\n" + after
+// ---- Import data model ----
+
+interface ImportEntry {
+  from: string
+  named: boolean        // true = import { X, Y }, false = import X
+  tags: string[]        // imported symbols
+  originalLine: string  // the original import line text
+}
+
+function parseImportBlock(lines: string[]): ImportEntry[] {
+  const entries: ImportEntry[] = []
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith("import ")) continue
+
+    // import { X, Y, Z } from "path"
+    const namedMatch = trimmed.match(/^import\s+\{([^}]+)\}\s+from\s+["']([^"']+)["']/)
+    if (namedMatch) {
+      const tags = namedMatch[1].split(",").map((s) => s.replace(/^type\s+/, "").trim()).filter(Boolean)
+      entries.push({ from: namedMatch[2], named: true, tags, originalLine: line })
+      continue
+    }
+
+    // import X from "path"
+    const defaultMatch = trimmed.match(/^import\s+([A-Za-z0-9_]+)\s+from\s+["']([^"']+)["']/)
+    if (defaultMatch) {
+      entries.push({ from: defaultMatch[2], named: false, tags: [defaultMatch[1]], originalLine: line })
+      continue
+    }
+
+    // import * as X from "path"
+    const starMatch = trimmed.match(/^import\s+\*\s+as\s+(\w+)\s+from\s+["']([^"']+)["']/)
+    if (starMatch) {
+      entries.push({ from: starMatch[2], named: false, tags: [starMatch[1]], originalLine: line })
+      continue
+    }
+  }
+
+  return entries
+}
+
+function importLinesFromExisting(existing: ImportEntry[], _fallback: string[]): string[] {
+  const out: string[] = []
+
+  // Group all lucide-react tags into one line
+  let lucideTags: string[] = []
+  let hasLucideDefault = false
+
+  const nonLucide: ImportEntry[] = []
+
+  for (const entry of existing) {
+    if (entry.from === "lucide-react") {
+      if (entry.named) {
+        lucideTags.push(...entry.tags)
+      } else {
+        hasLucideDefault = true
+      }
+    } else {
+      nonLucide.push(entry)
+    }
+  }
+
+  // Deduplicate lucide tags and emit one line
+  const uniqueLucide = [...new Set(lucideTags)].sort()
+  if (uniqueLucide.length > 0) {
+    out.push(`import { ${uniqueLucide.join(", ")} } from "lucide-react"`)
+  }
+  if (hasLucideDefault) {
+    out.push(`import LucideIcon from "lucide-react"`)
+  }
+
+  // Emit non-lucide imports, with @/components/ui/* paths lowercased
+  for (const entry of nonLucide) {
+    let from = entry.from
+    // Force lowercase for shadcn paths
+    const uiMatch = from.match(/^@\/components\/ui\/(.+)$/)
+    if (uiMatch) {
+      from = `@/components/ui/${uiMatch[1].toLowerCase()}`
+    }
+    if (entry.named) {
+      const deduped = [...new Set(entry.tags)].sort()
+      out.push(`import { ${deduped.join(", ")} } from "${from}"`)
+    } else {
+      out.push(`import ${entry.tags[0]} from "${from}"`)
+    }
+  }
+
+  return out
+}
+
+function computeMissing(usedTags: string[], existing: ImportEntry[]): string[] {
+  const imported = new Set<string>()
+  for (const entry of existing) {
+    for (const tag of entry.tags) imported.add(tag)
+  }
+
+  const missing: string[] = []
+  for (const tag of usedTags) {
+    if (imported.has(tag)) continue
+    if (SHADCN_TAGS.has(tag)) {
+      missing.push(tag)
+      continue
+    }
+    if (KNOWN_TAGS[tag] && !imported.has(tag)) {
+      missing.push(tag)
+      continue
+    }
+    if (LUCIDE_ICONS.has(tag)) {
+      missing.push(tag)
+      continue
+    }
+  }
+
+  return [...new Set(missing)]
+}
+
+function mergeIntoExisting(tag: string, existing: ImportEntry[]): boolean {
+  // Determine what module this tag belongs to
+  let targetFrom: string | null = null
+  let named = true
+
+  if (SHADCN_TAGS.has(tag)) {
+    targetFrom = `@/components/ui/${tag.toLowerCase()}`
+  } else if (KNOWN_TAGS[tag]) {
+    targetFrom = KNOWN_TAGS[tag].from
+    named = KNOWN_TAGS[tag].named
+  } else if (LUCIDE_ICONS.has(tag)) {
+    targetFrom = "lucide-react"
+    named = true
+  }
+
+  if (!targetFrom) return false
+
+  // Find an existing import from the same module
+  for (const entry of existing) {
+    // Normalize path for comparison (case-insensitive for shadcn)
+    const existingPath = normalizeImportPath(entry.from)
+    const targetPath = normalizeImportPath(targetFrom)
+    if (existingPath === targetPath && entry.named === named) {
+      if (!entry.tags.includes(tag)) {
+        entry.tags.push(tag)
+        return true
+      }
+      return true // already there
+    }
+  }
+
+  // No existing entry — create a new one
+  existing.push({ from: targetFrom, named, tags: [tag], originalLine: "" })
+  return true
+}
+
+function normalizeImportPath(path: string): string {
+  const uiMatch = path.match(/^@\/components\/ui\/(.+)$/)
+  if (uiMatch) return `@/components/ui/${uiMatch[1].toLowerCase()}`
+  return path
+}
+
+function lowercaseShadcnPaths(lines: string[]): string[] {
+  return lines.map((line) => {
+    return line.replace(
+      /("@\/components\/ui\/[^"]+")|('@\/components\/ui\/[^']+')/g,
+      (match) => {
+        const quote = match[0]
+        const path = match.slice(1, -1)
+        const lower = path.replace(/\/ui\/(.+)$/, (_: string, name: string) => `/ui/${name.toLowerCase()}`)
+        if (lower !== path) return `${quote}${lower}${quote}`
+        return match
+      },
+    )
+  })
 }
 
 function findUsedComponentTags(body: string): string[] {
   const tags = new Set<string>()
-
-  // Match JSX component tags: <ComponentName ...> or <ComponentName .../>
-  // Must start with uppercase letter (React convention)
   const tagRegex = /<([A-Z][A-Za-z0-9]*)\b/g
   let m: RegExpExecArray | null
   while ((m = tagRegex.exec(body)) !== null) {
     tags.add(m[1])
   }
-
   return Array.from(tags)
 }
 
-interface ParsedImport {
-  slug: string
-  from: string
-}
-
-function parseExistingImports(importBlock: string): ParsedImport[] {
-  const result: ParsedImport[] = []
-
-  // import { X, Y } from "..."
-  const namedRe = /import\s+\{([^}]+)\}\s+from\s+["']([^"']+)["']/g
-  let m: RegExpExecArray | null
-  while ((m = namedRe.exec(importBlock)) !== null) {
-    const names = m[1].split(",").map((n) => n.trim()).filter(Boolean)
-    const from = m[2]
-    for (const name of names) {
-      // Handle "type X" imports
-      const clean = name.replace(/^type\s+/, "")
-      result.push({ slug: clean, from })
-    }
-  }
-
-  // import X from "..."
-  const defaultRe = /import\s+([A-Z][A-Za-z0-9]*)\s+from\s+["']([^"']+)["']/g
-  while ((m = defaultRe.exec(importBlock)) !== null) {
-    result.push({ slug: m[1], from: m[2] })
-  }
-
-  // import * as X from "..."
-  const starRe = /import\s+\*\s+as\s+(\w+)\s+from\s+["']([^"']+)["']/g
-  while ((m = starRe.exec(importBlock)) !== null) {
-    result.push({ slug: m[1], from: m[2] })
-  }
-
-  return result
-}
-
-function fromPattern(from: string): string {
-  // Approximate match for whether `from` appears in the import block
-  return from
-}
-
-// Re-export for use in the pipeline
 export default lintAllFiles
