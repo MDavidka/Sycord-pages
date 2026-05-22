@@ -234,10 +234,93 @@ function fixSyntaxErrors(content: string, result: LintResult): string {
   const styleCount = (content.match(/\s+style=\{\{\}\}/g) || []).length
   if (styleCount > 0) {
     content = content.replace(/\s+style=\{\{\}\}/g, "")
-    result.fixed.push(`removed empty style={} (${styleCount}x)`)
+    result.fixed.push(`removed empty style={{}} (${styleCount}x)`)
   }
 
+  // Fix: Orphan keys — key={i} or key={index} on elements not inside a .map()
+  // The AI often copies key={i} from loop templates into static JSX blocks
+  // where the variable i doesn't exist, causing TS2304: Cannot find name 'i'.
+  content = fixOrphanKeys(content, result)
+
   return content
+}
+
+// ---- Orphan key detection ----
+// Finds key={X} where X is a loop variable (i, index, etc.) but the element
+// is NOT inside a .map() callback. Strips the orphan key attribute.
+
+const LOOP_VARIABLES = new Set(["i", "index", "idx", "item", "row", "col", "cell", "el", "entry", "v", "x", "k"])
+
+function fixOrphanKeys(content: string, result: LintResult): string {
+  const lines = content.split("\n")
+  let fixed = 0
+
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const line = lines[lineNum]
+
+    // Match key={varname} — both curly braces and string forms
+    const keyMatch = line.match(/\bkey=\{(\w+)\}/)
+    if (!keyMatch) continue
+    const varName = keyMatch[1]
+    if (!LOOP_VARIABLES.has(varName)) continue
+
+    // Search backwards for a .map( callback that introduces this variable
+    if (!hasEnclosingMap(lines, lineNum, varName)) {
+      // Strip the orphan key — replace key={varname} (with optional surrounding space)
+      lines[lineNum] = line.replace(/\s*key=\{(\w+)\}\s*/, " ").replace(/\s{2,}/g, " ").trimEnd()
+      // Also fix trailing " >" → ">"
+      lines[lineNum] = lines[lineNum].replace(/\s+>/g, ">").replace(/>\s+$/g, ">")
+      if (lines[lineNum].trim() === "") lines[lineNum] = ""
+      fixed++
+    }
+  }
+
+  if (fixed > 0) {
+    result.fixed.push(`stripped ${fixed} orphan key={var} not in .map()`)
+  }
+
+  return lines.join("\n")
+}
+
+function hasEnclosingMap(lines: string[], startLine: number, varName: string): boolean {
+  // Look backwards up to 30 lines for a .map(( pattern that introduces varName
+  const searchStart = Math.max(0, startLine - 30)
+  let depth = 0
+
+  for (let i = startLine; i >= searchStart; i--) {
+    const line = lines[i]
+
+    // Track function scope boundaries — if we hit a function/export keyword,
+    // we've left the JSX scope and can stop
+    if (/^(export |function |const \w+ = \(.*\) =>|const \w+ = function)/.test(line.trim()) && depth === 0) {
+      return false
+    }
+
+    // Track brace depth
+    const opens = (line.match(/\{/g) || []).length
+    const closes = (line.match(/\}/g) || []).length
+    depth += opens - closes
+
+    // Look for .map((item, i) => or .map((item, index) =>
+    const mapMatch = line.match(/\.map\(\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/)
+    if (mapMatch && (mapMatch[2] === varName || mapMatch[1] === varName)) {
+      return true
+    }
+
+    // Also match single-param .map((item) =>
+    const singleMatch = line.match(/\.map\(\s*\(\s*(\w+)\s*\)/)
+    if (singleMatch && singleMatch[1] === varName) {
+      return true
+    }
+
+    // JSX .map pattern: {items.map((item, i) => ...
+    const jsxMatch = line.match(/\.map\(\s*\(\s*(\w+)\s*,?\s*(\w*)\s*\)\s*=>/)
+    if (jsxMatch && (jsxMatch[2] === varName || jsxMatch[1] === varName)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 // ---- Import repair — the core fixer for all three issues ----
