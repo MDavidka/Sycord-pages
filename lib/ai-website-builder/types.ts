@@ -296,11 +296,45 @@ export interface ProjectContext {
   connectedIntegrationIds?: string[]
 }
 
+export type ProgressEvent =
+  | { type: "step"; step: string; detail: string }
+  | { type: "manifest"; manifest: GeneratedProjectManifest }
+  | { type: "page"; path: string; fileName: string; sectionCount: number }
+  | { type: "scaffold"; baseCount: number; uiCount: number }
+  | { type: "complete"; files: BuilderFile[]; qualityScore: number; pageCount: number; fileCount: number }
+  | { type: "error"; message: string }
+
+export type ProgressCallback = (event: ProgressEvent) => void
+
 export interface BuilderOptions {
   model?: ModelSelection
   quality?: "fast" | "best"
   projectId?: string
   project?: ProjectContext
+  onProgress?: ProgressCallback
+}
+
+export interface RefineOptions {
+  model?: ModelSelection
+  projectId?: string
+  project?: ProjectContext
+  existingFiles: BuilderFile[]
+  existingManifest: GeneratedProjectManifest
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>
+  onProgress?: ProgressCallback
+}
+
+export interface RefineResult {
+  files: BuilderFile[]
+  manifest: GeneratedProjectManifest
+  changes: Array<{ path: string; action: "created" | "modified" | "deleted"; summary: string }>
+  logs: PipelineLog[]
+  warnings: string[]
+}
+
+export interface GenerateConversationMessage {
+  role: "user" | "assistant"
+  content: string
 }
 
 export interface BuilderFile {

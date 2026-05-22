@@ -28,7 +28,10 @@ import type {
   NavLink,
   PagePlan,
   PipelineLog,
+  ProgressCallback,
   ProjectContext,
+  RefineOptions,
+  RefineResult,
   RequiredComponent,
   RunBuilderResult,
   SectionItem,
@@ -52,7 +55,10 @@ export type {
   GeneratedProjectManifest,
   IntegrationPlan,
   PagePlan,
+  ProgressCallback,
   ProjectContext,
+  RefineOptions,
+  RefineResult,
   RunBuilderResult,
   SectionPlan,
   ThemeTokens,
@@ -1076,43 +1082,56 @@ export async function runAIWebsiteBuilder(
   options: BuilderOptions = {},
 ): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
+  const emit = options.onProgress
+
   logs.push({
     step: "start",
     detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
   })
+  emit?.({ type: "step", step: "start", detail: logs[logs.length - 1].detail })
 
   const quality = options.quality || "best"
   logs.push({ step: "quality", detail: `${quality === "fast" ? "Fast" : "Best"} generation pipeline selected` })
 
   // 1. Design direction + plan (with repair).
+  emit?.({ type: "step", step: "design-direction", detail: "Planning visual design direction..." })
   const direction = await planDesignDirection(prompt, { ...options, quality }, logs)
+  emit?.({ type: "step", step: "planning", detail: "Creating website architecture plan..." })
   const manifest = await planManifest(prompt, { ...options, quality }, logs, direction)
+  emit?.({ type: "manifest", manifest })
   logs.push({
     step: "plan",
     detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
   })
+  emit?.({ type: "step", step: "plan-complete", detail: logs[logs.length - 1].detail })
 
   // 2. Render pages.
+  emit?.({ type: "step", step: "rendering", detail: "Rendering pages..." })
   const required = pickRequiredUiComponents(manifest)
   const pageFiles: BuilderFile[] = []
-  for (const page of manifest.pages) {
+  for (let i = 0; i < manifest.pages.length; i++) {
+    const page = manifest.pages[i]
     const { file } = renderPageFile(manifest, page)
     pageFiles.push(file)
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
+    emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: page.sections.length })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) for
+  // Resolve env var values (project envVars- server env fallback) for
   // missing-env checks only. Never echo or write these values to files.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
+  emit?.({ type: "step", step: "scaffolding", detail: "Scaffolding project files and UI components..." })
   const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
+  emit?.({ type: "scaffold", baseCount: baseFiles.length, uiCount: uiFiles.length })
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
   // 4. File-level validation.
+  emit?.({ type: "step", step: "validating", detail: "Running build validation..." })
   const connectedIntegrationIds = Array.from(new Set([
     ...(options.project?.connectedIntegrationIds ?? []),
     ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
@@ -1173,6 +1192,8 @@ export async function runAIWebsiteBuilder(
     )
   }
 
+  emit?.({ type: "complete", files: allFiles, qualityScore, pageCount: manifest.pages.length, fileCount: allFiles.length })
+
   return {
     manifest,
     files: allFiles,
@@ -1189,3 +1210,366 @@ export async function runAIWebsiteBuilder(
     deploymentMode: manifest.deploymentMode,
   }
 }
+
+// ---- Multi-plan generation ----
+// Generates multiple alternative plans in parallel, scores them, and picks the best.
+// Dramatically improves quality by exploring different design directions.
+export async function runMultiPlanBuilder(
+  prompt: string,
+  options: BuilderOptions = {},
+  planCount = 3,
+): Promise<RunBuilderResult> {
+  const emit = options.onProgress
+  emit?.({ type: "step", step: "multi-plan", detail: `Generating ${planCount} alternative website plans...` })
+
+  const quality = options.quality || "best"
+  const plans = await generateMultiplePlans(prompt, options, planCount)
+
+  // Score plans and pick the best
+  let bestManifest: GeneratedProjectManifest | null = null
+  let bestScore = -Infinity
+
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i]
+    const validation = validateManifest(plan)
+    let score = 0
+    if (validation.ok) {
+      const home = plan.pages.find((p) => p.path === "/")
+      if (home) {
+        const kinds = new Set(home.sections.map((s) => s.kind))
+        score += kinds.size * 10
+        score += Math.min(20, home.sections.length * 3)
+      }
+      score += plan.pages.length * 6
+      score -= validation.warnings.length * 5
+      if (plan.designDirection.visualStyle !== "bold-saas") score += 2
+      if (plan.brief.projectName.length > 0) score += 5
+      if (plan.brief.tagline !== "Beautiful, fast, on-brand websites.") score += 8
+      if (plan.brief.description.length > 50) score += 5
+    } else {
+      score -= 50
+    }
+    emit?.({ type: "step", step: "plan-score", detail: `Plan ${i + 1} scored ${score} (${plan.pages.length} pages, ${plan.brief.projectName})` })
+    if (score > bestScore) {
+      bestScore = score
+      bestManifest = plan
+    }
+  }
+
+  if (!bestManifest) {
+    emit?.({ type: "step", step: "multi-plan-fallback", detail: "No valid plan generated. Using deterministic fallback." })
+    return runAIWebsiteBuilder(prompt, options)
+  }
+
+  emit?.({ type: "step", step: "multi-plan-select", detail: `Selected best plan: "${bestManifest.brief.projectName}" (${bestManifest.pages.length} pages)` })
+  emit?.({ type: "manifest", manifest: bestManifest })
+
+  // Render the best plan
+  const logs: PipelineLog[] = []
+
+  emit?.({ type: "step", step: "rendering", detail: "Rendering pages from best plan..." })
+  const required = pickRequiredUiComponents(bestManifest)
+  const pageFiles: BuilderFile[] = []
+  for (const page of bestManifest.pages) {
+    const { file } = renderPageFile(bestManifest, page)
+    pageFiles.push(file)
+    emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: page.sections.length })
+  }
+
+  const resolvedEnv = resolveRequiredEnvVarValues(bestManifest.requiredEnvVars, options.project)
+
+  emit?.({ type: "step", step: "scaffolding", detail: "Scaffolding project files..." })
+  const baseFiles = scaffoldBaseFiles(bestManifest, required, prompt)
+  const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
+  emit?.({ type: "scaffold", baseCount: baseFiles.length, uiCount: uiFiles.length })
+
+  const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
+
+  const connectedIntegrationIds = Array.from(new Set([
+    ...(options.project?.connectedIntegrationIds ?? []),
+    ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
+  ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
+  const build = runBuildValidation(allFiles, {
+    needsDatabase: bestManifest.needsDatabase,
+    deploymentMode: bestManifest.deploymentMode,
+    connectedIntegrationIds,
+  })
+
+  const missingEnvVars = computeMissingEnvVars(
+    bestManifest.requiredEnvVars,
+    options.project?.envVarKeys,
+    resolvedEnv,
+  )
+
+  const qualityScore = computeQualityScore(bestManifest, build)
+
+  const advisoryWarnings = [...build.warnings]
+  if (bestManifest.needsDatabase && missingEnvVars.length) {
+    advisoryWarnings.unshift(`Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`)
+  }
+  if (bestManifest.unconnectedIntegrations.length) {
+    advisoryWarnings.push(`Integrations not connected: ${bestManifest.unconnectedIntegrations.join(", ")}`)
+  }
+
+  emit?.({ type: "complete", files: allFiles, qualityScore, pageCount: bestManifest.pages.length, fileCount: allFiles.length })
+
+  return {
+    manifest: bestManifest,
+    files: allFiles,
+    logs,
+    build,
+    warnings: advisoryWarnings,
+    qualityScore,
+    needsDatabase: bestManifest.needsDatabase,
+    databaseProvider: bestManifest.databaseProvider,
+    integrations: bestManifest.integrations,
+    requiredEnvVars: bestManifest.requiredEnvVars,
+    missingEnvVars,
+    unconnectedIntegrations: bestManifest.unconnectedIntegrations,
+    deploymentMode: bestManifest.deploymentMode,
+  }
+}
+
+async function generateMultiplePlans(
+  prompt: string,
+  options: BuilderOptions,
+  count: number,
+): Promise<GeneratedProjectManifest[]> {
+  const model = pickModel(options)
+  const direction = options.quality !== "fast"
+    ? await planDesignDirection(prompt, options, [])
+    : fallbackDesignDirection(prompt, options.project)
+
+  const plans: GeneratedProjectManifest[] = []
+  const temperatureVars = [0.7, 0.85, 0.6]
+
+  const tasks = Array.from({ length: count }, async (_, i) => {
+    const temp = temperatureVars[i % temperatureVars.length]
+    try {
+      const raw = await callAIAgent(
+        [
+          { role: "system", content: PLAN_SYSTEM_PROMPT },
+          { role: "user", content: buildPlannerUserContent(prompt, options.project, direction) },
+        ],
+        { model, temperature: temp, retries: 0 },
+      )
+      const parsed = extractJson<unknown>(raw)
+      if (parsed) {
+        return normalizeManifest(parsed, prompt, options.project, direction)
+      }
+    } catch {
+      // Skip failed plan
+    }
+    return null
+  })
+
+  const results = await Promise.all(tasks)
+  for (const plan of results) {
+    if (plan) plans.push(plan)
+  }
+
+  if (plans.length === 0) {
+    plans.push(normalizeManifest(null, prompt, options.project, direction))
+  }
+
+  return plans
+}
+
+// ---- Iterative Refinement ----
+// Allows users to refine an existing generated website with follow-up prompts.
+// The AI receives the current manifest + all files and produces a diff.
+export async function refineAIWebsite(
+  prompt: string,
+  options: RefineOptions,
+): Promise<RefineResult> {
+  const logs: PipelineLog[] = []
+  const emit = options.onProgress
+
+  emit?.({ type: "step", step: "refine-planning", detail: "Analyzing refinement request..." })
+  const model = pickModel({ model: options.model, quality: "best" })
+
+  const fileSummary = options.existingFiles
+    .map((f) => `${f.path} (${f.content.length} chars)`)
+    .join("\n")
+
+  const conversationContext = options.conversationHistory
+    .map((m) => `${m.role}: ${m.content}`)
+    .join("\n\n")
+
+  const manifestJson = JSON.stringify(
+    {
+      brief: options.existingManifest.brief,
+      pages: options.existingManifest.pages.map((p) => ({
+        path: p.path,
+        title: p.title,
+        sections: p.sections.map((s) => ({
+          kind: s.kind,
+          variant: s.variant,
+          heading: s.heading,
+          description: s.description,
+        })),
+      })),
+      designDirection: options.existingManifest.designDirection,
+      needsDatabase: options.existingManifest.needsDatabase,
+    },
+    null,
+    2,
+  )
+
+  try {
+    const raw = await callAIAgent(
+      [
+        {
+          role: "system",
+          content: REFINE_SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: `Current website manifest:\n${manifestJson}\n\nExisting files:\n${fileSummary}\n\nConversation history:\n${conversationContext}\n\nRefinement request: ${prompt}\n\nReturn a JSON diff describing what to change.`,
+        },
+      ],
+      { model, temperature: 0.4 },
+    )
+
+    const diff = extractJson<RefineDiff>(raw)
+    logs.push({ step: "refine-plan", detail: `Refinement plan received: ${diff?.changes?.length ?? 0} changes` })
+
+    if (diff && diff.changes) {
+      // Apply changes to the manifest
+      const updatedManifest = applyRefineDiff(options.existingManifest, diff)
+      const validation = validateManifest(updatedManifest)
+      if (validation.ok) {
+        emit?.({ type: "manifest", manifest: updatedManifest })
+
+        // Re-render pages
+        emit?.({ type: "step", step: "rendering", detail: "Re-rendering pages..." })
+        const required = pickRequiredUiComponents(updatedManifest)
+        const baseFiles = scaffoldBaseFiles(updatedManifest, required, "")
+
+        const pageFiles: BuilderFile[] = []
+        for (const page of updatedManifest.pages) {
+          const { file } = renderPageFile(updatedManifest, page)
+          pageFiles.push(file)
+          emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: page.sections.length })
+        }
+
+        const changedPaths = new Set(diff.changes.map((c) => c.path))
+        const files: BuilderFile[] = [
+          ...baseFiles.filter((f) => changedPaths.has(f.path) || changedPaths.has("*")),
+          ...pageFiles,
+        ]
+
+        const allFiles = [...options.existingFiles]
+        for (const newFile of files) {
+          const existingIdx = allFiles.findIndex((f) => f.path === newFile.path)
+          if (existingIdx >= 0) {
+            allFiles[existingIdx] = newFile
+          } else {
+            allFiles.push(newFile)
+          }
+        }
+
+        return {
+          files: allFiles,
+          manifest: updatedManifest,
+          changes: diff.changes,
+          logs,
+          warnings: validation.warnings,
+        }
+      } else {
+        logs.push({ step: "refine-validation", detail: `Validation failed: ${validation.errors.join("; ")}` })
+      }
+    }
+  } catch (error) {
+    logs.push({ step: "refine-error", detail: `Refinement failed: ${error instanceof Error ? error.message : String(error)}` })
+  }
+
+  return {
+    files: options.existingFiles,
+    manifest: options.existingManifest,
+    changes: [],
+    logs,
+    warnings: ["Refinement could not be applied. The website remains unchanged."],
+  }
+}
+
+interface RefineDiff {
+  changes: Array<{
+    path: string
+    action: "created" | "modified" | "deleted"
+    summary: string
+  }>
+  brief?: Partial<DesignBrief>
+  pages?: Array<{
+    path: string
+    action?: "update" | "add" | "remove"
+    title?: string
+    sections?: SectionPlan[]
+  }>
+  themePreset?: ThemePreset
+}
+
+function applyRefineDiff(
+  existing: GeneratedProjectManifest,
+  diff: RefineDiff,
+): GeneratedProjectManifest {
+  const brief = diff.brief
+    ? { ...existing.brief, ...diff.brief }
+    : existing.brief
+
+  let pages = [...existing.pages]
+
+  if (diff.pages) {
+    for (const pageDiff of diff.pages) {
+      if (pageDiff.action === "remove") {
+        pages = pages.filter((p) => p.path !== pageDiff.path)
+      } else if (pageDiff.action === "add" && pageDiff.path) {
+        const sections = pageDiff.sections || defaultSectionsForRoute(pageDiff.path, brief)
+        pages.push({
+          path: pageDiff.path,
+          title: pageDiff.title || prettifyPath(pageDiff.path),
+          metaTitle: `${pageDiff.title || prettifyPath(pageDiff.path)} — ${brief.projectName}`,
+          metaDescription: brief.description,
+          sections,
+        })
+      } else if (pageDiff.path && pageDiff.sections) {
+        const existingIdx = pages.findIndex((p) => p.path === pageDiff.path)
+        if (existingIdx >= 0) {
+          pages[existingIdx] = { ...pages[existingIdx], sections: pageDiff.sections }
+          if (pageDiff.title) pages[existingIdx].title = pageDiff.title
+        }
+      }
+    }
+  }
+
+  const theme = diff.themePreset && THEME_PRESETS.includes(diff.themePreset)
+    ? buildTheme(diff.themePreset)
+    : existing.theme
+
+  return {
+    ...existing,
+    brief,
+    pages,
+    theme,
+  }
+}
+
+const REFINE_SYSTEM_PROMPT = `You are a senior product designer refining an existing website. You receive the current website manifest and a refinement request from the user.
+
+Return ONLY one JSON object, no prose, no markdown fences:
+
+{
+  "changes": [{"path": "file/path", "action": "created" | "modified" | "deleted", "summary": "brief description"}],
+  "brief": { partial DesignBrief fields to update },
+  "pages": [{"path": "/route", "action": "update" | "add" | "remove", "title": "Page Title", "sections": [SectionPlan...]}],
+  "themePreset": "saas" | "agency" | "ecommerce" | "portfolio" | "restaurant" | "nonprofit" | "event" | "creator" | "local-business"
+}
+
+Rules:
+1. Only include fields that actually change
+2. For page updates, include the FULL sections array (not just the changes)
+3. When adding a page, provide the complete sections array
+4. Section plans follow the same schema as the website planner
+5. Keep the same project name and style unless the user explicitly asks to change them
+6. Never output raw TSX, JSX, or code strings
+7. Be surgical — prefer minimal changes over rewriting everything`
