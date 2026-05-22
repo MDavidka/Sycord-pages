@@ -252,24 +252,6 @@ const ModelRow = ({ model, selected, onSelect, tier }: { model: ModelOption; sel
   </DropdownMenuItem>
 )
 
-const stageIcons: Record<PipelineProgress["stage"], React.ReactNode> = {
-  designing: <Palette className="h-4 w-4" />,
-  planning: <Layout className="h-4 w-4" />,
-  rendering: <Code2 className="h-4 w-4" />,
-  scaffolding: <FileText className="h-4 w-4" />,
-  validating: <CheckCircle2 className="h-4 w-4" />,
-  complete: <Sparkles className="h-4 w-4" />,
-}
-
-const stageLabels: Record<PipelineProgress["stage"], string> = {
-  designing: "Design Direction",
-  planning: "Planning Pages",
-  rendering: "Rendering UI",
-  scaffolding: "Building Files",
-  validating: "Validating",
-  complete: "Complete",
-}
-
 interface AIWebsiteBuilderProps {
   projectId: string
   generatedPages: GeneratedPage[]
