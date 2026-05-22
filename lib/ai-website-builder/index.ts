@@ -7,7 +7,8 @@
 //   3. validate manifest → if errors, run a single repair pass against the AI.
 //   4. render every page deterministically with sections.ts.
 //   5. scaffold project files (configs, layout, header/footer, ui components).
-//   6. file-level validation → quality score + diagnostics.
+//   6. lint all files → fix syntax errors, inject missing imports.
+//   7. file-level validation → quality score + diagnostics.
 //
 // `runAIWebsiteBuilder(prompt, opts?)` is the entry point used by the API
 // route and by older callers that pass only a prompt.
@@ -46,6 +47,7 @@ import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesig
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
 import { renderSectionBlock, type SectionBlockLayout } from "./blocks"
+import { lintAllFiles } from "./lint"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
@@ -1241,13 +1243,19 @@ export async function runAIWebsiteBuilder(
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
-  // 4. File-level validation.
+  // 4. Lint all files — fix syntax errors and inject missing imports.
+  emit?.({ type: "step", step: "linting", detail: "Linting generated files..." })
+  const lintedFiles = lintAllFiles(allFiles, (msg) => logs.push({ step: "lint", detail: msg }))
+  const lintChangeCount = logs.filter((l) => l.step === "lint").length
+  if (lintChangeCount > 0) logs.push({ step: "lint", detail: `Linted ${lintChangeCount} issues across ${allFiles.length} files` })
+
+  // 5. File-level validation.
   emit?.({ type: "step", step: "validating", detail: "Running build validation..." })
   const connectedIntegrationIds = Array.from(new Set([
     ...(options.project?.connectedIntegrationIds ?? []),
     ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
-  const build = runBuildValidation(allFiles, {
+  const build = runBuildValidation(lintedFiles, {
     needsDatabase: manifest.needsDatabase,
     deploymentMode: manifest.deploymentMode,
     connectedIntegrationIds,
@@ -1288,7 +1296,7 @@ export async function runAIWebsiteBuilder(
   }
 
   const qualityScore = computeQualityScore(manifest, build)
-  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
+  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${lintedFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
 
   // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
@@ -1303,11 +1311,11 @@ export async function runAIWebsiteBuilder(
     )
   }
 
-  emit?.({ type: "complete", files: allFiles, qualityScore, pageCount: manifest.pages.length, fileCount: allFiles.length })
+  emit?.({ type: "complete", files: lintedFiles, qualityScore, pageCount: manifest.pages.length, fileCount: lintedFiles.length })
 
   return {
     manifest,
-    files: allFiles,
+    files: lintedFiles,
     logs,
     build,
     warnings: advisoryWarnings,
@@ -1395,12 +1403,13 @@ export async function runMultiPlanBuilder(
   emit?.({ type: "scaffold", baseCount: baseFiles.length, uiCount: uiFiles.length })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
+  const lintedFiles = lintAllFiles(allFiles)
 
   const connectedIntegrationIds = Array.from(new Set([
     ...(options.project?.connectedIntegrationIds ?? []),
     ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
-  const build = runBuildValidation(allFiles, {
+  const build = runBuildValidation(lintedFiles, {
     needsDatabase: bestManifest.needsDatabase,
     deploymentMode: bestManifest.deploymentMode,
     connectedIntegrationIds,
@@ -1422,11 +1431,11 @@ export async function runMultiPlanBuilder(
     advisoryWarnings.push(`Integrations not connected: ${bestManifest.unconnectedIntegrations.join(", ")}`)
   }
 
-  emit?.({ type: "complete", files: allFiles, qualityScore, pageCount: bestManifest.pages.length, fileCount: allFiles.length })
+  emit?.({ type: "complete", files: lintedFiles, qualityScore, pageCount: bestManifest.pages.length, fileCount: lintedFiles.length })
 
   return {
     manifest: bestManifest,
-    files: allFiles,
+    files: lintedFiles,
     logs,
     build,
     warnings: advisoryWarnings,
@@ -1580,8 +1589,10 @@ export async function refineAIWebsite(
           }
         }
 
+        const lintedFiles = lintAllFiles(allFiles, (msg) => logs.push({ step: "lint", detail: msg }))
+
         return {
-          files: allFiles,
+          files: lintedFiles,
           manifest: updatedManifest,
           changes: diff.changes,
           logs,
