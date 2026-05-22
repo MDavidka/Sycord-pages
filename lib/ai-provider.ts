@@ -5,14 +5,15 @@
 // Supported providers:
 //   - "xAI"        → https://api.x.ai/v1/chat/completions                     (XAI_API_KEY)
 //   - "OpenRouter" → https://openrouter.ai/api/v1/chat/completions            (OPENROUTER_API_KEY)
+//   - "OpenAI"     → https://api.openai.com/v1/chat/completions               (OPENAI_API_KEY)
+//   - "Anthropic"  → https://api.anthropic.com/v1/messages                    (ANTHROPIC_API_KEY)
 //   - "Google"     → https://aiplatform.googleapis.com/v1/publishers/google/
 //                    models/{model}:generateContent?key=...
-//                    (GOOGLE_AIAGENT_API)  —  Gemini 3.1 Pro Preview via
-//                    **Vertex AI in express mode** (Agent Studio), NOT the
-//                    AI Studio / generativelanguage.googleapis.com endpoint.
+//                    (GOOGLE_AIAGENT_API)  —  Gemini via Vertex AI express mode
+//   - "DeepSeek"    → https://api.deepseek.com/v1/chat/completions            (DEEPSEEK_API)
 //
-// OpenAI-style providers share a schema; Vertex AI's generateContent uses a
-// different request/response shape, handled separately below.
+// OpenAI-style providers share a schema; Anthropic Messages API and Vertex AI's
+// generateContent use different request/response shapes, handled separately below.
 
 export type ChatRole = "system" | "user" | "assistant"
 
@@ -65,6 +66,12 @@ function providerConfig(provider: string): ProviderConfig {
       apiKey: process.env.DEEPSEEK_API,
     }
   }
+  if (provider === "OpenAI") {
+    return {
+      url: "https://api.openai.com/v1/chat/completions",
+      apiKey: process.env.OPENAI_API_KEY,
+    }
+  }
   // Default to OpenRouter for any other provider string.
   return {
     url: "https://openrouter.ai/api/v1/chat/completions",
@@ -77,6 +84,9 @@ export async function callModel(
 ): Promise<CallModelResult | CallModelError> {
   if (opts.model.provider === "Google") {
     return callGoogle(opts)
+  }
+  if (opts.model.provider === "Anthropic") {
+    return callAnthropic(opts)
   }
   return callOpenAICompatible(opts)
 }
@@ -248,6 +258,79 @@ async function callGoogle(
     message: "Vertex AI API error",
     details: errors.join("\n"),
   }
+}
+
+// Anthropic Messages API — different shape than chat completions:
+//   - system is a top-level string (not a message)
+//   - messages are { role: "user" | "assistant", content: [{ type: "text", text }] }
+//   - response is { content: [{ type: "text", text }] }
+async function callAnthropic(
+  opts: CallModelOptions,
+): Promise<CallModelResult | CallModelError> {
+  const { model, messages, temperature = 0.1 } = opts
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    return {
+      ok: false,
+      status: 500,
+      message: "Anthropic API key is not configured (ANTHROPIC_API_KEY).",
+    }
+  }
+
+  const systemMessages = messages.filter((m) => m.role === "system").map((m) => m.content)
+  const nonSystem = messages.filter((m) => m.role !== "system")
+
+  const body: Record<string, unknown> = {
+    model: model.id,
+    max_tokens: 32768,
+    temperature,
+    messages: nonSystem.map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: [{ type: "text", text: m.content }],
+    })),
+  }
+
+  if (systemMessages.length > 0) {
+    body.system = systemMessages.join("\n\n")
+  }
+
+  let response: Response
+  try {
+    response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      status: 502,
+      message: "Network error calling Anthropic",
+      details: err instanceof Error ? err.message : String(err),
+    }
+  }
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "")
+    return {
+      ok: false,
+      status: response.status,
+      message: "Anthropic API error",
+      details: errText,
+    }
+  }
+
+  const data = (await response.json().catch(() => null)) as {
+    content?: Array<{ type: string; text?: string }>
+    error?: { message?: string }
+  } | null
+
+  const content = data?.content?.map((c) => c.text ?? "").join("") ?? ""
+  return { ok: true, content, raw: data }
 }
 
 // Extracts the first valid JSON payload from a model response. Handles fenced

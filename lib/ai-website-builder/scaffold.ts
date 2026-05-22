@@ -159,6 +159,11 @@ function buildPackageJson(
   if (slugs.has("separator")) deps["@radix-ui/react-separator"] = "^1.1.0"
   if (slugs.has("label")) deps["@radix-ui/react-label"] = "^2.1.0"
   if (slugs.has("tabs")) deps["@radix-ui/react-tabs"] = "^1.1.1"
+  if (slugs.has("checkbox")) deps["@radix-ui/react-checkbox"] = "^1.1.3"
+  if (slugs.has("switch")) deps["@radix-ui/react-switch"] = "^1.1.1"
+  if (slugs.has("progress")) deps["@radix-ui/react-progress"] = "^1.1.1"
+  if (slugs.has("select")) deps["@radix-ui/react-select"] = "^2.1.2"
+  if (slugs.has("dialog")) deps["@radix-ui/react-dialog"] = "^1.1.4"
   if (opts.needsDatabase) deps["@libsql/client"] = "^0.14.0"
   const devDeps: Record<string, string> = {
     "@tailwindcss/postcss": "^4.0.0",
@@ -246,8 +251,6 @@ function buildLayout(manifest: GeneratedProjectManifest): string {
     : ""
   return `import type { Metadata } from "next"
 import "./globals.css"
-import { SiteHeader } from "@/components/site-header"
-import { SiteFooter } from "@/components/site-footer"
 
 export const metadata: Metadata = {
   title: ${JSON.stringify(`${projectName} — ${manifest.brief.tagline}`)},
@@ -264,191 +267,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="scroll-smooth">
       <body className="min-h-dvh bg-background text-foreground antialiased">
-        <SiteHeader />
-        <main className="flex-1">{children}</main>
-        <SiteFooter />
+        {children}
       </body>
     </html>
-  )
-}
-`
-}
-
-function buildSiteHeader(_manifest: GeneratedProjectManifest): string {
-  return `"use client"
-
-import * as React from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { Menu, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { siteConfig } from "@/lib/site-config"
-
-const navItems = siteConfig.navLinks
-const primaryCta = siteConfig.primaryCta
-
-export function SiteHeader() {
-  const [open, setOpen] = React.useState(false)
-  React.useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false) }
-    document.body.style.overflow = "hidden"
-    window.addEventListener("keydown", onKey)
-    return () => {
-      document.body.style.overflow = ""
-      window.removeEventListener("keydown", onKey)
-    }
-  }, [open])
-
-  return (
-    <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          {siteConfig.logoUrl ? (
-            <Image
-              src={siteConfig.logoUrl}
-              alt={siteConfig.name + " logo"}
-              width={32}
-              height={32}
-              className="h-8 w-8 rounded-lg object-cover"
-              priority
-            />
-          ) : (
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-xs font-semibold text-primary-foreground">
-              {siteConfig.logoInitials}
-            </span>
-          )}
-          <span>{siteConfig.name}</span>
-        </Link>
-        <nav className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="hidden md:block">
-          <Button asChild size="sm"><Link href={primaryCta.href}>{primaryCta.label}</Link></Button>
-        </div>
-        <button
-          type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-foreground/80 transition hover:bg-accent hover:text-accent-foreground md:hidden"
-          aria-label="Open menu"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </div>
-      <div
-        className={cn(
-          "border-t border-border/60 bg-background md:hidden",
-          open ? "block" : "hidden",
-        )}
-      >
-        <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-3 sm:px-6 lg:px-8">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className="rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
-            >
-              {item.label}
-            </Link>
-          ))}
-          <Button asChild className="mt-2 w-full" onClick={() => setOpen(false)}>
-            <Link href={primaryCta.href}>{primaryCta.label}</Link>
-          </Button>
-        </div>
-      </div>
-    </header>
-  )
-}
-`
-}
-
-function buildSiteFooter(_manifest: GeneratedProjectManifest): string {
-  return `import Image from "next/image"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { siteConfig } from "@/lib/site-config"
-
-const navItems = siteConfig.navLinks
-const socialLinks = siteConfig.socialLinks
-const footerInfo: { email?: string; phone?: string; address?: string } = siteConfig.contact ?? {}
-const footerCta = siteConfig.footerCta
-
-export function SiteFooter() {
-  return (
-    <footer className="mt-24 border-t border-border/60 bg-card/40">
-      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-4">
-          <div className="space-y-3 lg:col-span-2">
-            <div className="flex items-center gap-2">
-              {siteConfig.logoUrl ? (
-                <Image
-                  src={siteConfig.logoUrl}
-                  alt={siteConfig.name + " logo"}
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 rounded-md object-cover"
-                />
-              ) : (
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-primary-foreground">
-                  {siteConfig.logoInitials}
-                </span>
-              )}
-              <p className="text-lg font-semibold tracking-tight">{siteConfig.name}</p>
-            </div>
-            <p className="max-w-md text-sm text-muted-foreground">{siteConfig.description}</p>
-            {footerCta ? (
-              <Button asChild size="sm" variant="outline" className="mt-2">
-                <Link href={footerCta.href}>{footerCta.label}</Link>
-              </Button>
-            ) : null}
-          </div>
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Explore</p>
-            <ul className="space-y-2 text-sm">
-              {navItems.map((item) => (
-                <li key={item.href}>
-                  <Link href={item.href} className="text-muted-foreground transition hover:text-foreground">
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Contact</p>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              {footerInfo.email ? <li><a href={\`mailto:\${footerInfo.email}\`} className="transition hover:text-foreground">{footerInfo.email}</a></li> : null}
-              {footerInfo.phone ? <li><a href={\`tel:\${footerInfo.phone.replace(/\\s/g, "")}\`} className="transition hover:text-foreground">{footerInfo.phone}</a></li> : null}
-              {footerInfo.address ? <li>{footerInfo.address}</li> : null}
-            </ul>
-            {socialLinks.length > 0 ? (
-              <ul className="flex flex-wrap gap-x-4 gap-y-2 pt-2 text-sm">
-                {socialLinks.map((s) => (
-                  <li key={s.href}>
-                    <a href={s.href} className="text-muted-foreground transition hover:text-foreground">{s.label}</a>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        </div>
-        <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-border/60 pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center">
-          <p>© {new Date().getFullYear()} {siteConfig.name}. All rights reserved.</p>
-          <p>Crafted with care.</p>
-        </div>
-      </div>
-    </footer>
   )
 }
 `
@@ -849,6 +670,212 @@ export const TabsContent = React.forwardRef<
 ))
 TabsContent.displayName = "TabsContent"
 `,
+
+  alert: () => `import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
+
+const alertVariants = cva(
+  "relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",
+  {
+    variants: {
+      variant: {
+        default: "bg-background text-foreground",
+        destructive: "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+      },
+    },
+    defaultVariants: { variant: "default" },
+  },
+)
+
+export const Alert = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>>(
+  ({ className, variant, ...props }, ref) => (
+    <div ref={ref} role="alert" className={cn(alertVariants({ variant }), className)} {...props} />
+  ),
+)
+Alert.displayName = "Alert"
+
+export const AlertTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
+  ({ className, ...props }, ref) => (
+    <h5 ref={ref} className={cn("mb-1 font-medium leading-none tracking-tight", className)} {...props} />
+  ),
+)
+AlertTitle.displayName = "AlertTitle"
+
+export const AlertDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn("text-sm [&_p]:leading-relaxed", className)} {...props} />
+  ),
+)
+AlertDescription.displayName = "AlertDescription"
+`,
+
+  checkbox: () => `import * as React from "react"
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
+import { cn } from "@/lib/utils"
+import { Check } from "lucide-react"
+
+export const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <CheckboxPrimitive.Root ref={ref} className={cn("peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground", className)} {...props}>
+    <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
+      <Check className="h-4 w-4" />
+    </CheckboxPrimitive.Indicator>
+  </CheckboxPrimitive.Root>
+))
+Checkbox.displayName = "Checkbox"
+`,
+
+  switch: () => `import * as React from "react"
+import * as SwitchPrimitives from "@radix-ui/react-switch"
+import { cn } from "@/lib/utils"
+
+export const Switch = React.forwardRef<
+  React.ElementRef<typeof SwitchPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
+>(({ className, ...props }, ref) => (
+  <SwitchPrimitives.Root className={cn("peer inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input", className)} {...props} ref={ref}>
+    <SwitchPrimitives.Thumb className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0" />
+  </SwitchPrimitives.Root>
+))
+Switch.displayName = "Switch"
+`,
+
+  skeleton: () => `import { cn } from "@/lib/utils"
+
+export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("animate-pulse rounded-md bg-muted", className)} {...props} />
+}
+`,
+
+  progress: () => `import * as React from "react"
+import * as ProgressPrimitive from "@radix-ui/react-progress"
+import { cn } from "@/lib/utils"
+
+export const Progress = React.forwardRef<
+  React.ElementRef<typeof ProgressPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof ProgressPrimitive.Root>
+>(({ className, value, ...props }, ref) => (
+  <ProgressPrimitive.Root ref={ref} className={cn("relative h-4 w-full overflow-hidden rounded-full bg-secondary", className)} {...props}>
+    <ProgressPrimitive.Indicator className="h-full w-full flex-1 bg-primary transition-all" style={{ transform: \`translateX(-\${100 - (value || 0)}%)\` }} />
+  </ProgressPrimitive.Root>
+))
+Progress.displayName = "Progress"
+`,
+
+  select: () => `import * as React from "react"
+import * as SelectPrimitive from "@radix-ui/react-select"
+import { cn } from "@/lib/utils"
+import { Check, ChevronDown, ChevronUp } from "lucide-react"
+
+export const Select = SelectPrimitive.Root
+export const SelectGroup = SelectPrimitive.Group
+export const SelectValue = SelectPrimitive.Value
+
+export const SelectTrigger = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Trigger>, React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>>(
+  ({ className, children, ...props }, ref) => (
+    <SelectPrimitive.Trigger ref={ref} className={cn("flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1", className)} {...props}>
+      {children}
+      <SelectPrimitive.Icon asChild><ChevronDown className="h-4 w-4 opacity-50" /></SelectPrimitive.Icon>
+    </SelectPrimitive.Trigger>
+  ),
+)
+SelectTrigger.displayName = "SelectTrigger"
+
+export const SelectContent = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Content>, React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>>(
+  ({ className, children, position = "popper", ...props }, ref) => (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content ref={ref} className={cn("relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2", position === "popper" && "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1", className)} position={position} {...props}>
+        <SelectPrimitive.Viewport className={cn("p-1", position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]")}>{children}</SelectPrimitive.Viewport>
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  ),
+)
+SelectContent.displayName = "SelectContent"
+
+export const SelectItem = React.forwardRef<React.ElementRef<typeof SelectPrimitive.Item>, React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>>(
+  ({ className, children, ...props }, ref) => (
+    <SelectPrimitive.Item ref={ref} className={cn("relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", className)} {...props}>
+      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center"><SelectPrimitive.ItemIndicator><Check className="h-4 w-4" /></SelectPrimitive.ItemIndicator></span>
+      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
+  ),
+)
+SelectItem.displayName = "SelectItem"
+`,
+
+  table: () => `import * as React from "react"
+import { cn } from "@/lib/utils"
+
+export const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
+  ({ className, ...props }, ref) => (
+    <div className="relative w-full overflow-auto"><table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} /></div>
+  ),
+)
+Table.displayName = "Table"
+
+export const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+  ({ className, ...props }, ref) => <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />,
+)
+TableHeader.displayName = "TableHeader"
+
+export const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(
+  ({ className, ...props }, ref) => <tbody ref={ref} className={cn("[&_tr:last-child]:border-0", className)} {...props} />,
+)
+TableBody.displayName = "TableBody"
+
+export const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
+  ({ className, ...props }, ref) => <tr ref={ref} className={cn("border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted", className)} {...props} />,
+)
+TableRow.displayName = "TableRow"
+
+export const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(
+  ({ className, ...props }, ref) => <th ref={ref} className={cn("h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0", className)} {...props} />,
+)
+TableHead.displayName = "TableHead"
+
+export const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
+  ({ className, ...props }, ref) => <td ref={ref} className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />,
+)
+TableCell.displayName = "TableCell"
+`,
+
+  dialog: () => `import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { cn } from "@/lib/utils"
+import { X } from "lucide-react"
+
+export const Dialog = DialogPrimitive.Root
+export const DialogTrigger = DialogPrimitive.Trigger
+
+export const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(
+  ({ className, children, ...props }, ref) => (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+      <DialogPrimitive.Content ref={ref} className={cn("fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg", className)} {...props}>
+        {children}
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"><X className="h-4 w-4" /><span className="sr-only">Close</span></DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  ),
+)
+DialogContent.displayName = "DialogContent"
+
+export const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)} {...props} />
+DialogHeader.displayName = "DialogHeader"
+
+export const DialogTitle = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Title>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>>(
+  ({ className, ...props }, ref) => <DialogPrimitive.Title ref={ref} className={cn("text-lg font-semibold leading-none tracking-tight", className)} {...props} />,
+)
+DialogTitle.displayName = "DialogTitle"
+
+export const DialogDescription = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Description>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>>(
+  ({ className, ...props }, ref) => <DialogPrimitive.Description ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />,
+)
+DialogDescription.displayName = "DialogDescription"
+`,
 }
 
 export const ALL_UI_COMPONENTS: RequiredComponent[] = Object.keys(UI_COMPONENT_BUILDERS).map((slug) => ({
@@ -1180,8 +1207,6 @@ export function scaffoldBaseFiles(
     { path: "postcss.config.js", content: buildPostcssConfig() },
     { path: "app/globals.css", content: buildGlobalsCss(manifest.theme) },
     { path: "app/layout.tsx", content: buildLayout(manifest) },
-    { path: "components/site-header.tsx", content: buildSiteHeader(manifest) },
-    { path: "components/site-footer.tsx", content: buildSiteFooter(manifest) },
     { path: "lib/utils.ts", content: buildLibUtils() },
     { path: "lib/site-config.ts", content: buildSiteConfig(manifest) },
     { path: "lib/generated-manifest.ts", content: buildGeneratedManifest(manifest) },

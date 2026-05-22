@@ -7,7 +7,8 @@
 //   3. validate manifest → if errors, run a single repair pass against the AI.
 //   4. render every page deterministically with sections.ts.
 //   5. scaffold project files (configs, layout, header/footer, ui components).
-//   6. file-level validation → quality score + diagnostics.
+//   6. lint all files → fix syntax errors, inject missing imports.
+//   7. file-level validation → quality score + diagnostics.
 //
 // `runAIWebsiteBuilder(prompt, opts?)` is the entry point used by the API
 // route and by older callers that pass only a prompt.
@@ -28,7 +29,10 @@ import type {
   NavLink,
   PagePlan,
   PipelineLog,
+  ProgressCallback,
   ProjectContext,
+  RefineOptions,
+  RefineResult,
   RequiredComponent,
   RunBuilderResult,
   SectionItem,
@@ -42,6 +46,8 @@ import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
 import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection } from "./design-directions"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
+import { renderSectionBlock, type SectionBlockLayout } from "./blocks"
+import { lintAllFiles } from "./lint"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
@@ -52,7 +58,10 @@ export type {
   GeneratedProjectManifest,
   IntegrationPlan,
   PagePlan,
+  ProgressCallback,
   ProjectContext,
+  RefineOptions,
+  RefineResult,
   RunBuilderResult,
   SectionPlan,
   ThemeTokens,
@@ -335,76 +344,25 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
 }
 
 function defaultSectionsForRoute(routePath: string, brief: DesignBrief): SectionPlan[] {
-  // Route-aware defaults so missing AI output still yields varied pages.
   if (routePath === "/") {
     return [
       {
         kind: "hero",
         variant: "cinematic",
-        eyebrow: `Introducing ${brief.projectName}`,
+        eyebrow: brief.projectName,
         heading: brief.tagline,
         description: brief.description,
         primaryCta: brief.primaryCta,
         secondaryCta: brief.secondaryCta,
         anchor: "top",
       },
-      { kind: "logos", heading: "Trusted by teams worldwide" },
-      { kind: "feature-grid", variant: "asymmetric-bento", eyebrow: "Why teams choose us", heading: "Built for the way you work", description: brief.description },
-      { kind: "stats", variant: "row", eyebrow: "By the numbers", heading: "Real results, week after week" },
-      { kind: "testimonials", variant: "grid-cards", eyebrow: "Customer stories", heading: `What customers say about ${brief.projectName}` },
-      { kind: "pricing", eyebrow: "Pricing", heading: "Simple pricing for every team" },
-      { kind: "faq", variant: "accordion", eyebrow: "FAQ", heading: "Questions before you start?" },
-      { kind: "cta", variant: "boxed-card", heading: "Ready to get started?", description: brief.description, primaryCta: brief.primaryCta },
+      { kind: "feature-grid", variant: "bento", heading: "Key features", description: brief.description },
+      { kind: "cta", variant: "boxed-card", heading: "Get started today", primaryCta: brief.primaryCta },
     ]
   }
-  const last = routePath.replace(/^\//, "").split("/").filter(Boolean).pop() ?? ""
-  switch (last) {
-    case "pricing":
-      return [
-        { kind: "hero", variant: "centered", heading: "Simple, predictable pricing", description: "Pick a plan that scales with you.", primaryCta: brief.primaryCta },
-        { kind: "pricing" },
-        { kind: "comparison", heading: "Compare every plan" },
-        { kind: "faq", variant: "two-column", heading: "Pricing FAQ" },
-        { kind: "cta", variant: "banner" },
-      ]
-    case "contact":
-      return [
-        { kind: "hero", variant: "centered", heading: "Let's talk", description: "Tell us about your project and we'll be in touch.", primaryCta: brief.primaryCta },
-        { kind: "contact", variant: "split-form" },
-        { kind: "faq", variant: "two-column", heading: "Common questions" },
-      ]
-    case "about":
-      return [
-        { kind: "hero", variant: "magazine-cover", heading: `About ${brief.projectName}`, description: brief.description },
-        { kind: "stats", variant: "split-callout" },
-        { kind: "process", variant: "timeline", heading: "How we work" },
-        { kind: "team" },
-        { kind: "cta", variant: "split" },
-      ]
-    case "blog":
-      return [
-        { kind: "hero", variant: "centered", heading: "Stories, ideas, and behind-the-scenes", description: "Insights from our team.", primaryCta: { label: "Subscribe", href: "#" } },
-        { kind: "blog-preview", variant: "feature-and-list" },
-        { kind: "blog-preview", variant: "card-grid" },
-        { kind: "cta", variant: "banner" },
-      ]
-    case "shop":
-    case "store":
-    case "menu":
-      return [
-        { kind: "hero", variant: "ecommerce", heading: "Crafted with care", description: brief.description, primaryCta: { label: "Shop now", href: "#" } },
-        { kind: "product-grid", heading: "Bestsellers" },
-        { kind: "stats", variant: "card-row" },
-        { kind: "cta", variant: "boxed-card" },
-      ]
-    default:
-      return [
-        { kind: "hero", variant: "centered", heading: prettifyPath(routePath), description: brief.description, primaryCta: brief.primaryCta },
-        { kind: "feature-grid", variant: "proof-led" },
-        { kind: "testimonials", variant: "spotlight" },
-        { kind: "cta", variant: "split" },
-      ]
-  }
+  return [
+    { kind: "hero", variant: "centered", heading: prettifyPath(routePath), description: brief.description, primaryCta: brief.primaryCta },
+  ]
 }
 
 function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): DesignBrief {
@@ -435,16 +393,6 @@ function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): Desi
     logoInitials: computeInitials(projectName),
     category: project?.category,
   }
-}
-
-function fallbackPagesFromBrief(brief: DesignBrief): PagePlan[] {
-  return brief.navLinks.slice(0, 5).map((link, i) => ({
-    path: link.href.startsWith("/") ? sanitizeRoute(link.href) : "/",
-    title: i === 0 ? "Home" : link.label,
-    metaTitle: `${i === 0 ? "Home" : link.label} — ${brief.projectName}`,
-    metaDescription: brief.description,
-    sections: defaultSectionsForRoute(i === 0 ? "/" : sanitizeRoute(link.href), brief),
-  }))
 }
 
 function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext, direction?: DesignDirection): GeneratedProjectManifest {
@@ -495,24 +443,6 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
       sections: [],
     })
     normalizedPaths.unshift("/")
-  }
-
-  // If only the home page exists (e.g. the planner failed entirely), add
-  // the standard secondary pages from the fallback brief so the generated
-  // site still has a real internal structure.
-  if (pages.length < 2) {
-    const seedBrief: DesignBrief = {
-      ...fallbackBrief,
-      themePreset,
-      projectName: safeText(briefRaw.projectName, fallbackBrief.projectName),
-      tagline: safeText(briefRaw.tagline, fallbackBrief.tagline),
-      description: safeText(briefRaw.description, fallbackBrief.description),
-    }
-    for (const extra of fallbackPagesFromBrief(seedBrief)) {
-      if (extra.path === "/" || pages.some((p) => p.path === extra.path)) continue
-      pages.push(extra)
-      normalizedPaths.push(extra.path)
-    }
   }
 
   // Host-project branding always wins over AI-invented names/descriptions.
@@ -567,10 +497,6 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
   for (const page of pages) {
     if (page.sections.length === 0) {
       page.sections = defaultSectionsForRoute(page.path, briefSeed)
-    }
-    // Ensure home has a hero up front.
-    if (page.path === "/" && page.sections[0]?.kind !== "hero") {
-      page.sections.unshift({ kind: "hero", variant: "split", heading: briefSeed.tagline, description: briefSeed.description, primaryCta: briefSeed.primaryCta, secondaryCta: briefSeed.secondaryCta })
     }
     // De-dup consecutive identical kinds.
     page.sections = dedupConsecutive(page.sections)
@@ -1002,6 +928,102 @@ async function repairManifest(
 
 // ---------- rendering ----------
 
+// Map section kind + variant to a block layout. The blocks system provides
+// higher-quality shadcn-composed output; we prefer it when variants match.
+function mapSectionToBlockLayout(section: SectionPlan): SectionBlockLayout | null {
+  const v = section.variant ?? ""
+  if (v.startsWith("blocks-")) {
+    const layout = v.replace("blocks-", "") as SectionBlockLayout
+    const validLayouts: SectionBlockLayout[] = [
+      "hero-centered", "hero-split", "hero-cinematic", "hero-dashboard",
+      "feature-cards", "feature-bento", "feature-icon-grid", "feature-alternating",
+      "stats-row", "stats-cards",
+      "testimonials-grid", "testimonials-spotlight",
+      "pricing-tiers", "pricing-toggle",
+      "faq-accordion", "faq-grid",
+      "contact-form", "contact-split",
+      "cta-banner", "cta-boxed",
+      "logos-row",
+      "gallery-grid", "gallery-masonry",
+      "process-steps", "process-timeline",
+      "team-grid",
+      "blog-cards",
+      "comparison-table",
+      "product-grid",
+    ]
+    if (validLayouts.includes(layout)) return layout
+  }
+  // Auto-map common patterns
+  const map: Record<string, SectionBlockLayout> = {
+    "hero:cinematic": "hero-cinematic",
+    "hero:split": "hero-split",
+    "hero:centered": "hero-centered",
+    "hero:saas-dashboard": "hero-dashboard",
+    "feature-grid:cards": "feature-cards",
+    "feature-grid:bento": "feature-bento",
+    "feature-grid:asymmetric-bento": "feature-bento",
+    "feature-grid:icon-grid": "feature-icon-grid",
+    "feature-grid:alternating": "feature-alternating",
+    "feature-grid:proof-led": "feature-cards",
+    "stats:row": "stats-row",
+    "stats:card-row": "stats-cards",
+    "testimonials:grid-cards": "testimonials-grid",
+    "testimonials:spotlight": "testimonials-spotlight",
+    "pricing:three-tier": "pricing-tiers",
+    "pricing:two-tier-toggle": "pricing-toggle",
+    "faq:accordion": "faq-accordion",
+    "faq:two-column": "faq-grid",
+    "contact:form": "contact-form",
+    "contact:split-form": "contact-split",
+    "cta:banner": "cta-banner",
+    "cta:split": "cta-banner",
+    "cta:boxed-card": "cta-boxed",
+    "logos:row": "logos-row",
+    "gallery:grid": "gallery-grid",
+    "gallery:masonry": "gallery-masonry",
+    "process:steps": "process-steps",
+    "process:timeline": "process-timeline",
+    "process:numbered-cards": "process-steps",
+    "team:card-grid": "team-grid",
+    "blog-preview:card-grid": "blog-cards",
+    "blog-preview:feature-and-list": "blog-cards",
+    "comparison:table": "comparison-table",
+    "product-grid:card-grid": "product-grid",
+  }
+  const key = `${section.kind}:${section.variant ?? ""}`
+  return map[key] ?? null
+}
+
+function sectionToBlockPlan(section: SectionPlan, layout: SectionBlockLayout, _pagePath: string) {
+  return {
+    kind: layout,
+    heading: section.heading,
+    subheading: section.subheading,
+    description: section.description,
+    eyebrow: section.eyebrow,
+    cta: section.primaryCta ? { label: section.primaryCta.label, href: section.primaryCta.href } : undefined,
+    secondaryCta: section.secondaryCta ? { label: section.secondaryCta.label, href: section.secondaryCta.href } : undefined,
+    items: (section.items ?? []).map((item) => ({
+      id: item.title?.toLowerCase().replace(/\s+/g, "-") ?? "item",
+      kind: "Card" as const,
+      heading: item.title,
+      text: item.label,
+      description: item.description,
+      eyebrow: item.eyebrow,
+      icon: item.icon,
+      href: item.href,
+      value: item.value,
+      suffix: item.suffix,
+      price: item.price,
+      src: item.image,
+      alt: item.title,
+      highlighted: item.highlighted,
+      cta: item.cta ? { label: item.cta.label, href: item.cta.href } : undefined,
+    })),
+    anchor: section.anchor,
+  }
+}
+
 function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
   file: BuilderFile
   importsNeeded: Set<string>
@@ -1013,6 +1035,19 @@ function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
   const importsNeeded = new Set<string>()
 
   page.sections.forEach((section, sectionIndex) => {
+    // Check if this section should use block-based rendering
+    const blockLayout = mapSectionToBlockLayout(section)
+    if (blockLayout) {
+      const plan = sectionToBlockPlan(section, blockLayout, page.path)
+      const { tsx, imports: blockImports } = renderSectionBlock(plan)
+      tsxBlocks.push(tsx)
+      for (const imp of blockImports) {
+        importsNeeded.add(imp.toLowerCase())
+      }
+      allImports.push([])
+      return
+    }
+
     const rendered = renderSection(section, { sectionIndex, pagePath: page.path })
     allImports.push(rendered.imports)
     tsxBlocks.push(rendered.tsx)
@@ -1051,22 +1086,23 @@ function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
 }
 
 function pickRequiredUiComponents(manifest: GeneratedProjectManifest): RequiredComponent[] {
-  // Probe-render every page to know which @/components/ui/* slugs are needed,
-  // then return matching component definitions to scaffold.
   const required = new Set<string>()
   for (const page of manifest.pages) {
     for (const section of page.sections) {
+      const blockLayout = mapSectionToBlockLayout(section)
+      if (blockLayout) {
+        const { imports } = renderSectionBlock(sectionToBlockPlan(section, blockLayout, page.path))
+        for (const imp of imports) required.add(imp.toLowerCase())
+      }
       for (const imp of renderSection(section, { sectionIndex: 0, pagePath: page.path }).imports) {
         const m = imp.from.match(/^@\/components\/ui\/([a-z-]+)$/)
         if (m) required.add(m[1])
       }
     }
   }
-  // Always include button/badge/card/separator since the header/footer use them.
-  required.add("button")
-  required.add("badge")
-  required.add("card")
-  required.add("separator")
+  // Always include core components used by headers, footers, and all blocks
+  const always = ["button", "badge", "card", "separator", "input", "textarea", "label", "avatar", "accordion", "tabs"]
+  for (const slug of always) required.add(slug)
   return ALL_UI_COMPONENTS.filter((c) => required.has(c.slug))
 }
 
@@ -1076,48 +1112,67 @@ export async function runAIWebsiteBuilder(
   options: BuilderOptions = {},
 ): Promise<RunBuilderResult> {
   const logs: PipelineLog[] = []
+  const emit = options.onProgress
+
   logs.push({
     step: "start",
     detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""}`,
   })
+  emit?.({ type: "step", step: "start", detail: logs[logs.length - 1].detail })
 
   const quality = options.quality || "best"
   logs.push({ step: "quality", detail: `${quality === "fast" ? "Fast" : "Best"} generation pipeline selected` })
 
   // 1. Design direction + plan (with repair).
+  emit?.({ type: "step", step: "design-direction", detail: "Planning visual design direction..." })
   const direction = await planDesignDirection(prompt, { ...options, quality }, logs)
+  emit?.({ type: "step", step: "planning", detail: "Creating website architecture plan..." })
   const manifest = await planManifest(prompt, { ...options, quality }, logs, direction)
+  emit?.({ type: "manifest", manifest })
   logs.push({
     step: "plan",
     detail: `Manifest ready: ${manifest.pages.length} pages, theme=${manifest.theme.preset}, deployment=${manifest.deploymentMode}`,
   })
+  emit?.({ type: "step", step: "plan-complete", detail: logs[logs.length - 1].detail })
 
   // 2. Render pages.
+  emit?.({ type: "step", step: "rendering", detail: "Rendering pages..." })
   const required = pickRequiredUiComponents(manifest)
   const pageFiles: BuilderFile[] = []
-  for (const page of manifest.pages) {
+  for (let i = 0; i < manifest.pages.length; i++) {
+    const page = manifest.pages[i]
     const { file } = renderPageFile(manifest, page)
     pageFiles.push(file)
     logs.push({ step: "render", detail: `Rendered ${page.path} -> ${file.path} (${page.sections.length} sections)` })
+    emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: page.sections.length })
   }
 
-  // Resolve env var values (project envVars ⟶ server env fallback) for
+  // Resolve env var values (project envVars- server env fallback) for
   // missing-env checks only. Never echo or write these values to files.
   const resolvedEnv = resolveRequiredEnvVarValues(manifest.requiredEnvVars, options.project)
 
   // 3. Scaffold base + ui components (+ optional DB files).
+  emit?.({ type: "step", step: "scaffolding", detail: "Scaffolding project files and UI components..." })
   const baseFiles = scaffoldBaseFiles(manifest, required, prompt)
   const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
+  emit?.({ type: "scaffold", baseCount: baseFiles.length, uiCount: uiFiles.length })
   logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
 
   const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
 
-  // 4. File-level validation.
+  // 4. Lint all files — fix syntax errors and inject missing imports.
+  emit?.({ type: "step", step: "linting", detail: "Linting generated files..." })
+  const lintedFiles = lintAllFiles(allFiles, (msg) => logs.push({ step: "lint", detail: msg }))
+  const lintChangeCount = logs.filter((l) => l.step === "lint").length
+  if (lintChangeCount > 0) logs.push({ step: "lint", detail: `Linted ${lintChangeCount} issues across ${allFiles.length} files` })
+
+  // 5. File-level validation.
+  emit?.({ type: "step", step: "validating", detail: "Running build validation..." })
   const connectedIntegrationIds = Array.from(new Set([
     ...(options.project?.connectedIntegrationIds ?? []),
     ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
   ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
-  const build = runBuildValidation(allFiles, {
+  const build = runBuildValidation(lintedFiles, {
     needsDatabase: manifest.needsDatabase,
     deploymentMode: manifest.deploymentMode,
     connectedIntegrationIds,
@@ -1158,7 +1213,7 @@ export async function runAIWebsiteBuilder(
   }
 
   const qualityScore = computeQualityScore(manifest, build)
-  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${allFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
+  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${lintedFiles.length} deployable files, deployment=${manifest.deploymentMode}` })
 
   // Advisory warnings surfaced to the UI. Never include values here.
   const advisoryWarnings = [...build.warnings]
@@ -1173,9 +1228,11 @@ export async function runAIWebsiteBuilder(
     )
   }
 
+  emit?.({ type: "complete", files: lintedFiles, qualityScore, pageCount: manifest.pages.length, fileCount: lintedFiles.length })
+
   return {
     manifest,
-    files: allFiles,
+    files: lintedFiles,
     logs,
     build,
     warnings: advisoryWarnings,
@@ -1189,3 +1246,369 @@ export async function runAIWebsiteBuilder(
     deploymentMode: manifest.deploymentMode,
   }
 }
+
+// ---- Multi-plan generation ----
+// Generates multiple alternative plans in parallel, scores them, and picks the best.
+// Dramatically improves quality by exploring different design directions.
+export async function runMultiPlanBuilder(
+  prompt: string,
+  options: BuilderOptions = {},
+  planCount = 3,
+): Promise<RunBuilderResult> {
+  const emit = options.onProgress
+  emit?.({ type: "step", step: "multi-plan", detail: `Generating ${planCount} alternative website plans...` })
+
+  const quality = options.quality || "best"
+  const plans = await generateMultiplePlans(prompt, options, planCount)
+
+  // Score plans and pick the best
+  let bestManifest: GeneratedProjectManifest | null = null
+  let bestScore = -Infinity
+
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i]
+    const validation = validateManifest(plan)
+    let score = 0
+    if (validation.ok) {
+      const home = plan.pages.find((p) => p.path === "/")
+      if (home) {
+        const kinds = new Set(home.sections.map((s) => s.kind))
+        score += kinds.size * 10
+        score += Math.min(20, home.sections.length * 3)
+      }
+      score += plan.pages.length * 6
+      score -= validation.warnings.length * 5
+      if (plan.designDirection.visualStyle !== "bold-saas") score += 2
+      if (plan.brief.projectName.length > 0) score += 5
+      if (plan.brief.tagline !== "Beautiful, fast, on-brand websites.") score += 8
+      if (plan.brief.description.length > 50) score += 5
+    } else {
+      score -= 50
+    }
+    emit?.({ type: "step", step: "plan-score", detail: `Plan ${i + 1} scored ${score} (${plan.pages.length} pages, ${plan.brief.projectName})` })
+    if (score > bestScore) {
+      bestScore = score
+      bestManifest = plan
+    }
+  }
+
+  if (!bestManifest) {
+    emit?.({ type: "step", step: "multi-plan-fallback", detail: "No valid plan generated. Using deterministic fallback." })
+    return runAIWebsiteBuilder(prompt, options)
+  }
+
+  emit?.({ type: "step", step: "multi-plan-select", detail: `Selected best plan: "${bestManifest.brief.projectName}" (${bestManifest.pages.length} pages)` })
+  emit?.({ type: "manifest", manifest: bestManifest })
+
+  // Render the best plan
+  const logs: PipelineLog[] = []
+
+  emit?.({ type: "step", step: "rendering", detail: "Rendering pages from best plan..." })
+  const required = pickRequiredUiComponents(bestManifest)
+  const pageFiles: BuilderFile[] = []
+  for (const page of bestManifest.pages) {
+    const { file } = renderPageFile(bestManifest, page)
+    pageFiles.push(file)
+    emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: page.sections.length })
+  }
+
+  const resolvedEnv = resolveRequiredEnvVarValues(bestManifest.requiredEnvVars, options.project)
+
+  emit?.({ type: "step", step: "scaffolding", detail: "Scaffolding project files..." })
+  const baseFiles = scaffoldBaseFiles(bestManifest, required, prompt)
+  const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
+  emit?.({ type: "scaffold", baseCount: baseFiles.length, uiCount: uiFiles.length })
+
+  const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
+  const lintedFiles = lintAllFiles(allFiles)
+
+  const connectedIntegrationIds = Array.from(new Set([
+    ...(options.project?.connectedIntegrationIds ?? []),
+    ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
+  ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
+  const build = runBuildValidation(lintedFiles, {
+    needsDatabase: bestManifest.needsDatabase,
+    deploymentMode: bestManifest.deploymentMode,
+    connectedIntegrationIds,
+  })
+
+  const missingEnvVars = computeMissingEnvVars(
+    bestManifest.requiredEnvVars,
+    options.project?.envVarKeys,
+    resolvedEnv,
+  )
+
+  const qualityScore = computeQualityScore(bestManifest, build)
+
+  const advisoryWarnings = [...build.warnings]
+  if (bestManifest.needsDatabase && missingEnvVars.length) {
+    advisoryWarnings.unshift(`Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`)
+  }
+  if (bestManifest.unconnectedIntegrations.length) {
+    advisoryWarnings.push(`Integrations not connected: ${bestManifest.unconnectedIntegrations.join(", ")}`)
+  }
+
+  emit?.({ type: "complete", files: lintedFiles, qualityScore, pageCount: bestManifest.pages.length, fileCount: lintedFiles.length })
+
+  return {
+    manifest: bestManifest,
+    files: lintedFiles,
+    logs,
+    build,
+    warnings: advisoryWarnings,
+    qualityScore,
+    needsDatabase: bestManifest.needsDatabase,
+    databaseProvider: bestManifest.databaseProvider,
+    integrations: bestManifest.integrations,
+    requiredEnvVars: bestManifest.requiredEnvVars,
+    missingEnvVars,
+    unconnectedIntegrations: bestManifest.unconnectedIntegrations,
+    deploymentMode: bestManifest.deploymentMode,
+  }
+}
+
+async function generateMultiplePlans(
+  prompt: string,
+  options: BuilderOptions,
+  count: number,
+): Promise<GeneratedProjectManifest[]> {
+  const model = pickModel(options)
+  const direction = options.quality !== "fast"
+    ? await planDesignDirection(prompt, options, [])
+    : fallbackDesignDirection(prompt, options.project)
+
+  const plans: GeneratedProjectManifest[] = []
+  const temperatureVars = [0.7, 0.85, 0.6]
+
+  const tasks = Array.from({ length: count }, async (_, i) => {
+    const temp = temperatureVars[i % temperatureVars.length]
+    try {
+      const raw = await callAIAgent(
+        [
+          { role: "system", content: PLAN_SYSTEM_PROMPT },
+          { role: "user", content: buildPlannerUserContent(prompt, options.project, direction) },
+        ],
+        { model, temperature: temp, retries: 0 },
+      )
+      const parsed = extractJson<unknown>(raw)
+      if (parsed) {
+        return normalizeManifest(parsed, prompt, options.project, direction)
+      }
+    } catch {
+      // Skip failed plan
+    }
+    return null
+  })
+
+  const results = await Promise.all(tasks)
+  for (const plan of results) {
+    if (plan) plans.push(plan)
+  }
+
+  if (plans.length === 0) {
+    plans.push(normalizeManifest(null, prompt, options.project, direction))
+  }
+
+  return plans
+}
+
+// ---- Iterative Refinement ----
+// Allows users to refine an existing generated website with follow-up prompts.
+// The AI receives the current manifest + all files and produces a diff.
+export async function refineAIWebsite(
+  prompt: string,
+  options: RefineOptions,
+): Promise<RefineResult> {
+  const logs: PipelineLog[] = []
+  const emit = options.onProgress
+
+  emit?.({ type: "step", step: "refine-planning", detail: "Analyzing refinement request..." })
+  const model = pickModel({ model: options.model, quality: "best" })
+
+  const fileSummary = options.existingFiles
+    .map((f) => `${f.path} (${f.content.length} chars)`)
+    .join("\n")
+
+  const conversationContext = options.conversationHistory
+    .map((m) => `${m.role}: ${m.content}`)
+    .join("\n\n")
+
+  const manifestJson = JSON.stringify(
+    {
+      brief: options.existingManifest.brief,
+      pages: options.existingManifest.pages.map((p) => ({
+        path: p.path,
+        title: p.title,
+        sections: p.sections.map((s) => ({
+          kind: s.kind,
+          variant: s.variant,
+          heading: s.heading,
+          description: s.description,
+        })),
+      })),
+      designDirection: options.existingManifest.designDirection,
+      needsDatabase: options.existingManifest.needsDatabase,
+    },
+    null,
+    2,
+  )
+
+  try {
+    const raw = await callAIAgent(
+      [
+        {
+          role: "system",
+          content: REFINE_SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: `Current website manifest:\n${manifestJson}\n\nExisting files:\n${fileSummary}\n\nConversation history:\n${conversationContext}\n\nRefinement request: ${prompt}\n\nReturn a JSON diff describing what to change.`,
+        },
+      ],
+      { model, temperature: 0.4 },
+    )
+
+    const diff = extractJson<RefineDiff>(raw)
+    logs.push({ step: "refine-plan", detail: `Refinement plan received: ${diff?.changes?.length ?? 0} changes` })
+
+    if (diff && diff.changes) {
+      // Apply changes to the manifest
+      const updatedManifest = applyRefineDiff(options.existingManifest, diff)
+      const validation = validateManifest(updatedManifest)
+      if (validation.ok) {
+        emit?.({ type: "manifest", manifest: updatedManifest })
+
+        // Re-render pages
+        emit?.({ type: "step", step: "rendering", detail: "Re-rendering pages..." })
+        const required = pickRequiredUiComponents(updatedManifest)
+        const baseFiles = scaffoldBaseFiles(updatedManifest, required, "")
+
+        const pageFiles: BuilderFile[] = []
+        for (const page of updatedManifest.pages) {
+          const { file } = renderPageFile(updatedManifest, page)
+          pageFiles.push(file)
+          emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: page.sections.length })
+        }
+
+        const changedPaths = new Set(diff.changes.map((c) => c.path))
+        const files: BuilderFile[] = [
+          ...baseFiles.filter((f) => changedPaths.has(f.path) || changedPaths.has("*")),
+          ...pageFiles,
+        ]
+
+        const allFiles = [...options.existingFiles]
+        for (const newFile of files) {
+          const existingIdx = allFiles.findIndex((f) => f.path === newFile.path)
+          if (existingIdx >= 0) {
+            allFiles[existingIdx] = newFile
+          } else {
+            allFiles.push(newFile)
+          }
+        }
+
+        const lintedFiles = lintAllFiles(allFiles, (msg) => logs.push({ step: "lint", detail: msg }))
+
+        return {
+          files: lintedFiles,
+          manifest: updatedManifest,
+          changes: diff.changes,
+          logs,
+          warnings: validation.warnings,
+        }
+      } else {
+        logs.push({ step: "refine-validation", detail: `Validation failed: ${validation.errors.join("; ")}` })
+      }
+    }
+  } catch (error) {
+    logs.push({ step: "refine-error", detail: `Refinement failed: ${error instanceof Error ? error.message : String(error)}` })
+  }
+
+  return {
+    files: options.existingFiles,
+    manifest: options.existingManifest,
+    changes: [],
+    logs,
+    warnings: ["Refinement could not be applied. The website remains unchanged."],
+  }
+}
+
+interface RefineDiff {
+  changes: Array<{
+    path: string
+    action: "created" | "modified" | "deleted"
+    summary: string
+  }>
+  brief?: Partial<DesignBrief>
+  pages?: Array<{
+    path: string
+    action?: "update" | "add" | "remove"
+    title?: string
+    sections?: SectionPlan[]
+  }>
+  themePreset?: ThemePreset
+}
+
+function applyRefineDiff(
+  existing: GeneratedProjectManifest,
+  diff: RefineDiff,
+): GeneratedProjectManifest {
+  const brief = diff.brief
+    ? { ...existing.brief, ...diff.brief }
+    : existing.brief
+
+  let pages = [...existing.pages]
+
+  if (diff.pages) {
+    for (const pageDiff of diff.pages) {
+      if (pageDiff.action === "remove") {
+        pages = pages.filter((p) => p.path !== pageDiff.path)
+      } else if (pageDiff.action === "add" && pageDiff.path) {
+        const sections = pageDiff.sections || defaultSectionsForRoute(pageDiff.path, brief)
+        pages.push({
+          path: pageDiff.path,
+          title: pageDiff.title || prettifyPath(pageDiff.path),
+          metaTitle: `${pageDiff.title || prettifyPath(pageDiff.path)} — ${brief.projectName}`,
+          metaDescription: brief.description,
+          sections,
+        })
+      } else if (pageDiff.path && pageDiff.sections) {
+        const existingIdx = pages.findIndex((p) => p.path === pageDiff.path)
+        if (existingIdx >= 0) {
+          pages[existingIdx] = { ...pages[existingIdx], sections: pageDiff.sections }
+          if (pageDiff.title) pages[existingIdx].title = pageDiff.title
+        }
+      }
+    }
+  }
+
+  const theme = diff.themePreset && THEME_PRESETS.includes(diff.themePreset)
+    ? buildTheme(diff.themePreset)
+    : existing.theme
+
+  return {
+    ...existing,
+    brief,
+    pages,
+    theme,
+  }
+}
+
+const REFINE_SYSTEM_PROMPT = `You are a senior product designer refining an existing website. You receive the current website manifest and a refinement request from the user.
+
+Return ONLY one JSON object, no prose, no markdown fences:
+
+{
+  "changes": [{"path": "file/path", "action": "created" | "modified" | "deleted", "summary": "brief description"}],
+  "brief": { partial DesignBrief fields to update },
+  "pages": [{"path": "/route", "action": "update" | "add" | "remove", "title": "Page Title", "sections": [SectionPlan...]}],
+  "themePreset": "saas" | "agency" | "ecommerce" | "portfolio" | "restaurant" | "nonprofit" | "event" | "creator" | "local-business"
+}
+
+Rules:
+1. Only include fields that actually change
+2. For page updates, include the FULL sections array (not just the changes)
+3. When adding a page, provide the complete sections array
+4. Section plans follow the same schema as the website planner
+5. Keep the same project name and style unless the user explicitly asks to change them
+6. Never output raw TSX, JSX, or code strings
+7. Be surgical — prefer minimal changes over rewriting everything`
