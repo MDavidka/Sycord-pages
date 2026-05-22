@@ -300,8 +300,6 @@ export function runBuildValidation(files: BuilderFile[], opts: RunBuildValidatio
     "app/layout.tsx",
     "app/globals.css",
     "app/page.tsx",
-    "components/site-header.tsx",
-    "components/site-footer.tsx",
     "components/ui/button.tsx",
     "components/ui/badge.tsx",
     "components/ui/card.tsx",

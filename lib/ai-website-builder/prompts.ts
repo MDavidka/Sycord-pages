@@ -110,8 +110,9 @@ DESIGN PHILOSOPHY:
 - The heading hierarchy is: eyebrow (small label above) → heading → subheading → description.
 - Never use the same section kind+variant combo consecutively — it creates visual fatigue.
 
-SECTION VARIETY — Home page ("/") MUST use at least 6 DISTINCT section kinds:
-  hero → (logos or stats) → feature-grid → (testimonials or gallery or process) → pricing → faq → cta
+SECTION VARIETY — Every page should feel like a custom composition of shadcn components:
+  - No forced rhythm or required section kinds. Build what fits the page.
+  - VARY visual patterns — never repeat the same kind+variant combo back-to-back.
 
 SECTION VARIANT RULES:
 ${Object.entries(VARIANTS_BY_KIND)
@@ -170,11 +171,11 @@ Design direction rules:
 - Avoid the design-direction "avoid" items, especially generic shadcn card-stack repetition.
 
 Page structure rules:
-- Home page ("/") MUST have at least 6 sections from DIFFERENT kinds.
-- Internal pages must NOT clone the homepage. Pick 3-5 sections suited to that page's specific job.
-- 3 to 6 total pages. Always include "/" first.
-- Never reference shadcn components that aren't standard (only use what a normal shadcn install provides).
-- Sections must NOT include site headers, footers or global navigation; the scaffold renders those.
+- Every page is fully self-contained — NO shared header, footer, or navigation scaffold exists.
+- Each page MUST include as its FIRST section a logo/title row and as its LAST section a site footer. Use the section kinds available to build these. Think of each page as a standalone composition of shadcn components.
+- Home page and internal pages should have DISTINCT layouts and section compositions — never duplicates.
+- 1 to 6 pages total. Always include "/" first. Single-page sites are common and valid.
+- Never reference shadcn components that aren't standard.
 - Internal links must only point to paths you defined in "pages" or in-page anchors ("#section-id").
 
 Output strict JSON. No comments, no trailing commas, no markdown.`

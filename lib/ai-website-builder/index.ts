@@ -344,76 +344,25 @@ function normalizeSection(raw: unknown, fallbackKind: SectionKind = "hero"): Sec
 }
 
 function defaultSectionsForRoute(routePath: string, brief: DesignBrief): SectionPlan[] {
-  // Route-aware defaults so missing AI output still yields varied pages.
   if (routePath === "/") {
     return [
       {
         kind: "hero",
         variant: "cinematic",
-        eyebrow: `Introducing ${brief.projectName}`,
+        eyebrow: brief.projectName,
         heading: brief.tagline,
         description: brief.description,
         primaryCta: brief.primaryCta,
         secondaryCta: brief.secondaryCta,
         anchor: "top",
       },
-      { kind: "logos", heading: "Trusted by teams worldwide" },
-      { kind: "feature-grid", variant: "asymmetric-bento", eyebrow: "Why teams choose us", heading: "Built for the way you work", description: brief.description },
-      { kind: "stats", variant: "row", eyebrow: "By the numbers", heading: "Real results, week after week" },
-      { kind: "testimonials", variant: "grid-cards", eyebrow: "Customer stories", heading: `What customers say about ${brief.projectName}` },
-      { kind: "pricing", eyebrow: "Pricing", heading: "Simple pricing for every team" },
-      { kind: "faq", variant: "accordion", eyebrow: "FAQ", heading: "Questions before you start?" },
-      { kind: "cta", variant: "boxed-card", heading: "Ready to get started?", description: brief.description, primaryCta: brief.primaryCta },
+      { kind: "feature-grid", variant: "bento", heading: "Key features", description: brief.description },
+      { kind: "cta", variant: "boxed-card", heading: "Get started today", primaryCta: brief.primaryCta },
     ]
   }
-  const last = routePath.replace(/^\//, "").split("/").filter(Boolean).pop() ?? ""
-  switch (last) {
-    case "pricing":
-      return [
-        { kind: "hero", variant: "centered", heading: "Simple, predictable pricing", description: "Pick a plan that scales with you.", primaryCta: brief.primaryCta },
-        { kind: "pricing" },
-        { kind: "comparison", heading: "Compare every plan" },
-        { kind: "faq", variant: "two-column", heading: "Pricing FAQ" },
-        { kind: "cta", variant: "banner" },
-      ]
-    case "contact":
-      return [
-        { kind: "hero", variant: "centered", heading: "Let's talk", description: "Tell us about your project and we'll be in touch.", primaryCta: brief.primaryCta },
-        { kind: "contact", variant: "split-form" },
-        { kind: "faq", variant: "two-column", heading: "Common questions" },
-      ]
-    case "about":
-      return [
-        { kind: "hero", variant: "magazine-cover", heading: `About ${brief.projectName}`, description: brief.description },
-        { kind: "stats", variant: "split-callout" },
-        { kind: "process", variant: "timeline", heading: "How we work" },
-        { kind: "team" },
-        { kind: "cta", variant: "split" },
-      ]
-    case "blog":
-      return [
-        { kind: "hero", variant: "centered", heading: "Stories, ideas, and behind-the-scenes", description: "Insights from our team.", primaryCta: { label: "Subscribe", href: "#" } },
-        { kind: "blog-preview", variant: "feature-and-list" },
-        { kind: "blog-preview", variant: "card-grid" },
-        { kind: "cta", variant: "banner" },
-      ]
-    case "shop":
-    case "store":
-    case "menu":
-      return [
-        { kind: "hero", variant: "ecommerce", heading: "Crafted with care", description: brief.description, primaryCta: { label: "Shop now", href: "#" } },
-        { kind: "product-grid", heading: "Bestsellers" },
-        { kind: "stats", variant: "card-row" },
-        { kind: "cta", variant: "boxed-card" },
-      ]
-    default:
-      return [
-        { kind: "hero", variant: "centered", heading: prettifyPath(routePath), description: brief.description, primaryCta: brief.primaryCta },
-        { kind: "feature-grid", variant: "proof-led" },
-        { kind: "testimonials", variant: "spotlight" },
-        { kind: "cta", variant: "split" },
-      ]
-  }
+  return [
+    { kind: "hero", variant: "centered", heading: prettifyPath(routePath), description: brief.description, primaryCta: brief.primaryCta },
+  ]
 }
 
 function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): DesignBrief {
@@ -444,16 +393,6 @@ function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): Desi
     logoInitials: computeInitials(projectName),
     category: project?.category,
   }
-}
-
-function fallbackPagesFromBrief(brief: DesignBrief): PagePlan[] {
-  return brief.navLinks.slice(0, 5).map((link, i) => ({
-    path: link.href.startsWith("/") ? sanitizeRoute(link.href) : "/",
-    title: i === 0 ? "Home" : link.label,
-    metaTitle: `${i === 0 ? "Home" : link.label} — ${brief.projectName}`,
-    metaDescription: brief.description,
-    sections: defaultSectionsForRoute(i === 0 ? "/" : sanitizeRoute(link.href), brief),
-  }))
 }
 
 function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext, direction?: DesignDirection): GeneratedProjectManifest {
@@ -504,24 +443,6 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
       sections: [],
     })
     normalizedPaths.unshift("/")
-  }
-
-  // If only the home page exists (e.g. the planner failed entirely), add
-  // the standard secondary pages from the fallback brief so the generated
-  // site still has a real internal structure.
-  if (pages.length < 2) {
-    const seedBrief: DesignBrief = {
-      ...fallbackBrief,
-      themePreset,
-      projectName: safeText(briefRaw.projectName, fallbackBrief.projectName),
-      tagline: safeText(briefRaw.tagline, fallbackBrief.tagline),
-      description: safeText(briefRaw.description, fallbackBrief.description),
-    }
-    for (const extra of fallbackPagesFromBrief(seedBrief)) {
-      if (extra.path === "/" || pages.some((p) => p.path === extra.path)) continue
-      pages.push(extra)
-      normalizedPaths.push(extra.path)
-    }
   }
 
   // Host-project branding always wins over AI-invented names/descriptions.
@@ -576,10 +497,6 @@ function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContex
   for (const page of pages) {
     if (page.sections.length === 0) {
       page.sections = defaultSectionsForRoute(page.path, briefSeed)
-    }
-    // Ensure home has a hero up front.
-    if (page.path === "/" && page.sections[0]?.kind !== "hero") {
-      page.sections.unshift({ kind: "hero", variant: "split", heading: briefSeed.tagline, description: briefSeed.description, primaryCta: briefSeed.primaryCta, secondaryCta: briefSeed.secondaryCta })
     }
     // De-dup consecutive identical kinds.
     page.sections = dedupConsecutive(page.sections)
