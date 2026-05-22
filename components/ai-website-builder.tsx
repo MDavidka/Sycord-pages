@@ -78,7 +78,25 @@ interface PipelineProgress {
   totalPages: number
   baseFiles: number
   uiFiles: number
-  stage: "designing" | "planning" | "rendering" | "scaffolding" | "validating" | "complete"
+  stage: "planning" | "manifest" | "compiling" | "validating" | "persisting" | "complete"
+}
+
+const stageIcons: Record<PipelineProgress["stage"], React.ReactNode> = {
+  planning: <Palette className="h-4 w-4" />,
+  manifest: <Layout className="h-4 w-4" />,
+  compiling: <Code2 className="h-4 w-4" />,
+  validating: <CheckCircle2 className="h-4 w-4" />,
+  persisting: <FileText className="h-4 w-4" />,
+  complete: <Sparkles className="h-4 w-4" />,
+}
+
+const stageLabels: Record<PipelineProgress["stage"], string> = {
+  planning: "Analyzing Prompt",
+  manifest: "Layout Planning",
+  compiling: "Code Generation",
+  validating: "Zod Validation",
+  persisting: "Packaging Files",
+  complete: "Complete",
 }
 
 const InputBar = ({
@@ -318,7 +336,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
     const endpoint = isRefinement
       ? "/api/ai/generate-website/refine"
-      : "/api/ai/generate-website/stream"
+      : "/api/syra/generate/stream"
 
     const bodyPayload: Record<string, unknown> = isRefinement
       ? {
@@ -393,34 +411,54 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   }, [selectedModel, projectId, existingFiles, existingManifest, conversationHistory])
 
   const handleSSEEvent = useCallback((event: string, data: unknown) => {
-    switch (event) {
-      case "progress": {
-        const evt = data as { type: string; step?: string; detail?: string; path?: string; fileName?: string; sectionCount?: number; baseCount?: number; uiCount?: number; pageCount?: number; fileCount?: number; qualityScore?: number }
-        if (evt.type === "step" && evt.step && evt.detail) {
+    const evt = data as {
+      type: string; step?: string; status?: string; progress?: number;
+      detail?: string; pagePath?: string; filePath?: string;
+      pageCount?: number; fileCount?: number; qualityScore?: number;
+      manifest?: unknown; files?: unknown[]; error?: string;
+    }
+
+    if (evt.error) {
+      setError(evt.error)
+      return
+    }
+
+    switch (evt.type) {
+      case "step": {
+        if (evt.step && evt.detail) {
           const stage = mapStepToStage(evt.step)
           setProgress(prev => ({ ...prev, currentStep: evt.detail || "", detail: evt.detail || "", stage }))
-        } else if (evt.type === "manifest") {
-          const manifest = (data as { manifest?: unknown }).manifest || data
-          setExistingManifest(manifest)
-        } else if (evt.type === "page" && evt.path) {
-          setProgress(prev => ({ ...prev, pagesRendered: prev.pagesRendered + 1, detail: `Rendered ${evt.path}` }))
-        } else if (evt.type === "scaffold") {
-          setProgress(prev => ({ ...prev, baseFiles: (data as { baseCount: number }).baseCount, uiFiles: (data as { uiCount: number }).uiCount, stage: "scaffolding" }))
-        } else if (evt.type === "complete") {
-          setProgress(prev => ({ ...prev, stage: "complete", totalPages: (data as { pageCount: number }).pageCount }))
         }
         break
       }
-      case "result": {
+      case "detail": {
+        setProgress(prev => ({ ...prev, detail: evt.detail || prev.detail }))
+        break
+      }
+      case "manifest": {
+        const manifest = evt.manifest || data
+        setExistingManifest(manifest)
+        break
+      }
+      case "page": {
+        if (evt.pagePath) {
+          setProgress(prev => ({ ...prev, pagesRendered: prev.pagesRendered + 1, detail: `Rendered ${evt.pagePath}` }))
+        }
+        break
+      }
+      case "file": {
+        if (evt.filePath) {
+          setProgress(prev => ({ ...prev, detail: `Generated ${evt.filePath}` }))
+        }
+        break
+      }
+      case "complete": {
+        setProgress(prev => ({ ...prev, stage: "complete", totalPages: evt.pageCount ?? prev.totalPages }))
         handleGenerationResult(data)
         break
       }
       case "error": {
-        setError((data as { message?: string })?.message || "Generation failed")
-        break
-      }
-      case "saved": {
-        // Files saved to project
+        setError(evt.error || "Generation failed")
         break
       }
     }
@@ -428,11 +466,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   }, [])
 
   const mapStepToStage = (step: string): PipelineProgress["stage"] => {
-    if (step.includes("design")) return "designing"
-    if (step.includes("plan") || step.includes("manifest")) return "planning"
-    if (step.includes("render")) return "rendering"
-    if (step.includes("scaffold")) return "scaffolding"
+    if (step.includes("plan")) return "planning"
+    if (step.includes("manifest")) return "manifest"
+    if (step.includes("compil")) return "compiling"
     if (step.includes("valid")) return "validating"
+    if (step.includes("persist") || step.includes("scaffold")) return "persisting"
     return "complete"
   }
 
