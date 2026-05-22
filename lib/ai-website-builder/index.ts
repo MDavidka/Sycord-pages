@@ -19,16 +19,24 @@ import type {
   BuilderFile,
   BuilderOptions,
   ComponentNode,
+  CreativeDirection,
   CtaPlan,
   DesignBrief,
   DesignDirection,
   EnvVarRequirement,
+  GeneratedComponentManifest,
   GeneratedProjectManifest,
   IntegrationKind,
   IntegrationPlan,
+  ImportPlan,
+  LayoutComponentNode,
+  LayoutCompositionPlan,
+  LogicPlan,
   NavLink,
+  PageCompositionPlan,
   PagePlan,
   PipelineLog,
+  ProductIntent,
   ProgressCallback,
   ProjectContext,
   RefineOptions,
@@ -43,10 +51,14 @@ import type {
 } from "./types"
 import { buildTheme, detectPresetFromPrompt, THEME_PRESETS } from "./themes"
 import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
+import { COMPONENT_FIRST_SYSTEM_PROMPT } from "./prompts-comp"
 import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection } from "./design-directions"
+import { detectProductIntent, detectCreativeDirection, normalizeCreativeDirection, composeStylePrompt } from "./creative-direction"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
+import { validateComponentTree, validatePageComposition } from "./validate-tree"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
 import { renderSectionBlock, type SectionBlockLayout } from "./blocks"
+import { renderPageFile as renderCompPage, compilePage, type CompiledPage } from "./compiler"
 import { lintAllFiles } from "./lint"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 
@@ -393,6 +405,207 @@ function fallbackBriefFromPrompt(prompt: string, project?: ProjectContext): Desi
     logoInitials: computeInitials(projectName),
     category: project?.category,
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPONENT-FIRST PIPELINE
+// ═══════════════════════════════════════════════════════════════════
+
+function normalizeLayoutNode(raw: unknown, depth = 0): LayoutComponentNode | undefined {
+  if (depth > 8 || !raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const r = raw as Record<string, unknown>
+  const type = typeof r.type === "string" ? r.type : ""
+  if (!type) return undefined
+
+  const children = Array.isArray(r.children)
+    ? r.children
+        .map((child) => normalizeLayoutNode(child, depth + 1))
+        .filter((child): child is LayoutComponentNode => Boolean(child))
+        .slice(0, 40)
+    : undefined
+
+  const props = typeof r.props === "object" && r.props !== null && !Array.isArray(r.props)
+    ? r.props as Record<string, unknown>
+    : undefined
+
+  return {
+    type: type.slice(0, 40),
+    props: props && Object.keys(props).length > 0 ? props : undefined,
+    children: children?.length ? children : undefined,
+    clientComponent: typeof r.clientComponent === "boolean" ? r.clientComponent : undefined,
+    logicBinding: typeof r.logicBinding === "string" ? r.logicBinding.slice(0, 40) : undefined,
+  }
+}
+
+function normalizePageComposition(raw: unknown): PageCompositionPlan {
+  const r = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
+  const path = typeof r.path === "string" ? sanitizeRoute(r.path) : "/"
+  const tree = normalizeLayoutNode(r.componentTree)
+  const fallbackTree: LayoutComponentNode = {
+    type: "Page",
+    children: [{
+      type: "Section",
+      props: { className: "min-h-screen flex items-center" },
+      children: [{
+        type: "Container",
+        children: [{
+          type: "Heading",
+          props: { className: "text-4xl font-bold", children: typeof r.title === "string" ? r.title : "Welcome" },
+        }],
+      }],
+    }],
+  }
+
+  return {
+    path,
+    title: typeof r.title === "string" ? r.title : prettifyPath(path),
+    metaTitle: typeof r.metaTitle === "string" ? r.metaTitle : prettifyPath(path),
+    metaDescription: typeof r.metaDescription === "string" ? r.metaDescription : "",
+    componentTree: tree ?? fallbackTree,
+    logicPlan: normalizeLogicPlan(r.logicPlan),
+  }
+}
+
+function normalizeLogicPlan(raw: unknown): LogicPlan | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const r = raw as Record<string, unknown>
+  const state = Array.isArray(r.state) ? r.state.map((s: unknown) => {
+    const st = s as Record<string, unknown>
+    return {
+      name: typeof st.name === "string" ? st.name : "value",
+      type: (typeof st.type === "string" ? st.type : "string") as "string" | "number" | "boolean" | "array" | "object",
+      initialValue: st.initialValue ?? null,
+    }
+  }) : []
+  const actions = Array.isArray(r.actions) ? r.actions.map((a: unknown) => {
+    const ac = a as Record<string, unknown>
+    return {
+      name: typeof ac.name === "string" ? ac.name : "setValue",
+      type: (typeof ac.type === "string" ? ac.type : "setter") as "setter" | "toggle" | "increment" | "decrement" | "push" | "remove" | "reset",
+      stateName: typeof ac.stateName === "string" ? ac.stateName : "value",
+    }
+  }) : []
+  if (state.length === 0 && actions.length === 0) return undefined
+  return { state, actions, derived: [] }
+}
+
+function normalizeComponentManifest(raw: unknown, prompt: string, project?: ProjectContext): GeneratedComponentManifest {
+  const fallbackBrief = fallbackBriefFromPrompt(prompt, project)
+  const root = (raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}) as Record<string, unknown>
+
+  const intent = normalizeIntent(root.intent, prompt, project)
+  const creativeDirection = normalizeCreativeDirection(root.creativeDirection, detectCreativeDirection(intent, prompt, project))
+
+  const briefRaw = (root.brief as Record<string, unknown> | undefined) ?? {}
+  const themePreset = detectPresetFromPrompt(`${prompt} ${project?.category ?? ""} ${project?.description ?? ""}`)
+
+  const rawPages = Array.isArray(root.pages) ? (root.pages as unknown[]) : []
+  const pages: PageCompositionPlan[] = rawPages.map((p) => normalizePageComposition(p))
+
+  if (!pages.some((p) => p.path === "/")) {
+    pages.unshift(normalizePageComposition({ path: "/", title: "Home", componentTree: undefined }))
+  }
+
+  const { needsDatabase, integrations, databaseProvider, unconnectedRequested } = resolveIntegrations(root, prompt, project)
+  const requiredEnvVars = buildRequiredEnvVars(integrations, needsDatabase)
+
+  return {
+    intent,
+    creativeDirection,
+    layoutComposition: { pages },
+    brief: { ...fallbackBrief, themePreset },
+    theme: buildTheme(themePreset),
+    deploymentMode: "next-server",
+    needsDatabase,
+    databaseProvider,
+    integrations,
+    requiredEnvVars,
+    unconnectedIntegrations: unconnectedRequested,
+  }
+}
+
+function normalizeIntent(raw: unknown, prompt: string, project?: ProjectContext): ProductIntent {
+  const intent = detectProductIntent(prompt, project)
+  if (!raw || typeof raw !== "object") return intent
+  const r = raw as Record<string, unknown>
+  return {
+    type: (typeof r.type === "string" ? r.type : intent.type) as ProductIntent["type"],
+    complexity: (typeof r.complexity === "string" ? r.complexity : intent.complexity) as ProductIntent["complexity"],
+    requiresDatabase: typeof r.requiresDatabase === "boolean" ? r.requiresDatabase : intent.requiresDatabase,
+    requiresAuth: typeof r.requiresAuth === "boolean" ? r.requiresAuth : intent.requiresAuth,
+    uiMode: (typeof r.uiMode === "string" ? r.uiMode : intent.uiMode) as ProductIntent["uiMode"],
+    confidence: typeof r.confidence === "number" ? r.confidence : intent.confidence,
+  }
+}
+
+async function planComponentLayout(prompt: string, opts: BuilderOptions, logs: PipelineLog[]): Promise<GeneratedComponentManifest> {
+  const model = pickModel(opts)
+  const stylePrompt = composeStylePrompt(detectCreativeDirection(detectProductIntent(prompt, opts.project), prompt, opts.project))
+
+  let raw = ""
+  try {
+    raw = await callAIAgent(
+      [
+        { role: "system", content: COMPONENT_FIRST_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `${buildPlannerUserContent(prompt, opts.project)}\n\nCreative direction to follow:\n${stylePrompt}\n\nDesign a unique, creative website with varied layouts. Think like an art director — every page should feel different. Return the JSON object with component trees.`,
+        },
+      ],
+      { model, temperature: 0.8 },
+    )
+    logs.push({ step: "component-plan", detail: `Layout planner returned ${raw.length} chars` })
+  } catch (error) {
+    logs.push({
+      step: "component-plan",
+      detail: `Layout planning failed: ${error instanceof Error ? error.message : String(error)}. Using deterministic fallback.`,
+    })
+  }
+
+  const parsed = extractJson<unknown>(raw)
+  const manifest = normalizeComponentManifest(parsed, prompt, opts.project)
+
+  const pageErrors: string[] = []
+  for (const page of manifest.layoutComposition.pages) {
+    const validation = validatePageComposition(page)
+    if (!validation.ok) pageErrors.push(...validation.errors)
+  }
+  if (pageErrors.length) {
+    logs.push({ step: "component-validate", detail: `Component tree validation: ${pageErrors.join("; ")}` })
+  } else {
+    logs.push({ step: "component-validate", detail: `All ${manifest.layoutComposition.pages.length} component trees valid` })
+  }
+
+  return manifest
+}
+
+function pickRequiredUiComponentsFromComposition(manifest: GeneratedComponentManifest): RequiredComponent[] {
+  const required = new Set<string>()
+
+  for (const page of manifest.layoutComposition.pages) {
+    const { importPlan } = compilePage(page)
+    for (const imp of importPlan) {
+      if (imp.from.startsWith("@/components/ui/")) {
+        for (const name of imp.named) {
+          required.add(name.toLowerCase())
+        }
+      }
+    }
+  }
+
+  const always = ["button", "badge", "card", "separator", "input", "textarea", "label", "avatar", "accordion", "tabs"]
+  for (const slug of always) required.add(slug)
+
+  return ALL_UI_COMPONENTS.filter((c) => required.has(c.slug))
+}
+
+function renderPageFilesFromComposition(manifest: GeneratedComponentManifest): BuilderFile[] {
+  const files: BuilderFile[] = []
+  for (const page of manifest.layoutComposition.pages) {
+    const { tsx, fileName } = renderCompPage(page)
+    files.push({ path: fileName, content: tsx })
+  }
+  return files
 }
 
 function normalizeManifest(raw: unknown, prompt: string, project?: ProjectContext, direction?: DesignDirection): GeneratedProjectManifest {
@@ -1108,6 +1321,156 @@ function pickRequiredUiComponents(manifest: GeneratedProjectManifest): RequiredC
 
 // Public entry point.
 export async function runAIWebsiteBuilder(
+  prompt: string,
+  options: BuilderOptions = {},
+): Promise<RunBuilderResult> {
+  const logs: PipelineLog[] = []
+  const emit = options.onProgress
+
+  logs.push({
+    step: "start",
+    detail: `Builder started${options.model ? ` with ${options.model.provider}/${options.model.id}` : ""} with component-first pipeline`,
+  })
+  emit?.({ type: "step", step: "start", detail: logs[logs.length - 1].detail })
+
+  const quality = options.quality || "best"
+
+  // ── Component-First Pipeline ──────────────────────────────────
+  emit?.({ type: "step", step: "component-layout", detail: "Planning creative component layouts..." })
+  const compManifest = await planComponentLayout(prompt, { ...options, quality }, logs)
+  emit?.({
+    type: "step",
+    step: "layout-complete",
+    detail: `${compManifest.layoutComposition.pages.length} pages planned with direction: ${compManifest.creativeDirection.styleId}`,
+  })
+
+  // Render pages using the deterministic compiler
+  emit?.({ type: "step", step: "rendering", detail: "Compiling component trees to TSX..." })
+  const required = pickRequiredUiComponentsFromComposition(compManifest)
+  const pageFiles = renderPageFilesFromComposition(compManifest)
+  for (const file of pageFiles) {
+    logs.push({ step: "render", detail: `Compiled ${file.path} (${file.content.length} chars)` })
+    const page = compManifest.layoutComposition.pages.find((p) => {
+      const expectedPath = p.path === "/" ? "app/page.tsx" : `app${p.path}/page.tsx`
+      return expectedPath === file.path
+    })
+    if (page) {
+      emit?.({ type: "page", path: page.path, fileName: file.path, sectionCount: 1 })
+    }
+  }
+
+  // Resolve env vars
+  const resolvedEnv = resolveRequiredEnvVarValues(compManifest.requiredEnvVars, options.project)
+
+  // Scaffold
+  emit?.({ type: "step", step: "scaffolding", detail: "Scaffolding project files and UI components..." })
+  const baseFiles = scaffoldBaseFiles(
+    { ...compManifest as unknown as GeneratedProjectManifest, pages: [] },
+    required,
+    prompt,
+  )
+  const uiFiles = buildUiComponentFiles(required.map((r) => r.slug))
+  emit?.({ type: "scaffold", baseCount: baseFiles.length, uiCount: uiFiles.length })
+  logs.push({ step: "scaffold", detail: `Scaffolded ${baseFiles.length} base files + ${uiFiles.length} UI components` })
+
+  const allFiles: BuilderFile[] = [...baseFiles, ...uiFiles, ...pageFiles]
+
+  // Lint
+  emit?.({ type: "step", step: "linting", detail: "Linting generated files..." })
+  const lintedFiles = lintAllFiles(allFiles, (msg) => logs.push({ step: "lint", detail: msg }))
+  const lintChangeCount = logs.filter((l) => l.step === "lint").length
+  if (lintChangeCount > 0) logs.push({ step: "lint", detail: `Linted ${lintChangeCount} issues across ${allFiles.length} files` })
+
+  // Build validation
+  emit?.({ type: "step", step: "validating", detail: "Running build validation..." })
+  const connectedIntegrationIds = Array.from(new Set([
+    ...(options.project?.connectedIntegrationIds ?? []),
+    ...(options.project?.integrations?.map((i) => (i.provider || i.name)) ?? []),
+  ].map((s) => (s ?? "").toLowerCase()).filter(Boolean)))
+  const build = runBuildValidation(lintedFiles, {
+    needsDatabase: compManifest.needsDatabase,
+    deploymentMode: compManifest.deploymentMode,
+    connectedIntegrationIds,
+  })
+  if (!build.ok) {
+    logs.push({ step: "build-validate", detail: `Build validation failed: ${build.errors.join("; ")}` })
+  } else {
+    logs.push({ step: "build-validate", detail: `Build validation passed (${build.warnings.length} warnings)` })
+  }
+
+  const missingEnvVars = computeMissingEnvVars(
+    compManifest.requiredEnvVars,
+    options.project?.envVarKeys,
+    resolvedEnv,
+  )
+  if (compManifest.needsDatabase) {
+    const missingNames = missingEnvVars.map((e) => e.key)
+    if (missingNames.length) {
+      logs.push({
+        step: "integrations",
+        detail: `Database required (Turso). Missing env vars: ${missingNames.join(", ")}`,
+      })
+    } else {
+      logs.push({ step: "integrations", detail: "Database required (Turso). Turso env loaded." })
+    }
+  } else {
+    logs.push({ step: "integrations", detail: "No database integration required" })
+  }
+  if (compManifest.unconnectedIntegrations.length) {
+    logs.push({
+      step: "integrations",
+      detail: `Skipped unconnected integrations: ${compManifest.unconnectedIntegrations.join(", ")}`,
+    })
+  }
+
+  const qualityScore = computeQualityScore(
+    { ...compManifest as unknown as GeneratedProjectManifest, designDirection: fallbackDesignDirection(prompt, options.project) },
+    build,
+  )
+  logs.push({ step: "done", detail: `Quality score ${qualityScore}/100, ${lintedFiles.length} deployable files, deployment=${compManifest.deploymentMode}` })
+
+  const advisoryWarnings = [...build.warnings]
+  if (compManifest.needsDatabase && missingEnvVars.length) {
+    advisoryWarnings.unshift(`Missing env vars: ${missingEnvVars.map((e) => e.key).join(", ")}`)
+  }
+  if (compManifest.unconnectedIntegrations.length) {
+    advisoryWarnings.push(`Integrations not connected (UI placeholders used): ${compManifest.unconnectedIntegrations.join(", ")}`)
+  }
+
+  emit?.({ type: "complete", files: lintedFiles, qualityScore, pageCount: compManifest.layoutComposition.pages.length, fileCount: lintedFiles.length })
+
+  // Convert to legacy manifest shape for API compatibility
+  const legacyManifest: GeneratedProjectManifest = {
+    brief: compManifest.brief,
+    theme: compManifest.theme,
+    designDirection: fallbackDesignDirection(prompt, options.project),
+    pages: [],
+    deploymentMode: compManifest.deploymentMode,
+    needsDatabase: compManifest.needsDatabase,
+    databaseProvider: compManifest.databaseProvider,
+    integrations: compManifest.integrations,
+    requiredEnvVars: compManifest.requiredEnvVars,
+    unconnectedIntegrations: compManifest.unconnectedIntegrations,
+  }
+
+  return {
+    manifest: legacyManifest,
+    files: lintedFiles,
+    logs,
+    build,
+    warnings: advisoryWarnings,
+    qualityScore,
+    needsDatabase: compManifest.needsDatabase,
+    databaseProvider: compManifest.databaseProvider,
+    integrations: compManifest.integrations,
+    requiredEnvVars: compManifest.requiredEnvVars,
+    missingEnvVars,
+    unconnectedIntegrations: compManifest.unconnectedIntegrations,
+    deploymentMode: compManifest.deploymentMode,
+  }
+}
+
+export async function runAIWebsiteBuilderLegacy(
   prompt: string,
   options: BuilderOptions = {},
 ): Promise<RunBuilderResult> {

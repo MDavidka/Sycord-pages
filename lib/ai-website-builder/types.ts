@@ -1,13 +1,139 @@
 // Schema for the AI website builder pipeline.
 //
-// The AI plans a `GeneratedProjectManifest` (DesignBrief + ThemeTokens + PagePlan[]).
-// Deterministic renderers in `sections.ts` then turn each `SectionPlan` into
-// polished TSX. The shape is validated and repaired before rendering, so the
-// downstream renderer never has to deal with malformed AI output.
+// The new COMPONENT-FIRST architecture:
+//   User Prompt → ProductIntent → CreativeDirection → LayoutComposition → ComponentTree → LogicPlan → ImportPlan → Compiler → TSX
+//
+// Legacy types (SectionKind, SectionPlan, PagePlan, etc.) are retained for backward
+// compatibility with the existing blocks/sections renderers but are deprecated in
+// favor of the component-first pipeline.
 
 import type { ModelSelection } from "@/lib/ai-provider"
 import type { DesignDirection } from "./design-directions"
 export type { DesignDirection } from "./design-directions"
+
+// ═══════════════════════════════════════════════════════════════════
+// NEW COMPONENT-FIRST TYPES
+// ═══════════════════════════════════════════════════════════════════
+
+export interface ProductIntent {
+  type:
+    | "marketing-site"
+    | "dashboard-app"
+    | "tool-app"
+    | "ecommerce"
+    | "booking"
+    | "portfolio"
+    | "game"
+    | "content-site"
+    | "unknown"
+
+  complexity:
+    | "website"
+    | "app"
+    | "hybrid"
+
+  requiresDatabase: boolean
+  requiresAuth: boolean
+
+  uiMode:
+    | "marketing"
+    | "dashboard"
+    | "interactive"
+    | "editorial"
+    | "tool"
+
+  confidence: number
+}
+
+export interface CreativeDirection {
+  styleId: string
+  mood: string
+  density: "minimal" | "balanced" | "dense"
+  typography: "editorial" | "technical" | "playful" | "clean" | "luxury"
+  spacing: "tight" | "balanced" | "airy"
+  layoutRhythm: "centered" | "split" | "asymmetric" | "editorial" | "dashboard"
+  visualEnergy: "calm" | "balanced" | "high"
+  radius: "none" | "sm" | "md" | "lg" | "xl"
+  colorStrategy: "neutral" | "vibrant" | "dark" | "soft" | "high-contrast"
+}
+
+export interface LayoutComponentNode {
+  type: string
+  props?: Record<string, unknown>
+  children?: LayoutComponentNode[]
+  clientComponent?: boolean
+  logicBinding?: string
+}
+
+export interface ComponentTree {
+  root: LayoutComponentNode
+}
+
+export interface StateDefinition {
+  name: string
+  type: "string" | "number" | "boolean" | "array" | "object"
+  initialValue: unknown
+}
+
+export interface ActionDefinition {
+  name: string
+  type: "setter" | "toggle" | "increment" | "decrement" | "push" | "remove" | "reset"
+  stateName: string
+}
+
+export interface DerivedDefinition {
+  name: string
+  expression: string
+  dependencies: string[]
+}
+
+export interface LogicPlan {
+  state: StateDefinition[]
+  actions: ActionDefinition[]
+  derived: DerivedDefinition[]
+}
+
+export interface ImportPlanEntry {
+  from: string
+  named: string[]
+  defaultImport?: string
+}
+
+export interface ImportPlan {
+  imports: ImportPlanEntry[]
+}
+
+export interface LayoutCompositionPlan {
+  pages: PageCompositionPlan[]
+}
+
+export interface PageCompositionPlan {
+  path: string
+  title: string
+  metaTitle: string
+  metaDescription: string
+  componentTree: LayoutComponentNode
+  logicPlan?: LogicPlan
+  importPlan?: ImportPlan
+}
+
+export interface GeneratedComponentManifest {
+  intent: ProductIntent
+  creativeDirection: CreativeDirection
+  layoutComposition: LayoutCompositionPlan
+  brief: DesignBrief
+  theme: ThemeTokens
+  deploymentMode: DeploymentMode
+  needsDatabase: boolean
+  databaseProvider?: "turso" | "none"
+  integrations: IntegrationPlan[]
+  requiredEnvVars: EnvVarRequirement[]
+  unconnectedIntegrations: string[]
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LEGACY TYPES (retained for backward compatibility)
+// ═══════════════════════════════════════════════════════════════════
 
 export type SectionKind =
   | "hero"
