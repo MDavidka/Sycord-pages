@@ -375,14 +375,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   useEffect(() => {
     if (!isLoading) return
     const steps = [
-      "Planning",
-      "Manifest",
-      "Component Context",
-      "Scaffold",
-      "Generating Page JSON",
-      "Validating JSON",
-      "Converting to Files",
-      "Building",
+      "Generating Site Architecture",
+      "Building Page UI Trees",
+      "Compiling UI Components",
+      "Generating Server Actions",
+      "Building and Validating",
     ]
     let idx = 0
     setCurrentPipelineStep(steps[idx])
