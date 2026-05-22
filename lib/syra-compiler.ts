@@ -1,4 +1,4 @@
-import { callModel, extractJson } from "@/lib/ai-provider"
+import { callModel, extractJson } from "./ai-provider.ts"
 
 function capitalize(s: string) {
   if (!s) return s;
