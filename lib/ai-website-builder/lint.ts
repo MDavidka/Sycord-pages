@@ -1,9 +1,10 @@
 // Post-generation syntax linting and import repair for generated TSX.
 //
-// Handles three critical deployment-breaking issues:
+// Handles four critical deployment-breaking issues:
 //   1. Duplicate imports — merges into existing import lines instead of appending
 //   2. Case sensitivity — forces all @/components/ui/* paths to lowercase (Linux-compatible)
 //   3. Lucide-react barrel conflicts — merges ALL lucide-react imports into one line
+//   4. Sub-component grouping — CardHeader/CardTitle/CardFooter all live in card.tsx
 //
 // Also fixes common AI syntax errors:
 //   - Single-quotes wrapped in double braces:  className={{'...'}}
@@ -20,39 +21,111 @@ export interface LintResult {
   warnings: string[]
 }
 
-// All shadcn components we support. Tags matching these names
-// get a lowercase `@/components/ui/<name>` import.
-const SHADCN_TAGS = new Set([
-  "Button", "Badge",
-  "Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter",
-  "Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent",
-  "Tabs", "TabsList", "TabsTrigger", "TabsContent",
-  "Input", "Textarea", "Label",
-  "Avatar", "AvatarImage", "AvatarFallback",
-  "Separator",
-  "Select", "SelectTrigger", "SelectValue", "SelectContent", "SelectItem", "SelectGroup",
-  "Checkbox", "Switch",
-  "Skeleton", "Progress",
-  "Alert", "AlertTitle", "AlertDescription",
-  "Dialog", "DialogTrigger", "DialogContent", "DialogHeader", "DialogTitle", "DialogDescription",
-  "Table", "TableHeader", "TableBody", "TableRow", "TableHead", "TableCell",
-  "Sheet", "SheetTrigger", "SheetContent",
-  "Breadcrumb", "BreadcrumbList", "BreadcrumbItem", "BreadcrumbLink",
-  "Pagination", "PaginationContent", "PaginationPrevious", "PaginationNext", "PaginationItem", "PaginationLink",
-  "Tooltip", "TooltipTrigger", "TooltipContent",
-  "HoverCard", "HoverCardTrigger", "HoverCardContent",
-])
+// ---- Component-to-File Registry ----
+// Maps every shadcn component (including sub-components) to its actual
+// parent file on disk. This is the single source of truth for where
+// components live — the AI never guesses paths.
+//
+// shadcn/ui file structure:
+//   components/ui/card.tsx     → exports Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter
+//   components/ui/avatar.tsx   → exports Avatar, AvatarImage, AvatarFallback
+//   components/ui/accordion.tsx→ exports Accordion, AccordionItem, AccordionTrigger, AccordionContent
+//   ...etc
 
-// Non-shadcn tags that map to known modules.
-// Maps tag name → import config. All lucide-react icons go here.
-const KNOWN_TAGS: Record<string, { from: string; named: boolean; tags?: string[] }> = {
+const COMPONENT_REGISTRY: Record<string, string> = {
+  // Single-file components (component name === file name)
+  "Button": "button",
+  "Badge": "badge",
+  "Input": "input",
+  "Textarea": "textarea",
+  "Label": "label",
+  "Separator": "separator",
+  "Checkbox": "checkbox",
+  "Switch": "switch",
+  "Skeleton": "skeleton",
+  "Progress": "progress",
+  // Card family — all live in card.tsx
+  "Card": "card",
+  "CardHeader": "card",
+  "CardTitle": "card",
+  "CardDescription": "card",
+  "CardContent": "card",
+  "CardFooter": "card",
+  // Avatar family — all live in avatar.tsx
+  "Avatar": "avatar",
+  "AvatarImage": "avatar",
+  "AvatarFallback": "avatar",
+  // Accordion family — all live in accordion.tsx
+  "Accordion": "accordion",
+  "AccordionItem": "accordion",
+  "AccordionTrigger": "accordion",
+  "AccordionContent": "accordion",
+  // Tabs family — all live in tabs.tsx
+  "Tabs": "tabs",
+  "TabsList": "tabs",
+  "TabsTrigger": "tabs",
+  "TabsContent": "tabs",
+  // Select family — all live in select.tsx
+  "Select": "select",
+  "SelectTrigger": "select",
+  "SelectValue": "select",
+  "SelectContent": "select",
+  "SelectItem": "select",
+  "SelectGroup": "select",
+  // Alert family — all live in alert.tsx
+  "Alert": "alert",
+  "AlertTitle": "alert",
+  "AlertDescription": "alert",
+  // Dialog family — all live in dialog.tsx
+  "Dialog": "dialog",
+  "DialogTrigger": "dialog",
+  "DialogContent": "dialog",
+  "DialogHeader": "dialog",
+  "DialogTitle": "dialog",
+  "DialogDescription": "dialog",
+  // Table family — all live in table.tsx
+  "Table": "table",
+  "TableHeader": "table",
+  "TableBody": "table",
+  "TableRow": "table",
+  "TableHead": "table",
+  "TableCell": "table",
+  // Sheet family — all live in sheet.tsx
+  "Sheet": "sheet",
+  "SheetTrigger": "sheet",
+  "SheetContent": "sheet",
+  // Breadcrumb family — all live in breadcrumb.tsx
+  "Breadcrumb": "breadcrumb",
+  "BreadcrumbList": "breadcrumb",
+  "BreadcrumbItem": "breadcrumb",
+  "BreadcrumbLink": "breadcrumb",
+  // Pagination family — all live in pagination.tsx
+  "Pagination": "pagination",
+  "PaginationContent": "pagination",
+  "PaginationPrevious": "pagination",
+  "PaginationNext": "pagination",
+  "PaginationItem": "pagination",
+  "PaginationLink": "pagination",
+  // Tooltip family — all live in tooltip.tsx
+  "Tooltip": "tooltip",
+  "TooltipTrigger": "tooltip",
+  "TooltipContent": "tooltip",
+  // HoverCard family — all live in hover-card.tsx
+  "HoverCard": "hover-card",
+  "HoverCardTrigger": "hover-card",
+  "HoverCardContent": "hover-card",
+}
+
+// Derive: all known component tag names
+const SHADCN_TAGS = new Set(Object.keys(COMPONENT_REGISTRY))
+
+// Non-shadcn tags that map to known modules
+const KNOWN_TAGS: Record<string, { from: string; named: boolean }> = {
   "Link": { from: "next/link", named: false },
   "Image": { from: "next/image", named: false },
 }
 
-// All lucide-react icons we might encounter. Any tag not in SHADCN_TAGS
-// or KNOWN_TAGS that starts with uppercase and appears in THIS set gets
-// imported from "lucide-react".
+// All lucide-react icons we might encounter
 const LUCIDE_ICONS = new Set([
   "Check", "ChevronRight", "ChevronDown", "ChevronUp",
   "ArrowRight", "ArrowUpRight", "ArrowLeft", "ArrowUp",
@@ -229,7 +302,7 @@ function fixImports(content: string, result: LintResult): string {
   }
 
   // Rebuild import block from the merged existing state
-  const rebuiltLines = importLinesFromExisting(existing, importLines)
+  const rebuiltLines = importLinesFromExisting(existing)
   const rebuiltBlock = rebuiltLines.join("\n")
 
   // Count injected
@@ -247,13 +320,36 @@ function fixImports(content: string, result: LintResult): string {
   return before + rebuiltBlock + "\n\n" + body
 }
 
+// ---- Helper: resolve a component tag to its canonical @/components/ui/<file> path ----
+
+function resolveComponentFile(tag: string): string | null {
+  const file = COMPONENT_REGISTRY[tag]
+  if (!file) return null
+  return `@/components/ui/${file}`
+}
+
+// Normalize any @/components/ui/* path to its canonical lowercase form,
+// resolving sub-component imports to their parent file.
+function normalizeImportPath(path: string): string {
+  const uiMatch = path.match(/^@\/components\/ui\/(.+)$/)
+  if (!uiMatch) return path
+  const name = uiMatch[1].toLowerCase()
+  // Check if this path matches a known parent file in the registry.
+  // If multiple tags map to the same file, resolve to that file.
+  for (const [tag, file] of Object.entries(COMPONENT_REGISTRY)) {
+    if (file === name) return `@/components/ui/${file}`
+  }
+  // Fallback: lowercase only (handles unknown UI components gracefully)
+  return `@/components/ui/${name}`
+}
+
 // ---- Import data model ----
 
 interface ImportEntry {
-  from: string
-  named: boolean        // true = import { X, Y }, false = import X
-  tags: string[]        // imported symbols
-  originalLine: string  // the original import line text
+  from: string        // canonical path (normalized)
+  named: boolean      // true = import { X, Y }, false = import X
+  tags: string[]      // imported symbols
+  originalLine: string
 }
 
 function parseImportBlock(lines: string[]): ImportEntry[] {
@@ -263,22 +359,19 @@ function parseImportBlock(lines: string[]): ImportEntry[] {
     const trimmed = line.trim()
     if (!trimmed.startsWith("import ")) continue
 
-    // import { X, Y, Z } from "path"
     const namedMatch = trimmed.match(/^import\s+\{([^}]+)\}\s+from\s+["']([^"']+)["']/)
     if (namedMatch) {
       const tags = namedMatch[1].split(",").map((s) => s.replace(/^type\s+/, "").trim()).filter(Boolean)
-      entries.push({ from: namedMatch[2], named: true, tags, originalLine: line })
+      entries.push({ from: normalizeImportPath(namedMatch[2]), named: true, tags, originalLine: line })
       continue
     }
 
-    // import X from "path"
     const defaultMatch = trimmed.match(/^import\s+([A-Za-z0-9_]+)\s+from\s+["']([^"']+)["']/)
     if (defaultMatch) {
       entries.push({ from: defaultMatch[2], named: false, tags: [defaultMatch[1]], originalLine: line })
       continue
     }
 
-    // import * as X from "path"
     const starMatch = trimmed.match(/^import\s+\*\s+as\s+(\w+)\s+from\s+["']([^"']+)["']/)
     if (starMatch) {
       entries.push({ from: starMatch[2], named: false, tags: [starMatch[1]], originalLine: line })
@@ -289,49 +382,58 @@ function parseImportBlock(lines: string[]): ImportEntry[] {
   return entries
 }
 
-function importLinesFromExisting(existing: ImportEntry[], _fallback: string[]): string[] {
-  const out: string[] = []
+function importLinesFromExisting(existing: ImportEntry[]): string[] {
+  // Step 1: Re-group ALL shadcn entries by their canonical parent file.
+  // This fixes AI-generated imports like:
+  //   import { CardHeader } from "@/components/ui/cardheader"  // wrong file!
+  //   import { CardContent } from "@/components/ui/cardcontent" // wrong file!
+  // into:
+  //   import { CardHeader, CardContent } from "@/components/ui/card"
 
-  // Group all lucide-react tags into one line
-  let lucideTags: string[] = []
+  const byFile = new Map<string, { named: boolean; tags: Set<string>; defaultTag?: string }>()
+
+  // Lucide-react gets special handling
+  let lucideTags = new Set<string>()
   let hasLucideDefault = false
-
-  const nonLucide: ImportEntry[] = []
 
   for (const entry of existing) {
     if (entry.from === "lucide-react") {
       if (entry.named) {
-        lucideTags.push(...entry.tags)
+        for (const t of entry.tags) lucideTags.add(t)
       } else {
         hasLucideDefault = true
       }
-    } else {
-      nonLucide.push(entry)
+      continue
+    }
+
+    const from = normalizeImportPath(entry.from)
+    if (!byFile.has(from)) {
+      byFile.set(from, { named: entry.named, tags: new Set() })
+    }
+    const group = byFile.get(from)!
+    for (const t of entry.tags) group.tags.add(t)
+    if (!entry.named && entry.tags[0]) {
+      group.defaultTag = entry.tags[0]
     }
   }
 
-  // Deduplicate lucide tags and emit one line
-  const uniqueLucide = [...new Set(lucideTags)].sort()
-  if (uniqueLucide.length > 0) {
-    out.push(`import { ${uniqueLucide.join(", ")} } from "lucide-react"`)
+  const out: string[] = []
+
+  // Emit lucide-react as one merged line
+  if (lucideTags.size > 0) {
+    out.push(`import { ${[...lucideTags].sort().join(", ")} } from "lucide-react"`)
   }
   if (hasLucideDefault) {
     out.push(`import LucideIcon from "lucide-react"`)
   }
 
-  // Emit non-lucide imports, with @/components/ui/* paths lowercased
-  for (const entry of nonLucide) {
-    let from = entry.from
-    // Force lowercase for shadcn paths
-    const uiMatch = from.match(/^@\/components\/ui\/(.+)$/)
-    if (uiMatch) {
-      from = `@/components/ui/${uiMatch[1].toLowerCase()}`
-    }
-    if (entry.named) {
-      const deduped = [...new Set(entry.tags)].sort()
-      out.push(`import { ${deduped.join(", ")} } from "${from}"`)
-    } else {
-      out.push(`import ${entry.tags[0]} from "${from}"`)
+  // Emit non-lucide imports grouped by canonical file
+  for (const [from, group] of byFile) {
+    if (group.named) {
+      const sorted = [...group.tags].sort()
+      out.push(`import { ${sorted.join(", ")} } from "${from}"`)
+    } else if (group.defaultTag) {
+      out.push(`import ${group.defaultTag} from "${from}"`)
     }
   }
 
@@ -347,11 +449,11 @@ function computeMissing(usedTags: string[], existing: ImportEntry[]): string[] {
   const missing: string[] = []
   for (const tag of usedTags) {
     if (imported.has(tag)) continue
-    if (SHADCN_TAGS.has(tag)) {
+    if (COMPONENT_REGISTRY[tag]) {
       missing.push(tag)
       continue
     }
-    if (KNOWN_TAGS[tag] && !imported.has(tag)) {
+    if (KNOWN_TAGS[tag]) {
       missing.push(tag)
       continue
     }
@@ -369,52 +471,43 @@ function mergeIntoExisting(tag: string, existing: ImportEntry[]): boolean {
   let targetFrom: string | null = null
   let named = true
 
-  if (SHADCN_TAGS.has(tag)) {
-    targetFrom = `@/components/ui/${tag.toLowerCase()}`
+  if (COMPONENT_REGISTRY[tag]) {
+    targetFrom = resolveComponentFile(tag) // uses registry → "@/components/ui/card" for CardHeader
   } else if (KNOWN_TAGS[tag]) {
     targetFrom = KNOWN_TAGS[tag].from
     named = KNOWN_TAGS[tag].named
   } else if (LUCIDE_ICONS.has(tag)) {
     targetFrom = "lucide-react"
-    named = true
   }
 
   if (!targetFrom) return false
 
-  // Find an existing import from the same module
+  // Find an existing entry with the SAME canonical path
   for (const entry of existing) {
-    // Normalize path for comparison (case-insensitive for shadcn)
     const existingPath = normalizeImportPath(entry.from)
-    const targetPath = normalizeImportPath(targetFrom)
-    if (existingPath === targetPath && entry.named === named) {
+    if (existingPath === normalizeImportPath(targetFrom) && entry.named === named) {
       if (!entry.tags.includes(tag)) {
         entry.tags.push(tag)
-        return true
       }
-      return true // already there
+      return true
     }
   }
 
-  // No existing entry — create a new one
-  existing.push({ from: targetFrom, named, tags: [tag], originalLine: "" })
+  // No existing entry for this canonical file — create one
+  existing.push({ from: normalizeImportPath(targetFrom), named, tags: [tag], originalLine: "" })
   return true
-}
-
-function normalizeImportPath(path: string): string {
-  const uiMatch = path.match(/^@\/components\/ui\/(.+)$/)
-  if (uiMatch) return `@/components/ui/${uiMatch[1].toLowerCase()}`
-  return path
 }
 
 function lowercaseShadcnPaths(lines: string[]): string[] {
   return lines.map((line) => {
     return line.replace(
-      /("@\/components\/ui\/[^"]+")|('@\/components\/ui\/[^']+')/g,
+      /from\s+("@\/components\/ui\/[^"]+")|from\s+('@\/components\/ui\/[^']+')/g,
       (match) => {
-        const quote = match[0]
-        const path = match.slice(1, -1)
-        const lower = path.replace(/\/ui\/(.+)$/, (_: string, name: string) => `/ui/${name.toLowerCase()}`)
-        if (lower !== path) return `${quote}${lower}${quote}`
+        const prefix = match.startsWith("from \"") ? "from \"" : "from '"
+        const quote = match.startsWith("from \"") ? "\"" : "'"
+        const inner = match.slice(prefix.length, -1)
+        const normalized = normalizeImportPath(inner)
+        if (normalized !== inner) return `${prefix}${normalized}${quote}`
         return match
       },
     )
