@@ -167,24 +167,27 @@ const InputBar = ({
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] px-2 sm:px-2.5 gap-1 sm:gap-1.5 min-w-0 rounded-full" disabled={disabled}>
+                  <Button variant="ghost" className="h-7 sm:h-8 text-[10px] sm:text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06] px-1.5 sm:px-2.5 gap-1 sm:gap-1.5 min-w-0 rounded-full" disabled={disabled}>
                     {selectedTier === "fast" ? <Zap className="h-3 w-3 text-yellow-400 shrink-0" /> : <Gem className="h-3 w-3 text-violet-400 shrink-0" />}
-                    <span className="max-w-[80px] sm:max-w-[140px] truncate">{selectedModel.name}</span>
+                    <span className="hidden sm:inline max-w-[140px] truncate">{selectedModel.name}</span>
+                    <span className="sm:hidden max-w-[60px] truncate text-[10px]">
+                      {selectedModel.id.startsWith("gemini") ? "Gemini" : selectedModel.id.startsWith("grok") ? "Grok" : selectedModel.id.startsWith("deepseek") ? "DeepSeek" : selectedModel.name}
+                    </span>
                     <span className={cn("hidden sm:inline-flex items-center h-4 px-1.5 rounded-full text-[9px] font-bold uppercase tracking-wide tabular-nums", selectedTier === "fast" ? "bg-yellow-400/10 text-yellow-300" : "bg-violet-400/10 text-violet-300")}>
-                      −{formatCredits(selectedCost)}/file
+                      −{formatCredits(selectedCost)}
                     </span>
                     <ChevronDown className="h-3 w-3 shrink-0" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="bg-[#1c1c1c]/95 backdrop-blur-xl border border-white/10 min-w-[280px] rounded-2xl p-2 shadow-2xl">
+                <DropdownMenuContent align="start" side="top" className="bg-[#1c1c1c]/95 backdrop-blur-xl border border-white/10 w-[calc(100vw-2rem)] max-w-[320px] sm:min-w-[280px] sm:w-auto rounded-2xl p-2 shadow-2xl max-h-[70vh] overflow-y-auto">
                   <div className="px-2.5 pt-1 pb-2 text-[10px] text-zinc-500 leading-relaxed border-b border-white/10 mb-1.5">
-                    Planning and generation both use your selected model for consistent output across the full build pipeline.
+                    Select model for planning and generation
                   </div>
                   {bestModels.length > 0 && (
                     <>
                       <div className="px-2.5 pt-1.5 pb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-violet-300/90">
                         <Gem className="h-3 w-3" /> Best
-                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">−{formatCredits(bestCost)}/file</span>
+                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">−{formatCredits(bestCost)}</span>
                       </div>
                       {bestModels.map(m => (
                         <ModelRow key={m.id} model={m} selected={selectedModel.id === m.id} onSelect={() => setSelectedModel(m)} tier="best" />
@@ -195,7 +198,7 @@ const InputBar = ({
                     <>
                       <div className="px-2.5 pt-2.5 pb-1.5 mt-1 border-t border-white/10 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-yellow-300/90">
                         <Zap className="h-3 w-3" /> Fast
-                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">−{formatCredits(fastCost)}/file</span>
+                        <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-zinc-500">−{formatCredits(fastCost)}</span>
                       </div>
                       {fastModels.map(m => (
                         <ModelRow key={m.id} model={m} selected={selectedModel.id === m.id} onSelect={() => setSelectedModel(m)} tier="fast" />

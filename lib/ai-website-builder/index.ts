@@ -45,6 +45,7 @@ import { PLAN_SYSTEM_PROMPT, PAGE_REPAIR_PROMPT } from "./prompts"
 import { DESIGN_DIRECTION_SYSTEM_PROMPT, fallbackDesignDirection, normalizeDesignDirection } from "./design-directions"
 import { computeQualityScore, runBuildValidation, validateManifest } from "./validate"
 import { buildImportsPreamble, renderSection, type RenderedSection } from "./sections"
+import { renderSectionBlock, type SectionBlockLayout } from "./blocks"
 import { ALL_UI_COMPONENTS, buildUiComponentFiles, computeInitials, scaffoldBaseFiles } from "./scaffold"
 
 // Re-export types so callers can `import { ... } from "@/lib/ai-website-builder"`.
@@ -1008,6 +1009,102 @@ async function repairManifest(
 
 // ---------- rendering ----------
 
+// Map section kind + variant to a block layout. The blocks system provides
+// higher-quality shadcn-composed output; we prefer it when variants match.
+function mapSectionToBlockLayout(section: SectionPlan): SectionBlockLayout | null {
+  const v = section.variant ?? ""
+  if (v.startsWith("blocks-")) {
+    const layout = v.replace("blocks-", "") as SectionBlockLayout
+    const validLayouts: SectionBlockLayout[] = [
+      "hero-centered", "hero-split", "hero-cinematic", "hero-dashboard",
+      "feature-cards", "feature-bento", "feature-icon-grid", "feature-alternating",
+      "stats-row", "stats-cards",
+      "testimonials-grid", "testimonials-spotlight",
+      "pricing-tiers", "pricing-toggle",
+      "faq-accordion", "faq-grid",
+      "contact-form", "contact-split",
+      "cta-banner", "cta-boxed",
+      "logos-row",
+      "gallery-grid", "gallery-masonry",
+      "process-steps", "process-timeline",
+      "team-grid",
+      "blog-cards",
+      "comparison-table",
+      "product-grid",
+    ]
+    if (validLayouts.includes(layout)) return layout
+  }
+  // Auto-map common patterns
+  const map: Record<string, SectionBlockLayout> = {
+    "hero:cinematic": "hero-cinematic",
+    "hero:split": "hero-split",
+    "hero:centered": "hero-centered",
+    "hero:saas-dashboard": "hero-dashboard",
+    "feature-grid:cards": "feature-cards",
+    "feature-grid:bento": "feature-bento",
+    "feature-grid:asymmetric-bento": "feature-bento",
+    "feature-grid:icon-grid": "feature-icon-grid",
+    "feature-grid:alternating": "feature-alternating",
+    "feature-grid:proof-led": "feature-cards",
+    "stats:row": "stats-row",
+    "stats:card-row": "stats-cards",
+    "testimonials:grid-cards": "testimonials-grid",
+    "testimonials:spotlight": "testimonials-spotlight",
+    "pricing:three-tier": "pricing-tiers",
+    "pricing:two-tier-toggle": "pricing-toggle",
+    "faq:accordion": "faq-accordion",
+    "faq:two-column": "faq-grid",
+    "contact:form": "contact-form",
+    "contact:split-form": "contact-split",
+    "cta:banner": "cta-banner",
+    "cta:split": "cta-banner",
+    "cta:boxed-card": "cta-boxed",
+    "logos:row": "logos-row",
+    "gallery:grid": "gallery-grid",
+    "gallery:masonry": "gallery-masonry",
+    "process:steps": "process-steps",
+    "process:timeline": "process-timeline",
+    "process:numbered-cards": "process-steps",
+    "team:card-grid": "team-grid",
+    "blog-preview:card-grid": "blog-cards",
+    "blog-preview:feature-and-list": "blog-cards",
+    "comparison:table": "comparison-table",
+    "product-grid:card-grid": "product-grid",
+  }
+  const key = `${section.kind}:${section.variant ?? ""}`
+  return map[key] ?? null
+}
+
+function sectionToBlockPlan(section: SectionPlan, layout: SectionBlockLayout, _pagePath: string) {
+  return {
+    kind: layout,
+    heading: section.heading,
+    subheading: section.subheading,
+    description: section.description,
+    eyebrow: section.eyebrow,
+    cta: section.primaryCta ? { label: section.primaryCta.label, href: section.primaryCta.href } : undefined,
+    secondaryCta: section.secondaryCta ? { label: section.secondaryCta.label, href: section.secondaryCta.href } : undefined,
+    items: (section.items ?? []).map((item) => ({
+      id: item.title?.toLowerCase().replace(/\s+/g, "-") ?? "item",
+      kind: "Card" as const,
+      heading: item.title,
+      text: item.label,
+      description: item.description,
+      eyebrow: item.eyebrow,
+      icon: item.icon,
+      href: item.href,
+      value: item.value,
+      suffix: item.suffix,
+      price: item.price,
+      src: item.image,
+      alt: item.title,
+      highlighted: item.highlighted,
+      cta: item.cta ? { label: item.cta.label, href: item.cta.href } : undefined,
+    })),
+    anchor: section.anchor,
+  }
+}
+
 function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
   file: BuilderFile
   importsNeeded: Set<string>
@@ -1019,6 +1116,19 @@ function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
   const importsNeeded = new Set<string>()
 
   page.sections.forEach((section, sectionIndex) => {
+    // Check if this section should use block-based rendering
+    const blockLayout = mapSectionToBlockLayout(section)
+    if (blockLayout) {
+      const plan = sectionToBlockPlan(section, blockLayout, page.path)
+      const { tsx, imports: blockImports } = renderSectionBlock(plan)
+      tsxBlocks.push(tsx)
+      for (const imp of blockImports) {
+        importsNeeded.add(imp.toLowerCase())
+      }
+      allImports.push([])
+      return
+    }
+
     const rendered = renderSection(section, { sectionIndex, pagePath: page.path })
     allImports.push(rendered.imports)
     tsxBlocks.push(rendered.tsx)
@@ -1057,22 +1167,23 @@ function renderPageFile(manifest: GeneratedProjectManifest, page: PagePlan): {
 }
 
 function pickRequiredUiComponents(manifest: GeneratedProjectManifest): RequiredComponent[] {
-  // Probe-render every page to know which @/components/ui/* slugs are needed,
-  // then return matching component definitions to scaffold.
   const required = new Set<string>()
   for (const page of manifest.pages) {
     for (const section of page.sections) {
+      const blockLayout = mapSectionToBlockLayout(section)
+      if (blockLayout) {
+        const { imports } = renderSectionBlock(sectionToBlockPlan(section, blockLayout, page.path))
+        for (const imp of imports) required.add(imp.toLowerCase())
+      }
       for (const imp of renderSection(section, { sectionIndex: 0, pagePath: page.path }).imports) {
         const m = imp.from.match(/^@\/components\/ui\/([a-z-]+)$/)
         if (m) required.add(m[1])
       }
     }
   }
-  // Always include button/badge/card/separator since the header/footer use them.
-  required.add("button")
-  required.add("badge")
-  required.add("card")
-  required.add("separator")
+  // Always include core components used by headers, footers, and all blocks
+  const always = ["button", "badge", "card", "separator", "input", "textarea", "label", "avatar", "accordion", "tabs"]
+  for (const slug of always) required.add(slug)
   return ALL_UI_COMPONENTS.filter((c) => required.has(c.slug))
 }
 
