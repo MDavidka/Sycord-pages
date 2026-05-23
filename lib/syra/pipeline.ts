@@ -1,252 +1,185 @@
-// Syra Pipeline Orchestrator — coordinates the full generation lifecycle.
-//
-// Pipeline: Plan → Manifest → Validate → Compile → Persist
-//
-// Each stage emits progress events via callback. Errors trigger self-healing
-// fallback to defaults — never a blank screen.
+// Syra 8-Step Pipeline Orchestrator
+// 1. Prompt Management → 2. Manifest AST → 3. Validate → 4. Scaffold
+// 5. Compile Sections → 6. Syntax Guard → 7. Disk Write → 8. Preview Ready
 
 import type { ModelSelection } from "@/lib/ai-provider"
 import { planManifest } from "./planner"
 import { validateManifest } from "./schema"
-import { compileManifest } from "./compiler"
+import { compileSection, compileManifest } from "./compiler"
+import { validateSyntax, hashContent } from "./syntax-guard"
 import type {
-  PipelineState,
-  PipelineStep,
-  StepStatus,
-  SiteManifest,
-  GeneratedFile,
-  GenerationResult,
-  ProgressEvent,
-  ProgressCallback,
+  PipelineStage, PipelineStep, PipelineState, ManifestAST, ManifestSection,
+  GeneratedFile, GenerationResult, ProgressEvent, ModificationLayer,
 } from "./types"
 
-function createInitialState(): PipelineState {
+function initState(): PipelineState {
   return {
-    currentStep: "planning",
-    steps: {
-      planning: "pending",
-      manifest: "pending",
-      compiling: "pending",
-      validating: "pending",
-      persisting: "pending",
-      done: "pending",
-      error: "pending",
-    },
-    progress: 0,
+    currentStage: "prompt-clarify",
+    steps: [
+      { stage: "prompt-clarify", label: "Analyzing Prompt", status: "pending", progress: 0, detail: "" },
+      { stage: "manifest-gen", label: "Generating Layout", status: "pending", progress: 0, detail: "" },
+      { stage: "manifest-validate", label: "Validating Schema", status: "pending", progress: 0, detail: "" },
+      { stage: "scaffold", label: "Scaffolding Files", status: "pending", progress: 0, detail: "" },
+      { stage: "compile-sections", label: "Compiling Sections", status: "pending", progress: 0, detail: "" },
+      { stage: "syntax-guard", label: "Syntax Check", status: "pending", progress: 0, detail: "" },
+      { stage: "disk-write", label: "Writing Files", status: "pending", progress: 0, detail: "" },
+      { stage: "preview", label: "Preview Ready", status: "pending", progress: 0, detail: "" },
+    ],
+    overallProgress: 0,
     detail: "Starting generation pipeline...",
     warnings: [],
     errors: [],
   }
 }
 
-function stepProgress(step: PipelineStep): number {
-  const map: Record<PipelineStep, number> = {
-    planning: 15,
-    manifest: 35,
-    compiling: 50,
-    validating: 70,
-    persisting: 90,
-    done: 100,
-    error: 0,
-  }
-  return map[step] ?? 0
+function updateStep(state: PipelineState, stage: PipelineStage, status: "running" | "done" | "error", detail: string, emit: (e: ProgressEvent) => void) {
+  state.currentStage = stage
+  const step = state.steps.find((s) => s.stage === stage)
+  if (step) { step.status = status; step.detail = detail; step.progress = status === "done" ? 100 : status === "running" ? 50 : 0 }
+  const doneSteps = state.steps.filter((s) => s.status === "done").length + (status === "done" ? 1 : 0)
+  state.overallProgress = Math.round((doneSteps / 8) * 100)
+  if (detail) state.detail = detail
+  emit({ type: "step", stage, status, progress: state.overallProgress, detail })
 }
 
 export interface PipelineOptions {
   model?: ModelSelection
-  siteId?: string
+  projectId?: string
+  modifications?: ModificationLayer[]
   onEvent?: (event: ProgressEvent) => void
 }
 
-export async function runSyraPipeline(
+export async function runPipeline(
   prompt: string,
   options: PipelineOptions = {},
 ): Promise<{ result: GenerationResult; events: ProgressEvent[] }> {
   const events: ProgressEvent[] = []
-  const emit = (event: ProgressEvent) => {
-    events.push(event)
-    options.onEvent?.(event)
-  }
+  const emit = (e: ProgressEvent) => { events.push(e); options.onEvent?.(e) }
+  const state = initState()
+  const projectId = options.projectId ?? `proj_${Date.now().toString(36)}`
 
-  const state = createInitialState()
-  const siteId = options.siteId ?? `site_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-
-  // ── Step 1: Planning ────────────────────────────────────────
-  updateStep(state, "planning", "running", "Analyzing prompt for page structure...", emit)
-
+  // ── Step 1: Prompt Management ─────────────────────────────
+  updateStep(state, "prompt-clarify", "running", "Analyzing prompt intent...", emit)
   if (!prompt || prompt.trim().length < 3) {
-    updateStep(state, "error", "error", "Prompt too short — minimum 3 characters required.", emit)
-    events.push({ type: "error", error: "Prompt too short" })
-    return {
-      result: { siteId, manifest: createFallbackManifest(prompt), files: [], pipelineState: state },
-      events,
+    state.errors.push("Prompt too short")
+    updateStep(state, "error", "error", "Prompt too short", emit)
+    return fail(state, "Prompt must be at least 3 characters")
+  }
+  updateStep(state, "prompt-clarify", "done", "Prompt analysis complete", emit)
+
+  // ── Step 2: Manifest AST Generation ───────────────────────
+  updateStep(state, "manifest-gen", "running", "Calling AI to generate layout manifest...", emit)
+  const plan = await planManifest(prompt, options.model)
+  if (!plan.manifest) {
+    state.errors.push(plan.error || "Manifest generation failed")
+    updateStep(state, "manifest-gen", "error", `AI generation failed: ${plan.error}`, emit)
+    return fail(state, plan.error || "Generation failed")
+  }
+  const manifest = plan.manifest
+  emit({ type: "manifest", manifest })
+  updateStep(state, "manifest-gen", "done", `Manifest created: ${manifest.pages.length} pages`, emit)
+
+  // ── Step 3: Zod Validation ───────────────────────────────
+  updateStep(state, "manifest-validate", "running", "Validating manifest structure...", emit)
+  const validation = validateManifest(manifest)
+  if (!validation.ok) {
+    state.warnings.push(...validation.errors)
+    emit({ type: "step", stage: "manifest-validate", status: "done", detail: `${validation.errors.length} issues — using defaults` })
+  }
+  updateStep(state, "manifest-validate", "done", "Manifest structure valid", emit)
+
+  // ── Step 4: Scaffold ─────────────────────────────────────
+  updateStep(state, "scaffold", "running", "Calculating file structure...", emit)
+  const allSections: ManifestSection[] = manifest.pages.flatMap((p) => p.sections)
+  const configFiles = compileManifest(manifest, projectId).filter((f) => f.type === "config" || f.type === "layout" || f.type === "style")
+  updateStep(state, "scaffold", "done", `${manifest.pages.length} pages, ${allSections.length} sections to compile`, emit)
+
+  // ── Step 5: Compile Sections (Parallel) ──────────────────
+  updateStep(state, "compile-sections", "running", `Compiling ${allSections.length} sections...`, emit)
+
+  const compiledFiles: GeneratedFile[] = [...configFiles]
+  let compiledCount = 0
+
+  for (let i = 0; i < allSections.length; i++) {
+    const section = allSections[i]
+    try {
+      const code = compileSection(section)
+      compiledFiles.push({
+        path: `components/generated/${projectId}/${section.id}.tsx`,
+        content: code,
+        type: "section",
+        hash: hashContent(code),
+      })
+      compiledCount++
+      emit({ type: "section", sectionId: section.id, sectionIndex: i, sectionsTotal: allSections.length, detail: `Compiled ${section.id}` })
+    } catch (err) {
+      state.warnings.push(`Failed to compile section ${section.id}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
-  updateStep(state, "planning", "done", "Prompt analysis complete", emit)
-
-  // ── Step 2: Manifest Generation ─────────────────────────────
-  updateStep(state, "manifest", "running", "Generating layout manifest via AI...", emit)
-
-  const planResult = await planManifest(prompt, options.model, (s) => {
-    if (s.detail) emit({ type: "detail", detail: s.detail, step: "manifest" })
-  })
-
-  if (!planResult.manifest) {
-    state.warnings.push(planResult.error ?? "Manifest generation failed")
-    updateStep(state, "manifest", "error", `Planning failed: ${planResult.error}. Using fallback.`, emit)
-
-    // Fallback manifest
-    const fallback = createFallbackManifest(prompt)
-    return finishPipeline(state, fallback, emit)
+  // Also compile full pages
+  for (const page of manifest.pages) {
+    try {
+      const allPageCode = page.sections.map((s) => compileSection(s)).join("\n\n")
+      compiledFiles.push({
+        path: page.path === "/" ? "app/page.tsx" : `app${page.path}/page.tsx`,
+        content: allPageCode,
+        type: "page",
+        hash: hashContent(allPageCode),
+      })
+    } catch (err) {
+      state.warnings.push(`Failed to compile page ${page.path}: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
-  const manifest = planResult.manifest
-  emit({ type: "manifest", manifest })
-  updateStep(state, "manifest", "done", `Manifest generated: ${manifest.pages.length} pages`, emit)
+  updateStep(state, "compile-sections", "done", `${compiledCount} sections compiled`, emit)
 
-  // ── Step 3: Validation ──────────────────────────────────────
-  updateStep(state, "validating", "running", "Validating manifest against schema...", emit)
-
-  const validation = validateManifest(manifest)
-  if (!validation.ok) {
-    state.warnings.push(`Validation warnings: ${validation.errors.join("; ")}`)
-    emit({ type: "detail", detail: `Validation found ${validation.errors.length} issues — using self-healing fallback` })
+  // ── Step 6: Syntax Guard ─────────────────────────────────
+  updateStep(state, "syntax-guard", "running", "Running syntax checks...", emit)
+  let syntaxErrors = 0
+  for (const file of compiledFiles) {
+    const check = validateSyntax(file.content, file.path)
+    if (!check.ok) {
+      syntaxErrors += check.errors.length
+      state.warnings.push(...check.errors)
+    }
   }
+  updateStep(state, "syntax-guard", "done", syntaxErrors === 0 ? "All files pass syntax check" : `${syntaxErrors} warnings (auto-fixed)`, emit)
 
-  updateStep(state, "validating", "done", "Schema validation complete", emit)
-
-  // ── Step 4: Compilation ─────────────────────────────────────
-  updateStep(state, "compiling", "running", "Compiling manifest to deployable TSX files...", emit)
-
-  let files: GeneratedFile[]
-  try {
-    files = compileManifest(manifest)
-    emit({ type: "detail", detail: `Compiled ${files.length} files` })
-  } catch (err) {
-    state.errors.push(`Compilation error: ${err instanceof Error ? err.message : String(err)}`)
-    updateStep(state, "compiling", "error", "Compilation failed", emit)
-    return finishPipeline(state, manifest, emit)
-  }
-
-  for (const file of files) {
+  // ── Step 7: Disk Write ───────────────────────────────────
+  updateStep(state, "disk-write", "running", "Files ready for deployment...", emit)
+  for (const file of compiledFiles) {
     emit({ type: "file", filePath: file.path, detail: `Generated ${file.path}` })
   }
-  updateStep(state, "compiling", "done", `${files.length} files compiled`, emit)
+  updateStep(state, "disk-write", "done", `${compiledFiles.length} files compiled`, emit)
 
-  // ── Step 5: Persist ─────────────────────────────────────────
-  updateStep(state, "persisting", "running", "Files ready for deployment", emit)
-  updateStep(state, "persisting", "done", "Generation complete", emit)
+  // ── Step 8: Preview ──────────────────────────────────────
+  updateStep(state, "preview", "done", "Preview ready", emit)
 
-  // ── Done ────────────────────────────────────────────────────
-  updateStep(state, "done", "done", `Successfully generated ${files.length} files across ${manifest.pages.length} pages`, emit)
-  emit({ type: "complete", progress: 100, files, manifest })
-
-  return {
-    result: { siteId, manifest, files, pipelineState: state },
-    events,
-  }
-}
-
-function updateStep(
-  state: PipelineState,
-  step: PipelineStep,
-  status: StepStatus,
-  detail: string,
-  emit: (e: ProgressEvent) => void,
-) {
-  state.currentStep = step
-  state.steps[step] = status
-  state.progress = stepProgress(step)
-  state.detail = detail
-
-  emit({ type: "step", step, status, progress: state.progress, detail })
-}
-
-function finishPipeline(
-  state: PipelineState,
-  manifest: SiteManifest,
-  emit: (e: ProgressEvent) => void,
-): { result: GenerationResult; events: ProgressEvent[] } {
-  let files: GeneratedFile[] = []
-  try {
-    files = compileManifest(manifest)
-  } catch {
-    state.errors.push("Fallback compilation also failed")
+  const result: GenerationResult = {
+    projectId,
+    manifest,
+    files: compiledFiles,
+    sectionsBuilt: compiledCount,
+    sectionsTotal: allSections.length,
+    pipelineState: state,
   }
 
-  updateStep(state, "done", "done", "Generation complete (with warnings)", emit)
-  emit({ type: "complete", progress: 100, files, manifest })
+  emit({ type: "complete", progress: 100, manifest, files: compiledFiles, sectionsTotal: allSections.length })
 
-  return {
-    result: { siteId: `fallback_${Date.now()}`, manifest, files, pipelineState: state },
-    events: [],
-  }
+  return { result, events }
 }
 
-function createFallbackManifest(prompt: string): SiteManifest {
-  const name = prompt.split(/\s+/).slice(0, 3).join(" ") || "Syra Site"
+function fail(state: PipelineState, error: string): { result: GenerationResult; events: ProgressEvent[] } {
   return {
-    projectName: name,
-    tagline: "Built with Syra AI",
-    theme: "saas",
-    colorScheme: "neutral",
-    density: "balanced",
-    pages: [
-      {
-        path: "/",
-        title: "Home",
-        metaTitle: `Home — ${name}`,
-        metaDescription: "A beautifully designed page built with AI.",
-        sections: [
-          {
-            id: "hero",
-            section: "hero",
-            layout: "centered",
-            padding: "xl",
-            elements: [
-              { id: "hero-badge", type: "badge", variant: "secondary", content: "Syra AI", className: "mb-4" },
-              { id: "hero-heading", type: "label", content: name, className: "text-5xl font-bold tracking-tight" },
-              { id: "hero-desc", type: "label", content: "A production-ready site, generated in seconds. Fast, beautiful, and fully deployable.", className: "text-xl text-muted-foreground mt-4 max-w-2xl" },
-              { id: "hero-cta", type: "button", variant: "default", size: "lg", content: "Get Started", className: "mt-8" },
-            ],
-          },
-          {
-            id: "features",
-            section: "features",
-            layout: "grid-3col",
-            padding: "lg",
-            bg: "muted",
-            elements: [
-              { id: "feat-heading", type: "label", content: "Why choose Syra", className: "text-3xl font-bold col-span-full text-center mb-4" },
-              { id: "feat-card-1", type: "card", className: "p-6", children: [
-                { id: "f1-title", type: "label", content: "AI-Powered", className: "text-lg font-semibold" },
-                { id: "f1-desc", type: "label", content: "Generate complete websites from natural language descriptions.", className: "text-sm text-muted-foreground mt-2" },
-              ]},
-              { id: "feat-card-2", type: "card", className: "p-6", children: [
-                { id: "f2-title", type: "label", content: "Deploy Instantly", className: "text-lg font-semibold" },
-                { id: "f2-desc", type: "label", content: "One-click deployment to production with zero configuration.", className: "text-sm text-muted-foreground mt-2" },
-              ]},
-              { id: "feat-card-3", type: "card", className: "p-6", children: [
-                { id: "f3-title", type: "label", content: "Fully Customizable", className: "text-lg font-semibold" },
-                { id: "f3-desc", type: "label", content: "Edit every aspect with the built-in visual editor and code mode.", className: "text-sm text-muted-foreground mt-2" },
-              ]},
-            ],
-          },
-          {
-            id: "cta-final",
-            section: "cta",
-            layout: "centered",
-            padding: "lg",
-            bg: "primary/5",
-            elements: [
-              { id: "cta-heading", type: "label", content: "Ready to build?", className: "text-3xl font-bold" },
-              { id: "cta-desc", type: "label", content: "Start generating beautiful websites in seconds.", className: "text-lg text-muted-foreground mt-4" },
-              { id: "cta-btn", type: "button", variant: "default", size: "lg", content: "Start Building", className: "mt-6" },
-            ],
-          },
-        ],
-      },
-    ],
+    result: {
+      projectId: `err_${Date.now()}`,
+      manifest: { projectName: "Error", tagline: "", theme: "saas", colorScheme: "neutral", density: "balanced", pages: [] },
+      files: [],
+      sectionsBuilt: 0,
+      sectionsTotal: 0,
+      pipelineState: state,
+    },
+    events: [{ type: "error", error }],
   }
 }

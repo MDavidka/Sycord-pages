@@ -1,31 +1,17 @@
 // Syra — v0-style Generative UI Builder
-// Barrel export
-
-export { runSyraPipeline } from "./pipeline"
+export { runPipeline } from "./pipeline"
 export type { PipelineOptions } from "./pipeline"
 export { planManifest } from "./planner"
-export { compileManifest } from "./compiler"
-export { validateManifest, healElement, fallbackElement } from "./schema"
-export { getRegistryEntry, isClientComponent, isVoidElement, REGISTRY, registryByName, registryByExport } from "./registry"
-export { createSSEStream, streamPipelineProgress, buildStreamingResponse, formatProgressForChat } from "./stream"
-
-// Re-export all types
+export { compileSection, compilePage, compileManifest, compileLayout, compileConfigs } from "./compiler"
+export { validateSyntax, hashContent } from "./syntax-guard"
+export { validateManifest, healElement, healSection, ManifestASTSchema, ManifestElementSchema, ManifestSectionSchema } from "./schema"
+export { REGISTRY, getEntry, getAllowedTypes, subcomponentToParent, registryByName } from "./registry"
+export { createSSEStream, formatProgressForChat } from "./stream"
 export type {
-  PipelineState,
-  PipelineStep,
-  StepStatus,
-  ManifestElement,
-  ManifestSection,
-  ManifestPage,
-  SiteManifest,
-  GeneratedFile,
-  GenerationResult,
-  ProgressEvent,
-  ProgressCallback,
-  RegistryEntry,
-  ThemeTokens,
-  LayoutTemplate,
-  LayoutDefinition,
+  ManifestElement, ManifestSection, ManifestPage, ManifestAST,
+  GeneratedFile, PipelineStage, PipelineStep, PipelineState,
+  GenerationResult, ProgressEvent, ModificationLayer,
 } from "./types"
-
+export type { RegistryEntry } from "./registry"
 export type { ValidationResult } from "./schema"
+export type { SyntaxCheckResult } from "./syntax-guard"

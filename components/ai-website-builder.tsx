@@ -71,33 +71,30 @@ export interface GeneratedPage {
   usedFor?: string
 }
 
+interface PipelineStep {
+  stage: string
+  label: string
+  status: "pending" | "running" | "done" | "error"
+}
+
 interface PipelineProgress {
   currentStep: string
   detail: string
-  pagesRendered: number
-  totalPages: number
-  baseFiles: number
-  uiFiles: number
-  stage: "planning" | "manifest" | "compiling" | "validating" | "persisting" | "complete"
+  overallProgress: number
+  steps: PipelineStep[]
+  stage: string
 }
 
-const stageIcons: Record<PipelineProgress["stage"], React.ReactNode> = {
-  planning: <Palette className="h-4 w-4" />,
-  manifest: <Layout className="h-4 w-4" />,
-  compiling: <Code2 className="h-4 w-4" />,
-  validating: <CheckCircle2 className="h-4 w-4" />,
-  persisting: <FileText className="h-4 w-4" />,
-  complete: <Sparkles className="h-4 w-4" />,
-}
-
-const stageLabels: Record<PipelineProgress["stage"], string> = {
-  planning: "Analyzing Prompt",
-  manifest: "Layout Planning",
-  compiling: "Code Generation",
-  validating: "Zod Validation",
-  persisting: "Packaging Files",
-  complete: "Complete",
-}
+const STEPS_DEFAULT: PipelineStep[] = [
+  { stage: "prompt-clarify", label: "Analyzing Prompt", status: "pending" },
+  { stage: "manifest-gen", label: "Generating Layout", status: "pending" },
+  { stage: "manifest-validate", label: "Validating Schema", status: "pending" },
+  { stage: "scaffold", label: "Scaffolding Files", status: "pending" },
+  { stage: "compile-sections", label: "Compiling Sections", status: "pending" },
+  { stage: "syntax-guard", label: "Syntax Check", status: "pending" },
+  { stage: "disk-write", label: "Writing Files", status: "pending" },
+  { stage: "preview", label: "Preview Ready", status: "pending" },
+]
 
 const InputBar = ({
   input, setInput, onSend, disabled,
@@ -275,7 +272,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   const [bestCost, setBestCost] = useState<number>(BEST_COST_PER_FILE)
   const [fastCost, setFastCost] = useState<number>(FAST_COST_PER_FILE)
 
-  const [progress, setProgress] = useState<PipelineProgress>({ currentStep: "", detail: "", pagesRendered: 0, totalPages: 0, baseFiles: 0, uiFiles: 0, stage: "designing" })
+  const [progress, setProgress] = useState<PipelineProgress>({
+    currentStep: "", detail: "", overallProgress: 0, steps: [...STEPS_DEFAULT], stage: ""
+  })
   const [existingManifest, setExistingManifest] = useState<unknown>(null)
   const [existingFiles, setExistingFiles] = useState<Array<{ path: string; content: string }>>([])
 
@@ -394,67 +393,66 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
   const handleSSEEvent = useCallback((event: string, data: unknown) => {
     const evt = data as {
-      type: string; step?: string; status?: string; progress?: number;
-      detail?: string; pagePath?: string; filePath?: string;
-      pageCount?: number; fileCount?: number; qualityScore?: number;
+      type: string; stage?: string; status?: string; progress?: number;
+      detail?: string; sectionId?: string; sectionIndex?: number;
+      sectionsTotal?: number; filePath?: string;
       manifest?: unknown; files?: unknown[]; error?: string;
     }
 
-    if (evt.error) {
-      setError(evt.error)
-      return
-    }
+    if (evt.error) { setError(evt.error); return }
 
     switch (evt.type) {
       case "step": {
-        if (evt.step && evt.detail) {
-          const stage = mapStepToStage(evt.step)
-          setProgress(prev => ({ ...prev, currentStep: evt.detail || "", detail: evt.detail || "", stage }))
-        }
+        setProgress(prev => {
+          const steps = prev.steps.map(s => {
+            if (evt.stage && s.stage === evt.stage) {
+              return { ...s, status: (evt.status as PipelineStep["status"]) || s.status }
+            }
+            // Mark previous steps as done
+            if (evt.stage && evt.status === "running" && (s.status === "pending")) {
+              const stepOrder = STEPS_DEFAULT.findIndex(x => x.stage === s.stage)
+              const currentOrder = STEPS_DEFAULT.findIndex(x => x.stage === evt.stage)
+              if (stepOrder >= 0 && stepOrder < currentOrder) return { ...s, status: "done" as const }
+            }
+            return s
+          })
+          return {
+            ...prev,
+            steps,
+            stage: evt.stage || prev.stage,
+            detail: evt.detail || prev.detail,
+            overallProgress: evt.progress ?? prev.overallProgress,
+          }
+        })
         break
       }
-      case "detail": {
-        setProgress(prev => ({ ...prev, detail: evt.detail || prev.detail }))
+      case "section": {
+        setProgress(prev => ({
+          ...prev,
+          detail: evt.detail || `Compiling section ${(evt.sectionIndex ?? 0) + 1}/${evt.sectionsTotal ?? 1}`,
+        }))
         break
       }
       case "manifest": {
-        const manifest = evt.manifest || data
-        setExistingManifest(manifest)
-        break
-      }
-      case "page": {
-        if (evt.pagePath) {
-          setProgress(prev => ({ ...prev, pagesRendered: prev.pagesRendered + 1, detail: `Rendered ${evt.pagePath}` }))
-        }
+        setExistingManifest(evt.manifest || data)
         break
       }
       case "file": {
-        if (evt.filePath) {
-          setProgress(prev => ({ ...prev, detail: `Generated ${evt.filePath}` }))
-        }
+        setProgress(prev => ({ ...prev, detail: evt.detail || `Generated ${evt.filePath}` }))
         break
       }
       case "complete": {
-        setProgress(prev => ({ ...prev, stage: "complete", totalPages: evt.pageCount ?? prev.totalPages }))
+        setProgress(prev => ({
+          ...prev,
+          stage: "done",
+          overallProgress: 100,
+          steps: prev.steps.map(s => ({ ...s, status: "done" as const })),
+        }))
         handleGenerationResult(data)
         break
       }
-      case "error": {
-        setError(evt.error || "Generation failed")
-        break
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const mapStepToStage = (step: string): PipelineProgress["stage"] => {
-    if (step.includes("plan")) return "planning"
-    if (step.includes("manifest")) return "manifest"
-    if (step.includes("compil")) return "compiling"
-    if (step.includes("valid")) return "validating"
-    if (step.includes("persist") || step.includes("scaffold")) return "persisting"
-    return "complete"
-  }
 
   const handleGenerationResult = useCallback((data: unknown) => {
     const d = data as Record<string, unknown>
@@ -594,24 +592,42 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
                 ))}
               {isLoading && (
                 <div className="py-2 sm:py-2.5 flex flex-col items-start">
-                  <div className="inline-flex flex-col gap-2 px-4 py-3 rounded-2xl rounded-bl-md bg-white/[0.06] border border-white/[0.06] max-w-[88%] sm:max-w-[82%]">
-                    <div className="flex items-center gap-2">
-                      {progress.stage !== "complete" ? (
-                        <div className="flex items-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-1" />
-                          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
-                          <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
-                        </div>
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                      )}
-                      <span className="text-xs text-zinc-400 font-medium">{stageLabels[progress.stage]}</span>
+                  <div className="inline-flex flex-col gap-3 px-4 py-4 rounded-2xl rounded-bl-md bg-white/[0.06] border border-white/[0.06] max-w-[90%] sm:max-w-[84%] min-w-[280px]">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-1" />
+                        <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-2" />
+                        <div className="w-2 h-2 rounded-full bg-zinc-400 thinking-dot-3" />
+                      </div>
+                      <span className="text-xs text-zinc-300 font-medium">Generating website...</span>
                     </div>
-                    {progress.detail && (
-                      <span className="text-[11px] text-zinc-500 pl-1">{progress.detail}</span>
-                    )}
-                    {progress.totalPages > 0 && progress.stage === "complete" && (
-                      <span className="text-[11px] text-zinc-500 pl-1">{progress.totalPages} pages &middot; {progress.baseFiles + progress.uiFiles} files scaffolded</span>
+
+                    {/* Progress bar */}
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500/60 rounded-full transition-all duration-700" style={{ width: `${progress.overallProgress}%` }} />
+                      </div>
+                      <span className="text-[10px] text-zinc-500 tabular-nums">{progress.overallProgress}%</span>
+                    </div>
+
+                    {/* Steps */}
+                    <div className="flex flex-col gap-1">
+                      {progress.steps.map((step) => {
+                        const icon = step.status === "done" ? "✔" : step.status === "running" ? "⚡" : step.status === "error" ? "✖" : "◌"
+                        const color = step.status === "done" ? "text-emerald-400" : step.status === "running" ? "text-blue-400" : step.status === "error" ? "text-red-400" : "text-zinc-600"
+                        const label = step.status === "done" ? "Done" : step.status === "running" ? "Running" : "Pending"
+                        return (
+                          <div key={step.stage} className="flex items-center gap-2">
+                            <span className={color + " text-[10px] w-3 flex-shrink-0"}>{icon}</span>
+                            <span className={cn("text-[11px]", step.status === "running" ? "text-zinc-200" : step.status === "done" ? "text-zinc-400" : "text-zinc-600")}>{step.label}</span>
+                            <span className={cn("text-[9px] ml-auto", step.status === "running" ? "text-blue-400/60" : step.status === "done" ? "text-emerald-400/60" : "text-zinc-700")}>{label}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {progress.detail && progress.stage !== "done" && (
+                      <span className="text-[10px] text-zinc-500 italic border-t border-white/[0.04] pt-2">{progress.detail}</span>
                     )}
                   </div>
                 </div>

@@ -1,89 +1,50 @@
-// Syra SSE Streaming — real-time pipeline progress over Server-Sent Events.
-//
-// The stream endpoint sends JSON-encoded ProgressEvent objects as SSE messages.
-// The client chat UI renders these as a live progress block with:
-//   - Step-by-step pipeline stages with status icons (✔ ⚡ ◌)
-//   - Progress percentage bar
-//   - Streaming detail messages
-//   - Final generated files manifest
+// Syra SSE Stream — server-sent events for real-time pipeline progress.
+// Used by the chat UI to render live pipeline stage cards.
 
-import type { ProgressEvent } from "./types"
+import type { ProgressEvent, PipelineState } from "./types"
 
-export function createSSEStream(write: (chunk: string) => void) {
-  const encoder = new TextEncoder()
+export function createSSEStream(): {
+  write: (chunk: string) => void
+  event: (e: ProgressEvent) => void
+  close: () => void
+  state: () => string
+} {
+  let buffer = ""
 
   return {
-    write(chunk: string) {
-      write(chunk)
-    },
-    event(event: ProgressEvent) {
-      write(`data: ${JSON.stringify(event)}\n\n`)
-    },
-    error(code: string, message: string) {
-      write(`event: error\ndata: ${JSON.stringify({ code, message })}\n\n`)
-    },
-    done() {
-      write(`data: [DONE]\n\n`)
-    },
+    write(chunk: string) { buffer += chunk },
+    event(e: ProgressEvent) { buffer += `data: ${JSON.stringify(e)}\n\n` },
+    close() { buffer += "data: [DONE]\n\n" },
+    state() { return buffer },
   }
 }
 
-// In-memory stream state for the pipeline
-export function streamPipelineProgress(
-  events: ProgressEvent[],
-  onChunk: (chunk: string) => void,
-) {
-  const encoder = new TextEncoder()
-
-  for (const event of events) {
-    const line = `data: ${JSON.stringify(event)}\n\n`
-    onChunk(line)
+export function formatProgressForChat(state: PipelineState): string {
+  const statusIcon: Record<string, string> = {
+    pending: "◌", running: "⚡", done: "✔", error: "✖",
   }
 
-  onChunk(`data: [DONE]\n\n`)
-}
+  const lines: string[] = [
+    `🎨 **${state.detail || "Building your site..."}**`,
+    "",
+    `**Progress:** ${state.overallProgress}%`,
+    `[\`${"■".repeat(Math.max(1, Math.floor(state.overallProgress / 5)))}${"□".repeat(20 - Math.max(1, Math.floor(state.overallProgress / 5)))}\`]`,
+    "",
+    "**Pipeline Stages:**",
+  ]
 
-export function buildStreamingResponse(
-  stream: ReadableStream<Uint8Array>,
-): Response {
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  })
-}
-
-// Progress UI helper — converts pipeline state to formatted text for chat UI
-export function formatProgressForChat(state: {
-  steps: Record<string, string>
-  progress: number
-  detail?: string
-}): string {
-  const stepEmojis: Record<string, string> = {
-    pending: "◌",
-    running: "⚡",
-    done: "✔",
-    error: "✖",
+  for (const step of state.steps) {
+    const icon = statusIcon[step.status] || "◌"
+    const label = step.label
+    const detail = step.status === "running" && step.detail ? ` — ${step.detail}` : ""
+    const strike = step.status === "error" ? " ~~" + label + "~~" : ` **${label}**`
+    lines.push(`  ${icon} ${label}${detail}`)
   }
 
-  const lines: string[] = []
-
-  if (state.detail) {
-    lines.push(`${state.detail}\n`)
-  }
-
-  lines.push(`Progress: ${state.progress}%`)
-  lines.push(`[${"■".repeat(Math.floor(state.progress / 5))}${"□".repeat(20 - Math.floor(state.progress / 5))}] ${state.progress}%\n`)
-
-  const stageOrder = ["planning", "manifest", "compiling", "validating", "persisting"]
-  for (const stage of stageOrder) {
-    const status = state.steps[stage] || "pending"
-    const emoji = stepEmojis[status] || "◌"
-    const label = stage.charAt(0).toUpperCase() + stage.slice(1)
-    lines.push(`  ${emoji} Step ${stageOrder.indexOf(stage) + 1}: ${label} (${status === "done" ? "Done" : status === "running" ? "Running" : "Pending"})`)
+  if (state.warnings.length > 0) {
+    lines.push("")
+    lines.push("⚠️ Warnings:")
+    for (const w of state.warnings.slice(0, 3)) lines.push(`  - ${w}`)
   }
 
   return lines.join("\n")

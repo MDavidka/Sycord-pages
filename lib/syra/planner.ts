@@ -1,52 +1,31 @@
-// Syra AI Planner — prompt engineering for manifest generation.
-// Sends the user prompt to the selected AI model and returns a SiteManifest.
-//
-// The AI is strictly constrained:
-//   - Only use components from the REGISTRY
-//   - Only use allowed Tailwind classes (no arbitrary hex colors)
-//   - Output valid JSON matching the SiteManifest schema
-//   - Never output raw TSX or code
-//   - Copy must be original, benefit-focused, no lorem ipsum
+// Syra AI Planner — converts user prompts + conversation history into ManifestAST JSON.
+// Constrained to only use components from the registry and Tailwind token classes.
 
 import { callModel, extractJson, type ChatMessage, type ModelSelection } from "@/lib/ai-provider"
-import { registryByName } from "./registry"
-import type { SiteManifest, PipelineState, ProgressCallback, ManifestSection } from "./types"
+import { getAllowedTypes, registryByName } from "./registry"
+import { validateManifest } from "./schema"
+import type { ManifestAST, ManifestSection, ManifestPage } from "./types"
 
-const FALLBACK_MODEL: ModelSelection = { id: "gemini-3.1-flash-preview", provider: "Google" }
 const DEFAULT_MODEL: ModelSelection = { id: "gemini-3.1-pro-preview", provider: "Google" }
+const allowedTypes = getAllowedTypes().join(", ")
 
-const allowedTypes = Array.from(registryByName.keys()).join(", ")
+const SYSTEM_PROMPT = `You are Syra, a production-grade generative UI builder. You convert prompts into precise JSON manifests that compile into deployable Next.js + shadcn/ui pages.
 
-const ALLOWED_LAYOUTS = [
-  "hero", "features", "pricing", "cta", "faq", "footer", "stats", "testimonials",
-  "contact", "logos", "gallery", "team", "blog", "process", "generic",
-]
+COMPONENT CATALOG — use ONLY these types:
+${[...registryByName.keys()].sort().join(", ")}
 
-const SYSTEM_PROMPT = `You are Syra, a production-grade generative UI builder. You convert natural language prompts into structured JSON manifests that a deterministic compiler turns into deployable Next.js pages.
+Sub-components: CardHeader, CardTitle, CardDescription, CardContent, CardFooter, AccordionItem, AccordionTrigger, AccordionContent, TabsList, TabsTrigger, TabsContent, SelectTrigger, SelectValue, SelectContent, SelectItem, AvatarImage, AvatarFallback, TableHeader, TableBody, TableRow, TableHead, TableCell, AlertTitle, AlertDescription, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, SheetTrigger, SheetContent, SheetHeader, SheetTitle, SheetDescription, TooltipTrigger, TooltipContent, PopoverTrigger, PopoverContent, HoverCardTrigger, HoverCardContent, CarouselContent, CarouselItem, BreadcrumbList, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PaginationContent, PaginationItem, PaginationLink, NavigationMenuList, NavigationMenuItem, NavigationMenuTrigger, NavigationMenuContent, NavigationMenuLink, RadioGroupItem, ScrollBar, ResizablePanel, ResizableHandle, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent
 
-CRITICAL RULES — you MUST follow these exactly:
+TAILWIND ONLY — never use hex colors. Use these tokens:
+- Colors: bg-primary, bg-secondary, bg-muted, bg-accent, bg-card, bg-background, bg-foreground, text-primary, text-secondary, text-muted-foreground, text-accent-foreground, border-border, border-input
+- Text sizes: text-xs, text-sm, text-base, text-lg, text-xl, text-2xl, text-3xl, text-4xl, text-5xl, text-6xl
+- Weights: font-light, font-normal, font-medium, font-semibold, font-bold
+- Spacing: gap-2, gap-4, gap-6, gap-8, gap-12, gap-16, p-4, p-6, p-8, px-4, px-6, px-8, py-4, py-6, py-8, py-12, py-20
+- Radius: rounded-sm, rounded-md, rounded-lg, rounded-xl, rounded-2xl, rounded-full
+- Layout: max-w-2xl, max-w-4xl, max-w-6xl, w-full, h-full, min-h-screen
+- Motion: transition-all, duration-200, duration-300, hover:scale-105, animate-in, fade-in, slide-in-from-bottom-4
 
-1. ONLY use these component types: ${allowedTypes}
-   - Never invent component names. Never output raw JSX, TSX, or code.
-   - Use "button" for buttons, "card" for cards, "badge" for badges, "separator" for dividers.
-   - For headings use the "label" type with a large className like "text-4xl font-bold".
-   - For paragraphs use the "label" type with "text-lg text-muted-foreground".
-
-2. ONLY use Tailwind CSS utility classes. Never output hex colors (#ff00ae).
-   - Use design tokens: "bg-primary", "text-muted-foreground", "border-border", etc.
-   - Valid spacing: "gap-4", "gap-6", "gap-8", "gap-12", "gap-16".
-   - Valid text sizes: "text-sm", "text-base", "text-lg", "text-xl", "text-2xl", "text-3xl", "text-4xl", "text-5xl", "text-6xl".
-   - Valid font weights: "font-light", "font-normal", "font-medium", "font-semibold", "font-bold".
-   - Valid border radius: "rounded-sm", "rounded-md", "rounded-lg", "rounded-xl", "rounded-2xl", "rounded-full".
-
-3. COPY QUALITY:
-   - Headlines: 3-8 words, benefit-focused, specific.
-   - Descriptions: 15-40 words, clear value proposition.
-   - CTA labels: 2-4 words max.
-   - NEVER use "lorem ipsum", "placeholder", "coming soon", "TBD", "production-ready".
-
-4. STRUCTURE — output this JSON shape exactly:
-
+OUTPUT FORMAT — return ONLY a JSON object:
 {
   "projectName": string,
   "tagline": string,
@@ -61,21 +40,20 @@ CRITICAL RULES — you MUST follow these exactly:
       "metaDescription": string,
       "sections": [
         {
-          "id": string (kebab-case),
-          "section": "hero" | "features" | "pricing" | "cta" | "faq" | "footer" | "stats" | "testimonials" | "contact" | "logos" | "gallery" | "team" | "blog" | "process" | "generic",
-          "layout": "centered" | "split" | "grid-2col" | "grid-3col" | "asymmetric" | "bento" | "alternating",
+          "id": string (kebab, unique),
+          "type": "hero" | "features" | "pricing" | "cta" | "faq" | "footer" | "stats" | "testimonials" | "contact" | "logos" | "gallery" | "team" | "blog" | "process" | "generic",
+          "layout": "centered" | "split" | "grid-2" | "grid-3" | "grid-4" | "asymmetric" | "bento" | "alternating",
           "bg": "default" | "muted" | "card" | "primary/5" | "accent/5",
           "padding": "sm" | "md" | "lg" | "xl",
           "elements": [
             {
               "id": string,
-              "type": string (from allowed types),
+              "type": string (from component catalog),
               "variant": "default" | "secondary" | "destructive" | "outline" | "ghost" | "link",
               "size": "sm" | "default" | "lg" | "icon",
-              "className": string (Tailwind utility classes only),
+              "className": string (Tailwind tokens only),
               "content": string,
-              "props": {},
-              "children": []
+              "children": [ { ... element ... } ]
             }
           ]
         }
@@ -84,148 +62,112 @@ CRITICAL RULES — you MUST follow these exactly:
   ]
 }
 
-5. LAYOUT VARIETY:
-   - Vary section types: don't repeat the same section kind consecutively.
-   - Vary layouts: mix centered, split, grid, asymmetric.
-   - Vary density: minimal pages have fewer elements with more whitespace; dense pages pack more content.
-   - Every page should feel like a different composition.
+COMPOSITION RULES:
+1. Hero: badge → heading (text-5xl font-bold) → description (text-lg text-muted-foreground) → button group
+2. Features: heading → description → grid of cards (3-6), each card has CardHeader(CardTitle) + CardContent(label)
+3. Pricing: heading → 3 card columns, middle one with variant="secondary" as highlighted tier
+4. CTA: bg="primary/5" with centered heading + description + button
+5. FAQ: centered list of questions (label with text-lg font-semibold) and answers (label with text-muted-foreground)
+6. Footer: small grid with text-sm links
+7. Vary layouts consecutively — never repeat the same type+layout combo
+8. Copy must be original, benefit-focused, no lorem ipsum
 
-6. COMPOSE CREATIVELY:
-   - Use cards inside grid layouts for feature sections.
-   - Use badges above headings for context ("NEW", "BETA", "PRO").
-   - Use separators between content blocks.
-   - For hero sections: badge → heading → description → button group.
-   - For feature sections: heading → description → card grid (3-6 cards).
-   - For pricing sections: heading → description → 3 card columns with badges for popular tier.
-   - For CTA sections: background-colored section with heading → description → button.
-   - For FAQ sections: use a centered list of question-answer pairs.
-   - For footer sections: small text with links.
-
-7. ELEMENT COMPOSITION PATTERNS:
-   - \`button\` elements: always have \`content\` (the button text) and \`variant\`.
-   - \`badge\` elements: always have \`content\` and \`variant\`.
-   - \`label\` elements used as headings: \`className\` with "text-4xl font-bold".
-   - \`label\` elements used as body text: \`className\` with "text-lg text-muted-foreground".
-   - \`card\` elements: contain children like badge+label+label+button.
-   - \`separator\` elements: self-closing, just className.
-
-Return ONLY the JSON object. No markdown fences, no prose, no comments.`
+Return ONLY the JSON. No prose, no markdown fences.`
 
 export async function planManifest(
   prompt: string,
   model: ModelSelection = DEFAULT_MODEL,
-  onProgress?: (state: Partial<PipelineState>) => void,
-): Promise<{ manifest: SiteManifest | null; raw: string; error?: string }> {
-  onProgress?.({ detail: "Analyzing prompt for layout planning..." })
-
+): Promise<{ manifest: ManifestAST | null; raw: string; error?: string }> {
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: `Create a website for: ${prompt}\n\nDesign a polished, professional site with varied section layouts. Make it feel like a custom design, not a template. Use creative component compositions. Return the JSON manifest.`,
-    },
+    { role: "user", content: prompt },
   ]
 
   let raw = ""
   try {
     const result = await callModel({ model, messages, temperature: 0.75 })
-    if (!result.ok) {
-      return { manifest: null, raw: "", error: result.message }
-    }
+    if (!result.ok) return { manifest: null, raw: "", error: result.message }
     raw = result.content
   } catch (err) {
     return { manifest: null, raw: "", error: err instanceof Error ? err.message : "AI call failed" }
   }
 
-  onProgress?.({ detail: "Parsing generated manifest..." })
+  const parsed = extractJson<ManifestAST>(raw)
+  if (!parsed) return { manifest: null, raw, error: "Failed to parse AI output as JSON" }
 
-  const parsed = extractJson<SiteManifest>(raw)
-  if (!parsed) {
-    return { manifest: null, raw, error: "Failed to parse AI output as JSON" }
-  }
-
-  onProgress?.({ detail: "Normalizing manifest structure..." })
-  const normalized = normalizeManifest(parsed, prompt)
-
+  const normalized = normalizeAst(parsed, prompt)
   return { manifest: normalized, raw }
 }
 
-function normalizeManifest(raw: Partial<SiteManifest>, prompt: string): SiteManifest {
+function normalizeAst(raw: Partial<ManifestAST>, prompt: string): ManifestAST {
   const projectName = raw.projectName || prompt.split(/\s+/).slice(0, 3).join(" ") || "Syra Site"
-
   const pages = Array.isArray(raw.pages) && raw.pages.length > 0
-    ? raw.pages
-    : [createDefaultHomePage(prompt)]
+    ? raw.pages.map((p) => normalizePage(p, projectName))
+    : [defaultPage(projectName, prompt)]
 
-  // Ensure home page exists
   if (!pages.some((p) => p.path === "/")) {
-    pages.unshift(createDefaultHomePage(prompt))
+    pages.unshift(defaultPage(projectName, prompt))
   }
-
-  // Normalize each page
-  const normalizedPages = pages.map((page, pageIdx) => ({
-    path: page.path || (pageIdx === 0 ? "/" : `/page-${pageIdx}`),
-    title: page.title || "Page",
-    metaTitle: page.metaTitle || `${page.title || "Page"} — ${projectName}`,
-    metaDescription: page.metaDescription || "A beautifully designed page.",
-    sections: normalizeSections(
-      Array.isArray(page.sections) && page.sections.length > 0
-        ? page.sections
-        : [createDefaultSection("hero")]
-    ),
-  }))
 
   return {
     projectName,
-    tagline: raw.tagline || "Beautiful, fast, on-brand.",
-    theme: (["saas", "agency", "ecommerce", "portfolio", "dark", "minimal"].includes(raw.theme ?? "") ? raw.theme : "saas") as SiteManifest["theme"],
-    colorScheme: (["neutral", "vibrant", "dark", "soft", "high-contrast"].includes(raw.colorScheme ?? "") ? raw.colorScheme : "neutral") as SiteManifest["colorScheme"],
-    density: (["minimal", "balanced", "dense"].includes(raw.density ?? "") ? raw.density : "balanced") as SiteManifest["density"],
-    pages: normalizedPages,
+    tagline: raw.tagline || "Built with Syra AI",
+    theme: raw.theme && ["saas", "agency", "ecommerce", "portfolio", "dark", "minimal"].includes(raw.theme) ? raw.theme : "saas",
+    colorScheme: raw.colorScheme && ["neutral", "vibrant", "dark", "soft", "high-contrast"].includes(raw.colorScheme) ? raw.colorScheme : "neutral",
+    density: raw.density && ["minimal", "balanced", "dense"].includes(raw.density) ? raw.density : "balanced",
+    pages,
   }
 }
 
-function normalizeSections(sections: unknown[]): ManifestSection[] {
-  return sections.map((s, i) => {
-    const raw = s as Record<string, unknown>
-    const elements = Array.isArray(raw.elements)
-      ? raw.elements.filter(
-          (el: unknown) => typeof el === "object" && el !== null && typeof (el as Record<string, unknown>).type === "string"
-        ) as ManifestSection["elements"]
-      : []
-
-    return {
-      id: typeof raw.id === "string" ? raw.id : `section-${i + 1}`,
-      section: (typeof raw.section === "string" && ALLOWED_LAYOUTS.includes(raw.section) ? raw.section : "generic") as ManifestSection["section"],
-      layout: typeof raw.layout === "string" ? raw.layout as ManifestSection["layout"] : undefined,
-      bg: typeof raw.bg === "string" ? raw.bg as ManifestSection["bg"] : undefined,
-      padding: typeof raw.padding === "string" ? raw.padding as ManifestSection["padding"] : undefined,
-      elements: elements.length > 0 ? elements : [{ id: `el-${i}-1`, type: "label", content: "Content", className: "text-center text-muted-foreground" }],
-    }
-  })
+function normalizePage(raw: Partial<ManifestPage>, projectName: string): ManifestPage {
+  return {
+    path: raw.path || "/",
+    title: raw.title || "Page",
+    metaTitle: raw.metaTitle || `${raw.title || "Page"} — ${projectName}`,
+    metaDescription: raw.metaDescription || "A beautifully designed page.",
+    sections: Array.isArray(raw.sections) ? raw.sections.map(normalizeSection) : [defaultSection("hero")],
+  }
 }
 
-function createDefaultHomePage(prompt: string) {
+function normalizeSection(raw: Partial<ManifestSection>): ManifestSection {
+  const validTypes = new Set(["hero", "features", "pricing", "cta", "faq", "footer", "stats", "testimonials", "contact", "logos", "gallery", "team", "blog", "process", "generic"])
+  const elements = Array.isArray(raw.elements) ? raw.elements.filter((e) => typeof e?.type === "string") : []
+
+  return {
+    id: raw.id || `section-${Date.now().toString(36)}`,
+    type: raw.type && validTypes.has(raw.type) ? raw.type as ManifestSection["type"] : "generic",
+    layout: raw.layout as ManifestSection["layout"],
+    bg: raw.bg as ManifestSection["bg"],
+    padding: raw.padding as ManifestSection["padding"],
+    elements: elements.length > 0 ? elements : [defaultElement("badge", "Content")],
+  }
+}
+
+function defaultElement(type: string, content: string): ManifestSection["elements"][0] {
+  return { id: `el-${Date.now().toString(36)}`, type, content }
+}
+
+function defaultPage(name: string, prompt: string): ManifestPage {
   return {
     path: "/",
     title: "Home",
-    metaTitle: "Home",
+    metaTitle: `Home — ${name}`,
     metaDescription: prompt.slice(0, 150),
-    sections: [createDefaultSection("hero")],
+    sections: [defaultSection("hero")],
   }
 }
 
-function createDefaultSection(section: string): ManifestSection {
+function defaultSection(type: string): ManifestSection {
   return {
-    id: section,
-    section: section as ManifestSection["section"],
+    id: type,
+    type: type as ManifestSection["type"],
     layout: "centered",
     padding: "md",
     elements: [
-      { id: `el-${section}-1`, type: "badge", variant: "secondary", content: "Welcome", className: "mb-4" },
-      { id: `el-${section}-2`, type: "label", content: "Build Something Great", className: "text-4xl font-bold tracking-tight" },
-      { id: `el-${section}-3`, type: "label", content: "A beautiful, production-ready site generated by AI.", className: "text-lg text-muted-foreground mt-4 max-w-2xl" },
-      { id: `el-${section}-4`, type: "button", variant: "default", size: "lg", content: "Get Started", className: "mt-8" },
+      { id: "el-badge", type: "badge", variant: "secondary", content: "Welcome", className: "mb-4" },
+      { id: "el-heading", type: "label", content: "Build Something Great", className: "text-4xl font-bold tracking-tight" },
+      { id: "el-desc", type: "label", content: "A beautiful site generated by AI.", className: "text-lg text-muted-foreground mt-4 max-w-2xl" },
+      { id: "el-cta", type: "button", variant: "default", size: "lg", content: "Get Started", className: "mt-8" },
     ],
   }
 }
