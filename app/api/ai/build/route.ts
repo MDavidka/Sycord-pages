@@ -33,50 +33,85 @@ function loadCheatsheet(): string {
   if (existsSync(cheatsheetPath)) {
     try {
       const raw = readFileSync(cheatsheetPath, "utf-8")
-      const data = safeJson<{ components?: Array<{ slug: string; name: string; import_path: string; exports: string[]; purpose: string; composition?: string }> }>(raw)
+      const data = safeJson<{ components?: Array<{ slug: string; name: string; import_path: string; exports: string[]; purpose: string; composition?: string; common_props?: Record<string, string[]> }> }>(raw)
       if (data?.components) {
-        return data.components.map(c =>
-          `Component: ${c.name} (slug: ${c.slug})\n  Import: ${c.import_path}\n  Exports: ${(c.exports || []).join(", ")}\n  Purpose: ${c.purpose}${c.composition ? `\n  Composition: ${c.composition}` : ""}`
-        ).join("\n\n")
+        return data.components.map(c => {
+          const propsBlock = c.common_props
+            ? `\n  Props: ${Object.entries(c.common_props).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("|") : v}`).join(", ")}`
+            : ""
+          return `Component: ${c.name} (slug: ${c.slug})\n  Import: import { ${(c.exports || []).join(", ")} } from "${c.import_path}"\n  Purpose: ${c.purpose}${c.composition ? `\n  Composition: ${c.composition}` : ""}${propsBlock}`
+        }).join("\n\n")
       }
     } catch {}
   }
   return "No shadcn cheatsheet found"
 }
 
+const NEXTJS_STRUCTURE_RULES = `
+You are a Next.js website architect. Given a user's website request, produce a JSON array describing every file needed for a production-ready Next.js App Router application.
+
+ALL files MUST be .tsx (TypeScript + JSX) for pages/components and .ts for lib/utilities.
+
+Output ONLY a JSON array of objects:
+- name: Next.js file path. Choose from:
+  • "app/layout.tsx" — root layout with metadata, fonts, providers (MANDATORY)
+  • "app/page.tsx" — homepage/landing (MANDATORY)
+  • "app/globals.css" — global styles with Tailwind + design tokens (MANDATORY)
+  • "lib/types.ts" — shared TypeScript interfaces (MANDATORY)
+  • "lib/utils.ts" — cn() helper with clsx + tailwind-merge (MANDATORY)
+  • "app/[route]/page.tsx" — nested route pages (e.g. "app/about/page.tsx")
+  • "components/site-header.tsx" — shared header/navigation
+  • "components/site-footer.tsx" — shared footer
+  • "components/[name].tsx" — custom components
+  • "app/[route]/loading.tsx" — route loading states
+  • "app/[route]/error.tsx" — route error boundaries
+- usedFor: short tag like "root layout", "homepage", "about page", "header", "types"
+- description: detailed description of what this file contains (2-3 sentences)
+- route: URL route path like "/" or "/about". Use "n/a" for non-page files.
+- priority: number 1-100 where 1 = must generate FIRST (dependencies first)
+
+GENERATION ORDER (priority):
+1. "lib/types.ts" (priority 1) — all other files depend on types
+2. "lib/utils.ts" (priority 2) — cn() helper needed everywhere
+3. "app/globals.css" (priority 3) — design tokens
+4. "app/layout.tsx" (priority 4) — root shell
+5. Shared components (priority 5-10)
+6. Route pages (priority 11+)
+7. "app/page.tsx" — homepage often last since it composes shared components
+
+Keep 5-12 files total. Mobile-first, semantic Tailwind tokens.`
+
 function generateStructurePrompt(userPrompt: string, cheatsheet: string): ChatMessage[] {
   return [
-    {
-      role: "system",
-      content: `You are a website architect. Given a user's website request, you must produce a JSON structure describing every page/section that will be built.
-
-Output ONLY a JSON array of objects with these fields:
-- name: file path like "src/index.html" or "src/about.html" (use .html for pages, .css for styles, .ts for scripts)
-- usedFor: short tag like "homepage", "about page", "global styles", "header component"
-- description: detailed content description (2-3 sentences about what this page/section contains)
-- route: the URL route path like "/" or "/about" or "/contact"
-- priority: number 1-10 where 1 is most important/root
-
-Rules:
-- Always include a home/landing page
-- Always include a global CSS file (src/style.css)
-- Always include shared TypeScript types file (src/types.ts)
-- Include a navigation/header component if it makes sense
-- Use mobile-first design approach
-- Use semantic Tailwind tokens (bg-background, text-foreground, etc.)
-- Keep the plan reasonable: 3-8 pages total
-
-The following shadcn/ui components are available for the builder to use:
-${cheatsheet}
-
-Return ONLY the JSON array, no markdown fences, no extra text.`,
-    },
-    {
-      role: "user",
-      content: userPrompt,
-    },
+    { role: "system", content: NEXTJS_STRUCTURE_RULES + `\n\nAVAILABLE shadcn/ui COMPONENTS:\n${cheatsheet}\n\nReturn ONLY the JSON array.` },
+    { role: "user", content: userPrompt },
   ]
 }
+
+const CODE_RULES = `You are a production Next.js App Router + TypeScript developer. Generate complete, deployable code.
+
+CRITICAL — 100% SHADCN/UI RULE:
+You MUST use shadcn/ui components for ALL UI elements. NEVER use raw HTML <button>, <input>, <select>, <textarea>, <label>, <form> directly.
+Instead use: Button, Input, Textarea, Select/SelectTrigger/SelectContent/SelectItem, Label, Checkbox, Switch, RadioGroup, Form/FormField/FormItem/FormLabel/FormControl/FormMessage.
+For layout: Card/CardHeader/CardContent/CardFooter, Separator, Tabs/TabsContent/TabsList/TabsTrigger, Sheet/SheetTrigger/SheetContent, Dialog/DialogTrigger/DialogContent, Accordion, Badge, Avatar, Skeleton, Tooltip, Popover, DropdownMenu.
+For navigation: NavigationMenu, Breadcrumb, Pagination, Sidebar.
+
+ALLOWED raw HTML (structural only): div, span, section, main, header, footer, nav, article, aside, ul, ol, li, img, a, h1-h6, p, table/thead/tbody/tr/th/td, br, hr, pre, code, svg, picture, source, figure, figcaption, blockquote.
+
+IMPORTS: import { cn } from "@/lib/utils" for className merging. Always use cn().
+
+FILE CONVENTIONS:
+- Server Components by default (no "use client")
+- Add "use client" ONLY when using: useState, useEffect, useRef, onClick, onChange, onSubmit, event handlers, browser APIs
+- layout.tsx: wrap children, import fonts from next/font/google, set metadata export
+- page.tsx: export default async function or function, use Next.js metadata API
+
+DESIGN:
+- Mobile-first responsive: base classes + sm: + md: + lg: breakpoints
+- Semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground, bg-secondary, text-secondary-foreground, bg-muted, bg-accent, bg-destructive, text-destructive-foreground
+- Dark mode compatible via class strategy (use dark: variants where needed)
+
+Return ONLY the code. No markdown fences, no explanation.`
 
 function generateCodePrompt(
   pages: PageStructure[],
@@ -91,43 +126,26 @@ function generateCodePrompt(
 
   let prevContext = ""
   if (previouslyGeneratedFiles.length > 0) {
-    prevContext = "\n\nPreviously generated files (you must import from these, NOT redefine types):\n" +
-      previouslyGeneratedFiles.map(f => {
-        // Only show full content for recent/small files, otherwise just exports
-        const lines = f.code.split("\n")
-        return `--- FILE: ${f.name} (${f.usedFor || "no tag"}) ---\n\`\`\`\n${f.code}\n\`\`\``
-      }).join("\n\n")
+    prevContext = "\n\nALREADY GENERATED (import from these, DO NOT redefine types/exports):\n" +
+      previouslyGeneratedFiles.map(f =>
+        `--- ${f.name} (${f.usedFor || ""}) ---\n${f.code}`
+      ).join("\n\n---\n\n")
   }
 
-  const baseSystem = `You are an expert frontend developer building a website page/section using Next.js / React + TypeScript + Tailwind CSS + shadcn/ui components.
-
-AVAILABLE shadcn/ui COMPONENTS (use ONLY these imports):
-${cheatsheet}
-
-RULES:
-1. Generate valid TypeScript/TSX code for: ${currentPage.name}
-2. This file's purpose: ${currentPage.usedFor}
-3. Description: ${currentPage.description}
-4. Import components ONLY from @/components/ui/{slug}
-5. Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground
-6. Keep layout mobile-first: base classes for mobile, sm:/md:/lg: for larger screens
-7. Do NOT import from files that don't exist yet — only import types/utils/styles that appear in "Previously generated files"
-8. Do NOT redefine types/interfaces already in src/types.ts
-9. Return ONLY the code, no markdown fences, no explanation text
-10. For .tsx pages: use "use client" if it needs interactivity; otherwise it can be a server component
-
-ALL PAGES IN THIS PROJECT:
-${pagesContext}
-${prevContext}`
-
-  let fullSystem = baseSystem
-  if (customBuilderPrompt && customBuilderPrompt !== "Generation code prompting is disabled." && customBuilderPrompt.length > 10) {
-    fullSystem = `${baseSystem}\n\nADDITIONAL BUILD RULES FROM PROJECT OWNER:\n${customBuilderPrompt}`
-  }
+  const fullSystem = [
+    CODE_RULES,
+    `\nAVAILABLE shadcn/ui COMPONENTS:\n${cheatsheet}`,
+    customBuilderPrompt && customBuilderPrompt.length > 10 && customBuilderPrompt !== "Generation code prompting is disabled."
+      ? `\nADDITIONAL BUILD RULES:\n${customBuilderPrompt}`
+      : "",
+    `\nALL FILES IN THIS PROJECT:\n${pagesContext}`,
+    prevContext,
+    `\nNOW GENERATE: ${currentPage.name}\nPurpose: ${currentPage.usedFor}\nDescription: ${currentPage.description}`,
+  ].filter(Boolean).join("\n")
 
   return [
     { role: "system", content: fullSystem },
-    { role: "user", content: `Generate the complete code for ${currentPage.name} (${currentPage.usedFor}). This page should: ${currentPage.description}` },
+    { role: "user", content: `Write the complete production code for ${currentPage.name}.` },
   ]
 }
 
@@ -138,14 +156,18 @@ export async function POST(request: NextRequest) {
   }
 
   const encoder = new TextEncoder()
+  let isClosed = false
+
   const stream = new ReadableStream({
     async start(controller) {
       const enqueue = (event: string, data: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        if (isClosed) return
+        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) } catch {}
       }
       const done = () => {
-        controller.enqueue(encoder.encode(`event: done\ndata: {}\n\n`))
-        controller.close()
+        if (isClosed) return
+        try { controller.enqueue(encoder.encode("event: done\ndata: {}\n\n")); controller.close() } catch {}
+        isClosed = true
       }
 
       try {
@@ -157,255 +179,132 @@ export async function POST(request: NextRequest) {
           provider: String(body.provider ?? "DeepSeek"),
         }
 
-        if (!prompt || !projectId) {
-          enqueue("error", { message: "prompt and projectId are required" })
-          done()
-          return
-        }
+        if (!prompt || !projectId) { enqueue("error", { message: "prompt and projectId required" }); done(); return }
 
         const cheatsheet = loadCheatsheet()
-
-        // Fetch custom prompts from DB
         let customBuilderCode = ""
         try {
           const { builderCode } = await getSystemPrompts()
-          if (builderCode && builderCode !== "Generation code prompting is disabled." && builderCode.trim().length > 10) {
+          if (builderCode && builderCode.length > 10 && builderCode !== "Generation code prompting is disabled.") {
             customBuilderCode = builderCode
           }
         } catch {}
 
-        // ── STEP 1: Echo user input ──────────────────────────────
-        const step1: BuildStep = {
-          id: "step-1",
-          title: "📝 Input Received",
-          content: `User request: "${prompt}"\nModel: ${model.provider} - ${model.id}`,
-          timestamp: Date.now(),
-        }
-        enqueue("step", step1)
+        // STEP 1 ───────────────────────────────────────────────────
+        enqueue("step", { id: "step-1", title: "📝 Input Received", content: `"${prompt}"\nModel: ${model.provider} · ${model.id}`, timestamp: Date.now() })
 
-        // ── STEP 2: Generate website structure ────────────────────
-        const step2Start: BuildStep = {
-          id: "step-2",
-          title: "🏗️ Generating Website Structure",
-          content: "Analyzing requirements and planning pages...",
-          timestamp: Date.now(),
-        }
-        enqueue("step", step2Start)
+        // STEP 2 ───────────────────────────────────────────────────
+        enqueue("step", { id: "step-2", title: "🏗️ Generating structure", content: "Planning Next.js App Router file tree...", timestamp: Date.now() })
 
-        const structureMessages = generateStructurePrompt(prompt, cheatsheet)
-        const structureResult = await callModel({ model, messages: structureMessages, temperature: 0.3 })
+        const structResult = await callModel({ model, messages: generateStructurePrompt(prompt, cheatsheet), temperature: 0.3 })
 
         let pages: PageStructure[] = []
-        if (structureResult.ok) {
-          pages = extractJson<PageStructure[]>(structureResult.content) || []
-          if (!Array.isArray(pages) || pages.length === 0) {
-            // Fallback: create a minimal structure
-            pages = [
-              { name: "src/index.html", usedFor: "homepage", description: "Main landing page with hero section", route: "/", priority: 1 },
-              { name: "src/style.css", usedFor: "global styles", description: "Global CSS with design tokens and Tailwind utilities", route: "n/a", priority: 2 },
-              { name: "src/types.ts", usedFor: "shared types", description: "Shared TypeScript interfaces and types", route: "n/a", priority: 3 },
-            ]
-          }
-        } else {
-          enqueue("error", { message: `Structure generation failed: ${structureResult.message}`, details: (structureResult as any).details })
-          done()
-          return
+        if (structResult.ok) {
+          pages = extractJson<PageStructure[]>(structResult.content) || []
+        }
+        if (!Array.isArray(pages) || pages.length === 0) {
+          pages = [
+            { name: "lib/types.ts", usedFor: "shared types", description: "TypeScript interfaces for the application data model", route: "n/a", priority: 1 },
+            { name: "lib/utils.ts", usedFor: "cn utility", description: "cn() helper using clsx + tailwind-merge for className composition", route: "n/a", priority: 2 },
+            { name: "app/globals.css", usedFor: "global styles", description: "Tailwind directives + design tokens + base styles", route: "n/a", priority: 3 },
+            { name: "app/layout.tsx", usedFor: "root layout", description: "Root layout with metadata, fonts, providers wrapping children", route: "n/a", priority: 4 },
+            { name: "app/page.tsx", usedFor: "homepage", description: "Landing page with hero section, feature highlights, CTA", route: "/", priority: 6 },
+          ]
         }
 
-        const step2Complete: BuildStep = {
-          id: "step-2",
-          title: "🏗️ Structure Generated",
-          content: `Planned ${pages.length} pages:\n${pages.map(p => `  • ${p.name} (${p.usedFor}) → ${p.route}`).join("\n")}`,
-          timestamp: Date.now(),
-        }
-        enqueue("step", step2Complete)
+        enqueue("step", { id: "step-2", title: "🏗️ Structure planned", content: `${pages.length} files:\n${pages.map(p => `  • ${p.name} (${p.usedFor}) → ${p.route}`).join("\n")}`, timestamp: Date.now() })
 
-        // ── STEP 3: Generate code for each page ───────────────────
-        const generatedPages: Array<{ name: string; code: string; usedFor: string; timestamp: number }> = []
+        // STEP 3 ───────────────────────────────────────────────────
+        const generated: Array<{ name: string; code: string; usedFor: string; timestamp: number }> = []
+        const sorted = [...pages].sort((a, b) => a.priority - b.priority)
 
-        // Sort by priority: most important first (lowest number = highest priority)
-        const sortedPages = [...pages].sort((a, b) => a.priority - b.priority)
-
-        for (let i = 0; i < sortedPages.length; i++) {
-          const page = sortedPages[i]
-          const step3Start: BuildStep = {
+        for (let i = 0; i < sorted.length; i++) {
+          const page = sorted[i]
+          enqueue("step", {
             id: "step-3",
-            title: `⬛ Generating: ${page.name} (${i + 1}/${sortedPages.length})`,
+            title: `${i + 1}/${sorted.length} Generating: ${page.name}`,
             content: `Purpose: ${page.usedFor}\nDescription: ${page.description}`,
             timestamp: Date.now(),
-          }
-          enqueue("step", step3Start)
+          })
 
-          const codeMessages = generateCodePrompt(sortedPages, page, generatedPages, cheatsheet, customBuilderCode)
-          const codeResult = await callModel({ model, messages: codeMessages, temperature: 0.2 })
+          const msgs = generateCodePrompt(sorted, page, generated, cheatsheet, customBuilderCode)
+          const result = await callModel({ model, messages: msgs, temperature: 0.2 })
 
-          if (codeResult.ok) {
-            const cleanedCode = extractCode(codeResult.content, page.name.endsWith(".ts") || page.name.endsWith(".tsx") ? "ts" : undefined) || codeResult.content
-            generatedPages.push({
-              name: page.name,
-              code: cleanedCode,
-              usedFor: page.usedFor,
-              timestamp: Date.now(),
-            })
+          if (result.ok) {
+            const lang = page.name.endsWith(".tsx") || page.name.endsWith(".ts") ? "ts" : undefined
+            const code = extractCode(result.content, lang) || result.content
+            generated.push({ name: page.name, code, usedFor: page.usedFor, timestamp: Date.now() })
 
-            const step3Complete: BuildStep = {
-              id: "step-3",
-              title: `✅ Generated: ${page.name}`,
-              content: `Generated ${cleanedCode.length} characters of code`,
-              timestamp: Date.now(),
-            }
-            enqueue("step", step3Complete)
-            enqueue("page", { name: page.name, code: cleanedCode, usedFor: page.usedFor, timestamp: Date.now() })
+            enqueue("step", { id: "step-3", title: `✅ ${page.name}`, content: `${code.length.toLocaleString()} chars`, timestamp: Date.now() })
+            enqueue("page", { name: page.name, code, usedFor: page.usedFor, timestamp: Date.now() })
           } else {
-            const step3Error: BuildStep = {
-              id: "step-3",
-              title: `❌ Failed: ${page.name}`,
-              content: `Error: ${codeResult.message}\n${(codeResult as any).details || ""}`,
-              timestamp: Date.now(),
-            }
-            enqueue("step", step3Error)
+            enqueue("step", { id: "step-3", title: `❌ ${page.name}`, content: `${result.message}\n${(result as any).details || ""}`, timestamp: Date.now() })
           }
         }
 
-        // ── STEP 4: Load shadcn components (non-AI) ───────────────
-        const step4Start: BuildStep = {
-          id: "step-4",
-          title: "📦 Loading shadcn/ui Components",
-          content: "Scanning generated code for shadcn/ui imports...",
-          timestamp: Date.now(),
-        }
-        enqueue("step", step4Start)
+        // STEP 4 ───────────────────────────────────────────────────
+        enqueue("step", { id: "step-4", title: "📦 Checking shadcn/ui components", content: "Scanning imports...", timestamp: Date.now() })
 
-        // Parse all generated code to find what shadcn components are used
-        const usedShadcnComponents = new Set<string>()
-        const importRegex = /@\/components\/ui\/([a-zA-Z0-9-]+)/g
-        for (const page of generatedPages) {
-          let match: RegExpExecArray | null
-          while ((match = importRegex.exec(page.code)) !== null) {
-            usedShadcnComponents.add(match[1])
-          }
+        const usedComponents = new Set<string>()
+        const importRx = /from\s+["']@\/components\/ui\/([a-zA-Z0-9-]+)["']/g
+        for (const page of generated) {
+          let m: RegExpExecArray | null
+          while ((m = importRx.exec(page.code)) !== null) usedComponents.add(m[1])
         }
 
-        // Check which components already exist on disk
         const root = process.cwd()
-        const existingComponents: string[] = []
-        const missingComponents: string[] = []
-        const invalidSlugs = new Set<string>()
+        const existing: string[] = []
+        const missing: string[] = []
+        const invalid = new Set<string>()
 
-        for (const slug of usedShadcnComponents) {
-          // Validate slug contains only safe characters
-          if (!/^[a-zA-Z0-9-]+$/.test(slug) || slug.startsWith("-") || slug.endsWith("-")) {
-            invalidSlugs.add(slug)
-            continue
-          }
-          const compPath = join(root, "components", "ui", `${slug}.tsx`)
-          if (existsSync(compPath)) {
-            existingComponents.push(slug)
-          } else {
-            missingComponents.push(slug)
-          }
+        for (const slug of usedComponents) {
+          if (!/^[a-zA-Z][a-zA-Z0-9-]*$/.test(slug)) { invalid.add(slug); continue }
+          if (existsSync(join(root, "components", "ui", `${slug}.tsx`))) existing.push(slug)
+          else missing.push(slug)
         }
 
-        let componentReport = ""
-        if (existingComponents.length > 0) {
-          componentReport += `✅ Found (${existingComponents.length}): ${existingComponents.join(", ")}\n`
-        }
-        if (missingComponents.length > 0) {
-          componentReport += `⬜ Not installed (${missingComponents.length}): ${missingComponents.join(", ")}\n`
-          componentReport += `Run: ${missingComponents.map(s => `npx shadcn@latest add ${s}`).join(" && ")}`
-        }
-        if (invalidSlugs.size > 0) {
-          componentReport += `\n⚠️ Invalid import paths skipped: ${Array.from(invalidSlugs).join(", ")}`
-        }
-        if (usedShadcnComponents.size === 0) {
-          componentReport = "No shadcn/ui component imports detected in generated code."
-        }
+        let report = `Detected ${usedComponents.size} component imports\n`
+        if (existing.length) report += `\n✅ Installed (${existing.length}):\n${existing.map(s => `  • ${s}  →  components/ui/${s}.tsx`).join("\n")}`
+        if (missing.length) report += `\n\n⬜ Missing (${missing.length}):\n${missing.map(s => `  • ${s}  →  npx shadcn@latest add ${s}`).join("\n")}`
+        if (invalid.size) report += `\n\n⚠️  Invalid slugs: ${Array.from(invalid).join(", ")}`
+        if (usedComponents.size === 0) report = "No shadcn/ui imports detected."
 
-        const step4Complete: BuildStep = {
-          id: "step-4",
-          title: "📦 Component Audit Complete",
-          content: `Total shadcn imports detected: ${usedShadcnComponents.size}\n${componentReport}`,
-          timestamp: Date.now(),
-        }
-        enqueue("step", step4Complete)
+        enqueue("step", { id: "step-4", title: "📦 Component audit", content: report, timestamp: Date.now() })
 
-        // ── Save generated pages to DB ──────────────────────────
-        if (ObjectId.isValid(projectId) && generatedPages.length > 0) {
+        // SAVE TO DB ───────────────────────────────────────────────
+        if (ObjectId.isValid(projectId) && generated.length > 0) {
           try {
             const client = await clientPromise
             const db = client.db()
-            for (const page of generatedPages) {
-              // Try update first
-              const updResult = await db.collection("users").updateOne(
-                {
-                  id: session.user.id,
-                  "projects": {
-                    $elemMatch: {
-                      _id: new ObjectId(projectId),
-                      "pages.name": page.name,
-                    },
-                  },
-                },
-                {
-                  $set: {
-                    "projects.$[proj].pages.$[pg].content": page.code,
-                    "projects.$[proj].pages.$[pg].usedFor": page.usedFor,
-                    "projects.$[proj].pages.$[pg].updatedAt": new Date(),
-                  },
-                },
-                {
-                  arrayFilters: [
-                    { "proj._id": new ObjectId(projectId) },
-                    { "pg.name": page.name },
-                  ],
-                },
+            for (const page of generated) {
+              const upd = await db.collection("users").updateOne(
+                { id: session.user.id, projects: { $elemMatch: { _id: new ObjectId(projectId), "pages.name": page.name } } },
+                { $set: { "projects.$[proj].pages.$[pg].content": page.code, "projects.$[proj].pages.$[pg].usedFor": page.usedFor, "projects.$[proj].pages.$[pg].updatedAt": new Date() } },
+                { arrayFilters: [{ "proj._id": new ObjectId(projectId) }, { "pg.name": page.name }] },
               )
-              if (updResult.matchedCount === 0) {
+              if (upd.matchedCount === 0) {
                 await db.collection("users").updateOne(
                   { id: session.user.id, "projects._id": new ObjectId(projectId) },
-                  {
-                    $push: {
-                      "projects.$.pages": {
-                        name: page.name,
-                        content: page.code,
-                        usedFor: page.usedFor,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                      },
-                    } as any,
-                  },
+                  { $push: { "projects.$.pages": { name: page.name, content: page.code, usedFor: page.usedFor, createdAt: new Date(), updatedAt: new Date() } } as any },
                 )
               }
             }
-            enqueue("step", {
-              id: "step-done",
-              title: "💾 Pages Saved",
-              content: `Saved ${generatedPages.length} pages to project database.`,
-              timestamp: Date.now(),
-            })
-          } catch (dbErr: any) {
-            enqueue("step", {
-              id: "step-done",
-              title: "⚠️ Save Warning",
-              content: `Pages generated but DB save failed: ${dbErr.message}`,
-              timestamp: Date.now(),
-            })
+            enqueue("step", { id: "step-done", title: "💾 Saved", content: `${generated.length} pages saved to project database.`, timestamp: Date.now() })
+          } catch (e: any) {
+            enqueue("step", { id: "step-done", title: "⚠️ DB save failed", content: e.message, timestamp: Date.now() })
           }
         }
 
         done()
       } catch (err: any) {
-        enqueue("error", { message: `Pipeline error: ${err.message}`, stack: err.stack })
+        enqueue("error", { message: `Pipeline crashed: ${err.message}` })
         done()
       }
     },
+    cancel() { isClosed = true },
   })
 
   return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
   })
 }
