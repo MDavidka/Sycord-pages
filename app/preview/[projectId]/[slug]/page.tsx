@@ -4,7 +4,6 @@
 
 "use client"
 
-import { use } from "react"
 import dynamic from "next/dynamic"
 import { notFound } from "next/navigation"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
@@ -55,9 +54,10 @@ interface PageProps {
   searchParams: Promise<{ sections?: string }>
 }
 
-export default function PreviewPage({ params, searchParams }: PageProps) {
-  const { projectId, slug } = use(params)
-  const { sections } = use(searchParams)
+export default async function PreviewPage({ params, searchParams }: PageProps) {
+  const { projectId, slug } = await params
+  const resolvedSearch = await searchParams
+  const sections = resolvedSearch.sections
   const sectionIds = sections ? sections.split(",") : await fetchSectionIds(projectId, slug)
 
   if (!sectionIds || sectionIds.length === 0) {
