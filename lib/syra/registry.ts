@@ -1,82 +1,58 @@
-// Syra Component Registry — maps the AI's JSON manifest element types to
-// actual shadcn/ui React components and their import paths.
-// This is the ONLY bridge between the AI output and the rendered UI.
+// Syra Registry — maps ManifestComponent.shadcnPrimitive to shadcn/ui import paths.
+// Used by the compiler to resolve deterministic imports. No hallucination possible.
 
 export interface RegistryEntry {
-  component: string
+  primitive: string
   importPath: string
-  exports: string[]
+  mainExport: string
+  subExports: string[]
   isClient: boolean
   voidElement: boolean
-  subcomponents: string[]
 }
 
 export const REGISTRY: RegistryEntry[] = [
-  // Layout & Content
-  { component: "button", importPath: "@/components/ui/button", exports: ["Button"], isClient: false, voidElement: false, subcomponents: [] },
-  { component: "badge", importPath: "@/components/ui/badge", exports: ["Badge"], isClient: false, voidElement: false, subcomponents: [] },
-  { component: "card", importPath: "@/components/ui/card", exports: ["Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter"], isClient: false, voidElement: false, subcomponents: ["CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter"] },
-  { component: "separator", importPath: "@/components/ui/separator", exports: ["Separator"], isClient: false, voidElement: true, subcomponents: [] },
-  { component: "skeleton", importPath: "@/components/ui/skeleton", exports: ["Skeleton"], isClient: false, voidElement: true, subcomponents: [] },
-  { component: "progress", importPath: "@/components/ui/progress", exports: ["Progress"], isClient: false, voidElement: true, subcomponents: [] },
-  { component: "avatar", importPath: "@/components/ui/avatar", exports: ["Avatar", "AvatarImage", "AvatarFallback"], isClient: false, voidElement: false, subcomponents: ["AvatarImage", "AvatarFallback"] },
-  { component: "input", importPath: "@/components/ui/input", exports: ["Input"], isClient: false, voidElement: true, subcomponents: [] },
-  { component: "textarea", importPath: "@/components/ui/textarea", exports: ["Textarea"], isClient: false, voidElement: true, subcomponents: [] },
-  { component: "label", importPath: "@/components/ui/label", exports: ["Label"], isClient: false, voidElement: false, subcomponents: [] },
-  // Client Components
-  { component: "accordion", importPath: "@/components/ui/accordion", exports: ["Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent"], isClient: true, voidElement: false, subcomponents: ["AccordionItem", "AccordionTrigger", "AccordionContent"] },
-  { component: "tabs", importPath: "@/components/ui/tabs", exports: ["Tabs", "TabsList", "TabsTrigger", "TabsContent"], isClient: true, voidElement: false, subcomponents: ["TabsList", "TabsTrigger", "TabsContent"] },
-  { component: "dialog", importPath: "@/components/ui/dialog", exports: ["Dialog", "DialogTrigger", "DialogContent", "DialogHeader", "DialogTitle", "DialogDescription"], isClient: true, voidElement: false, subcomponents: ["DialogTrigger", "DialogContent", "DialogHeader", "DialogTitle", "DialogDescription"] },
-  { component: "select", importPath: "@/components/ui/select", exports: ["Select", "SelectTrigger", "SelectValue", "SelectContent", "SelectItem"], isClient: true, voidElement: false, subcomponents: ["SelectTrigger", "SelectValue", "SelectContent", "SelectItem"] },
-  { component: "checkbox", importPath: "@/components/ui/checkbox", exports: ["Checkbox"], isClient: true, voidElement: true, subcomponents: [] },
-  { component: "switch", importPath: "@/components/ui/switch", exports: ["Switch"], isClient: true, voidElement: true, subcomponents: [] },
-  { component: "tooltip", importPath: "@/components/ui/tooltip", exports: ["Tooltip", "TooltipTrigger", "TooltipContent"], isClient: true, voidElement: false, subcomponents: ["TooltipTrigger", "TooltipContent"] },
-  { component: "hover-card", importPath: "@/components/ui/hover-card", exports: ["HoverCard", "HoverCardTrigger", "HoverCardContent"], isClient: true, voidElement: false, subcomponents: ["HoverCardTrigger", "HoverCardContent"] },
-  { component: "popover", importPath: "@/components/ui/popover", exports: ["Popover", "PopoverTrigger", "PopoverContent"], isClient: true, voidElement: false, subcomponents: ["PopoverTrigger", "PopoverContent"] },
-  { component: "carousel", importPath: "@/components/ui/carousel", exports: ["Carousel", "CarouselContent", "CarouselItem", "CarouselPrevious", "CarouselNext"], isClient: true, voidElement: false, subcomponents: ["CarouselContent", "CarouselItem"] },
-  { component: "slider", importPath: "@/components/ui/slider", exports: ["Slider"], isClient: true, voidElement: true, subcomponents: [] },
-  { component: "toggle", importPath: "@/components/ui/toggle", exports: ["Toggle"], isClient: true, voidElement: false, subcomponents: [] },
-  { component: "calendar", importPath: "@/components/ui/calendar", exports: ["Calendar"], isClient: true, voidElement: true, subcomponents: [] },
-  { component: "sheet", importPath: "@/components/ui/sheet", exports: ["Sheet", "SheetTrigger", "SheetContent", "SheetHeader", "SheetTitle", "SheetDescription"], isClient: true, voidElement: false, subcomponents: ["SheetTrigger", "SheetContent", "SheetHeader", "SheetTitle", "SheetDescription"] },
-  { component: "scroll-area", importPath: "@/components/ui/scroll-area", exports: ["ScrollArea", "ScrollBar"], isClient: false, voidElement: false, subcomponents: [] },
-  // Data Display
-  { component: "table", importPath: "@/components/ui/table", exports: ["Table", "TableHeader", "TableBody", "TableRow", "TableHead", "TableCell"], isClient: false, voidElement: false, subcomponents: ["TableHeader", "TableBody", "TableRow", "TableHead", "TableCell"] },
-  { component: "chart", importPath: "@/components/ui/chart", exports: ["ChartContainer", "ChartTooltip", "ChartTooltipContent", "ChartLegend", "ChartLegendContent"], isClient: true, voidElement: false, subcomponents: [] },
-  // Feedback
-  { component: "alert", importPath: "@/components/ui/alert", exports: ["Alert", "AlertTitle", "AlertDescription"], isClient: false, voidElement: false, subcomponents: ["AlertTitle", "AlertDescription"] },
-  { component: "alert-dialog", importPath: "@/components/ui/alert-dialog", exports: ["AlertDialog", "AlertDialogTrigger", "AlertDialogContent", "AlertDialogHeader", "AlertDialogTitle", "AlertDialogDescription", "AlertDialogFooter", "AlertDialogAction", "AlertDialogCancel"], isClient: true, voidElement: false, subcomponents: ["AlertDialogTrigger", "AlertDialogContent", "AlertDialogHeader", "AlertDialogTitle", "AlertDialogDescription", "AlertDialogFooter", "AlertDialogAction", "AlertDialogCancel"] },
-  // Navigation
-  { component: "breadcrumb", importPath: "@/components/ui/breadcrumb", exports: ["Breadcrumb", "BreadcrumbList", "BreadcrumbItem", "BreadcrumbLink", "BreadcrumbPage", "BreadcrumbSeparator"], isClient: false, voidElement: false, subcomponents: ["BreadcrumbList", "BreadcrumbItem", "BreadcrumbLink", "BreadcrumbPage", "BreadcrumbSeparator"] },
-  { component: "pagination", importPath: "@/components/ui/pagination", exports: ["Pagination", "PaginationContent", "PaginationItem", "PaginationLink", "PaginationPrevious", "PaginationNext"], isClient: false, voidElement: false, subcomponents: ["PaginationContent", "PaginationItem", "PaginationLink", "PaginationPrevious", "PaginationNext"] },
-  { component: "navigation-menu", importPath: "@/components/ui/navigation-menu", exports: ["NavigationMenu", "NavigationMenuList", "NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent", "NavigationMenuLink"], isClient: false, voidElement: false, subcomponents: ["NavigationMenuList", "NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent", "NavigationMenuLink"] },
-  // Forms
-  { component: "radio-group", importPath: "@/components/ui/radio-group", exports: ["RadioGroup", "RadioGroupItem"], isClient: false, voidElement: false, subcomponents: ["RadioGroupItem"] },
-  // Resizable
-  { component: "resizable", importPath: "@/components/ui/resizable", exports: ["ResizablePanelGroup", "ResizablePanel", "ResizableHandle"], isClient: false, voidElement: false, subcomponents: ["ResizablePanel", "ResizableHandle"] },
+  { primitive: "button", importPath: "@/components/ui/button", mainExport: "Button", subExports: [], isClient: false, voidElement: false },
+  { primitive: "badge", importPath: "@/components/ui/badge", mainExport: "Badge", subExports: [], isClient: false, voidElement: false },
+  { primitive: "card", importPath: "@/components/ui/card", mainExport: "Card", subExports: ["CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter"], isClient: false, voidElement: false },
+  { primitive: "label", importPath: "@/components/ui/label", mainExport: "Label", subExports: [], isClient: false, voidElement: false },
+  { primitive: "separator", importPath: "@/components/ui/separator", mainExport: "Separator", subExports: [], isClient: false, voidElement: true },
+  { primitive: "skeleton", importPath: "@/components/ui/skeleton", mainExport: "Skeleton", subExports: [], isClient: false, voidElement: true },
+  { primitive: "progress", importPath: "@/components/ui/progress", mainExport: "Progress", subExports: [], isClient: false, voidElement: true },
+  { primitive: "avatar", importPath: "@/components/ui/avatar", mainExport: "Avatar", subExports: ["AvatarImage", "AvatarFallback"], isClient: false, voidElement: false },
+  { primitive: "input", importPath: "@/components/ui/input", mainExport: "Input", subExports: [], isClient: false, voidElement: true },
+  { primitive: "textarea", importPath: "@/components/ui/textarea", mainExport: "Textarea", subExports: [], isClient: false, voidElement: true },
+  { primitive: "accordion", importPath: "@/components/ui/accordion", mainExport: "Accordion", subExports: ["AccordionItem", "AccordionTrigger", "AccordionContent"], isClient: true, voidElement: false },
+  { primitive: "tabs", importPath: "@/components/ui/tabs", mainExport: "Tabs", subExports: ["TabsList", "TabsTrigger", "TabsContent"], isClient: true, voidElement: false },
+  { primitive: "dialog", importPath: "@/components/ui/dialog", mainExport: "Dialog", subExports: ["DialogTrigger", "DialogContent", "DialogHeader", "DialogTitle", "DialogDescription"], isClient: true, voidElement: false },
+  { primitive: "select", importPath: "@/components/ui/select", mainExport: "Select", subExports: ["SelectTrigger", "SelectValue", "SelectContent", "SelectItem"], isClient: true, voidElement: false },
+  { primitive: "checkbox", importPath: "@/components/ui/checkbox", mainExport: "Checkbox", subExports: [], isClient: true, voidElement: true },
+  { primitive: "switch", importPath: "@/components/ui/switch", mainExport: "Switch", subExports: [], isClient: true, voidElement: true },
+  { primitive: "tooltip", importPath: "@/components/ui/tooltip", mainExport: "Tooltip", subExports: ["TooltipTrigger", "TooltipContent"], isClient: true, voidElement: false },
+  { primitive: "popover", importPath: "@/components/ui/popover", mainExport: "Popover", subExports: ["PopoverTrigger", "PopoverContent"], isClient: true, voidElement: false },
+  { primitive: "sheet", importPath: "@/components/ui/sheet", mainExport: "Sheet", subExports: ["SheetTrigger", "SheetContent", "SheetHeader", "SheetTitle", "SheetDescription"], isClient: true, voidElement: false },
+  { primitive: "alert", importPath: "@/components/ui/alert", mainExport: "Alert", subExports: ["AlertTitle", "AlertDescription"], isClient: false, voidElement: false },
+  { primitive: "carousel", importPath: "@/components/ui/carousel", mainExport: "Carousel", subExports: ["CarouselContent", "CarouselItem"], isClient: true, voidElement: false },
+  { primitive: "slider", importPath: "@/components/ui/slider", mainExport: "Slider", subExports: [], isClient: true, voidElement: true },
+  { primitive: "toggle", importPath: "@/components/ui/toggle", mainExport: "Toggle", subExports: [], isClient: true, voidElement: false },
+  { primitive: "breadcrumb", importPath: "@/components/ui/breadcrumb", mainExport: "Breadcrumb", subExports: ["BreadcrumbList", "BreadcrumbItem", "BreadcrumbLink", "BreadcrumbSeparator"], isClient: false, voidElement: false },
+  { primitive: "pagination", importPath: "@/components/ui/pagination", mainExport: "Pagination", subExports: ["PaginationContent", "PaginationItem", "PaginationLink"], isClient: false, voidElement: false },
+  { primitive: "navigation-menu", importPath: "@/components/ui/navigation-menu", mainExport: "NavigationMenu", subExports: ["NavigationMenuList", "NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent"], isClient: false, voidElement: false },
+  { primitive: "radio-group", importPath: "@/components/ui/radio-group", mainExport: "RadioGroup", subExports: ["RadioGroupItem"], isClient: false, voidElement: false },
+  { primitive: "scroll-area", importPath: "@/components/ui/scroll-area", mainExport: "ScrollArea", subExports: ["ScrollBar"], isClient: false, voidElement: false },
+  { primitive: "table", importPath: "@/components/ui/table", mainExport: "Table", subExports: ["TableHeader", "TableBody", "TableRow", "TableHead", "TableCell"], isClient: false, voidElement: false },
 ]
 
-export const registryByName = new Map(REGISTRY.map((r) => [r.component, r]))
-export const subcomponentToParent = new Map<string, string>()
-
-for (const entry of REGISTRY) {
-  for (const sub of entry.subcomponents) {
-    subcomponentToParent.set(sub, entry.component)
-    subcomponentToParent.set(sub.toLowerCase(), entry.component)
-  }
-}
-for (const entry of REGISTRY) {
-  subcomponentToParent.set(entry.component.toLowerCase(), entry.component)
+export const byPrimitive = new Map(REGISTRY.map((r) => [r.primitive, r]))
+export const byExport = new Map<string, RegistryEntry>()
+for (const e of REGISTRY) {
+  byExport.set(e.mainExport, e)
+  for (const s of e.subExports) byExport.set(s, e)
 }
 
-export function getEntry(type: string): RegistryEntry | undefined {
-  const lower = type.toLowerCase()
-  return registryByName.get(lower) ??
-    (subcomponentToParent.has(lower) ? registryByName.get(subcomponentToParent.get(lower)!) : undefined) ??
-    registryByName.get(type)
+export function getPrimitive(name: string): RegistryEntry | undefined {
+  return byPrimitive.get(name) ?? byExport.get(name)
 }
 
-export function getAllowedTypes(): string[] {
-  const types = REGISTRY.map((r) => r.component)
-  for (const entry of REGISTRY) types.push(...entry.subcomponents.map((s) => s.toLowerCase()))
-  return types
+export function isClient(primitive: string): boolean {
+  return getPrimitive(primitive)?.isClient ?? false
 }

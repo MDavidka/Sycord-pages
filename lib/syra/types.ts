@@ -1,82 +1,83 @@
-// Syra Engine — v0-style Generative UI Builder
-// Types for the 8-step pipeline: Prompt → Manifest → Scaffold → Compile → Guard → Write → Preview → Iterate
+// Syra Engine Types — v2 schema aligned with the Syra manifest spec.
+// siteMetadata → routingGraph → pages → sections → components
 
-// ── Prompt History ──────────────────────────────────────────────
+// ── Site Metadata ────────────────────────────────────────────────
 
-export type ModificationLayer = {
-  index: number
-  instruction: string
-  timestamp: number
-  affectedSessionIds: string[]
+export interface SiteMetadata {
+  projectId: string
+  siteName: string
+  globalTheme: {
+    variant: "dark" | "light"
+    primaryColor: string
+    borderRadius: string
+  }
 }
 
-// ── Manifest AST ────────────────────────────────────────────────
+// ── Routing ──────────────────────────────────────────────────────
 
-export interface ManifestElement {
+export interface RouteEdge {
+  sourcePageId: string
+  targetPageId: string
+  triggerElementId: string
+  actionType: "PUSH_ROUTE"
+}
+
+// ── Component ────────────────────────────────────────────────────
+
+export interface ManifestComponent {
   id: string
-  type: string
-  variant?: "default" | "secondary" | "destructive" | "outline" | "ghost" | "link"
-  size?: "sm" | "default" | "lg" | "icon"
-  className?: string
-  content?: string
-  children?: ManifestElement[]
+  shadcnPrimitive: "card" | "button" | "input" | "dialog" | "badge" | "tabs" | "accordion" | "label" | "separator" | "skeleton" | "progress" | "avatar" | "textarea" | "select" | "checkbox" | "switch" | "tooltip" | "popover" | "sheet" | "alert" | "table" | "carousel" | "slider" | "toggle" | "breadcrumb" | "pagination" | "navigation-menu" | "radio-group" | "scroll-area"
+  purpose: string
+  styles: {
+    customTailwindClasses: string
+  }
+  props: Record<string, unknown>
+  children: ManifestComponent[] | null
 }
+
+// ── Section ──────────────────────────────────────────────────────
 
 export interface ManifestSection {
-  id: string
-  type: "hero" | "features" | "pricing" | "cta" | "faq" | "footer" | "stats" | "testimonials" | "contact" | "logos" | "gallery" | "team" | "blog" | "process" | "generic"
-  layout?: "centered" | "split" | "grid-2" | "grid-3" | "grid-4" | "asymmetric" | "bento" | "alternating"
-  bg?: "default" | "muted" | "card" | "primary/5" | "accent/5"
-  padding?: "sm" | "md" | "lg" | "xl"
-  elements: ManifestElement[]
+  sectionId: string
+  semanticType: "hero" | "features" | "pricing" | "testimonials" | "cta" | "faq" | "footer" | "stats" | "contact" | "logos" | "gallery" | "team" | "blog" | "process" | "generic"
+  displayName: string
+  layoutContainer: "container-grid" | "container-flex" | "full-width"
+  gridCols: number | null
+  components: ManifestComponent[]
 }
+
+// ── Page ─────────────────────────────────────────────────────────
 
 export interface ManifestPage {
-  path: string
+  pageId: string
+  slug: string
   title: string
-  metaTitle: string
   metaDescription: string
-  sections: ManifestSection[]
+  layout: {
+    rootType: "flex-col"
+    headerEnabled: boolean
+    footerEnabled: boolean
+    sections: ManifestSection[]
+  }
 }
 
+// ── Manifest AST ─────────────────────────────────────────────────
+
 export interface ManifestAST {
-  projectName: string
-  tagline: string
-  theme: "saas" | "agency" | "ecommerce" | "portfolio" | "dark" | "minimal"
-  colorScheme: "neutral" | "vibrant" | "dark" | "soft" | "high-contrast"
-  density: "minimal" | "balanced" | "dense"
+  $schema: string
+  siteMetadata: SiteMetadata
+  routingGraph: RouteEdge[]
   pages: ManifestPage[]
 }
 
-// ── Generated Files ─────────────────────────────────────────────
+// ── Pipeline ─────────────────────────────────────────────────────
 
-export interface GeneratedFile {
-  path: string
-  content: string
-  type: "page" | "section" | "layout" | "config" | "style"
-  hash?: string
-}
-
-// ── Pipeline State ──────────────────────────────────────────────
-
-export type PipelineStage =
-  | "prompt-clarify"
-  | "manifest-gen"
-  | "manifest-validate"
-  | "scaffold"
-  | "compile-sections"
-  | "syntax-guard"
-  | "disk-write"
-  | "preview"
-  | "done"
-  | "error"
+export type PipelineStage = "prompt-check" | "manifest-gen" | "scaffold" | "compile-sections" | "done" | "error"
 
 export interface PipelineStep {
   stage: PipelineStage
   label: string
   status: "pending" | "running" | "done" | "error"
-  progress: number // 0-100 for this step
-  detail: string
 }
 
 export interface PipelineState {
@@ -88,7 +89,22 @@ export interface PipelineState {
   errors: string[]
 }
 
-// ── Generation Result ───────────────────────────────────────────
+export const DEFAULT_STEPS: PipelineStep[] = [
+  { stage: "prompt-check", label: "Analyzing Prompt", status: "pending" },
+  { stage: "manifest-gen", label: "Generating Layout", status: "pending" },
+  { stage: "scaffold", label: "Scaffolding Files", status: "pending" },
+  { stage: "compile-sections", label: "Compiling Sections", status: "pending" },
+]
+
+// ── Generated Files ──────────────────────────────────────────────
+
+export interface GeneratedFile {
+  path: string
+  content: string
+  type: "layout-map" | "header" | "footer" | "section" | "page" | "config" | "style"
+}
+
+// ── Results & Events ─────────────────────────────────────────────
 
 export interface GenerationResult {
   projectId: string
@@ -99,10 +115,8 @@ export interface GenerationResult {
   pipelineState: PipelineState
 }
 
-// ── Progress Events (SSE) ──────────────────────────────────────
-
 export interface ProgressEvent {
-  type: "step" | "section" | "file" | "manifest" | "complete" | "error"
+  type: "step" | "section" | "file" | "manifest" | "complete" | "error" | "clarify"
   stage?: PipelineStage
   status?: "pending" | "running" | "done" | "error"
   progress?: number
@@ -114,5 +128,14 @@ export interface ProgressEvent {
   manifest?: ManifestAST
   files?: GeneratedFile[]
   error?: string
-  modificationLayer?: number
+  clarifyQuestion?: string
+}
+
+// ── Prompt History ───────────────────────────────────────────────
+
+export interface ModificationLayer {
+  index: number
+  instruction: string
+  timestamp: number
+  affectedSectionIds: string[]
 }

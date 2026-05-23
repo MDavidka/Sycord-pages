@@ -1,234 +1,261 @@
-// Syra TSX Compiler — generates deployable React component code from manifest sections.
-// Each section is compiled independently (parallelizable). The compiler imports
-// ONLY from the shadcn registry — never hallucinates component sources.
+// Syra Compiler — deterministic ManifestAST → deployable TSX + JSON files.
+// Generates: layout-map.json, header.tsx, footer.tsx, [sectionId].tsx per section.
+// Every import is resolved from the REGISTRY. No hallucination possible.
 
-import { getEntry } from "./registry"
-import type { ManifestElement, ManifestSection, ManifestPage, ManifestAST, GeneratedFile } from "./types"
+import { getPrimitive, isClient as isClientPrimitive } from "./registry"
+import type { ManifestAST, ManifestSection, ManifestComponent, ManifestPage, GeneratedFile } from "./types"
 
-const ESC_CHARS: Record<string, string> = {
-  "&": "&amp;", "<": "&lt;", ">": "&gt;", "{": "&#123;", "}": "&#125;", "`": "&#96;",
-}
-
-function esc(s: string): string { return s.replace(/[&<>{}\`]/g, (c) => ESC_CHARS[c] || c) }
+const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "{": "&#123;", "}": "&#125;", "`": "&#96;" }
+function esc(s: string): string { return s.replace(/[&<>{}\`]/g, (c) => ESC[c] ?? c) }
 function jsxStr(s: string): string { return `"${esc(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` }
 
-function compileElement(el: ManifestElement, indent = 0): string {
-  const entry = getEntry(el.type)
-  const tag = entry?.exports[0] ?? el.type
+// ── Layout Map ───────────────────────────────────────────────────
+
+export function compileLayoutMap(manifest: ManifestAST): GeneratedFile {
+  return {
+    path: `components/generated/${manifest.siteMetadata.projectId}/layout-map.json`,
+    content: JSON.stringify(manifest, null, 2),
+    type: "layout-map",
+  }
+}
+
+// ── Header ────────────────────────────────────────────────────────
+
+export function compileHeader(manifest: ManifestAST): GeneratedFile {
+  const navLinks = manifest.routingGraph
+    .filter((e) => e.actionType === "PUSH_ROUTE")
+    .map((e) => ({ id: e.triggerElementId, pageId: e.sourcePageId, target: e.targetPageId }))
+
+  const projectId = manifest.siteMetadata.projectId
+  const siteName = manifest.siteMetadata.siteName
+
+  return {
+    path: `components/generated/${projectId}/header.tsx`,
+    content: `import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { Menu } from "lucide-react"
+
+export default function SyraHeader() {
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto flex h-14 items-center justify-between px-4">
+        <a href="/" className="flex items-center gap-2 text-sm font-semibold">
+          ${jsxStr(siteName)}
+        </a>
+        <nav className="hidden md:flex items-center gap-6">
+${navLinks.map((l) => `          <a href=${jsxStr(l.target)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">${l.pageId}</a>`).join("\n")}
+        </nav>
+        <Button variant="ghost" size="icon" className="md:hidden">
+          <Menu className="h-4 w-4" />
+        </Button>
+      </div>
+    </header>
+  )
+}
+`,
+    type: "header",
+  }
+}
+
+// ── Footer ────────────────────────────────────────────────────────
+
+export function compileFooter(manifest: ManifestAST): GeneratedFile {
+  const projectId = manifest.siteMetadata.projectId
+  const siteName = manifest.siteMetadata.siteName
+
+  return {
+    path: `components/generated/${projectId}/footer.tsx`,
+    content: `import { cn } from "@/lib/utils"
+
+export default function SyraFooter() {
+  return (
+    <footer className="border-t border-border/40 py-8">
+      <div className="container mx-auto px-4">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            &copy; {new Date().getFullYear()} ${jsxStr(siteName)}. Built with Syra AI.
+          </p>
+        </div>
+      </div>
+    </footer>
+  )
+}
+`,
+    type: "footer",
+  }
+}
+
+// ── Section Compiler ──────────────────────────────────────────────
+
+function compileComponent(comp: ManifestComponent, indent = 0): string {
+  const entry = getPrimitive(comp.shadcnPrimitive)
+  const tag = entry?.mainExport ?? comp.shadcnPrimitive
   const isVoid = entry?.voidElement ?? false
-  const isClient = entry?.isClient ?? false
   const pad = "  ".repeat(indent)
 
   const attrs: string[] = []
-  if (el.variant && el.variant !== "default") attrs.push(`variant=${jsxStr(el.variant)}`)
-  if (el.size && el.size !== "default") attrs.push(`size=${jsxStr(el.size)}`)
-  if (el.className) attrs.push(`className={cn(${jsxStr(el.className)})}`)
+  if (comp.styles?.customTailwindClasses) {
+    const classes = comp.styles.customTailwindClasses
+    if (classes.length > 0) attrs.push(`className=${jsxStr(classes)}`)
+  }
+  if (comp.props) {
+    for (const [key, value] of Object.entries(comp.props)) {
+      if (key === "className" || key === "children") continue
+      if (typeof value === "string") attrs.push(`${key}=${jsxStr(value)}`)
+      else if (typeof value === "boolean" && value) attrs.push(key)
+      else attrs.push(`${key}={${JSON.stringify(value)}}`)
+    }
+  }
   const attrStr = attrs.length ? ` ${attrs.join(" ")}` : ""
 
   if (isVoid) return `${pad}<${tag}${attrStr} />`
 
-  if (el.children?.length) {
-    const children = el.children.map((c) => compileElement(c, indent + 1)).join("\n")
-    return `${pad}<${tag}${attrStr}>\n${children}\n${pad}</${tag}>`
+  if (comp.children?.length) {
+    const children = comp.children.map((c) => compileComponent(c, indent + 1)).join("\n")
+    const childText = comp.props?.children
+    const inner = childText && typeof childText === "string" ? `${esc(childText)}` : `\n${children}\n${pad}`
+    return `${pad}<${tag}${attrStr}>${inner}</${tag}>`
   }
 
-  if (el.content) return `${pad}<${tag}${attrStr}>${esc(el.content)}</${tag}>`
+  const text = comp.props?.children
+  if (text && typeof text === "string") return `${pad}<${tag}${attrStr}>${esc(text)}</${tag}>`
+
   return `${pad}<${tag}${attrStr} />`
 }
 
-function collectImports(elements: ManifestElement[]): Map<string, Set<string>> {
+function collectSectionImports(section: ManifestSection): Map<string, Set<string>> {
   const imps = new Map<string, Set<string>>()
-  function walk(el: ManifestElement) {
-    const entry = getEntry(el.type)
+  function walk(comp: ManifestComponent) {
+    const entry = getPrimitive(comp.shadcnPrimitive)
     if (entry) {
       if (!imps.has(entry.importPath)) imps.set(entry.importPath, new Set())
-      imps.get(entry.importPath)!.add(entry.exports[0])
+      imps.get(entry.importPath)!.add(entry.mainExport)
     }
-    for (const c of el.children ?? []) walk(c)
+    for (const c of comp.children ?? []) walk(c)
   }
-  for (const el of elements) walk(el)
+  for (const comp of section.components) walk(comp)
   return imps
 }
 
-function compileImports(elements: ManifestElement[]): string {
-  const imps = collectImports(elements)
+function compileSectionImports(section: ManifestSection): string {
+  const imps = collectSectionImports(section)
   const lines: string[] = []
-  imps.has("@/components/ui/card") && imps.set("@/components/ui/card", new Set(["Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter"]))
   for (const [path, names] of imps) {
-    const sorted = [...names].sort()
-    lines.push(`import { ${sorted.join(", ")} } from ${jsxStr(path)}`)
+    lines.push(`import { ${[...names].sort().join(", ")} } from ${jsxStr(path)}`)
   }
   lines.push(`import { cn } from "@/lib/utils"`)
-  lines.push(`import { Sparkles, ArrowRight, Check, Star, Zap, ShieldCheck, Rocket, Crown, Target, Flame, Layers, BarChart3, Code2, Palette, Globe, Users, Mail, Phone, MessageCircle, ChevronRight, ArrowUpRight } from "lucide-react"`)
   return lines.join("\n")
 }
 
-function sectionLayoutClass(layout?: string): string {
-  switch (layout) {
-    case "centered": return "flex flex-col items-center text-center max-w-4xl mx-auto"
-    case "split": return "grid grid-cols-1 lg:grid-cols-2 gap-12 items-center"
-    case "grid-2": return "grid grid-cols-1 sm:grid-cols-2 gap-6"
-    case "grid-3": return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-    case "grid-4": return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-    case "asymmetric": return "grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-12"
-    case "bento": return "grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-min"
-    case "alternating": return "flex flex-col gap-16"
-    default: return "flex flex-col items-center text-center max-w-4xl mx-auto"
+function layoutClasses(section: ManifestSection): string {
+  const cols = section.gridCols ?? 1
+  const gridMap: Record<number, string> = {
+    1: "grid-cols-1",
+    2: "grid-cols-1 sm:grid-cols-2",
+    3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+    4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+    5: "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
+    6: "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6",
   }
+
+  if (section.layoutContainer === "container-grid") {
+    return `grid ${gridMap[cols] || "grid-cols-1"} gap-6`
+  }
+  if (section.layoutContainer === "container-flex") {
+    return "flex flex-col items-center text-center max-w-4xl mx-auto"
+  }
+  return ""
 }
 
-function sectionBg(bg?: string): string {
-  switch (bg) {
-    case "muted": return "bg-muted/50"
-    case "card": return "bg-card"
-    case "primary/5": return "bg-primary/5"
-    case "accent/5": return "bg-accent/5"
-    default: return ""
-  }
-}
-
-function sectionPadding(pad?: string): string {
-  switch (pad) {
-    case "sm": return "py-8 sm:py-12"
-    case "lg": return "py-20 sm:py-28"
-    case "xl": return "py-24 sm:py-32"
-    default: return "py-12 sm:py-16 lg:py-20"
-  }
-}
-
-export function compileSection(section: ManifestSection): string {
-  const needsClient = section.elements.some((el) => getEntry(el.type)?.isClient)
+export function compileSection(section: ManifestSection, projectId: string): GeneratedFile {
+  const needsClient = section.components.some((c) => isClientPrimitive(c.shadcnPrimitive))
+  const imports = compileSectionImports(section)
   const clientDir = needsClient ? '"use client";\n\n' : ""
-  const imports = compileImports(section.elements)
-  const layoutClass = sectionLayoutClass(section.layout)
-  const bgClass = sectionBg(section.bg)
-  const padClass = sectionPadding(section.padding)
-  const elementsTsx = section.elements.map((el) => compileElement(el, 2)).join("\n")
+  const layoutClass = layoutClasses(section)
+  const elements = section.components.map((c) => compileComponent(c, 2)).join("\n")
 
-  return `${clientDir}${imports}
+  return {
+    path: `components/generated/${projectId}/${section.sectionId}.tsx`,
+    content: `${clientDir}${imports}
 
-export default function ${pascalCase(section.id)}() {
+export default function ${pascalCase(section.sectionId)}() {
   return (
-    <section id=${jsxStr(section.id)} className={cn(${jsxStr([bgClass, padClass].filter(Boolean).join(" ").trim())})}>
+    <section id=${jsxStr(section.sectionId)} className="py-16 sm:py-20">
       <div className="container mx-auto px-4 sm:px-6">
         <div className={cn(${jsxStr(layoutClass)})}>
-${elementsTsx}
+${elements}
         </div>
       </div>
     </section>
   )
 }
-`
+`,
+    type: "section",
+  }
 }
 
-export function compilePage(page: ManifestPage, projectId: string): GeneratedFile {
-  const allElements = page.sections.flatMap((s) => s.elements)
-  const hasClient = allElements.some((el) => getEntry(el.type)?.isClient)
-  const clientDir = hasClient ? '"use client";\n\n' : ""
-  const allImports = collectImports(allElements)
-  const importLines: string[] = []
-  for (const [path, names] of allImports) {
-    importLines.push(`import { ${[...names].sort().join(", ")} } from ${jsxStr(path)}`)
-  }
-  importLines.push(`import { cn } from "@/lib/utils"`)
+// ── Page Compiler — wraps header + sections + footer ──────────────
 
-  const sectionVarNames = page.sections.map((s) => pascalCase(s.id) + "Section")
+export function compilePage(page: ManifestPage, manifest: ManifestAST): GeneratedFile {
+  const projectId = manifest.siteMetadata.projectId
+  const sections = page.layout.sections
+  const needsClient = sections.some((s) => s.components.some((c) => isClientPrimitive(c.shadcnPrimitive)))
 
-  const sectionRenders = page.sections
-    .map((s) => {
-      const code = compileSection(s)
-      const varName = pascalCase(s.id) + "Section"
-      return `${varName}`
-    })
-    .join(",\n  ")
+  const sectionImports = sections
+    .map((s) => `import ${pascalCase(s.sectionId)} from "@/components/generated/${projectId}/${s.sectionId}"`)
+    .join("\n")
 
-  const jsx = `${clientDir}${importLines.join("\n")}
+  const headerImport = page.layout.headerEnabled
+    ? `import SyraHeader from "@/components/generated/${projectId}/header"`
+    : ""
 
-${page.sections.map((s) => {
-  const code = compileSection(s)
-  return code
-}).join("\n\n")}
+  const footerImport = page.layout.footerEnabled
+    ? `import SyraFooter from "@/components/generated/${projectId}/footer"`
+    : ""
+
+  const clientDir = needsClient ? '"use client";\n\n' : ""
+
+  return {
+    path: page.slug === "/" ? "app/page.tsx" : `app/${page.slug}/page.tsx`,
+    content: `${clientDir}${headerImport ? headerImport + "\n" : ""}${footerImport ? footerImport + "\n" : ""}${sectionImports}
 
 export const metadata = {
-  title: ${jsxStr(page.metaTitle)},
+  title: ${jsxStr(page.title)},
   description: ${jsxStr(page.metaDescription)},
 }
 
 export default function Page() {
   return (
     <>
-${page.sections.map((s) => `      <${pascalCase(s.id)} />`).join("\n")}
+${page.layout.headerEnabled ? "      <SyraHeader />" : ""}
+${sections.map((s) => `      <${pascalCase(s.sectionId)} />`).join("\n")}
+${page.layout.footerEnabled ? "      <SyraFooter />" : ""}
     </>
   )
 }
-`
-  const filePath = page.path === "/" ? "app/page.tsx" : `app${page.path}/page.tsx`
-  return { path: filePath, content: jsx, type: "page" }
-}
-
-export function compileLayout(manifest: ManifestAST): GeneratedFile {
-  return {
-    path: "app/layout.tsx",
-    content: `import type { Metadata } from "next"
-import "./globals.css"
-
-export const metadata: Metadata = {
-  title: { default: ${jsxStr(manifest.projectName)}, template: \`%s — ${manifest.projectName}\` },
-  description: ${jsxStr(manifest.tagline)},
-}
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans antialiased">
-        <div className="relative flex min-h-screen flex-col">
-          <main className="flex-1">{children}</main>
-        </div>
-      </body>
-    </html>
-  )
-}
 `,
-    type: "layout",
+    type: "page",
   }
 }
 
-export function compileConfigs(manifest: ManifestAST): GeneratedFile[] {
-  const slug = manifest.projectName.toLowerCase().replace(/\s+/g, "-")
-  return [
-    {
-      path: "package.json",
-      content: JSON.stringify({ name: slug, version: "0.1.0", private: true, scripts: { dev: "next dev", build: "next build", start: "next start" }, dependencies: { next: "^16.0.0", react: "^19.0.0", "react-dom": "^19.0.0" } }, null, 2) + "\n",
-      type: "config",
-    },
-    {
-      path: "tsconfig.json",
-      content: JSON.stringify({ compilerOptions: { target: "ES2017", lib: ["dom", "dom.iterable", "esnext"], allowJs: true, skipLibCheck: true, strict: true, noEmit: true, module: "esnext", moduleResolution: "bundler", resolveJsonModule: true, isolatedModules: true, jsx: "preserve", incremental: true, plugins: [{ name: "next" }], paths: { "@/*": ["./*"] } }, include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"], exclude: ["node_modules"] }, null, 2) + "\n",
-      type: "config",
-    },
-    {
-      path: "next.config.mjs",
-      content: `/** @type {import('next').NextConfig} */\nconst nextConfig = { images: { remotePatterns: [{ protocol: "https", hostname: "**" }] } }\nexport default nextConfig\n`,
-      type: "config",
-    },
-    {
-      path: "lib/utils.ts",
-      content: `import { type ClassValue, clsx } from "clsx"\nimport { twMerge } from "tailwind-merge"\n\nexport function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }\n`,
-      type: "config",
-    },
-    {
-      path: "app/globals.css",
-      content: `@import "tailwindcss";\n\n@theme {\n  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;\n  --radius-sm: 0.375rem;\n  --radius-md: 0.5rem;\n  --radius-lg: 0.75rem;\n  --radius-xl: 1rem;\n}\n\n@layer base {\n  * { border-color: transparent; }\n  body { background-color: var(--background); color: var(--foreground); font-feature-settings: "rlig" 1, "calt" 1; }\n}\n`,
-      type: "style",
-    },
-  ]
-}
+// ── Full Manifest Compilation ─────────────────────────────────────
 
-export function compileManifest(manifest: ManifestAST, projectId: string): GeneratedFile[] {
-  const files: GeneratedFile[] = [compileLayout(manifest), ...compileConfigs(manifest)]
+export function compileManifest(manifest: ManifestAST): GeneratedFile[] {
+  const files: GeneratedFile[] = [compileLayoutMap(manifest)]
+  const projectId = manifest.siteMetadata.projectId
+
+  const hasHeader = manifest.pages.some((p) => p.layout.headerEnabled)
+  const hasFooter = manifest.pages.some((p) => p.layout.footerEnabled)
+  if (hasHeader) files.push(compileHeader(manifest))
+  if (hasFooter) files.push(compileFooter(manifest))
+
   for (const page of manifest.pages) {
-    files.push(compilePage(page, projectId))
+    for (const section of page.layout.sections) {
+      files.push(compileSection(section, projectId))
+    }
+    files.push(compilePage(page, manifest))
   }
+
   return files
 }
 

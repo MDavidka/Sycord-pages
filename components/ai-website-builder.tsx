@@ -86,14 +86,10 @@ interface PipelineProgress {
 }
 
 const STEPS_DEFAULT: PipelineStep[] = [
-  { stage: "prompt-clarify", label: "Analyzing Prompt", status: "pending" },
+  { stage: "prompt-check", label: "Analyzing Prompt", status: "pending" },
   { stage: "manifest-gen", label: "Generating Layout", status: "pending" },
-  { stage: "manifest-validate", label: "Validating Schema", status: "pending" },
   { stage: "scaffold", label: "Scaffolding Files", status: "pending" },
   { stage: "compile-sections", label: "Compiling Sections", status: "pending" },
-  { stage: "syntax-guard", label: "Syntax Check", status: "pending" },
-  { stage: "disk-write", label: "Writing Files", status: "pending" },
-  { stage: "preview", label: "Preview Ready", status: "pending" },
 ]
 
 const InputBar = ({
@@ -396,10 +392,26 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
       type: string; stage?: string; status?: string; progress?: number;
       detail?: string; sectionId?: string; sectionIndex?: number;
       sectionsTotal?: number; filePath?: string;
-      manifest?: unknown; files?: unknown[]; error?: string;
+      manifest?: unknown; files?: unknown[]; error?: string; clarifyQuestion?: string;
     }
 
     if (evt.error) { setError(evt.error); return }
+
+    // Handle clarification request
+    if (evt.type === "clarify" && evt.clarifyQuestion) {
+      setIsLoading(false)
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: evt.clarifyQuestion!,
+      }])
+      setProgress(prev => ({
+        ...prev,
+        detail: "Waiting for more details...",
+        steps: prev.steps.map(s => ({ ...s, status: "done" as const })),
+      }))
+      return
+    }
 
     switch (evt.type) {
       case "step": {
