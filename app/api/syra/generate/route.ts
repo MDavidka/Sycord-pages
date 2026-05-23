@@ -1,9 +1,24 @@
-// Syra Generate — POST endpoint
-import { NextResponse } from "next/server"
+// Syra Generate — POST endpoint + GET manifest retrieval
+import { NextResponse, NextRequest } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { runPipeline } from "@/lib/syra"
 import type { ModelSelection } from "@/lib/ai-provider"
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const projectId = searchParams.get("projectId")
+  const slug = searchParams.get("slug")
+
+  // In a full implementation, this would fetch from a database.
+  // For now, return a minimal response so the preview page doesn't crash.
+  return NextResponse.json({
+    projectId,
+    slug,
+    manifest: null,
+    message: "Use the POST endpoint to generate a manifest first.",
+  })
+}
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
