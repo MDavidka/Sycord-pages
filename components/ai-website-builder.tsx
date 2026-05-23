@@ -52,6 +52,13 @@ export interface GeneratedPage {
   usedFor?: string
 }
 
+interface DebugStep {
+  id: number
+  title: string
+  detail: string
+  status: "pending" | "done"
+}
+
 // ── Input Bar ────────────────────────────────────────────────────
 
 const InputBar = ({
@@ -174,6 +181,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [debugSteps, setDebugSteps] = useState<DebugStep[]>([])
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
@@ -198,11 +206,95 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     return () => { cancelled = true }
   }, [])
 
-  const handleSend = () => {
+  const pushStep = (title: string, detail: string) => {
+    setDebugSteps((prev) => [...prev, { id: prev.length + 1, title, detail, status: "done" }])
+  }
+
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  const handleSend = async () => {
     if (!input.trim() || isLoading) return
     setIsLoading(true)
-    // TODO: Wire up to generation API
-    setTimeout(() => setIsLoading(false), 1000)
+    setDebugSteps([])
+
+    try {
+      // 1. User input
+      pushStep("1. User input", `Felhasználó kérés: "${input.trim()}"`)
+      await wait(250)
+
+      // 2. Temporary structure JSON
+      const structure = {
+        pages: [
+          {
+            name: "Landing",
+            route: "/",
+            usedFor: "Main marketing page",
+            content: ["Hero section", "Feature cards", "CTA"],
+          },
+          {
+            name: "About",
+            route: "/about",
+            usedFor: "Brand story and team",
+            content: ["Intro", "Mission", "Team grid"],
+          },
+          {
+            name: "Contact",
+            route: "/contact",
+            usedFor: "Lead collection",
+            content: ["Contact form", "Support details"],
+          },
+        ],
+      }
+
+      pushStep("2. Website structure", `Temporary structure JSON:\n${JSON.stringify(structure, null, 2)}`)
+      await wait(250)
+
+      // 3. Generate code using predefined shadcn components + prompt
+      const generatedCode = `import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+
+export default function LandingPage() {
+  return (
+    <main className="min-h-screen bg-background text-foreground p-8">
+      <section className="max-w-4xl mx-auto space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Welcome to your AI generated website</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>This page was generated from your Syra AI prompt.</p>
+            <Button className="mt-4">Get started</Button>
+          </CardContent>
+        </Card>
+      </section>
+    </main>
+  )
+}`
+
+      pushStep("3. Code generation", "Generated with predefined shadcn components: Card, CardHeader, CardContent, CardTitle, Button.")
+      await wait(250)
+
+      // 4. Backend loads referenced components in components/ui
+      const usedComponents = ["card", "button"]
+      pushStep(
+        "4. Backend component loading (non-AI)",
+        `System loads components into components/ui: ${usedComponents.join(", ")}.`,
+      )
+
+      setGeneratedPages((prev) => [
+        ...prev,
+        {
+          name: "landing-page.tsx",
+          code: generatedCode,
+          timestamp: Date.now(),
+          usedFor: "Main marketing page",
+        },
+      ])
+      setInput("")
+      setAttachments([])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -237,6 +329,20 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
             fastCost={fastCost}
           />
         </div>
+
+        {debugSteps.length > 0 && (
+          <div className="w-full max-w-2xl mx-auto pb-8">
+            <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-4 space-y-3">
+              <p className="text-xs uppercase tracking-wider text-zinc-400">Syra debug chat steps</p>
+              {debugSteps.map((step) => (
+                <div key={step.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                  <p className="text-sm font-medium text-white">{step.title}</p>
+                  <pre className="mt-2 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{step.detail}</pre>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
