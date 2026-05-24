@@ -12,15 +12,14 @@ import {
 import {
   Loader2,
   ChevronDown,
-  Sparkles,
   CheckCircle2,
   Send,
   Zap,
-  Plus,
   Paperclip,
   X,
   Coins,
   Gem,
+  Circle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
@@ -56,8 +55,15 @@ interface DebugStep {
   id: number
   title: string
   detail: string
-  status: "pending" | "done"
+  status: "pending" | "active" | "done"
 }
+
+const STEP_TEMPLATES: Array<Pick<DebugStep, "title" | "detail">> = [
+  { title: "1. Validate request", detail: "Waiting for prompt analysis..." },
+  { title: "2. Plan site structure", detail: "Waiting to draft routes and sections..." },
+  { title: "3. Generate page code", detail: "Waiting to create component code..." },
+  { title: "4. Resolve UI dependencies", detail: "Waiting to map required UI components..." },
+]
 
 // ── Input Bar ────────────────────────────────────────────────────
 
@@ -206,8 +212,31 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     return () => { cancelled = true }
   }, [])
 
-  const pushStep = (title: string, detail: string) => {
-    setDebugSteps((prev) => [...prev, { id: prev.length + 1, title, detail, status: "done" }])
+  const initializeSteps = () => {
+    setDebugSteps(
+      STEP_TEMPLATES.map((step, index) => ({
+        id: index + 1,
+        title: step.title,
+        detail: step.detail,
+        status: "pending" as const,
+      }))
+    )
+  }
+
+  const beginStep = (id: number, detail: string) => {
+    setDebugSteps((prev) =>
+      prev.map((step) => {
+        if (step.id < id && step.status !== "done") return { ...step, status: "done" as const }
+        if (step.id === id) return { ...step, status: "active" as const, detail }
+        return step
+      })
+    )
+  }
+
+  const completeStep = (id: number, detail: string) => {
+    setDebugSteps((prev) =>
+      prev.map((step) => (step.id === id ? { ...step, status: "done" as const, detail } : step))
+    )
   }
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -215,12 +244,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
     setIsLoading(true)
-    setDebugSteps([])
+    initializeSteps()
 
     try {
       // 1. User input
-      pushStep("1. User input", `Felhasználó kérés: "${input.trim()}"`)
+      beginStep(1, "Parsing prompt, selected model, and attached files...")
+      const prompt = input.trim()
+      const attachmentSummary = attachments.length ? `${attachments.length} attachment(s) ready.` : "No attachments provided."
       await wait(250)
+      completeStep(1, `Prompt: "${prompt}"\nModel: ${selectedModel.name} (${selectedModel.provider})\n${attachmentSummary}`)
 
       // 2. Temporary structure JSON
       const structure = {
@@ -246,8 +278,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
         ],
       }
 
-      pushStep("2. Website structure", `Temporary structure JSON:\n${JSON.stringify(structure, null, 2)}`)
+      const structureStepId = beginStep("2. Website structure", "Drafting page map and content sections...")
       await wait(250)
+      completeStep(structureStepId, `Temporary structure JSON:\n${JSON.stringify(structure, null, 2)}`)
 
       // 3. Generate code using predefined shadcn components + prompt
       const generatedCode = `import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -271,15 +304,15 @@ export default function LandingPage() {
   )
 }`
 
-      pushStep("3. Code generation", "Generated with predefined shadcn components: Card, CardHeader, CardContent, CardTitle, Button.")
+      beginStep(3, "Composing React page using Syra generation templates...")
       await wait(250)
+      completeStep(3, "Generated landing page with shadcn Card and Button building blocks.")
 
       // 4. Backend loads referenced components in components/ui
       const usedComponents = ["card", "button"]
-      pushStep(
-        "4. Backend component loading (non-AI)",
-        `System loads components into components/ui: ${usedComponents.join(", ")}.`,
-      )
+      beginStep(4, "Inspecting generated code imports and resolving component dependencies...")
+      await wait(200)
+      completeStep(4, `Resolved UI dependencies: ${usedComponents.join(", ")} from components/ui.`)
 
       setGeneratedPages((prev) => [
         ...prev,
@@ -314,6 +347,24 @@ export default function LandingPage() {
           </div>
         </div>
 
+        {debugSteps.length > 0 && (
+          <div className="w-full max-w-2xl mx-auto pb-5 sm:pb-6">
+            <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-4 space-y-3">
+              <p className="text-xs uppercase tracking-wider text-zinc-400">Syra debug chat steps</p>
+              {debugSteps.map((step) => (
+                <div key={step.id} className={cn("rounded-xl border p-3 transition-colors", step.status === "done" ? "border-emerald-400/20 bg-emerald-500/[0.05]" : step.status === "active" ? "border-blue-400/30 bg-blue-500/[0.07]" : "border-white/[0.06] bg-white/[0.02]")}>
+                  <p className="text-sm font-medium text-white flex items-center gap-2">
+                    {step.status === "done" ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : step.status === "active" ? <Loader2 className="h-4 w-4 text-blue-300 animate-spin" /> : <Circle className="h-3.5 w-3.5 text-zinc-500" />}
+                    {step.title}
+                    {step.status === "active" && <span className="text-[10px] uppercase tracking-wider text-blue-300/90">In progress</span>}
+                  </p>
+                  <pre className="mt-2 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{step.detail || "Waiting..."}</pre>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="w-full pb-8 sm:pb-12">
           <InputBar
             input={input}
@@ -329,20 +380,6 @@ export default function LandingPage() {
             fastCost={fastCost}
           />
         </div>
-
-        {debugSteps.length > 0 && (
-          <div className="w-full max-w-2xl mx-auto pb-8">
-            <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-4 space-y-3">
-              <p className="text-xs uppercase tracking-wider text-zinc-400">Syra debug chat steps</p>
-              {debugSteps.map((step) => (
-                <div key={step.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                  <p className="text-sm font-medium text-white">{step.title}</p>
-                  <pre className="mt-2 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{step.detail}</pre>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
