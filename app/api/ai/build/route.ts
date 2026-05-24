@@ -103,7 +103,10 @@ function stripAllArtifacts(code: string): string {
   if (!code) return ""
   let out = code
   // Strip bracket meta-tags
-  out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|component|COMPONENT)\s*\]/g, "")
+  // Strip bracket meta-tags of any kind
+  out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE)\s*\](?:\s*\[?\/?(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE)\s*\])?/gi, "")
+  // Strip standalone closing bracket tags
+  out = out.replace(/\[\s*\/\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE)\s*\]/gi, "")
   // Strip markdown fences
   out = out.replace(/^```[a-zA-Z0-9]*\s*$/gm, "")
   // Strip ### FILE: headers
@@ -193,7 +196,7 @@ NEXT.JS: Server Components by default. "use client" ONLY for hooks/events. layou
 
 ${STRICT_TYPE_RULES}
 
-RETURN ONLY RAW CODE. NO [code] tags. NO fences. NO descriptions. FIRST CHARACTER is code. LAST CHARACTER is code.`
+RETURN ONLY RAW CODE. NO [code] / [file] / [usedfor] / [usedFor] / [component] / [page] bracket tags. NO fences. NO descriptions. NO metadata tags inline. FIRST CHARACTER is code. LAST CHARACTER is code.`
 
 const EDIT_RULES = `You are editing an existing Next.js project. Apply the user's requested change.
 
