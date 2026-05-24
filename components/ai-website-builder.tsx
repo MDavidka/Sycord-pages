@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,11 +21,12 @@ import {
   X,
   Coins,
   Gem,
+  FileText,
+  AlertCircle,
+  Clock,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
-
-// ── Types ────────────────────────────────────────────────────────
 
 interface ModelOption {
   id: string
@@ -53,13 +54,12 @@ export interface GeneratedPage {
 }
 
 interface DebugStep {
-  id: number
+  id: string
   title: string
   detail: string
-  status: "pending" | "done"
+  status: "pending" | "running" | "done" | "error"
+  timestamp: number
 }
-
-// ── Input Bar ────────────────────────────────────────────────────
 
 const InputBar = ({
   input, setInput, onSend, disabled,
@@ -166,7 +166,24 @@ const ModelRow = ({ model, selected, onSelect, tier }: { model: ModelOption; sel
   </DropdownMenuItem>
 )
 
-// ── AIWebsiteBuilder Shell ────────────────────────────────────────
+function parseSSEChunk(chunk: string): Array<{ event: string; data: any }> {
+  const results: Array<{ event: string; data: any }> = []
+  const parts = chunk.split("\n\n")
+  for (const part of parts) {
+    const lines = part.split("\n")
+    let event = ""
+    let data = ""
+    for (const line of lines) {
+      if (line.startsWith("event: ")) event = line.slice(7).trim()
+      else if (line.startsWith("data: ")) data = line.slice(6).trim()
+    }
+    if (event && data) {
+      try { results.push({ event, data: JSON.parse(data) }) }
+      catch { /* skip malformed */ }
+    }
+  }
+  return results
+}
 
 interface AIWebsiteBuilderProps {
   projectId: string
@@ -182,12 +199,16 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [debugSteps, setDebugSteps] = useState<DebugStep[]>([])
+  const [fileCount, setFileCount] = useState<{ current: number; total: number } | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
   const [credits, setCredits] = useState<number | null>(null)
   const [bestCost, setBestCost] = useState<number>(BEST_COST_PER_FILE)
   const [fastCost, setFastCost] = useState<number>(FAST_COST_PER_FILE)
+
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -206,143 +227,266 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     return () => { cancelled = true }
   }, [])
 
-  const pushStep = (title: string, detail: string) => {
-    setDebugSteps((prev) => [...prev, { id: prev.length + 1, title, detail, status: "done" }])
-  }
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort()
+    }
+  }, [])
 
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const pushStep = useCallback((step: DebugStep) => {
+    setDebugSteps(prev => {
+      const existingIdx = prev.findIndex(s => s.id === step.id)
+      if (existingIdx >= 0) {
+        const updated = [...prev]
+        updated[existingIdx] = step
+        if (existingIdx > 0 && prev[existingIdx - 1].status === "running") {
+          updated[existingIdx - 1] = { ...updated[existingIdx - 1], status: "done" }
+        }
+        return updated
+      }
+      const newSteps = [...prev]
+      if (newSteps.length > 0 && newSteps[newSteps.length - 1].status === "running") {
+        newSteps[newSteps.length - 1] = { ...newSteps[newSteps.length - 1], status: "done" }
+      }
+      return [...newSteps, step]
+    })
+  }, [])
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
     setIsLoading(true)
     setDebugSteps([])
+    setFileCount(null)
+    setError(null)
+
+    const controller = new AbortController()
+    abortRef.current = controller
 
     try {
-      // 1. User input
-      pushStep("1. User input", `Felhasználó kérés: "${input.trim()}"`)
-      await wait(250)
+      const res = await fetch("/api/ai/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: input.trim(),
+          projectId,
+          modelId: selectedModel.id,
+          provider: selectedModel.provider,
+          mode: "generate",
+        }),
+        signal: controller.signal,
+      })
 
-      // 2. Temporary structure JSON
-      const structure = {
-        pages: [
-          {
-            name: "Landing",
-            route: "/",
-            usedFor: "Main marketing page",
-            content: ["Hero section", "Feature cards", "CTA"],
-          },
-          {
-            name: "About",
-            route: "/about",
-            usedFor: "Brand story and team",
-            content: ["Intro", "Mission", "Team grid"],
-          },
-          {
-            name: "Contact",
-            route: "/contact",
-            usedFor: "Lead collection",
-            content: ["Contact form", "Support details"],
-          },
-        ],
+      if (!res.ok) {
+        pushStep({ id: "error", title: "Error", detail: `Server returned ${res.status}`, status: "error", timestamp: Date.now() })
+        setError(`Server error: ${res.status}`)
+        setIsLoading(false)
+        return
       }
 
-      pushStep("2. Website structure", `Temporary structure JSON:\n${JSON.stringify(structure, null, 2)}`)
-      await wait(250)
+      const reader = res.body?.getReader()
+      if (!reader) { setIsLoading(false); return }
 
-      // 3. Generate code using predefined shadcn components + prompt
-      const generatedCode = `import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+      const decoder = new TextDecoder()
+      let buffer = ""
+      let fileCurrent = 0
+      let fileTotal = 0
+      const seenFiles = new Set<string>()
 
-export default function LandingPage() {
-  return (
-    <main className="min-h-screen bg-background text-foreground p-8">
-      <section className="max-w-4xl mx-auto space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome to your AI generated website</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p>This page was generated from your Syra AI prompt.</p>
-            <Button className="mt-4">Get started</Button>
-          </CardContent>
-        </Card>
-      </section>
-    </main>
-  )
-}`
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
 
-      pushStep("3. Code generation", "Generated with predefined shadcn components: Card, CardHeader, CardContent, CardTitle, Button.")
-      await wait(250)
+        const events = parseSSEChunk(buffer)
+        buffer = ""
 
-      // 4. Backend loads referenced components in components/ui
-      const usedComponents = ["card", "button"]
-      pushStep(
-        "4. Backend component loading (non-AI)",
-        `System loads components into components/ui: ${usedComponents.join(", ")}.`,
-      )
+        for (const { event, data } of events) {
+          if (event === "step") {
+            const title = String(data.title ?? "")
+            const status: DebugStep["status"] =
+              title.startsWith("✅") || title.startsWith("💾") || title.startsWith("📝") || title === ""
+                ? "done"
+                : title.startsWith("❌") ? "error" : "running"
 
-      setGeneratedPages((prev) => [
-        ...prev,
-        {
-          name: "landing-page.tsx",
-          code: generatedCode,
-          timestamp: Date.now(),
-          usedFor: "Main marketing page",
-        },
-      ])
-      setInput("")
-      setAttachments([])
+            pushStep({
+              id: data.id || `step-${Date.now()}`,
+              title: data.title || "",
+              detail: data.content || "",
+              status,
+              timestamp: data.timestamp || Date.now(),
+            })
+
+            if (data.content && data.content.includes("files:") && fileTotal === 0) {
+              const match = data.content.match(/(\d+)\s*files/)
+              if (match) {
+                fileTotal = parseInt(match[1])
+                setFileCount({ current: 0, total: fileTotal })
+              }
+            }
+          } else if (event === "page") {
+            if (!seenFiles.has(data.name)) {
+              seenFiles.add(data.name)
+              fileCurrent++
+              setFileCount({ current: fileCurrent, total: fileTotal || fileCurrent })
+            }
+            setGeneratedPages(prev => {
+              const idx = prev.findIndex(p => p.name === data.name)
+              const page: GeneratedPage = {
+                name: data.name,
+                code: data.code || "",
+                timestamp: data.timestamp || Date.now(),
+                usedFor: data.usedFor || "",
+              }
+              if (idx >= 0) {
+                const copy = [...prev]
+                copy[idx] = page
+                return copy
+              }
+              return [...prev, page]
+            })
+          } else if (event === "error") {
+            pushStep({ id: "error", title: "Error", detail: data.message || "Unknown error", status: "error", timestamp: Date.now() })
+            setError(data.message || "An error occurred")
+          } else if (event === "done") {
+            setDebugSteps(prev => prev.map(s =>
+              s.status === "running" ? { ...s, status: "done" } : s
+            ))
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        pushStep({ id: "error", title: "Connection Error", detail: err.message || "Failed to connect", status: "error", timestamp: Date.now() })
+        setError(err.message || "Connection failed")
+      }
     } finally {
       setIsLoading(false)
+      setInput("")
+      setAttachments([])
     }
   }
+
+  const isBuilding = isLoading || (debugSteps.length > 0 && debugSteps.every(s => s.status !== "done" && s.status !== "error") && debugSteps.some(s => s.status === "running"))
 
   return (
     <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
       <div className="absolute top-1/4 left-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4">
-        <div className="flex-1 flex flex-col items-center justify-center text-center py-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
-          <div className="space-y-1">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-white">
-              Hi {userName},
-            </h1>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-zinc-500">
-              What are we building?
-            </h2>
-          </div>
-        </div>
-
-        <div className="w-full pb-8 sm:pb-12">
-          <InputBar
-            input={input}
-            setInput={setInput}
-            onSend={handleSend}
-            disabled={isLoading}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            attachments={attachments}
-            setAttachments={setAttachments}
-            credits={credits}
-            bestCost={bestCost}
-            fastCost={fastCost}
-          />
-        </div>
-
-        {debugSteps.length > 0 && (
-          <div className="w-full max-w-2xl mx-auto pb-8">
-            <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-4 space-y-3">
-              <p className="text-xs uppercase tracking-wider text-zinc-400">Syra debug chat steps</p>
-              {debugSteps.map((step) => (
-                <div key={step.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                  <p className="text-sm font-medium text-white">{step.title}</p>
-                  <pre className="mt-2 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{step.detail}</pre>
-                </div>
-              ))}
+      <div className="flex-1 flex flex-col items-center px-3 sm:px-4 overflow-y-auto custom-scrollbar">
+        {!isBuilding && !isLoading && debugSteps.length === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <div className="space-y-1">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-white">
+                Hi {userName},
+              </h1>
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-zinc-500">
+                What are we building?
+              </h2>
             </div>
           </div>
         )}
+
+        {(isBuilding || isLoading || debugSteps.length > 0) && (
+          <div className="flex-1 w-full max-w-2xl flex flex-col justify-center py-8">
+            <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {isBuilding || isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                  ) : error ? (
+                    <AlertCircle className="h-4 w-4 text-red-400" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  )}
+                  <p className="text-xs uppercase tracking-wider text-zinc-400">
+                    {isBuilding || isLoading ? "Building your site" : error ? "Build failed" : "Build complete"}
+                  </p>
+                </div>
+                {fileCount && fileCount.total > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-zinc-500" />
+                    <span className="text-xs text-zinc-400 tabular-nums">
+                      {fileCount.current}/{fileCount.total}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {fileCount && fileCount.total > 0 && (
+                <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-violet-500 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${Math.min(100, (fileCount.current / fileCount.total) * 100)}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {debugSteps
+                  .filter(s => s.id !== "error")
+                  .map((step) => (
+                    <div
+                      key={step.id}
+                      className={cn(
+                        "rounded-xl border p-3 transition-all duration-300",
+                        step.status === "running" && "border-blue-500/30 bg-blue-500/[0.04]",
+                        step.status === "done" && "border-emerald-500/20 bg-emerald-500/[0.03]",
+                        step.status === "error" && "border-red-500/20 bg-red-500/[0.03]",
+                        step.status === "pending" && "border-white/[0.05] bg-white/[0.01]",
+                      )}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className="mt-0.5 shrink-0">
+                          {step.status === "running" && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />}
+                          {step.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
+                          {step.status === "error" && <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
+                          {step.status === "pending" && <Clock className="h-3.5 w-3.5 text-zinc-600" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn(
+                            "text-sm font-medium",
+                            step.status === "running" && "text-blue-300",
+                            step.status === "done" && "text-emerald-300",
+                            step.status === "error" && "text-red-300",
+                            step.status === "pending" && "text-zinc-500",
+                          )}>
+                            {step.title}
+                          </p>
+                          <pre className="mt-1.5 text-xs text-zinc-400 whitespace-pre-wrap font-mono leading-relaxed">{step.detail}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {error && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+                    <p className="text-sm text-red-300">{error}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="w-full pb-8 sm:pb-12 shrink-0">
+        <InputBar
+          input={input}
+          setInput={setInput}
+          onSend={handleSend}
+          disabled={isLoading}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
+          attachments={attachments}
+          setAttachments={setAttachments}
+          credits={credits}
+          bestCost={bestCost}
+          fastCost={fastCost}
+        />
       </div>
     </div>
   )

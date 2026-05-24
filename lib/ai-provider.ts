@@ -336,6 +336,7 @@ async function callAnthropic(
 // Extracts the first valid JSON payload from a model response. Handles fenced
 // ```json blocks, stray prose, and picks the outermost [ ... ] or { ... }
 // region as a fallback. Returns null if nothing parseable is found.
+// Additionally strips placeholder values like "[usedFor]" from extracted JSON.
 export function extractJson<T = unknown>(content: string): T | null {
   if (!content) return null
   const trimmed = content.trim()
@@ -343,16 +344,46 @@ export function extractJson<T = unknown>(content: string): T | null {
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
   if (fenced?.[1]) {
     try {
-      return JSON.parse(fenced[1]) as T
+      return cleanJsonPlaceholders(JSON.parse(fenced[1])) as T
     } catch {
       // fall through
+    }
+  }
+
+  // Find the outermost array or object by scanning for first [ or { and matching closing bracket
+  const firstArray = trimmed.indexOf("[")
+  const firstObject = trimmed.indexOf("{")
+  const startChar = firstArray >= 0 && (firstArray < firstObject || firstObject < 0) ? "[" : "{"
+  const closeChar = startChar === "[" ? "]" : "}"
+  const startIdx = trimmed.indexOf(startChar)
+  if (startIdx >= 0) {
+    let depth = 0
+    let endIdx = -1
+    let inString = false
+    let escaped = false
+    for (let i = startIdx; i < trimmed.length; i++) {
+      const ch = trimmed[i]
+      if (escaped) { escaped = false; continue }
+      if (ch === "\\" && inString) { escaped = true; continue }
+      if (ch === '"') { inString = !inString; continue }
+      if (inString) continue
+      if (ch === startChar) depth++
+      else if (ch === closeChar) { depth--; if (depth === 0) { endIdx = i; break } }
+    }
+    if (endIdx > startIdx) {
+      try {
+        const jsonStr = trimmed.slice(startIdx, endIdx + 1)
+        return cleanJsonPlaceholders(JSON.parse(jsonStr)) as T
+      } catch {
+        // fall through
+      }
     }
   }
 
   const arrayBlock = trimmed.match(/\[\s*[\s\S]*\s*\]/)
   if (arrayBlock) {
     try {
-      return JSON.parse(arrayBlock[0]) as T
+      return cleanJsonPlaceholders(JSON.parse(arrayBlock[0])) as T
     } catch {
       // fall through
     }
@@ -361,42 +392,82 @@ export function extractJson<T = unknown>(content: string): T | null {
   const objectBlock = trimmed.match(/\{\s*[\s\S]*\s*\}/)
   if (objectBlock) {
     try {
-      return JSON.parse(objectBlock[0]) as T
+      return cleanJsonPlaceholders(JSON.parse(objectBlock[0])) as T
     } catch {
       // fall through
     }
   }
 
   try {
-    return JSON.parse(trimmed) as T
+    return cleanJsonPlaceholders(JSON.parse(trimmed)) as T
   } catch {
     return null
   }
+}
+
+// Strip placeholder values like "[usedFor]", "[name]", "[description]" etc.
+// from parsed JSON objects/arrays. These are AI hallucinations where the model
+// outputs field-name-like bracket markers instead of real data.
+function cleanJsonPlaceholders<T>(value: T): T {
+  if (typeof value === "string") {
+    return (value.replace(/^\[[a-zA-Z]+\]$/, "").trim() || value.replace(/^\[[a-zA-Z]+\]$/, "")) as unknown as T
+  }
+  if (Array.isArray(value)) {
+    return value.map(cleanJsonPlaceholders) as unknown as T
+  }
+  if (value !== null && typeof value === "object") {
+    const cleaned: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof val === "string" && /^\[[a-zA-Z]+\]$/.test(val)) {
+        cleaned[key] = ""
+      } else {
+        cleaned[key] = cleanJsonPlaceholders(val)
+      }
+    }
+    return cleaned as unknown as T
+  }
+  return value
 }
 
 // Extract a runnable source code body out of a chatty model response.
 //
 // Real model output we've seen in the wild:
 //   1. Clean: just the code.
-//   2. Fenced with a language hint: ```typescript\n...\n```
-//   3. Fenced then trailing prose: "```ts\n...\n```\n\nLet me know…"
-//   4. Prose-then-fence: "Here is the code:\n\n```ts\n...\n```"
-//   5. Unclosed / malformed fence: "```typescript\n...\n" (no closing fence).
+//   2. Fenced with a language hint: \`\`\`typescript\n...\n\`\`\`
+//   3. Fenced then trailing prose: "\`\`\`ts\n...\n\`\`\`\n\nLet me know…"
+//   4. Prose-then-fence: "Here is the code:\n\n\`\`\`ts\n...\n\`\`\`"
+//   5. Unclosed / malformed fence: "\`\`\`typescript\n...\n" (no closing fence).
 //   6. No fence, prose prefix: "Here is the code:\n\nexport function …"
-//
-// The previous implementation failed case 2 when `lang="ts"` because \s* can't
-// match `cript` in ```typescript — it silently returned the full messy blob
-// (including prose and triple-backtick markers), which is exactly what lands
-// in the generated .ts file and kills `vite build`.
+//   7. JSON-wrapped: {"code": "..."} or {"name": "...", "code": "..."}
 //
 // This version tries multiple strategies and, crucially, always strips any
-// leading/trailing triple-backtick lines before returning.
+// leading/trailing triple-backtick lines and prose before returning.
 export function extractCode(content: string, lang?: string): string {
   if (!content) return ""
+
+  // Strategy quick-check: if the content looks like clean code already, return immediately
+  const quickTrim = content.trim()
+  if (/^(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|@tailwind|@layer|\/\/|\/\*|{|package\s*\{)/m.test(quickTrim) &&
+      !quickTrim.match(/^```/) &&
+      !quickTrim.startsWith("Here") &&
+      !quickTrim.startsWith("This")) {
+    return stripStrayFenceMarkers(quickTrim).trim()
+  }
+
   const trimmed = content.trim()
 
-  // Strategy A: lang-specific fence. Accept ```ts, ```typescript, ```tsx when
-  // lang=ts; accept ```js / ```javascript / ```jsx when lang=js. For other
+  // Strategy Z: JSON-wrapped code object — some models wrap code in {"code": "..."}
+  if (trimmed.startsWith("{") && trimmed.includes('"code"')) {
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>
+      if (typeof parsed.code === "string" && parsed.code.length > 10) {
+        return extractCode(parsed.code, lang)
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Strategy A: lang-specific fence. Accept \`\`\`ts, \`\`\`typescript, \`\`\`tsx when
+  // lang=ts; accept \`\`\`js / \`\`\`javascript / \`\`\`jsx when lang=js. For other
   // langs just match the lang literally.
   const langAliases =
     lang === "ts" ? ["typescript", "tsx", "ts"]
@@ -413,20 +484,49 @@ export function extractCode(content: string, lang?: string): string {
   const anyFence = trimmed.match(/```[a-zA-Z0-9]*\b[\t ]*\n?([\s\S]*?)\n?```/)
   if (anyFence?.[1]) return stripStrayFenceMarkers(anyFence[1]).trim()
 
-  // Strategy C: unclosed fence — a ``` that never closes. Take everything
+  // Strategy C: unclosed fence — a \`\`\` that never closes. Take everything
   // after the opening fence line.
   const openFence = trimmed.match(/^```[a-zA-Z0-9]*\b[\t ]*\n([\s\S]*)$/)
   if (openFence?.[1]) return stripStrayFenceMarkers(openFence[1]).trim()
 
-  // Strategy D: no fence but prose prefix before an import/export/const/function.
-  // Drop everything up to the first plausible code line.
+  // Strategy D: no fence but prose prefix before code. Drop everything up to
+  // the first plausible code line. Match more aggressively — include JSX openings too.
   const codeStart = trimmed.search(
-    /^(?:import\b|export\b|const\b|let\b|var\b|function\b|async\s+function\b|\/\/|\/\*)/m,
+    /^(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|async\s+function\b|\/\*|\/\/|@tailwind|@layer|@apply|^<\w+|^\{[\s\n]*"?\w|^package\s*\{)/ms,
   )
-  if (codeStart > 0) return stripStrayFenceMarkers(trimmed.slice(codeStart)).trim()
+  if (codeStart > 4) {
+    const result = stripStrayFenceMarkers(trimmed.slice(codeStart)).trim()
+    if (result.length > 10) return result
+  }
 
-  // Strategy E: give up and scrub stray fence markers out of the raw content.
-  return stripStrayFenceMarkers(trimmed).trim()
+  // Strategy E: try to find code by locating the first import/export/function line
+  // and extracting from there to the end.
+  const codeLine = trimmed.search(/\n\s*(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|async\s+function\b)/m)
+  if (codeLine > 0) {
+    const result = stripStrayFenceMarkers(trimmed.slice(codeLine + 1)).trim()
+    if (result.length > 10) return result
+  }
+
+  // Strategy F: give up and scrub stray fence markers out of the raw content,
+  // then strip obvious prose lines.
+  let fallback = stripStrayFenceMarkers(trimmed).trim()
+  // Remove lines that are clearly prose (full sentences without code syntax)
+  fallback = fallback.split("\n").filter(line => {
+    const t = line.trim()
+    if (!t) return true
+    if (/[{}();=<>\[\]&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) return true
+    if (/^(?:import|export|const|let|var|function|class|interface|type|enum|return|if|for|while|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|yield|await|async|default|extends|implements|static|public|private|protected|readonly|abstract|as|from|require|module)\b/i.test(t)) return true
+    if (/^["']use (client|server|strict)["']/.test(t)) return true
+    if (/^[\/\*]/.test(t)) return true
+    if (/^@(tailwind|layer|apply|media|keyframes)/.test(t)) return true
+    if (/^<(div|span|section|main|header|footer|nav|article|aside|ul|ol|li|p|h[1-6]|a|img|button|input|form|table|tbody|thead|tr|th|td|svg|path|br|hr|pre|code|picture|source|figure|figcaption|blockquote|label|select|textarea|option|html|head|body|meta|link|title)\b/i.test(t)) return true
+    if (/^(<\/[\w-]+>|\/>)/.test(t)) return true
+    // Filter out prose sentences
+    if (/^(Here|This|Please|Let|Note|Feel free|You can|Make sure|Don't forget|Remember|The above|I hope|Enjoy|Ready to|Now you|The code|The file|Below|Following|This will|I have|I've|I will)\s/i.test(t)) return false
+    if (/^[a-z]/i.test(t) && /[.!?]$/.test(t) && !/[{}();]/.test(t)) return false
+    return true
+  }).join("\n")
+  return fallback.trim()
 }
 
 // Strip any lone ``` lines that slipped through — a ``` that is alone on a

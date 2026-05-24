@@ -102,15 +102,32 @@ NavigationMenu: NavigationMenu, NavigationMenuList, NavigationMenuItem, Navigati
 function stripAllArtifacts(code: string): string {
   if (!code) return ""
   let out = code
-  // Strip bracket meta-tags
   // Strip bracket meta-tags of any kind
-  out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE)\s*\](?:\s*\[?\/?(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE)\s*\])?/gi, "")
+  out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\](?:\s*\[?\/?(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\])?/gi, "")
   // Strip standalone closing bracket tags
-  out = out.replace(/\[\s*\/\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE)\s*\]/gi, "")
+  out = out.replace(/\[\s*\/\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\]/gi, "")
   // Strip markdown fences
   out = out.replace(/^```[a-zA-Z0-9]*\s*$/gm, "")
   // Strip ### FILE: headers
   out = out.replace(/^###\s*FILE:.*$/gm, "")
+  // Strip leading "Here is..." type prose on its own line
+  out = out.replace(/^(?:Here is|This is|Below is|Following is|This will|I have|I've|I will|The code|The file|This code|The following)\s.{0,200}$/gm, "")
+  // Strip trailing prose that starts with sentence patterns
+  out = out.replace(/\n(?:This|Here|Please|Let|Note|Feel free|You can|Make sure|Don't forget|Remember|The above|I hope|Enjoy|Ready to|Now you)\s.{0,500}$/gm, "")
+  // Strip lines that are entirely prose (no code characters — no semicolons, braces, import/export, etc.)
+  out = out.split("\n").filter(line => {
+    const t = line.trim()
+    if (!t) return true
+    if (/[{}();=<>\[\]\&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) return true
+    if (/^(?:import|export|const|let|var|function|class|interface|type|enum|return|if|for|while|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|yield|await|async|default|extends|implements|static|public|private|protected|readonly|abstract|as|from|require|module)($|\s)/i.test(t)) return true
+    if (/^["']use (client|server|strict)["']/.test(t)) return true
+    if (/^[\/\*]/.test(t)) return true
+    if (/^@(tailwind|layer|apply|media|keyframes)/.test(t)) return true
+    if (/^<(div|span|section|main|header|footer|nav|article|aside|ul|ol|li|p|h[1-6]|a|img|button|input|form|table|tbody|thead|tr|th|td|svg|path|br|hr|pre|code|picture|source|figure|figcaption|blockquote|label|select|textarea|option|html|head|body|meta|link|title)\b/i.test(t)) return true
+    if (/^(<\/[\w-]+>|\/>)/.test(t)) return true
+    if (/^[a-z]/.test(t) && !/[{}();=<>\[\]&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t) && t.split(/\s+/).length > 5) return false
+    return true
+  }).join("\n")
   // Strip leading/trailing empty lines
   out = out.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "")
   // Collapse triple+ newlines
@@ -136,7 +153,6 @@ function stripAllArtifacts(code: string): string {
   out = out.replace(/^\s*\[$|^\s*\]$/gm, "")
   return out.trim()
 }
-
 function loadCheatsheet(): string {
   const p = join(process.cwd(),"components.json")
   if (!existsSync(p)) return "No cheatsheet"
@@ -172,20 +188,46 @@ async function saveHistory(projectId:string,userId:string,entry:BuildHistoryEntr
 // PROMPTS
 // ═══════════════════════════════════════════════════════════════════
 
-const STRUCTURE_RULES = `Next.js App Router architect. Output ONLY a JSON array.
+const STRUCTURE_RULES = `Next.js App Router architect.
 
-MANDATORY: "package.json"(1) "tsconfig.json"(2) "lib/types.ts"(3) "lib/utils.ts"(4) "app/globals.css"(5) "app/layout.tsx"(6) "app/page.tsx"(7)
+Return a single JSON array — NOTHING else. The FIRST byte of your response MUST be "[". The LAST byte MUST be "]".
+NO prose, NO markdown, NO code fences, NO "Here is...", NO explanation, NO comments. ONLY the JSON array.
 
-Fields: name, usedFor, description, route, priority(1-100). 7-14 files total.
+The JSON array must contain 7-14 objects with EXACTLY these fields:
+  "name"     — file path string (e.g. "app/page.tsx")
+  "usedFor"  — short plain English description (not "[usedFor]" or brackets, just words like "Homepage hero section")
+  "description" — 1-2 sentence technical description of the file's contents
+  "route"    — URL path or "n/a" (e.g. "/", "/about", "n/a")
+  "priority" — integer 1-100 (lower = earlier in pipeline order)
 
-Return ONLY the JSON array.`
+MANDATORY files (these MUST be included):
+  {"name":"package.json","usedFor":"npm config","description":"package.json with all dependencies","route":"n/a","priority":1}
+  {"name":"tsconfig.json","usedFor":"TypeScript config","description":"tsconfig with path aliases","route":"n/a","priority":2}
+  {"name":"lib/types.ts","usedFor":"shared types","description":"TypeScript interfaces and enums","route":"n/a","priority":3}
+  {"name":"lib/utils.ts","usedFor":"cn utility","description":"cn() helper with clsx+tailwind-merge","route":"n/a","priority":4}
+  {"name":"app/globals.css","usedFor":"global styles","description":"Tailwind directives and CSS custom properties","route":"n/a","priority":5}
+  {"name":"app/layout.tsx","usedFor":"root layout","description":"Root layout with metadata, fonts, and providers","route":"n/a","priority":6}
+  {"name":"app/page.tsx","usedFor":"homepage","description":"Landing page for the described website","route":"/","priority":7}
+
+IMPORTANT: ALL string values must contain ONLY plain English text — NO square brackets, NO placeholders like "[usedFor]" or "[name]", NO JSON inside strings. Every field must be meaningful and specific to the user's request.
+
+Return ONLY the JSON array. No other output whatsoever.`
 
 function structPrompt(prompt:string,cheatsheet:string,depReport:string):ChatMessage[]{return[
   {role:"system",content:[STRUCTURE_RULES,`\nshadcn/ui:\n${cheatsheet}`,`\nNPM deps:\n${depReport}`].join("\n")},
   {role:"user",content:prompt},
 ]}
 
-const CODE_RULES = `Production Next.js App Router + TypeScript. Output raw code — FIRST character must be code, LAST character must be code.
+const CODE_RULES = `Production Next.js App Router + TypeScript.
+
+THE RULES:
+1. FIRST character of your response MUST be code (import, export, "use client", function, const, let, var, interface, type, class, or //).
+2. Return ONLY the source code. NOTHING else.
+3. NO prose — no "Here is the code", no "This component...", no "Let me know if...".
+4. NO markdown fences (\`\`\`typescript etc) — raw code only.
+5. NO [code] [/code] or any other bracket-style tags.
+6. NO leading or trailing blank lines containing only whitespace.
+7. NO JSON wrappers around the code. NO "code" field objects. Just the raw code.
 
 100% SHADCN/UI: Never raw <button> <input> <select> <textarea> <label> <form>.
 Use: Button Input Textarea Select SelectTrigger SelectContent SelectItem Label Form FormField FormItem FormControl FormMessage Checkbox Switch RadioGroup Card CardHeader CardContent CardFooter Separator Tabs TabsList TabsTrigger TabsContent Sheet SheetTrigger SheetContent Dialog DialogTrigger DialogContent Accordion AccordionItem AccordionTrigger AccordionContent Badge Avatar Skeleton Tooltip Popover DropdownMenu Breadcrumb Pagination.
@@ -200,14 +242,22 @@ RETURN ONLY RAW CODE. NO [code] / [file] / [usedfor] / [usedFor] / [component] /
 
 const EDIT_RULES = `You are editing an existing Next.js project. Apply the user's requested change.
 
-Respond with ONE OR MORE file blocks:
+Respond with file blocks ONLY. NO prose, NO "Here is...", NO explanations, NO markdown outside of file blocks.
+
+Format — EXACTLY this, nothing else:
 ### FILE: path/to/file.tsx
-<complete new code — NOT diffs>
+<complete new code — NOT diffs, NOT descriptions, NOT extra comments>
+
+### FILE: path/to/file.tsx
+<complete new code>
 
 Special actions:
 - DELETE: ### FILE: path/to/file.tsx\\nDELETE
 - MOVE:   ### FILE: old/path.tsx\\nMOVE_TO: new/path.tsx
 - ADD:    ### FILE: new/path.tsx\\n<complete code>
+
+NO prose between file blocks. NO introductory text. NO closing remarks.
+Each ### FILE: block must be immediately followed by the complete code on the next line.
 
 ${STRICT_TYPE_RULES}
 
@@ -222,6 +272,7 @@ function codePrompt(pages:PageStructure[],cur:PageStructure,prev:Array<{name:str
   pts.push(`\nALL FILES:\n${list}`,pb)
   return[{role:"system",content:pts.join("\n")},{role:"user",content:`Write production code for ${cur.name} (${cur.usedFor}).`}]
 }
+
 function editPrompt(userReq:string, existing:Array<{name:string;code:string;usedFor:string}>,cheatsheet:string,depReport:string,custom?:string):ChatMessage[]{
   const fl=existing.map(f=>`--- ${f.name} (${f.usedFor||""}) ---\n${f.code}`).join("\n\n")
   const pts=[EDIT_RULES,`\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`]
