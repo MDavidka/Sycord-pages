@@ -12,15 +12,14 @@ import {
 import {
   Loader2,
   ChevronDown,
-  Sparkles,
   CheckCircle2,
   Send,
   Zap,
-  Plus,
   Paperclip,
   X,
   Coins,
   Gem,
+  Circle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
@@ -56,7 +55,7 @@ interface DebugStep {
   id: number
   title: string
   detail: string
-  status: "pending" | "done"
+  status: "pending" | "active" | "done"
 }
 
 // ── Input Bar ────────────────────────────────────────────────────
@@ -206,8 +205,24 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     return () => { cancelled = true }
   }, [])
 
-  const pushStep = (title: string, detail: string) => {
-    setDebugSteps((prev) => [...prev, { id: prev.length + 1, title, detail, status: "done" }])
+  const beginStep = (title: string, detail = "") => {
+    let id = 0
+    setDebugSteps((prev) => {
+      id = prev.length + 1
+      return [
+        ...prev.map((step) => (step.status === "active" ? { ...step, status: "done" as const } : step)),
+        { id, title, detail, status: "active" as const },
+      ]
+    })
+    return id
+  }
+
+  const completeStep = (id: number, detail?: string) => {
+    setDebugSteps((prev) =>
+      prev.map((step) =>
+        step.id === id ? { ...step, status: "done" as const, detail: detail ?? step.detail } : step
+      )
+    )
   }
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -219,8 +234,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
     try {
       // 1. User input
-      pushStep("1. User input", `Felhasználó kérés: "${input.trim()}"`)
+      const inputStepId = beginStep("1. User input", "Reading your prompt and preparing generation context...")
       await wait(250)
+      completeStep(inputStepId, `User prompt captured: "${input.trim()}"`)
 
       // 2. Temporary structure JSON
       const structure = {
@@ -246,8 +262,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
         ],
       }
 
-      pushStep("2. Website structure", `Temporary structure JSON:\n${JSON.stringify(structure, null, 2)}`)
+      const structureStepId = beginStep("2. Website structure", "Drafting page map and content sections...")
       await wait(250)
+      completeStep(structureStepId, `Temporary structure JSON:\n${JSON.stringify(structure, null, 2)}`)
 
       // 3. Generate code using predefined shadcn components + prompt
       const generatedCode = `import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -271,15 +288,15 @@ export default function LandingPage() {
   )
 }`
 
-      pushStep("3. Code generation", "Generated with predefined shadcn components: Card, CardHeader, CardContent, CardTitle, Button.")
+      const generationStepId = beginStep("3. Code generation", "Generating starter page code with Syra templates...")
       await wait(250)
+      completeStep(generationStepId, "Generated with predefined shadcn components: Card, CardHeader, CardContent, CardTitle, Button.")
 
       // 4. Backend loads referenced components in components/ui
       const usedComponents = ["card", "button"]
-      pushStep(
-        "4. Backend component loading (non-AI)",
-        `System loads components into components/ui: ${usedComponents.join(", ")}.`,
-      )
+      const backendStepId = beginStep("4. Backend component loading (non-AI)", "Resolving reusable UI dependencies...")
+      await wait(200)
+      completeStep(backendStepId, `System loads components into components/ui: ${usedComponents.join(", ")}.`)
 
       setGeneratedPages((prev) => [
         ...prev,
@@ -335,9 +352,13 @@ export default function LandingPage() {
             <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-4 space-y-3">
               <p className="text-xs uppercase tracking-wider text-zinc-400">Syra debug chat steps</p>
               {debugSteps.map((step) => (
-                <div key={step.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                  <p className="text-sm font-medium text-white">{step.title}</p>
-                  <pre className="mt-2 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{step.detail}</pre>
+                <div key={step.id} className={cn("rounded-xl border p-3 transition-colors", step.status === "done" ? "border-emerald-400/20 bg-emerald-500/[0.05]" : step.status === "active" ? "border-blue-400/30 bg-blue-500/[0.07]" : "border-white/[0.06] bg-white/[0.02]")}>
+                  <p className="text-sm font-medium text-white flex items-center gap-2">
+                    {step.status === "done" ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : step.status === "active" ? <Loader2 className="h-4 w-4 text-blue-300 animate-spin" /> : <Circle className="h-3.5 w-3.5 text-zinc-500" />}
+                    {step.title}
+                    {step.status === "active" && <span className="text-[10px] uppercase tracking-wider text-blue-300/90">In progress</span>}
+                  </p>
+                  <pre className="mt-2 text-xs text-zinc-300 whitespace-pre-wrap font-mono">{step.detail || "Waiting..."}</pre>
                 </div>
               ))}
             </div>
