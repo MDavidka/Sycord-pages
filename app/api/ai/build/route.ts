@@ -263,6 +263,16 @@ ${STRICT_TYPE_RULES}
 
 Production quality. 100% shadcn/ui. cn() for classNames. Mobile-first. FIRST char must be "#".`
 
+function codePrompt(pages:PageStructure[],cur:PageStructure,prev:Array<{name:string;code:string;usedFor?:string}>,cheatsheet:string,depReport:string,custom?:string):ChatMessage[]{
+  const list=pages.map(p=>`- ${p.name} (${p.usedFor}): ${p.description}`).join("\n")
+  let pb=""
+  if(prev.length) pb="\n\nALREADY GENERATED:\n"+prev.map(f=>`--- ${f.name} ---\n${f.code}`).join("\n\n")
+  const pts=[CODE_RULES,`\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`]
+  if(custom&&custom.length>10&&custom!=="Generation code prompting is disabled.") pts.push(`\nBUILD RULES:\n${custom}`)
+  pts.push(`\nALL FILES:\n${list}`,pb)
+  return[{role:"system",content:pts.join("\n")},{role:"user",content:`Write production code for ${cur.name} (${cur.usedFor}).`}]
+}
+
 function editPrompt(userReq:string, existing:Array<{name:string;code:string;usedFor:string}>,cheatsheet:string,depReport:string,custom?:string):ChatMessage[]{
   const fl=existing.map(f=>`--- ${f.name} (${f.usedFor||""}) ---\n${f.code}`).join("\n\n")
   const pts=[EDIT_RULES,`\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`]
