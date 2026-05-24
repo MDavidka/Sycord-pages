@@ -58,6 +58,13 @@ interface DebugStep {
   status: "pending" | "active" | "done"
 }
 
+const STEP_TEMPLATES: Array<Pick<DebugStep, "title" | "detail">> = [
+  { title: "1. Validate request", detail: "Waiting for prompt analysis..." },
+  { title: "2. Plan site structure", detail: "Waiting to draft routes and sections..." },
+  { title: "3. Generate page code", detail: "Waiting to create component code..." },
+  { title: "4. Resolve UI dependencies", detail: "Waiting to map required UI components..." },
+]
+
 // ── Input Bar ────────────────────────────────────────────────────
 
 const InputBar = ({
@@ -205,23 +212,30 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     return () => { cancelled = true }
   }, [])
 
-  const beginStep = (title: string, detail = "") => {
-    let id = 0
-    setDebugSteps((prev) => {
-      id = prev.length + 1
-      return [
-        ...prev.map((step) => (step.status === "active" ? { ...step, status: "done" as const } : step)),
-        { id, title, detail, status: "active" as const },
-      ]
-    })
-    return id
+  const initializeSteps = () => {
+    setDebugSteps(
+      STEP_TEMPLATES.map((step, index) => ({
+        id: index + 1,
+        title: step.title,
+        detail: step.detail,
+        status: "pending" as const,
+      }))
+    )
   }
 
-  const completeStep = (id: number, detail?: string) => {
+  const beginStep = (id: number, detail: string) => {
     setDebugSteps((prev) =>
-      prev.map((step) =>
-        step.id === id ? { ...step, status: "done" as const, detail: detail ?? step.detail } : step
-      )
+      prev.map((step) => {
+        if (step.id < id && step.status !== "done") return { ...step, status: "done" as const }
+        if (step.id === id) return { ...step, status: "active" as const, detail }
+        return step
+      })
+    )
+  }
+
+  const completeStep = (id: number, detail: string) => {
+    setDebugSteps((prev) =>
+      prev.map((step) => (step.id === id ? { ...step, status: "done" as const, detail } : step))
     )
   }
 
@@ -230,13 +244,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
     setIsLoading(true)
-    setDebugSteps([])
+    initializeSteps()
 
     try {
       // 1. User input
-      const inputStepId = beginStep("1. User input", "Reading your prompt and preparing generation context...")
+      beginStep(1, "Parsing prompt, selected model, and attached files...")
+      const prompt = input.trim()
+      const attachmentSummary = attachments.length ? `${attachments.length} attachment(s) ready.` : "No attachments provided."
       await wait(250)
-      completeStep(inputStepId, `User prompt captured: "${input.trim()}"`)
+      completeStep(1, `Prompt: "${prompt}"\nModel: ${selectedModel.name} (${selectedModel.provider})\n${attachmentSummary}`)
 
       // 2. Temporary structure JSON
       const structure = {
@@ -288,15 +304,15 @@ export default function LandingPage() {
   )
 }`
 
-      const generationStepId = beginStep("3. Code generation", "Generating starter page code with Syra templates...")
+      beginStep(3, "Composing React page using Syra generation templates...")
       await wait(250)
-      completeStep(generationStepId, "Generated with predefined shadcn components: Card, CardHeader, CardContent, CardTitle, Button.")
+      completeStep(3, "Generated landing page with shadcn Card and Button building blocks.")
 
       // 4. Backend loads referenced components in components/ui
       const usedComponents = ["card", "button"]
-      const backendStepId = beginStep("4. Backend component loading (non-AI)", "Resolving reusable UI dependencies...")
+      beginStep(4, "Inspecting generated code imports and resolving component dependencies...")
       await wait(200)
-      completeStep(backendStepId, `System loads components into components/ui: ${usedComponents.join(", ")}.`)
+      completeStep(4, `Resolved UI dependencies: ${usedComponents.join(", ")} from components/ui.`)
 
       setGeneratedPages((prev) => [
         ...prev,
@@ -331,24 +347,8 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="w-full pb-8 sm:pb-12">
-          <InputBar
-            input={input}
-            setInput={setInput}
-            onSend={handleSend}
-            disabled={isLoading}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            attachments={attachments}
-            setAttachments={setAttachments}
-            credits={credits}
-            bestCost={bestCost}
-            fastCost={fastCost}
-          />
-        </div>
-
         {debugSteps.length > 0 && (
-          <div className="w-full max-w-2xl mx-auto pb-8">
+          <div className="w-full max-w-2xl mx-auto pb-5 sm:pb-6">
             <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-4 space-y-3">
               <p className="text-xs uppercase tracking-wider text-zinc-400">Syra debug chat steps</p>
               {debugSteps.map((step) => (
@@ -364,6 +364,22 @@ export default function LandingPage() {
             </div>
           </div>
         )}
+
+        <div className="w-full pb-8 sm:pb-12">
+          <InputBar
+            input={input}
+            setInput={setInput}
+            onSend={handleSend}
+            disabled={isLoading}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            credits={credits}
+            bestCost={bestCost}
+            fastCost={fastCost}
+          />
+        </div>
       </div>
     </div>
   )
