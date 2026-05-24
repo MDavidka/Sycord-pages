@@ -95,6 +95,64 @@ DropdownMenu: DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMe
 NavigationMenu: NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuTrigger, NavigationMenuContent, NavigationMenuLink
 `
 
+// ═══════════════════════════════════════════════════════════════════
+// CODE CLEANER — strips ALL meta-tags, fences, and descriptions
+// ═══════════════════════════════════════════════════════════════════
+
+function stripAllArtifacts(code: string): string {
+  if (!code) return ""
+  let out = code
+  // Strip bracket meta-tags of any kind
+  out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\](?:\s*\[?\/?(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\])?/gi, "")
+  // Strip standalone closing bracket tags
+  out = out.replace(/\[\s*\/\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\]/gi, "")
+  // Strip markdown fences
+  out = out.replace(/^```[a-zA-Z0-9]*\s*$/gm, "")
+  // Strip ### FILE: headers
+  out = out.replace(/^###\s*FILE:.*$/gm, "")
+  // Strip leading "Here is..." type prose on its own line
+  out = out.replace(/^(?:Here is|This is|Below is|Following is|This will|I have|I've|I will|The code|The file|This code|The following)\s.{0,200}$/gm, "")
+  // Strip trailing prose that starts with sentence patterns
+  out = out.replace(/\n(?:This|Here|Please|Let|Note|Feel free|You can|Make sure|Don't forget|Remember|The above|I hope|Enjoy|Ready to|Now you)\s.{0,500}$/gm, "")
+  // Strip lines that are entirely prose (no code characters — no semicolons, braces, import/export, etc.)
+  out = out.split("\n").filter(line => {
+    const t = line.trim()
+    if (!t) return true
+    if (/[{}();=<>\[\]\&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) return true
+    if (/^(?:import|export|const|let|var|function|class|interface|type|enum|return|if|for|while|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|yield|await|async|default|extends|implements|static|public|private|protected|readonly|abstract|as|from|require|module)($|\s)/i.test(t)) return true
+    if (/^["']use (client|server|strict)["']/.test(t)) return true
+    if (/^[\/\*]/.test(t)) return true
+    if (/^@(tailwind|layer|apply|media|keyframes)/.test(t)) return true
+    if (/^<(div|span|section|main|header|footer|nav|article|aside|ul|ol|li|p|h[1-6]|a|img|button|input|form|table|tbody|thead|tr|th|td|svg|path|br|hr|pre|code|picture|source|figure|figcaption|blockquote|label|select|textarea|option|html|head|body|meta|link|title)\b/i.test(t)) return true
+    if (/^(<\/[\w-]+>|\/>)/.test(t)) return true
+    if (/^[a-z]/.test(t) && !/[{}();=<>\[\]&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t) && t.split(/\s+/).length > 5) return false
+    return true
+  }).join("\n")
+  // Strip leading/trailing empty lines
+  out = out.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "")
+  // Collapse triple+ newlines
+  out = out.replace(/\n{3,}/g, "\n\n")
+  // Strip leading description lines (prose before the actual code)
+  const codeStart = out.search(/(?:^|\n)\s*(?:"use client"|"use strict"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|@tailwind|@layer|\/\/|\/\*|\{)/m)
+  if (codeStart > 0) out = out.slice(codeStart)
+  // Strip trailing prose (after the last code-like line)
+  const lines = out.split("\n")
+  let lastCodeLine = lines.length - 1
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (/^(?:export\b|import\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|return\b|if\s*\(|}\s*$|\)\s*;|\)\s*=>|^\s*\{|^\s*\}|^\s*\]|^\s*\)|^\s*<|^\s*\/>|^\s*\/\*\*|^\s*\*\/|^\s*\* |^\s*\/\/|@layer|@tailwind|@apply)/.test(line) || /^[\s]*$/.test(line)) {
+      lastCodeLine = i
+      continue
+    }
+    break
+  }
+  if (lastCodeLine < lines.length - 1) {
+    out = lines.slice(0, lastCodeLine + 1).join("\n")
+  }
+  // Remove remaining stray bracket-only lines
+  out = out.replace(/^\s*\[$|^\s*\]$/gm, "")
+  return out.trim()
+}
 function loadCheatsheet(): string {
   const p = join(process.cwd(),"components.json")
   if (!existsSync(p)) return "No cheatsheet"
@@ -180,65 +238,7 @@ NEXT.JS: Server Components by default. "use client" ONLY for hooks/events. layou
 
 ${STRICT_TYPE_RULES}
 
-RETURN ONLY RAW CODE. FIRST CHARACTER is code. LAST CHARACTER is code.`
-
-function stripAllArtifacts(code: string): string {
-  if (!code) return ""
-  let out = code
-  // Strip bracket meta-tags (including markers like [/code])
-  out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|component|COMPONENT|usedFor|USEDFOR|name|NAME)\s*\]/g, "")
-  // Strip markdown fences
-  out = out.replace(/^```[a-zA-Z0-9]*\s*$/gm, "")
-  // Strip ### FILE: headers
-  out = out.replace(/^###\s*FILE:.*$/gm, "")
-  // Strip leading "Here is..." type prose on its own line
-  out = out.replace(/^(?:Here is|This is|Below is|Following is|This will|I have|I've|I will|The code|The file|This code|The following)\s.{0,200}$/gm, "")
-  // Strip trailing prose that starts with lowercase/sentence patterns
-  out = out.replace(/\n(?:This|Here|Please|Let|Note|Feel free|You can|Make sure|Don't forget|Remember|The above|I hope|Enjoy|Ready to|Now you)\s.{0,500}$/gm, "")
-  // Strip lines that are entirely prose (no code characters — no semicolons, braces, import/export, etc.)
-  out = out.split("\n").filter(line => {
-    const t = line.trim()
-    if (!t) return true
-    // Keep lines that contain code indicators
-    if (/[{}();=<>\[\]\&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) return true
-    if (/^(?:import|export|const|let|var|function|class|interface|type|enum|return|if|for|while|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|yield|await|async|default|extends|implements|static|public|private|protected|readonly|abstract|as|from|require|module)($|\s)/i.test(t)) return true
-    if (/^["']use (client|server|strict)["']/.test(t)) return true
-    if (/^[\/\*]/.test(t)) return true
-    if (/^@(tailwind|layer|apply|media|keyframes)/.test(t)) return true
-    if (/^<(div|span|section|main|header|footer|nav|article|aside|ul|ol|li|p|h[1-6]|a|img|button|input|form|table|tbody|thead|tr|th|td|svg|path|br|hr|pre|code|picture|source|figure|figcaption|blockquote|label|select|textarea|option|thead|html|head|body|meta|link|title)\b/i.test(t)) return true
-    if (/^(<\/[\w-]+>|\/>)/.test(t)) return true
-    // If a line is just lowercase words without code chars, it's probably prose — filter it out
-    if (/^[a-z]/.test(t) && !/[{}();=<>\[\]&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) {
-      // But keep short one-liners that could be JSX text content (like single words between tags)
-      if (t.split(/\s+/).length > 5) return false
-    }
-    return true
-  }).join("\n")
-  // Strip leading/trailing empty lines
-  out = out.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "")
-  // Collapse triple+ newlines
-  out = out.replace(/\n{3,}/g, "\n\n")
-  // Strip leading description lines (prose before the actual code)
-  const codeStart = out.search(/(?:^|\n)\s*(?:"use client"|"use strict"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|@tailwind|@layer|\/\/|\/\*|\{)/m)
-  if (codeStart > 0) out = out.slice(codeStart)
-  // Strip trailing prose (after the last code-like line)
-  const lines = out.split("\n")
-  let lastCodeLine = lines.length - 1
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i].trim()
-    if (/^(?:export\b|import\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|return\b|if\s*\(|}\s*$|\)\s*;|\)\s*=>|^\s*\{|^\s*\}|^\s*\]|^\s*\)|^\s*<|^\s*\/>|^\s*\/\*\*|^\s*\*\/|^\s*\* |^\s*\/\/|@layer|@tailwind|@apply)/.test(line) || /^[\s]*$/.test(line)) {
-      lastCodeLine = i
-      continue
-    }
-    break
-  }
-  if (lastCodeLine < lines.length - 1) {
-    out = lines.slice(0, lastCodeLine + 1).join("\n")
-  }
-  // Remove remaining stray bracket-only lines
-  out = out.replace(/^\s*\[$|^\s*\]$/gm, "")
-  return out.trim()
-}
+RETURN ONLY RAW CODE. NO [code] / [file] / [usedfor] / [usedFor] / [component] / [page] bracket tags. NO fences. NO descriptions. NO metadata tags inline. FIRST CHARACTER is code. LAST CHARACTER is code.`
 
 const EDIT_RULES = `You are editing an existing Next.js project. Apply the user's requested change.
 
