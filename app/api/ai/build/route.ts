@@ -37,6 +37,70 @@ const HISTORY_MAX=50
 
 function buildDependencyReport():string { return Object.entries(SHADCN_DEP_MAP).filter(([,v])=>v.length>0).map(([k,v])=>`  ${k} → ${v.join(", ")}`).join("\n") }
 
+function checkSyntax(filename:string,code:string):string|null{
+  if(!code||code.length<3) return "Empty or too short"
+  const ext=filename.split(".").pop()?.toLowerCase()||""
+  // JSON: try to parse
+  if(ext==="json"){
+    try{JSON.parse(code);return null}catch(e:any){
+      const msg=e.message||""
+      // Detect if the error is just a missing closing brace
+      if(/unexpected (end|EOF|token)/i.test(msg)||/expected.*}/i.test(msg)) return "Missing closing brace(s)"
+      return `JSON: ${msg.slice(0,80)}`
+    }
+  }
+  // CSS: lightweight — count braces
+  if(ext==="css"){
+    const opens=(code.match(/\{/g)||[]).length
+    const closes=(code.match(/\}/g)||[]).length
+    if(opens!==closes) return `CSS: ${opens} open vs ${closes} close braces`
+    return null
+  }
+  // TS/TSX/JS/JSX: check balanced braces/brackets/parens, ignoring strings and comments
+  try{
+    const stripped=code
+      .replace(/"((?:[^"\\]|\\.)*)"/g,"")
+      .replace(/'((?:[^'\\]|\\.)*)'/g,"")
+      .replace(/`((?:[^`\\]|\\.)*)`/g,"")
+      .replace(/\/\/.*$/gm,"")
+      .replace(/\/\*[\s\S]*?\*\//g,"")
+    const pairs:{[k:string]:string}={"{":"}","(":")","[":"]"}
+    const stack:string[]=[]
+    for(let i=0;i<stripped.length;i++){
+      const ch=stripped[i]
+      if(ch==="{"||ch==="("||ch==="[") stack.push(ch)
+      else if(ch==="}"||ch===")"||ch==="]"){
+        if(!stack.length) return `Unexpected ${ch} at position ${i}`
+        const last=stack.pop()!
+        if(pairs[last]!==ch) return `Mismatched ${last} with ${ch} at position ${i}`
+      }
+    }
+    if(stack.length) return `Missing ${stack.map(c=>pairs[c]).join(", ")} (${stack.length} unclosed)`
+  }catch{return null}
+  return null
+}
+
+function tryCloseJSON(code:string):string|null{
+  let attempt=code.trim()
+  // Try adding one closing brace
+  try{JSON.parse(attempt+"}");return attempt+"}"}catch{}
+  // Try adding two
+  try{JSON.parse(attempt+"}}");return attempt+"}}"}catch{}
+  // Try adding a closing bracket if it looks like an array
+  try{JSON.parse(attempt+"]");return attempt+"]"}catch{}
+  // Try adding both
+  try{JSON.parse(attempt+"}]");return attempt+"}]"}catch{}
+  try{JSON.parse(attempt+"}]}");return attempt+"}]}"}catch{}
+  try{JSON.parse(attempt+"}}]");return attempt+"}}]"}catch{}
+  // If none work, try counting unmatched braces and add them
+  const depth=(attempt.match(/\{/g)||[]).length-(attempt.match(/\}/g)||[]).length
+  if(depth>0&&depth<=5){
+    const closed=attempt+"}".repeat(depth)
+    try{JSON.parse(closed);return closed}catch{}
+  }
+  return null
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // STRICT TYPE RULES — exact prop interfaces from this project's shadcn
 // ═══════════════════════════════════════════════════════════════════
@@ -437,6 +501,52 @@ export async function POST(request:NextRequest){
       rpt+=dgap
       push("step",{id:"step-4",title:"📦 Audit",content:rpt,timestamp:Date.now()})
       hsteps.push({title:"📦 Audit",content:`${usedComps.size} component${usedComps.size===1?"":"s"}`})
+      // STEP 5 — syntax validation + auto-fix
+      push("step",{id:"step-5",title:"🔍 Validating",content:"Checking syntax...",timestamp:Date.now()})
+      const syntaxErrors:Array<{name:string;error:string}>=[]
+      for(const pg of generated){
+        const err=checkSyntax(pg.name,pg.code)
+        if(err) syntaxErrors.push({name:pg.name,error:err})
+      }
+      if(syntaxErrors.length){
+        push("step",{id:"step-5",title:"🔧 Auto-fixing",content:`Found ${syntaxErrors.length} file${syntaxErrors.length===1?"":"s"} with errors`,timestamp:Date.now()})
+        hsteps.push({title:"🔧 Fix",content:`${syntaxErrors.length} files`})
+        const FIX_PROMPT = `Fix the syntax error in this file. Return ONLY the complete corrected code — no explanations, no fences, no prose. The file has this error:\n\nERROR: {ERROR}\n\nFix and return the ENTIRE corrected file.`
+        for(const se of syntaxErrors){
+          const pg=generated.find(g=>g.name===se.name); if(!pg) continue
+          push("step",{id:"step-5",title:`🔧 ${se.name}`,content:se.error,timestamp:Date.now()})
+          const fixMsgs=[{role:"system" as const,content:FIX_PROMPT.replace("{ERROR}",se.error)},{role:"user" as const,content:pg.code}]
+          const fixRes=await callModel({model,messages:fixMsgs,temperature:0.1})
+          if(fixRes.ok){
+            let fixedCode=stripAllArtifacts(fixRes.content)
+            if(!fixedCode||fixedCode.length<10) fixedCode=extractCode(fixRes.content)||fixRes.content
+            const recheck=checkSyntax(se.name,fixedCode)
+            if(!recheck){
+              pg.code=fixedCode
+              push("step",{id:"step-5",title:`✅ ${se.name}`,content:"Fixed",timestamp:Date.now()})
+              push("page",{name:pg.name,code:fixedCode,usedFor:pg.usedFor,timestamp:Date.now()})
+            } else {
+              // Fallback: try closing brace fix for JSON files
+              if(se.name.endsWith(".json")&&fixedCode){
+                const closed=tryCloseJSON(fixedCode)
+                if(closed&&!checkSyntax(se.name,closed)){
+                  pg.code=closed
+                  push("step",{id:"step-5",title:`✅ ${se.name}`,content:"Auto-closed (fallback)",timestamp:Date.now()})
+                  push("page",{name:pg.name,code:closed,usedFor:pg.usedFor,timestamp:Date.now()})
+                } else {
+                  push("step",{id:"step-5",title:`⚠️ ${se.name}`,content:`Still broken: ${recheck}`,timestamp:Date.now()})
+                }
+              } else {
+                push("step",{id:"step-5",title:`⚠️ ${se.name}`,content:`Still broken: ${recheck}`,timestamp:Date.now()})
+              }
+            }
+          } else {
+            push("step",{id:"step-5",title:`❌ ${se.name}`,content:fixRes.message,timestamp:Date.now()})
+          }
+        }
+      } else {
+        push("step",{id:"step-5",title:"✅ Valid",content:"All files pass syntax checks",timestamp:Date.now()})
+      }
       // SAVE
       if(ObjectId.isValid(pid)&&generated.length) try{
         const c=await clientPromise; const db=c.db()

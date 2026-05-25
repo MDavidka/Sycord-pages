@@ -118,6 +118,7 @@ async function callOpenAICompatible(
         model: model.id,
         messages,
         temperature,
+        max_tokens: 8192,
       }),
     })
   } catch (err) {
