@@ -340,7 +340,8 @@ async function callAnthropic(
 // Additionally strips placeholder values like "[usedFor]" from extracted JSON.
 export function extractJson<T = unknown>(content: string): T | null {
   if (!content) return null
-  const trimmed = content.trim()
+  let trimmed = content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").replace(/<think>[\s\S]*?<\/think>/gi, "")
+  trimmed = trimmed.trim()
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
   if (fenced?.[1]) {
@@ -446,8 +447,10 @@ function cleanJsonPlaceholders<T>(value: T): T {
 export function extractCode(content: string, lang?: string): string {
   if (!content) return ""
 
+  let cleanedContent = content.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").replace(/<think>[\s\S]*?<\/think>/gi, "")
+
   // Strategy quick-check: if the content looks like clean code already, return immediately
-  const quickTrim = content.trim()
+  const quickTrim = cleanedContent.trim()
   if (/^(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|@tailwind|@layer|\/\/|\/\*|{|package\s*\{)/m.test(quickTrim) &&
       !quickTrim.match(/^```/) &&
       !quickTrim.startsWith("Here") &&
@@ -455,7 +458,7 @@ export function extractCode(content: string, lang?: string): string {
     return stripStrayFenceMarkers(quickTrim).trim()
   }
 
-  const trimmed = content.trim()
+  const trimmed = cleanedContent.trim()
 
   // Strategy Z: JSON-wrapped code object — some models wrap code in {"code": "..."}
   if (trimmed.startsWith("{") && trimmed.includes('"code"')) {
