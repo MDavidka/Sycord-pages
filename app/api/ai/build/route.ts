@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import * as ts from "typescript"
 
 interface PageStructure { name:string; usedFor:string; description:string; route:string; priority:number }
 interface BuildHistoryEntry { prompt:string; model:string; timestamp:number; files:string[]; steps:Array<{title:string;content:string}> }
@@ -56,28 +57,33 @@ function checkSyntax(filename:string,code:string):string|null{
     if(opens!==closes) return `CSS: ${opens} open vs ${closes} close braces`
     return null
   }
-  // TS/TSX/JS/JSX: check balanced braces/brackets/parens, ignoring strings and comments
-  try{
-    const stripped=code
-      .replace(/"((?:[^"\\]|\\.)*)"/g,"")
-      .replace(/'((?:[^'\\]|\\.)*)'/g,"")
-      .replace(/`((?:[^`\\]|\\.)*)`/g,"")
-      .replace(/\/\/.*$/gm,"")
-      .replace(/\/\*[\s\S]*?\*\//g,"")
-    const pairs:{[k:string]:string}={"{":"}","(":")","[":"]"}
-    const stack:string[]=[]
-    for(let i=0;i<stripped.length;i++){
-      const ch=stripped[i]
-      if(ch==="{"||ch==="("||ch==="[") stack.push(ch)
-      else if(ch==="}"||ch===")"||ch==="]"){
-        if(!stack.length) return `Unexpected ${ch} at position ${i}`
-        const last=stack.pop()!
-        if(pairs[last]!==ch) return `Mismatched ${last} with ${ch} at position ${i}`
+  // TS/TSX/JS/JSX: true AST parser syntax check
+  if (["js", "jsx", "ts", "tsx"].includes(ext)) {
+    try {
+      const scriptKind = ext === "tsx" ? ts.ScriptKind.TSX :
+                         ext === "ts" ? ts.ScriptKind.TS :
+                         ext === "jsx" ? ts.ScriptKind.JSX : ts.ScriptKind.JS;
+      const sourceFile = ts.createSourceFile(
+        filename,
+        code,
+        ts.ScriptTarget.Latest,
+        true,
+        scriptKind
+      );
+
+      if (sourceFile.parseDiagnostics && sourceFile.parseDiagnostics.length > 0) {
+        const diag = sourceFile.parseDiagnostics[0];
+        const message = ts.flattenDiagnosticMessageText(diag.messageText, "\n");
+        const pos = sourceFile.getLineAndCharacterOfPosition(diag.start || 0);
+        return `Line ${pos.line + 1}, Col ${pos.character + 1}: ${message}`;
       }
+      return null;
+    } catch (e: any) {
+      return `TS Parser Error: ${e.message}`;
     }
-    if(stack.length) return `Missing ${stack.map(c=>pairs[c]).join(", ")} (${stack.length} unclosed)`
-  }catch{return null}
-  return null
+  }
+
+  return null;
 }
 
 function tryCloseJSON(code:string):string|null{
@@ -166,6 +172,10 @@ NavigationMenu: NavigationMenu, NavigationMenuList, NavigationMenuItem, Navigati
 function stripAllArtifacts(code: string): string {
   if (!code) return ""
   let out = code
+  // Strip thinking blocks
+  out = out.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+  out = out.replace(/<think>[\s\S]*?<\/think>/gi, "")
+
   // Strip bracket meta-tags of any kind
   out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\](?:\s*\[?\/?(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\])?/gi, "")
   // Strip standalone closing bracket tags
@@ -298,9 +308,10 @@ function structPrompt(prompt:string,cheatsheet:string,depReport:string):ChatMess
 const CODE_RULES = `Production Next.js App Router + TypeScript.
 
 THE RULES:
-1. FIRST character of your response MUST be code (import, export, "use client", function, const, let, var, interface, type, class, or //).
-2. Return ONLY the source code. NOTHING else.
-3. NO prose — no "Here is the code", no "This component...", no "Let me know if...".
+1. You may optionally output a <thinking>...</thinking> block at the very beginning to plan your code before generating it.
+2. Immediately after the thinking block, the very next character MUST be code (import, export, "use client", function, const, let, var, interface, type, class, or //).
+3. Return ONLY the source code after the thinking block. NOTHING else.
+4. NO prose — no "Here is the code", no "This component...", no "Let me know if...".
 4. NO markdown fences (\`\`\`typescript etc) — raw code only.
 5. NO [code] [/code] or any other bracket-style tags.
 6. NO leading or trailing blank lines containing only whitespace.
@@ -322,6 +333,9 @@ const EDIT_RULES = `You are editing an existing Next.js project. Apply the user'
 Respond with file blocks ONLY. NO prose, NO "Here is...", NO explanations, NO markdown outside of file blocks.
 
 Format — EXACTLY this, nothing else:
+<thinking>
+...reasoning about how to apply the user's request...
+</thinking>
 ### FILE: path/to/file.tsx
 <complete new code — NOT diffs, NOT descriptions, NOT extra comments>
 
@@ -340,11 +354,18 @@ ${STRICT_TYPE_RULES}
 
 Production quality. 100% shadcn/ui. cn() for classNames. Mobile-first. FIRST char must be "#".`
 
-function codePrompt(pages:PageStructure[],cur:PageStructure,prev:Array<{name:string;code:string;usedFor?:string}>,cheatsheet:string,depReport:string,custom?:string):ChatMessage[]{
+function codePrompt(pages:PageStructure[],cur:PageStructure,prev:Array<{name:string;code:string;usedFor?:string}>,cheatsheet:string,depReport:string,custom?:string, userGoal?:string):ChatMessage[]{
   const list=pages.map(p=>`- ${p.name} (${p.usedFor}): ${p.description}`).join("\n")
   let pb=""
   if(prev.length) pb="\n\nALREADY GENERATED:\n"+prev.map(f=>`--- ${f.name} ---\n${f.code}`).join("\n\n")
-  const pts=[CODE_RULES,`\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`]
+  const pts=[CODE_RULES]
+  if(userGoal) pts.push(`\nPROJECT GOAL:\n${userGoal}`)
+  pts.push(`\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`)
+
+  if(cur.name.endsWith(".json")) pts.push(`\nFILE RULE: The file is a JSON file. Return ONLY valid JSON. No trailing commas, no comments.`)
+  else if(cur.name.endsWith(".ts")) pts.push(`\nFILE RULE: The file is a plain TypeScript file (.ts). NO JSX/TSX allowed.`)
+  else if(cur.name.endsWith(".tsx")) pts.push(`\nFILE RULE: The file is a React TSX file. Use JSX syntax.`)
+
   if(custom&&custom.length>10&&custom!=="Generation code prompting is disabled.") pts.push(`\nBUILD RULES:\n${custom}`)
   pts.push(`\nALL FILES:\n${list}`,pb)
   return[{role:"system",content:pts.join("\n")},{role:"user",content:`Write production code for ${cur.name} (${cur.usedFor}).`}]
@@ -352,7 +373,7 @@ function codePrompt(pages:PageStructure[],cur:PageStructure,prev:Array<{name:str
 
 function editPrompt(userReq:string, existing:Array<{name:string;code:string;usedFor:string}>,cheatsheet:string,depReport:string,custom?:string):ChatMessage[]{
   const fl=existing.map(f=>`--- ${f.name} (${f.usedFor||""}) ---\n${f.code}`).join("\n\n")
-  const pts=[EDIT_RULES,`\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`]
+  const pts=[EDIT_RULES, `\nUSER REQUEST:\n${userReq}`, `\nNPM deps:\n${depReport}`,`\nshadcn/ui:\n${cheatsheet}`]
   if(custom&&custom.length>10&&custom!=="Generation code prompting is disabled.") pts.push(`\nBUILD RULES:\n${custom}`)
   pts.push(`\nEXISTING FILES:\n${fl}`)
   return[{role:"system",content:pts.join("\n")},{role:"user",content:`Apply: ${userReq}`}]
@@ -469,7 +490,7 @@ export async function POST(request:NextRequest){
       for(let i=0;i<sorted.length;i++){
         const pg=sorted[i]
         push("step",{id:"step-3",title:`${i+1}/${sorted.length} ${pg.name}`,content:pg.description,timestamp:Date.now()})
-        const msgs=codePrompt(sorted,pg,generated,cheatsheet,depReport,customBuilderCode)
+        const msgs=codePrompt(sorted,pg,generated,cheatsheet,depReport,customBuilderCode, prompt)
         const res=await callModel({model,messages:msgs,temperature:0.2})
         if(res.ok){
           let code=stripAllArtifacts(res.content)
