@@ -106,6 +106,13 @@ function stripAllArtifacts(code: string): string {
   out = out.replace(/\[\s*\/?\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\](?:\s*\[?\/?(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\])?/gi, "")
   // Strip standalone closing bracket tags
   out = out.replace(/\[\s*\/\s*(?:code|CODE|file|FILE|usedfor|usedFor|USEDFOR|component|COMPONENT|page|PAGE|name|NAME)\s*\]/gi, "")
+  // Strip "filenameDescription text" pattern (file path immediately followed by prose with no space)
+  // e.g. "app/layout.tsxRoot layout for the application" after a closing brace
+  out = out.replace(/(?<=})\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*[A-Z][a-z].*(?=\n|$)/g, "")
+  // Strip standalone lines that look like file descriptors: path/file.ext Some description
+  out = out.replace(/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)[\s]+[A-Z][a-z].*$/gm, "")
+  // Strip lines that are just a file path followed by a short description tag
+  out = out.replace(/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*$/gm, "")
   // Strip markdown fences
   out = out.replace(/^```[a-zA-Z0-9]*\s*$/gm, "")
   // Strip ### FILE: headers
@@ -149,6 +156,12 @@ function stripAllArtifacts(code: string): string {
   if (lastCodeLine < lines.length - 1) {
     out = lines.slice(0, lastCodeLine + 1).join("\n")
   }
+  // Final safety net: strip any remaining trailing metadata line that starts with a file path
+  // This catches cases where the AI appends a file path like "app/layout.tsx" after the code
+  out = out.replace(/\n\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json|x?html?|svg)\s*[A-Za-z].*$/s, "")
+  out = out.replace(/\n\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json|x?html?|svg)\s*$/s, "")
+  // Also strip any text that's concatenated directly to a closing brace like }app/layout.tsx...
+  out = out.replace(/(\})\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*[A-Z][a-z].*$/s, "$1")
   // Remove remaining stray bracket-only lines
   out = out.replace(/^\s*\[$|^\s*\]$/gm, "")
   return out.trim()
