@@ -118,6 +118,7 @@ async function callOpenAICompatible(
         model: model.id,
         messages,
         temperature,
+        max_tokens: 8192,
       }),
     })
   } catch (err) {
@@ -510,10 +511,17 @@ export function extractCode(content: string, lang?: string): string {
   // Strategy F: give up and scrub stray fence markers out of the raw content,
   // then strip obvious prose lines.
   let fallback = stripStrayFenceMarkers(trimmed).trim()
+  // Remove lines that look like file descriptors: path/file.ext Some description
+  fallback = fallback.replace(/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)[\s]+[A-Z][a-z].*$/gm, "")
+  fallback = fallback.replace(/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*$/gm, "")
+  // Strip filenameDescription concatenated after closing brace: }app/layout.tsxRoot layout...
+  fallback = fallback.replace(/(\})\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*[A-Z][a-z].*$/s, "$1")
   // Remove lines that are clearly prose (full sentences without code syntax)
   fallback = fallback.split("\n").filter(line => {
     const t = line.trim()
     if (!t) return true
+    // Filter out file-path + description patterns
+    if (/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\b/i.test(t)) return false
     if (/[{}();=<>\[\]&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) return true
     if (/^(?:import|export|const|let|var|function|class|interface|type|enum|return|if|for|while|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|yield|await|async|default|extends|implements|static|public|private|protected|readonly|abstract|as|from|require|module)\b/i.test(t)) return true
     if (/^["']use (client|server|strict)["']/.test(t)) return true
@@ -526,6 +534,9 @@ export function extractCode(content: string, lang?: string): string {
     if (/^[a-z]/i.test(t) && /[.!?]$/.test(t) && !/[{}();]/.test(t)) return false
     return true
   }).join("\n")
+  // Final safety net: strip any trailing metadata line with a file path
+  fallback = fallback.replace(/\n\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*[A-Za-z].*$/s, "")
+  fallback = fallback.replace(/\n\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*$/s, "")
   return fallback.trim()
 }
 
