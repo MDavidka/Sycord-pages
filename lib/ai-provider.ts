@@ -32,6 +32,9 @@ export interface CallModelOptions {
   model: ModelSelection
   messages: ChatMessage[]
   temperature?: number
+  maxTokens?: number
+  timeout?: number
+  signal?: AbortSignal
 }
 
 export interface CallModelResult {
