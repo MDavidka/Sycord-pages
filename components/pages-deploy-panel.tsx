@@ -258,6 +258,7 @@ export type PagesDeployPanelProps = {
   onDeleteAll: () => void
   onDeploy: () => void
   onGoToAI: () => void
+  onFixWithSyra?: () => void
   isDeploying: boolean
   deployProgress?: number
   deployError: string | null
@@ -275,6 +276,7 @@ export function PagesDeployPanel({
   onDeleteAll,
   onDeploy,
   onGoToAI,
+  onFixWithSyra,
   isDeploying,
   deployProgress = 0,
   deployError,
@@ -451,17 +453,29 @@ export function PagesDeployPanel({
                 <pre className="mt-2 text-xs whitespace-pre-wrap break-words rounded-lg bg-black/40 border border-red-500/15 p-3 text-red-200/80 max-h-48 overflow-y-auto font-mono">
                   {deployError || runnerErrorDetails || "Deployment failed. Check Companion Server logs for details."}
                 </pre>
-                {onFetchLogs && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onFetchLogs}
-                    className="mt-3 h-7 text-xs gap-1.5 border-red-500/20 text-red-300 hover:text-red-200"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Refresh API Logs
-                  </Button>
-                )}
+                <div className="flex items-center gap-2 mt-3">
+                  {onFetchLogs && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onFetchLogs}
+                      className="h-7 text-xs gap-1.5 border-red-500/20 text-red-300 hover:text-red-200"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Refresh Logs
+                    </Button>
+                  )}
+                  {onFixWithSyra && (
+                    <Button
+                      size="sm"
+                      onClick={onFixWithSyra}
+                      className="h-7 text-xs gap-1.5"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      Fix with Syra
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>

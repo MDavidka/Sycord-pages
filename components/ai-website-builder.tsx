@@ -9,6 +9,19 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Loader2,
   ChevronDown,
@@ -16,7 +29,6 @@ import {
   CheckCircle2,
   Send,
   Zap,
-  Plus,
   Paperclip,
   X,
   Coins,
@@ -24,6 +36,13 @@ import {
   FileText,
   AlertCircle,
   Clock,
+  Brain,
+  Wrench,
+  FileCode,
+  FolderOpen,
+  Eye,
+  Copy,
+  Check,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
@@ -53,12 +72,43 @@ export interface GeneratedPage {
   usedFor?: string
 }
 
-interface DebugStep {
+interface StageStep {
   id: string
+  stage: string
   title: string
-  detail: string
+  message: string
   status: "pending" | "running" | "done" | "error"
   timestamp: number
+  mode?: string
+  file?: string
+  action?: string
+  chars?: number
+  changedFiles?: string[]
+  fullFiles?: string[]
+  summaryCount?: number
+  cacheHit?: boolean
+  memoryHit?: boolean
+  revision?: string
+  severity?: "error" | "warning" | "info"
+  code?: string
+  errors?: number
+  retryable?: boolean
+  filesToCreate?: Array<{ name: string; usedFor: string }>
+  filesToModify?: Array<{ name: string; usedFor: string }>
+  filesToDelete?: string[]
+}
+
+const STAGE_LABELS: Record<string, string> = {
+  starting: "Starting",
+  intent: "Understanding",
+  memory: "Memory",
+  context: "Context",
+  planning: "Planning",
+  writing: "Writing",
+  validating: "Validating",
+  repair: "Auto-repairing",
+  saving: "Saving",
+  cache: "Cache",
 }
 
 const InputBar = ({
@@ -84,7 +134,7 @@ const InputBar = ({
         <div className="relative flex items-end gap-2 bg-zinc-900/80 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-2 shadow-2xl">
           <div className="flex-1 flex flex-col gap-1 min-h-0">
             <textarea
-              placeholder="Describe the website you want to build..."
+              placeholder="Describe what you want to build or change..."
               className="w-full resize-none bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none px-3 py-2 min-h-[40px] max-h-32"
               rows={1}
               value={input}
@@ -110,9 +160,16 @@ const InputBar = ({
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => {
               if (e.target.files) setAttachments(prev => [...prev, ...Array.from(e.target.files!)])
             }} />
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-300 rounded-lg" onClick={() => fileInputRef.current?.click()}>
-              <Paperclip className="h-3.5 w-3.5" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-300 rounded-lg" onClick={() => fileInputRef.current?.click()}>
+                    <Paperclip className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Attach files (txt, md, json, ts, tsx, css)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             <div className="relative">
               <DropdownMenu>
@@ -125,14 +182,14 @@ const InputBar = ({
                 <DropdownMenuContent align="end" className="w-64 p-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-2xl">
                   <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
                     <Gem className="h-3 w-3" /> Best
-                    <span className="ml-auto font-medium normal-case tracking-normal text-zinc-500">−{formatCredits(bestCost)}</span>
+                    <span className="ml-auto font-medium normal-case tracking-normal text-zinc-500">-{formatCredits(bestCost)}</span>
                   </div>
                   {MODELS.filter(m => !m.fast).map(m => (
                     <ModelRow key={m.id} model={m} selected={selectedModel.id === m.id} onSelect={() => setSelectedModel(m)} tier="best" />
                   ))}
                   <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mt-1">
                     <Zap className="h-3 w-3" /> Fast
-                    <span className="ml-auto font-medium normal-case tracking-normal text-zinc-500">−{formatCredits(fastCost)}</span>
+                    <span className="ml-auto font-medium normal-case tracking-normal text-zinc-500">-{formatCredits(fastCost)}</span>
                   </div>
                   {MODELS.filter(m => m.fast).map(m => (
                     <ModelRow key={m.id} model={m} selected={selectedModel.id === m.id} onSelect={() => setSelectedModel(m)} tier="fast" />
@@ -170,12 +227,13 @@ function parseSSEChunk(chunk: string): Array<{ event: string; data: any }> {
   const results: Array<{ event: string; data: any }> = []
   const parts = chunk.split("\n\n")
   for (const part of parts) {
+    if (!part.trim()) continue
     const lines = part.split("\n")
     let event = ""
     let data = ""
     for (const line of lines) {
       if (line.startsWith("event: ")) event = line.slice(7).trim()
-      else if (line.startsWith("data: ")) data = line.slice(6).trim()
+      else if (line.startsWith("data: ")) data = line.slice(6)
     }
     if (event && data) {
       try { results.push({ event, data: JSON.parse(data) }) }
@@ -185,22 +243,39 @@ function parseSSEChunk(chunk: string): Array<{ event: string; data: any }> {
   return results
 }
 
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  starting: Sparkles,
+  memory: Brain,
+  planning: Sparkles,
+  writing: FileCode,
+  validating: CheckCircle2,
+  repair: Wrench,
+  saving: FileText,
+}
+
 interface AIWebsiteBuilderProps {
   projectId: string
   generatedPages: GeneratedPage[]
   setGeneratedPages: React.Dispatch<React.SetStateAction<GeneratedPage[]>>
   onDeploy?: () => void
+  hasExistingFiles?: boolean
 }
 
-const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDeploy }: AIWebsiteBuilderProps) => {
+const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDeploy, hasExistingFiles }: AIWebsiteBuilderProps) => {
   const { data: session } = useSession()
   const userName = session?.user?.name?.split(" ")[0] || "there"
 
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [debugSteps, setDebugSteps] = useState<DebugStep[]>([])
-  const [fileCount, setFileCount] = useState<{ current: number; total: number } | null>(null)
+  const [buildSteps, setBuildSteps] = useState<StageStep[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [buildComplete, setBuildComplete] = useState(false)
+  const [changedFiles, setChangedFiles] = useState<string[]>([])
+  const [detectedMode, setDetectedMode] = useState<string | null>(null)
+  const [planSummary, setPlanSummary] = useState<string | null>(null)
+  const [planFiles, setPlanFiles] = useState<{ create: Array<{ name: string; usedFor: string }>; modify: Array<{ name: string; usedFor: string }>; delete: string[] } | null>(null)
+  const [validationErrors, setValidationErrors] = useState<Array<{ file: string; code: string; message: string }>>([])
+  const [repairPass, setRepairPass] = useState(0)
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
@@ -233,34 +308,30 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     }
   }, [])
 
-  const pushStep = useCallback((step: DebugStep) => {
-    setDebugSteps(prev => {
-      const existingIdx = prev.findIndex(s => s.id === step.id)
-      if (existingIdx >= 0) {
-        const updated = [...prev]
-        updated[existingIdx] = step
-        if (existingIdx > 0 && prev[existingIdx - 1].status === "running") {
-          updated[existingIdx - 1] = { ...updated[existingIdx - 1], status: "done" }
-        }
-        return updated
-      }
-      const newSteps = [...prev]
-      if (newSteps.length > 0 && newSteps[newSteps.length - 1].status === "running") {
-        newSteps[newSteps.length - 1] = { ...newSteps[newSteps.length - 1], status: "done" }
-      }
-      return [...newSteps, step]
-    })
-  }, [])
-
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
     setIsLoading(true)
-    setDebugSteps([])
-    setFileCount(null)
+    setBuildSteps([])
     setError(null)
+    setBuildComplete(false)
+    setChangedFiles([])
+    setDetectedMode(null)
+    setPlanSummary(null)
+    setPlanFiles(null)
+    setValidationErrors([])
+    setRepairPass(0)
 
     const controller = new AbortController()
     abortRef.current = controller
+
+    // Read attachments
+    const attachmentData: Array<{ name: string; type: string; text: string }> = []
+    for (const file of attachments) {
+      try {
+        const text = await file.text()
+        attachmentData.push({ name: file.name, type: file.type || "text/plain", text })
+      } catch { /* skip binary/unreadable files */ }
+    }
 
     try {
       const res = await fetch("/api/ai/build", {
@@ -271,14 +342,14 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
           projectId,
           modelId: selectedModel.id,
           provider: selectedModel.provider,
-          mode: "generate",
+          mode: "auto",
+          attachments: attachmentData,
         }),
         signal: controller.signal,
       })
 
       if (!res.ok) {
-        pushStep({ id: "error", title: "Error", detail: `Server returned ${res.status}`, status: "error", timestamp: Date.now() })
-        setError(`Server error: ${res.status}`)
+        setError(`Server returned ${res.status}`)
         setIsLoading(false)
         return
       }
@@ -288,75 +359,108 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
       const decoder = new TextDecoder()
       let buffer = ""
-      let fileCurrent = 0
-      let fileTotal = 0
-      const seenFiles = new Set<string>()
+
+      const upsertStep = (stage: string, status: StageStep["status"], title: string, message: string, extra?: Partial<StageStep>) => {
+        const id = `syra-${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        if (stage === "validating" && extra?.severity === "error" && extra?.file && extra?.code && extra?.message) {
+          setValidationErrors(prev => [...prev, { file: extra.file!, code: extra.code!, message: extra.message! }])
+        }
+        if (stage === "repair" && status === "running") {
+          setRepairPass(extra?.errors ?? 0)
+        }
+        if (stage === "planning" && extra?.mode) {
+          setDetectedMode(extra.mode)
+          setPlanSummary(message)
+          setPlanFiles({ create: extra?.filesToCreate ?? [], modify: extra?.filesToModify ?? [], delete: extra?.filesToDelete ?? [] })
+        }
+        if (stage === "saving" && extra?.changedFiles) {
+          setChangedFiles(extra.changedFiles)
+        }
+
+        setBuildSteps(prev => {
+          const existingIdx = prev.findIndex(s => s.stage === stage && s.status === "running")
+          if (existingIdx >= 0 && (status === "done" || status === "error")) {
+            const updated = [...prev]
+            updated[existingIdx] = { ...updated[existingIdx], ...extra, status, title, message } as StageStep
+            return updated
+          }
+          const newStep: StageStep = { id, stage, title, message, status, timestamp: Date.now(), ...extra }
+          return [...prev, newStep]
+        })
+      }
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
 
-        const events = parseSSEChunk(buffer)
-        buffer = ""
+        const parts = buffer.split("\n\n")
+        buffer = parts.pop() || ""
 
-        for (const { event, data } of events) {
-          if (event === "step") {
-            const title = String(data.title ?? "")
-            const status: DebugStep["status"] =
-              title.startsWith("✅") || title.startsWith("💾") || title.startsWith("📝") || title === ""
-                ? "done"
-                : title.startsWith("❌") ? "error" : "running"
-
-            pushStep({
-              id: data.id || `step-${Date.now()}`,
-              title: data.title || "",
-              detail: data.content || "",
-              status,
-              timestamp: data.timestamp || Date.now(),
-            })
-
-            if (data.content && data.content.includes("files:") && fileTotal === 0) {
-              const match = data.content.match(/(\d+)\s*files/)
-              if (match) {
-                fileTotal = parseInt(match[1])
-                setFileCount({ current: 0, total: fileTotal })
-              }
-            }
-          } else if (event === "page") {
-            if (!seenFiles.has(data.name)) {
-              seenFiles.add(data.name)
-              fileCurrent++
-              setFileCount({ current: fileCurrent, total: fileTotal || fileCurrent })
-            }
-            setGeneratedPages(prev => {
-              const idx = prev.findIndex(p => p.name === data.name)
-              const page: GeneratedPage = {
-                name: data.name,
-                code: data.code || "",
-                timestamp: data.timestamp || Date.now(),
-                usedFor: data.usedFor || "",
-              }
-              if (idx >= 0) {
-                const copy = [...prev]
-                copy[idx] = page
-                return copy
-              }
-              return [...prev, page]
-            })
-          } else if (event === "error") {
-            pushStep({ id: "error", title: "Error", detail: data.message || "Unknown error", status: "error", timestamp: Date.now() })
-            setError(data.message || "An error occurred")
-          } else if (event === "done") {
-            setDebugSteps(prev => prev.map(s =>
-              s.status === "running" ? { ...s, status: "done" } : s
-            ))
+        for (const part of parts) {
+          if (!part.trim()) continue
+          const lines = part.split("\n")
+          let event = ""
+          let data = ""
+          for (const line of lines) {
+            if (line.startsWith("event: ")) event = line.slice(7).trim()
+            else if (line.startsWith("data: ")) data = line.slice(6)
           }
+          if (!event || !data) continue
+
+          let parsed: any
+          try { parsed = JSON.parse(data) } catch { continue }
+
+          if (event === "stage") {
+            upsertStep(parsed.stage || "unknown", parsed.status || "running", parsed.title || "", parsed.message || "", parsed)
+          } else if (event === "memory") {
+            upsertStep("memory", parsed.status || "done", parsed.title || "", parsed.message || "", parsed)
+          } else if (event === "cache") {
+            upsertStep("cache", "done", parsed.title || "Cache", "Cache operation", parsed)
+          } else if (event === "plan") {
+            upsertStep("planning", "done", parsed.title || "Plan ready", parsed.message || "", parsed)
+          } else if (event === "file") {
+            upsertStep("writing", parsed.status || "done", parsed.title || "", parsed.message || "", parsed)
+            if (parsed.status === "done" && parsed.file) {
+              setGeneratedPages(prev => {
+                const idx = prev.findIndex(p => p.name === parsed.file)
+                const page: GeneratedPage = {
+                  name: parsed.file,
+                  code: `// ${parsed.chars ? parsed.chars + " chars" : ""}`,
+                  timestamp: Date.now(),
+                  usedFor: parsed.action || "",
+                }
+                if (idx >= 0) {
+                  const copy = [...prev]
+                  copy[idx] = page
+                  return copy
+                }
+                return [...prev, page]
+              })
+            }
+          } else if (event === "diagnostic") {
+            upsertStep("validating", parsed.severity === "error" ? "error" : "done", parsed.message || "Validation", parsed.message || "", parsed)
+          } else if (event === "repair") {
+            upsertStep("repair", parsed.status || "done", parsed.title || "", parsed.message || "", parsed)
+          } else if (event === "saved") {
+            upsertStep("saving", "done", parsed.title || "Saved", parsed.message || "", parsed)
+          } else if (event === "error") {
+            setError(parsed.message || "An error occurred")
+            upsertStep(parsed.stage || "error", "error", parsed.title || "Error", parsed.message || "", parsed)
+          } else if (event === "done") {
+            setBuildComplete(true)
+          }
+        }
+      }
+
+      // Process remaining buffer
+      if (buffer.trim()) {
+        for (const { event, data } of parseSSEChunk(buffer)) {
+          if (event === "done") setBuildComplete(true)
         }
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        pushStep({ id: "error", title: "Connection Error", detail: err.message || "Failed to connect", status: "error", timestamp: Date.now() })
         setError(err.message || "Connection failed")
       }
     } finally {
@@ -366,7 +470,16 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     }
   }
 
-  const isBuilding = isLoading || (debugSteps.length > 0 && debugSteps.every(s => s.status !== "done" && s.status !== "error") && debugSteps.some(s => s.status === "running"))
+  const isBuilding = isLoading || (buildSteps.length > 0 && buildSteps.some(s => s.status === "running"))
+
+  // Group steps by stage for the timeline
+  const stageGroups = buildSteps.reduce<Record<string, StageStep[]>>((acc, step) => {
+    if (!acc[step.stage]) acc[step.stage] = []
+    acc[step.stage].push(step)
+    return acc
+  }, {})
+
+  const stageOrder = ["starting", "memory", "cache", "intent", "context", "planning", "writing", "validating", "repair", "saving"]
 
   return (
     <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
@@ -374,9 +487,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
       <div className="absolute bottom-1/4 right-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="flex-1 flex flex-col items-center px-3 sm:px-4 overflow-y-auto custom-scrollbar">
-        {!isBuilding && !isLoading && debugSteps.length === 0 && (
+        {/* IDLE STATE */}
+        {!isBuilding && buildSteps.length === 0 && !buildComplete && (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="space-y-1">
+            <div className="space-y-1 mb-6">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-white">
                 Hi {userName},
               </h1>
@@ -384,91 +498,204 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
                 What are we building?
               </h2>
             </div>
+
+            {hasExistingFiles && (
+              <div className="flex items-center gap-2 mb-6">
+                <Badge variant="secondary" className="gap-1.5">
+                  <Brain className="h-3 w-3" />
+                  {generatedPages.length} files in memory
+                </Badge>
+                <Badge variant="secondary" className="gap-1.5">
+                  <Sparkles className="h-3 w-3" />
+                  Editing existing project
+                </Badge>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 justify-center">
+              {[
+                "Build a SaaS landing page",
+                "Add pricing to this site",
+                "Fix the latest deploy error",
+                "Make it look premium",
+              ].map((example) => (
+                <button
+                  key={example}
+                  onClick={() => { if (!isLoading) { setInput(example) } }}
+                  className="px-3 py-1.5 text-xs text-zinc-500 bg-white/[0.03] border border-white/[0.06] rounded-full hover:bg-white/[0.06] hover:text-zinc-300 transition-colors"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        {(isBuilding || isLoading || debugSteps.length > 0) && (
-          <div className="flex-1 w-full max-w-2xl flex flex-col justify-center py-8">
-            <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/70 p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {isBuilding || isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
-                  ) : error ? (
-                    <AlertCircle className="h-4 w-4 text-red-400" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  )}
-                  <p className="text-xs uppercase tracking-wider text-zinc-400">
-                    {isBuilding || isLoading ? "Building your site" : error ? "Build failed" : "Build complete"}
-                  </p>
-                </div>
-                {fileCount && fileCount.total > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5 text-zinc-500" />
-                    <span className="text-xs text-zinc-400 tabular-nums">
-                      {fileCount.current}/{fileCount.total}
-                    </span>
+        {/* BUILD STATES */}
+        {(isBuilding || buildSteps.length > 0 || buildComplete) && (
+          <div className="flex-1 w-full max-w-2xl flex flex-col py-8 gap-4">
+            {/* Status Card */}
+            <Card className="border-white/[0.08] bg-zinc-900/70">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {buildComplete ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    ) : error ? (
+                      <AlertCircle className="h-4 w-4 text-red-400" />
+                    ) : (
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                    )}
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">
+                      {buildComplete ? "Build complete" : error ? "Build failed" : "Building your site"}
+                    </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                    {detectedMode && (
+                      <Badge variant={detectedMode === "edit" ? "secondary" : detectedMode === "fix" ? "destructive" : "default"}>
+                        {detectedMode === "generate" ? "New Build" : detectedMode === "edit" ? "Edit" : detectedMode === "fix" ? "Fix" : detectedMode}
+                      </Badge>
+                    )}
+                    <Badge variant="secondary" className="text-[10px]">{selectedModel.name.slice(0, 14)}</Badge>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                {isBuilding && (
+                  <Progress value={Math.min(95, buildSteps.filter(s => s.status === "done").length * 15)} className="h-1.5" />
                 )}
-              </div>
 
-              {fileCount && fileCount.total > 0 && (
-                <div className="w-full h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-violet-500 rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${Math.min(100, (fileCount.current / fileCount.total) * 100)}%` }}
-                  />
+                {/* Timeline Steps */}
+                <div className="space-y-1.5">
+                  {stageOrder.filter(s => stageGroups[s]).map((stage) => {
+                    const steps = stageGroups[stage]
+                    const lastStep = steps[steps.length - 1]
+                    const isRunning = lastStep?.status === "running"
+                    const isDone = lastStep?.status === "done"
+                    const isError = lastStep?.status === "error"
+                    const Icon = ICON_MAP[stage] || Sparkles
+
+                    return (
+                      <Accordion key={stage} type="single" collapsible className="border-none">
+                        <AccordionItem value={stage} className="border-none">
+                          <AccordionTrigger className="py-1.5 hover:no-underline">
+                            <div className="flex items-center gap-2">
+                              {isRunning ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
+                              ) : isError ? (
+                                <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                              ) : isDone ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                              ) : (
+                                <Clock className="h-3.5 w-3.5 text-zinc-600" />
+                              )}
+                              <span className={cn("text-sm", isRunning && "text-blue-300", isError && "text-red-300", isDone && "text-emerald-300", !isRunning && !isError && !isDone && "text-zinc-500")}>
+                                {STAGE_LABELS[stage] || stage}
+                              </span>
+                              <span className="text-xs text-zinc-500">— {lastStep?.title}</span>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            {steps.map((step) => (
+                              <div key={step.id} className="pl-8 py-1 text-xs text-zinc-500">
+                                {step.message}
+                                {step.file && (
+                                  <Badge variant="secondary" className="ml-2 text-[10px] h-4 px-1">
+                                    {step.file}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    )
+                  })}
                 </div>
-              )}
+              </CardContent>
+            </Card>
 
-              <div className="space-y-2">
-                {debugSteps
-                  .filter(s => s.id !== "error")
-                  .map((step) => (
-                    <div
-                      key={step.id}
-                      className={cn(
-                        "rounded-xl border p-3 transition-all duration-300",
-                        step.status === "running" && "border-blue-500/30 bg-blue-500/[0.04]",
-                        step.status === "done" && "border-emerald-500/20 bg-emerald-500/[0.03]",
-                        step.status === "error" && "border-red-500/20 bg-red-500/[0.03]",
-                        step.status === "pending" && "border-white/[0.05] bg-white/[0.01]",
-                      )}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div className="mt-0.5 shrink-0">
-                          {step.status === "running" && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />}
-                          {step.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />}
-                          {step.status === "error" && <AlertCircle className="h-3.5 w-3.5 text-red-400" />}
-                          {step.status === "pending" && <Clock className="h-3.5 w-3.5 text-zinc-600" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={cn(
-                            "text-sm font-medium",
-                            step.status === "running" && "text-blue-300",
-                            step.status === "done" && "text-emerald-300",
-                            step.status === "error" && "text-red-300",
-                            step.status === "pending" && "text-zinc-500",
-                          )}>
-                            {step.title}
-                          </p>
-                          <pre className="mt-1.5 text-xs text-zinc-400 whitespace-pre-wrap font-mono leading-relaxed">{step.detail}</pre>
-                        </div>
-                      </div>
+            {/* Plan Card */}
+            {planSummary && (
+              <Card className="border-white/[0.08] bg-zinc-900/50">
+                <CardContent className="p-4 space-y-2">
+                  <p className="text-sm font-medium text-zinc-200">{planSummary}</p>
+                  {planFiles && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {planFiles.create.map(f => (
+                        <Badge key={f.name} className="text-[10px] gap-1 bg-emerald-500/10 text-emerald-300 border-emerald-500/20">
+                          <FileCode className="h-3 w-3" />
+                          + {f.name}
+                        </Badge>
+                      ))}
+                      {planFiles.modify.map(f => (
+                        <Badge key={f.name} className="text-[10px] gap-1 bg-amber-500/10 text-amber-300 border-amber-500/20">
+                          <FileCode className="h-3 w-3" />
+                          ~ {f.name}
+                        </Badge>
+                      ))}
+                      {planFiles.delete.map(f => (
+                        <Badge key={f} className="text-[10px] gap-1 bg-red-500/10 text-red-300 border-red-500/20">
+                          - {f}
+                        </Badge>
+                      ))}
                     </div>
-                  ))}
-              </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-              {error && (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-3">
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-                    <p className="text-sm text-red-300">{error}</p>
+            {/* Validation Errors */}
+            {validationErrors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle className="text-sm">{validationErrors.length} validation {validationErrors.length === 1 ? "issue" : "issues"}</AlertTitle>
+                <AlertDescription>
+                  <div className="mt-2 space-y-1">
+                    {validationErrors.map((e, i) => (
+                      <div key={i} className="text-xs text-red-300/80">
+                        <span className="font-mono">{e.file}</span>: {e.message}
+                      </div>
+                    ))}
                   </div>
-                </div>
-              )}
-            </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Changed Files */}
+            {changedFiles.length > 0 && (
+              <Card className="border-emerald-500/10 bg-emerald-500/[0.02]">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <p className="text-sm font-medium text-emerald-300">Files saved</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {changedFiles.filter(f => !f.startsWith("-")).map(file => (
+                      <Badge key={file} variant="secondary" className="text-[10px] gap-1">
+                        <FileCode className="h-3 w-3" />
+                        {file}
+                      </Badge>
+                    ))}
+                  </div>
+                  {onDeploy && (
+                    <Button onClick={onDeploy} className="mt-3 gap-2" size="sm">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Deploy Changes
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Error */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle className="text-sm">Build Error</AlertTitle>
+                <AlertDescription className="text-xs">{error}</AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
       </div>

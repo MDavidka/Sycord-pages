@@ -2328,6 +2328,7 @@ export default function SiteSettingsPage() {
                         generatedPages={generatedPages}
                         setGeneratedPages={setGeneratedPages}
                         onDeploy={handleDeploy}
+                        hasExistingFiles={generatedPages.length > 0}
                       />
                     </div>
                   ) : (
@@ -2383,6 +2384,7 @@ export default function SiteSettingsPage() {
                 }}
                 onDeploy={handleDeploy}
                 onGoToAI={() => setActiveTab("ai")}
+                onFixWithSyra={() => setActiveTab("ai")}
                 isDeploying={isDeploying}
                 deployProgress={deployProgress}
                 deployError={deployError}

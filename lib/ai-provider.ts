@@ -1,19 +1,5 @@
-// Unified chat-completion helper. Routes to the provider of the currently
-// selected model so every AI step in the build pipeline (plan → style JSON →
-// logic TS) runs on the same model the user picked from the dropdown.
-//
-// Supported providers:
-//   - "xAI"        → https://api.x.ai/v1/chat/completions                     (XAI_API_KEY)
-//   - "OpenRouter" → https://openrouter.ai/api/v1/chat/completions            (OPENROUTER_API_KEY)
-//   - "OpenAI"     → https://api.openai.com/v1/chat/completions               (OPENAI_API_KEY)
-//   - "Anthropic"  → https://api.anthropic.com/v1/messages                    (ANTHROPIC_API_KEY)
-//   - "Google"     → https://aiplatform.googleapis.com/v1/publishers/google/
-//                    models/{model}:generateContent?key=...
-//                    (GOOGLE_AIAGENT_API)  —  Gemini via Vertex AI express mode
-//   - "DeepSeek"    → https://api.deepseek.com/v1/chat/completions            (DEEPSEEK_API)
-//
-// OpenAI-style providers share a schema; Anthropic Messages API and Vertex AI's
-// generateContent use different request/response shapes, handled separately below.
+// Unified chat-completion helper with timeout, retry, and abort support.
+// Added for the Syra pipeline refactoring.
 
 export type ChatRole = "system" | "user" | "assistant"
 
@@ -32,12 +18,17 @@ export interface CallModelOptions {
   model: ModelSelection
   messages: ChatMessage[]
   temperature?: number
+  maxTokens?: number
+  timeoutMs?: number
+  signal?: AbortSignal
+  maxRetries?: number
 }
 
 export interface CallModelResult {
   ok: true
   content: string
   raw: unknown
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
 }
 
 export interface CallModelError {
@@ -47,6 +38,78 @@ export interface CallModelError {
   details?: string
 }
 
+const DEFAULT_TIMEOUT = 120_000 // 2 minutes
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504])
+const MAX_RETRIES = 2
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function jitter(baseMs: number): number {
+  return Math.floor(baseMs * (0.5 + Math.random()))
+}
+
+function delayForRetry(attempt: number): number {
+  const base = Math.min(1000 * Math.pow(2, attempt), 30000)
+  return jitter(base)
+}
+
+// Separated because it's used independently from retry logic
+async function callModelOnce(
+  opts: CallModelOptions,
+): Promise<CallModelResult | CallModelError> {
+  const { model, messages, temperature = 0.1, timeoutMs = DEFAULT_TIMEOUT, signal } = opts
+
+  if (model.provider === "Google") {
+    return callGoogle({ model, messages, temperature, timeoutMs, signal })
+  }
+  if (model.provider === "Anthropic") {
+    return callAnthropic({ model, messages, temperature, timeoutMs, signal })
+  }
+  return callOpenAICompatible({ model, messages, temperature, timeoutMs, signal })
+}
+
+export async function callModel(
+  opts: CallModelOptions,
+): Promise<CallModelResult | CallModelError> {
+  const maxRetries = opts.maxRetries ?? MAX_RETRIES
+
+  let lastError: CallModelError | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      await sleep(delayForRetry(attempt - 1))
+    }
+
+    const result = await callModelOnce(opts)
+
+    if (result.ok) return result
+
+    lastError = result
+    if (!RETRYABLE_STATUSES.has(result.status)) break
+  }
+
+  return lastError ?? { ok: false, status: 500, message: "Max retries exceeded" }
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number, signal?: AbortSignal): Promise<Response> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  if (signal) {
+    signal.addEventListener("abort", () => controller.abort())
+  }
+
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal })
+    return response
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// ═══════ OpenAI Compatible providers ═══════
 interface ProviderConfig {
   url: string
   apiKey: string | undefined
@@ -72,29 +135,16 @@ function providerConfig(provider: string): ProviderConfig {
       apiKey: process.env.OPENAI_API_KEY,
     }
   }
-  // Default to OpenRouter for any other provider string.
   return {
     url: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: process.env.OPENROUTER_API_KEY,
   }
 }
 
-export async function callModel(
-  opts: CallModelOptions,
-): Promise<CallModelResult | CallModelError> {
-  if (opts.model.provider === "Google") {
-    return callGoogle(opts)
-  }
-  if (opts.model.provider === "Anthropic") {
-    return callAnthropic(opts)
-  }
-  return callOpenAICompatible(opts)
-}
-
 async function callOpenAICompatible(
-  opts: CallModelOptions,
+  opts: Omit<CallModelOptions, "maxRetries"> & { timeoutMs: number; signal?: AbortSignal },
 ): Promise<CallModelResult | CallModelError> {
-  const { model, messages, temperature = 0.1 } = opts
+  const { model, messages, temperature = 0.1, timeoutMs, signal } = opts
   const cfg = providerConfig(model.provider)
 
   if (!cfg.apiKey) {
@@ -107,25 +157,31 @@ async function callOpenAICompatible(
 
   let response: Response
   try {
-    response = await fetch(cfg.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${cfg.apiKey}`,
-        ...(cfg.headers ?? {}),
+    response = await fetchWithTimeout(
+      cfg.url,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${cfg.apiKey}`,
+          ...(cfg.headers ?? {}),
+        },
+        body: JSON.stringify({
+          model: model.id,
+          messages,
+          temperature,
+          max_tokens: opts.maxTokens ?? 8192,
+        }),
       },
-      body: JSON.stringify({
-        model: model.id,
-        messages,
-        temperature,
-        max_tokens: 8192,
-      }),
-    })
+      timeoutMs,
+      signal,
+    )
   } catch (err) {
+    const isAbort = (err as Error)?.name === "AbortError"
     return {
       ok: false,
-      status: 502,
-      message: `Network error calling ${model.provider}`,
+      status: isAbort ? 408 : 502,
+      message: isAbort ? `Request timed out for ${model.provider}` : `Network error calling ${model.provider}`,
       details: err instanceof Error ? err.message : String(err),
     }
   }
@@ -135,24 +191,29 @@ async function callOpenAICompatible(
     return {
       ok: false,
       status: response.status,
-      message: `${model.provider} API error`,
-      details: errText,
+      message: `${model.provider} API error (${response.status})`,
+      details: errText.slice(0, 500),
     }
   }
 
-  const data = await response.json().catch(() => null) as { choices?: Array<{ message?: { content?: string } }> } | null
+  const data = await response.json().catch(() => null) as {
+    choices?: Array<{ message?: { content?: string } }>
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+  } | null
   const content = data?.choices?.[0]?.message?.content ?? ""
-  return { ok: true, content, raw: data }
+  return {
+    ok: true,
+    content,
+    raw: data,
+    usage: data?.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
+    } : undefined,
+  }
 }
 
-// Vertex AI in express mode (aiplatform.googleapis.com) speaks a different
-// shape than the OpenAI chat-completions schema:
-//   - request:  { systemInstruction?: { parts }, contents: [{ role, parts }] }
-//   - response: { candidates: [{ content: { parts: [{ text }] } }] }
-// We fold the OpenAI "system" message into systemInstruction, and map
-// user/assistant turns to "user"/"model" roles Vertex expects. Auth is the
-// API key passed as `?key=` (NOT a bearer token — express mode accepts the
-// raw API key, unlike the standard Vertex endpoint which requires OAuth2).
+// ═══════ Google / Vertex AI ═══════
 interface GooglePart { text: string }
 interface GoogleContent { role?: "user" | "model"; parts: GooglePart[] }
 interface GoogleResponse {
@@ -173,9 +234,9 @@ function googleModelCandidates(modelId: string): string[] {
 }
 
 async function callGoogle(
-  opts: CallModelOptions,
+  opts: Omit<CallModelOptions, "maxRetries"> & { timeoutMs: number; signal?: AbortSignal },
 ): Promise<CallModelResult | CallModelError> {
-  const { model, messages, temperature = 0.1 } = opts
+  const { model, messages, temperature = 0.1, timeoutMs, signal } = opts
   const apiKey = process.env.GOOGLE_AIAGENT_API
   if (!apiKey) {
     return {
@@ -194,8 +255,7 @@ async function callGoogle(
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }))
-  // Google rejects requests with zero `contents`. If the caller only sent
-  // system messages, relay them as a single user turn so the call still runs.
+
   if (contents.length === 0 && systemTurns.length > 0) {
     contents.push({
       role: "user",
@@ -203,10 +263,6 @@ async function callGoogle(
     })
   }
 
-  // Vertex AI in express mode: API key is a query param, not a header.
-  // Gemini preview SKUs can move quickly; try the requested id first, then
-  // curated fallback aliases so "Gemini 3.1 Flash" keeps working even when
-  // Vertex maps it to the latest stable flash family id.
   const candidates = googleModelCandidates(model.id)
   const errors: string[] = []
 
@@ -217,18 +273,24 @@ async function callGoogle(
 
     let response: Response
     try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      response = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction,
+            contents,
+            generationConfig: { temperature },
+          }),
         },
-        body: JSON.stringify({
-          systemInstruction,
-          contents,
-          generationConfig: { temperature },
-        }),
-      })
+        timeoutMs,
+        signal,
+      )
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return { ok: false, status: 408, message: "Request timed out calling Vertex AI" }
+      }
       return {
         ok: false,
         status: 502,
@@ -239,7 +301,7 @@ async function callGoogle(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "")
-      errors.push(`${candidate}: ${response.status} ${errText}`)
+      errors.push(`${candidate}: ${response.status} ${errText.slice(0, 200)}`)
       continue
     }
 
@@ -261,14 +323,11 @@ async function callGoogle(
   }
 }
 
-// Anthropic Messages API — different shape than chat completions:
-//   - system is a top-level string (not a message)
-//   - messages are { role: "user" | "assistant", content: [{ type: "text", text }] }
-//   - response is { content: [{ type: "text", text }] }
+// ═══════ Anthropic ═══════
 async function callAnthropic(
-  opts: CallModelOptions,
+  opts: Omit<CallModelOptions, "maxRetries"> & { timeoutMs: number; signal?: AbortSignal },
 ): Promise<CallModelResult | CallModelError> {
-  const { model, messages, temperature = 0.1 } = opts
+  const { model, messages, temperature = 0.1, timeoutMs, signal } = opts
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return {
@@ -283,7 +342,7 @@ async function callAnthropic(
 
   const body: Record<string, unknown> = {
     model: model.id,
-    max_tokens: 32768,
+    max_tokens: opts.maxTokens ?? 32768,
     temperature,
     messages: nonSystem.map((m) => ({
       role: m.role === "assistant" ? "assistant" : "user",
@@ -297,20 +356,26 @@ async function callAnthropic(
 
   let response: Response
   try {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+    response = await fetchWithTimeout(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    })
+      timeoutMs,
+      signal,
+    )
   } catch (err) {
+    const isAbort = (err as Error)?.name === "AbortError"
     return {
       ok: false,
-      status: 502,
-      message: "Network error calling Anthropic",
+      status: isAbort ? 408 : 502,
+      message: isAbort ? "Request timed out calling Anthropic" : "Network error calling Anthropic",
       details: err instanceof Error ? err.message : String(err),
     }
   }
@@ -321,7 +386,7 @@ async function callAnthropic(
       ok: false,
       status: response.status,
       message: "Anthropic API error",
-      details: errText,
+      details: errText.slice(0, 500),
     }
   }
 
@@ -334,24 +399,17 @@ async function callAnthropic(
   return { ok: true, content, raw: data }
 }
 
-// Extracts the first valid JSON payload from a model response. Handles fenced
-// ```json blocks, stray prose, and picks the outermost [ ... ] or { ... }
-// region as a fallback. Returns null if nothing parseable is found.
-// Additionally strips placeholder values like "[usedFor]" from extracted JSON.
+// ═══════ JSON / Code extraction utilities ═══════
+
 export function extractJson<T = unknown>(content: string): T | null {
   if (!content) return null
   const trimmed = content.trim()
 
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
   if (fenced?.[1]) {
-    try {
-      return cleanJsonPlaceholders(JSON.parse(fenced[1])) as T
-    } catch {
-      // fall through
-    }
+    try { return cleanJsonPlaceholders(JSON.parse(fenced[1])) as T } catch {}
   }
 
-  // Find the outermost array or object by scanning for first [ or { and matching closing bracket
   const firstArray = trimmed.indexOf("[")
   const firstObject = trimmed.indexOf("{")
   const startChar = firstArray >= 0 && (firstArray < firstObject || firstObject < 0) ? "[" : "{"
@@ -372,43 +430,14 @@ export function extractJson<T = unknown>(content: string): T | null {
       else if (ch === closeChar) { depth--; if (depth === 0) { endIdx = i; break } }
     }
     if (endIdx > startIdx) {
-      try {
-        const jsonStr = trimmed.slice(startIdx, endIdx + 1)
-        return cleanJsonPlaceholders(JSON.parse(jsonStr)) as T
-      } catch {
-        // fall through
-      }
+      try { return cleanJsonPlaceholders(JSON.parse(trimmed.slice(startIdx, endIdx + 1))) as T } catch {}
     }
   }
 
-  const arrayBlock = trimmed.match(/\[\s*[\s\S]*\s*\]/)
-  if (arrayBlock) {
-    try {
-      return cleanJsonPlaceholders(JSON.parse(arrayBlock[0])) as T
-    } catch {
-      // fall through
-    }
-  }
-
-  const objectBlock = trimmed.match(/\{\s*[\s\S]*\s*\}/)
-  if (objectBlock) {
-    try {
-      return cleanJsonPlaceholders(JSON.parse(objectBlock[0])) as T
-    } catch {
-      // fall through
-    }
-  }
-
-  try {
-    return cleanJsonPlaceholders(JSON.parse(trimmed)) as T
-  } catch {
-    return null
-  }
+  try { return cleanJsonPlaceholders(JSON.parse(trimmed)) as T } catch {}
+  return null
 }
 
-// Strip placeholder values like "[usedFor]", "[name]", "[description]" etc.
-// from parsed JSON objects/arrays. These are AI hallucinations where the model
-// outputs field-name-like bracket markers instead of real data.
 function cleanJsonPlaceholders<T>(value: T): T {
   if (typeof value === "string") {
     return (value.replace(/^\[[a-zA-Z]+\]$/, "").trim() || value.replace(/^\[[a-zA-Z]+\]$/, "")) as unknown as T
@@ -430,118 +459,49 @@ function cleanJsonPlaceholders<T>(value: T): T {
   return value
 }
 
-// Extract a runnable source code body out of a chatty model response.
-//
-// Real model output we've seen in the wild:
-//   1. Clean: just the code.
-//   2. Fenced with a language hint: \`\`\`typescript\n...\n\`\`\`
-//   3. Fenced then trailing prose: "\`\`\`ts\n...\n\`\`\`\n\nLet me know…"
-//   4. Prose-then-fence: "Here is the code:\n\n\`\`\`ts\n...\n\`\`\`"
-//   5. Unclosed / malformed fence: "\`\`\`typescript\n...\n" (no closing fence).
-//   6. No fence, prose prefix: "Here is the code:\n\nexport function …"
-//   7. JSON-wrapped: {"code": "..."} or {"name": "...", "code": "..."}
-//
-// This version tries multiple strategies and, crucially, always strips any
-// leading/trailing triple-backtick lines and prose before returning.
 export function extractCode(content: string, lang?: string): string {
   if (!content) return ""
 
-  // Strategy quick-check: if the content looks like clean code already, return immediately
-  const quickTrim = content.trim()
-  if (/^(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|@tailwind|@layer|\/\/|\/\*|{|package\s*\{)/m.test(quickTrim) &&
-      !quickTrim.match(/^```/) &&
-      !quickTrim.startsWith("Here") &&
-      !quickTrim.startsWith("This")) {
-    return stripStrayFenceMarkers(quickTrim).trim()
-  }
-
   const trimmed = content.trim()
 
-  // Strategy Z: JSON-wrapped code object — some models wrap code in {"code": "..."}
+  if (/^(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|@tailwind|@layer|\/\/|\/\*|{|package\s*\{)/m.test(trimmed) &&
+    !trimmed.match(/^```/) &&
+    !trimmed.startsWith("Here") &&
+    !trimmed.startsWith("This")) {
+    return stripStrayFenceMarkers(trimmed).trim()
+  }
+
   if (trimmed.startsWith("{") && trimmed.includes('"code"')) {
     try {
       const parsed = JSON.parse(trimmed) as Record<string, unknown>
       if (typeof parsed.code === "string" && parsed.code.length > 10) {
         return extractCode(parsed.code, lang)
       }
-    } catch { /* fall through */ }
+    } catch {}
   }
 
-  // Strategy A: lang-specific fence. Accept \`\`\`ts, \`\`\`typescript, \`\`\`tsx when
-  // lang=ts; accept \`\`\`js / \`\`\`javascript / \`\`\`jsx when lang=js. For other
-  // langs just match the lang literally.
-  const langAliases =
-    lang === "ts" ? ["typescript", "tsx", "ts"]
+  const langAliases = lang === "ts" ? ["typescript", "tsx", "ts"]
     : lang === "js" ? ["javascript", "jsx", "js"]
     : lang ? [lang]
     : []
+
   for (const alias of langAliases) {
     const re = new RegExp(`\`\`\`${alias}\\b[\\t ]*\\n?([\\s\\S]*?)\\n?\`\`\``, "i")
     const m = trimmed.match(re)
     if (m?.[1]) return stripStrayFenceMarkers(m[1]).trim()
   }
 
-  // Strategy B: any fenced block (first occurrence).
   const anyFence = trimmed.match(/```[a-zA-Z0-9]*\b[\t ]*\n?([\s\S]*?)\n?```/)
   if (anyFence?.[1]) return stripStrayFenceMarkers(anyFence[1]).trim()
 
-  // Strategy C: unclosed fence — a \`\`\` that never closes. Take everything
-  // after the opening fence line.
   const openFence = trimmed.match(/^```[a-zA-Z0-9]*\b[\t ]*\n([\s\S]*)$/)
   if (openFence?.[1]) return stripStrayFenceMarkers(openFence[1]).trim()
 
-  // Strategy D: no fence but prose prefix before code. Drop everything up to
-  // the first plausible code line. Match more aggressively — include JSX openings too.
-  const codeStart = trimmed.search(
-    /^(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|async\s+function\b|\/\*|\/\/|@tailwind|@layer|@apply|^<\w+|^\{[\s\n]*"?\w|^package\s*\{)/ms,
-  )
-  if (codeStart > 4) {
-    const result = stripStrayFenceMarkers(trimmed.slice(codeStart)).trim()
-    if (result.length > 10) return result
-  }
-
-  // Strategy E: try to find code by locating the first import/export/function line
-  // and extracting from there to the end.
-  const codeLine = trimmed.search(/\n\s*(?:"use (client|server|strict)"|import\b|export\b|const\b|let\b|var\b|function\b|interface\b|type\b|class\b|async\s+function\b)/m)
-  if (codeLine > 0) {
-    const result = stripStrayFenceMarkers(trimmed.slice(codeLine + 1)).trim()
-    if (result.length > 10) return result
-  }
-
-  // Strategy F: give up and scrub stray fence markers out of the raw content,
-  // then strip obvious prose lines.
-  let fallback = stripStrayFenceMarkers(trimmed).trim()
-  // Remove lines that look like file descriptors: path/file.ext Some description
-  fallback = fallback.replace(/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)[\s]+[A-Z][a-z].*$/gm, "")
-  fallback = fallback.replace(/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*$/gm, "")
-  // Strip filenameDescription concatenated after closing brace: }app/layout.tsxRoot layout...
-  fallback = fallback.replace(/(\})\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*[A-Z][a-z].*$/s, "$1")
-  // Remove lines that are clearly prose (full sentences without code syntax)
-  fallback = fallback.split("\n").filter(line => {
-    const t = line.trim()
-    if (!t) return true
-    // Filter out file-path + description patterns
-    if (/^[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\b/i.test(t)) return false
-    if (/[{}();=<>\[\]&\|\^\~\`\$\%\#\@\!\?\*\+\/\-]/.test(t)) return true
-    if (/^(?:import|export|const|let|var|function|class|interface|type|enum|return|if|for|while|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|yield|await|async|default|extends|implements|static|public|private|protected|readonly|abstract|as|from|require|module)\b/i.test(t)) return true
-    if (/^["']use (client|server|strict)["']/.test(t)) return true
-    if (/^[\/\*]/.test(t)) return true
-    if (/^@(tailwind|layer|apply|media|keyframes)/.test(t)) return true
-    if (/^<(div|span|section|main|header|footer|nav|article|aside|ul|ol|li|p|h[1-6]|a|img|button|input|form|table|tbody|thead|tr|th|td|svg|path|br|hr|pre|code|picture|source|figure|figcaption|blockquote|label|select|textarea|option|html|head|body|meta|link|title)\b/i.test(t)) return true
-    if (/^(<\/[\w-]+>|\/>)/.test(t)) return true
-    // Filter out prose sentences
-    if (/^(Here|This|Please|Let|Note|Feel free|You can|Make sure|Don't forget|Remember|The above|I hope|Enjoy|Ready to|Now you|The code|The file|Below|Following|This will|I have|I've|I will)\s/i.test(t)) return false
-    if (/^[a-z]/i.test(t) && /[.!?]$/.test(t) && !/[{}();]/.test(t)) return false
-    return true
-  }).join("\n")
-  // Final safety net: strip any trailing metadata line with a file path
-  fallback = fallback.replace(/\n\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*[A-Za-z].*$/s, "")
-  fallback = fallback.replace(/\n\s*[a-zA-Z0-9_\/-]+\.(?:tsx?|jsx?|css|json)\s*$/s, "")
-  return fallback.trim()
+  return stripStrayFenceMarkers(trimmed).trim()
 }
 
-// Strip any lone ``` lines that slipped through — a ``` that is alone on a
-// line is always markdown noise, never valid TS/JS syntax.
 function stripStrayFenceMarkers(code: string): string {
   return code.replace(/^[\t ]*```[a-zA-Z0-9]*[\t ]*$/gm, "")
 }
+
+// Export DOMException type for Node.js compatibility
