@@ -33,3 +33,10 @@ next-env.d.ts
 __pycache__/
 *.py[cod]
 *$py.class
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
