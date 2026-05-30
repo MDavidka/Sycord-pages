@@ -1,0 +1,41 @@
+{
+  "summary": "Tested Patch Canvas /builder (Next.js 16 app on sycord-pages) end-to-end. Backend: 5/5 pytest tests pass for GET /builder, POST /api/builder/export (valid + invalid), and POST /api/builder/stream (SSE start/patch/done + invalid handling). Frontend: All UI flows pass — 4-panel shell visible, 3 viewport iframes in 'All' mode and 1 in 'Desktop', component tree selection populates property inspector, editing inspector-text dispatches a JSON Patch ('replace /pages/0/tree/children/0/children/0/children/0/text = ...') visible in the PATCHES & CODE panel, undo/redo toggle correctly, mode routing surfaces 'Send (fast)' when a node is selected, and the preview iframe has sandbox='allow-scripts'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Preview iframe (mini-renderer)", "issues": ["Uses cdn.tailwindcss.com inside iframe — console warns it should not be used in production. Consider inlining required Tailwind utilities or moving to a small static stylesheet to avoid runtime CDN dependency."]}
+    ],
+    "other_console_warnings": [
+      "On /builder initial load one resource returned HTTP 500 (no impact on UI behavior, all panels and APIs functional). Likely a non-critical asset/route — main agent may want to check server logs to identify and silence it."
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_builder_apis.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Investigate the single 500 response observed during /builder page load (check Next.js server logs for the failing resource — likely a webpack chunk, favicon, or RSC payload).",
+    "Replace cdn.tailwindcss.com in the iframe preview document with a precompiled stylesheet to remove the production warning."
+  ],
+  "critical_code_review_comments": [
+    "Builder document IR is well-typed (Zod discriminated union on 'component') and the export endpoint correctly validates and returns issues with 422 for malformed payloads.",
+    "Stream endpoint correctly produces SSE with named events (start/patch/done) and Content-Type text/event-stream.",
+    "Iframe is sandboxed with allow-scripts only (no allow-same-origin) which is the correct security posture for an LLM-driven preview.",
+    "The mini-renderer iframe relies on tailwind CDN; for offline / CSP-strict environments this will break — consider bundling styles."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_builder_apis.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "N/A — /builder is unauthenticated as documented.",
+  "seed_data_creation": "None — tests build payload in-memory matching createDefaultDocument().",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "BuilderDocument schema (lib/ai-ui-builder/catalog/schemas.ts) requires keys: id, version(int), componentCatalogVersion, theme, state, history, routes, pages. Nodes use 'component' discriminator (NOT 'type'), and Heading/Text store the literal copy in a top-level 'text' field on the node, not in props. Use createDefaultDocument() shape from lib/ai-ui-builder/document/default-document.ts as a known-valid payload. The PATCHES & CODE panel renders patch ops as 'replace /pages/0/tree/children/.../text = \"...\"'. Tree-node 'node-hero-heading' selection populates [data-testid=inspector-text]; editing then blurring dispatches the patch. Undo enables after a patch, redo enables after undo. SSE stream endpoint can take up to ~30s for fast mode; tests wait up to 60s.",
+  "rca of the issue": "N/A — no functional bugs found. The single observed 500 on /builder load is non-blocking (no impact on shell, panels, APIs, or streaming) and should be investigated via Next.js server logs."
+}
