@@ -9,7 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
@@ -21,6 +21,7 @@ import {
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Loader2,
@@ -43,6 +44,16 @@ import {
   Eye,
   Copy,
   Check,
+  ChevronRight,
+  Code2,
+  Terminal,
+  Layers,
+  Palette,
+  Package,
+  ShieldCheck,
+  PenTool,
+  PlayCircle,
+  Rocket,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BEST_COST_PER_FILE, FAST_COST_PER_FILE, tierOf, formatCredits, type ModelTier } from "@/lib/credits"
@@ -98,17 +109,35 @@ interface StageStep {
   filesToDelete?: string[]
 }
 
+interface FileGenStatus {
+  name: string
+  status: "pending" | "generating" | "done" | "error"
+  chars?: number
+  usedFor?: string
+}
+
 const STAGE_LABELS: Record<string, string> = {
   starting: "Starting",
-  intent: "Understanding",
-  memory: "Memory",
-  context: "Context",
-  planning: "Planning",
-  writing: "Writing",
-  validating: "Validating",
+  intent: "Understanding request",
+  memory: "Reading project memory",
+  context: "Selecting relevant files",
+  planning: "Planning changes",
+  writing: "Writing files",
+  validating: "Validating project",
   repair: "Auto-repairing",
-  saving: "Saving",
+  saving: "Saving project",
   cache: "Cache",
+}
+
+const STAGE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  starting: Sparkles,
+  memory: Brain,
+  planning: PenTool,
+  writing: Code2,
+  validating: ShieldCheck,
+  repair: Wrench,
+  saving: Package,
+  cache: Layers,
 }
 
 const InputBar = ({
@@ -243,16 +272,6 @@ function parseSSEChunk(chunk: string): Array<{ event: string; data: any }> {
   return results
 }
 
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  starting: Sparkles,
-  memory: Brain,
-  planning: Sparkles,
-  writing: FileCode,
-  validating: CheckCircle2,
-  repair: Wrench,
-  saving: FileText,
-}
-
 interface AIWebsiteBuilderProps {
   projectId: string
   generatedPages: GeneratedPage[]
@@ -268,6 +287,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [buildSteps, setBuildSteps] = useState<StageStep[]>([])
+  const [fileStatuses, setFileStatuses] = useState<FileGenStatus[]>([])
   const [error, setError] = useState<string | null>(null)
   const [buildComplete, setBuildComplete] = useState(false)
   const [changedFiles, setChangedFiles] = useState<string[]>([])
@@ -276,6 +296,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   const [planFiles, setPlanFiles] = useState<{ create: Array<{ name: string; usedFor: string }>; modify: Array<{ name: string; usedFor: string }>; delete: string[] } | null>(null)
   const [validationErrors, setValidationErrors] = useState<Array<{ file: string; code: string; message: string }>>([])
   const [repairPass, setRepairPass] = useState(0)
+  const [expandedAccordion, setExpandedAccordion] = useState<string>("")
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(MODELS.find(m => m.id === DEFAULT_MODEL_ID) || MODELS[0])
   const [attachments, setAttachments] = useState<File[]>([])
@@ -308,10 +329,15 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     }
   }, [])
 
+  const totalFiles = fileStatuses.length
+  const completedFiles = fileStatuses.filter(f => f.status === "done").length
+  const currentFile = fileStatuses.find(f => f.status === "generating")
+
   const handleSend = async () => {
     if (!input.trim() || isLoading) return
     setIsLoading(true)
     setBuildSteps([])
+    setFileStatuses([])
     setError(null)
     setBuildComplete(false)
     setChangedFiles([])
@@ -320,11 +346,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
     setPlanFiles(null)
     setValidationErrors([])
     setRepairPass(0)
+    setExpandedAccordion("")
 
     const controller = new AbortController()
     abortRef.current = controller
 
-    // Read attachments
     const attachmentData: Array<{ name: string; type: string; text: string }> = []
     for (const file of attachments) {
       try {
@@ -362,6 +388,29 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
       const upsertStep = (stage: string, status: StageStep["status"], title: string, message: string, extra?: Partial<StageStep>) => {
         const id = `syra-${stage}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+
+        if (stage === "writing" && extra?.file) {
+          setFileStatuses(prev => {
+            const existingIdx = prev.findIndex(f => f.name === extra!.file)
+            if (existingIdx >= 0) {
+              const updated = [...prev]
+              updated[existingIdx] = {
+                ...updated[existingIdx],
+                status: status === "running" ? "generating" : status === "done" ? "done" : status === "error" ? "error" : "pending",
+                chars: extra?.chars,
+                usedFor: extra?.action,
+              }
+              return updated
+            }
+            return [...prev, {
+              name: extra!.file!,
+              status: "generating",
+              chars: extra?.chars,
+              usedFor: extra?.action,
+            }]
+          })
+        }
+
         if (stage === "validating" && extra?.severity === "error" && extra?.file && extra?.code && extra?.message) {
           setValidationErrors(prev => [...prev, { file: extra.file!, code: extra.code!, message: extra.message! }])
         }
@@ -371,7 +420,11 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
         if (stage === "planning" && extra?.mode) {
           setDetectedMode(extra.mode)
           setPlanSummary(message)
-          setPlanFiles({ create: extra?.filesToCreate ?? [], modify: extra?.filesToModify ?? [], delete: extra?.filesToDelete ?? [] })
+          const creates = (extra?.filesToCreate ?? []).map((f: { name: string; usedFor: string }) => ({ name: f.name, usedFor: f.usedFor || "" }))
+          const mods = (extra?.filesToModify ?? []).map((f: { name: string; usedFor: string }) => ({ name: f.name, usedFor: f.usedFor || "" }))
+          setPlanFiles({ create: creates, modify: mods, delete: extra?.filesToDelete ?? [] })
+          const allFileNames = [...creates, ...mods].map(f => f.name)
+          setFileStatuses(allFileNames.map(name => ({ name, status: "pending" as const })))
         }
         if (stage === "saving" && extra?.changedFiles) {
           setChangedFiles(extra.changedFiles)
@@ -387,6 +440,10 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
           const newStep: StageStep = { id, stage, title, message, status, timestamp: Date.now(), ...extra }
           return [...prev, newStep]
         })
+
+        if (status === "running") {
+          setExpandedAccordion(stage)
+        }
       }
 
       while (true) {
@@ -453,7 +510,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
         }
       }
 
-      // Process remaining buffer
       if (buffer.trim()) {
         for (const { event, data } of parseSSEChunk(buffer)) {
           if (event === "done") setBuildComplete(true)
@@ -472,7 +528,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
 
   const isBuilding = isLoading || (buildSteps.length > 0 && buildSteps.some(s => s.status === "running"))
 
-  // Group steps by stage for the timeline
   const stageGroups = buildSteps.reduce<Record<string, StageStep[]>>((acc, step) => {
     if (!acc[step.stage]) acc[step.stage] = []
     acc[step.stage].push(step)
@@ -480,6 +535,9 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
   }, {})
 
   const stageOrder = ["starting", "memory", "cache", "intent", "context", "planning", "writing", "validating", "repair", "saving"]
+  const currentRunningStage = buildSteps.find(s => s.status === "running")
+
+  const fileProgress = totalFiles > 0 ? Math.min(100, Math.round((completedFiles / totalFiles) * 100)) : 0
 
   return (
     <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
@@ -534,86 +592,138 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
         {/* BUILD STATES */}
         {(isBuilding || buildSteps.length > 0 || buildComplete) && (
           <div className="flex-1 w-full max-w-2xl flex flex-col py-8 gap-4">
-            {/* Status Card */}
-            <Card className="border-white/[0.08] bg-zinc-900/70">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {buildComplete ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    ) : error ? (
-                      <AlertCircle className="h-4 w-4 text-red-400" />
-                    ) : (
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
-                    )}
-                    <p className="text-xs uppercase tracking-wider text-zinc-400">
-                      {buildComplete ? "Build complete" : error ? "Build failed" : "Building your site"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
+            {/* ─── CURRENTLY GENERATING CARD ─── */}
+            {(isBuilding && (currentRunningStage || currentFile)) && (
+              <Card className="border-white/[0.08] bg-zinc-900/70 overflow-hidden">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      {currentFile ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                      ) : (
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                      )}
+                      <span className="text-xs uppercase tracking-wider text-zinc-400 font-semibold">
+                        {currentFile ? "Currently generating" : currentRunningStage?.stage ? STAGE_LABELS[currentRunningStage.stage] || currentRunningStage.title : "Building"}
+                      </span>
+                    </div>
                     {detectedMode && (
                       <Badge variant={detectedMode === "edit" ? "secondary" : detectedMode === "fix" ? "destructive" : "default"}>
                         {detectedMode === "generate" ? "New Build" : detectedMode === "edit" ? "Edit" : detectedMode === "fix" ? "Fix" : detectedMode}
                       </Badge>
                     )}
-                    <Badge variant="secondary" className="text-[10px]">{selectedModel.name.slice(0, 14)}</Badge>
                   </div>
-                </div>
 
-                {/* Progress bar */}
-                {isBuilding && (
-                  <Progress value={Math.min(95, buildSteps.filter(s => s.status === "done").length * 15)} className="h-1.5" />
-                )}
-
-                {/* Timeline Steps */}
-                <div className="space-y-1.5">
-                  {stageOrder.filter(s => stageGroups[s]).map((stage) => {
-                    const steps = stageGroups[stage]
-                    const lastStep = steps[steps.length - 1]
-                    const isRunning = lastStep?.status === "running"
-                    const isDone = lastStep?.status === "done"
-                    const isError = lastStep?.status === "error"
-                    const Icon = ICON_MAP[stage] || Sparkles
-
-                    return (
-                      <Accordion key={stage} type="single" collapsible className="border-none">
-                        <AccordionItem value={stage} className="border-none">
-                          <AccordionTrigger className="py-1.5 hover:no-underline">
-                            <div className="flex items-center gap-2">
-                              {isRunning ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />
-                              ) : isError ? (
-                                <AlertCircle className="h-3.5 w-3.5 text-red-400" />
-                              ) : isDone ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                              ) : (
-                                <Clock className="h-3.5 w-3.5 text-zinc-600" />
-                              )}
-                              <span className={cn("text-sm", isRunning && "text-blue-300", isError && "text-red-300", isDone && "text-emerald-300", !isRunning && !isError && !isDone && "text-zinc-500")}>
-                                {STAGE_LABELS[stage] || stage}
-                              </span>
-                              <span className="text-xs text-zinc-500">— {lastStep?.title}</span>
+                  {currentFile && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 mb-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 shrink-0">
+                          <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                            <FileCode className="h-4 w-4 text-amber-400" />
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-amber-200 font-mono">{currentFile.name}</span>
+                            <Badge variant="secondary" className="text-[10px] h-4">
+                              {currentFile.usedFor || "updating"}
+                            </Badge>
+                          </div>
+                          {currentFile.chars ? (
+                            <span className="text-xs text-amber-400/60">{currentFile.chars.toLocaleString()} characters generated</span>
+                          ) : (
+                            <div className="flex items-center gap-2 mt-1">
+                              <Loader2 className="h-3 w-3 animate-spin text-amber-400/60" />
+                              <span className="text-xs text-amber-400/60">Generating code...</span>
                             </div>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            {steps.map((step) => (
-                              <div key={step.id} className="pl-8 py-1 text-xs text-zinc-500">
-                                {step.message}
-                                {step.file && (
-                                  <Badge variant="secondary" className="ml-2 text-[10px] h-4 px-1">
-                                    {step.file}
-                                  </Badge>
-                                )}
-                              </div>
-                            ))}
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* File progress bar */}
+                  {totalFiles > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-zinc-500">{completedFiles} of {totalFiles} files written</span>
+                        <span className="text-zinc-600">{fileProgress}%</span>
+                      </div>
+                      <Progress value={fileProgress} className="h-1.5" />
+                    </div>
+                  )}
+
+                  {/* File status pills */}
+                  {fileStatuses.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {fileStatuses.map((f) => {
+                        const isGenerating = f.status === "generating"
+                        const isDone = f.status === "done"
+                        const isError = f.status === "error"
+                        return (
+                          <Badge
+                            key={f.name}
+                            variant={isError ? "destructive" : "secondary"}
+                            className={cn(
+                              "text-[10px] gap-1 py-0.5",
+                              isGenerating && "border-blue-500/30 bg-blue-500/10 text-blue-300 animate-pulse",
+                              isDone && "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+                            )}
+                          >
+                            {isGenerating ? (
+                              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            ) : isDone ? (
+                              <CheckCircle2 className="h-2.5 w-2.5" />
+                            ) : isError ? (
+                              <AlertCircle className="h-2.5 w-2.5" />
+                            ) : (
+                              <span className="w-2.5 h-2.5 rounded-full border border-zinc-600" />
+                            )}
+                            {f.name.split("/").pop()}
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ─── COMPLETE CARD ─── */}
+            {buildComplete && (
+              <Card className="border-emerald-500/10 bg-emerald-500/[0.02]">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                    <span className="text-sm font-semibold text-emerald-300">Build complete</span>
+                    {detectedMode && (
+                      <Badge variant={detectedMode === "edit" ? "secondary" : detectedMode === "fix" ? "destructive" : "default"} className="ml-2">
+                        {detectedMode === "generate" ? "New Build" : detectedMode === "edit" ? "Edit" : detectedMode === "fix" ? "Fix" : detectedMode}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {changedFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      {changedFiles.filter(f => !f.startsWith("-")).map(file => (
+                        <Badge key={file} variant="secondary" className="text-[10px] gap-1">
+                          <FileCode className="h-3 w-3" />
+                          {file}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    {onDeploy && (
+                      <Button onClick={onDeploy} size="sm" className="gap-2">
+                        <Rocket className="h-3.5 w-3.5" /> Deploy Changes
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Plan Card */}
             {planSummary && (
@@ -645,6 +755,99 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
               </Card>
             )}
 
+            {/* ─── STEPS TIMELINE ─── */}
+            {buildSteps.length > 0 && (
+              <Card className="border-white/[0.08] bg-zinc-900/50">
+                <Accordion
+                  type="single"
+                  collapsible
+                  value={expandedAccordion}
+                  onValueChange={setExpandedAccordion}
+                >
+                  {stageOrder.filter(s => stageGroups[s]).map((stage) => {
+                    const steps = stageGroups[stage]
+                    const lastStep = steps[steps.length - 1]
+                    const isRunning = lastStep?.status === "running"
+                    const isDone = lastStep?.status === "done"
+                    const isError = lastStep?.status === "error"
+                    const Icon = STAGE_ICONS[stage] || Code2
+
+                    return (
+                      <AccordionItem key={stage} value={stage} className="border-b border-white/[0.05] last:border-0">
+                        <AccordionTrigger className="px-5 py-3 hover:no-underline group">
+                          <div className="flex items-center gap-3 w-full">
+                            <div className={cn(
+                              "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
+                              isRunning && "bg-blue-500/10",
+                              isDone && "bg-emerald-500/10",
+                              isError && "bg-red-500/10",
+                              !isRunning && !isDone && !isError && "bg-white/[0.03]"
+                            )}>
+                              {isRunning ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                              ) : isError ? (
+                                <AlertCircle className="h-4 w-4 text-red-400" />
+                              ) : isDone ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                              ) : (
+                                <Icon className="h-4 w-4 text-zinc-600" />
+                              )}
+                            </div>
+                            <div className="flex-1 text-left min-w-0">
+                              <div className={cn(
+                                "text-sm font-medium",
+                                isRunning && "text-blue-300",
+                                isDone && "text-zinc-300",
+                                isError && "text-red-300",
+                                !isRunning && !isDone && !isError && "text-zinc-500"
+                              )}>
+                                {STAGE_LABELS[stage] || stage}
+                              </div>
+                              <div className="text-xs text-zinc-500 truncate">{lastStep?.title}</div>
+                            </div>
+                            <ChevronRight className={cn("h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-200", expandedAccordion === stage && "rotate-90")} />
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="px-5 pb-3 space-y-1">
+                            {steps.map((step) => (
+                              <div key={step.id} className="flex items-start gap-2 pl-11 py-1">
+                                <div className={cn(
+                                  "w-4 h-4 rounded-full flex items-center justify-center mt-0.5 shrink-0",
+                                  step.status === "running" && "bg-blue-500/20",
+                                  step.status === "done" && "bg-emerald-500/20",
+                                  step.status === "error" && "bg-red-500/20",
+                                  step.status === "pending" && "bg-white/[0.04]",
+                                )}>
+                                  {step.status === "running" ? (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                                  ) : step.status === "done" ? (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                  ) : step.status === "error" ? (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                                  ) : (
+                                    <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs text-zinc-400">{step.message}</span>
+                                  {step.file && (
+                                    <Badge variant="secondary" className="ml-2 text-[10px] h-4 px-1">
+                                      {step.file.split("/").pop()}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )
+                  })}
+                </Accordion>
+              </Card>
+            )}
+
             {/* Validation Errors */}
             {validationErrors.length > 0 && (
               <Alert variant="destructive">
@@ -663,7 +866,7 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
             )}
 
             {/* Changed Files */}
-            {changedFiles.length > 0 && (
+            {changedFiles.length > 0 && !buildComplete && (
               <Card className="border-emerald-500/10 bg-emerald-500/[0.02]">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -678,12 +881,6 @@ const AIWebsiteBuilder = ({ projectId, generatedPages, setGeneratedPages, onDepl
                       </Badge>
                     ))}
                   </div>
-                  {onDeploy && (
-                    <Button onClick={onDeploy} className="mt-3 gap-2" size="sm">
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Deploy Changes
-                    </Button>
-                  )}
                 </CardContent>
               </Card>
             )}
