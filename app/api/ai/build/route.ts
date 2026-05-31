@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth"
 import { callModel, extractJson, type ChatMessage } from "@/lib/ai-provider"
 import { readFileSync } from "fs"
 import { join } from "path"
+import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 
 function loadPrompt(name: string): string {
   try {
@@ -214,7 +216,7 @@ export async function POST(request: NextRequest) {
           push("state_update", conv)
 
           // Immediately start generating the first step
-          await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt)
+          await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt, pid, session.user.id)
           done()
           return
         }
@@ -291,7 +293,7 @@ export async function POST(request: NextRequest) {
           push("plan", { steps: conv.plan })
           push("state_update", conv)
 
-          await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt)
+          await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt, pid, session.user.id)
           done()
           return
         }
@@ -299,7 +301,7 @@ export async function POST(request: NextRequest) {
         // ──────── PHASE: GENERATING → Answer to step question → continue generation ────────
         if (conv.phase === "generating") {
           conv.answers.push(prompt)
-          await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt)
+          await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt, pid, session.user.id)
           done()
           return
         }
@@ -336,6 +338,106 @@ function buildAskingContext(conv: ConversationState): string {
   return ctx
 }
 
+async function saveFileToDb(
+  projectId: string,
+  userId: string,
+  file: { name: string; code: string; usedFor: string },
+) {
+  if (!ObjectId.isValid(projectId)) return
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    const result = await db.collection("users").updateOne(
+      {
+        id: userId,
+        projects: { $elemMatch: { _id: new ObjectId(projectId), "pages.name": file.name } },
+      },
+      {
+        $set: {
+          "projects.$[proj].pages.$[pg].content": file.code,
+          "projects.$[proj].pages.$[pg].usedFor": file.usedFor,
+          "projects.$[proj].pages.$[pg].updatedAt": new Date(),
+        },
+      },
+      {
+        arrayFilters: [
+          { "proj._id": new ObjectId(projectId) },
+          { "pg.name": file.name },
+        ],
+      },
+    )
+    if (result.matchedCount === 0) {
+      await db.collection("users").updateOne(
+        { id: userId, "projects._id": new ObjectId(projectId) },
+        {
+          $push: {
+            "projects.$.pages": {
+              name: file.name,
+              content: file.code,
+              usedFor: file.usedFor,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            },
+          },
+        },
+      )
+    }
+  } catch (e) {
+    console.error("Failed to save file to DB:", e)
+  }
+}
+
+async function saveAllFilesToDb(
+  projectId: string,
+  userId: string,
+  files: Array<{ name: string; code: string; usedFor: string }>,
+) {
+  if (!ObjectId.isValid(projectId) || files.length === 0) return
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    for (const file of files) {
+      const result = await db.collection("users").updateOne(
+        {
+          id: userId,
+          projects: { $elemMatch: { _id: new ObjectId(projectId), "pages.name": file.name } },
+        },
+        {
+          $set: {
+            "projects.$[proj].pages.$[pg].content": file.code,
+            "projects.$[proj].pages.$[pg].usedFor": file.usedFor,
+            "projects.$[proj].pages.$[pg].updatedAt": new Date(),
+          },
+        },
+        {
+          arrayFilters: [
+            { "proj._id": new ObjectId(projectId) },
+            { "pg.name": file.name },
+          ],
+        },
+      )
+      if (result.matchedCount === 0) {
+        await db.collection("users").updateOne(
+          { id: userId, "projects._id": new ObjectId(projectId) },
+          {
+            $push: {
+              "projects.$.pages": {
+                name: file.name,
+                content: file.code,
+                usedFor: file.usedFor,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              },
+            },
+          },
+        )
+      }
+    }
+  } catch (e) {
+    console.error("Failed to save files to DB:", e)
+  }
+}
+
 async function generateNextStep(
   ctrl: ReadableStreamDefaultController,
   push: (ev: string, d: unknown) => void,
@@ -343,10 +445,15 @@ async function generateNextStep(
   model: { id: string; provider: string },
   codePrompt: string,
   planPrompt: string,
+  projectId: string,
+  userId: string,
 ) {
   if (conv.currentStepIndex >= conv.plan.length) {
     conv.phase = "done"
     push("done", { files: conv.generatedFiles })
+    push("step", { title: "Saving files", detail: `Saving ${conv.generatedFiles.length} files to database...`, status: "running" })
+    await saveAllFilesToDb(projectId, userId, conv.generatedFiles)
+    push("step", { title: "Saved", detail: `${conv.generatedFiles.length} files saved to Pages tab.`, status: "done" })
     return
   }
 
@@ -427,6 +534,8 @@ async function generateNextStep(
       detail: `${codeBlock.code.length.toLocaleString()} chars — Step ${conv.currentStepIndex + 1}/${conv.plan.length}`,
       status: "done",
     })
+
+    saveFileToDb(projectId, userId, { name: filename, code: codeBlock.code, usedFor: step }).catch(() => {})
   } else {
     // Fallback: try to use raw content as code
     const fallbackCode = res.content.trim()
@@ -450,10 +559,11 @@ async function generateNextStep(
       detail: `${fallbackCode.length.toLocaleString()} chars (raw) — Step ${conv.currentStepIndex + 1}/${conv.plan.length}`,
       status: "done",
     })
+    saveFileToDb(projectId, userId, { name: filename, code: fallbackCode, usedFor: step }).catch(() => {})
   }
 
   conv.currentStepIndex++
   push("state_update", conv)
 
-  await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt)
+  await generateNextStep(ctrl, push, conv, model, codePrompt, planPrompt, projectId, userId)
 }

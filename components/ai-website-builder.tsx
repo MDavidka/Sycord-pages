@@ -9,6 +9,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import {
   Loader2,
   ChevronDown,
@@ -19,12 +21,14 @@ import {
   Send,
   CheckCircle2,
   FileText,
-  MessageSquare,
   Bot,
-  User,
-  ArrowRight,
-  Check,
+  User as UserIcon,
   AlertCircle,
+  Hash,
+  Code2,
+  MessageSquare,
+  Check,
+  ArrowRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -78,10 +82,10 @@ interface ChatMessage {
 }
 
 const ModelRow = ({ model, selected, onSelect, tier }: { model: ModelOption; selected: boolean; onSelect: () => void; tier: "best" | "fast" }) => (
-  <DropdownMenuItem onClick={onSelect} className={cn("text-xs rounded-xl px-2.5 py-2 flex items-center gap-2.5 border transition-all", selected ? "text-white bg-white/[0.10] border-white/20" : "text-zinc-300 border-transparent hover:bg-white/[0.05] hover:border-white/10")}>
+  <DropdownMenuItem onClick={onSelect} className={cn("text-xs rounded-lg px-2.5 py-2 flex items-center gap-2.5 border border-transparent transition-all", selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50")}>
     {tier === "fast" ? <Zap className="h-3 w-3 text-yellow-400 shrink-0" /> : <Gem className="h-3 w-3 text-violet-400 shrink-0" />}
     <span className="flex-1 min-w-0 truncate">{model.name}</span>
-    <span className="text-[10px] text-zinc-500 shrink-0 px-1.5 py-0.5 rounded bg-white/[0.04] border border-white/[0.06]">{model.provider}</span>
+    <span className="text-[10px] text-muted-foreground shrink-0">{model.provider}</span>
     {selected && <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0" />}
   </DropdownMenuItem>
 )
@@ -98,14 +102,13 @@ const InputBar = ({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   return (
-    <div className="w-full max-w-2xl mx-auto px-3 sm:px-4">
-      <div className="relative group">
-        <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-zinc-700/50 via-zinc-600/30 to-zinc-700/50 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300" />
-        <div className="relative flex items-end gap-2 bg-zinc-900/80 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-2 shadow-2xl">
+    <div className="w-full max-w-2xl mx-auto px-4">
+      <div className="relative">
+        <div className="flex items-end gap-2 bg-[#1e1e1e] border border-border/40 rounded-2xl p-2">
           <div className="flex-1 flex flex-col gap-1 min-h-0">
             <textarea
               placeholder="Describe the website you want to build..."
-              className="w-full resize-none bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none px-3 py-2 min-h-[40px] max-h-32"
+              className="w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none px-3 py-2 min-h-[40px] max-h-32 font-[Inter,system-ui,sans-serif]"
               rows={1}
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -117,10 +120,10 @@ const InputBar = ({
             {attachments.length > 0 && (
               <div className="flex flex-wrap gap-1.5 px-3 pb-1">
                 {attachments.map((file, i) => (
-                  <div key={i} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-white/[0.06] border border-white/[0.06] rounded-full text-zinc-400">
+                  <Badge key={i} variant="secondary" className="gap-1 text-[10px]">
                     {file.name.slice(0, 20)}
-                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} className="hover:text-zinc-200"><X className="h-2.5 w-2.5" /></button>
-                  </div>
+                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}><X className="h-2.5 w-2.5" /></button>
+                  </Badge>
                 ))}
               </div>
             )}
@@ -130,26 +133,26 @@ const InputBar = ({
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => {
               if (e.target.files) setAttachments(prev => [...prev, ...Array.from(e.target.files!)])
             }} />
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-300 rounded-lg" onClick={() => fileInputRef.current?.click()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground rounded-lg" onClick={() => fileInputRef.current?.click()}>
               <Paperclip className="h-3.5 w-3.5" />
             </Button>
 
             <div className="relative">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-zinc-400 hover:text-zinc-200 rounded-lg px-2 text-[11px]">
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground rounded-lg px-2 text-[11px]">
                     {selectedModel.name.slice(0, 14)}
                     <ChevronDown className="h-3 w-3 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 p-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-2xl">
-                  <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                <DropdownMenuContent align="end" className="w-64 p-1.5 bg-popover border-border rounded-xl shadow-lg">
+                  <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     <Gem className="h-3 w-3" /> Best
                   </div>
                   {MODELS.filter(m => !m.fast).map(m => (
                     <ModelRow key={m.id} model={m} selected={selectedModel.id === m.id} onSelect={() => setSelectedModel(m)} tier="best" />
                   ))}
-                  <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5 mt-1">
+                  <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mt-1">
                     <Zap className="h-3 w-3" /> Fast
                   </div>
                   {MODELS.filter(m => m.fast).map(m => (
@@ -159,8 +162,8 @@ const InputBar = ({
               </DropdownMenu>
             </div>
 
-            <Button onClick={onSend} className={cn("h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0", input.trim() && !disabled ? "bg-white text-black hover:bg-zinc-200" : "bg-zinc-800/50 text-zinc-700")} disabled={!input.trim() || disabled}>
-              {disabled ? <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin text-zinc-700" /> : <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+            <Button onClick={onSend} size="icon" className={cn("h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 rounded-lg p-0", input.trim() && !disabled ? "bg-foreground text-background hover:bg-foreground/90" : "bg-muted text-muted-foreground")} disabled={!input.trim() || disabled}>
+              {disabled ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </Button>
           </div>
         </div>
@@ -190,6 +193,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId?: string }) => {
     originalRequest: "",
   })
   const [error, setError] = useState<string | null>(null)
+  const [generatedPages, setGeneratedPages] = useState<GeneratedPage[]>([])
 
   const chatRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -220,6 +224,7 @@ const AIWebsiteBuilder = ({ projectId }: { projectId?: string }) => {
       originalRequest: "",
     })
     setError(null)
+    setGeneratedPages([])
   }
 
   const handleSend = async () => {
@@ -318,13 +323,21 @@ const AIWebsiteBuilder = ({ projectId }: { projectId?: string }) => {
               break
 
             case "code":
-              addMessage({
-                role: "ai",
-                type: "code",
-                content: `Generated ${data.filename}`,
-                detail: `${(data.code?.length || 0).toLocaleString()} chars`,
-                files: data.filename ? [{ name: data.filename, code: data.code, usedFor: data.usedFor || "" }] : [],
-              })
+              if (data.filename && data.code) {
+                setGeneratedPages(prev => {
+                  const idx = prev.findIndex(p => p.name === data.filename)
+                  const page = { name: data.filename, code: data.code, usedFor: data.usedFor || "", timestamp: Date.now() }
+                  if (idx >= 0) { const copy = [...prev]; copy[idx] = page; return copy }
+                  return [...prev, page]
+                })
+                addMessage({
+                  role: "ai",
+                  type: "code",
+                  content: data.filename,
+                  detail: `${(data.code?.length || 0).toLocaleString()} chars`,
+                  files: [{ name: data.filename, code: data.code, usedFor: data.usedFor || "" }],
+                })
+              }
               break
 
             case "state_update":
@@ -334,15 +347,12 @@ const AIWebsiteBuilder = ({ projectId }: { projectId?: string }) => {
               break
 
             case "done":
-              const doneFiles = data.files || conversationState.generatedFiles
-              if (doneFiles.length > 0) {
-                addMessage({
-                  role: "ai",
-                  type: "done",
-                  content: `Built ${doneFiles.length} files:`,
-                  files: doneFiles,
-                })
-              }
+              addMessage({
+                role: "ai",
+                type: "done",
+                content: "Build complete",
+                files: data.files || conversationState.generatedFiles,
+              })
               break
 
             case "error":
@@ -369,63 +379,58 @@ const AIWebsiteBuilder = ({ projectId }: { projectId?: string }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
-      <div className="absolute top-1/4 left-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {messages.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center py-16">
-            <div className="space-y-1">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-white">
-                Hi {userName},
-              </h1>
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-zinc-500">
-                What are we building?
-              </h2>
-            </div>
+    <div className="flex flex-col h-full font-[Inter,system-ui,sans-serif]">
+      {messages.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center py-16 px-4">
+          <div className="space-y-2">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-foreground">
+              Hi {userName},
+            </h1>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight text-muted-foreground/60">
+              What are we building?
+            </h2>
           </div>
-        ) : (
-          <div ref={chatRef} className="flex-1 overflow-y-auto custom-scrollbar px-3 sm:px-4 py-6">
-            <div className="max-w-2xl mx-auto space-y-4">
-              {messages.map((msg) => (
-                <div key={msg.id}>
-                  <ChatBubble msg={msg} />
-                </div>
-              ))}
+        </div>
+      ) : (
+        <div ref={chatRef} className="flex-1 overflow-y-auto custom-scrollbar">
+          <div className="max-w-2xl mx-auto py-6 space-y-6">
+            {messages.map((msg) => (
+              <div key={msg.id}>
+                <ChatBubble msg={msg} />
+              </div>
+            ))}
 
-              {isLoading && (
-                <div className="flex items-center gap-2 text-zinc-500 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-xs">Syra is thinking...</span>
-                </div>
-              )}
+            {isLoading && (
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Syra is thinking...</span>
+              </div>
+            )}
 
-              {error && (
-                <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-3">
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-                    <p className="text-sm text-red-300">{error}</p>
-                  </div>
+            {error && (
+              <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                  <p className="text-sm text-destructive">{error}</p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="w-full pb-8 sm:pb-12 shrink-0">
-        <div className="flex items-center justify-between max-w-2xl mx-auto px-3 sm:px-4 mb-2">
+      <div className="w-full pb-8 shrink-0">
+        <div className="flex items-center justify-between max-w-2xl mx-auto px-4 mb-3">
           {messages.length > 0 && (
             <button
               onClick={resetConversation}
-              className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Start new build
+              New build
             </button>
           )}
-          <span className="text-[11px] text-zinc-600 ml-auto">
-            Syra AI Builder v2
+          <span className="text-[11px] text-muted-foreground ml-auto">
+            Syra v2
           </span>
         </div>
         <InputBar
@@ -446,13 +451,13 @@ const AIWebsiteBuilder = ({ projectId }: { projectId?: string }) => {
 function ChatBubble({ msg }: { msg: ChatMessage }) {
   if (msg.role === "user") {
     return (
-      <div className="flex justify-end">
-        <div className="flex items-start gap-2 max-w-[85%]">
-          <div className="rounded-2xl rounded-br-md bg-white/[0.08] border border-white/[0.06] px-4 py-2.5">
-            <p className="text-sm text-zinc-100 whitespace-pre-wrap">{msg.content}</p>
-          </div>
-          <div className="h-7 w-7 rounded-full bg-zinc-700/50 flex items-center justify-center shrink-0 mt-0.5">
-            <User className="h-3.5 w-3.5 text-zinc-400" />
+      <div className="flex justify-end px-4">
+        <div className="flex items-start gap-3 max-w-[85%]">
+          <Card className="px-4 py-2.5 bg-accent/40 border-border/30 rounded-2xl rounded-br-sm">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+          </Card>
+          <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+            <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
         </div>
       </div>
@@ -460,111 +465,119 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
   }
 
   return (
-    <div className="flex items-start gap-2">
-      <div className="h-7 w-7 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
-        <Bot className="h-3.5 w-3.5 text-blue-400" />
+    <div className="flex items-start gap-3 px-4">
+      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+        <Bot className="h-3.5 w-3.5 text-muted-foreground" />
       </div>
-      <div className="max-w-[85%] space-y-1">
+      <div className="max-w-[85%] min-w-0 space-y-1.5">
         {msg.type === "state" && (
-          <div className={cn("rounded-2xl rounded-bl-md px-4 py-2.5 border", msg.state === 2 || msg.state === 3 ? "bg-amber-500/[0.06] border-amber-500/20" : "bg-blue-500/[0.06] border-blue-500/20")}>
-            <p className="text-sm text-zinc-200">{msg.content}</p>
-          </div>
+          <Card className={cn("px-4 py-2.5 rounded-2xl rounded-bl-sm border", msg.state === 2 || msg.state === 3 ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30" : "bg-muted/30 border-border/20")}>
+            <p className="text-sm">{msg.content}</p>
+          </Card>
         )}
 
         {msg.type === "question" && (
-          <div className="rounded-2xl rounded-bl-md bg-blue-500/[0.08] border border-blue-500/20 px-4 py-3">
+          <Card className="px-4 py-3 rounded-2xl rounded-bl-sm border-border/20 bg-muted/20">
             <div className="flex items-center gap-2 mb-1.5">
-              <MessageSquare className="h-3.5 w-3.5 text-blue-400" />
-              <span className="text-[10px] text-blue-400/70 uppercase tracking-wider font-semibold">{msg.detail}</span>
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              {msg.detail && <Badge variant="secondary" className="text-[10px]">{msg.detail}</Badge>}
             </div>
-            <p className="text-sm text-zinc-100">{msg.content}</p>
-          </div>
+            <p className="text-sm leading-relaxed">{msg.content}</p>
+          </Card>
         )}
 
         {msg.type === "plan" && msg.steps && (
-          <div className="rounded-2xl rounded-bl-md bg-emerald-500/[0.05] border border-emerald-500/20 px-4 py-3">
-            <p className="text-sm text-zinc-300 mb-2">{msg.content}</p>
-            <div className="space-y-1">
-              {msg.steps.map((step, i) => (
-                <div key={i} className="flex items-start gap-2 text-xs">
-                  <span className="text-emerald-400 font-medium shrink-0 mt-0.5">{i + 1}.</span>
-                  <span className="text-zinc-400">{step}</span>
-                </div>
-              ))}
+          <Card className="px-4 py-3 rounded-2xl rounded-bl-sm border-border/20 bg-muted/20">
+            <p className="text-sm text-muted-foreground mb-3">{msg.content}</p>
+            <div className="space-y-1.5">
+              {msg.steps.map((step, i) => {
+                const filename = step.match(/%([^%]+)%/)?.[1]
+                return (
+                  <div key={i} className="flex items-start gap-2.5 text-sm group">
+                    <span className="text-muted-foreground shrink-0 mt-0.5 font-mono text-xs w-5">{i + 1}.</span>
+                    <div className="flex-1 min-w-0">
+                      {filename ? (
+                        <div className="flex items-center gap-1.5">
+                          <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-foreground/80">{filename}</code>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">{step}</span>
+                      )}
+                      {step.replace(/%[^%]+%/g, "").trim() && (
+                        <p className="text-xs text-muted-foreground/70 mt-0.5">{step.replace(/%[^%]+%/g, "").trim()}</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          </div>
+          </Card>
         )}
 
         {msg.type === "step" && (
-          <div className="rounded-2xl rounded-bl-md bg-white/[0.03] border border-white/[0.05] px-4 py-2">
-            <div className="flex items-center gap-2">
-              {msg.content.toLowerCase().includes("generating") || msg.content.toLowerCase().includes("processing") || msg.content.toLowerCase().includes("analyzing") || msg.content.toLowerCase().includes("planning") ? (
-                <Loader2 className="h-3 w-3 animate-spin text-blue-400 shrink-0" />
-              ) : (
-                <ArrowRight className="h-3 w-3 text-zinc-500 shrink-0" />
-              )}
-              <div className="min-w-0">
-                <p className="text-xs text-zinc-300 truncate">{msg.content}</p>
-                {msg.detail && <p className="text-[10px] text-zinc-500 mt-0.5">{msg.detail}</p>}
-              </div>
+          <div className="flex items-center gap-2.5 text-sm">
+            {msg.content.toLowerCase().includes("generating") || msg.content.toLowerCase().includes("saving") ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+            ) : msg.content.toLowerCase().includes("analyzing") || msg.content.toLowerCase().includes("planning") ? (
+              <Hash className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            ) : msg.content.toLowerCase().includes("saved") || msg.content.toLowerCase().includes("generated") ? (
+              <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            ) : (
+              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
+            <div className="min-w-0">
+              <span className="text-muted-foreground">{msg.content}</span>
+              {msg.detail && <span className="text-xs text-muted-foreground/50 ml-2">{msg.detail}</span>}
             </div>
           </div>
         )}
 
-        {msg.type === "code" && (
-          <div className="rounded-2xl rounded-bl-md bg-white/[0.04] border border-white/[0.08] px-4 py-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-xs font-medium text-zinc-200">{msg.content}</span>
-              {msg.detail && <span className="text-[10px] text-zinc-500 ml-1">{msg.detail}</span>}
+        {msg.type === "code" && msg.files && (
+          <Card className="rounded-2xl rounded-bl-sm border-border/20 bg-muted/10 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/10">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+              <code className="text-xs font-mono truncate">{msg.content}</code>
+              {msg.detail && <Badge variant="secondary" className="text-[10px] shrink-0 ml-auto">{msg.detail}</Badge>}
             </div>
-            {msg.files && msg.files.length > 0 && (
-              <div className="rounded-lg bg-zinc-950/80 border border-white/[0.06] overflow-hidden mt-1">
-                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-white/[0.05]">
-                  <FileText className="h-3 w-3 text-zinc-500" />
-                  <span className="text-[10px] text-zinc-400 font-mono">{msg.files[0].name}</span>
-                </div>
-                <pre className="p-3 text-[11px] text-zinc-300 font-mono leading-relaxed overflow-x-auto max-h-48 custom-scrollbar">
-                  {msg.files[0].code.slice(0, 1500)}
-                  {msg.files[0].code.length > 1500 && "\n\n... (truncated)"}
-                </pre>
-              </div>
-            )}
-          </div>
+            <pre className="p-4 text-[11px] text-foreground/70 font-mono leading-relaxed overflow-x-auto max-h-32 custom-scrollbar">
+              {msg.files[0].code.slice(0, 1200)}
+              {msg.files[0].code.length > 1200 && "\n\n..."}
+            </pre>
+          </Card>
         )}
 
         {msg.type === "done" && msg.files && (
-          <div className="rounded-2xl rounded-bl-md bg-emerald-500/[0.06] border border-emerald-500/20 px-4 py-3">
+          <Card className="px-4 py-3 rounded-2xl rounded-bl-sm border-emerald-200 dark:border-emerald-800/30 bg-emerald-50/50 dark:bg-emerald-950/20">
             <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <span className="text-sm font-medium text-emerald-300">{msg.content}</span>
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <span className="text-sm font-medium">{msg.content}</span>
+              <Badge variant="secondary" className="text-[10px]">{msg.files.length} files</Badge>
             </div>
             <div className="space-y-1">
               {msg.files.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <FileText className="h-3 w-3 text-zinc-500 shrink-0" />
-                  <span className="text-zinc-400 font-mono">{f.name}</span>
-                  <span className="text-zinc-600">—</span>
-                  <span className="text-zinc-500 truncate">{f.usedFor}</span>
+                <div key={i} className="flex items-center gap-2 text-xs pl-6">
+                  <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <code className="text-xs font-mono">{f.name}</code>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         )}
 
         {msg.type === "error" && (
-          <div className="rounded-2xl rounded-bl-md bg-red-500/[0.06] border border-red-500/20 px-4 py-3">
+          <Card className="px-4 py-3 rounded-2xl rounded-bl-sm border-destructive/30 bg-destructive/5">
             <div className="flex items-start gap-2">
-              <AlertCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-300">{msg.content}</p>
+              <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              <p className="text-sm text-destructive">{msg.content}</p>
             </div>
-          </div>
+          </Card>
         )}
 
         {msg.type === "text" && (
-          <div className="rounded-2xl rounded-bl-md bg-white/[0.04] border border-white/[0.06] px-4 py-2.5">
-            <p className="text-sm text-zinc-200 whitespace-pre-wrap">{msg.content}</p>
-          </div>
+          <Card className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-muted/20 border-border/10">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+          </Card>
         )}
       </div>
     </div>
