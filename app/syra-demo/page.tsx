@@ -53,9 +53,6 @@ export default function SyraDemoPage() {
         <SyraAIBuilder
           projectId="demo-project-001"
           projectName="Syra Demo Project"
-          onCodeGenerated={(code) => {
-            console.log('[v0] Code generated:', code.substring(0, 100));
-          }}
         />
 
         {/* Pipeline Documentation */}
