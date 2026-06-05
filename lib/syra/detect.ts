@@ -54,22 +54,27 @@ export function detectFramework(vfs: VirtualFs): ProjectFramework {
 
   const isNext = !!deps.next || has("next.config.js") || has("next.config.mjs") || has("next.config.ts")
 
+  // Prefer the entry file that actually exists; otherwise synthesise a default
+  // using the project's language.
+  const ext = language === "javascript" ? "jsx" : "tsx"
+  const pickEntry = (candidates: string[], fallback: string) => candidates.find((c) => has(c)) || fallback
+
   if (hasPrefix("src/app/")) {
     router = "src-app"
-    entryFile = "src/app/page.tsx"
     componentsDir = "src/components"
+    entryFile = pickEntry(["src/app/page.tsx", "src/app/page.jsx", "src/app/page.js"], `src/app/page.${ext}`)
   } else if (hasPrefix("app/")) {
     router = "app"
-    entryFile = "app/page.tsx"
     componentsDir = "components"
+    entryFile = pickEntry(["app/page.tsx", "app/page.jsx", "app/page.js"], `app/page.${ext}`)
   } else if (hasPrefix("src/pages/")) {
     router = "pages"
-    entryFile = "src/pages/index.tsx"
     componentsDir = "src/components"
+    entryFile = pickEntry(["src/pages/index.tsx", "src/pages/index.jsx", "src/pages/index.js"], `src/pages/index.${ext}`)
   } else if (hasPrefix("pages/")) {
     router = "pages"
-    entryFile = "pages/index.tsx"
     componentsDir = "components"
+    entryFile = pickEntry(["pages/index.tsx", "pages/index.jsx", "pages/index.js"], `pages/index.${ext}`)
   }
 
   // Decide framework label + sensible defaults for empty/unknown projects.

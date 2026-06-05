@@ -77,6 +77,16 @@ export type SyraEvent =
 
 export type StepStatus = "pending" | "running" | "success" | "error" | "skipped"
 
+/**
+ * Distributive Omit so that removing a key from the `SyraEvent` discriminated
+ * union preserves each member's own fields (a plain `Omit<Union, K>` collapses
+ * to the common keys only).
+ */
+export type DistributiveOmit<T, K extends keyof any> = T extends unknown ? Omit<T, K> : never
+
+/** A SyraEvent before the pipeline assigns its sequential `id`. */
+export type SyraEventInput = DistributiveOmit<SyraEvent, "id">
+
 export type SyraStepKey =
   | "prompt"
   | "inspect"
@@ -103,8 +113,8 @@ export const SYRA_STEPS: SyraStepMeta[] = [
   { key: "cache", icon: "DatabaseZap", title: "Caching project context" },
   { key: "plan", icon: "ListChecks", title: "Planning the build" },
   { key: "generate", icon: "Wand2", title: "Generating files" },
-  { key: "save", icon: "Save", title: "Saving to project" },
   { key: "validate", icon: "ShieldCheck", title: "Validating output" },
+  { key: "save", icon: "Save", title: "Saving to project" },
   { key: "summary", icon: "CheckCircle2", title: "Done" },
 ]
 

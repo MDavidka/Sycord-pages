@@ -7,7 +7,7 @@
 // generation stays fast and predictable. The pipeline persists the resulting
 // diff to MongoDB after the run.
 
-import { SchemaType, type FunctionDeclaration } from "@google/generative-ai"
+import { Type, type FunctionDeclaration } from "@google/genai"
 import type { ProjectFramework } from "./types"
 import { detectFramework } from "./detect"
 import type { VirtualFs } from "./vfs"
@@ -35,9 +35,9 @@ export interface ToolResult {
 /* Gemini function declarations                                        */
 /* ------------------------------------------------------------------ */
 
-const STRING = SchemaType.STRING
-const OBJECT = SchemaType.OBJECT
-const ARRAY = SchemaType.ARRAY
+const STRING = Type.STRING
+const OBJECT = Type.OBJECT
+const ARRAY = Type.ARRAY
 
 export const FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
   {
