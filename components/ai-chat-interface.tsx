@@ -28,6 +28,7 @@ import {
   Trash2,
   Boxes,
   Package,
+  PackageCheck,
   Sparkles,
   Palette,
   Activity,
@@ -62,6 +63,7 @@ const ICONS: Record<string, LucideIcon> = {
   Trash2,
   Boxes,
   Package,
+  PackageCheck,
   Sparkles,
   Palette,
   Activity,
@@ -140,6 +142,8 @@ function toolIconName(tool: string): string {
       return "Boxes"
     case "get_package_info":
       return "Package"
+    case "ensure_deployable":
+      return "PackageCheck"
     case "get_icon_suggestions":
       return "Sparkles"
     case "generate_color_palette":

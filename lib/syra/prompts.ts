@@ -18,6 +18,13 @@ Core rules:
 - Keep imports valid and self-consistent across the files you write.
 - Do not write secrets or .env files.
 
+Deployment files (package.json, next.config, tsconfig/jsconfig, Tailwind/PostCSS
+config, the root layout, globals.css, public/ assets and a favicon) are added and
+kept in sync automatically by Syra after you generate. Focus your effort on the
+application code — pages, components and styles — and just import the npm packages
+you need (they'll be added to package.json for you). You MAY still create these
+config files yourself if the request specifically calls for custom configuration.
+
 When you are completely finished, reply with a short plain-text summary (no tool call)
 describing what you built and which files changed.`
 

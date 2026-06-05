@@ -18,6 +18,7 @@ import {
   type ProjectContextHandle,
 } from "./gemini"
 import { buildStableContext, detectFramework, importantFilesToRead } from "./detect"
+import { ensureDeployable } from "./scaffold"
 import { SYRA_SYSTEM, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
 import { FUNCTION_DECLARATIONS, executeTool, type ToolContext } from "./tools"
 import { validateFiles, type ValidationIssue } from "./validate"
@@ -178,6 +179,35 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       firstUserMessage: buildGeneratePrompt(prompt, plan, framework),
     })
     step("generate", "success", `Generated ${vfs.changes().filter((c) => c.kind !== "deleted").length} file change(s)`)
+
+    if (aborted()) return abortResult(vfs)
+
+    // ---------- Deployable scaffold (within the generate step) ----------
+    // Guarantee the project has everything needed to `npm install && next build
+    // && next start`: package.json (build/start scripts + every imported dep),
+    // next.config, tsconfig/jsconfig, layout/globals, Tailwind config, public
+    // assets and a home page. Only fills in what the model didn't already write.
+    emit({ type: "tool", tool: "ensure_deployable", status: "running", label: "Ensuring deployable Next.js project" })
+    const beforeScaffold = new Set(vfs.changes().map((c) => c.path))
+    const scaffold = ensureDeployable(vfs, framework)
+    if (scaffold.changed.length) {
+      for (const path of scaffold.changed) {
+        const change = vfs.changes().find((c) => c.path === path)
+        if (change) emit({ type: "file", change })
+      }
+      scaffold.notes.forEach((n) => log(n))
+      const newOnes = scaffold.changed.filter((p) => !beforeScaffold.has(p))
+      emit({
+        type: "tool",
+        tool: "ensure_deployable",
+        status: "success",
+        label: `Added/updated ${scaffold.changed.length} deployment file${scaffold.changed.length === 1 ? "" : "s"}`,
+      })
+      log(`Deployment scaffold touched: ${scaffold.changed.join(", ")}${newOnes.length ? `` : ""}`)
+    } else {
+      emit({ type: "tool", tool: "ensure_deployable", status: "success", label: "Project already deployable" })
+      log("Project already had all required deployment files.")
+    }
 
     if (aborted()) return abortResult(vfs)
 

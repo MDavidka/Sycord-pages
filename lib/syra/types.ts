@@ -138,6 +138,8 @@ export function iconForTool(tool: string): string {
       return "Boxes"
     case "get_package_info":
       return "Package"
+    case "ensure_deployable":
+      return "PackageCheck"
     case "get_icon_suggestions":
       return "Sparkles"
     case "generate_color_palette":
