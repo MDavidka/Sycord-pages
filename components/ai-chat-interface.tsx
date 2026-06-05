@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils"
 
 export default function AIChatInterface({ projectId }: { projectId: string }) {
+  // projectId is reserved for future implementation
   const { data: session } = useSession()
   const userName = session?.user?.name?.split(" ")[0] || "there"
 

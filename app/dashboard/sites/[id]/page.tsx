@@ -7,13 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import AIChatInterface from "@/components/ai-chat-interface"
-export interface GeneratedPage {
-  name: string
-  code: string
-  timestamp: number
-  usedFor?: string
-}
-
+import { type GeneratedPage } from "@/lib/types"
 import {
   Trash2,
   Plus,

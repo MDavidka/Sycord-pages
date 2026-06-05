@@ -31,13 +31,7 @@ import {
   Server,
   Activity,
 } from "lucide-react"
-export interface GeneratedPage {
-  name: string
-  code: string
-  timestamp: number
-  usedFor?: string
-}
-
+import { type GeneratedPage } from "@/lib/types"
 
 interface FileTreeNode {
   name: string
