@@ -3,14 +3,9 @@
 // After the model generates the requested pages/components, this module fills in
 // every file a Next.js project needs to actually `npm install && next build &&
 // next start` on the deploy runner — WITHOUT overwriting anything the model
-// already wrote. It:
-//
-//   - creates/patches package.json (correct scripts + all imported deps)
-//   - adds next.config.mjs, tsconfig.json/jsconfig.json, next-env.d.ts
-//   - adds the App-Router layout + globals.css (or Pages-Router _app) if missing
-//   - wires up Tailwind (config + postcss + directives) when that's the styling
-//   - adds public/robots.txt and a favicon
-//   - guarantees a home page exists so the build never fails on an empty route
+// already wrote. It also injects the full shadcn/ui design system (theme tokens,
+// tailwind config and component primitives) so every generated site shares a
+// consistent, production-grade component library.
 //
 // Build-critical tooling (typescript, types, tailwind, postcss) is placed in
 // `dependencies` (not devDependencies) because the runner may install with
@@ -18,6 +13,12 @@
 
 import type { ProjectFramework } from "./types"
 import type { VirtualFs } from "./vfs"
+import {
+  SHADCN_DEPS,
+  SHADCN_GLOBALS_CSS,
+  shadcnComponentFiles,
+  shadcnTailwindConfig,
+} from "./shadcn"
 
 export interface ScaffoldResult {
   changed: string[]
@@ -36,6 +37,7 @@ const VERSIONS: Record<string, string> = {
   tailwindcss: "3.4.14",
   postcss: "8.4.47",
   autoprefixer: "10.4.20",
+  "tailwindcss-animate": "1.0.7",
   "lucide-react": "0.454.0",
   "framer-motion": "11.11.9",
   clsx: "2.1.1",
@@ -45,12 +47,34 @@ const VERSIONS: Record<string, string> = {
   "date-fns": "4.1.0",
   "next-themes": "0.3.0",
   sonner: "1.5.0",
+  "react-hook-form": "7.53.0",
+  "@hookform/resolvers": "3.9.0",
+  // Radix primitives used by the shadcn component set (React 18 compatible)
+  "@radix-ui/react-slot": "1.1.0",
+  "@radix-ui/react-label": "2.1.0",
+  "@radix-ui/react-separator": "1.1.0",
+  "@radix-ui/react-avatar": "1.1.1",
+  "@radix-ui/react-accordion": "1.2.1",
+  "@radix-ui/react-dialog": "1.1.2",
+  "@radix-ui/react-dropdown-menu": "2.1.2",
+  "@radix-ui/react-tabs": "1.1.1",
+  "@radix-ui/react-select": "2.1.2",
+  "@radix-ui/react-checkbox": "1.1.2",
+  "@radix-ui/react-switch": "1.1.1",
+  "@radix-ui/react-toast": "1.2.2",
+  "@radix-ui/react-tooltip": "1.1.3",
+  "@radix-ui/react-popover": "1.1.2",
+  "@radix-ui/react-scroll-area": "1.2.0",
+  "@radix-ui/react-progress": "1.1.0",
+  "@radix-ui/react-radio-group": "1.2.1",
+  "@radix-ui/react-aspect-ratio": "1.1.0",
+  "@radix-ui/react-collapsible": "1.1.1",
 }
 
 const SKIP_PKGS = new Set(["next", "react", "react-dom"])
 const NODE_BUILTINS = new Set([
   "fs", "path", "os", "crypto", "http", "https", "stream", "util", "events",
-  "child_process", "url", "querystring", "zlib", "buffer", "process",
+  "child_process", "url", "querystring", "zlib", "buffer", "process", "net", "dns",
 ])
 
 /** Root package name for an import specifier, or null for local/aliased imports. */
@@ -109,79 +133,88 @@ export function ensureDeployable(vfs: VirtualFs, fw: ProjectFramework): Scaffold
   const notes: string[] = []
   const isTs = fw.language !== "javascript"
   const ext = isTs ? "tsx" : "jsx"
-  const usesTailwind = /tailwind/i.test(fw.styling)
   const isAppRouter = fw.router === "app" || fw.router === "src-app"
   const isPagesRouter = fw.router === "pages"
+  // shadcn/ui is the design system for every TypeScript Next.js project (the default).
+  const isNextish = fw.router !== "unknown" || /next/i.test(fw.framework)
+  const useShadcn = isTs && isNextish
+  // Tailwind underpins shadcn, so it is always on for shadcn projects.
+  const usesTailwind = useShadcn || /tailwind/i.test(fw.styling) || fw.isEmpty
   const appDir = appBaseDir(fw)
 
   const has = (p: string) => vfs.exists(p)
   const hasAny = (paths: string[]) => paths.some((p) => vfs.exists(p))
   const add = (path: string, content: string) => {
-    if (vfs.exists(path)) return
+    if (vfs.exists(path)) return false
     vfs.write(path, content)
     changed.push(path)
+    return true
   }
 
   // Does any code use the "@/" path alias?
-  const usesAlias = vfs.list().some((p) => /\.(tsx|ts|jsx|js)$/.test(p) && /["']@\//.test(vfs.read(p) || ""))
+  const usesAlias =
+    useShadcn || vfs.list().some((p) => /\.(tsx|ts|jsx|js)$/.test(p) && /["']@\//.test(vfs.read(p) || ""))
 
-  /* ---------------- package.json ---------------- */
-  {
-    const raw = vfs.read("package.json")
-    let pkg: any = {}
-    let existed = false
-    if (raw) {
-      try {
-        pkg = JSON.parse(raw)
-        existed = true
-      } catch {
-        pkg = {}
+  /* ---------------- shadcn/ui design system ---------------- */
+  if (useShadcn) {
+    for (const [path, content] of Object.entries(shadcnComponentFiles())) {
+      if (add(path, content)) {
+        /* tracked */
       }
     }
+    notes.push("Injected shadcn/ui design system (components/ui/*, lib/utils, theme).")
+  }
 
-    pkg.name = pkg.name || "syra-site"
-    pkg.version = pkg.version || "0.1.0"
-    pkg.private = pkg.private ?? true
+  /* ---------------- globals.css ---------------- */
+  const globalsCandidates = isAppRouter
+    ? [`${appDir}/globals.css`, "styles/globals.css"]
+    : ["styles/globals.css", `${pagesBaseDir(fw, vfs)}/globals.css`]
+  let globalsPath = globalsCandidates.find((p) => has(p)) || null
+  if (!globalsPath) {
+    globalsPath = isAppRouter ? `${appDir}/globals.css` : "styles/globals.css"
+    const base = useShadcn
+      ? SHADCN_GLOBALS_CSS
+      : usesTailwind
+      ? `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`
+      : `:root { color-scheme: light dark; }\n* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }\n`
+    add(globalsPath, base)
+    notes.push(`Added ${globalsPath}.`)
+  }
 
-    pkg.scripts = pkg.scripts || {}
-    pkg.scripts.dev = pkg.scripts.dev || "next dev"
-    pkg.scripts.build = pkg.scripts.build || "next build"
-    pkg.scripts.start = pkg.scripts.start || "next start"
-    pkg.scripts.lint = pkg.scripts.lint || "next lint"
-
-    pkg.dependencies = pkg.dependencies || {}
-    const dep = (name: string) => {
-      if (!pkg.dependencies[name] && !(pkg.devDependencies && pkg.devDependencies[name])) {
-        pkg.dependencies[name] = versionFor(name)
-      }
+  /* ---------------- Tailwind config ---------------- */
+  if (usesTailwind) {
+    if (!hasAny(["tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs", "tailwind.config.cjs"])) {
+      add(
+        "tailwind.config.js",
+        useShadcn
+          ? shadcnTailwindConfig()
+          : `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: { extend: {} },
+  plugins: [],
+};
+`,
+      )
+      notes.push("Added tailwind.config.js.")
     }
-
-    // Core runtime
-    dep("next")
-    dep("react")
-    dep("react-dom")
-
-    // Everything the generated code imports
-    for (const p of collectExternalImports(vfs)) dep(p)
-
-    // Build tooling in dependencies (survives a production install)
-    if (isTs) {
-      dep("typescript")
-      dep("@types/node")
-      dep("@types/react")
-      dep("@types/react-dom")
-    }
-    if (usesTailwind) {
-      dep("tailwindcss")
-      dep("postcss")
-      dep("autoprefixer")
-    }
-
-    const next = JSON.stringify(pkg, null, 2) + "\n"
-    if (next !== raw) {
-      vfs.write("package.json", next)
-      changed.push("package.json")
-      notes.push(existed ? "Patched package.json (scripts + dependencies)." : "Created package.json with build/start scripts.")
+    if (!hasAny(["postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"])) {
+      add(
+        "postcss.config.js",
+        `module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+`,
+      )
+      notes.push("Added postcss.config.js.")
     }
   }
 
@@ -255,71 +288,18 @@ export default nextConfig;
     notes.push("Added jsconfig.json for the @/ path alias.")
   }
 
-  /* ---------------- Tailwind ---------------- */
-  if (usesTailwind) {
-    if (!hasAny(["tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs", "tailwind.config.cjs"])) {
-      add(
-        "tailwind.config.js",
-        `/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
-  theme: { extend: {} },
-  plugins: [],
-};
-`,
-      )
-      notes.push("Added tailwind.config.js.")
-    }
-    if (!hasAny(["postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"])) {
-      add(
-        "postcss.config.js",
-        `module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-`,
-      )
-      notes.push("Added postcss.config.js.")
-    }
-  }
-
-  /* ---------------- globals.css ---------------- */
-  const globalsCandidates = isAppRouter
-    ? [`${appDir}/globals.css`, "styles/globals.css"]
-    : ["styles/globals.css", `${pagesBaseDir(fw, vfs)}/globals.css`]
-  let globalsPath = globalsCandidates.find((p) => has(p)) || null
-  if (!globalsPath) {
-    globalsPath = isAppRouter ? `${appDir}/globals.css` : "styles/globals.css"
-    const base = usesTailwind
-      ? `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-`
-      : `:root { color-scheme: light dark; }
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-`
-    add(globalsPath, base)
-    notes.push(`Added ${globalsPath}.`)
-  }
-
   /* ---------------- Layout (App Router) ---------------- */
   if (isAppRouter) {
-    const layoutPath = `${appDir}/layout.${ext}`
     const hasLayout = hasAny([`${appDir}/layout.tsx`, `${appDir}/layout.jsx`, `${appDir}/layout.js`])
     if (!hasLayout) {
       const importPath = globalsPath.startsWith(appDir) ? "./" + globalsPath.slice(appDir.length + 1) : `@/${globalsPath}`
+      const bodyClass = useShadcn ? "min-h-screen bg-background text-foreground antialiased" : ""
+      const toasterImport = useShadcn ? `import { Toaster } from "@/components/ui/sonner"\n` : ""
+      const toasterEl = useShadcn ? "\n        <Toaster />" : ""
       add(
-        layoutPath,
+        `${appDir}/layout.${ext}`,
         `${isTs ? `import type { Metadata } from "next"\n` : ""}import "${importPath}"
-
+${toasterImport}
 ${isTs ? "export const metadata: Metadata = {" : "export const metadata = {"}
   title: "Built with Syra",
   description: "Generated by Syra, the AI website builder.",
@@ -327,14 +307,16 @@ ${isTs ? "export const metadata: Metadata = {" : "export const metadata = {"}
 
 export default function RootLayout({ children }${isTs ? ": { children: React.ReactNode }" : ""}) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body${bodyClass ? ` className="${bodyClass}"` : ""}>
+        {children}${toasterEl}
+      </body>
     </html>
   )
 }
 `,
       )
-      notes.push(`Added ${layoutPath}.`)
+      notes.push(`Added ${appDir}/layout.${ext}.`)
     }
   }
 
@@ -370,8 +352,9 @@ export default function App({ Component, pageProps }${isTs ? ": AppProps" : ""})
       homePath,
       `export default function Home() {
   return (
-    <main style={{ display: "flex", minHeight: "100vh", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>
-      <h1>Built with Syra</h1>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
+      <h1 className="text-4xl font-bold tracking-tight">Built with Syra</h1>
+      <p className="text-muted-foreground">Your new site is ready. Describe what to build next.</p>
     </main>
   )
 }
@@ -387,22 +370,80 @@ export default function App({ Component, pageProps }${isTs ? ": AppProps" : ""})
   }
   // App Router uses app/icon.svg as the favicon automatically.
   if (isAppRouter && !hasAny([`${appDir}/icon.svg`, `${appDir}/favicon.ico`, "public/favicon.ico", "public/icon.svg"])) {
-    add(
-      `${appDir}/icon.svg`,
-      `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0A0A0B"/>
-  <path d="M40 22c0-3-3-5-8-5s-9 2-9 6c0 9 18 5 18 14 0 4-4 6-9 6s-9-2-9-6" fill="none" stroke="#6366F1" stroke-width="4" stroke-linecap="round"/>
-</svg>
-`,
-    )
+    add(`${appDir}/icon.svg`, faviconSvg())
     notes.push(`Added ${appDir}/icon.svg favicon.`)
   } else if (isPagesRouter && !hasAny(["public/favicon.ico", "public/icon.svg"])) {
-    add(
-      "public/icon.svg",
-      `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0A0A0B"/><path d="M40 22c0-3-3-5-8-5s-9 2-9 6c0 9 18 5 18 14 0 4-4 6-9 6s-9-2-9-6" fill="none" stroke="#6366F1" stroke-width="4" stroke-linecap="round"/></svg>\n`,
-    )
+    add("public/icon.svg", faviconSvg())
     notes.push("Added public/icon.svg favicon.")
   }
 
+  /* ---------------- package.json (LAST, so it sees every import) ---------------- */
+  {
+    const raw = vfs.read("package.json")
+    let pkg: any = {}
+    let existed = false
+    if (raw) {
+      try {
+        pkg = JSON.parse(raw)
+        existed = true
+      } catch {
+        pkg = {}
+      }
+    }
+
+    pkg.name = pkg.name || "syra-site"
+    pkg.version = pkg.version || "0.1.0"
+    pkg.private = pkg.private ?? true
+
+    pkg.scripts = pkg.scripts || {}
+    pkg.scripts.dev = pkg.scripts.dev || "next dev"
+    pkg.scripts.build = pkg.scripts.build || "next build"
+    pkg.scripts.start = pkg.scripts.start || "next start"
+    pkg.scripts.lint = pkg.scripts.lint || "next lint"
+
+    pkg.dependencies = pkg.dependencies || {}
+    const dep = (name: string) => {
+      if (!pkg.dependencies[name] && !(pkg.devDependencies && pkg.devDependencies[name])) {
+        pkg.dependencies[name] = versionFor(name)
+      }
+    }
+
+    // Core runtime
+    dep("next")
+    dep("react")
+    dep("react-dom")
+
+    // Everything the generated + scaffolded code imports
+    for (const p of collectExternalImports(vfs)) dep(p)
+
+    // shadcn essentials (some, like the tailwind plugin, aren't import-discoverable)
+    if (useShadcn) for (const p of SHADCN_DEPS) dep(p)
+
+    // Build tooling in dependencies (survives a production install)
+    if (isTs) {
+      dep("typescript")
+      dep("@types/node")
+      dep("@types/react")
+      dep("@types/react-dom")
+    }
+    if (usesTailwind) {
+      dep("tailwindcss")
+      dep("postcss")
+      dep("autoprefixer")
+      dep("tailwindcss-animate")
+    }
+
+    const next = JSON.stringify(pkg, null, 2) + "\n"
+    if (next !== raw) {
+      vfs.write("package.json", next)
+      changed.push("package.json")
+      notes.push(existed ? "Patched package.json (scripts + dependencies)." : "Created package.json with build/start scripts.")
+    }
+  }
+
   return { changed: [...new Set(changed)], notes }
+}
+
+function faviconSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0A0A0B"/><path d="M40 22c0-3-3-5-8-5s-9 2-9 6c0 9 18 5 18 14 0 4-4 6-9 6s-9-2-9-6" fill="none" stroke="#6366F1" stroke-width="4" stroke-linecap="round"/></svg>\n`
 }

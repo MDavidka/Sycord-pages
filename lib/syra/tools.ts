@@ -1,11 +1,10 @@
 // Syra tools.
 //
-// Maps the tool kit described in `tools.md` to (a) Gemini function declarations
-// the model can call, and (b) real executors that operate on the in-memory
-// VirtualFs. Tools are intentionally side-effect-local: they mutate the VFS,
-// the design helpers are deterministic, and nothing here touches the network so
-// generation stays fast and predictable. The pipeline persists the resulting
-// diff to MongoDB after the run.
+// A lean, file-focused tool kit: the model inspects the project and then freely
+// writes complete files (preferring write_files for many files at once). Tools
+// operate on the in-memory VirtualFs and never touch the network, so generation
+// stays fast and predictable. The pipeline persists the resulting diff to
+// MongoDB after the run.
 
 import { Type, type FunctionDeclaration } from "@google/genai"
 import type { ProjectFramework } from "./types"
@@ -138,76 +137,7 @@ export const FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
     description: "Return the full project file tree as an indented string.",
     parameters: { type: OBJECT, properties: {}, required: [] },
   },
-  {
-    name: "get_package_info",
-    description: "Return parsed package.json info: name, scripts and dependency list.",
-    parameters: { type: OBJECT, properties: {}, required: [] },
-  },
-  {
-    name: "get_icon_suggestions",
-    description: "Suggest relevant lucide-react icon names for a section or feature.",
-    parameters: {
-      type: OBJECT,
-      properties: { section: { type: STRING, description: "Section or feature, e.g. 'features', 'contact'." } },
-      required: ["section"],
-    },
-  },
-  {
-    name: "generate_color_palette",
-    description: "Generate an accessible color palette (hex codes) for a given style.",
-    parameters: {
-      type: OBJECT,
-      properties: { style: { type: STRING, description: "Design style, e.g. 'modern dark SaaS'." } },
-      required: ["style"],
-    },
-  },
-  {
-    name: "log_action",
-    description: "Record a short human-readable note about what you are doing, shown to the user.",
-    parameters: {
-      type: OBJECT,
-      properties: { action: { type: STRING, description: "Short description of the action." } },
-      required: ["action"],
-    },
-  },
 ]
-
-/* ------------------------------------------------------------------ */
-/* Deterministic design helpers                                        */
-/* ------------------------------------------------------------------ */
-
-function colorPalette(style: string) {
-  const s = (style || "").toLowerCase()
-  const dark = /dark|night|noir|black/.test(s)
-  const luxury = /luxur|premium|elegant|gold/.test(s)
-  const playful = /playful|fun|vibrant|kids|colou?rful/.test(s)
-  if (luxury) {
-    return { background: "#0B0B0F", surface: "#15151D", primary: "#C9A227", secondary: "#E7E3D8", accent: "#8A6D1F", text: "#F5F3EC", muted: "#9A958A" }
-  }
-  if (playful) {
-    return { background: "#FFFDF7", surface: "#FFFFFF", primary: "#FF5C8A", secondary: "#5C7CFF", accent: "#FFC75C", text: "#1B1B2F", muted: "#6B6B7B" }
-  }
-  if (dark) {
-    return { background: "#0A0A0B", surface: "#141416", primary: "#6366F1", secondary: "#22D3EE", accent: "#A855F7", text: "#FAFAFA", muted: "#A1A1AA" }
-  }
-  return { background: "#FFFFFF", surface: "#F8FAFC", primary: "#4F46E5", secondary: "#0EA5E9", accent: "#F59E0B", text: "#0F172A", muted: "#64748B" }
-}
-
-const ICON_MAP: Record<string, string[]> = {
-  features: ["Zap", "Sparkles", "Rocket", "Shield", "Layers", "Gauge"],
-  pricing: ["Check", "BadgeCheck", "Crown", "Tag", "Wallet", "TrendingUp"],
-  contact: ["Mail", "Phone", "MapPin", "MessageSquare", "Send", "Globe"],
-  testimonials: ["Quote", "Star", "Heart", "ThumbsUp", "Users", "Smile"],
-  hero: ["ArrowRight", "Play", "Sparkles", "Rocket", "Star"],
-  footer: ["Github", "Twitter", "Linkedin", "Mail", "Globe", "Heart"],
-  analytics: ["BarChart3", "LineChart", "PieChart", "TrendingUp", "Activity", "Gauge"],
-  security: ["Shield", "Lock", "Key", "Fingerprint", "ShieldCheck", "Eye"],
-}
-
-function iconSuggestions(section: string): string[] {
-  const key = Object.keys(ICON_MAP).find((k) => section.toLowerCase().includes(k))
-  return key ? ICON_MAP[key] : ["Sparkles", "Star", "Circle", "Square", "Zap", "ArrowRight"]
-}
 
 /* ------------------------------------------------------------------ */
 /* Executor                                                            */
@@ -277,41 +207,6 @@ export async function executeTool(name: string, rawArgs: any, ctx: ToolContext):
 
     case "get_project_structure": {
       return { label: "Read project structure", data: { tree: ctx.vfs.tree(), files: ctx.vfs.list() } }
-    }
-
-    case "get_package_info": {
-      const raw = ctx.vfs.read("package.json")
-      if (!raw) return { label: "No package.json", data: { found: false } }
-      try {
-        const pkg = JSON.parse(raw)
-        return {
-          label: "Read package.json",
-          data: {
-            found: true,
-            name: pkg.name,
-            scripts: pkg.scripts || {},
-            dependencies: Object.keys(pkg.dependencies || {}),
-            devDependencies: Object.keys(pkg.devDependencies || {}),
-          },
-        }
-      } catch {
-        return { label: "Invalid package.json", data: { found: true, parseError: true } }
-      }
-    }
-
-    case "get_icon_suggestions": {
-      const icons = iconSuggestions(args.section || "")
-      return { label: `Suggested icons for ${args.section}`, data: { section: args.section, icons } }
-    }
-
-    case "generate_color_palette": {
-      const palette = colorPalette(args.style || "")
-      return { label: `Palette for "${args.style}"`, data: { style: args.style, palette } }
-    }
-
-    case "log_action": {
-      ctx.onLog?.(String(args.action || ""))
-      return { label: String(args.action || "Logged"), data: { ok: true } }
     }
 
     default:

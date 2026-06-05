@@ -403,7 +403,8 @@ export default function AIChatInterface({ projectId }: { projectId: string }) {
             </div>
           </div>
           <p className="text-center text-[10px] text-zinc-600 mt-2">
-            Syra inspects your project, plans, then generates real files. Generation runs on Vertex AI.
+            Syra inspects your project, plans, then generates a multi-page Next.js app with shadcn/ui
+            components and real backend routes. Runs on Vertex AI (gemini-3.5-flash).
           </p>
         </div>
       </div>

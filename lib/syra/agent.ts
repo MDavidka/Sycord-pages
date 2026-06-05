@@ -47,7 +47,7 @@ export interface RunResult {
   error?: string
 }
 
-const MAX_TOOL_ROUNDS = 12
+const MAX_TOOL_ROUNDS = 26
 
 export async function runSyra(opts: RunOptions): Promise<RunResult> {
   const { prompt, initialFiles, signal } = opts
@@ -228,7 +228,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
         log,
         aborted,
         firstUserMessage: buildRepairMessage(errors),
-        maxRounds: 6,
+        maxRounds: 10,
       })
       issues = validateFiles(vfs, framework)
       errors = issues.filter((i) => i.level === "error")
@@ -336,7 +336,8 @@ async function runToolLoop(args: {
       systemInstruction: SYRA_SYSTEM,
       contents,
       tools: FUNCTION_DECLARATIONS,
-      temperature: 0.6,
+      temperature: 0.75,
+      maxOutputTokens: 32768,
     })
     logUsage(res, log)
 

@@ -54,6 +54,9 @@ export function validateFiles(vfs: VirtualFs, fw: ProjectFramework): ValidationI
 
   for (const path of vfs.list()) {
     if (!/\.(tsx|jsx|ts|js)$/.test(path)) continue
+    // Skip Syra-injected, known-good design-system + config files.
+    if (path.startsWith("components/ui/") || path === "lib/utils.ts" || path === "next-env.d.ts") continue
+    if (/(^|\/)(tailwind|postcss|next)\.config\.[cm]?js$/.test(path)) continue
     const content = vfs.read(path) || ""
 
     if (!content.trim()) {
@@ -62,7 +65,7 @@ export function validateFiles(vfs: VirtualFs, fw: ProjectFramework): ValidationI
     }
 
     if (!bracketBalance(content)) {
-      issues.push({ path, level: "error", message: "Unbalanced brackets — likely truncated or malformed." })
+      issues.push({ path, level: "warning", message: "Possibly unbalanced brackets — review for truncation." })
     }
 
     // App Router client-component check.

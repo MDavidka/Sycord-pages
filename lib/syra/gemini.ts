@@ -4,7 +4,7 @@
 // Vertex AI and using the key the user provided (GOOGLE_AIAGENT_API):
 //
 //   GOOGLE_AIAGENT_API        API key (Vertex AI express mode / Gemini Dev API)
-//   GOOGLE_AIAGENT_MODEL      model id (default: gemini-2.5-flash)
+//   GOOGLE_AIAGENT_MODEL      model id (default: gemini-3.5-flash)
 //   GOOGLE_VERTEX_PROJECT     GCP project id  -> full Vertex AI mode (ADC)
 //   GOOGLE_VERTEX_LOCATION    region          (default: global)
 //   GOOGLE_GENAI_USE_VERTEXAI "false" to force the Gemini Developer API
@@ -22,7 +22,9 @@ import {
   type GenerateContentResponse,
 } from "@google/genai"
 
-export const GEMINI_MODEL = process.env.GOOGLE_AIAGENT_MODEL || "gemini-2.5-flash"
+// Syra generation runs strictly on the "gemini-3.5-flash" model unless an
+// explicit override is provided via GOOGLE_AIAGENT_MODEL.
+export const GEMINI_MODEL = process.env.GOOGLE_AIAGENT_MODEL || "gemini-3.5-flash"
 
 export type AiMode = "vertex" | "vertex-express" | "developer"
 
@@ -153,6 +155,8 @@ export interface GenerateOptions {
   forceTool?: boolean
   temperature?: number
   responseJson?: boolean
+  /** Upper bound on output tokens — raised high so the model can emit huge files. */
+  maxOutputTokens?: number
 }
 
 /**
@@ -160,10 +164,12 @@ export interface GenerateOptions {
  * folds the stable context into the system instruction.
  */
 export async function generate(opts: GenerateOptions): Promise<GenerateContentResponse> {
-  const { client, handle, systemInstruction, contents, tools, forceTool, temperature, responseJson } = opts
+  const { client, handle, systemInstruction, contents, tools, forceTool, temperature, responseJson, maxOutputTokens } =
+    opts
 
   const config: GenerateContentConfig = {
-    temperature: temperature ?? 0.6,
+    temperature: temperature ?? 0.7,
+    maxOutputTokens: maxOutputTokens ?? 32768,
     // System instruction: inline the context only when it isn't cached.
     systemInstruction: handle.cached ? systemInstruction : `${systemInstruction}\n\n${handle.text}`,
   }
