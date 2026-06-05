@@ -6,8 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
-import AIWebsiteBuilder, { type GeneratedPage } from "@/components/ai-website-builder"
+import AIChatInterface from "@/components/ai-chat-interface"
+export interface GeneratedPage {
+  name: string
+  code: string
+  timestamp: number
+  usedFor?: string
+}
+
 import {
   Trash2,
   Plus,
@@ -2323,11 +2329,8 @@ export default function SiteSettingsPage() {
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
                     <div className="absolute inset-0 overflow-hidden custom-scrollbar">
-                      <AIWebsiteBuilder
+                      <AIChatInterface
                         projectId={id}
-                        generatedPages={generatedPages}
-                        setGeneratedPages={setGeneratedPages}
-                        onDeploy={handleDeploy}
                       />
                     </div>
                   ) : (

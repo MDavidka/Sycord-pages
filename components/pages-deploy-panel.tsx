@@ -31,7 +31,13 @@ import {
   Server,
   Activity,
 } from "lucide-react"
-import type { GeneratedPage } from "@/components/ai-website-builder"
+export interface GeneratedPage {
+  name: string
+  code: string
+  timestamp: number
+  usedFor?: string
+}
+
 
 interface FileTreeNode {
   name: string
