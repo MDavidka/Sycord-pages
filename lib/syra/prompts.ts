@@ -102,7 +102,7 @@ Return ONLY this JSON object (no markdown fences):
       "path": "${fw.entryFile}",
       "title": "Home",
       "purpose": "what this page is for",
-      "sections": ["Hero: headline + subcopy + 2 CTAs + product mockup", "Logos/social proof", "Features grid (3-6 cards w/ icons)", "How it works", "Testimonials", "Pricing teaser", "FAQ (Accordion)", "CTA band", "Footer"]
+      "sections": ["<Specific highly-tailored section based on prompt>", "<Another unique layout section>"]
     }
   ],
   "components": ["components/site-header.tsx", "components/site-footer.tsx", "..."],
@@ -112,13 +112,15 @@ Return ONLY this JSON object (no markdown fences):
 Rules:
 - Home page MUST be "${fw.entryFile}". Use correct router paths for the other routes.
 - Plan 3-6 PAGES (home + e.g. about, features/services, pricing, contact, blog, etc. as fits).
-- Each page MUST list 4-8 concrete SECTIONS describing layout + the actual content to include.
+- Each page MUST list highly specific SECTIONS describing layout + the actual content to include.
 - Always include a shared header/nav + footer in "components", and at least one real backend piece.
+- Act as a free-form playground. Think as much as you need to to accomplish the user's goal.
 - Be specific to the user's request (real domain content, not generic filler).`
 }
 
 export function buildGeneratePrompt(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
   return `Now BUILD the site exactly per this design plan. Use write_files to emit complete files.
+You are in a free-form playground. Think as much as you need to to solve problems, generate files, and build features. IMPORTANT: Strictly use the provided file map to verify your imports. Do not hallucinate components.
 
 USER REQUEST:
 """${prompt}"""
@@ -146,7 +148,7 @@ Implementation requirements:
 - Build the UI from shadcn/ui primitives (@/components/ui/*): ${UI_LIST}. Icons: lucide-react.
 - Reuse the shared header/nav + footer on every page. Implement the backend pieces and wire forms.
 - Add "use client" to interactive components. Write COMPLETE files (no placeholders/TODO).
-- Write 2-4 files per write_files call across rounds. Keep going until every page + component exists.
+- Generate files step-by-step. Keep going until every page + component exists.
 - When everything is built, stop calling tools and reply with a short summary.`
 }
 
@@ -167,7 +169,7 @@ USER REQUEST:
 PAGES TO CREATE (home page MUST be "${fw.entryFile}"):
 ${pages}
 
-Use write_files with 2-4 files per call. Build the UI from @/components/ui/* (shadcn).`
+Use write_files. Build the UI from @/components/ui/* (shadcn).`
 }
 
 function asStringArray(v: any): string[] {

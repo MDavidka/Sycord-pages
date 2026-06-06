@@ -49,7 +49,7 @@ export interface RunResult {
   error?: string
 }
 
-const MAX_TOOL_ROUNDS = 26
+const MAX_TOOL_ROUNDS = 50
 
 export async function runSyra(opts: RunOptions): Promise<RunResult> {
   const { prompt, initialFiles, signal } = opts
@@ -230,7 +230,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       log,
       aborted,
       firstUserMessage: buildGeneratePrompt(prompt, plan, framework),
-      forceFirstTool: true,
+      forceFirstTool: false,
     })
 
     // Content guard: if the model produced no real files (e.g. it replied with
