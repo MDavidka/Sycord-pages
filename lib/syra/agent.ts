@@ -21,7 +21,7 @@ import { buildStableContext, detectFramework, importantFilesToRead } from "./det
 import { ensureDeployable, injectDesignSystem } from "./scaffold"
 import { designSystemReference } from "./shadcn"
 import { fileMapMessage } from "./filemap"
-import { SYRA_SYSTEM, buildForceGenerateMessage, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
+import { SYRA_SYSTEM, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
 import { FUNCTION_DECLARATIONS, executeTool, type ToolContext } from "./tools"
 import { validateFiles, type ValidationIssue } from "./validate"
 import { VirtualFs } from "./vfs"
@@ -49,7 +49,7 @@ export interface RunResult {
   error?: string
 }
 
-const MAX_TOOL_ROUNDS = 26
+const MAX_TOOL_ROUNDS = 50
 
 export async function runSyra(opts: RunOptions): Promise<RunResult> {
   const { prompt, initialFiles, signal } = opts
@@ -230,27 +230,8 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       log,
       aborted,
       firstUserMessage: buildGeneratePrompt(prompt, plan, framework),
-      forceFirstTool: true,
+      forceFirstTool: false,
     })
-
-    // Content guard: if the model produced no real files (e.g. it replied with
-    // prose instead of calling write_files), force it to actually build the site.
-    for (let attempt = 0; attempt < 2 && !aborted(); attempt++) {
-      const contentCount = [...authored].filter(isContentFile).length
-      if (contentCount > 0) break
-      log(`No content files written yet — forcing generation (attempt ${attempt + 1}).`, "warn")
-      emit({ type: "tool", tool: "log_action", status: "running", label: "Forcing file generation" })
-      finalSummary = await runToolLoop({
-        client,
-        handle,
-        ctx,
-        emit,
-        log,
-        aborted,
-        firstUserMessage: buildForceGenerateMessage(prompt, plan, framework),
-        forceFirstTool: true,
-      })
-    }
 
     const authoredContent = [...authored].filter(isContentFile)
     log(`Authored ${authoredContent.length} content file(s): ${authoredContent.join(", ") || "(none)"}`)
