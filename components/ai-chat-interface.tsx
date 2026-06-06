@@ -7,6 +7,7 @@ import {
   Send,
   Loader2,
   Square,
+  Undo2,
   ChevronDown,
   Terminal,
   Eye,
@@ -168,7 +169,7 @@ function toolIconName(tool: string): string {
   }
 }
 
-export default function AIChatInterface({ projectId }: { projectId: string }) {
+export default function AIChatInterface({ projectId, onBack }: { projectId: string; onBack?: () => void }) {
   const { data: session } = useSession()
   const userName = session?.user?.name?.split(" ")[0] || "there"
 
@@ -346,8 +347,17 @@ export default function AIChatInterface({ projectId }: { projectId: string }) {
       {/* Animations for the glowing right-to-left step sweep */}
       <style>{SYRA_KEYFRAMES}</style>
 
-      {/* Header: Syra title + account profile (no back/spacing bar) */}
+      {/* Header: back + Syra title + account profile (full-screen, single header) */}
       <header className="relative z-10 shrink-0 flex items-center justify-center px-4 pt-6 pb-3">
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="Back"
+            className="absolute left-4 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full grid place-items-center bg-white/10 text-white hover:bg-white/20 ring-1 ring-white/15 backdrop-blur-md transition-colors active:scale-95"
+          >
+            <Undo2 className="h-4 w-4" />
+          </button>
+        )}
         <h1 className="text-2xl font-bold tracking-tight text-white drop-shadow-sm">Syra</h1>
         <div className="absolute right-4 top-1/2 -translate-y-1/2">
           {avatarUrl ? (

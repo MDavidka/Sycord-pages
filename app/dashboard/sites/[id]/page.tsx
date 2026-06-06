@@ -1362,7 +1362,8 @@ export default function SiteSettingsPage() {
           overflow: "hidden",
         }}
       >
-        {/* Header */}
+        {/* Header — hidden on the Syra (ai) tab so it renders full-screen with its own header */}
+        {activeTab !== "ai" && (
         <header className={cn("border-b border-white/10 bg-background/50 backdrop-blur-sm z-20 shrink-0")}>
           <div className="flex items-center justify-between h-14 px-4 md:px-6">
             {/* Mobile: hamburger + site name */}
@@ -1419,6 +1420,7 @@ export default function SiteSettingsPage() {
             </div>
           </div>
         </header>
+        )}
 
         {/* Tap overlay to close sidebar on mobile */}
         {isSidebarOpen && (
@@ -2325,6 +2327,7 @@ export default function SiteSettingsPage() {
                     <div className="absolute inset-0 overflow-hidden custom-scrollbar">
                       <AIChatInterface
                         projectId={id}
+                        onBack={() => setActiveTab("overview")}
                       />
                     </div>
                   ) : (
