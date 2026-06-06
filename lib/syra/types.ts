@@ -161,6 +161,7 @@ export function iconForTool(tool: string): string {
     case "get_file_map":
       return "FileSearch"
     case "write_file":
+    case "write_files":
       return "FilePlus2"
     case "edit_file":
       return "FilePen"

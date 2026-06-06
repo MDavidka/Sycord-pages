@@ -18,9 +18,8 @@ HOW YOU WORK
 - Use read_file / read_files to re-read any file you previously wrote when you need its
   exact exports or content for more context before importing or editing it.
 - Call get_file_map any time to see every file and the exact symbols it exports.
-- Favor write_file to emit complete files sequentially. Always write the
+- Favor write_files to emit MANY complete files in a single call. Always write the
   ENTIRE file content — no placeholders, no "// TODO", no truncation, no "...".
-- Think step-by-step and write files ONE AT A TIME using write_file so you have time to reason about the architecture and file structure.
 - Keep imports valid and consistent across every file you write.
 
 DESIGN SYSTEM — shadcn/ui (https://ui.shadcn.com)
@@ -73,8 +72,8 @@ summary of what you built and the key files/routes you created.`
 
 export function buildPlanPrompt(prompt: string, fw: ProjectFramework): string {
   return `You are the lead designer + architect. Produce a DETAILED design plan for a complete,
-multi-page website for this request. Think hard about how each page should LOOK and what
-real CONTENT goes in them.
+multi-page website for this request. Think hard about how each page should LOOK, what
+SECTIONS it contains, and what real CONTENT goes in them.
 
 USER REQUEST:
 """${prompt}"""
@@ -103,7 +102,7 @@ Return ONLY this JSON object (no markdown fences):
       "path": "${fw.entryFile}",
       "title": "Home",
       "purpose": "what this page is for",
-      "sections": ["Section 1", "Section 2"]
+      "sections": ["<Specific highly-tailored section based on prompt>", "<Another unique layout section>"]
     }
   ],
   "components": ["components/site-header.tsx", "components/site-footer.tsx", "..."],
@@ -111,13 +110,17 @@ Return ONLY this JSON object (no markdown fences):
 }
 
 Rules:
+- Home page MUST be "${fw.entryFile}". Use correct router paths for the other routes.
+- Plan 3-6 PAGES (home + e.g. about, features/services, pricing, contact, blog, etc. as fits).
+- Each page MUST list highly specific SECTIONS describing layout + the actual content to include.
+- Always include a shared header/nav + footer in "components", and at least one real backend piece.
 - Act as a free-form playground. Think as much as you need to to accomplish the user's goal.
 - Be specific to the user's request (real domain content, not generic filler).`
 }
 
 export function buildGeneratePrompt(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
-  return `Now BUILD the site exactly per this design plan. Use write_file to emit complete files sequentially.
-You are in a free-form playground. Think as much as you need to to solve problems, generate files, and build features. Generate whatever errors or logic you want to satisfy the request. Write files ONE BY ONE using write_file so you can carefully consider what to build next.
+  return `Now BUILD the site exactly per this design plan. Use write_files to emit complete files.
+You are in a free-form playground. Think as much as you need to to solve problems, generate files, and build features. IMPORTANT: Strictly use the provided file map to verify your imports. Do not hallucinate components.
 
 USER REQUEST:
 """${prompt}"""
@@ -128,7 +131,7 @@ DESIGN DIRECTION:
 - Typography: ${plan.design.typography}
 - Layout: ${plan.design.layout}
 
-PAGES TO BUILD:
+PAGES TO BUILD (implement EVERY section listed for each page):
 ${plan.pages
   .map((p) => `• ${p.path} — ${p.title}: ${p.purpose}\n   sections:\n${p.sections.map((s) => `     - ${s}`).join("\n")}`)
   .join("\n")}
@@ -137,31 +140,36 @@ SHARED COMPONENTS: ${plan.components.join(", ") || "site header + footer"}
 BACKEND: ${plan.backend.join(", ") || "a contact/newsletter route handler"}
 
 Implementation requirements:
-- Build every page above with real, specific copy.
-- Apply the design direction consistently.
+- Home page path MUST be "${fw.entryFile}". Build every page and EVERY section above with
+  real, specific copy — multiple paragraphs, lists, stats, testimonials, FAQs, CTAs.
+- Apply the design direction consistently: cohesive color accents, strong typographic
+  hierarchy, generous spacing, rounded cards, hover states, responsive grids, and tasteful
+  gradients/borders. Make it look designed, not default.
 - Build the UI from shadcn/ui primitives (@/components/ui/*): ${UI_LIST}. Icons: lucide-react.
+- Reuse the shared header/nav + footer on every page. Implement the backend pieces and wire forms.
 - Add "use client" to interactive components. Write COMPLETE files (no placeholders/TODO).
-- Write files one by one using write_file.
+- Generate files step-by-step. Keep going until every page + component exists.
 - When everything is built, stop calling tools and reply with a short summary.`
 }
 
 /** Sent when the model failed to write any real files — forces it to build now. */
 export function buildForceGenerateMessage(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
   const pages = plan.pages.length
-    ? plan.pages.map((p) => `- ${p.path} (${p.title})`).join("\n")
-    : `- ${fw.entryFile}\n- app/about/page.tsx\n- app/contact/page.tsx`
-  return `You have NOT created the website files yet. Stop explaining and CALL write_file NOW.
+    ? plan.pages.map((p) => `- ${p.path} (${p.title}): ${p.sections.slice(0, 6).join("; ")}`).join("\n")
+    : `- ${fw.entryFile}: hero + features + testimonials + CTA + footer\n- app/about/page.tsx: story + team + values\n- app/contact/page.tsx: contact form wired to /api/contact`
+  return `You have NOT created the website files yet. Stop explaining and CALL write_files NOW.
 
-Build the pages below with COMPLETE, detailed content. Apply the design style:
+Build the pages below with COMPLETE, detailed content — every section, real copy, multiple
+pages. No placeholder text, no "Built with Syra", no empty pages. Apply the design style:
 ${plan.design.style || "modern, polished, responsive"}.
 
 USER REQUEST:
 """${prompt}"""
 
-PAGES TO CREATE:
+PAGES TO CREATE (home page MUST be "${fw.entryFile}"):
 ${pages}
 
-Use write_file sequentially. Build the UI from @/components/ui/* (shadcn).`
+Use write_files. Build the UI from @/components/ui/* (shadcn).`
 }
 
 function asStringArray(v: any): string[] {
