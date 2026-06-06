@@ -83,29 +83,6 @@ export const FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
     },
   },
   {
-    name: "write_files",
-    description:
-      "Create or overwrite multiple files in one call. Ideal for generating a complete page plus its components. Token-efficient.",
-    parameters: {
-      type: OBJECT,
-      properties: {
-        files: {
-          type: ARRAY,
-          description: "Array of files to write.",
-          items: {
-            type: OBJECT,
-            properties: {
-              path: { type: STRING, description: "Target file path." },
-              content: { type: STRING, description: "Complete file content." },
-            },
-            required: ["path", "content"],
-          },
-        },
-      },
-      required: ["files"],
-    },
-  },
-  {
     name: "edit_file",
     description:
       "Make a targeted edit by replacing an exact snippet (old_text) with new_text. Read the file first so old_text matches exactly.",
@@ -174,25 +151,6 @@ export async function executeTool(name: string, rawArgs: any, ctx: ToolContext):
       const { path, created } = ctx.vfs.write(args.path, args.content ?? "")
       ctx.onFileChange?.(path, created ? "created" : "modified")
       return { label: `${created ? "Created" : "Updated"} ${path}`, data: { path, created, ok: true } }
-    }
-
-    case "write_files": {
-      const files: { path: string; content: string }[] = Array.isArray(args.files) ? args.files : []
-      const written: { path: string; created: boolean }[] = []
-      const errors: { path: string; error: string }[] = []
-      for (const f of files) {
-        try {
-          const { path, created } = ctx.vfs.write(f.path, f.content ?? "")
-          ctx.onFileChange?.(path, created ? "created" : "modified")
-          written.push({ path, created })
-        } catch (e: any) {
-          errors.push({ path: f?.path, error: e?.message || "write failed" })
-        }
-      }
-      return {
-        label: `Wrote ${written.length} file${written.length === 1 ? "" : "s"}${errors.length ? `, ${errors.length} failed` : ""}`,
-        data: { written, errors, ok: errors.length === 0 },
-      }
     }
 
     case "edit_file": {

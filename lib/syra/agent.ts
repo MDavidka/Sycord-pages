@@ -474,8 +474,6 @@ function summarizeArgs(name: string, rawArgs: any): string {
     case "edit_file":
     case "delete_file":
       return String(a.path || "")
-    case "write_files":
-      return Array.isArray(a.files) ? a.files.map((f: any) => f?.path).filter(Boolean).join(", ") : ""
     case "read_files":
       return Array.isArray(a.paths) ? `${a.paths.length} files` : ""
     case "list_files":
@@ -495,8 +493,6 @@ function labelForTool(name: string): string {
   switch (name) {
     case "write_file":
       return "Writing file"
-    case "write_files":
-      return "Writing files"
     case "edit_file":
       return "Editing file"
     case "delete_file":

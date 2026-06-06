@@ -18,8 +18,9 @@ HOW YOU WORK
 - Use read_file / read_files to re-read any file you previously wrote when you need its
   exact exports or content for more context before importing or editing it.
 - Call get_file_map any time to see every file and the exact symbols it exports.
-- Favor write_files to emit MANY complete files in a single call. Always write the
+- Favor write_file to emit complete files sequentially. Always write the
   ENTIRE file content — no placeholders, no "// TODO", no truncation, no "...".
+- Think step-by-step and write files ONE AT A TIME using write_file so you have time to reason about the architecture and file structure.
 - Keep imports valid and consistent across every file you write.
 
 DESIGN SYSTEM — shadcn/ui (https://ui.shadcn.com)
@@ -115,8 +116,8 @@ Rules:
 }
 
 export function buildGeneratePrompt(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
-  return `Now BUILD the site exactly per this design plan. Use write_files to emit complete files.
-You are in a free-form playground. Think as much as you need to to solve problems, generate files, and build features. Generate whatever errors or logic you want to satisfy the request.
+  return `Now BUILD the site exactly per this design plan. Use write_file to emit complete files sequentially.
+You are in a free-form playground. Think as much as you need to to solve problems, generate files, and build features. Generate whatever errors or logic you want to satisfy the request. Write files ONE BY ONE using write_file so you can carefully consider what to build next.
 
 USER REQUEST:
 """${prompt}"""
@@ -140,7 +141,7 @@ Implementation requirements:
 - Apply the design direction consistently.
 - Build the UI from shadcn/ui primitives (@/components/ui/*): ${UI_LIST}. Icons: lucide-react.
 - Add "use client" to interactive components. Write COMPLETE files (no placeholders/TODO).
-- Write files using write_files.
+- Write files one by one using write_file.
 - When everything is built, stop calling tools and reply with a short summary.`
 }
 
@@ -149,7 +150,7 @@ export function buildForceGenerateMessage(prompt: string, plan: SyraPlan, fw: Pr
   const pages = plan.pages.length
     ? plan.pages.map((p) => `- ${p.path} (${p.title})`).join("\n")
     : `- ${fw.entryFile}\n- app/about/page.tsx\n- app/contact/page.tsx`
-  return `You have NOT created the website files yet. Stop explaining and CALL write_files NOW.
+  return `You have NOT created the website files yet. Stop explaining and CALL write_file NOW.
 
 Build the pages below with COMPLETE, detailed content. Apply the design style:
 ${plan.design.style || "modern, polished, responsive"}.
@@ -160,7 +161,7 @@ USER REQUEST:
 PAGES TO CREATE:
 ${pages}
 
-Use write_files. Build the UI from @/components/ui/* (shadcn).`
+Use write_file sequentially. Build the UI from @/components/ui/* (shadcn).`
 }
 
 function asStringArray(v: any): string[] {
