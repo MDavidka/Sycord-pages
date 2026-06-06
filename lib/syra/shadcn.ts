@@ -15,6 +15,45 @@ export const SHADCN_COMPONENTS = [
   "accordion", "dialog", "dropdown-menu", "tabs", "sheet", "sonner", "skeleton",
 ] as const
 
+/** Exact named exports for each design-system module (case-sensitive). */
+export const SHADCN_EXPORTS: Record<string, string[]> = {
+  "@/lib/utils": ["cn"],
+  "@/components/ui/button": ["Button", "buttonVariants"],
+  "@/components/ui/card": ["Card", "CardHeader", "CardFooter", "CardTitle", "CardDescription", "CardContent"],
+  "@/components/ui/input": ["Input"],
+  "@/components/ui/label": ["Label"],
+  "@/components/ui/textarea": ["Textarea"],
+  "@/components/ui/badge": ["Badge", "badgeVariants"],
+  "@/components/ui/separator": ["Separator"],
+  "@/components/ui/avatar": ["Avatar", "AvatarImage", "AvatarFallback"],
+  "@/components/ui/accordion": ["Accordion", "AccordionItem", "AccordionTrigger", "AccordionContent"],
+  "@/components/ui/dialog": [
+    "Dialog", "DialogPortal", "DialogOverlay", "DialogClose", "DialogTrigger",
+    "DialogContent", "DialogHeader", "DialogFooter", "DialogTitle", "DialogDescription",
+  ],
+  "@/components/ui/dropdown-menu": [
+    "DropdownMenu", "DropdownMenuTrigger", "DropdownMenuContent", "DropdownMenuItem",
+    "DropdownMenuLabel", "DropdownMenuSeparator", "DropdownMenuGroup", "DropdownMenuPortal",
+    "DropdownMenuSub", "DropdownMenuRadioGroup",
+  ],
+  "@/components/ui/tabs": ["Tabs", "TabsList", "TabsTrigger", "TabsContent"],
+  "@/components/ui/sheet": [
+    "Sheet", "SheetTrigger", "SheetClose", "SheetContent", "SheetHeader", "SheetTitle", "SheetDescription",
+  ],
+  "@/components/ui/sonner": ["Toaster"],
+  "@/components/ui/skeleton": ["Skeleton"],
+}
+
+/** A compact, cache-friendly reference of importable design-system modules. */
+export function designSystemReference(): string {
+  const lines = Object.entries(SHADCN_EXPORTS).map(([mod, names]) => `- "${mod}" -> ${names.join(", ")}`)
+  return [
+    "# shadcn/ui design system (pre-installed; import these EXACT paths, case-sensitive)",
+    ...lines,
+    'Icons: import from "lucide-react". Use only the named exports listed above.',
+  ].join("\n")
+}
+
 /**
  * Packages the design system needs that are NOT discoverable by scanning import
  * statements (e.g. the tailwind plugin required only by the config file). Radix

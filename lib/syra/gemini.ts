@@ -112,8 +112,14 @@ export async function cacheProjectContext(
     tokens: Math.ceil(stableContext.length / 4),
   }
 
-  // Context caches enforce a minimum token count; skip tiny contexts outright.
-  if ((handle.tokens ?? 0) < 1024) return handle
+  // Rough token estimate (≈4 chars/token). Gemini rejects caches below its
+  // minimum token threshold, so skip the network call for very small contexts;
+  // otherwise we attempt caching aggressively and fall back gracefully.
+  const approxTokens = Math.ceil(stableContext.length / 4)
+  handle.tokens = approxTokens
+  if (approxTokens < 256) {
+    return handle
+  }
 
   try {
     const cache = await client.ai.caches.create({

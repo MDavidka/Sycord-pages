@@ -155,68 +155,15 @@ export function ensureDeployable(vfs: VirtualFs, fw: ProjectFramework): Scaffold
   const usesAlias =
     useShadcn || vfs.list().some((p) => /\.(tsx|ts|jsx|js)$/.test(p) && /["']@\//.test(vfs.read(p) || ""))
 
-  /* ---------------- shadcn/ui design system ---------------- */
-  if (useShadcn) {
-    for (const [path, content] of Object.entries(shadcnComponentFiles())) {
-      if (add(path, content)) {
-        /* tracked */
-      }
-    }
-    notes.push("Injected shadcn/ui design system (components/ui/*, lib/utils, theme).")
+  /* ---------------- shadcn/ui design system + Tailwind theme ---------------- */
+  // Idempotent — this normally already ran BEFORE generation (so the model could
+  // see and import the primitives). Re-running here only fills remaining gaps.
+  {
+    const ds = injectDesignSystem(vfs, fw)
+    for (const c of ds.changed) if (!changed.includes(c)) changed.push(c)
+    for (const n of ds.notes) notes.push(n)
   }
-
-  /* ---------------- globals.css ---------------- */
-  const globalsCandidates = isAppRouter
-    ? [`${appDir}/globals.css`, "styles/globals.css"]
-    : ["styles/globals.css", `${pagesBaseDir(fw, vfs)}/globals.css`]
-  let globalsPath = globalsCandidates.find((p) => has(p)) || null
-  if (!globalsPath) {
-    globalsPath = isAppRouter ? `${appDir}/globals.css` : "styles/globals.css"
-    const base = useShadcn
-      ? SHADCN_GLOBALS_CSS
-      : usesTailwind
-      ? `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`
-      : `:root { color-scheme: light dark; }\n* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }\n`
-    add(globalsPath, base)
-    notes.push(`Added ${globalsPath}.`)
-  }
-
-  /* ---------------- Tailwind config ---------------- */
-  if (usesTailwind) {
-    if (!hasAny(["tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs", "tailwind.config.cjs"])) {
-      add(
-        "tailwind.config.js",
-        useShadcn
-          ? shadcnTailwindConfig()
-          : `/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
-  theme: { extend: {} },
-  plugins: [],
-};
-`,
-      )
-      notes.push("Added tailwind.config.js.")
-    }
-    if (!hasAny(["postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"])) {
-      add(
-        "postcss.config.js",
-        `module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-`,
-      )
-      notes.push("Added postcss.config.js.")
-    }
-  }
+  const globalsPath = resolveGlobalsPath(vfs, fw)
 
   /* ---------------- next.config ---------------- */
   if (!hasAny(["next.config.js", "next.config.mjs", "next.config.ts", "next.config.cjs"])) {
@@ -442,6 +389,95 @@ export default function App({ Component, pageProps }${isTs ? ": AppProps" : ""})
   }
 
   return { changed: [...new Set(changed)], notes }
+}
+
+/** The globals.css path Syra uses for this project (existing one, else the default). */
+function resolveGlobalsPath(vfs: VirtualFs, fw: ProjectFramework): string {
+  const isAppRouter = fw.router === "app" || fw.router === "src-app"
+  const appDir = appBaseDir(fw)
+  const candidates = isAppRouter
+    ? [`${appDir}/globals.css`, "styles/globals.css"]
+    : ["styles/globals.css", `${pagesBaseDir(fw, vfs)}/globals.css`]
+  return candidates.find((p) => vfs.exists(p)) || (isAppRouter ? `${appDir}/globals.css` : "styles/globals.css")
+}
+
+/**
+ * Inject the shadcn/ui design system (component primitives, theme tokens,
+ * tailwind/postcss config, cn helper) without overwriting existing files. This
+ * is run BEFORE generation so the model can see and import the primitives, and
+ * again (idempotently) during ensureDeployable. Returns the files it created.
+ */
+export function injectDesignSystem(vfs: VirtualFs, fw: ProjectFramework): ScaffoldResult {
+  const changed: string[] = []
+  const notes: string[] = []
+  const isTs = fw.language !== "javascript"
+  const isNextish = fw.router !== "unknown" || /next/i.test(fw.framework)
+  const useShadcn = isTs && isNextish
+  const usesTailwind = useShadcn || /tailwind/i.test(fw.styling) || fw.isEmpty
+
+  const has = (p: string) => vfs.exists(p)
+  const hasAny = (paths: string[]) => paths.some((p) => vfs.exists(p))
+  const add = (path: string, content: string) => {
+    if (vfs.exists(path)) return
+    vfs.write(path, content)
+    changed.push(path)
+  }
+
+  if (useShadcn) {
+    for (const [path, content] of Object.entries(shadcnComponentFiles())) add(path, content)
+    notes.push("Injected shadcn/ui design system (components/ui/*, lib/utils, theme).")
+  }
+
+  // globals.css
+  const globalsPath = resolveGlobalsPath(vfs, fw)
+  if (!has(globalsPath)) {
+    const base = useShadcn
+      ? SHADCN_GLOBALS_CSS
+      : usesTailwind
+      ? `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n`
+      : `:root { color-scheme: light dark; }\n* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }\n`
+    add(globalsPath, base)
+    notes.push(`Added ${globalsPath}.`)
+  }
+
+  // Tailwind + PostCSS config
+  if (usesTailwind) {
+    if (!hasAny(["tailwind.config.js", "tailwind.config.ts", "tailwind.config.mjs", "tailwind.config.cjs"])) {
+      add(
+        "tailwind.config.js",
+        useShadcn
+          ? shadcnTailwindConfig()
+          : `/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: { extend: {} },
+  plugins: [],
+};
+`,
+      )
+      notes.push("Added tailwind.config.js.")
+    }
+    if (!hasAny(["postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"])) {
+      add(
+        "postcss.config.js",
+        `module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};
+`,
+      )
+      notes.push("Added postcss.config.js.")
+    }
+  }
+
+  return { changed, notes }
 }
 
 function faviconSvg(): string {

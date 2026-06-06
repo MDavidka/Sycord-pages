@@ -18,7 +18,8 @@ import {
   type ProjectContextHandle,
 } from "./gemini"
 import { buildStableContext, detectFramework, importantFilesToRead } from "./detect"
-import { ensureDeployable } from "./scaffold"
+import { ensureDeployable, injectDesignSystem } from "./scaffold"
+import { designSystemReference } from "./shadcn"
 import { SYRA_SYSTEM, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
 import { FUNCTION_DECLARATIONS, executeTool, type ToolContext } from "./tools"
 import { validateFiles, type ValidationIssue } from "./validate"
@@ -101,6 +102,28 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
 
     if (aborted()) return abortResult(vfs)
 
+    // ---------- Pre-install the design system (so the model can see + import it) ----------
+    emit({ type: "tool", tool: "ensure_deployable", status: "running", label: "Installing shadcn/ui design system" })
+    const design = injectDesignSystem(vfs, framework)
+    for (const path of design.changed) {
+      const change = vfs.changes().find((c) => c.path === path)
+      if (change) emit({ type: "file", change })
+    }
+    if (design.changed.length) {
+      design.notes.forEach((n) => log(n))
+      emit({
+        type: "tool",
+        tool: "ensure_deployable",
+        status: "success",
+        label: `Installed ${design.changed.length} design-system file${design.changed.length === 1 ? "" : "s"}`,
+      })
+      log(`Design system files now available to import: ${design.changed.join(", ")}`)
+    } else {
+      emit({ type: "tool", tool: "ensure_deployable", status: "success", label: "Design system already present" })
+    }
+
+    if (aborted()) return abortResult(vfs)
+
     // ---------- Step: read ----------
     step("read", "running", "Reading key files")
     const toRead = importantFilesToRead(vfs, framework)
@@ -116,8 +139,17 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
 
     // ---------- Step: cache ----------
     step("cache", "running", "Caching project context")
-    const stableContext = buildStableContext(vfs, framework, toRead)
-    log(`Stable context built (${stableContext.length} chars).`)
+    const stableContext = [
+      buildStableContext(vfs, framework, toRead),
+      "",
+      designSystemReference(),
+      "",
+      "# Current project files (exact paths, case-sensitive)",
+      "```",
+      vfs.tree(),
+      "```",
+    ].join("\n")
+    log(`Stable context built (${stableContext.length} chars, incl. design system + file tree).`)
     handle = await cacheProjectContext(client, stableContext)
     if (handle.cached) {
       emit({ type: "context", cached: true, tokens: handle.tokens, detail: `Vertex AI context cache created (${handle.tokens ?? "?"} tokens).` })
@@ -324,7 +356,13 @@ async function runToolLoop(args: {
 }): Promise<string> {
   const { client, handle, ctx, emit, log, aborted } = args
   const maxRounds = args.maxRounds ?? MAX_TOOL_ROUNDS
-  const contents: Content[] = [{ role: "user", parts: [{ text: args.firstUserMessage }] }]
+  const fileList = () => {
+    const files = ctx.vfs.list()
+    return `Current project files (${files.length}) — import using these EXACT paths (case-sensitive):\n${files.join("\n")}`
+  }
+  const contents: Content[] = [
+    { role: "user", parts: [{ text: `${args.firstUserMessage}\n\n${fileList()}` }] },
+  ]
   let finalText = ""
 
   for (let round = 0; round < maxRounds; round++) {
@@ -370,6 +408,9 @@ async function runToolLoop(args: {
         responseParts.push({ functionResponse: { name, response: { error: msg } } })
       }
     }
+    // Re-send the live file structure every round so the model never guesses a
+    // path or capitalization — it always sees the exact current filenames.
+    responseParts.push({ text: fileList() })
     contents.push({ role: "user", parts: responseParts })
   }
 
