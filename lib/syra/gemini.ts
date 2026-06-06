@@ -151,43 +151,15 @@ export async function cacheProjectContext(
   client: AiClient,
   stableContext: string,
 ): Promise<ProjectContextHandle> {
+  const approxTokens = Math.ceil(stableContext.length / 4)
   const handle: ProjectContextHandle = {
     cacheName: null,
-    cached: false,
+    cached: false, // Ensure caching is disabled to avoid stale file structures
     text: stableContext,
     mode: client.mode,
-    tokens: Math.ceil(stableContext.length / 4),
+    tokens: approxTokens,
   }
 
-  // Rough token estimate (≈4 chars/token). Gemini rejects caches below its
-  // minimum token threshold, so skip the network call for very small contexts;
-  // otherwise we attempt caching aggressively and fall back gracefully.
-  const approxTokens = Math.ceil(stableContext.length / 4)
-  handle.tokens = approxTokens
-  if (approxTokens < 256) {
-    return handle
-  }
-
-  try {
-    const cache = await withRetry(() =>
-      client.ai.caches.create({
-        model: modelPath(client.model),
-        config: {
-          displayName: "syra-project-context",
-          systemInstruction:
-            "You are Syra's project memory. The following is stable context about the user's codebase.",
-          contents: [{ role: "user", parts: [{ text: stableContext }] }],
-          ttl: "1800s",
-        },
-      }),
-    )
-    handle.cacheName = cache?.name ?? null
-    handle.cached = !!cache?.name
-    const total = (cache as any)?.usageMetadata?.totalTokenCount
-    if (typeof total === "number") handle.tokens = total
-  } catch {
-    // Fall back to inline context.
-  }
   return handle
 }
 
