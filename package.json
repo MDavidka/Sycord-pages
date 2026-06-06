@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@auth/core": "latest",
@@ -88,10 +90,14 @@
     "@eslint/js": "^9.39.4",
     "@next/eslint-plugin-next": "^16.2.4",
     "@tailwindcss/postcss": "^4.1.9",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.4",
+    "fast-check": "^3.23.2",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "framer-motion": "^12.23.26",
     "playwright": "^1.57.0",
