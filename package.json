@@ -13,6 +13,7 @@
     "@aws-sdk/credential-providers": "latest",
     "@cfworker/json-schema": "latest",
     "@emotion/is-prop-valid": "latest",
+    "@google/genai": "^2.8.0",
     "@google/generative-ai": "latest",
     "@heroui/react": "latest",
     "@hookform/resolvers": "^3.10.0",
