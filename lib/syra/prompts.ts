@@ -1,6 +1,6 @@
 // System + planning prompts for the Syra agent.
 
-import type { ProjectFramework, SyraPlan } from "./types"
+import type { ProjectFramework, SyraPlan, SyraPlanDesign, SyraPlanPage } from "./types"
 import { SHADCN_COMPONENTS } from "./shadcn"
 
 const UI_LIST = SHADCN_COMPONENTS.join(", ")
@@ -71,7 +71,9 @@ When you are completely finished, stop calling tools and reply with a short plai
 summary of what you built and the key files/routes you created.`
 
 export function buildPlanPrompt(prompt: string, fw: ProjectFramework): string {
-  return `Plan a complete, multi-page website with real functionality for this request.
+  return `You are the lead designer + architect. Produce a DETAILED design plan for a complete,
+multi-page website for this request. Think hard about how each page should LOOK, what
+SECTIONS it contains, and what real CONTENT goes in them.
 
 USER REQUEST:
 """${prompt}"""
@@ -85,67 +87,95 @@ DETECTED PROJECT:
 - Components directory: ${fw.componentsDir}
 ${fw.isEmpty ? "- This is an EMPTY project; Syra will scaffold the config + shadcn primitives for you." : ""}
 
-Produce an ambitious but realistic implementation plan as JSON with this shape:
+Return ONLY this JSON object (no markdown fences):
 {
   "summary": "one sentence describing the site",
-  "steps": ["short actionable step", "..."],
-  "files": [{ "path": "app/page.tsx", "purpose": "what this file is for" }]
+  "design": {
+    "style": "overall visual style + mood (e.g. 'sleek dark SaaS, glassy cards, bold')",
+    "colors": "palette direction using theme tokens / accents (e.g. 'indigo primary on slate, subtle gradients')",
+    "typography": "heading + body type vibe and scale",
+    "layout": "navigation + spacing + grid approach used across pages"
+  },
+  "steps": ["short actionable build step", "..."],
+  "pages": [
+    {
+      "path": "${fw.entryFile}",
+      "title": "Home",
+      "purpose": "what this page is for",
+      "sections": ["Hero: headline + subcopy + 2 CTAs + product mockup", "Logos/social proof", "Features grid (3-6 cards w/ icons)", "How it works", "Testimonials", "Pricing teaser", "FAQ (Accordion)", "CTA band", "Footer"]
+    }
+  ],
+  "components": ["components/site-header.tsx", "components/site-footer.tsx", "..."],
+  "backend": ["app/api/contact/route.ts — handle contact form POST", "..."]
 }
 
-Rules for the plan:
-- Home page MUST be "${fw.entryFile}". Use correct router paths for other routes.
-- Include MULTIPLE pages/routes and a shared header + footer.
-- Include at least one real backend piece (a Route Handler under app/api/* or a Server Action).
-- Put shared/custom components under "${fw.componentsDir}" (build on top of @/components/ui/*).
-- 5-12 steps, 6-20 files. Be specific to the request.
-- Respond with ONLY the JSON object, no markdown fences.`
+Rules:
+- Home page MUST be "${fw.entryFile}". Use correct router paths for the other routes.
+- Plan 3-6 PAGES (home + e.g. about, features/services, pricing, contact, blog, etc. as fits).
+- Each page MUST list 4-8 concrete SECTIONS describing layout + the actual content to include.
+- Always include a shared header/nav + footer in "components", and at least one real backend piece.
+- Be specific to the user's request (real domain content, not generic filler).`
 }
 
 export function buildGeneratePrompt(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
-  return `Now implement the plan. Use write_files to emit many complete files at once.
+  return `Now BUILD the site exactly per this design plan. Use write_files to emit complete files.
 
 USER REQUEST:
 """${prompt}"""
 
-APPROVED PLAN:
-${JSON.stringify(plan, null, 2)}
+DESIGN DIRECTION:
+- Style: ${plan.design.style}
+- Colors: ${plan.design.colors}
+- Typography: ${plan.design.typography}
+- Layout: ${plan.design.layout}
+
+PAGES TO BUILD (implement EVERY section listed for each page):
+${plan.pages
+  .map((p) => `• ${p.path} — ${p.title}: ${p.purpose}\n   sections:\n${p.sections.map((s) => `     - ${s}`).join("\n")}`)
+  .join("\n")}
+
+SHARED COMPONENTS: ${plan.components.join(", ") || "site header + footer"}
+BACKEND: ${plan.backend.join(", ") || "a contact/newsletter route handler"}
 
 Implementation requirements:
-- Home page path MUST be "${fw.entryFile}". Build every route in the plan.
-- Build the UI from shadcn/ui primitives (@/components/ui/*) + Tailwind theme tokens.
-  Available primitives: ${UI_LIST}. Use lucide-react for icons.
-- Create a shared header/nav and footer and use them across pages.
-- Implement the real backend pieces (Route Handlers / Server Actions) and wire any forms to them.
-- Every page must be content-rich (multiple full sections + real copy). NEVER output
-  placeholder text like "Built with Syra" or empty pages.
-- Add "use client" to interactive components. Write COMPLETE file contents for every file.
-- Write files in batches of 2-4 per write_files call across multiple rounds (avoids
-  truncating large responses). Keep going until every planned file exists.
-- Call read_file only if you need to edit an existing file precisely.
-- When everything is written, stop calling tools and reply with a short summary.`
+- Home page path MUST be "${fw.entryFile}". Build every page and EVERY section above with
+  real, specific copy — multiple paragraphs, lists, stats, testimonials, FAQs, CTAs.
+- Apply the design direction consistently: cohesive color accents, strong typographic
+  hierarchy, generous spacing, rounded cards, hover states, responsive grids, and tasteful
+  gradients/borders. Make it look designed, not default.
+- Build the UI from shadcn/ui primitives (@/components/ui/*): ${UI_LIST}. Icons: lucide-react.
+- Reuse the shared header/nav + footer on every page. Implement the backend pieces and wire forms.
+- Add "use client" to interactive components. Write COMPLETE files (no placeholders/TODO).
+- Write 2-4 files per write_files call across rounds. Keep going until every page + component exists.
+- When everything is built, stop calling tools and reply with a short summary.`
 }
 
 /** Sent when the model failed to write any real files — forces it to build now. */
 export function buildForceGenerateMessage(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
-  const files = plan.files.length
-    ? plan.files.map((f) => `- ${f.path}: ${f.purpose}`).join("\n")
-    : `- ${fw.entryFile}: content-rich home page\n- app/about/page.tsx: about page\n- app/contact/page.tsx: contact page with a working form`
+  const pages = plan.pages.length
+    ? plan.pages.map((p) => `- ${p.path} (${p.title}): ${p.sections.slice(0, 6).join("; ")}`).join("\n")
+    : `- ${fw.entryFile}: hero + features + testimonials + CTA + footer\n- app/about/page.tsx: story + team + values\n- app/contact/page.tsx: contact form wired to /api/contact`
   return `You have NOT created the website files yet. Stop explaining and CALL write_files NOW.
 
-Create the files below with COMPLETE, detailed, production-ready content — real copy,
-multiple distinct sections per page, and multiple pages. No placeholder text, no "Built
-with Syra", no empty pages.
+Build the pages below with COMPLETE, detailed content — every section, real copy, multiple
+pages. No placeholder text, no "Built with Syra", no empty pages. Apply the design style:
+${plan.design.style || "modern, polished, responsive"}.
 
 USER REQUEST:
 """${prompt}"""
 
-FILES TO CREATE (home page MUST be "${fw.entryFile}"):
-${files}
+PAGES TO CREATE (home page MUST be "${fw.entryFile}"):
+${pages}
 
 Use write_files with 2-4 files per call. Build the UI from @/components/ui/* (shadcn).`
 }
 
-/** Defensive JSON extraction for the plan response. */
+function asStringArray(v: any): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean)
+  return []
+}
+
+/** Defensive JSON extraction for the detailed plan response. */
 export function parsePlan(text: string): SyraPlan {
   let raw = (text || "").trim()
   // Strip markdown fences if the model added them.
@@ -156,23 +186,68 @@ export function parsePlan(text: string): SyraPlan {
   const end = raw.lastIndexOf("}")
   if (start !== -1 && end !== -1) raw = raw.slice(start, end + 1)
 
+  const fallbackDesign: SyraPlanDesign = {
+    style: "modern, polished, responsive",
+    colors: "theme tokens with a clear accent",
+    typography: "strong headings, readable body",
+    layout: "sticky top nav, spacious sections, footer",
+  }
+
   try {
     const obj = JSON.parse(raw)
-    const steps = Array.isArray(obj.steps) ? obj.steps.map(String) : []
-    const files = Array.isArray(obj.files)
+
+    const design: SyraPlanDesign = {
+      style: String(obj?.design?.style || fallbackDesign.style).trim(),
+      colors: String(obj?.design?.colors || fallbackDesign.colors).trim(),
+      typography: String(obj?.design?.typography || fallbackDesign.typography).trim(),
+      layout: String(obj?.design?.layout || fallbackDesign.layout).trim(),
+    }
+
+    const pages: SyraPlanPage[] = Array.isArray(obj.pages)
+      ? obj.pages
+          .map((p: any) => ({
+            path: String(p?.path || "").trim(),
+            title: String(p?.title || "").trim() || "Page",
+            purpose: String(p?.purpose || "").trim(),
+            sections: asStringArray(p?.sections),
+          }))
+          .filter((p: SyraPlanPage) => p.path)
+      : []
+
+    const components = asStringArray(obj.components)
+    const backend = asStringArray(obj.backend)
+
+    // Derive the flat file list from explicit files or from pages/components/backend.
+    const explicitFiles = Array.isArray(obj.files)
       ? obj.files
           .map((f: any) => ({ path: String(f?.path || "").trim(), purpose: String(f?.purpose || "").trim() }))
           .filter((f: any) => f.path)
       : []
+    const derivedFiles = [
+      ...pages.map((p) => ({ path: p.path, purpose: `${p.title} page` })),
+      ...components.map((c) => ({ path: c, purpose: "shared component" })),
+      ...backend.map((b) => ({ path: b.split(/\s/)[0].trim(), purpose: "backend" })),
+    ].filter((f) => f.path && /[/.]/.test(f.path))
+    const files = explicitFiles.length ? explicitFiles : derivedFiles
+
+    const steps = asStringArray(obj.steps)
     return {
       summary: String(obj.summary || "Build the requested website").trim(),
-      steps: steps.length ? steps : ["Generate the requested files"],
+      design,
+      steps: steps.length ? steps : ["Design the pages", "Build shared layout", "Generate each page", "Wire backend"],
+      pages,
+      components,
+      backend,
       files,
     }
   } catch {
     return {
       summary: "Build the requested website",
+      design: fallbackDesign,
       steps: ["Inspect the project", "Generate the requested files", "Validate output"],
+      pages: [],
+      components: [],
+      backend: [],
       files: [],
     }
   }

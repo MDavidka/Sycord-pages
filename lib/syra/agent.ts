@@ -181,8 +181,14 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     emit({ type: "tool", tool: "log_action", status: "success", label: "Plan ready" })
     emit({ type: "plan", plan })
     log(`Plan: ${plan.summary}`)
+    log(`Design — style: ${plan.design.style}; colors: ${plan.design.colors}; type: ${plan.design.typography}; layout: ${plan.design.layout}`)
     plan.steps.forEach((s, i) => log(`  ${i + 1}. ${s}`))
-    if (plan.files.length) log(`Planned files: ${plan.files.map((f) => f.path).join(", ")}`)
+    plan.pages.forEach((p) => {
+      log(`Page ${p.path} (${p.title}) — ${p.purpose}`)
+      p.sections.forEach((s) => log(`    · ${s}`))
+    })
+    if (plan.components.length) log(`Components: ${plan.components.join(", ")}`)
+    if (plan.backend.length) log(`Backend: ${plan.backend.join(", ")}`)
     step("plan", "success", plan.summary)
 
     if (aborted()) return abortResult(vfs)

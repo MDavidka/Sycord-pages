@@ -614,7 +614,7 @@ function PlanCard({ plan, context }: { plan: SyraPlan; context: { cached: boolea
   return (
     <div className="rounded-xl border border-white/[0.06] bg-zinc-900/40 backdrop-blur-xl p-4">
       <div className="flex items-center gap-2 mb-2">
-        <ListChecks className="h-4 w-4 text-blue-300" />
+        <ListChecks className="h-4 w-4 text-sky-300" />
         <span className="text-sm font-medium text-white">Plan</span>
         {context && (
           <span
@@ -632,19 +632,90 @@ function PlanCard({ plan, context }: { plan: SyraPlan; context: { cached: boolea
         )}
       </div>
       <p className="text-sm text-zinc-300 mb-3">{plan.summary}</p>
-      <ol className="space-y-1.5 mb-3">
-        {plan.steps.map((s, i) => (
-          <li key={i} className="flex gap-2 text-xs text-zinc-400">
-            <span className="text-zinc-600 tabular-nums">{i + 1}.</span>
-            <span>{s}</span>
-          </li>
-        ))}
-      </ol>
-      {plan.files.length > 0 && (
+
+      {/* Design direction */}
+      {plan.design && (plan.design.style || plan.design.colors) && (
+        <div className="mb-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Palette className="h-3.5 w-3.5 text-fuchsia-300" />
+            <span className="text-[11px] font-medium text-zinc-300 uppercase tracking-wider">Design</span>
+          </div>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            {plan.design.style && (
+              <div className="flex gap-1.5">
+                <dt className="text-zinc-500 shrink-0">Style:</dt>
+                <dd className="text-zinc-300">{plan.design.style}</dd>
+              </div>
+            )}
+            {plan.design.colors && (
+              <div className="flex gap-1.5">
+                <dt className="text-zinc-500 shrink-0">Colors:</dt>
+                <dd className="text-zinc-300">{plan.design.colors}</dd>
+              </div>
+            )}
+            {plan.design.typography && (
+              <div className="flex gap-1.5">
+                <dt className="text-zinc-500 shrink-0">Type:</dt>
+                <dd className="text-zinc-300">{plan.design.typography}</dd>
+              </div>
+            )}
+            {plan.design.layout && (
+              <div className="flex gap-1.5">
+                <dt className="text-zinc-500 shrink-0">Layout:</dt>
+                <dd className="text-zinc-300">{plan.design.layout}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      )}
+
+      {/* Pages with sections */}
+      {plan.pages.length > 0 && (
+        <div className="space-y-2 mb-3">
+          <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">
+            Pages ({plan.pages.length})
+          </span>
+          {plan.pages.map((p) => (
+            <div key={p.path} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <FileCode2 className="h-3.5 w-3.5 text-sky-300 shrink-0" />
+                <span className="text-xs font-medium text-white">{p.title}</span>
+                <code className="text-[10px] font-mono text-zinc-500">{p.path}</code>
+              </div>
+              {p.purpose && <p className="text-[11px] text-zinc-500 mt-1">{p.purpose}</p>}
+              {p.sections.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5">
+                  {p.sections.map((s, i) => (
+                    <li key={i} className="flex gap-1.5 text-[11px] text-zinc-400">
+                      <span className="text-sky-400/60 shrink-0">▹</span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Steps */}
+      {plan.steps.length > 0 && (
+        <ol className="space-y-1.5 mb-3">
+          {plan.steps.map((s, i) => (
+            <li key={i} className="flex gap-2 text-xs text-zinc-400">
+              <span className="text-zinc-600 tabular-nums">{i + 1}.</span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {/* Backend pieces */}
+      {plan.backend.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {plan.files.map((f) => (
-            <span key={f.path} className="text-[10px] font-mono px-2 py-1 rounded-md bg-white/5 text-zinc-400" title={f.purpose}>
-              {f.path}
+          {plan.backend.map((b, i) => (
+            <span key={i} className="text-[10px] px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300">
+              {b}
             </span>
           ))}
         </div>

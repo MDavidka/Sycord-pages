@@ -44,10 +44,42 @@ export interface FileChange {
   previous?: string
 }
 
+/** Design direction for the whole site (drives the visual style). */
+export interface SyraPlanDesign {
+  /** Overall visual style, e.g. "modern minimal SaaS, bold dark theme". */
+  style: string
+  /** Color direction, e.g. "indigo + slate, subtle gradients". */
+  colors: string
+  /** Typography vibe, e.g. "large geometric headings, clean body". */
+  typography: string
+  /** Layout/navigation approach, e.g. "sticky top nav + spacious sections". */
+  layout: string
+}
+
+/** A page in the plan with its concrete design + content breakdown. */
+export interface SyraPlanPage {
+  path: string
+  /** Page title / route name. */
+  title: string
+  /** What the page is for. */
+  purpose: string
+  /** Ordered sections/content blocks the page should contain. */
+  sections: string[]
+}
+
 /** The plan Syra produces before generating any code. */
 export interface SyraPlan {
   summary: string
+  /** Site-wide visual design direction. */
+  design: SyraPlanDesign
   steps: string[]
+  /** Per-page design + content breakdown. */
+  pages: SyraPlanPage[]
+  /** Shared components to build (paths or names). */
+  components: string[]
+  /** Backend pieces (route handlers / server actions). */
+  backend: string[]
+  /** Flat file list (derived) used for logging/scaffolding fallbacks. */
   files: { path: string; purpose: string }[]
 }
 
