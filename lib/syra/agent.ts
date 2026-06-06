@@ -21,7 +21,7 @@ import { buildStableContext, detectFramework, importantFilesToRead } from "./det
 import { ensureDeployable, injectDesignSystem } from "./scaffold"
 import { designSystemReference } from "./shadcn"
 import { fileMapMessage } from "./filemap"
-import { SYRA_SYSTEM, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
+import { SYRA_SYSTEM, buildForceGenerateMessage, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
 import { FUNCTION_DECLARATIONS, executeTool, type ToolContext } from "./tools"
 import { validateFiles, type ValidationIssue } from "./validate"
 import { VirtualFs } from "./vfs"
@@ -189,11 +189,13 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
 
     // ---------- Step: generate ----------
     step("generate", "running", "Generating files")
+    const authored = new Set<string>()
     const ctx: ToolContext = {
       vfs,
       framework,
       memory: new Map(),
       onFileChange: (path, kind) => {
+        if (kind !== "deleted") authored.add(path)
         const change = vfs
           .changes()
           .find((c) => c.path === path && c.kind === kind) || { path, kind, content: vfs.read(path) || "" }
@@ -202,7 +204,19 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       onLog: (m) => log(m),
     }
 
-    const finalSummary = await runToolLoop({
+    // Files that count as real, user-facing content (not the injected design
+    // system / config) — used to detect an empty generation.
+    const isContentFile = (p: string) =>
+      !p.startsWith("components/ui/") &&
+      p !== "lib/utils.ts" &&
+      p !== "components.json" &&
+      !/\.(css|json|svg|ico)$/.test(p) &&
+      !/(^|\/)(next|tailwind|postcss)\.config\.[cm]?js$/.test(p) &&
+      p !== "next-env.d.ts" &&
+      p !== "tsconfig.json" &&
+      p !== "package.json"
+
+    let finalSummary = await runToolLoop({
       client,
       handle,
       ctx,
@@ -210,7 +224,30 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       log,
       aborted,
       firstUserMessage: buildGeneratePrompt(prompt, plan, framework),
+      forceFirstTool: true,
     })
+
+    // Content guard: if the model produced no real files (e.g. it replied with
+    // prose instead of calling write_files), force it to actually build the site.
+    for (let attempt = 0; attempt < 2 && !aborted(); attempt++) {
+      const contentCount = [...authored].filter(isContentFile).length
+      if (contentCount > 0) break
+      log(`No content files written yet — forcing generation (attempt ${attempt + 1}).`, "warn")
+      emit({ type: "tool", tool: "log_action", status: "running", label: "Forcing file generation" })
+      finalSummary = await runToolLoop({
+        client,
+        handle,
+        ctx,
+        emit,
+        log,
+        aborted,
+        firstUserMessage: buildForceGenerateMessage(prompt, plan, framework),
+        forceFirstTool: true,
+      })
+    }
+
+    const authoredContent = [...authored].filter(isContentFile)
+    log(`Authored ${authoredContent.length} content file(s): ${authoredContent.join(", ") || "(none)"}`)
     step("generate", "success", `Generated ${vfs.changes().filter((c) => c.kind !== "deleted").length} file change(s)`)
 
     if (aborted()) return abortResult(vfs)
@@ -354,6 +391,7 @@ async function runToolLoop(args: {
   aborted: () => boolean | undefined
   firstUserMessage: string
   maxRounds?: number
+  forceFirstTool?: boolean
 }): Promise<string> {
   const { client, handle, ctx, emit, log, aborted } = args
   const maxRounds = args.maxRounds ?? MAX_TOOL_ROUNDS
@@ -373,6 +411,9 @@ async function runToolLoop(args: {
       tools: FUNCTION_DECLARATIONS,
       temperature: 0.75,
       maxOutputTokens: 32768,
+      // Force a tool call on the first round so the model starts building
+      // immediately instead of replying with prose and producing no files.
+      forceTool: !!args.forceFirstTool && round === 0,
     })
     logUsage(res, log)
 

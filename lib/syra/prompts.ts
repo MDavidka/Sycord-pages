@@ -43,6 +43,14 @@ MULTI-PAGE SITES
 - Add a shared site header/nav and footer component and use them across pages
   (e.g. via the root layout or a shared layout component).
 
+CONTENT QUALITY (critical)
+- Every page must be CONTENT-RICH and specific to the user's request: real headlines,
+  multiple paragraphs of copy, feature lists, FAQs, testimonials, stats, CTAs, etc.
+- Compose several distinct sections per page (hero, features, how-it-works, pricing,
+  testimonials, FAQ, CTA, footer) — not a single line of text.
+- NEVER ship placeholder text such as "Built with Syra", "Hello World", lorem ipsum,
+  empty pages, or "coming soon". Write the actual website the user asked for.
+
 REAL BACKEND FUNCTIONALITY
 - Implement working server logic, not mockups. Use App Router Route Handlers
   (app/api/<name>/route.ts exporting GET/POST) and/or Server Actions ("use server").
@@ -108,9 +116,33 @@ Implementation requirements:
   Available primitives: ${UI_LIST}. Use lucide-react for icons.
 - Create a shared header/nav and footer and use them across pages.
 - Implement the real backend pieces (Route Handlers / Server Actions) and wire any forms to them.
+- Every page must be content-rich (multiple full sections + real copy). NEVER output
+  placeholder text like "Built with Syra" or empty pages.
 - Add "use client" to interactive components. Write COMPLETE file contents for every file.
+- Write files in batches of 2-4 per write_files call across multiple rounds (avoids
+  truncating large responses). Keep going until every planned file exists.
 - Call read_file only if you need to edit an existing file precisely.
 - When everything is written, stop calling tools and reply with a short summary.`
+}
+
+/** Sent when the model failed to write any real files — forces it to build now. */
+export function buildForceGenerateMessage(prompt: string, plan: SyraPlan, fw: ProjectFramework): string {
+  const files = plan.files.length
+    ? plan.files.map((f) => `- ${f.path}: ${f.purpose}`).join("\n")
+    : `- ${fw.entryFile}: content-rich home page\n- app/about/page.tsx: about page\n- app/contact/page.tsx: contact page with a working form`
+  return `You have NOT created the website files yet. Stop explaining and CALL write_files NOW.
+
+Create the files below with COMPLETE, detailed, production-ready content — real copy,
+multiple distinct sections per page, and multiple pages. No placeholder text, no "Built
+with Syra", no empty pages.
+
+USER REQUEST:
+"""${prompt}"""
+
+FILES TO CREATE (home page MUST be "${fw.entryFile}"):
+${files}
+
+Use write_files with 2-4 files per call. Build the UI from @/components/ui/* (shadcn).`
 }
 
 /** Defensive JSON extraction for the plan response. */
