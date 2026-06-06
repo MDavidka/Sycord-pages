@@ -56,6 +56,42 @@ export interface SyraPlanDesign {
   layout: string
 }
 
+/** Per-page creative design direction (chosen for that page's purpose). */
+export interface SyraPageDesign {
+  /** How the page should look / its visual approach. */
+  visualApproach: string
+  /** The emotional tone / mood of the page. */
+  mood: string
+  /** Layout treatment for each of the page's sections. */
+  sectionLayouts: string[]
+}
+
+/** A single navigation entry shared across the site. */
+export interface SyraNavItem {
+  /** Human-readable label shown in the nav. */
+  label: string
+  /** Route the entry links to. */
+  route: string
+}
+
+/**
+ * Site-level manifest describing how the pages cohere: the full route map, the
+ * shared navigation + layout, the backend surface, and the metadata/SEO
+ * direction every route should follow.
+ */
+export interface SyraSiteManifest {
+  /** Every route in the site (superset of, and when derived equal to, page paths). */
+  routes: string[]
+  /** Shared navigation entries used on every route. */
+  navigation: SyraNavItem[]
+  /** Description of the shared layout (header/nav + footer) used across routes. */
+  sharedLayout: string
+  /** Backend endpoints (route handlers / server actions) the site exposes. */
+  backendEndpoints: string[]
+  /** Site-wide metadata / SEO direction every route's metadata should follow. */
+  metadata: string
+}
+
 /** A page in the plan with its concrete design + content breakdown. */
 export interface SyraPlanPage {
   path: string
@@ -65,6 +101,8 @@ export interface SyraPlanPage {
   purpose: string
   /** Ordered sections/content blocks the page should contain. */
   sections: string[]
+  /** Per-page creative design direction (derived when the model omits it). */
+  design?: SyraPageDesign
 }
 
 /** The plan Syra produces before generating any code. */
@@ -79,6 +117,8 @@ export interface SyraPlan {
   components: string[]
   /** Backend pieces (route handlers / server actions). */
   backend: string[]
+  /** Site-level manifest describing routes, navigation, shared layout, backend + metadata. */
+  manifest: SyraSiteManifest
   /** Flat file list (derived) used for logging/scaffolding fallbacks. */
   files: { path: string; purpose: string }[]
 }
