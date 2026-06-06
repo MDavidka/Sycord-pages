@@ -13,7 +13,8 @@ import {
   cacheProjectContext,
   generate,
   getAiClient,
-  releaseContextCache,
+  inlineHandle,
+  resetContextCache,
   type AiClient,
   type ProjectContextHandle,
 } from "./gemini"
@@ -21,7 +22,18 @@ import { buildStableContext, detectFramework, importantFilesToRead } from "./det
 import { ensureDeployable, injectDesignSystem } from "./scaffold"
 import { designSystemReference } from "./shadcn"
 import { fileMapMessage } from "./filemap"
-import { SYRA_SYSTEM, buildForceGenerateMessage, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
+import {
+  SYRA_ANALYST_SYSTEM,
+  SYRA_SUMMARIZER_SYSTEM,
+  SYRA_SYSTEM,
+  buildForceGenerateMessage,
+  buildGeneratePrompt,
+  buildIntentPrompt,
+  buildPlanPrompt,
+  buildSummaryPrompt,
+  parseIntent,
+  parsePlan,
+} from "./prompts"
 import { FUNCTION_DECLARATIONS, executeTool, type ToolContext } from "./tools"
 import { validateFiles, type ValidationIssue } from "./validate"
 import { VirtualFs } from "./vfs"
@@ -75,6 +87,36 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     log(`AI runtime: ${client.mode} · model ${client.model}.`)
     step("prompt", "success", "Prompt understood", prompt.slice(0, 140))
 
+    // Detect framework once (pure/cheap) — reused by thinking, inspect and the rest.
+    const framework = detectFramework(vfs)
+
+    // ---------- Step: thinking (intent analysis) ----------
+    step("thinking", "running", "Thinking it through")
+    let intent = parseIntent("")
+    try {
+      const intentRes = await generate({
+        client,
+        handle: inlineHandle(client),
+        systemInstruction: SYRA_ANALYST_SYSTEM,
+        contents: [{ role: "user", parts: [{ text: buildIntentPrompt(prompt, framework) }] }],
+        responseJson: true,
+        temperature: 0.3,
+      })
+      logUsage(intentRes, log)
+      intent = parseIntent(safeText(intentRes))
+    } catch (e: any) {
+      log(`Intent analysis failed (continuing): ${e?.message || e}`, "warn")
+    }
+    emit({ type: "thinking", intent })
+    log(`Intent: a ${intent.siteType} for ${intent.audience}.`)
+    if (intent.goals.length) intent.goals.forEach((g) => log(`  goal: ${g}`))
+    if (intent.pages.length) log(`  pages: ${intent.pages.join(", ")}`)
+    if (intent.components.length) log(`  components: ${intent.components.join(", ")}`)
+    if (intent.notes) log(`  direction: ${intent.notes}`)
+    step("thinking", "success", `${intent.siteType}${intent.pages.length ? ` · ${intent.pages.length} pages` : ""}`)
+
+    if (aborted()) return abortResult(vfs)
+
     // ---------- Step: inspect ----------
     step("inspect", "running", "Inspecting the codebase")
     emit({ type: "tool", tool: "list_files", status: "running", label: "Listing project files" })
@@ -88,7 +130,6 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     log(allFiles.length ? `Project files:\n${vfs.tree()}` : "Project is empty — Syra will scaffold from scratch.")
 
     emit({ type: "tool", tool: "detect_framework", status: "running", label: "Detecting framework" })
-    const framework = detectFramework(vfs)
     emit({
       type: "tool",
       tool: "detect_framework",
@@ -153,11 +194,11 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     log(`Stable context built (${stableContext.length} chars, incl. design system + file tree).`)
     handle = await cacheProjectContext(client, stableContext)
     if (handle.cached) {
-      emit({ type: "context", cached: true, tokens: handle.tokens, detail: `Vertex AI context cache created (${handle.tokens ?? "?"} tokens).` })
+      emit({ type: "context", cached: true, state: "active", tokens: handle.tokens, detail: `Vertex AI context cache created (${handle.tokens ?? "?"} tokens).` })
       step("cache", "success", `Context cached (${handle.tokens ?? "?"} tokens)`)
       log(`Context cache: ${handle.cacheName}`)
     } else {
-      emit({ type: "context", cached: false, tokens: handle.tokens, detail: "Context inlined into the system prompt (cache skipped)." })
+      emit({ type: "context", cached: false, state: "inlined", tokens: handle.tokens, detail: "Context inlined into the system prompt (cache skipped)." })
       step("cache", "success", "Context inlined")
       log("Context cache skipped (context below the cache minimum) — inlining instead.")
     }
@@ -171,7 +212,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       client,
       handle,
       systemInstruction: SYRA_SYSTEM,
-      contents: [{ role: "user", parts: [{ text: buildPlanPrompt(prompt, framework) }] }],
+      contents: [{ role: "user", parts: [{ text: buildPlanPrompt(prompt, framework, intent) }] }],
       responseJson: true,
       temperature: 0.4,
     })
@@ -343,7 +384,26 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     const success = errors.length === 0 && changes.length > 0
 
     step("summary", success ? "success" : "error", success ? "Build complete" : "Completed with issues")
-    const summary = finalSummary?.trim() || defaultSummary(plan, created, modified)
+
+    // Capability: Summarization — a dedicated model call that explains the work
+    // in plain language (reuses the project cache; falls back to generator text).
+    let summary = finalSummary?.trim() || defaultSummary(plan, created, modified)
+    if (success && (created.length || modified.length)) {
+      try {
+        const sumRes = await generate({
+          client,
+          handle,
+          systemInstruction: SYRA_SUMMARIZER_SYSTEM,
+          contents: [{ role: "user", parts: [{ text: buildSummaryPrompt(prompt, plan, created, modified, deleted) }] }],
+          temperature: 0.5,
+        })
+        const sumText = safeText(sumRes).trim()
+        logUsage(sumRes, log)
+        if (sumText) summary = sumText
+      } catch (e: any) {
+        log(`Summary generation failed (using fallback): ${e?.message || e}`, "warn")
+      }
+    }
     emit({
       type: "result",
       success,
@@ -380,7 +440,14 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       error: message,
     }
   } finally {
-    if (client! && handle) await releaseContextCache(client, handle)
+    // Cache reset/invalidation: the run is complete, so the stable project
+    // context cache is no longer needed — delete it so nothing works from stale
+    // context next time (a new session rebuilds fresh).
+    if (client! && handle?.cached) {
+      emit({ type: "context", cached: false, state: "reset", tokens: handle.tokens, detail: "Context cache reset (session complete)." })
+      log("Context cache reset (session complete).")
+      await resetContextCache(client, handle)
+    }
   }
 }
 

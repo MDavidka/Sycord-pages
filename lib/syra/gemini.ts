@@ -249,3 +249,29 @@ export async function generate(opts: GenerateOptions): Promise<GenerateContentRe
     }),
   )
 }
+
+
+/**
+ * A no-cache handle for one-off model calls made BEFORE the project cache
+ * exists (e.g. the intent-analysis "thinking" call). Context is inlined.
+ */
+export function inlineHandle(client: AiClient, text = ""): ProjectContextHandle {
+  return { cacheName: null, cached: false, text, mode: client.mode, tokens: Math.ceil(text.length / 4) }
+}
+
+/**
+ * Reset / invalidate the project context cache.
+ *
+ * WHY: the cache stores STABLE context (structure, framework, shadcn, key
+ * config). It becomes stale when that context changes — the project structure
+ * changes, dependencies or shadcn components are added, a cached file is edited,
+ * or a new session starts. Call this to delete the remote cache so the next run
+ * rebuilds fresh context (no stale reads).
+ *
+ * Within a single generation run Syra does NOT need to reset mid-flight because
+ * volatile state (the evolving file map) is re-sent every round instead of being
+ * cached; the cache is reset (released) once the run completes.
+ */
+export async function resetContextCache(client: AiClient, handle: ProjectContextHandle): Promise<void> {
+  await releaseContextCache(client, handle)
+}

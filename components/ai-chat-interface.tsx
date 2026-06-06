@@ -36,14 +36,18 @@ import {
   Wrench,
   Circle,
   AlertTriangle,
+  Brain,
+  Lightbulb,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   SYRA_STEPS,
+  type CacheState,
   type FileChange,
   type StepStatus,
   type SyraEvent,
+  type SyraIntent,
   type SyraPlan,
   type SyraStepKey,
 } from "@/lib/syra/types"
@@ -51,6 +55,7 @@ import {
 /* Map the icon name strings emitted by the pipeline to real components. */
 const ICONS: Record<string, LucideIcon> = {
   MessageSquare,
+  Brain,
   FolderTree,
   FileSearch,
   DatabaseZap,
@@ -179,7 +184,8 @@ export default function AIChatInterface({ projectId, onBack }: { projectId: stri
   const [tools, setTools] = useState<ToolEvent[]>([])
   const [logs, setLogs] = useState<LogLine[]>([])
   const [plan, setPlan] = useState<SyraPlan | null>(null)
-  const [contextInfo, setContextInfo] = useState<{ cached: boolean; tokens?: number; detail: string } | null>(null)
+  const [intent, setIntent] = useState<SyraIntent | null>(null)
+  const [contextInfo, setContextInfo] = useState<{ cached: boolean; state: CacheState; tokens?: number; detail: string } | null>(null)
   const [files, setFiles] = useState<Record<string, FileChange>>({})
   const [result, setResult] = useState<ResultState | null>(null)
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -199,6 +205,7 @@ export default function AIChatInterface({ projectId, onBack }: { projectId: stri
     setTools([])
     setLogs([])
     setPlan(null)
+    setIntent(null)
     setContextInfo(null)
     setFiles({})
     setResult(null)
@@ -224,11 +231,14 @@ export default function AIChatInterface({ projectId, onBack }: { projectId: stri
           return [...prev, { id: evt.id, tool: evt.tool, status: evt.status, label: evt.label }].slice(-40)
         })
         break
+      case "thinking":
+        setIntent(evt.intent)
+        break
       case "plan":
         setPlan(evt.plan)
         break
       case "context":
-        setContextInfo({ cached: evt.cached, tokens: evt.tokens, detail: evt.detail })
+        setContextInfo({ cached: evt.cached, state: evt.state, tokens: evt.tokens, detail: evt.detail })
         break
       case "file":
         setFiles((prev) => ({ ...prev, [evt.change.path]: evt.change }))
@@ -387,9 +397,11 @@ export default function AIChatInterface({ projectId, onBack }: { projectId: stri
           </div>
         ) : (
           <div className="w-full max-w-3xl mx-auto py-6 space-y-4 animate-in fade-in duration-500">
-            <SummaryBar phase={phase} result={result} onReset={() => setPhase("idle")} />
+            <SummaryBar phase={phase} result={result} cache={contextInfo} onReset={() => setPhase("idle")} />
 
             <StepRail steps={steps} />
+
+            {intent && <ThinkingCard intent={intent} />}
 
             <ActivityFeed tools={tools} running={isRunning} />
 
@@ -468,7 +480,34 @@ export default function AIChatInterface({ projectId, onBack }: { projectId: stri
 /* Sub-components                                                      */
 /* ------------------------------------------------------------------ */
 
-function SummaryBar({ phase, result, onReset }: { phase: Phase; result: ResultState | null; onReset: () => void }) {
+function CacheBadge({ cache }: { cache: { cached: boolean; state: CacheState; tokens?: number } | null }) {
+  if (!cache) return null
+  const map: Record<CacheState, { label: string; cls: string }> = {
+    active: { label: `cache active${cache.tokens ? ` · ${cache.tokens} tok` : ""}`, cls: "border-emerald-400/30 text-emerald-300 bg-emerald-500/5" },
+    inlined: { label: "context inlined", cls: "border-white/10 text-zinc-400" },
+    reset: { label: "cache reset", cls: "border-amber-400/30 text-amber-300 bg-amber-500/5" },
+    none: { label: "no cache", cls: "border-white/10 text-zinc-500" },
+  }
+  const m = map[cache.state] || map.none
+  return (
+    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border inline-flex items-center gap-1", m.cls)} title="Gemini context cache status">
+      <DatabaseZap className="h-3 w-3" />
+      {m.label}
+    </span>
+  )
+}
+
+function SummaryBar({
+  phase,
+  result,
+  cache,
+  onReset,
+}: {
+  phase: Phase
+  result: ResultState | null
+  cache: { cached: boolean; state: CacheState; tokens?: number } | null
+  onReset: () => void
+}) {
   const done = phase === "done" || phase === "error"
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-zinc-900/60 backdrop-blur-xl px-4 py-3">
@@ -496,11 +535,54 @@ function SummaryBar({ phase, result, onReset }: { phase: Phase; result: ResultSt
           {result?.summary && <p className="text-xs text-zinc-500 truncate">{result.summary}</p>}
         </div>
       </div>
-      {done && (
-        <Button onClick={onReset} variant="ghost" className="h-8 px-2 text-xs text-zinc-400 hover:text-white shrink-0">
-          <RotateCcw className="h-3.5 w-3.5 mr-1" />
-          New
-        </Button>
+      <div className="flex items-center gap-2 shrink-0">
+        <CacheBadge cache={cache} />
+        {done && (
+          <Button onClick={onReset} variant="ghost" className="h-8 px-2 text-xs text-zinc-400 hover:text-white shrink-0">
+            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+            New
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ThinkingCard({ intent }: { intent: SyraIntent }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-zinc-900/40 backdrop-blur-xl p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Lightbulb className="h-4 w-4 text-amber-300" />
+        <span className="text-sm font-medium text-white">Thinking</span>
+      </div>
+      <p className="text-sm text-zinc-300">
+        Building a <span className="text-white font-medium">{intent.siteType}</span>
+        {intent.audience ? <> for <span className="text-white font-medium">{intent.audience}</span></> : null}.
+      </p>
+      {intent.notes && <p className="text-xs text-zinc-500 mt-1">{intent.notes}</p>}
+      {intent.goals.length > 0 && (
+        <ul className="mt-2 space-y-0.5">
+          {intent.goals.map((g, i) => (
+            <li key={i} className="flex gap-1.5 text-[11px] text-zinc-400">
+              <span className="text-amber-400/60 shrink-0">◆</span>
+              <span>{g}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(intent.pages.length > 0 || intent.components.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {intent.pages.map((p) => (
+            <span key={`p-${p}`} className="text-[10px] px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-300">
+              {p}
+            </span>
+          ))}
+          {intent.components.map((c) => (
+            <span key={`c-${c}`} className="text-[10px] px-2 py-0.5 rounded-md bg-white/5 text-zinc-400">
+              {c}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   )

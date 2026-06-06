@@ -1,6 +1,6 @@
 // System + planning prompts for the Syra agent.
 
-import type { ProjectFramework, SyraPlan, SyraPlanDesign, SyraPlanPage } from "./types"
+import type { ProjectFramework, SyraIntent, SyraPlan, SyraPlanDesign, SyraPlanPage } from "./types"
 import { SHADCN_COMPONENTS } from "./shadcn"
 
 const UI_LIST = SHADCN_COMPONENTS.join(", ")
@@ -70,14 +70,17 @@ CONSTRAINTS
 When you are completely finished, stop calling tools and reply with a short plain-text
 summary of what you built and the key files/routes you created.`
 
-export function buildPlanPrompt(prompt: string, fw: ProjectFramework): string {
+export function buildPlanPrompt(prompt: string, fw: ProjectFramework, intent?: SyraIntent): string {
+  const intentBlock = intent
+    ? `\nINTENT (from analysis):\n- Type: ${intent.siteType}\n- Audience: ${intent.audience}\n- Goals: ${intent.goals.join("; ") || "n/a"}\n- Suggested pages: ${intent.pages.join(", ") || "n/a"}\n- Suggested components: ${intent.components.join(", ") || "n/a"}\n- Direction: ${intent.notes || "n/a"}\n`
+    : ""
   return `You are the lead designer + architect. Produce a DETAILED design plan for a complete,
 multi-page website for this request. Think hard about how each page should LOOK, what
 SECTIONS it contains, and what real CONTENT goes in them.
 
 USER REQUEST:
 """${prompt}"""
-
+${intentBlock}
 DETECTED PROJECT:
 - Framework: ${fw.framework}
 - Router: ${fw.router}
@@ -251,4 +254,87 @@ export function parsePlan(text: string): SyraPlan {
       files: [],
     }
   }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Capability: Intent Analysis (the visible "thinking" phase)          */
+/* ------------------------------------------------------------------ */
+
+/** System role for the analyst that interprets the user's request. */
+export const SYRA_ANALYST_SYSTEM = `You are Syra's product analyst. You read a user's website request and return a
+concise, structured interpretation of intent. You do NOT write code. Be specific
+and realistic; infer sensible defaults when the request is vague.`
+
+export function buildIntentPrompt(prompt: string, fw: ProjectFramework): string {
+  return `Analyse this website request and return ONLY a JSON object (no markdown fences):
+{
+  "siteType": "what kind of site this is (e.g. 'SaaS landing', 'bakery storefront', 'portfolio')",
+  "audience": "who it is for",
+  "goals": ["primary goal", "secondary goal"],
+  "pages": ["Home", "About", "Pricing", "Contact"],
+  "components": ["Header", "Footer", "Hero", "FeatureGrid"],
+  "reuse": ["existing files/components worth reusing, from the project context"],
+  "notes": "one or two sentences of design/UX direction"
+}
+
+USER REQUEST:
+"""${prompt}"""
+
+PROJECT: ${fw.framework} (${fw.router} router, ${fw.language}, ${fw.styling}). shadcn/ui is available.
+Keep it tight: 3-6 pages, 4-10 components.`
+}
+
+export type SyraIntentParsed = SyraIntent
+
+export function parseIntent(text: string): SyraIntent {
+  let raw = (text || "").trim()
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fence) raw = fence[1].trim()
+  const start = raw.indexOf("{")
+  const end = raw.lastIndexOf("}")
+  if (start !== -1 && end !== -1) raw = raw.slice(start, end + 1)
+  try {
+    const o = JSON.parse(raw)
+    return {
+      siteType: String(o?.siteType || "website").trim(),
+      audience: String(o?.audience || "general visitors").trim(),
+      goals: asStringArray(o?.goals),
+      pages: asStringArray(o?.pages),
+      components: asStringArray(o?.components),
+      reuse: asStringArray(o?.reuse),
+      notes: String(o?.notes || "").trim(),
+    }
+  } catch {
+    return { siteType: "website", audience: "general visitors", goals: [], pages: [], components: [], reuse: [], notes: "" }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Capability: Summarization                                           */
+/* ------------------------------------------------------------------ */
+
+/** System role for the summarizer that explains the work to the user. */
+export const SYRA_SUMMARIZER_SYSTEM = `You are Syra's release-notes writer. Given the user's request and the list of
+files created/edited, write a short, friendly, plain-text summary (3-6 sentences)
+of what was built — the pages, key sections and any backend. No code, no markdown
+headings, no file dumps. Speak directly to the user ("I built …").`
+
+export function buildSummaryPrompt(
+  prompt: string,
+  plan: SyraPlan,
+  created: string[],
+  modified: string[],
+  deleted: string[],
+): string {
+  return `USER REQUEST:
+"""${prompt}"""
+
+SITE: ${plan.summary}
+PAGES BUILT: ${plan.pages.map((p) => p.title).join(", ") || created.join(", ")}
+CREATED (${created.length}): ${created.slice(0, 40).join(", ") || "none"}
+EDITED (${modified.length}): ${modified.slice(0, 40).join(", ") || "none"}
+${deleted.length ? `DELETED (${deleted.length}): ${deleted.join(", ")}` : ""}
+
+Write the summary now.`
 }

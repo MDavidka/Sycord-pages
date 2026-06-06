@@ -83,6 +83,20 @@ export interface SyraPlan {
   files: { path: string; purpose: string }[]
 }
 
+/** Structured interpretation of the user's request (the "thinking" phase). */
+export interface SyraIntent {
+  siteType: string
+  audience: string
+  goals: string[]
+  pages: string[]
+  components: string[]
+  reuse: string[]
+  notes: string
+}
+
+/** Lifecycle state of the Gemini context cache, surfaced to the UI. */
+export type CacheState = "none" | "active" | "inlined" | "reset"
+
 /**
  * Stream event emitted by the pipeline. The UI maps `step`/`tool` to an icon and
  * a spinner while running. Every event carries a monotonically increasing `id`
@@ -91,8 +105,9 @@ export interface SyraPlan {
 export type SyraEvent =
   | { type: "step"; id: number; key: SyraStepKey; status: StepStatus; label: string; detail?: string }
   | { type: "tool"; id: number; tool: string; status: StepStatus; label: string; detail?: string; args?: unknown }
+  | { type: "thinking"; id: number; intent: SyraIntent }
   | { type: "plan"; id: number; plan: SyraPlan }
-  | { type: "context"; id: number; cached: boolean; tokens?: number; detail: string }
+  | { type: "context"; id: number; cached: boolean; state: CacheState; tokens?: number; detail: string }
   | { type: "file"; id: number; change: FileChange }
   | { type: "log"; id: number; level: "info" | "warn" | "error"; message: string }
   | {
@@ -121,6 +136,7 @@ export type SyraEventInput = DistributiveOmit<SyraEvent, "id">
 
 export type SyraStepKey =
   | "prompt"
+  | "thinking"
   | "inspect"
   | "read"
   | "cache"
@@ -140,6 +156,7 @@ export interface SyraStepMeta {
 /** Canonical ordered list of pipeline steps (UI renders these with icons). */
 export const SYRA_STEPS: SyraStepMeta[] = [
   { key: "prompt", icon: "MessageSquare", title: "Understanding your prompt" },
+  { key: "thinking", icon: "Brain", title: "Thinking it through" },
   { key: "inspect", icon: "FolderTree", title: "Inspecting the codebase" },
   { key: "read", icon: "FileSearch", title: "Reading key files" },
   { key: "cache", icon: "DatabaseZap", title: "Caching project context" },
