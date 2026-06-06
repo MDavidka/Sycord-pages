@@ -176,22 +176,10 @@ export function importantFilesToRead(vfs: VirtualFs, fw: ProjectFramework): stri
   return [...new Set([...existing, ...componentFiles])]
 }
 
-/** Build the stable, reusable project context that is cached in Gemini. */
-export function buildStableContext(vfs: VirtualFs, fw: ProjectFramework, readFiles: string[]): string {
-  const tree = vfs.tree()
-  const fileBlocks = readFiles
-    .map((path) => {
-      const content = vfs.read(path)
-      if (content == null) return null
-      // Cap each file so the cache stays lean.
-      const capped = content.length > 6000 ? content.slice(0, 6000) + "\n/* …truncated… */" : content
-      return `FILE: ${path}\n\`\`\`\n${capped}\n\`\`\``
-    })
-    .filter(Boolean)
-    .join("\n\n")
-
+/** Build the static project context (framework, design system) for caching. */
+export function buildStaticContext(fw: ProjectFramework): string {
   return [
-    "# PROJECT CONTEXT (stable)",
+    "# PROJECT CONTEXT (static)",
     "",
     "## Detected stack",
     `- Framework: ${fw.framework}`,
@@ -202,8 +190,26 @@ export function buildStableContext(vfs: VirtualFs, fw: ProjectFramework, readFil
     `- Home/entry file: ${fw.entryFile}`,
     `- Components directory: ${fw.componentsDir}`,
     fw.notes.length ? `- Notes:\n${fw.notes.map((n) => `  - ${n}`).join("\n")}` : "",
-    "",
-    "## File tree",
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
+/** Build the dynamic project context (file tree, key files) for each round. */
+export function buildDynamicContext(vfs: VirtualFs, readFiles: string[]): string {
+  const tree = vfs.tree()
+  const fileBlocks = readFiles
+    .map((path) => {
+      const content = vfs.read(path)
+      if (content == null) return null
+      const capped = content.length > 6000 ? content.slice(0, 6000) + "\n/* …truncated… */" : content
+      return `FILE: ${path}\n\`\`\`\n${capped}\n\`\`\``
+    })
+    .filter(Boolean)
+    .join("\n\n")
+
+  return [
+    "## File tree (current)",
     "```",
     tree,
     "```",

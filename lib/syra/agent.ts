@@ -17,7 +17,7 @@ import {
   type AiClient,
   type ProjectContextHandle,
 } from "./gemini"
-import { buildStableContext, detectFramework, importantFilesToRead } from "./detect"
+import { buildStaticContext, buildDynamicContext, detectFramework, importantFilesToRead } from "./detect"
 import { ensureDeployable, injectDesignSystem } from "./scaffold"
 import { designSystemReference } from "./shadcn"
 import { fileMapMessage } from "./filemap"
@@ -140,18 +140,17 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
 
     // ---------- Step: cache ----------
     step("cache", "running", "Caching project context")
+    const staticContext = buildStaticContext(framework)
+    const dynamicContext = buildDynamicContext(vfs, toRead)
     const stableContext = [
-      buildStableContext(vfs, framework, toRead),
+      staticContext,
       "",
       designSystemReference(),
       "",
-      "# Current project files (exact paths, case-sensitive)",
-      "```",
-      vfs.tree(),
-      "```",
+      dynamicContext,
     ].join("\n")
-    log(`Stable context built (${stableContext.length} chars, incl. design system + file tree).`)
-    handle = await cacheProjectContext(client, stableContext)
+    log(`Static context built (${staticContext.length} chars). Dynamic context (${dynamicContext.length} chars) will be sent each round.`)
+    handle = await cacheProjectContext(client, staticContext)
     if (handle.cached) {
       emit({ type: "context", cached: true, tokens: handle.tokens, detail: `Vertex AI context cache created (${handle.tokens ?? "?"} tokens).` })
       step("cache", "success", `Context cached (${handle.tokens ?? "?"} tokens)`)
