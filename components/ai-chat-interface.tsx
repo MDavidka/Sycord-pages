@@ -130,6 +130,7 @@ function toolIconName(tool: string): string {
       return "FolderTree"
     case "read_file":
     case "read_files":
+    case "get_file_map":
       return "FileSearch"
     case "write_file":
     case "write_files":

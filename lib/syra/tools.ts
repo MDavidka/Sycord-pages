@@ -9,6 +9,7 @@
 import { Type, type FunctionDeclaration } from "@google/genai"
 import type { ProjectFramework } from "./types"
 import { detectFramework } from "./detect"
+import { buildFileMap } from "./filemap"
 import type { VirtualFs } from "./vfs"
 import { isUnsafePath } from "./vfs"
 
@@ -137,6 +138,12 @@ export const FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
     description: "Return the full project file tree as an indented string.",
     parameters: { type: OBJECT, properties: {}, required: [] },
   },
+  {
+    name: "get_file_map",
+    description:
+      "Return a compressed map of every project file with the exact symbols each one exports. Use this to know what you can import and from where (correct path + capitalization) without reading whole files.",
+    parameters: { type: OBJECT, properties: {}, required: [] },
+  },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -207,6 +214,10 @@ export async function executeTool(name: string, rawArgs: any, ctx: ToolContext):
 
     case "get_project_structure": {
       return { label: "Read project structure", data: { tree: ctx.vfs.tree(), files: ctx.vfs.list() } }
+    }
+
+    case "get_file_map": {
+      return { label: "Read file map", data: { map: buildFileMap(ctx.vfs), count: ctx.vfs.list().length } }
     }
 
     default:

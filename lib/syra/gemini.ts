@@ -1,13 +1,21 @@
 // AI client for Syra — Vertex AI via the unified @google/genai SDK.
 //
-// Generation runs on Vertex AI. Auth/runtime is resolved from env, preferring
-// Vertex AI and using the key the user provided (GOOGLE_AIAGENT_API):
+// Generation runs on Vertex AI through the GLOBAL endpoint (location "global"),
+// which spreads load across regions and greatly reduces 429 / RESOURCE_EXHAUSTED
+// errors compared with a single regional endpoint. See:
+// https://docs.cloud.google.com/gemini-enterprise-agent-platform/resources/locations#global-endpoint
+//
+// Auth/runtime is resolved from env, preferring Vertex AI and using the key the
+// user provided (GOOGLE_AIAGENT_API):
 //
 //   GOOGLE_AIAGENT_API        API key (Vertex AI express mode / Gemini Dev API)
 //   GOOGLE_AIAGENT_MODEL      model id (default: gemini-3.5-flash)
 //   GOOGLE_VERTEX_PROJECT     GCP project id  -> full Vertex AI mode (ADC)
-//   GOOGLE_VERTEX_LOCATION    region          (default: global)
+//   GOOGLE_VERTEX_LOCATION    region          (default: global -> global endpoint)
 //   GOOGLE_GENAI_USE_VERTEXAI "false" to force the Gemini Developer API
+//
+// On top of the global endpoint, every model/cache call is wrapped with
+// exponential backoff that retries transient 429/503 responses.
 //
 // The stable project context is stored in a Vertex AI context cache and reused
 // across turns; when the context is too small for caching we transparently fall
@@ -37,10 +45,49 @@ export interface AiClient {
 function readEnv() {
   const apiKey = process.env.GOOGLE_AIAGENT_API || process.env.GOOGLE_AIAGENT_API_KEY || ""
   const project = process.env.GOOGLE_VERTEX_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ""
+  // Default to the GLOBAL endpoint to avoid regional 429 / quota errors.
   const location =
     process.env.GOOGLE_VERTEX_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || "global"
   const useVertex = (process.env.GOOGLE_GENAI_USE_VERTEXAI ?? "true").toLowerCase() !== "false"
   return { apiKey, project, location, useVertex }
+}
+
+/** True for transient errors worth retrying (rate limit / unavailable). */
+function isRetryable(err: any): boolean {
+  const code = err?.status ?? err?.code ?? err?.response?.status
+  if (code === 429 || code === 503 || code === 500) return true
+  const msg = String(err?.message || err || "").toLowerCase()
+  return (
+    msg.includes("429") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("resource exhausted") ||
+    msg.includes("rate limit") ||
+    msg.includes("quota") ||
+    msg.includes("unavailable") ||
+    msg.includes("overloaded") ||
+    msg.includes("503")
+  )
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Run `fn`, retrying transient 429/503 errors with exponential backoff + jitter.
+ * The global endpoint already reduces these; this handles the residual spikes.
+ */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  let lastErr: any
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      if (i === attempts - 1 || !isRetryable(err)) break
+      const backoff = Math.min(1000 * 2 ** i, 16000) + Math.floor(Math.random() * 500)
+      await sleep(backoff)
+    }
+  }
+  throw lastErr
 }
 
 /**
@@ -122,16 +169,18 @@ export async function cacheProjectContext(
   }
 
   try {
-    const cache = await client.ai.caches.create({
-      model: modelPath(client.model),
-      config: {
-        displayName: "syra-project-context",
-        systemInstruction:
-          "You are Syra's project memory. The following is stable context about the user's codebase.",
-        contents: [{ role: "user", parts: [{ text: stableContext }] }],
-        ttl: "1800s",
-      },
-    })
+    const cache = await withRetry(() =>
+      client.ai.caches.create({
+        model: modelPath(client.model),
+        config: {
+          displayName: "syra-project-context",
+          systemInstruction:
+            "You are Syra's project memory. The following is stable context about the user's codebase.",
+          contents: [{ role: "user", parts: [{ text: stableContext }] }],
+          ttl: "1800s",
+        },
+      }),
+    )
     handle.cacheName = cache?.name ?? null
     handle.cached = !!cache?.name
     const total = (cache as any)?.usageMetadata?.totalTokenCount
@@ -192,9 +241,11 @@ export async function generate(opts: GenerateOptions): Promise<GenerateContentRe
   }
   if (responseJson) config.responseMimeType = "application/json"
 
-  return client.ai.models.generateContent({
-    model: client.model,
-    contents,
-    config,
-  })
+  return withRetry(() =>
+    client.ai.models.generateContent({
+      model: client.model,
+      contents,
+      config,
+    }),
+  )
 }

@@ -17,6 +17,7 @@ HOW YOU WORK
   that exist in that list, using their EXACT path and capitalization. Never invent paths.
 - Use read_file / read_files to re-read any file you previously wrote when you need its
   exact exports or content for more context before importing or editing it.
+- Call get_file_map any time to see every file and the exact symbols it exports.
 - Favor write_files to emit MANY complete files in a single call. Always write the
   ENTIRE file content — no placeholders, no "// TODO", no truncation, no "...".
 - Keep imports valid and consistent across every file you write.

@@ -20,6 +20,7 @@ import {
 import { buildStableContext, detectFramework, importantFilesToRead } from "./detect"
 import { ensureDeployable, injectDesignSystem } from "./scaffold"
 import { designSystemReference } from "./shadcn"
+import { fileMapMessage } from "./filemap"
 import { SYRA_SYSTEM, buildGeneratePrompt, buildPlanPrompt, parsePlan } from "./prompts"
 import { FUNCTION_DECLARATIONS, executeTool, type ToolContext } from "./tools"
 import { validateFiles, type ValidationIssue } from "./validate"
@@ -356,12 +357,8 @@ async function runToolLoop(args: {
 }): Promise<string> {
   const { client, handle, ctx, emit, log, aborted } = args
   const maxRounds = args.maxRounds ?? MAX_TOOL_ROUNDS
-  const fileList = () => {
-    const files = ctx.vfs.list()
-    return `Current project files (${files.length}) — import using these EXACT paths (case-sensitive):\n${files.join("\n")}`
-  }
   const contents: Content[] = [
-    { role: "user", parts: [{ text: `${args.firstUserMessage}\n\n${fileList()}` }] },
+    { role: "user", parts: [{ text: `${args.firstUserMessage}\n\n${fileMapMessage(ctx.vfs)}` }] },
   ]
   let finalText = ""
 
@@ -408,9 +405,9 @@ async function runToolLoop(args: {
         responseParts.push({ functionResponse: { name, response: { error: msg } } })
       }
     }
-    // Re-send the live file structure every round so the model never guesses a
-    // path or capitalization — it always sees the exact current filenames.
-    responseParts.push({ text: fileList() })
+    // Re-send the live file map every round so the model never guesses a path,
+    // capitalization or export name — it always sees the exact current files.
+    responseParts.push({ text: fileMapMessage(ctx.vfs) })
     contents.push({ role: "user", parts: responseParts })
   }
 
