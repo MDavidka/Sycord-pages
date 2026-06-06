@@ -109,14 +109,26 @@ interface ResultState {
 
 const STATUS_RING: Record<StepStatus, string> = {
   pending: "border-white/10 text-zinc-600",
-  running: "border-blue-400/60 text-blue-300 bg-blue-500/10",
+  running: "border-sky-400/60 text-sky-300 bg-sky-500/10",
   success: "border-emerald-400/50 text-emerald-300 bg-emerald-500/10",
   error: "border-red-400/50 text-red-300 bg-red-500/10",
   skipped: "border-white/10 text-zinc-600",
 }
 
+/* Right-to-left glow sweep + icon pulse for the active step. */
+const SYRA_KEYFRAMES = `
+@keyframes syra-sweep {
+  0% { transform: translateX(140%); }
+  100% { transform: translateX(-140%); }
+}
+@keyframes syra-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.0); }
+  50% { box-shadow: 0 0 22px -2px rgba(56,189,248,0.75); }
+}
+`
+
 function StatusDot({ status }: { status: StepStatus }) {
-  if (status === "running") return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-300" />
+  if (status === "running") return <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-300" />
   if (status === "success") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
   if (status === "error") return <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
   if (status === "skipped") return <Circle className="h-3.5 w-3.5 text-zinc-600" />
@@ -316,13 +328,44 @@ export default function AIChatInterface({ projectId }: { projectId: string }) {
   const selected = selectedFile ? files[selectedFile] : null
 
   const showWorkspace = phase !== "idle"
+  const avatarUrl = session?.user?.image || ""
+  const initial = (session?.user?.name || "A").trim().charAt(0).toUpperCase()
 
   return (
-    <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative">
-      <div className="absolute top-1/4 left-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-64 sm:w-96 h-64 sm:h-96 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="flex flex-col h-full bg-transparent text-zinc-100 font-sans relative overflow-hidden">
+      {/* Top blue gradient */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-sky-500/30 via-blue-900/10 to-transparent"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 h-64 w-[40rem] rounded-full bg-cyan-400/20 blur-3xl"
+      />
 
-      <div className="flex-1 flex flex-col items-center px-3 sm:px-4 overflow-y-auto custom-scrollbar w-full">
+      {/* Animations for the glowing right-to-left step sweep */}
+      <style>{SYRA_KEYFRAMES}</style>
+
+      {/* Header: Syra title + account profile (no back/spacing bar) */}
+      <header className="relative z-10 shrink-0 flex items-center justify-center px-4 pt-6 pb-3">
+        <h1 className="text-2xl font-bold tracking-tight text-white drop-shadow-sm">Syra</h1>
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt={session?.user?.name || "Account"}
+              className="h-9 w-9 rounded-full object-cover ring-2 ring-white/15"
+            />
+          ) : (
+            <div className="h-9 w-9 rounded-full grid place-items-center bg-gradient-to-br from-sky-500 to-blue-700 text-sm font-semibold text-white ring-2 ring-white/15">
+              {initial}
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="relative z-10 flex-1 flex flex-col items-center px-3 sm:px-4 overflow-y-auto custom-scrollbar w-full">
         {!showWorkspace ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-16 animate-in fade-in slide-in-from-bottom-8 duration-700">
             <div className="space-y-1">
@@ -359,15 +402,15 @@ export default function AIChatInterface({ projectId }: { projectId: string }) {
         )}
       </div>
 
-      {/* Prompt input */}
-      <div className="w-full pb-8 sm:pb-12 shrink-0">
+      {/* Frosted-glass prompt input */}
+      <div className="relative z-10 w-full pb-8 sm:pb-12 shrink-0">
         <div className="w-full max-w-2xl mx-auto px-3 sm:px-4">
           <div className="relative group">
-            <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-zinc-700/50 via-zinc-600/30 to-zinc-700/50 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300" />
-            <div className="relative flex items-end gap-2 bg-zinc-900/80 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-2 shadow-2xl">
+            <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-sky-400/30 via-cyan-300/20 to-blue-500/30 opacity-0 group-focus-within:opacity-100 blur-sm transition-opacity duration-300" />
+            <div className="relative flex items-end gap-2 bg-white/[0.06] backdrop-blur-2xl border border-white/15 rounded-2xl p-2 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-white/5">
               <textarea
                 placeholder="Describe the website you want to build..."
-                className="flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder-zinc-500 outline-none px-3 py-2 min-h-[40px] max-h-32"
+                className="flex-1 resize-none bg-transparent text-sm text-zinc-100 placeholder-zinc-400 outline-none px-3 py-2 min-h-[40px] max-h-32"
                 rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -393,7 +436,9 @@ export default function AIChatInterface({ projectId }: { projectId: string }) {
                     onClick={handleSend}
                     className={cn(
                       "h-8 w-8 sm:h-9 sm:w-9 transition-all active:scale-95 shrink-0 shadow-none rounded-lg p-0",
-                      input.trim() ? "bg-white text-black hover:bg-zinc-200" : "bg-zinc-800/50 text-zinc-700",
+                      input.trim()
+                        ? "bg-gradient-to-br from-sky-400 to-blue-600 text-white hover:opacity-90"
+                        : "bg-white/10 text-zinc-500",
                     )}
                     disabled={!input.trim()}
                   >
@@ -403,10 +448,6 @@ export default function AIChatInterface({ projectId }: { projectId: string }) {
               </div>
             </div>
           </div>
-          <p className="text-center text-[10px] text-zinc-600 mt-2">
-            Syra inspects your project, plans, then generates a multi-page Next.js app with shadcn/ui
-            components and real backend routes. Runs on Vertex AI (gemini-3.5-flash).
-          </p>
         </div>
       </div>
     </div>
@@ -462,16 +503,33 @@ function StepRail({ steps }: { steps: Record<string, StepState> }) {
         {SYRA_STEPS.map((meta, i) => {
           const state = steps[meta.key] || { status: "pending" as StepStatus }
           const isLast = i === SYRA_STEPS.length - 1
+          const running = state.status === "running"
           return (
-            <div key={meta.key} className="flex items-stretch gap-3">
-              <div className="flex flex-col items-center">
+            <div
+              key={meta.key}
+              className={cn(
+                "relative flex items-stretch gap-3 rounded-lg overflow-hidden transition-colors",
+                running && "bg-sky-500/[0.06]",
+              )}
+            >
+              {/* glowing right-to-left sweep while this step is active */}
+              {running && (
+                <div className="pointer-events-none absolute inset-0">
+                  <div
+                    className="absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-l from-transparent via-sky-400/30 to-transparent"
+                    style={{ animation: "syra-sweep 1.8s linear infinite" }}
+                  />
+                </div>
+              )}
+              <div className="relative z-10 flex flex-col items-center">
                 <div
                   className={cn(
                     "h-9 w-9 rounded-lg border grid place-items-center transition-colors duration-300",
                     STATUS_RING[state.status],
                   )}
+                  style={running ? { animation: "syra-pulse 1.7s ease-in-out infinite" } : undefined}
                 >
-                  {state.status === "running" ? (
+                  {running ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Icon name={meta.icon} className="h-4 w-4" />
@@ -486,12 +544,12 @@ function StepRail({ steps }: { steps: Record<string, StepState> }) {
                   />
                 )}
               </div>
-              <div className={cn("flex-1 pb-3 pt-1.5", isLast && "pb-1")}>
+              <div className={cn("relative z-10 flex-1 pb-3 pt-1.5 pr-2", isLast && "pb-1")}>
                 <div className="flex items-center gap-2">
                   <p
                     className={cn(
                       "text-sm font-medium",
-                      state.status === "pending" ? "text-zinc-500" : "text-white",
+                      state.status === "pending" ? "text-zinc-500" : running ? "text-sky-100" : "text-white",
                       state.status === "skipped" && "text-zinc-600 line-through",
                     )}
                   >
