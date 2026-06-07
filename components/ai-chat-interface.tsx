@@ -96,6 +96,8 @@ interface LogLine {
   level: "info" | "warn" | "error"
   message: string
   ts: number
+  /** True when this line is the model's reasoning ("thinking"). */
+  thought?: boolean
 }
 
 interface ResultState {
@@ -236,6 +238,11 @@ export default function AIChatInterface({ projectId, onBack }: { projectId: stri
         break
       case "log":
         setLogs((prev) => [...prev, { id: evt.id, level: evt.level, message: evt.message, ts: Date.now() }].slice(-400))
+        break
+      case "thought":
+        setLogs((prev) =>
+          [...prev, { id: evt.id, level: "info" as const, message: evt.text, ts: Date.now(), thought: true }].slice(-400),
+        )
         break
       case "result":
         setResult({
@@ -882,10 +889,16 @@ function DebugConsole({
                 <span
                   className={cn(
                     "whitespace-pre-wrap break-words",
-                    l.level === "error" ? "text-red-300" : l.level === "warn" ? "text-amber-300" : "text-zinc-400",
+                    l.thought
+                      ? "text-indigo-300/90 italic"
+                      : l.level === "error"
+                        ? "text-red-300"
+                        : l.level === "warn"
+                          ? "text-amber-300"
+                          : "text-zinc-400",
                   )}
                 >
-                  {l.message}
+                  {l.thought ? `🧠 ${l.message}` : l.message}
                 </span>
               </div>
             ))

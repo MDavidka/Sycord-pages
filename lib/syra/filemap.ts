@@ -53,8 +53,10 @@ export function buildFileMap(vfs: VirtualFs): string {
 export function fileMapMessage(vfs: VirtualFs): string {
   const files = vfs.list()
   return [
-    `Current project files (${files.length}). Import ONLY these, using the EXACT path and`,
-    "capitalization shown, and only the exact exported symbols listed:",
+    `Current project files (${files.length}). This list is for IMPORT RESOLUTION only — it`,
+    "tells you what already exists so your imports use the EXACT path, capitalization and",
+    "exported symbols shown. It is NOT a limit on what you can build: create any new files",
+    "or folders the design needs. Only import a file from this list (or one you just created).",
     buildFileMap(vfs),
   ].join("\n")
 }
