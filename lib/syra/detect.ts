@@ -176,9 +176,17 @@ export function importantFilesToRead(vfs: VirtualFs, fw: ProjectFramework): stri
   return [...new Set([...existing, ...componentFiles])]
 }
 
-/** Build the stable, reusable project context that is cached in Gemini. */
+/**
+ * Build the stable, reusable project context that is cached in Gemini.
+ *
+ * IMPORTANT: this is REFERENCE context only — the detected stack plus a few key
+ * file contents. It deliberately does NOT include the project file tree: the
+ * tree changes constantly as Syra creates files, and baking a snapshot of it
+ * into the (reused) cache would "freeze" the old structure and push the model to
+ * keep reusing it. The authoritative, current file list is sent live on every
+ * turn via the file map instead.
+ */
 export function buildStableContext(vfs: VirtualFs, fw: ProjectFramework, readFiles: string[]): string {
-  const tree = vfs.tree()
   const fileBlocks = readFiles
     .map((path) => {
       const content = vfs.read(path)
@@ -191,7 +199,7 @@ export function buildStableContext(vfs: VirtualFs, fw: ProjectFramework, readFil
     .join("\n\n")
 
   return [
-    "# PROJECT CONTEXT (stable)",
+    "# PROJECT CONTEXT (stable reference — not a structural constraint)",
     "",
     "## Detected stack",
     `- Framework: ${fw.framework}`,
@@ -203,12 +211,13 @@ export function buildStableContext(vfs: VirtualFs, fw: ProjectFramework, readFil
     `- Components directory: ${fw.componentsDir}`,
     fw.notes.length ? `- Notes:\n${fw.notes.map((n) => `  - ${n}`).join("\n")}` : "",
     "",
-    "## File tree",
-    "```",
-    tree,
-    "```",
+    "## How to use this context",
+    "- Treat the above as background about the existing stack only.",
+    "- You are free to design and create ANY file/folder structure the site needs.",
+    "- The exact, current list of project files is provided fresh on every turn — use",
+    "  that (not this cached snapshot) to decide what already exists and what to import.",
     "",
-    fileBlocks ? "## Key files\n\n" + fileBlocks : "## Key files\n(none read)",
+    fileBlocks ? "## Key existing files (for reference)\n\n" + fileBlocks : "## Key existing files\n(none read)",
   ]
     .filter(Boolean)
     .join("\n")

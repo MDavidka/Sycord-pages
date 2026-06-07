@@ -11,9 +11,12 @@
 import type { Content, Part } from "@google/genai"
 import {
   cacheProjectContext,
+  extractThoughts,
   generate,
   getAiClient,
+  newSessionId,
   releaseContextCache,
+  sweepExpiredContextCaches,
   type AiClient,
   type ProjectContextHandle,
 } from "./gemini"
@@ -60,8 +63,17 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     emit({ type: "log", level, message })
   const step = (key: SyraStepKey, status: StepStatus, label: string, detail?: string) =>
     emit({ type: "step", key, status, label, detail })
+  // Stream the model's reasoning ("thinking") to the UI as it builds.
+  const thought = (text: string) => {
+    const t = (text || "").trim()
+    if (t) emit({ type: "thought", text: t })
+  }
 
   const aborted = () => signal?.aborted
+
+  // Unique id for this run — used to name (and later delete) its context cache so
+  // the cache is rotated per session and never forces a prior run's structure.
+  const sessionId = newSessionId()
 
   const vfs = new VirtualFs(initialFiles)
   let client: AiClient
@@ -72,7 +84,11 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
     step("prompt", "running", "Understanding your prompt")
     log(`Received prompt (${prompt.length} chars).`)
     client = getAiClient()
-    log(`AI runtime: ${client.mode} · model ${client.model}.`)
+    log(`AI runtime: ${client.mode} · model ${client.model} · session ${sessionId}.`)
+    // Best-effort: clear any leaked/expired Syra caches from crashed runs.
+    void sweepExpiredContextCaches(client)
+      .then((n) => n && log(`Swept ${n} expired context cache(s).`))
+      .catch(() => {})
     step("prompt", "success", "Prompt understood", prompt.slice(0, 140))
 
     // ---------- Step: inspect ----------
@@ -140,18 +156,16 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
 
     // ---------- Step: cache ----------
     step("cache", "running", "Caching project context")
+    // Stable REFERENCE context only (stack + key files + design system). The
+    // current file structure is intentionally NOT baked in here — it is streamed
+    // live on every turn via the file map so the cache never freezes a layout.
     const stableContext = [
       buildStableContext(vfs, framework, toRead),
       "",
       designSystemReference(),
-      "",
-      "# Current project files (exact paths, case-sensitive)",
-      "```",
-      vfs.tree(),
-      "```",
     ].join("\n")
-    log(`Stable context built (${stableContext.length} chars, incl. design system + file tree).`)
-    handle = await cacheProjectContext(client, stableContext)
+    log(`Stable context built (${stableContext.length} chars, stack + key files + design system; file list streamed live).`)
+    handle = await cacheProjectContext(client, stableContext, sessionId)
     if (handle.cached) {
       emit({ type: "context", cached: true, tokens: handle.tokens, detail: `Vertex AI context cache created (${handle.tokens ?? "?"} tokens).` })
       step("cache", "success", `Context cached (${handle.tokens ?? "?"} tokens)`)
@@ -166,7 +180,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
 
     // ---------- Step: plan ----------
     step("plan", "running", "Planning the build")
-    emit({ type: "tool", tool: "log_action", status: "running", label: "Generating plan" })
+    emit({ type: "tool", tool: "log_action", status: "running", label: "Thinking through the architecture" })
     const planRes = await generate({
       client,
       handle,
@@ -174,7 +188,10 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       contents: [{ role: "user", parts: [{ text: buildPlanPrompt(prompt, framework) }] }],
       responseJson: true,
       temperature: 0.4,
+      // Let the model reason about structure + design before committing to a plan.
+      thinking: { budget: -1, includeThoughts: true },
     })
+    thought(extractThoughts(planRes))
     const planText = safeText(planRes)
     logUsage(planRes, log)
     const plan: SyraPlan = parsePlan(planText)
@@ -228,6 +245,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
       ctx,
       emit,
       log,
+      thought,
       aborted,
       firstUserMessage: buildGeneratePrompt(prompt, plan, framework),
       forceFirstTool: true,
@@ -246,6 +264,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
         ctx,
         emit,
         log,
+        thought,
         aborted,
         firstUserMessage: buildForceGenerateMessage(prompt, plan, framework),
         forceFirstTool: true,
@@ -302,6 +321,7 @@ export async function runSyra(opts: RunOptions): Promise<RunResult> {
         ctx,
         emit,
         log,
+        thought,
         aborted,
         firstUserMessage: buildRepairMessage(errors),
         maxRounds: 10,
@@ -394,12 +414,13 @@ async function runToolLoop(args: {
   ctx: ToolContext
   emit: (e: SyraEventInput) => void
   log: (m: string, level?: "info" | "warn" | "error") => void
+  thought: (text: string) => void
   aborted: () => boolean | undefined
   firstUserMessage: string
   maxRounds?: number
   forceFirstTool?: boolean
 }): Promise<string> {
-  const { client, handle, ctx, emit, log, aborted } = args
+  const { client, handle, ctx, emit, log, thought, aborted } = args
   const maxRounds = args.maxRounds ?? MAX_TOOL_ROUNDS
   const contents: Content[] = [
     { role: "user", parts: [{ text: `${args.firstUserMessage}\n\n${fileMapMessage(ctx.vfs)}` }] },
@@ -417,10 +438,15 @@ async function runToolLoop(args: {
       tools: FUNCTION_DECLARATIONS,
       temperature: 0.75,
       maxOutputTokens: 32768,
-      // Force a tool call on the first round so the model starts building
-      // immediately instead of replying with prose and producing no files.
+      // Make the builder a real thinker: reason before each round of tool calls.
+      thinking: { budget: -1, includeThoughts: true },
+      // Encourage (not hard-force) a tool call on the very first round so the
+      // model starts building. After that it is AUTO, so it is free to stop,
+      // change approach, or recover from an error rather than being forced into
+      // a call that would just repeat a mistake.
       forceTool: !!args.forceFirstTool && round === 0,
     })
+    thought(extractThoughts(res))
     logUsage(res, log)
 
     const modelContent = res.candidates?.[0]?.content
@@ -436,6 +462,7 @@ async function runToolLoop(args: {
     if (!calls.length) break
 
     const responseParts: Part[] = []
+    let hadError = false
     for (const call of calls) {
       const name = call.name || "unknown"
       const argSummary = summarizeArgs(name, call.args)
@@ -446,6 +473,7 @@ async function runToolLoop(args: {
         log(`${iconForTool(name)} ${name} → ${result.label}`)
         responseParts.push({ functionResponse: { name, response: asObject(result.data) } })
       } catch (e: any) {
+        hadError = true
         const msg = e?.message || "tool error"
         emit({ type: "tool", tool: name, status: "error", label: `${name} failed: ${msg}` })
         log(`${name} failed: ${msg}`, "error")
@@ -455,6 +483,17 @@ async function runToolLoop(args: {
     // Re-send the live file map every round so the model never guesses a path,
     // capitalization or export name — it always sees the exact current files.
     responseParts.push({ text: fileMapMessage(ctx.vfs) })
+    // On a tool error, coach the model to adapt instead of repeating the failing
+    // call — we never force it to keep using an approach that errors.
+    if (hadError) {
+      responseParts.push({
+        text:
+          "One or more tool calls failed (see the error fields above). Do NOT repeat the exact same call. " +
+          "Adapt: e.g. if edit_file failed because old_text didn't match, read_file first or just write_file the whole file; " +
+          "if an import was wrong, fix the path/casing using the file list above or create the missing file. " +
+          "You have a sandbox — you may create any new files/folders you need.",
+      })
+    }
     contents.push({ role: "user", parts: responseParts })
   }
 

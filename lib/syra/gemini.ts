@@ -17,9 +17,10 @@
 // On top of the global endpoint, every model/cache call is wrapped with
 // exponential backoff that retries transient 429/503 responses.
 //
-// The stable project context is stored in a Vertex AI context cache and reused
-// across turns; when the context is too small for caching we transparently fall
-// back to inlining it in the system instruction.
+// The stable project context is stored in a SESSION-SCOPED Vertex AI context
+// cache (unique name + short TTL, deleted when the run ends) and reused across
+// turns within that one run; when the context is too small for caching we
+// transparently fall back to inlining it in the system instruction.
 
 import {
   GoogleGenAI,
@@ -28,11 +29,25 @@ import {
   type FunctionDeclaration,
   type GenerateContentConfig,
   type GenerateContentResponse,
+  type Part,
+  type ThinkingConfig,
 } from "@google/genai"
 
 // Syra generation runs strictly on the "gemini-3.5-flash" model unless an
 // explicit override is provided via GOOGLE_AIAGENT_MODEL.
 export const GEMINI_MODEL = process.env.GOOGLE_AIAGENT_MODEL || "gemini-3.5-flash"
+
+// Context caches are SESSION-SCOPED. Every run gets its own uniquely named cache
+// with a short TTL, and the cache is always deleted when the run ends (see
+// releaseContextCache). This guarantees the cache is rotated per session and can
+// never "freeze" a previous run's file structure onto a new generation.
+const CONTEXT_CACHE_PREFIX = "syra-ctx"
+const CONTEXT_CACHE_TTL_SECONDS = Number(process.env.SYRA_CACHE_TTL_SECONDS) || 900
+
+/** Generate a unique id for a single Syra session (used to name its cache). */
+export function newSessionId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
 
 export type AiMode = "vertex" | "vertex-express" | "developer"
 
@@ -136,6 +151,8 @@ export interface ProjectContextHandle {
   text: string
   /** How the AI client is running, surfaced to the debug UI. */
   mode: AiMode
+  /** Unique id of the session this cache belongs to (used for rotation). */
+  sessionId: string
 }
 
 function modelPath(model: string): string {
@@ -146,16 +163,23 @@ function modelPath(model: string): string {
  * Best-effort: store the stable project context in a Vertex AI context cache.
  * Never throws — if caching is unavailable (small context, express mode limits,
  * etc.) we inline the context instead and report `cached: false`.
+ *
+ * The cache is SESSION-SCOPED: it is named with the run's unique `sessionId` and
+ * given a short TTL, so each session gets a fresh cache that is deleted when the
+ * run finishes (see releaseContextCache). This prevents a previous run's cached
+ * file structure from being forced onto a later generation.
  */
 export async function cacheProjectContext(
   client: AiClient,
   stableContext: string,
+  sessionId: string,
 ): Promise<ProjectContextHandle> {
   const handle: ProjectContextHandle = {
     cacheName: null,
     cached: false,
     text: stableContext,
     mode: client.mode,
+    sessionId,
     tokens: Math.ceil(stableContext.length / 4),
   }
 
@@ -173,11 +197,11 @@ export async function cacheProjectContext(
       client.ai.caches.create({
         model: modelPath(client.model),
         config: {
-          displayName: "syra-project-context",
+          displayName: `${CONTEXT_CACHE_PREFIX}-${sessionId}`,
           systemInstruction:
-            "You are Syra's project memory. The following is stable context about the user's codebase.",
+            "You are Syra's project memory. The following is stable reference context about the user's existing codebase (detected stack + key files). It is reference only — it does NOT restrict which files Syra may create; the live, authoritative file list is supplied on every turn.",
           contents: [{ role: "user", parts: [{ text: stableContext }] }],
-          ttl: "1800s",
+          ttl: `${CONTEXT_CACHE_TTL_SECONDS}s`,
         },
       }),
     )
@@ -200,6 +224,36 @@ export async function releaseContextCache(client: AiClient, handle: ProjectConte
   }
 }
 
+/**
+ * Best-effort cleanup of leaked Syra context caches that have already expired
+ * but were never explicitly deleted (e.g. a crashed run). Only deletes caches
+ * whose expiry is in the past, so concurrent live sessions are never affected.
+ * Never throws.
+ */
+export async function sweepExpiredContextCaches(client: AiClient): Promise<number> {
+  let deleted = 0
+  try {
+    const pager = await client.ai.caches.list({ config: { pageSize: 100 } })
+    for await (const cache of pager as any) {
+      const displayName: string = (cache as any)?.displayName || ""
+      const name: string | undefined = (cache as any)?.name
+      if (!name || !displayName.startsWith(CONTEXT_CACHE_PREFIX)) continue
+      const expireRaw = (cache as any)?.expireTime
+      const expired = expireRaw ? new Date(expireRaw).getTime() < Date.now() : false
+      if (!expired) continue
+      try {
+        await client.ai.caches.delete({ name })
+        deleted++
+      } catch {
+        /* ignore individual failures */
+      }
+    }
+  } catch {
+    // Listing unsupported (e.g. express mode) — rely on TTL + per-session delete.
+  }
+  return deleted
+}
+
 export interface GenerateOptions {
   client: AiClient
   handle: ProjectContextHandle
@@ -212,6 +266,26 @@ export interface GenerateOptions {
   responseJson?: boolean
   /** Upper bound on output tokens — raised high so the model can emit huge files. */
   maxOutputTokens?: number
+  /**
+   * Enable model reasoning ("thinking"). When set, the model is given a thinking
+   * budget and its thought summaries are returned as `thought` parts so the
+   * pipeline can stream them. Pass `{ budget: -1 }` for a dynamic budget.
+   */
+  thinking?: { budget?: number; includeThoughts?: boolean }
+}
+
+/** Pull the model's reasoning ("thought") summary text out of a response. */
+export function extractThoughts(res: GenerateContentResponse): string {
+  try {
+    const parts: Part[] = res?.candidates?.[0]?.content?.parts ?? []
+    return parts
+      .filter((p: any) => p?.thought && typeof p?.text === "string")
+      .map((p: any) => p.text as string)
+      .join("\n")
+      .trim()
+  } catch {
+    return ""
+  }
 }
 
 /**
@@ -219,14 +293,32 @@ export interface GenerateOptions {
  * folds the stable context into the system instruction.
  */
 export async function generate(opts: GenerateOptions): Promise<GenerateContentResponse> {
-  const { client, handle, systemInstruction, contents, tools, forceTool, temperature, responseJson, maxOutputTokens } =
-    opts
+  const {
+    client,
+    handle,
+    systemInstruction,
+    contents,
+    tools,
+    forceTool,
+    temperature,
+    responseJson,
+    maxOutputTokens,
+    thinking,
+  } = opts
 
   const config: GenerateContentConfig = {
     temperature: temperature ?? 0.7,
     maxOutputTokens: maxOutputTokens ?? 32768,
     // System instruction: inline the context only when it isn't cached.
     systemInstruction: handle.cached ? systemInstruction : `${systemInstruction}\n\n${handle.text}`,
+  }
+
+  if (thinking) {
+    const thinkingConfig: ThinkingConfig = {
+      includeThoughts: thinking.includeThoughts ?? true,
+    }
+    if (typeof thinking.budget === "number") thinkingConfig.thinkingBudget = thinking.budget
+    config.thinkingConfig = thinkingConfig
   }
 
   if (handle.cached && handle.cacheName) config.cachedContent = handle.cacheName

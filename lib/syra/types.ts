@@ -95,6 +95,7 @@ export type SyraEvent =
   | { type: "context"; id: number; cached: boolean; tokens?: number; detail: string }
   | { type: "file"; id: number; change: FileChange }
   | { type: "log"; id: number; level: "info" | "warn" | "error"; message: string }
+  | { type: "thought"; id: number; text: string }
   | {
       type: "result"
       id: number
