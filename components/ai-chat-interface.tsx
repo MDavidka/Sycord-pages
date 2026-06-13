@@ -665,6 +665,12 @@ function PlanCard({ plan, context }: { plan: SyraPlan; context: { cached: boolea
                 <dd className="text-zinc-300">{plan.design.layout}</dd>
               </div>
             )}
+            {plan.design.signature && (
+              <div className="flex gap-1.5 sm:col-span-2">
+                <dt className="text-zinc-500 shrink-0">Signature:</dt>
+                <dd className="text-zinc-300">{plan.design.signature}</dd>
+              </div>
+            )}
           </dl>
         </div>
       )}

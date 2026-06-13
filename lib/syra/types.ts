@@ -54,6 +54,8 @@ export interface SyraPlanDesign {
   typography: string
   /** Layout/navigation approach, e.g. "sticky top nav + spacious sections". */
   layout: string
+  /** The single memorable detail/element the site is built around (optional). */
+  signature?: string
 }
 
 /** A page in the plan with its concrete design + content breakdown. */
