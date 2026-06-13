@@ -25,7 +25,7 @@ function CanvasDropZone({ index, dndActive }: { index: number; dndActive: boolea
           isOver ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="h-1 w-full bg-primary rounded-full shadow-[0_0_10px_1px_rgba(255,255,255,0.4)]" />
+        <div className="h-1 w-full bg-white rounded-full shadow-[0_0_10px_1px_rgba(255,255,255,0.5)]" />
       </div>
     </div>
   )
@@ -56,8 +56,9 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
         <div
           ref={setEndRef}
           className={`w-full max-w-[880px] rounded-2xl border-2 border-dashed transition-colors ${
-            endOver ? "border-primary bg-accent" : "border-border"
+            endOver ? "border-white/70 bg-white/5" : "border-border"
           }`}
+          style={{ backgroundColor: endOver ? undefined : "#101010" }}
         >
           <CanvasEmpty />
         </div>
@@ -85,7 +86,7 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
         </div>
       ))}
       {/* End drop area when dragging */}
-      <div ref={setEndRef} className={`transition-all ${dndActive ? (endOver ? "bg-primary/10 h-10" : "h-6") : "h-0"}`} />
+      <div ref={setEndRef} className={`transition-all ${dndActive ? (endOver ? "bg-white/10 h-10" : "h-6") : "h-0"}`} />
     </div>
   )
 

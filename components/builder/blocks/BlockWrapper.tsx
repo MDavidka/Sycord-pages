@@ -60,8 +60,8 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
         isRevealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
       } ${
         isSelected
-          ? "outline outline-2 outline-primary -outline-offset-2 rounded-sm animate-select-pulse"
-          : "hover:outline hover:outline-1 hover:outline-primary/30 hover:-outline-offset-1"
+          ? "outline outline-2 outline-white/80 -outline-offset-2 rounded-sm animate-select-pulse"
+          : "hover:outline hover:outline-1 hover:outline-white/25 hover:-outline-offset-1"
       }`}
       role="button"
       aria-label={`${block.type} block${isSelected ? ", selected" : ""}`}
@@ -76,7 +76,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
       style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
     >
       <span
-        className={`absolute top-1.5 left-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground bg-primary px-1.5 py-0.5 rounded-md transition-opacity z-10 ${
+        className={`absolute top-1.5 left-1.5 text-[10px] font-semibold uppercase tracking-wider text-black bg-white px-1.5 py-0.5 rounded-md transition-opacity z-10 ${
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
@@ -94,7 +94,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
               e.stopPropagation()
               moveBlock(index, index - 1)
             }}
-            className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="w-6 h-6 rounded-md bg-black/55 backdrop-blur-sm flex items-center justify-center text-white/75 hover:text-white hover:bg-black/70 transition-colors"
             title="Move up"
             aria-label={`Move ${block.type} block up`}
           >
@@ -107,7 +107,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
               e.stopPropagation()
               moveBlock(index, index + 1)
             }}
-            className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="w-6 h-6 rounded-md bg-black/55 backdrop-blur-sm flex items-center justify-center text-white/75 hover:text-white hover:bg-black/70 transition-colors"
             title="Move down"
             aria-label={`Move ${block.type} block down`}
           >
@@ -141,7 +141,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
               duration: 3000,
             })
           }}
-          className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
+          className="w-6 h-6 rounded-md bg-black/55 backdrop-blur-sm flex items-center justify-center text-white/75 hover:text-red-400 hover:bg-black/70 transition-colors"
           title="Delete"
           aria-label={`Delete ${block.type} block`}
         >

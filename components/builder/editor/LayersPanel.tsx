@@ -31,6 +31,7 @@ const blockLabels: Record<BlockType, string> = {
   faq: "FAQ", team: "Team", contact: "Contact", newsletter: "Newsletter",
   logocloud: "Logo Cloud", divider: "Divider", banner: "Banner",
   content: "Content", image: "Image", video: "Video", gallery: "Gallery",
+  button: "Button", heading: "Heading", text: "Text", badge: "Badge", card: "Card",
 }
 
 function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove }: {

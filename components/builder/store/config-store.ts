@@ -3,6 +3,7 @@
 import { create } from "zustand"
 import { produce } from "immer"
 import type { BlockConfig, SiteConfig, ThemeConfig, PageConfig } from "@/lib/builder/types"
+import { blankTheme } from "@/lib/builder/theme-presets"
 
 function ensurePages(config: SiteConfig): PageConfig[] {
   if (config.pages && config.pages.length > 0) return config.pages
@@ -49,58 +50,15 @@ interface ConfigState {
   canRedo: () => boolean
 }
 
-const defaultBlocks: BlockConfig[] = [
-  {
-    id: "block-navbar",
-    type: "navbar",
-    variant: "default",
-    props: { logo: "Acme Inc", links: ["Features", "Pricing", "About", "Contact"], ctaText: "Get Started" },
-  },
-  {
-    id: "block-hero",
-    type: "hero",
-    variant: "centered",
-    props: {
-      badge: "Now in Beta",
-      headline: "Build websites with drag & drop",
-      subheadline: "The visual editor that agents and humans both understand. Structured config, beautiful output.",
-      primaryCta: "Start Building",
-      secondaryCta: "View Demo",
-    },
-  },
-  {
-    id: "block-features",
-    type: "features",
-    variant: "grid",
-    props: {
-      label: "Features",
-      title: "Everything you need",
-      subtitle: "Powerful building blocks for your next website",
-      items: [
-        { icon: "Blocks", title: "Visual Editor", description: "Drag and drop blocks to build your layout" },
-        { icon: "Code", title: "JSON Config", description: "Every change is a clean JSON mutation" },
-        { icon: "Bot", title: "Agent Ready", description: "AI agents can read and write your config" },
-      ],
-    },
-  },
-  {
-    id: "block-cta",
-    type: "cta",
-    variant: "simple",
-    props: { headline: "Ready to get started?", subheadline: "Create your first site in minutes.", buttonText: "Start Free" },
-  },
-  {
-    id: "block-footer",
-    type: "footer",
-    variant: "simple",
-    props: { logo: "Sycord", copyright: "2026 Sycord. All rights reserved.", links: ["Privacy", "Terms", "Contact"] },
-  },
-]
-
+/**
+ * A brand-new project starts on a single blank page with the #101010 blank
+ * theme. Users build it up by dragging components onto the canvas.
+ */
 export const defaultConfig: SiteConfig = {
   name: "My Website",
-  pages: [{ id: "page-home", name: "Home", path: "/", blocks: defaultBlocks }],
-  blocks: defaultBlocks,
+  pages: [{ id: "page-home", name: "Home", path: "/", blocks: [] }],
+  blocks: [],
+  theme: blankTheme,
 }
 
 function snapshot(state: ConfigState): { pages?: PageConfig[]; blocks: BlockConfig[]; theme?: Partial<ThemeConfig> } {

@@ -22,6 +22,7 @@ import { ContentBlock } from "./ContentBlock"
 import { ImageBlock } from "./ImageBlock"
 import { VideoBlock } from "./VideoBlock"
 import { GalleryBlock } from "./GalleryBlock"
+import { ButtonBlock, HeadingBlock, TextBlock, BadgeBlock, CardElementBlock } from "./ElementBlocks"
 
 class BlockErrorBoundary extends Component<
   { blockType: string; children: ReactNode },
@@ -70,6 +71,11 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
   image: ImageBlock,
   video: VideoBlock,
   gallery: GalleryBlock,
+  button: ButtonBlock,
+  heading: HeadingBlock,
+  text: TextBlock,
+  badge: BadgeBlock,
+  card: CardElementBlock,
 }
 
 export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {

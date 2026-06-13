@@ -162,6 +162,48 @@ export const blockMetadata: BlockMeta[] = [
     variants: ["ribbon", "bar"],
     defaultProps: { text: "New: We just launched v2.0!", linkText: "Learn more" },
   },
+
+  // ---- Mini elements (shadcn-based, can be dropped anywhere) ----
+  {
+    type: "button",
+    label: "Button",
+    description: "A shadcn button you can place anywhere",
+    category: "Elements",
+    variants: ["default", "secondary", "outline", "ghost", "link", "destructive"],
+    defaultProps: { text: "Click me", size: "default", align: "left", url: "#", fullWidth: false },
+  },
+  {
+    type: "heading",
+    label: "Heading",
+    description: "A title / heading element",
+    category: "Elements",
+    variants: ["h1", "h2", "h3", "h4"],
+    defaultProps: { text: "Heading", align: "left" },
+  },
+  {
+    type: "text",
+    label: "Text",
+    description: "A paragraph of body text",
+    category: "Elements",
+    variants: ["base", "lead", "muted", "small"],
+    defaultProps: { text: "Write some text here. Drag me anywhere on the page.", align: "left" },
+  },
+  {
+    type: "badge",
+    label: "Badge",
+    description: "A small shadcn badge / pill",
+    category: "Elements",
+    variants: ["default", "secondary", "outline", "destructive"],
+    defaultProps: { text: "New", align: "left" },
+  },
+  {
+    type: "card",
+    label: "Card",
+    description: "A shadcn card with title and content",
+    category: "Elements",
+    variants: ["default", "ghost"],
+    defaultProps: { title: "Card title", description: "Card description goes here.", body: "Put any supporting content inside this card.", buttonText: "Action" },
+  },
 ]
 
 export const categories = [...new Set(blockMetadata.map((b) => b.category))]

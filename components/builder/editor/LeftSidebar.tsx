@@ -6,7 +6,7 @@ import { useDraggable } from "@dnd-kit/core"
 import {
   Search, Layout, Type, Grid3X3, DollarSign, Megaphone, PanelBottom, MessageSquare,
   BarChart3, HelpCircle, Users, Mail, Newspaper, Image, Plus, Minus, Flag, FileText,
-  ImageIcon, Play, GalleryHorizontalEnd, GripVertical,
+  ImageIcon, Play, GalleryHorizontalEnd, GripVertical, MousePointerClick, Heading, Tag, Square,
 } from "lucide-react"
 import { LayersPanel } from "./LayersPanel"
 import { useConfigStore } from "@/components/builder/store/config-store"
@@ -20,6 +20,7 @@ export const blockIcons: Record<BlockType, typeof Layout> = {
   stats: BarChart3, faq: HelpCircle, team: Users, contact: Mail,
   newsletter: Newspaper, logocloud: Image, divider: Minus, banner: Flag,
   content: FileText, image: ImageIcon, video: Play, gallery: GalleryHorizontalEnd,
+  button: MousePointerClick, heading: Heading, text: Type, badge: Tag, card: Square,
 }
 
 /** A draggable palette item — drag it onto the canvas to insert a block. */

@@ -27,7 +27,8 @@ import { useConfigStore } from "@/components/builder/store/config-store"
 import { useEditorStore } from "@/components/builder/store/editor-store"
 import { useKeyboardShortcuts } from "@/components/builder/hooks/use-keyboard-shortcuts"
 import { blockMetadata } from "@/lib/builder/block-metadata"
-import { generateSiteConfig, getStarterTemplate } from "@/lib/builder/generate-site"
+import { generateSiteConfig } from "@/lib/builder/generate-site"
+import { blankTheme } from "@/lib/builder/theme-presets"
 import type { BlockConfig, BlockType, SiteConfig } from "@/lib/builder/types"
 
 type LoadState = "loading" | "ready" | "error"
@@ -75,9 +76,15 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
           setConfig(stored)
           savedRef.current = JSON.stringify(stored)
         } else {
-          const starter = getStarterTemplate(data?.businessName || "")
-          setConfig(starter)
-          savedRef.current = JSON.stringify(starter)
+          // Brand-new project: start on a blank #101010 page.
+          const blank: SiteConfig = {
+            name: data?.businessName || "My site",
+            pages: [{ id: "page-home", name: "Home", path: "/", blocks: [] }],
+            blocks: [],
+            theme: blankTheme,
+          }
+          setConfig(blank)
+          savedRef.current = JSON.stringify(blank)
         }
         setLoadState("ready")
       } catch (err) {

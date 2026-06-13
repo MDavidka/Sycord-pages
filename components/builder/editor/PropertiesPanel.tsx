@@ -178,6 +178,57 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { title: "Style", fields: [{ key: "variant", label: "Variant", type: "select", options: ["ribbon", "bar"] }] },
     ],
   },
+  button: {
+    sections: [
+      { title: "Content", fields: [
+        { key: "text", label: "Label", type: "text" },
+        { key: "url", label: "URL", type: "text" },
+      ] },
+      { title: "Style", fields: [
+        { key: "variant", label: "Variant", type: "select", options: ["default", "secondary", "outline", "ghost", "link", "destructive"] },
+        { key: "size", label: "Size", type: "select", options: ["default", "sm", "lg"] },
+        { key: "align", label: "Align", type: "select", options: ["left", "center", "right"] },
+      ] },
+    ],
+  },
+  heading: {
+    sections: [
+      { title: "Content", fields: [{ key: "text", label: "Text", type: "text" }] },
+      { title: "Style", fields: [
+        { key: "variant", label: "Level", type: "select", options: ["h1", "h2", "h3", "h4"] },
+        { key: "align", label: "Align", type: "select", options: ["left", "center", "right"] },
+      ] },
+    ],
+  },
+  text: {
+    sections: [
+      { title: "Content", fields: [{ key: "text", label: "Text", type: "textarea" }] },
+      { title: "Style", fields: [
+        { key: "variant", label: "Style", type: "select", options: ["base", "lead", "muted", "small"] },
+        { key: "align", label: "Align", type: "select", options: ["left", "center", "right"] },
+      ] },
+    ],
+  },
+  badge: {
+    sections: [
+      { title: "Content", fields: [{ key: "text", label: "Text", type: "text" }] },
+      { title: "Style", fields: [
+        { key: "variant", label: "Variant", type: "select", options: ["default", "secondary", "outline", "destructive"] },
+        { key: "align", label: "Align", type: "select", options: ["left", "center", "right"] },
+      ] },
+    ],
+  },
+  card: {
+    sections: [
+      { title: "Content", fields: [
+        { key: "title", label: "Title", type: "text" },
+        { key: "description", label: "Description", type: "text" },
+        { key: "body", label: "Body", type: "textarea" },
+        { key: "buttonText", label: "Button Text", type: "text" },
+      ] },
+      { title: "Style", fields: [{ key: "variant", label: "Variant", type: "select", options: ["default", "ghost"] }] },
+    ],
+  },
 }
 
 function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }) {

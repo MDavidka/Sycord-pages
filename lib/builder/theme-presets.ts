@@ -23,6 +23,32 @@ export const defaultTheme: ThemeConfig = {
   radiusLg: 12,
 }
 
+/**
+ * Theme used for a brand-new, blank project. The visible canvas surface is
+ * #101010 as requested; surrounding surfaces are neutral dark greys so dropped
+ * components read well immediately.
+ */
+export const blankTheme: ThemeConfig = {
+  ...defaultTheme,
+  bg0: "#0a0a0a",
+  bg1: "#101010",
+  bg2: "#161616",
+  bg3: "#1f1f1f",
+  bg4: "#272727",
+  bg5: "#323232",
+  text0: "#fafafa",
+  text1: "#a1a1aa",
+  text2: "#71717a",
+  text3: "#52525b",
+  accent: "#22c55e",
+  accentDim: "#16a34a",
+  borderDefault: "#262626",
+  borderSubtle: "#1a1a1a",
+  borderHover: "#363636",
+  fontSans: "Inter",
+  fontDisplay: "Inter",
+}
+
 export interface ThemePreset {
   id: string
   name: string
@@ -154,9 +180,23 @@ export function hexToRgb(hex: string): string {
   return `${r}, ${g}, ${b}`
 }
 
+/** Pick black or white for legible text on top of the given background colour. */
+export function readableForeground(hex: string): string {
+  const h = hex.replace("#", "")
+  if (h.length < 6) return "#ffffff"
+  const r = parseInt(h.slice(0, 2), 16) / 255
+  const g = parseInt(h.slice(2, 4), 16) / 255
+  const b = parseInt(h.slice(4, 6), 16) / 255
+  const toLinear = (c: number) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
+  return luminance > 0.45 ? "#0a0a0a" : "#ffffff"
+}
+
 export function themeToCSS(theme: ThemeConfig): Record<string, string> {
   const rgb = hexToRgb(theme.accent)
+  const accentFg = readableForeground(theme.accent)
   return {
+    // ---- OpenPage block tokens (existing section blocks rely on these) ----
     "--color-bg-0": theme.bg0,
     "--color-bg-1": theme.bg1,
     "--color-bg-2": theme.bg2,
@@ -180,6 +220,25 @@ export function themeToCSS(theme: ThemeConfig): Record<string, string> {
     "--font-mono": `"${theme.fontMono}", ui-monospace, monospace`,
     "--radius-default": `${theme.radius}px`,
     "--radius-lg": `${theme.radiusLg}px`,
+    // ---- shadcn/ui semantic tokens (mini components adopt the site theme) ----
+    "--background": theme.bg1,
+    "--foreground": theme.text0,
+    "--card": theme.bg2,
+    "--card-foreground": theme.text0,
+    "--popover": theme.bg2,
+    "--popover-foreground": theme.text0,
+    "--primary": theme.accent,
+    "--primary-foreground": accentFg,
+    "--secondary": theme.bg3,
+    "--secondary-foreground": theme.text0,
+    "--muted": theme.bg2,
+    "--muted-foreground": theme.text2,
+    "--accent": theme.bg3,
+    "--accent-foreground": theme.text0,
+    "--border": theme.borderDefault,
+    "--input": theme.borderDefault,
+    "--ring": theme.accent,
+    "--radius": `${theme.radius}px`,
   }
 }
 

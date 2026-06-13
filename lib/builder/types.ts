@@ -21,6 +21,12 @@ export type BlockType =
   | "image"
   | "video"
   | "gallery"
+  // Mini elements (shadcn-based, droppable anywhere)
+  | "button"
+  | "heading"
+  | "text"
+  | "badge"
+  | "card"
 
 export type BlockVariant = string
 
