@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Monitor, Tablet, Smartphone, Undo2, Redo2, Code, Clock, Eye, Plus, HelpCircle, Download, ArrowLeft, Save, Loader2 } from "lucide-react"
+import { Monitor, Tablet, Smartphone, Undo2, Redo2, Code, Clock, Eye, Plus, HelpCircle, Download, ArrowLeft, Save, Loader2, Rocket } from "lucide-react"
 import { toast } from "sonner"
 import { useEditorStore, type Viewport } from "@/components/builder/store/editor-store"
 import { useConfigStore } from "@/components/builder/store/config-store"
+import { buildPageHtml } from "@/lib/builder/export-html"
 import type { PageConfig } from "@/lib/builder/types"
 
 const viewports: { value: Viewport; icon: typeof Monitor; label: string }[] = [
@@ -97,9 +98,11 @@ interface CanvasToolbarProps {
   onSave?: () => void
   saving?: boolean
   dirty?: boolean
+  onPublish?: () => void
+  publishing?: boolean
 }
 
-export function CanvasToolbar({ projectName, onBack, onSave, saving, dirty }: CanvasToolbarProps) {
+export function CanvasToolbar({ projectName, onBack, onSave, saving, dirty, onPublish, publishing }: CanvasToolbarProps) {
   const { viewport, setViewport, toggleJsonDrawer, jsonDrawerOpen, toggleHistory, togglePreview, toggleShortcutsModal, previewMode } = useEditorStore()
   const { undo, redo, canUndo, canRedo } = useConfigStore()
   const undoStack = useConfigStore((s) => s.undoStack)
@@ -114,19 +117,25 @@ export function CanvasToolbar({ projectName, onBack, onSave, saving, dirty }: Ca
   const config = useConfigStore((s) => s.config)
   const [showAddPage, setShowAddPage] = useState(false)
 
-  function handleExport() {
+  async function handleExport() {
     try {
-      const json = JSON.stringify(config, null, 2)
-      const blob = new Blob([json], { type: "application/json" })
+      const page = pages.find((p) => p.id === activePageId) ?? pages[0]
+      const html = await buildPageHtml({
+        siteName: projectName || config.name || "site",
+        pageName: page?.name || "Home",
+        blocks: page?.blocks || config.blocks,
+        theme: config.theme,
+      })
+      const blob = new Blob([html], { type: "text/html" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `${(projectName || config.name || "site").toLowerCase().replace(/\s+/g, "-")}.json`
+      a.download = `${(page?.name || "index").toLowerCase().replace(/\s+/g, "-")}.html`
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
-      toast("Site config (JSON) exported")
+      toast("Deployable HTML exported")
     } catch {
       toast.error("Export failed")
     }
@@ -199,9 +208,16 @@ export function CanvasToolbar({ projectName, onBack, onSave, saving, dirty }: Ca
           <HelpCircle size={15} />
         </button>
 
-        <button onClick={handleExport} className={`${iconBtn} hidden sm:flex`} title="Export JSON" aria-label="Export JSON">
+        <button onClick={handleExport} className={`${iconBtn} hidden sm:flex`} title="Download deployable HTML" aria-label="Download deployable HTML">
           <Download size={15} />
         </button>
+
+        {onPublish && (
+          <button onClick={onPublish} disabled={publishing} className="h-8 px-2.5 rounded-lg text-[11.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5" title="Save deployable pages to the Pages tab" aria-label="Publish to Pages">
+            {publishing ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
+            <span className="hidden lg:inline">Publish</span>
+          </button>
+        )}
 
         {onSave && (
           <button onClick={onSave} disabled={saving} className="h-8 px-2.5 sm:px-3 ml-0.5 rounded-lg bg-primary text-primary-foreground text-[11.5px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">

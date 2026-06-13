@@ -15,6 +15,8 @@ interface EditorState {
   isGenerating: boolean
   generationPrompt: string | null
   generationError: string | null
+  // Bumped when a block requests the full edit panel (used to open it on mobile)
+  editRequestId: number
   selectBlock: (id: string | null) => void
   setViewport: (vp: Viewport) => void
   toggleJsonDrawer: () => void
@@ -24,6 +26,7 @@ interface EditorState {
   setGenerating: (prompt: string | null) => void
   setGenerationError: (err: string | null) => void
   clearGeneration: () => void
+  requestEdit: (id: string) => void
 }
 
 export const useEditorStore = create<EditorState>()((set) => ({
@@ -36,6 +39,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
   isGenerating: false,
   generationPrompt: null,
   generationError: null,
+  editRequestId: 0,
   selectBlock: (id) => set({ selectedBlockId: id }),
   setViewport: (vp) => set({ viewport: vp }),
   toggleJsonDrawer: () => set((s) => ({ jsonDrawerOpen: !s.jsonDrawerOpen })),
@@ -45,4 +49,5 @@ export const useEditorStore = create<EditorState>()((set) => ({
   setGenerating: (prompt) => set({ isGenerating: !!prompt, generationPrompt: prompt, generationError: null }),
   setGenerationError: (err) => set({ generationError: err }),
   clearGeneration: () => set({ isGenerating: false, generationPrompt: null }),
+  requestEdit: (id) => set((s) => ({ selectedBlockId: id, editRequestId: s.editRequestId + 1 })),
 }))

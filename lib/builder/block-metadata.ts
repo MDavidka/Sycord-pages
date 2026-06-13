@@ -9,7 +9,7 @@ export interface BlockMeta {
   defaultProps: Record<string, unknown>
 }
 
-export const blockMetadata: BlockMeta[] = [
+export const baseBlockMetadata: BlockMeta[] = [
   {
     type: "navbar",
     label: "Navbar",
@@ -205,5 +205,76 @@ export const blockMetadata: BlockMeta[] = [
     defaultProps: { title: "Card title", description: "Card description goes here.", body: "Put any supporting content inside this card.", buttonText: "Action" },
   },
 ]
+
+/**
+ * The full shadcn/ui catalogue (57 components). Each is registered as a
+ * `ui-<slug>` block so it can be dragged onto the canvas like any other block.
+ * Renderers live in components/builder/blocks/ShadcnBlocks.tsx.
+ */
+function ui(type: string, label: string, category: string, variants: string[] = ["default"], defaultProps: Record<string, unknown> = {}): BlockMeta {
+  return { type: `ui-${type}`, label, category: `UI · ${category}`, variants, defaultProps, description: `${label} — shadcn/ui` }
+}
+
+export const shadcnMeta: BlockMeta[] = [
+  ui("accordion", "Accordion", "Navigation"),
+  ui("alert", "Alert", "Feedback", ["default", "destructive"], { title: "Heads up!", text: "You can add components to your app using the CLI." }),
+  ui("alert-dialog", "Alert Dialog", "Overlay", ["default"], { text: "Show dialog" }),
+  ui("aspect-ratio", "Aspect Ratio", "Display"),
+  ui("avatar", "Avatar", "Display"),
+  ui("badge", "Badge", "Display", ["default", "secondary", "outline", "destructive"], { text: "Badge" }),
+  ui("breadcrumb", "Breadcrumb", "Navigation"),
+  ui("button", "Button", "Forms", ["default", "secondary", "outline", "ghost", "link", "destructive"], { text: "Button" }),
+  ui("calendar", "Calendar", "Forms"),
+  ui("card", "Card", "Display", ["default"], { title: "Card title", text: "Card description goes here." }),
+  ui("carousel", "Carousel", "Display"),
+  ui("chart", "Chart", "Display"),
+  ui("checkbox", "Checkbox", "Forms", ["default"], { label: "Accept terms and conditions" }),
+  ui("collapsible", "Collapsible", "Navigation", ["default"], { text: "Toggle content" }),
+  ui("combobox", "Combobox", "Forms"),
+  ui("command", "Command", "Overlay"),
+  ui("context-menu", "Context Menu", "Overlay", ["default"], { text: "Right click here" }),
+  ui("data-table", "Data Table", "Display"),
+  ui("date-picker", "Date Picker", "Forms"),
+  ui("dialog", "Dialog", "Overlay", ["default"], { text: "Open dialog" }),
+  ui("drawer", "Drawer", "Overlay", ["default"], { text: "Open drawer" }),
+  ui("dropdown-menu", "Dropdown Menu", "Overlay", ["default"], { text: "Open menu" }),
+  ui("form", "Form", "Forms"),
+  ui("hover-card", "Hover Card", "Overlay", ["default"], { text: "Hover me" }),
+  ui("input", "Input", "Forms", ["default"], { placeholder: "Email" }),
+  ui("input-otp", "Input OTP", "Forms"),
+  ui("label", "Label", "Forms", ["default"], { text: "Your email address" }),
+  ui("menubar", "Menubar", "Navigation"),
+  ui("navigation-menu", "Navigation Menu", "Navigation"),
+  ui("pagination", "Pagination", "Navigation"),
+  ui("popover", "Popover", "Overlay", ["default"], { text: "Open popover" }),
+  ui("progress", "Progress", "Feedback", ["default"], { value: 60 }),
+  ui("radio-group", "Radio Group", "Forms"),
+  ui("resizable", "Resizable", "Layout"),
+  ui("scroll-area", "Scroll Area", "Layout"),
+  ui("select", "Select", "Forms"),
+  ui("separator", "Separator", "Layout"),
+  ui("sheet", "Sheet", "Overlay", ["default"], { text: "Open sheet" }),
+  ui("sidebar", "Sidebar", "Navigation"),
+  ui("skeleton", "Skeleton", "Feedback"),
+  ui("slider", "Slider", "Forms", ["default"], { value: 50 }),
+  ui("sonner", "Sonner", "Feedback", ["default"], { text: "Show toast" }),
+  ui("switch", "Switch", "Forms", ["default"], { label: "Airplane mode" }),
+  ui("table", "Table", "Display"),
+  ui("tabs", "Tabs", "Navigation"),
+  ui("textarea", "Textarea", "Forms", ["default"], { placeholder: "Type your message here." }),
+  ui("toast", "Toast", "Feedback", ["default"], { text: "Show toast" }),
+  ui("toggle", "Toggle", "Forms", ["default", "outline"], { text: "Bold" }),
+  ui("toggle-group", "Toggle Group", "Forms"),
+  ui("tooltip", "Tooltip", "Overlay", ["default"], { text: "Hover me" }),
+  ui("typography", "Typography", "Display"),
+  ui("field", "Field", "Forms"),
+  ui("input-group", "Input Group", "Forms"),
+  ui("item", "Item", "Display"),
+  ui("empty", "Empty", "Display"),
+  ui("kbd", "Kbd", "Display"),
+  ui("spinner", "Spinner", "Feedback"),
+]
+
+export const blockMetadata: BlockMeta[] = [...baseBlockMetadata, ...shadcnMeta]
 
 export const categories = [...new Set(blockMetadata.map((b) => b.category))]

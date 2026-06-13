@@ -4,6 +4,7 @@ import { useState } from "react"
 import { ChevronDown, ChevronRight, Code } from "lucide-react"
 import type { BlockConfig, BlockType } from "@/lib/builder/types"
 import { useConfigStore } from "@/components/builder/store/config-store"
+import { blockMetadata } from "@/lib/builder/block-metadata"
 
 interface FieldDef {
   key: string
@@ -344,24 +345,50 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+/**
+ * For blocks that have no hand-written schema (e.g. the shadcn UI catalogue),
+ * derive an editable schema: a text/textarea field for every string prop plus a
+ * variant selector when the block defines multiple variants.
+ */
+function deriveSchema(block: BlockConfig): { sections: { title: string; fields: FieldDef[] }[] } {
+  const meta = blockMetadata.find((b) => b.type === block.type)
+  const contentFields: FieldDef[] = []
+  for (const [key, value] of Object.entries(block.props || {})) {
+    if (typeof value === "string") {
+      contentFields.push({ key, label: key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), type: value.length > 60 ? "textarea" : "text" })
+    }
+  }
+  const sections: { title: string; fields: FieldDef[] }[] = []
+  if (contentFields.length) sections.push({ title: "Content", fields: contentFields })
+  if (meta && meta.variants.length > 1) {
+    sections.push({ title: "Style", fields: [{ key: "variant", label: "Variant", type: "select", options: meta.variants }] })
+  }
+  return { sections }
+}
+
 export function PropertiesPanel({ block }: { block: BlockConfig }) {
   const [showJson, setShowJson] = useState(false)
-  const schema = blockFields[block.type]
+  const schema = blockFields[block.type] ?? deriveSchema(block)
+  const hasFields = schema.sections.length > 0
 
   return (
     <>
       <div className="px-3.5 py-3 border-b border-border flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Properties</span>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent text-foreground font-semibold capitalize">{block.type}</span>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent text-foreground font-semibold capitalize">{block.type.replace(/^ui-/, "")}</span>
       </div>
 
-      {schema?.sections.map((section) => (
-        <Section key={section.title} title={section.title}>
-          {section.fields.map((field) => (
-            <PropertyField key={field.key} field={field} block={block} />
-          ))}
-        </Section>
-      )) || <div className="p-3.5 text-[12px] text-muted-foreground">No editable properties defined for this block type.</div>}
+      {hasFields ? (
+        schema.sections.map((section) => (
+          <Section key={section.title} title={section.title}>
+            {section.fields.map((field) => (
+              <PropertyField key={field.key} field={field} block={block} />
+            ))}
+          </Section>
+        ))
+      ) : (
+        <div className="p-3.5 text-[12px] text-muted-foreground">This component has no inline-editable text. Use the block&apos;s Manage menu to duplicate, move, or delete it.</div>
+      )}
 
       <div className="border-t border-border">
         <button onClick={() => setShowJson(!showJson)} className="w-full px-3.5 py-2 flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">

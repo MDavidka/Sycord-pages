@@ -27,6 +27,10 @@ export type BlockType =
   | "text"
   | "badge"
   | "card"
+  // Any shadcn UI component is registered with a `ui-<slug>` type. The open
+  // string keeps autocomplete for the known literals above while allowing the
+  // full shadcn catalogue to be added dynamically.
+  | (string & {})
 
 export type BlockVariant = string
 

@@ -28,6 +28,7 @@ import { useEditorStore } from "@/components/builder/store/editor-store"
 import { useKeyboardShortcuts } from "@/components/builder/hooks/use-keyboard-shortcuts"
 import { blockMetadata } from "@/lib/builder/block-metadata"
 import { generateSiteConfig } from "@/lib/builder/generate-site"
+import { buildPageHtml, pagePathToFilename } from "@/lib/builder/export-html"
 import { blankTheme } from "@/lib/builder/theme-presets"
 import type { BlockConfig, BlockType, SiteConfig } from "@/lib/builder/types"
 
@@ -43,11 +44,13 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
   const setGenerating = useEditorStore((s) => s.setGenerating)
   const clearGeneration = useEditorStore((s) => s.clearGeneration)
   const setGenerationError = useEditorStore((s) => s.setGenerationError)
+  const editRequestId = useEditorStore((s) => s.editRequestId)
 
   const [loadState, setLoadState] = useState<LoadState>("loading")
   const [projectName, setProjectName] = useState<string>("")
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [showAgent, setShowAgent] = useState(false)
   const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null)
   const [activePaletteType, setActivePaletteType] = useState<BlockType | null>(null)
@@ -57,6 +60,13 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
   const generationAbort = useRef<AbortController | null>(null)
 
   useKeyboardShortcuts(loadState === "ready")
+
+  // Open the edit sheet on mobile when a block's Manage menu requests it.
+  useEffect(() => {
+    if (editRequestId > 0 && typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setMobileSheet("edit")
+    }
+  }, [editRequestId])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -162,6 +172,37 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
     [setGenerating, setConfig, persist, clearGeneration, setGenerationError],
   )
 
+  // ---- Publish: render each page to deployable HTML and save to Pages ----
+  const handlePublish = useCallback(async () => {
+    const pages = config.pages && config.pages.length > 0 ? config.pages : [{ id: "page-home", name: "Home", path: "/", blocks: config.blocks }]
+    setPublishing(true)
+    try {
+      let saved = 0
+      for (const page of pages) {
+        if (!page.blocks || page.blocks.length === 0) continue
+        const html = await buildPageHtml({
+          siteName: projectName || config.name || "site",
+          pageName: page.name,
+          blocks: page.blocks,
+          theme: config.theme,
+        })
+        const res = await fetch(`/api/projects/${projectId}/pages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: pagePathToFilename(page.path), content: html, usedFor: "Builder page" }),
+        })
+        if (res.ok) saved++
+      }
+      await persist(config)
+      if (saved === 0) toast.error("Add some blocks before publishing")
+      else toast.success(`Published ${saved} page${saved === 1 ? "" : "s"} to the Pages tab`)
+    } catch {
+      toast.error("Publish failed")
+    } finally {
+      setPublishing(false)
+    }
+  }, [config, projectId, projectName, persist])
+
   // ---- Drag & drop: palette -> canvas insertion ------------------------
   function handleDragStart(event: DragStartEvent) {
     const paletteType = event.active.data.current?.paletteType as BlockType | undefined
@@ -223,7 +264,7 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
 
   return (
     <div className="h-full w-full flex flex-col relative bg-background text-foreground">
-      <CanvasToolbar projectName={projectName} onBack={onBack} onSave={() => persist(config)} saving={saving} dirty={dirty} />
+      <CanvasToolbar projectName={projectName} onBack={onBack} onSave={() => persist(config)} saving={saving} dirty={dirty} onPublish={handlePublish} publishing={publishing} />
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => { setActivePaletteType(null); setDndActive(false) }}>
         <div className="flex-1 flex overflow-hidden min-h-0">

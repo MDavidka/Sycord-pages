@@ -23,6 +23,7 @@ import { ImageBlock } from "./ImageBlock"
 import { VideoBlock } from "./VideoBlock"
 import { GalleryBlock } from "./GalleryBlock"
 import { ButtonBlock, HeadingBlock, TextBlock, BadgeBlock, CardElementBlock } from "./ElementBlocks"
+import { shadcnRenderers } from "./ShadcnBlocks"
 
 class BlockErrorBoundary extends Component<
   { blockType: string; children: ReactNode },
@@ -79,7 +80,7 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
 }
 
 export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
-  const Renderer = blockRenderers[block.type] || PlaceholderBlock
+  const Renderer = blockRenderers[block.type] || shadcnRenderers[block.type] || PlaceholderBlock
   return (
     <BlockErrorBoundary blockType={block.type}>
       <Renderer block={block} />

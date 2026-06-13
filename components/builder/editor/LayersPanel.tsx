@@ -43,6 +43,7 @@ function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove }: {
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
   const Icon = blockIcons[block.type] || Layout
+  const label = blockLabels[block.type] || blockMetadata.find((b) => b.type === block.type)?.label || block.type
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
 
   return (
@@ -54,18 +55,18 @@ function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove }: {
         isSelected ? "bg-accent text-foreground ring-1 ring-primary/40" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
-      <div {...attributes} {...listeners} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground cursor-grab active:cursor-grabbing touch-none" aria-label={`Drag to reorder ${blockLabels[block.type]}`}>
+      <div {...attributes} {...listeners} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground cursor-grab active:cursor-grabbing touch-none" aria-label={`Drag to reorder ${label}`}>
         <GripVertical size={13} />
       </div>
       <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 border ${isSelected ? "border-primary/30 bg-primary/10 text-foreground" : "border-border bg-muted/40 text-muted-foreground"}`}>
         <Icon size={14} />
       </div>
-      <span className="font-medium flex-1 truncate">{blockLabels[block.type]}</span>
+      <span className="font-medium flex-1 truncate">{label}</span>
       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={(e) => { e.stopPropagation(); onDuplicate() }} className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-all" aria-label={`Duplicate ${blockLabels[block.type]}`}>
+        <button onClick={(e) => { e.stopPropagation(); onDuplicate() }} className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-all" aria-label={`Duplicate ${label}`}>
           <Copy size={12} />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove() }} className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-all" aria-label={`Remove ${blockLabels[block.type]}`}>
+        <button onClick={(e) => { e.stopPropagation(); onRemove() }} className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-all" aria-label={`Remove ${label}`}>
           <Trash2 size={12} />
         </button>
       </div>
