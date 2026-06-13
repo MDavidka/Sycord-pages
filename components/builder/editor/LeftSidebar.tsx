@@ -23,41 +23,45 @@ export const blockIcons: Record<BlockType, typeof Layout> = {
 }
 
 /** A draggable palette item — drag it onto the canvas to insert a block. */
-function DraggablePaletteItem({ meta, onAdd }: { meta: BlockMeta; onAdd: (type: BlockType) => void }) {
+function DraggablePaletteItem({ meta, onAdd, draggable = true }: { meta: BlockMeta; onAdd: (type: BlockType) => void; draggable?: boolean }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `palette-${meta.type}`,
     data: { paletteType: meta.type },
+    disabled: !draggable,
   })
   const Icon = blockIcons[meta.type] || Layout
 
   return (
     <div
       ref={setNodeRef}
-      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[12px] text-text-1 hover:bg-bg-3 hover:text-text-0 transition-colors text-left group ${
+      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors text-left group ${
         isDragging ? "opacity-40" : ""
       }`}
     >
-      <span
-        {...attributes}
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing text-text-3 group-hover:text-text-2 touch-none"
-        title="Drag onto the canvas"
-        aria-label={`Drag ${meta.label} onto canvas`}
-      >
-        <GripVertical size={12} />
-      </span>
+      {draggable && (
+        <span
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing text-muted-foreground/60 group-hover:text-muted-foreground touch-none"
+          title="Drag onto the canvas"
+          aria-label={`Drag ${meta.label} onto canvas`}
+        >
+          <GripVertical size={13} />
+        </span>
+      )}
       <button onClick={() => onAdd(meta.type)} className="flex items-center gap-2 flex-1 text-left">
-        <div className="w-[22px] h-[22px] rounded border border-border-default bg-bg-3 flex items-center justify-center text-[10px] shrink-0">
-          <Icon size={12} />
+        <div className="w-6 h-6 rounded-md border border-border bg-muted/40 flex items-center justify-center shrink-0">
+          <Icon size={13} />
         </div>
         <span className="flex-1">{meta.label}</span>
-        <Plus size={11} className="text-text-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <Plus size={12} className="text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity" />
       </button>
     </div>
   )
 }
 
-function ComponentsPanel() {
+/** Components palette. `draggable` is disabled inside mobile sheets (tap-to-add). */
+export function ComponentsPanel({ draggable = true, onAdded }: { draggable?: boolean; onAdded?: () => void }) {
   const [search, setSearch] = useState("")
   const addBlock = useConfigStore((s) => s.addBlock)
   const selectBlock = useEditorStore((s) => s.selectBlock)
@@ -79,36 +83,37 @@ function ComponentsPanel() {
     addBlock(block)
     selectBlock(block.id)
     toast(`${meta.label} added`)
+    onAdded?.()
   }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="px-3 pt-2.5 pb-1.5">
+      <div className="px-3 pt-3 pb-1.5">
         <div className="relative">
-          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-3" />
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
           <input
             type="text"
             placeholder="Search components..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pr-2 py-1.5 rounded-md border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green placeholder:text-text-3"
-            style={{ paddingLeft: "1.625rem" }}
+            className="w-full pr-2 py-2 rounded-lg border border-border bg-background text-foreground text-[12px] outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/60"
+            style={{ paddingLeft: "1.875rem" }}
           />
         </div>
-        <p className="text-[10px] text-text-3 mt-1.5 px-0.5">Drag onto the canvas or click to append.</p>
+        <p className="text-[10.5px] text-muted-foreground/60 mt-1.5 px-0.5">{draggable ? "Drag onto the canvas or tap to append." : "Tap a component to add it."}</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar">
         {Object.entries(grouped).map(([category, items]) => (
           <div key={category}>
-            <div className="text-[9px] font-semibold uppercase tracking-wider text-text-3 px-1.5 pt-2.5 pb-1">{category}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-1.5 pt-2.5 pb-1">{category}</div>
             {items.map((meta) => (
-              <DraggablePaletteItem key={meta.type} meta={meta} onAdd={handleAdd} />
+              <DraggablePaletteItem key={meta.type} meta={meta} onAdd={handleAdd} draggable={draggable} />
             ))}
           </div>
         ))}
         {filtered.length === 0 && (
-          <div className="px-2 py-6 text-center text-[11px] text-text-3">No components match &ldquo;{search}&rdquo;</div>
+          <div className="px-2 py-6 text-center text-[12px] text-muted-foreground">No components match &ldquo;{search}&rdquo;</div>
         )}
       </div>
     </div>
@@ -121,17 +126,17 @@ export function LeftSidebar() {
   const [tab, setTab] = useState<Tab>("components")
 
   return (
-    <div className="hidden md:flex w-[280px] bg-bg-1 border-r border-border-default flex-col shrink-0">
-      <div className="flex border-b border-border-default shrink-0">
+    <div className="hidden md:flex w-[280px] bg-card border-r border-border flex-col shrink-0">
+      <div className="flex border-b border-border shrink-0">
         <button
           onClick={() => setTab("layers")}
-          className={`flex-1 py-2 text-[11px] font-medium transition-colors ${tab === "layers" ? "text-text-0 border-b border-green" : "text-text-3 hover:text-text-1"}`}
+          className={`flex-1 py-2.5 text-[11.5px] font-medium transition-colors ${tab === "layers" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}
         >
           Layers
         </button>
         <button
           onClick={() => setTab("components")}
-          className={`flex-1 py-2 text-[11px] font-medium transition-colors ${tab === "components" ? "text-text-0 border-b border-green" : "text-text-3 hover:text-text-1"}`}
+          className={`flex-1 py-2.5 text-[11.5px] font-medium transition-colors ${tab === "components" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}
         >
           Components
         </button>

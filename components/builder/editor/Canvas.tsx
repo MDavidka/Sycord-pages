@@ -11,7 +11,7 @@ import { resolveTheme, themeToCSS } from "@/lib/builder/theme-presets"
 import { useGoogleFonts } from "@/components/builder/hooks/use-google-fonts"
 
 /**
- * A thin drop indicator between blocks. This is the NEW drag-and-drop option:
+ * A thin drop indicator between blocks. This is the drag-and-drop drop option:
  * components dragged from the palette can be dropped at any insertion point on
  * the canvas. Each zone is a @dnd-kit droppable keyed by its insertion index.
  */
@@ -25,7 +25,7 @@ function CanvasDropZone({ index, dndActive }: { index: number; dndActive: boolea
           isOver ? "opacity-100" : "opacity-0"
         }`}
       >
-        <div className="h-1 w-full bg-green rounded-full shadow-[0_0_12px_2px_rgba(34,197,94,0.6)]" />
+        <div className="h-1 w-full bg-primary rounded-full shadow-[0_0_10px_1px_rgba(255,255,255,0.4)]" />
       </div>
     </div>
   )
@@ -48,15 +48,15 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
   // Drop zone for the empty canvas / appending at the end.
   const { setNodeRef: setEndRef, isOver: endOver } = useDroppable({ id: "canvas-drop-end", data: { index: blocks.length } })
 
-  const maxWidth = viewport === "desktop" ? "880px" : viewport === "tablet" ? "768px" : "375px"
+  const maxWidth = viewport === "desktop" ? "100%" : viewport === "tablet" ? "768px" : "375px"
 
   if (blocks.length === 0) {
     return (
-      <div className="flex-1 flex items-start justify-center p-6 overflow-auto relative">
+      <div className="flex-1 flex items-start justify-center p-4 md:p-6 overflow-auto custom-scrollbar relative">
         <div
           ref={setEndRef}
-          className={`w-full max-w-[880px] rounded-xl border-2 border-dashed transition-colors ${
-            endOver ? "border-green bg-green-glow2" : "border-border-default"
+          className={`w-full max-w-[880px] rounded-2xl border-2 border-dashed transition-colors ${
+            endOver ? "border-primary bg-accent" : "border-border"
           }`}
         >
           <CanvasEmpty />
@@ -67,7 +67,7 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
 
   const canvasContent = (
     <div
-      className="@container border rounded-xl min-h-[400px] relative z-[1] overflow-hidden transition-all duration-300"
+      className="@container border rounded-2xl min-h-[400px] relative z-[1] overflow-hidden transition-all duration-300 shadow-sm"
       style={{ width: "100%", maxWidth, ...cssVars, color: "var(--color-text-0)", backgroundColor: "var(--color-bg-1)", borderColor: "var(--color-border-default)" } as React.CSSProperties}
       onClick={(e) => {
         if (e.target === e.currentTarget) selectBlock(null)
@@ -85,37 +85,37 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
         </div>
       ))}
       {/* End drop area when dragging */}
-      <div ref={setEndRef} className={`transition-colors ${dndActive ? (endOver ? "bg-green-glow2 h-10" : "h-6") : "h-0"}`} />
+      <div ref={setEndRef} className={`transition-all ${dndActive ? (endOver ? "bg-primary/10 h-10" : "h-6") : "h-0"}`} />
     </div>
   )
 
   return (
-    <div className="flex-1 flex items-start justify-center p-6 overflow-auto relative">
+    <div className="flex-1 flex items-start justify-center p-4 md:p-6 overflow-auto custom-scrollbar relative">
       <div
-        className="absolute inset-0 opacity-40 pointer-events-none"
-        style={{ backgroundImage: "radial-gradient(circle, var(--color-bg-3) 1px, transparent 1px)", backgroundSize: "20px 20px" }}
+        className="absolute inset-0 opacity-50 pointer-events-none"
+        style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "22px 22px" }}
       />
 
       {viewport === "tablet" ? (
         <div className="relative z-[1]">
-          <div className="border-[12px] border-bg-4 rounded-2xl bg-bg-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
-            <div className="rounded-lg overflow-hidden">{canvasContent}</div>
+          <div className="border-[12px] border-muted rounded-[1.75rem] bg-muted shadow-2xl">
+            <div className="rounded-xl overflow-hidden">{canvasContent}</div>
           </div>
         </div>
       ) : viewport === "mobile" ? (
         <div className="relative z-[1]">
-          <div className="border-[10px] border-bg-4 rounded-[2rem] bg-bg-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+          <div className="border-[10px] border-muted rounded-[2.25rem] bg-muted shadow-2xl">
             <div className="flex justify-center -mt-[4px] mb-1">
-              <div className="w-24 h-5 bg-bg-4 rounded-b-xl" />
+              <div className="w-24 h-5 bg-muted rounded-b-2xl" />
             </div>
-            <div className="rounded-xl overflow-hidden">{canvasContent}</div>
+            <div className="rounded-[1.5rem] overflow-hidden">{canvasContent}</div>
             <div className="flex justify-center mt-2 pb-1">
-              <div className="w-28 h-1 bg-bg-5 rounded-full" />
+              <div className="w-28 h-1 bg-accent rounded-full" />
             </div>
           </div>
         </div>
       ) : (
-        canvasContent
+        <div className="relative z-[1] w-full max-w-[980px]">{canvasContent}</div>
       )}
     </div>
   )

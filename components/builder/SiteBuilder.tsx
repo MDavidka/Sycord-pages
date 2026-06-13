@@ -11,11 +11,13 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core"
 import { toast } from "sonner"
-import { Bot, Loader2, X } from "lucide-react"
+import { Bot, Loader2, LayoutGrid, Layers as LayersIcon, SlidersHorizontal } from "lucide-react"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { CanvasToolbar } from "@/components/builder/editor/CanvasToolbar"
-import { LeftSidebar, blockIcons } from "@/components/builder/editor/LeftSidebar"
+import { LeftSidebar, ComponentsPanel, blockIcons } from "@/components/builder/editor/LeftSidebar"
+import { LayersPanel } from "@/components/builder/editor/LayersPanel"
 import { Canvas } from "@/components/builder/editor/Canvas"
-import { RightSidebar } from "@/components/builder/editor/RightSidebar"
+import { RightSidebar, RightSidebarContent } from "@/components/builder/editor/RightSidebar"
 import { JsonDrawer } from "@/components/builder/editor/JsonDrawer"
 import { VersionHistory } from "@/components/builder/editor/VersionHistory"
 import { GenerationOverlay } from "@/components/builder/editor/GenerationOverlay"
@@ -29,6 +31,7 @@ import { generateSiteConfig, getStarterTemplate } from "@/lib/builder/generate-s
 import type { BlockConfig, BlockType, SiteConfig } from "@/lib/builder/types"
 
 type LoadState = "loading" | "ready" | "error"
+type MobileSheet = "components" | "layers" | "edit" | "agent" | null
 
 export default function SiteBuilder({ projectId, onBack }: { projectId: string; onBack?: () => void }) {
   const config = useConfigStore((s) => s.config)
@@ -45,6 +48,7 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [showAgent, setShowAgent] = useState(false)
+  const [mobileSheet, setMobileSheet] = useState<MobileSheet>(null)
   const [activePaletteType, setActivePaletteType] = useState<BlockType | null>(null)
   const [dndActive, setDndActive] = useState(false)
 
@@ -125,6 +129,7 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
   // ---- AI full-site generation -----------------------------------------
   const handleGenerateSite = useCallback(
     async (prompt: string) => {
+      setMobileSheet(null)
       setGenerating(prompt)
       generationAbort.current?.abort()
       const ac = new AbortController()
@@ -180,7 +185,7 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
 
   if (loadState === "loading") {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-bg-0 text-text-2">
+      <div className="h-full w-full flex items-center justify-center bg-background text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin mr-2" />
         Loading builder…
       </div>
@@ -189,10 +194,10 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
 
   if (loadState === "error") {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center bg-bg-0 text-text-2 gap-3">
+      <div className="h-full w-full flex flex-col items-center justify-center bg-background text-muted-foreground gap-3">
         <p className="text-sm">Couldn&apos;t load this project.</p>
         {onBack && (
-          <button onClick={onBack} className="px-3 py-1.5 rounded-lg bg-bg-2 border border-border-default text-text-1 text-xs hover:bg-bg-3">
+          <button onClick={onBack} className="px-3 py-1.5 rounded-lg bg-card border border-border text-foreground text-xs hover:bg-accent transition-colors">
             Go back
           </button>
         )}
@@ -202,12 +207,19 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
 
   const ActiveIcon = activePaletteType ? blockIcons[activePaletteType] : null
 
+  const mobileNav: { key: Exclude<MobileSheet, null>; label: string; icon: typeof Bot }[] = [
+    { key: "components", label: "Add", icon: LayoutGrid },
+    { key: "layers", label: "Layers", icon: LayersIcon },
+    { key: "edit", label: "Edit", icon: SlidersHorizontal },
+    { key: "agent", label: "AI", icon: Bot },
+  ]
+
   return (
-    <div className="h-full w-full flex flex-col relative bg-bg-0 text-text-0">
+    <div className="h-full w-full flex flex-col relative bg-background text-foreground">
       <CanvasToolbar projectName={projectName} onBack={onBack} onSave={() => persist(config)} saving={saving} dirty={dirty} />
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => { setActivePaletteType(null); setDndActive(false) }}>
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {!previewMode && <LeftSidebar />}
 
           <div className="flex-1 flex flex-col min-w-0 relative">
@@ -219,13 +231,13 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
           </div>
 
           {!previewMode && (showAgent ? (
-            <div className="hidden md:flex w-[320px] bg-bg-1 border-l border-border-default flex-col shrink-0">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-2 flex items-center gap-1.5">
-                  <Bot size={13} className="text-green" /> AI Agent
+            <div className="hidden md:flex w-[320px] bg-card border-l border-border flex-col shrink-0">
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Bot size={14} className="text-foreground" /> AI Agent
                 </span>
-                <button onClick={() => setShowAgent(false)} className="w-6 h-6 rounded flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3 transition-colors" aria-label="Close agent">
-                  <X size={13} />
+                <button onClick={() => setShowAgent(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" aria-label="Close agent">
+                  <SlidersHorizontal size={14} />
                 </button>
               </div>
               <AgentPanel onGenerateSite={handleGenerateSite} />
@@ -235,9 +247,55 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
           ))}
         </div>
 
+        {/* Mobile bottom navigation */}
+        {!previewMode && (
+          <nav className="md:hidden shrink-0 frosted-header border-t border-border flex items-stretch h-14">
+            {mobileNav.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setMobileSheet(key)}
+                className="flex-1 flex flex-col items-center justify-center gap-0.5 text-muted-foreground hover:text-foreground active:bg-accent/60 transition-colors"
+                aria-label={label}
+              >
+                <Icon size={18} />
+                <span className="text-[10px] font-medium">{label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+
+        {/* Mobile sheets (rendered inside DndContext so palette hooks have context) */}
+        <Sheet open={mobileSheet === "components"} onOpenChange={(o) => !o && setMobileSheet(null)}>
+          <SheetContent side="bottom" className="md:hidden h-[80vh] p-0 rounded-t-2xl bg-card flex flex-col gap-0">
+            <SheetHeader className="border-b border-border"><SheetTitle className="text-sm">Add Components</SheetTitle></SheetHeader>
+            <ComponentsPanel draggable={false} onAdded={() => setMobileSheet(null)} />
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={mobileSheet === "layers"} onOpenChange={(o) => !o && setMobileSheet(null)}>
+          <SheetContent side="bottom" className="md:hidden h-[80vh] p-0 rounded-t-2xl bg-card flex flex-col gap-0">
+            <SheetHeader className="border-b border-border"><SheetTitle className="text-sm">Layers</SheetTitle></SheetHeader>
+            <LayersPanel />
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={mobileSheet === "edit"} onOpenChange={(o) => !o && setMobileSheet(null)}>
+          <SheetContent side="bottom" className="md:hidden h-[80vh] p-0 rounded-t-2xl bg-card flex flex-col gap-0">
+            <SheetHeader className="border-b border-border"><SheetTitle className="text-sm">Edit & Design</SheetTitle></SheetHeader>
+            <RightSidebarContent />
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={mobileSheet === "agent"} onOpenChange={(o) => !o && setMobileSheet(null)}>
+          <SheetContent side="bottom" className="md:hidden h-[80vh] p-0 rounded-t-2xl bg-card flex flex-col gap-0">
+            <SheetHeader className="border-b border-border"><SheetTitle className="text-sm flex items-center gap-1.5"><Bot size={15} /> AI Agent</SheetTitle></SheetHeader>
+            <AgentPanel onGenerateSite={handleGenerateSite} />
+          </SheetContent>
+        </Sheet>
+
         <DragOverlay dropAnimation={null}>
           {activePaletteType && ActiveIcon ? (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green text-black text-[12px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold shadow-xl">
               <ActiveIcon size={14} />
               {blockMetadata.find((b) => b.type === activePaletteType)?.label}
             </div>
@@ -248,11 +306,11 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
       <VersionHistory />
       <ShortcutsModal />
 
-      {/* Floating AI agent toggle */}
+      {/* Floating AI agent toggle — desktop only */}
       {!previewMode && !showAgent && (
         <button
           onClick={() => setShowAgent(true)}
-          className="absolute bottom-5 right-5 z-40 h-11 px-4 rounded-full bg-green text-black text-[13px] font-semibold shadow-[0_8px_24px_rgba(34,197,94,0.4)] hover:bg-green-dim transition-all flex items-center gap-2 active:scale-95"
+          className="hidden md:flex absolute bottom-5 right-5 z-40 h-11 px-4 rounded-full bg-primary text-primary-foreground text-[13px] font-semibold shadow-lg hover:opacity-90 transition-all items-center gap-2 active:scale-95"
         >
           <Bot size={16} />
           AI Agent

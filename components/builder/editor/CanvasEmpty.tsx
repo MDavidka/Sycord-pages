@@ -26,15 +26,15 @@ export function CanvasEmpty() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-10 relative z-[1] min-h-[360px]">
-      <h3 className="text-lg font-semibold text-text-1">Start building</h3>
-      <p className="text-[13px] text-text-3 max-w-[360px] leading-relaxed">
-        Drag a component from the left panel onto the canvas, click to add one, or describe your site to the AI agent.
+      <h3 className="text-lg font-semibold text-foreground">Start building</h3>
+      <p className="text-[13px] text-muted-foreground max-w-[360px] leading-relaxed">
+        Drag a component from the panel onto the canvas, tap to add one, or describe your site to the AI agent.
       </p>
       <button
         onClick={handleAddBlock}
-        className="px-3.5 py-1.5 rounded-md bg-green text-black text-[12.5px] font-semibold border border-green hover:bg-green-dim transition-colors flex items-center gap-1.5"
+        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-[13px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5"
       >
-        <Plus size={14} />
+        <Plus size={15} />
         Add Hero Block
       </button>
     </div>

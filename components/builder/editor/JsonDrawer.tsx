@@ -14,19 +14,19 @@ function syntaxHighlight(json: string): string {
   return escaped.replace(
     /(&quot;(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\&])*?&quot;(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
     (match) => {
-      let cls = "text-status-yellow"
+      let cls = "text-amber-400"
       if (/^&quot;/.test(match)) {
         if (/:$/.test(match)) {
           cls = "text-sky-300"
           match = match.replace(/:$/, "")
           return `<span class="${cls}">${match}</span>:`
         } else {
-          cls = "text-emerald-300"
+          cls = "text-emerald-400"
         }
       } else if (/true|false/.test(match)) {
-        cls = "text-status-blue"
+        cls = "text-blue-400"
       } else if (/null/.test(match)) {
-        cls = "text-text-3"
+        cls = "text-muted-foreground"
       }
       return `<span class="${cls}">${match}</span>`
     },
@@ -72,32 +72,32 @@ export function JsonDrawer() {
   }
 
   return (
-    <div className={`bg-bg-0 flex flex-col overflow-hidden transition-all duration-250 ease-in-out ${jsonDrawerOpen ? "border-t border-border-default" : ""}`} style={{ height: jsonDrawerOpen ? "220px" : "0px" }}>
-      <div className="h-8 min-h-8 bg-bg-1 border-b border-border-default flex items-center px-3 text-[11px] text-text-2 gap-2 cursor-pointer select-none hover:bg-bg-2 transition-colors" onClick={toggleJsonDrawer}>
-        <span className="font-mono">{"{ }"}</span>
+    <div className={`bg-card flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${jsonDrawerOpen ? "border-t border-border" : ""}`} style={{ height: jsonDrawerOpen ? "220px" : "0px" }}>
+      <div className="h-9 min-h-9 bg-muted/30 border-b border-border flex items-center px-3 text-[11.5px] text-muted-foreground gap-2 cursor-pointer select-none hover:bg-accent/50 transition-colors" onClick={toggleJsonDrawer}>
+        <span className="font-mono text-foreground/70">{"{ }"}</span>
         <span>Site Config</span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-3">
           {!editing && (
-            <button onClick={(e) => { e.stopPropagation(); startEditing() }} className="text-[10px] text-text-3 hover:text-green transition-colors">Edit</button>
+            <button onClick={(e) => { e.stopPropagation(); startEditing() }} className="text-[10.5px] text-muted-foreground hover:text-foreground transition-colors">Edit</button>
           )}
           {editing && (
             <>
-              <button onClick={(e) => { e.stopPropagation(); applyEdit() }} className="text-[10px] text-green hover:text-green-dim transition-colors font-medium">Apply</button>
-              <button onClick={(e) => { e.stopPropagation(); cancelEdit() }} className="text-[10px] text-text-3 hover:text-status-red transition-colors">Cancel</button>
+              <button onClick={(e) => { e.stopPropagation(); applyEdit() }} className="text-[10.5px] text-foreground hover:opacity-80 transition-opacity font-medium">Apply</button>
+              <button onClick={(e) => { e.stopPropagation(); cancelEdit() }} className="text-[10.5px] text-muted-foreground hover:text-destructive transition-colors">Cancel</button>
             </>
           )}
-          <div className="flex items-center gap-1 text-[10px] text-green">
-            <span className="w-1.5 h-1.5 rounded-full bg-green" />
+          <div className="flex items-center gap-1 text-[10.5px] text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             Live
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed text-text-1">
+      <div className="flex-1 overflow-auto custom-scrollbar px-3.5 py-2.5 font-mono text-[11.5px] leading-relaxed text-foreground/80">
         {editing ? (
           <div className="h-full flex flex-col">
-            <textarea value={editValue} onChange={(e) => { setEditValue(e.target.value); setError(null) }} className="flex-1 w-full bg-transparent text-text-1 outline-none resize-none font-mono text-[11.5px] leading-relaxed" spellCheck={false} />
-            {error && <div className="text-status-red text-[10px] mt-1 py-1">{error}</div>}
+            <textarea value={editValue} onChange={(e) => { setEditValue(e.target.value); setError(null) }} className="flex-1 w-full bg-transparent text-foreground/80 outline-none resize-none font-mono text-[11.5px] leading-relaxed" spellCheck={false} />
+            {error && <div className="text-destructive text-[10.5px] mt-1 py-1">{error}</div>}
           </div>
         ) : (
           <pre dangerouslySetInnerHTML={{ __html: highlighted }} />

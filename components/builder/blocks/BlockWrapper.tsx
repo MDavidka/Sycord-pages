@@ -56,12 +56,12 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
         e.stopPropagation()
         onSelect()
       }}
-      className={`scroll-revealed relative cursor-pointer border-b border-border-subtle group transition-[opacity,transform] duration-500 ${
+      className={`scroll-revealed relative cursor-pointer group transition-[opacity,transform] duration-500 ${
         isRevealed ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
       } ${
         isSelected
-          ? "bg-green-glow2 outline outline-2 outline-green -outline-offset-2 rounded animate-select-pulse"
-          : "hover:bg-green-glow2"
+          ? "outline outline-2 outline-primary -outline-offset-2 rounded-sm animate-select-pulse"
+          : "hover:outline hover:outline-1 hover:outline-primary/30 hover:-outline-offset-1"
       }`}
       role="button"
       aria-label={`${block.type} block${isSelected ? ", selected" : ""}`}
@@ -76,7 +76,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
       style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
     >
       <span
-        className={`absolute top-1.5 left-1.5 text-[9px] font-semibold uppercase tracking-wider text-green bg-green-glow px-1.5 py-0.5 rounded transition-opacity z-10 ${
+        className={`absolute top-1.5 left-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground bg-primary px-1.5 py-0.5 rounded-md transition-opacity z-10 ${
           isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         }`}
       >
@@ -94,7 +94,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
               e.stopPropagation()
               moveBlock(index, index - 1)
             }}
-            className="w-6 h-6 rounded bg-bg-2/80 border border-border-default backdrop-blur-sm flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3 transition-colors"
+            className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             title="Move up"
             aria-label={`Move ${block.type} block up`}
           >
@@ -107,7 +107,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
               e.stopPropagation()
               moveBlock(index, index + 1)
             }}
-            className="w-6 h-6 rounded bg-bg-2/80 border border-border-default backdrop-blur-sm flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3 transition-colors"
+            className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             title="Move down"
             aria-label={`Move ${block.type} block down`}
           >
@@ -119,7 +119,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
             e.stopPropagation()
             duplicateBlock(block.id)
           }}
-          className="w-6 h-6 rounded bg-bg-2/80 border border-border-default backdrop-blur-sm flex items-center justify-center text-text-3 hover:text-text-0 hover:bg-bg-3 transition-colors"
+          className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           title="Duplicate"
           aria-label={`Duplicate ${block.type} block`}
         >
@@ -141,7 +141,7 @@ export function BlockWrapper({ block, isSelected, onSelect, children }: Props) {
               duration: 3000,
             })
           }}
-          className="w-6 h-6 rounded bg-bg-2/80 border border-border-default backdrop-blur-sm flex items-center justify-center text-text-3 hover:text-status-red hover:bg-status-red/10 transition-colors"
+          className="w-6 h-6 rounded-md frosted-glass flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors"
           title="Delete"
           aria-label={`Delete ${block.type} block`}
         >

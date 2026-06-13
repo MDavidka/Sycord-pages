@@ -34,11 +34,10 @@ const initialMessages: ChatMessage[] = [
 
 function TypingIndicator() {
   return (
-    <div className="self-start flex gap-1 px-4 py-3 bg-green-glow rounded-xl rounded-bl-sm border border-green/10">
-      {[0, 1, 2].map((i) => (
-        <span key={i} className="w-1.5 h-1.5 rounded-full bg-green opacity-40" style={{ animation: "typeDot 1.4s infinite", animationDelay: `${i * 0.2}s` }} />
-      ))}
-      <style>{`@keyframes typeDot { 0%, 60%, 100% { opacity: 0.4; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }`}</style>
+    <div className="self-start flex gap-1 px-4 py-3 bg-accent rounded-2xl rounded-bl-sm border border-border">
+      <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 thinking-dot-1" />
+      <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 thinking-dot-2" />
+      <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 thinking-dot-3" />
     </div>
   )
 }
@@ -198,37 +197,37 @@ export function AgentPanel({ onGenerateSite }: { onGenerateSite?: (prompt: strin
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="p-2.5 border-b border-border-default">
-        <button onClick={handleGenerate} className="w-full py-2 rounded-lg bg-green text-black text-[12px] font-semibold hover:bg-green-dim transition-colors flex items-center justify-center gap-1.5">
-          <Sparkles size={13} />
+    <div className="flex flex-col flex-1 overflow-hidden min-h-0">
+      <div className="p-2.5 border-b border-border">
+        <button onClick={handleGenerate} className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-[12.5px] font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5">
+          <Sparkles size={14} />
           Generate full site with AI
         </button>
-        <p className="text-[10px] text-text-3 mt-1.5 text-center">Type a description below, then generate or quick-edit.</p>
+        <p className="text-[10.5px] text-muted-foreground/70 mt-1.5 text-center">Type a description below, then generate or quick-edit.</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5 custom-scrollbar">
         {messages.map((msg) => (
-          <div key={msg.id} className={`max-w-[94%] px-3 py-2.5 rounded-xl text-[12.5px] leading-relaxed whitespace-pre-wrap ${msg.role === "user" ? "self-end bg-bg-3 text-text-0 rounded-br-sm" : "self-start bg-green-glow text-text-0 rounded-bl-sm border border-green/10"}`}>
+          <div key={msg.id} className={`max-w-[94%] px-3 py-2.5 rounded-2xl text-[12.5px] leading-relaxed whitespace-pre-wrap ${msg.role === "user" ? "self-end bg-muted text-foreground rounded-br-sm" : "self-start bg-accent text-foreground rounded-bl-sm border border-border"}`}>
             {msg.text}
             {msg.patch && (
-              <div className="bg-bg-2 border border-border-default rounded-md p-2 mt-2 font-mono text-[10.5px] leading-relaxed">
+              <div className="bg-background border border-border rounded-lg p-2 mt-2 font-mono text-[10.5px] leading-relaxed">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-sans text-[9px] font-semibold uppercase tracking-wider text-text-3">JSON Patch</span>
+                  <span className="font-sans text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground/70">JSON Patch</span>
                   {!msg.applied && (
                     <div className="flex gap-1">
-                      <button onClick={() => handleApply(msg)} className="px-1.5 py-0.5 rounded text-[9px] bg-green/20 text-green hover:bg-green/30 transition-colors flex items-center gap-0.5"><Check size={9} /> Apply</button>
-                      <button onClick={() => handleReject(msg)} className="px-1.5 py-0.5 rounded text-[9px] bg-status-red/10 text-status-red hover:bg-status-red/20 transition-colors flex items-center gap-0.5"><X size={9} /> Reject</button>
+                      <button onClick={() => handleApply(msg)} className="px-1.5 py-0.5 rounded-md text-[9.5px] bg-primary/15 text-foreground hover:bg-primary/25 transition-colors flex items-center gap-0.5"><Check size={9} /> Apply</button>
+                      <button onClick={() => handleReject(msg)} className="px-1.5 py-0.5 rounded-md text-[9.5px] bg-destructive/15 text-destructive hover:bg-destructive/25 transition-colors flex items-center gap-0.5"><X size={9} /> Reject</button>
                     </div>
                   )}
-                  {msg.applied && <span className="text-[9px] text-green font-medium flex items-center gap-0.5"><Check size={9} /> Applied</span>}
+                  {msg.applied && <span className="text-[9.5px] text-foreground/80 font-medium flex items-center gap-0.5"><Check size={9} /> Applied</span>}
                 </div>
-                <div className="text-text-3 text-[10px] mb-1">{msg.patch.path}</div>
+                <div className="text-muted-foreground/70 text-[10px] mb-1">{msg.patch.path}</div>
                 {msg.patch.removed?.map((line, i) => (
-                  <div key={`r-${i}`} className="text-status-red line-through opacity-60">- {line}</div>
+                  <div key={`r-${i}`} className="text-destructive/80 line-through opacity-70">- {line}</div>
                 ))}
                 {msg.patch.added?.map((line, i) => (
-                  <div key={`a-${i}`} className="text-green">+ {line}</div>
+                  <div key={`a-${i}`} className="text-emerald-400">+ {line}</div>
                 ))}
               </div>
             )}
@@ -238,23 +237,23 @@ export function AgentPanel({ onGenerateSite }: { onGenerateSite?: (prompt: strin
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-2.5 border-t border-border-default">
-        <div className="flex gap-1.5">
+      <div className="p-2.5 border-t border-border">
+        <div className="frosted-input rounded-xl flex gap-1.5 p-1 items-center">
           <input
             type="text"
             placeholder="Ask the agent or describe a site..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleSend() }}
-            className="flex-1 px-3 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[13px] outline-none focus:border-green placeholder:text-text-3"
+            className="flex-1 px-2.5 py-1.5 bg-transparent text-foreground text-[13px] outline-none placeholder:text-muted-foreground/60"
           />
-          <button onClick={handleSend} className="w-9 h-9 rounded-lg bg-green flex items-center justify-center text-black shrink-0 hover:bg-green-dim transition-colors" aria-label="Send message">
+          <button onClick={handleSend} className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shrink-0 hover:opacity-90 transition-opacity" aria-label="Send message">
             <Send size={14} />
           </button>
         </div>
         <div className="flex gap-1 mt-1.5 flex-wrap">
           {["Change the headline", "Add a pricing section", "Make the hero split", "Switch to ocean theme"].map((hint) => (
-            <span key={hint} onClick={() => handleHint(hint)} className="px-2 py-0.5 rounded-full text-[10.5px] text-text-2 border border-border-default bg-bg-2 cursor-pointer hover:border-green hover:text-green hover:bg-green-glow transition-all">
+            <span key={hint} onClick={() => handleHint(hint)} className="px-2 py-0.5 rounded-full text-[10.5px] text-muted-foreground border border-border bg-muted/40 cursor-pointer hover:border-foreground/20 hover:text-foreground hover:bg-accent transition-all">
               {hint}
             </span>
           ))}

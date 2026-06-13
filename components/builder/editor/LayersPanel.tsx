@@ -49,23 +49,23 @@ function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove }: {
       ref={setNodeRef}
       style={style}
       onClick={onSelect}
-      className={`group px-2.5 py-2 rounded-md text-[12.5px] flex items-center gap-2 transition-all cursor-pointer select-none relative ${
-        isSelected ? "bg-green-glow text-green" : "text-text-1 hover:bg-bg-3 hover:text-text-0"
+      className={`group px-2 py-2 rounded-lg text-[13px] flex items-center gap-2 transition-all cursor-pointer select-none ${
+        isSelected ? "bg-accent text-foreground ring-1 ring-primary/40" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
-      <div {...attributes} {...listeners} className="opacity-0 group-hover:opacity-100 transition-opacity text-text-3 cursor-grab active:cursor-grabbing touch-none" aria-label={`Drag to reorder ${blockLabels[block.type]}`}>
-        <GripVertical size={12} />
+      <div {...attributes} {...listeners} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground cursor-grab active:cursor-grabbing touch-none" aria-label={`Drag to reorder ${blockLabels[block.type]}`}>
+        <GripVertical size={13} />
       </div>
-      <div className={`w-[26px] h-[26px] rounded flex items-center justify-center text-[11px] shrink-0 border ${isSelected ? "border-green/30 bg-green-glow" : "border-border-default bg-bg-3"}`}>
-        <Icon size={13} />
+      <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 border ${isSelected ? "border-primary/30 bg-primary/10 text-foreground" : "border-border bg-muted/40 text-muted-foreground"}`}>
+        <Icon size={14} />
       </div>
-      <span className="font-medium flex-1">{blockLabels[block.type]}</span>
+      <span className="font-medium flex-1 truncate">{blockLabels[block.type]}</span>
       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={(e) => { e.stopPropagation(); onDuplicate() }} className="w-[22px] h-[22px] rounded flex items-center justify-center text-text-3 hover:bg-bg-4 hover:text-text-0 transition-all" aria-label={`Duplicate ${blockLabels[block.type]}`}>
-          <Copy size={11} />
+        <button onClick={(e) => { e.stopPropagation(); onDuplicate() }} className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground transition-all" aria-label={`Duplicate ${blockLabels[block.type]}`}>
+          <Copy size={12} />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onRemove() }} className="w-[22px] h-[22px] rounded flex items-center justify-center text-text-3 hover:bg-status-red/10 hover:text-status-red transition-all" aria-label={`Remove ${blockLabels[block.type]}`}>
-          <Trash2 size={11} />
+        <button onClick={(e) => { e.stopPropagation(); onRemove() }} className="w-6 h-6 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/15 hover:text-destructive transition-all" aria-label={`Remove ${blockLabels[block.type]}`}>
+          <Trash2 size={12} />
         </button>
       </div>
     </div>
@@ -82,7 +82,7 @@ function AddComponentPopover({ onAdd, onClose }: { onAdd: (type: BlockType) => v
   }, {})
 
   return (
-    <div className="absolute bottom-[52px] left-2 right-2 bg-bg-2 border border-border-default rounded-lg p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] z-10 max-h-[280px] overflow-y-auto">
+    <div className="absolute bottom-[52px] left-2 right-2 frosted-glass rounded-xl p-1.5 shadow-xl z-10 max-h-[280px] overflow-y-auto custom-scrollbar">
       <input
         autoFocus
         type="text"
@@ -90,27 +90,27 @@ function AddComponentPopover({ onAdd, onClose }: { onAdd: (type: BlockType) => v
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         onKeyDown={(e) => e.key === "Escape" && onClose()}
-        className="w-full px-2 py-1.5 rounded border border-border-default bg-bg-3 text-text-0 text-[11.5px] outline-none focus:border-green mb-1"
+        className="w-full px-2.5 py-2 rounded-lg border border-border bg-background text-foreground text-[12px] outline-none focus:ring-1 focus:ring-ring mb-1"
       />
       {Object.entries(grouped).map(([category, items]) => (
         <div key={category}>
-          <div className="text-[9px] font-semibold uppercase tracking-wider text-text-3 px-1.5 pt-2 pb-1">{category}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-1.5 pt-2 pb-1">{category}</div>
           {items.map((meta) => {
             const Icon = blockIcons[meta.type] || Layout
             return (
-              <button key={meta.type} onClick={() => { onAdd(meta.type); onClose() }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[12px] text-text-1 hover:bg-bg-3 hover:text-text-0 transition-colors text-left">
-                <div className="w-[22px] h-[22px] rounded border border-border-default bg-bg-3 flex items-center justify-center text-[10px] shrink-0">
-                  <Icon size={12} />
+              <button key={meta.type} onClick={() => { onAdd(meta.type); onClose() }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors text-left">
+                <div className="w-6 h-6 rounded-md border border-border bg-muted/40 flex items-center justify-center shrink-0">
+                  <Icon size={13} />
                 </div>
                 <span>{meta.label}</span>
-                <span className="ml-auto text-[10px] text-text-3">{meta.variants.length}v</span>
+                <span className="ml-auto text-[10px] text-muted-foreground/60">{meta.variants.length}v</span>
               </button>
             )
           })}
         </div>
       ))}
       {filtered.length === 0 && (
-        <div className="px-2 py-3 text-center text-[11px] text-text-3 flex items-center justify-center gap-1.5">
+        <div className="px-2 py-3 text-center text-[12px] text-muted-foreground flex items-center justify-center gap-1.5">
           <Search size={12} />
           No components match &ldquo;{search}&rdquo;
         </div>
@@ -154,12 +154,12 @@ export function LayersPanel() {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden relative">
-      <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-3">Layers</span>
-        <span className="text-[10px] text-text-3">{blocks.length}</span>
+      <div className="px-3 pt-3 pb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Layers</span>
+        <span className="text-[11px] text-muted-foreground/60">{blocks.length}</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
             {blocks.map((block) => (
@@ -183,12 +183,12 @@ export function LayersPanel() {
         </DndContext>
       </div>
 
-      <div className="p-2 border-t border-border-subtle relative">
+      <div className="p-2 border-t border-border relative">
         <button
           onClick={() => setShowPopover(!showPopover)}
-          className="w-full py-2 rounded-md border border-dashed border-border-default text-text-2 text-xs flex items-center justify-center gap-1.5 transition-all hover:border-green hover:text-green hover:bg-green-glow2"
+          className="w-full py-2 rounded-lg border border-dashed border-border text-muted-foreground text-xs flex items-center justify-center gap-1.5 transition-all hover:border-primary/50 hover:text-foreground hover:bg-accent/50"
         >
-          <Plus size={13} />
+          <Plus size={14} />
           Add Component
         </button>
         {showPopover && <AddComponentPopover onAdd={handleAddBlock} onClose={() => setShowPopover(false)} />}
