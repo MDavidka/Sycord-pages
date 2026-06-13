@@ -1,4 +1,10 @@
 // System + planning prompts for the Syra agent.
+//
+// The DESIGN EXCELLENCE guidance below is adapted from the v0.diy project's
+// "frontend-design" skill (github.com/SujalXplores/v0.diy, MIT). It captures the
+// design philosophy that gives v0-grade output its quality and is independent of
+// the v0 API — Syra runs it on Vertex AI. Content was rephrased for compliance
+// with licensing restrictions.
 
 import type { ProjectFramework, SyraPlan, SyraPlanDesign, SyraPlanPage } from "./types"
 import { SHADCN_COMPONENTS } from "./shadcn"
@@ -34,6 +40,30 @@ DESIGN SYSTEM — shadcn/ui (https://ui.shadcn.com)
   testimonials, FAQ via Accordion, CTA, footer) from these primitives.
 - Do NOT recreate the shadcn primitives — they already exist. Build new higher-level
   components on top of them under components/.
+
+DESIGN EXCELLENCE (this is what separates a great site from generic output)
+- Before writing code, COMMIT to one bold, specific aesthetic direction and execute it
+  with precision. Pick an extreme and own it: brutally minimal, maximalist, retro-futuristic,
+  organic/natural, luxury/refined, editorial/magazine, brutalist/raw, art-deco/geometric,
+  soft/pastel, industrial/utilitarian, etc. Both bold maximalism and refined minimalism
+  work — what matters is intentionality, not intensity. Match code complexity to the vision.
+- Differentiation: decide the ONE thing that makes this site memorable and build around it.
+- Typography: establish a strong hierarchy and a distinctive display+body pairing. Use a
+  clear type scale, confident heading sizes, and tight, deliberate tracking — never timid.
+- Color & theme: commit to a cohesive palette driven by the theme tokens (bg-background,
+  text-foreground, bg-primary, bg-card, border, muted, accent). Use a dominant color with
+  sharp accents rather than a flat, evenly-distributed palette. Support light + dark.
+- Motion: add purposeful animation for high-impact moments — one well-orchestrated page-load
+  with staggered reveals beats scattered micro-interactions. Add tasteful hover/focus states
+  and scroll-reveal where it elevates the page. (framer-motion is available; CSS is fine too.)
+- Spatial composition: use intentional, non-generic layouts — asymmetry, overlap, grid-breaking
+  accents, generous negative space OR controlled density. Avoid the default centered-stack look.
+- Backgrounds & depth: create atmosphere instead of flat solid fills — subtle gradient meshes,
+  noise/grain, geometric patterns, layered transparency, soft glows, decorative borders.
+- AVOID generic "AI slop": no cliché purple-gradient-on-white, no cookie-cutter centered hero +
+  three plain cards, no lorem ipsum. Vary your choices between generations — never converge on
+  the same fonts/colors/layout every time. Make choices that feel genuinely designed for THIS
+  brand and audience. Don't hold back; show what a truly polished, custom site looks like.
 
 MULTI-PAGE SITES
 - Build several real routes, not just a home page. Typical App Router layout:
@@ -91,10 +121,11 @@ Return ONLY this JSON object (no markdown fences):
 {
   "summary": "one sentence describing the site",
   "design": {
-    "style": "overall visual style + mood (e.g. 'sleek dark SaaS, glassy cards, bold')",
-    "colors": "palette direction using theme tokens / accents (e.g. 'indigo primary on slate, subtle gradients')",
-    "typography": "heading + body type vibe and scale",
-    "layout": "navigation + spacing + grid approach used across pages"
+    "style": "ONE committed, bold aesthetic direction + mood (e.g. 'editorial luxury, serif display, warm paper tones' or 'brutalist mono, stark high-contrast') — not generic",
+    "colors": "a dominant color + sharp accents using theme tokens (e.g. 'deep emerald primary on near-black, amber accent') — avoid cliché purple-on-white",
+    "typography": "a distinctive display + body pairing, type scale, and heading treatment",
+    "layout": "an intentional, non-generic layout system (asymmetry/overlap/grid accents), spacing rhythm, nav + footer approach",
+    "signature": "the ONE memorable detail/element this site is built around"
   },
   "steps": ["short actionable build step", "..."],
   "pages": [
@@ -110,6 +141,8 @@ Return ONLY this JSON object (no markdown fences):
 }
 
 Rules:
+- Commit to ONE bold, specific aesthetic direction and make every page express it. Avoid
+  generic AI aesthetics (cliché purple gradients, cookie-cutter centered hero + 3 plain cards).
 - Home page MUST be "${fw.entryFile}". Use correct router paths for the other routes.
 - Plan 3-6 PAGES (home + e.g. about, features/services, pricing, contact, blog, etc. as fits).
 - Each page MUST list 4-8 concrete SECTIONS describing layout + the actual content to include.
@@ -127,7 +160,7 @@ DESIGN DIRECTION:
 - Style: ${plan.design.style}
 - Colors: ${plan.design.colors}
 - Typography: ${plan.design.typography}
-- Layout: ${plan.design.layout}
+- Layout: ${plan.design.layout}${plan.design.signature ? `\n- Signature element: ${plan.design.signature}` : ""}
 
 PAGES TO BUILD (implement EVERY section listed for each page):
 ${plan.pages
@@ -140,9 +173,12 @@ BACKEND: ${plan.backend.join(", ") || "a contact/newsletter route handler"}
 Implementation requirements:
 - Home page path MUST be "${fw.entryFile}". Build every page and EVERY section above with
   real, specific copy — multiple paragraphs, lists, stats, testimonials, FAQs, CTAs.
-- Apply the design direction consistently: cohesive color accents, strong typographic
-  hierarchy, generous spacing, rounded cards, hover states, responsive grids, and tasteful
-  gradients/borders. Make it look designed, not default.
+- Apply the design direction consistently: commit fully to the chosen aesthetic across every
+  page. Strong typographic hierarchy, a dominant color with sharp accents, intentional
+  (non-generic) layout — asymmetry/overlap/grid accents where it fits — generous spacing,
+  atmospheric backgrounds (gradient meshes, subtle noise/grain, glows, decorative borders),
+  rounded cards, hover/focus states, responsive grids, and one well-orchestrated load animation.
+  Make it look deliberately designed, not default. Avoid generic AI aesthetics at all costs.
 - Build the UI from shadcn/ui primitives (@/components/ui/*): ${UI_LIST}. Icons: lucide-react.
 - Reuse the shared header/nav + footer on every page. Implement the backend pieces and wire forms.
 - Add "use client" to interactive components. Write COMPLETE files (no placeholders/TODO).
@@ -201,6 +237,7 @@ export function parsePlan(text: string): SyraPlan {
       colors: String(obj?.design?.colors || fallbackDesign.colors).trim(),
       typography: String(obj?.design?.typography || fallbackDesign.typography).trim(),
       layout: String(obj?.design?.layout || fallbackDesign.layout).trim(),
+      signature: obj?.design?.signature ? String(obj.design.signature).trim() : undefined,
     }
 
     const pages: SyraPlanPage[] = Array.isArray(obj.pages)
