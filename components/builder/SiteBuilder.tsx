@@ -29,6 +29,7 @@ import { useKeyboardShortcuts } from "@/components/builder/hooks/use-keyboard-sh
 import { blockMetadata } from "@/lib/builder/block-metadata"
 import { generateSiteConfig } from "@/lib/builder/generate-site"
 import { buildPageHtml, pagePathToFilename } from "@/lib/builder/export-html"
+import { variablesToMap } from "@/lib/builder/variables"
 import { blankTheme } from "@/lib/builder/theme-presets"
 import type { BlockConfig, BlockType, SiteConfig } from "@/lib/builder/types"
 
@@ -185,6 +186,7 @@ export default function SiteBuilder({ projectId, onBack }: { projectId: string; 
           pageName: page.name,
           blocks: page.blocks,
           theme: config.theme,
+          variables: variablesToMap(config.variables),
         })
         const res = await fetch(`/api/projects/${projectId}/pages`, {
           method: "POST",

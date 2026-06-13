@@ -9,7 +9,7 @@ import { blockMetadata } from "@/lib/builder/block-metadata"
 interface FieldDef {
   key: string
   label: string
-  type: "text" | "textarea" | "select" | "array-strings" | "array-items"
+  type: "text" | "textarea" | "select" | "array-strings" | "array-items" | "page-select"
   options?: string[]
 }
 
@@ -183,7 +183,11 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     sections: [
       { title: "Content", fields: [
         { key: "text", label: "Label", type: "text" },
-        { key: "url", label: "URL", type: "text" },
+      ] },
+      { title: "Action", fields: [
+        { key: "actionType", label: "On click", type: "select", options: ["url", "page"] },
+        { key: "url", label: "Open URL", type: "text" },
+        { key: "pagePath", label: "Go to page", type: "page-select" },
       ] },
       { title: "Style", fields: [
         { key: "variant", label: "Variant", type: "select", options: ["default", "secondary", "outline", "ghost", "link", "destructive"] },
@@ -235,6 +239,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
 function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }) {
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps)
   const updateBlock = useConfigStore((s) => s.updateBlock)
+  const pages = useConfigStore((s) => s.config.pages) ?? []
+  const variables = useConfigStore((s) => s.config.variables) ?? []
 
   const value = field.key === "variant" ? block.variant : (block.props as Record<string, unknown>)[field.key]
 
@@ -246,19 +252,42 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
     }
   }
 
+  // Inserts a {{variable}} token at the end of a text value.
+  const InsertVar = variables.length > 0 ? (
+    <select
+      value=""
+      onChange={(e) => { if (e.target.value) onChange(`${String(value || "")}{{${e.target.value}}}`) }}
+      className="text-[10px] rounded border border-border bg-muted/40 text-muted-foreground px-1 py-0.5 outline-none cursor-pointer hover:text-foreground"
+      title="Insert a variable"
+    >
+      <option value="">+ var</option>
+      {variables.map((v) => <option key={v.key} value={v.key}>{v.key}</option>)}
+    </select>
+  ) : null
+
   switch (field.type) {
     case "text":
       return (
         <div className="mb-2.5">
-          <label className="block text-[12px] text-muted-foreground mb-1 font-medium">{field.label}</label>
+          <div className="flex items-center justify-between mb-1"><label className="block text-[12px] text-muted-foreground font-medium">{field.label}</label>{InsertVar}</div>
           <input type="text" value={String(value || "")} onChange={(e) => onChange(e.target.value)} className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-foreground text-[13px] outline-none focus:ring-1 focus:ring-ring transition-shadow" />
         </div>
       )
     case "textarea":
       return (
         <div className="mb-2.5">
-          <label className="block text-[12px] text-muted-foreground mb-1 font-medium">{field.label}</label>
+          <div className="flex items-center justify-between mb-1"><label className="block text-[12px] text-muted-foreground font-medium">{field.label}</label>{InsertVar}</div>
           <textarea value={String(value || "")} onChange={(e) => onChange(e.target.value)} rows={3} className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-foreground text-[13px] outline-none focus:ring-1 focus:ring-ring resize-y transition-shadow" />
+        </div>
+      )
+    case "page-select":
+      return (
+        <div className="mb-2.5">
+          <label className="block text-[12px] text-muted-foreground mb-1 font-medium">{field.label}</label>
+          <select value={String(value || "")} onChange={(e) => onChange(e.target.value)} className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-foreground text-[13px] outline-none focus:ring-1 focus:ring-ring cursor-pointer">
+            <option value="">Select a page…</option>
+            {pages.map((p) => <option key={p.id} value={p.path}>{p.name} ({p.path})</option>)}
+          </select>
         </div>
       )
     case "select":

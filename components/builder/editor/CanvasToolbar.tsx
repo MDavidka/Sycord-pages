@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { useEditorStore, type Viewport } from "@/components/builder/store/editor-store"
 import { useConfigStore } from "@/components/builder/store/config-store"
 import { buildPageHtml } from "@/lib/builder/export-html"
+import { variablesToMap } from "@/lib/builder/variables"
 import type { PageConfig } from "@/lib/builder/types"
 
 const viewports: { value: Viewport; icon: typeof Monitor; label: string }[] = [
@@ -125,6 +126,7 @@ export function CanvasToolbar({ projectName, onBack, onSave, saving, dirty, onPu
         pageName: page?.name || "Home",
         blocks: page?.blocks || config.blocks,
         theme: config.theme,
+        variables: variablesToMap(config.variables),
       })
       const blob = new Blob([html], { type: "text/html" })
       const url = URL.createObjectURL(blob)

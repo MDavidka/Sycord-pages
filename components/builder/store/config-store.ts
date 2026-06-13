@@ -44,6 +44,7 @@ interface ConfigState {
   setTheme: (theme: Partial<ThemeConfig>) => void
   updateTheme: (partial: Partial<ThemeConfig>) => void
   previewTheme: (partial: Partial<ThemeConfig>) => void
+  setVariables: (variables: { key: string; value: string }[]) => void
   undo: () => void
   redo: () => void
   canUndo: () => boolean
@@ -237,6 +238,12 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
   previewTheme: (partial) =>
     set((state) => ({
       config: { ...state.config, theme: { ...state.config.theme, ...partial } },
+    })),
+
+  setVariables: (variables) =>
+    set((state) => ({
+      ...pushUndo(state, "Update variables"),
+      config: { ...state.config, variables },
     })),
 
   undo: () =>

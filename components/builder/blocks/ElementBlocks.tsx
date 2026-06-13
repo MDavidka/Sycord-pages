@@ -1,7 +1,11 @@
+"use client"
+
 import type { BlockConfig } from "@/lib/builder/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { useVars, pagePathToFilename } from "@/lib/builder/variables"
+import { useEditorStore } from "@/components/builder/store/editor-store"
 
 type Align = "left" | "center" | "right"
 
@@ -21,15 +25,18 @@ function textAlignClass(align?: string): string {
 /*  Button                                                                    */
 /* -------------------------------------------------------------------------- */
 export function ButtonBlock({ block }: { block: BlockConfig }) {
-  const p = block.props as { text?: string; size?: string; align?: Align; url?: string; fullWidth?: boolean }
+  const p = block.props as { text?: string; size?: string; align?: Align; url?: string; fullWidth?: boolean; actionType?: string; pagePath?: string }
   const variant = (block.variant || "default") as
     | "default" | "secondary" | "outline" | "ghost" | "link" | "destructive"
   const size = (p.size || "default") as "default" | "sm" | "lg"
+  const resolve = useVars()
+  const previewMode = useEditorStore((s) => s.previewMode)
+  const href = p.actionType === "page" ? pagePathToFilename(p.pagePath || "/") : p.url || "#"
 
   return (
     <div className={`px-6 py-4 flex ${alignClass(p.align)}`}>
       <Button variant={variant} size={size} className={p.fullWidth ? "w-full" : ""} asChild>
-        <a href={p.url || "#"}>{p.text || "Button"}</a>
+        <a href={href} onClick={(e) => { if (!previewMode) e.preventDefault() }}>{resolve(p.text || "Button")}</a>
       </Button>
     </div>
   )
@@ -40,6 +47,7 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
 /* -------------------------------------------------------------------------- */
 export function HeadingBlock({ block }: { block: BlockConfig }) {
   const p = block.props as { text?: string; align?: Align }
+  const resolve = useVars()
   const level = (block.variant || "h2") as "h1" | "h2" | "h3" | "h4"
   const sizes: Record<string, string> = {
     h1: "text-4xl @md:text-5xl font-bold tracking-tight",
@@ -51,7 +59,7 @@ export function HeadingBlock({ block }: { block: BlockConfig }) {
 
   return (
     <div className="px-6 py-3">
-      <Tag className={`${sizes[level]} ${textAlignClass(p.align)} text-foreground`}>{p.text || "Heading"}</Tag>
+      <Tag className={`${sizes[level]} ${textAlignClass(p.align)} text-foreground`}>{resolve(p.text || "Heading")}</Tag>
     </div>
   )
 }
@@ -61,6 +69,7 @@ export function HeadingBlock({ block }: { block: BlockConfig }) {
 /* -------------------------------------------------------------------------- */
 export function TextBlock({ block }: { block: BlockConfig }) {
   const p = block.props as { text?: string; align?: Align }
+  const resolve = useVars()
   const variant = block.variant || "base"
   const styles: Record<string, string> = {
     base: "text-[15px] leading-relaxed text-foreground/90",
@@ -71,7 +80,7 @@ export function TextBlock({ block }: { block: BlockConfig }) {
   return (
     <div className="px-6 py-3">
       <p className={`${styles[variant] || styles.base} ${textAlignClass(p.align)} max-w-2xl ${p.align === "center" ? "mx-auto" : p.align === "right" ? "ml-auto" : ""}`}>
-        {p.text || "Text"}
+        {resolve(p.text || "Text")}
       </p>
     </div>
   )

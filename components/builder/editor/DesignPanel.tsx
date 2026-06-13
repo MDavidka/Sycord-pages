@@ -55,6 +55,28 @@ function ColorSection({ title, colors, defaultOpen = false }: { title: string; c
   )
 }
 
+function VariablesManager() {
+  const variables = useConfigStore((s) => s.config.variables) ?? []
+  const setVariables = useConfigStore((s) => s.setVariables)
+  const update = (i: number, patch: Partial<{ key: string; value: string }>) =>
+    setVariables(variables.map((v, idx) => (idx === i ? { ...v, ...patch } : v)))
+
+  return (
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">Variables</div>
+      <p className="text-[10.5px] text-muted-foreground/60 mb-2">Reusable values. Reference them in any text as <code className="text-foreground/80">{"{{key}}"}</code>.</p>
+      {variables.map((v, i) => (
+        <div key={i} className="flex gap-1 mb-1.5">
+          <input value={v.key} onChange={(e) => update(i, { key: e.target.value.replace(/[^\w.-]/g, "") })} placeholder="key" className="w-[38%] px-2 py-1.5 rounded-lg border border-border bg-background text-foreground text-[12px] font-mono outline-none focus:ring-1 focus:ring-ring" />
+          <input value={v.value} onChange={(e) => update(i, { value: e.target.value })} placeholder="value" className="flex-1 px-2 py-1.5 rounded-lg border border-border bg-background text-foreground text-[12px] outline-none focus:ring-1 focus:ring-ring" />
+          <button onClick={() => setVariables(variables.filter((_, idx) => idx !== i))} className="px-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 text-xs transition-colors">x</button>
+        </div>
+      ))}
+      <button onClick={() => setVariables([...variables, { key: `var${variables.length + 1}`, value: "" }])} className="text-[11px] text-foreground/80 hover:text-foreground transition-colors mt-0.5">+ Add variable</button>
+    </div>
+  )
+}
+
 export function DesignPanel() {
   const theme = useConfigStore((s) => s.config.theme)
   const setTheme = useConfigStore((s) => s.setTheme)
@@ -134,6 +156,10 @@ export function DesignPanel() {
             <input type="number" min={0} max={32} value={resolved.radiusLg} onChange={(e) => updateTheme({ radiusLg: Number(e.target.value) })} className="w-full px-2.5 py-1.5 rounded-lg border border-border bg-background text-foreground text-[12px] outline-none focus:ring-1 focus:ring-ring" />
           </div>
         </div>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-border">
+        <VariablesManager />
       </div>
     </div>
   )

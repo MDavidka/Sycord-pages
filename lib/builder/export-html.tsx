@@ -2,8 +2,46 @@
 
 import { createElement } from "react"
 import { RenderBlock } from "@/components/builder/blocks/registry"
-import { resolveTheme, themeToCSS } from "@/lib/builder/theme-presets"
+import { resolveTheme, themeToCSS, readableForeground } from "@/lib/builder/theme-presets"
+import { VariablesProvider } from "@/lib/builder/variables"
 import type { BlockConfig, ThemeConfig } from "@/lib/builder/types"
+
+/**
+ * shadcn/ui utilities (bg-primary, border-border, bg-muted, ring-ring …) resolve
+ * to `--color-<token>` theme entries. The editor gets these from globals.css, but
+ * a standalone exported page must declare them itself or every shadcn component
+ * renders unstyled. This maps the site theme onto those Tailwind v4 color tokens.
+ */
+function shadcnColorAliases(t: ThemeConfig): Record<string, string> {
+  const fg = readableForeground(t.accent)
+  return {
+    "--color-background": t.bg1,
+    "--color-foreground": t.text0,
+    "--color-card": t.bg2,
+    "--color-card-foreground": t.text0,
+    "--color-popover": t.bg2,
+    "--color-popover-foreground": t.text0,
+    "--color-primary": t.accent,
+    "--color-primary-foreground": fg,
+    "--color-secondary": t.bg3,
+    "--color-secondary-foreground": t.text0,
+    "--color-muted": t.bg2,
+    "--color-muted-foreground": t.text2,
+    "--color-accent": t.bg3,
+    "--color-accent-foreground": t.text0,
+    "--color-destructive": "#ef4444",
+    "--color-destructive-foreground": "#fafafa",
+    "--color-border": t.borderDefault,
+    "--color-input": t.borderDefault,
+    "--color-ring": t.accent,
+    "--color-chart-1": t.accent,
+    "--color-chart-2": t.accentDim,
+    "--color-chart-3": t.text2,
+    "--color-chart-4": t.bg4,
+    "--color-chart-5": t.bg5,
+    "--radius": `${t.radius}px`,
+  }
+}
 
 /** Static CSS (utilities + reveal + keyframes) the rendered blocks depend on. */
 const RUNTIME_CSS = `
@@ -29,17 +67,22 @@ export async function buildPageHtml(opts: {
   pageName: string
   blocks: BlockConfig[]
   theme?: Partial<ThemeConfig>
+  variables?: Record<string, string>
 }): Promise<string> {
   const { renderToStaticMarkup } = await import("react-dom/server")
   const resolved = resolveTheme(opts.theme)
-  const vars = themeToCSS(resolved)
+  const vars = { ...themeToCSS(resolved), ...shadcnColorAliases(resolved) }
 
   const bodyMarkup = renderToStaticMarkup(
     createElement(
-      "div",
-      { className: "@container" },
-      ...opts.blocks.map((block) =>
-        createElement("div", { key: block.id, className: "scroll-revealed" }, createElement(RenderBlock, { block })),
+      VariablesProvider,
+      { value: opts.variables || {} },
+      createElement(
+        "div",
+        { className: "@container" },
+        ...opts.blocks.map((block) =>
+          createElement("div", { key: block.id, className: "scroll-revealed" }, createElement(RenderBlock, { block })),
+        ),
       ),
     ),
   )
@@ -84,9 +127,4 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
-/** Convert a page path (e.g. "/", "/about") to a stored filename. */
-export function pagePathToFilename(path: string): string {
-  const clean = (path || "/").replace(/^\//, "").replace(/\/+$/, "")
-  if (!clean) return "index.html"
-  return `${clean.replace(/\//g, "-")}.html`
-}
+export { pagePathToFilename } from "@/lib/builder/variables"

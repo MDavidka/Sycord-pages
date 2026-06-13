@@ -170,7 +170,7 @@ export const baseBlockMetadata: BlockMeta[] = [
     description: "A shadcn button you can place anywhere",
     category: "Elements",
     variants: ["default", "secondary", "outline", "ghost", "link", "destructive"],
-    defaultProps: { text: "Click me", size: "default", align: "left", url: "#", fullWidth: false },
+    defaultProps: { text: "Click me", size: "default", align: "left", url: "#", fullWidth: false, actionType: "url", pagePath: "" },
   },
   {
     type: "heading",

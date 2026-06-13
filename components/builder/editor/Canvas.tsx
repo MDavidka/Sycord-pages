@@ -9,6 +9,7 @@ import { BlockWrapper } from "@/components/builder/blocks/BlockWrapper"
 import { RenderBlock } from "@/components/builder/blocks/registry"
 import { resolveTheme, themeToCSS } from "@/lib/builder/theme-presets"
 import { useGoogleFonts } from "@/components/builder/hooks/use-google-fonts"
+import { VariablesProvider, variablesToMap } from "@/lib/builder/variables"
 
 /**
  * A thin drop indicator between blocks. This is the drag-and-drop drop option:
@@ -39,10 +40,12 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
     return page.blocks
   })
   const theme = useConfigStore((s) => s.config.theme)
+  const variables = useConfigStore((s) => s.config.variables)
   const { selectedBlockId, selectBlock, viewport } = useEditorStore()
 
   const resolved = useMemo(() => resolveTheme(theme), [theme])
   const cssVars = useMemo(() => themeToCSS(resolved), [resolved])
+  const varsMap = useMemo(() => variablesToMap(variables), [variables])
   useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono])
 
   // Drop zone for the empty canvas / appending at the end.
@@ -76,17 +79,19 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
       role="region"
       aria-label={`Site preview, ${blocks.length} blocks, ${viewport} viewport`}
     >
-      <CanvasDropZone index={0} dndActive={dndActive} />
-      {blocks.map((block, i) => (
-        <div key={block.id}>
-          <BlockWrapper block={block} isSelected={selectedBlockId === block.id} onSelect={() => selectBlock(block.id)}>
-            <RenderBlock block={block} />
-          </BlockWrapper>
-          <CanvasDropZone index={i + 1} dndActive={dndActive} />
-        </div>
-      ))}
-      {/* End drop area when dragging */}
-      <div ref={setEndRef} className={`transition-all ${dndActive ? (endOver ? "bg-white/10 h-10" : "h-6") : "h-0"}`} />
+      <VariablesProvider value={varsMap}>
+        <CanvasDropZone index={0} dndActive={dndActive} />
+        {blocks.map((block, i) => (
+          <div key={block.id}>
+            <BlockWrapper block={block} isSelected={selectedBlockId === block.id} onSelect={() => selectBlock(block.id)}>
+              <RenderBlock block={block} />
+            </BlockWrapper>
+            <CanvasDropZone index={i + 1} dndActive={dndActive} />
+          </div>
+        ))}
+        {/* End drop area when dragging */}
+        <div ref={setEndRef} className={`transition-all ${dndActive ? (endOver ? "bg-white/10 h-10" : "h-6") : "h-0"}`} />
+      </VariablesProvider>
     </div>
   )
 

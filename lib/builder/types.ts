@@ -82,4 +82,6 @@ export interface SiteConfig {
   pages?: PageConfig[]
   blocks: BlockConfig[]
   theme?: Partial<ThemeConfig>
+  /** Reusable values referenced in text via the {{key}} syntax. */
+  variables?: { key: string; value: string }[]
 }
