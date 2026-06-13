@@ -146,7 +146,15 @@ export function validateSiteConfig(raw: unknown, prompt?: string): SiteConfig {
     if (Object.keys(theme).length === 0) theme = undefined
   }
 
-  return { name, pages, blocks, theme }
+  let variables: { key: string; value: string }[] | undefined
+  if (Array.isArray(obj.variables)) {
+    variables = (obj.variables as unknown[])
+      .filter((v): v is Record<string, unknown> => !!v && typeof v === "object" && typeof (v as Record<string, unknown>).key === "string")
+      .map((v) => ({ key: String(v.key), value: String(v.value ?? "") }))
+    if (variables.length === 0) variables = undefined
+  }
+
+  return { name, pages, blocks, theme, variables }
 }
 
 function extractNameFromPrompt(prompt?: string): string {

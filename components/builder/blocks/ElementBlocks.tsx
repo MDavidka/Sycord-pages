@@ -4,8 +4,7 @@ import type { BlockConfig } from "@/lib/builder/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { useVars, pagePathToFilename } from "@/lib/builder/variables"
-import { useEditorStore } from "@/components/builder/store/editor-store"
+import { useVars, useRuntime, pagePathToFilename, type VarOp } from "@/lib/builder/variables"
 
 type Align = "left" | "center" | "right"
 
@@ -25,18 +24,37 @@ function textAlignClass(align?: string): string {
 /*  Button                                                                    */
 /* -------------------------------------------------------------------------- */
 export function ButtonBlock({ block }: { block: BlockConfig }) {
-  const p = block.props as { text?: string; size?: string; align?: Align; url?: string; fullWidth?: boolean; actionType?: string; pagePath?: string }
+  const p = block.props as {
+    text?: string; size?: string; align?: Align; url?: string; fullWidth?: boolean
+    actionType?: string; pagePath?: string; varKey?: string; varOp?: string; varAmount?: string | number
+  }
   const variant = (block.variant || "default") as
     | "default" | "secondary" | "outline" | "ghost" | "link" | "destructive"
   const size = (p.size || "default") as "default" | "sm" | "lg"
   const resolve = useVars()
-  const previewMode = useEditorStore((s) => s.previewMode)
-  const href = p.actionType === "page" ? pagePathToFilename(p.pagePath || "/") : p.url || "#"
+  const rt = useRuntime()
+  const action = p.actionType || "url"
+  const href = action === "page" ? pagePathToFilename(p.pagePath || "/") : action === "url" ? p.url || "#" : "#"
+
+  function onClick(e: React.MouseEvent) {
+    if (action === "var") {
+      e.preventDefault()
+      if (rt.interactive && rt.updateVar && p.varKey) rt.updateVar(p.varKey, (p.varOp as VarOp) || "add", Number(p.varAmount) || 0)
+      return
+    }
+    if (action === "page") {
+      if (rt.interactive && rt.navigate) { e.preventDefault(); rt.navigate(p.pagePath || "/"); return }
+      if (!rt.interactive) e.preventDefault()
+      return
+    }
+    // url
+    if (!rt.interactive) e.preventDefault()
+  }
 
   return (
     <div className={`px-6 py-4 flex ${alignClass(p.align)}`}>
       <Button variant={variant} size={size} className={p.fullWidth ? "w-full" : ""} asChild>
-        <a href={href} onClick={(e) => { if (!previewMode) e.preventDefault() }}>{resolve(p.text || "Button")}</a>
+        <a href={href} onClick={onClick}>{resolve(p.text || "Button")}</a>
       </Button>
     </div>
   )

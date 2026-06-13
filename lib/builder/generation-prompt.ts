@@ -1,3 +1,34 @@
+import { blockMetadata } from "@/lib/builder/block-metadata"
+
+const SECTION_TYPES = new Set([
+  "navbar", "hero", "features", "pricing", "cta", "footer", "testimonials", "stats",
+  "faq", "team", "contact", "newsletter", "logocloud", "divider", "banner", "content", "image", "video", "gallery",
+])
+const ELEMENT_TYPES = new Set(["button", "heading", "text", "badge", "card"])
+
+const sectionList = blockMetadata.filter((b) => SECTION_TYPES.has(b.type)).map((b) => `"${b.type}" (${b.variants.join("|")})`).join(", ")
+const elementList = blockMetadata.filter((b) => ELEMENT_TYPES.has(b.type)).map((b) => `"${b.type}" (${b.variants.join("|")})`).join(", ")
+const shadcnList = blockMetadata.filter((b) => b.type.startsWith("ui-")).map((b) => `"${b.type}"`).join(", ")
+
+const COMPONENT_CATALOGUE = `## Complete component catalogue (use any of these as a block "type")
+
+SECTION BLOCKS (full-width, primary building blocks): ${sectionList}
+
+MINI ELEMENTS (small, droppable anywhere): ${elementList}
+- "heading": props { text, align } ; variant is the level h1|h2|h3|h4
+- "text": props { text, align } ; variant base|lead|muted|small
+- "badge": props { text }
+- "card": props { title, description, body, buttonText }
+- "button": props { text, align, size:"sm"|"default"|"lg", actionType:"url"|"page"|"var", url, pagePath, varKey, varOp:"set"|"add"|"sub", varAmount } ; variant default|secondary|outline|ghost|link|destructive
+
+SHADCN UI COMPONENTS (rich, prebuilt; use for UI accents — minimal/no props needed): ${shadcnList}
+
+## Variables (dynamic values)
+Add an optional top-level "variables": [{ "key": "price", "value": "100" }]. Reference any variable inside text with {{price}}. A "button" with actionType:"var" updates a variable on click (varKey + varOp add|sub|set + varAmount), e.g. a counter or a price that changes by +20.
+
+## Page navigation
+A "button" with actionType:"page" and pagePath:"/about" navigates to another page you defined. Use this to link your pages together.`
+
 export const GENERATION_PROMPT = `You are a website configuration generator for the Sycord visual website builder.
 
 Given a user's description, generate a complete JSON site configuration.
@@ -60,5 +91,7 @@ Fonts: DM Sans, Inter, Space Grotesk, Poppins, Manrope, Outfit, Plus Jakarta San
 6. Do NOT use placeholder text like "Lorem ipsum"
 7. Make copy compelling and specific to the described business
 8. Each page needs a unique id (page-home, page-about, etc.), a name, and a path (/, /about, etc.)
+
+${COMPONENT_CATALOGUE}
 
 Return ONLY valid JSON. No markdown, no code fences, no explanation.`

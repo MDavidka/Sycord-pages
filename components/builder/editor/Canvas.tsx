@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useDroppable } from "@dnd-kit/core"
 import { useConfigStore } from "@/components/builder/store/config-store"
 import { useEditorStore } from "@/components/builder/store/editor-store"
@@ -9,7 +9,7 @@ import { BlockWrapper } from "@/components/builder/blocks/BlockWrapper"
 import { RenderBlock } from "@/components/builder/blocks/registry"
 import { resolveTheme, themeToCSS } from "@/lib/builder/theme-presets"
 import { useGoogleFonts } from "@/components/builder/hooks/use-google-fonts"
-import { VariablesProvider, variablesToMap } from "@/lib/builder/variables"
+import { RuntimeProvider, variablesToMap, computeVar } from "@/lib/builder/variables"
 
 /**
  * A thin drop indicator between blocks. This is the drag-and-drop drop option:
@@ -41,11 +41,32 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
   })
   const theme = useConfigStore((s) => s.config.theme)
   const variables = useConfigStore((s) => s.config.variables)
+  const pages = useConfigStore((s) => s.config.pages)
+  const setActivePage = useConfigStore((s) => s.setActivePage)
   const { selectedBlockId, selectBlock, viewport } = useEditorStore()
+  const previewMode = useEditorStore((s) => s.previewMode)
+
+  // Ephemeral variable overrides so previewing variable actions doesn't mutate
+  // the saved config.
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
 
   const resolved = useMemo(() => resolveTheme(theme), [theme])
   const cssVars = useMemo(() => themeToCSS(resolved), [resolved])
-  const varsMap = useMemo(() => variablesToMap(variables), [variables])
+  const baseVars = useMemo(() => variablesToMap(variables), [variables])
+  const varsMap = useMemo(() => ({ ...baseVars, ...overrides }), [baseVars, overrides])
+  const runtime = useMemo(
+    () => ({
+      vars: varsMap,
+      interactive: previewMode,
+      navigate: (path: string) => {
+        const target = pages?.find((p) => p.path === path)
+        if (target) setActivePage(target.id)
+      },
+      updateVar: (key: string, op: "set" | "add" | "sub", amount: number) =>
+        setOverrides((prev) => ({ ...prev, [key]: computeVar(prev[key] ?? baseVars[key], op, amount) })),
+    }),
+    [varsMap, previewMode, pages, setActivePage, baseVars],
+  )
   useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono])
 
   // Drop zone for the empty canvas / appending at the end.
@@ -79,7 +100,7 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
       role="region"
       aria-label={`Site preview, ${blocks.length} blocks, ${viewport} viewport`}
     >
-      <VariablesProvider value={varsMap}>
+      <RuntimeProvider value={runtime}>
         <CanvasDropZone index={0} dndActive={dndActive} />
         {blocks.map((block, i) => (
           <div key={block.id}>
@@ -91,7 +112,7 @@ export function Canvas({ dndActive = false }: { dndActive?: boolean }) {
         ))}
         {/* End drop area when dragging */}
         <div ref={setEndRef} className={`transition-all ${dndActive ? (endOver ? "bg-white/10 h-10" : "h-6") : "h-0"}`} />
-      </VariablesProvider>
+      </RuntimeProvider>
     </div>
   )
 

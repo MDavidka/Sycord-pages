@@ -185,9 +185,12 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: "text", label: "Label", type: "text" },
       ] },
       { title: "Action", fields: [
-        { key: "actionType", label: "On click", type: "select", options: ["url", "page"] },
+        { key: "actionType", label: "On click", type: "select", options: ["url", "page", "var"] },
         { key: "url", label: "Open URL", type: "text" },
         { key: "pagePath", label: "Go to page", type: "page-select" },
+        { key: "varKey", label: "Variable key", type: "text" },
+        { key: "varOp", label: "Operation", type: "select", options: ["add", "sub", "set"] },
+        { key: "varAmount", label: "Amount", type: "text" },
       ] },
       { title: "Style", fields: [
         { key: "variant", label: "Variant", type: "select", options: ["default", "secondary", "outline", "ghost", "link", "destructive"] },
