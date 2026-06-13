@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import AIChatInterface from "@/components/ai-chat-interface"
+import SiteBuilder from "@/components/builder/SiteBuilder"
 import { type GeneratedPage } from "@/lib/types"
 import {
   Trash2,
@@ -2319,13 +2319,13 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: SYRA (AI BUILDER) */}
+            {/* TAB CONTENT: SYRA (DRAG & DROP + AGENTIC BUILDER) */}
             {activeTab === "ai" && (
               <div className="h-full w-full flex flex-col">
-                <div className="flex-1 bg-background overflow-hidden relative">
+                <div className="flex-1 bg-bg-0 overflow-hidden relative">
                   {id ? (
-                    <div className="absolute inset-0 overflow-hidden custom-scrollbar">
-                      <AIChatInterface
+                    <div className="absolute inset-0 overflow-hidden">
+                      <SiteBuilder
                         projectId={id}
                         onBack={() => setActiveTab("overview")}
                       />

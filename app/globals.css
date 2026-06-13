@@ -425,3 +425,115 @@
     border-bottom-left-radius: 28px;
   }
 }
+
+
+/* ===========================================================================
+   Sycord Builder (ported from OpenPage) — JSON-first drag & drop block editor
+   These tokens, utilities and keyframes power the visual builder chrome and the
+   block components. They are additive and do NOT override the app's Inter
+   --font-sans. Per-site theme values are injected onto the canvas at runtime via
+   inline CSS variables (see themeToCSS in lib/builder/theme-presets.ts).
+   =========================================================================== */
+@theme inline {
+  /* Background layers */
+  --color-bg-0: #09090b;
+  --color-bg-1: #0f0f12;
+  --color-bg-2: #18181b;
+  --color-bg-3: #1e1e23;
+  --color-bg-4: #27272a;
+  --color-bg-5: #303036;
+
+  /* Borders */
+  --color-border-default: #2a2a2f;
+  --color-border-subtle: #1f1f24;
+  --color-border-hover: #3a3a3f;
+
+  /* Text */
+  --color-text-0: #fafafa;
+  --color-text-1: #a1a1aa;
+  --color-text-2: #71717a;
+  --color-text-3: #52525b;
+
+  /* Accent */
+  --color-green: #22c55e;
+  --color-green-dim: #16a34a;
+  --color-green-glow: rgba(34, 197, 94, 0.12);
+  --color-green-glow2: rgba(34, 197, 94, 0.06);
+
+  /* Status */
+  --color-status-red: #ef4444;
+  --color-status-yellow: #eab308;
+  --color-status-blue: #3b82f6;
+
+  /* Builder fonts (display/mono only; body sans stays Inter) */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Radius */
+  --radius-default: 8px;
+  --radius-lg: 12px;
+}
+
+/* Page-level keyframes used by the builder + block components */
+@keyframes builder-fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes builder-selectPulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.25); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+@utility animate-select-pulse {
+  animation: builder-selectPulse 0.4s ease-out;
+}
+
+/* Card hover lift */
+@utility card-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
+}
+@utility card-lift-hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 4px 10px rgba(0, 0, 0, 0.2), 0 0 16px rgba(34, 197, 94, 0.06);
+  border-color: var(--color-border-hover);
+}
+
+/* Accent glow shadows */
+@utility accent-glow-sm { box-shadow: 0 0 16px rgba(var(--color-accent-rgb, 34, 197, 94), 0.1); }
+@utility accent-glow-md { box-shadow: 0 0 16px rgba(var(--color-accent-rgb, 34, 197, 94), 0.15); }
+@utility accent-glow-lg { box-shadow: 0 0 20px rgba(var(--color-accent-rgb, 34, 197, 94), 0.25); }
+@utility accent-glow-xl { box-shadow: 0 0 24px rgba(var(--color-accent-rgb, 34, 197, 94), 0.3); }
+@utility accent-glow-ring { box-shadow: 0 0 32px rgba(var(--color-accent-rgb, 34, 197, 94), 0.1); }
+
+/* Scroll-reveal animation system. The block wrapper adds .scroll-revealed when
+   a section enters the viewport; children with .reveal-* animate in. */
+.reveal-fade-up,
+.reveal-scale,
+.reveal-slide-left,
+.reveal-slide-right {
+  opacity: 0;
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal-fade-up { transform: translateY(16px); }
+.reveal-scale { transform: scale(0.95); }
+.reveal-slide-left { transform: translateX(-20px); }
+.reveal-slide-right { transform: translateX(20px); }
+.scroll-revealed .reveal-fade-up,
+.scroll-revealed .reveal-scale,
+.scroll-revealed .reveal-slide-left,
+.scroll-revealed .reveal-slide-right {
+  opacity: 1;
+  transform: none;
+}
+
+@utility reveal-d1 { --reveal-delay: 0ms; }
+@utility reveal-d2 { --reveal-delay: 80ms; }
+@utility reveal-d3 { --reveal-delay: 160ms; }
+@utility reveal-d4 { --reveal-delay: 240ms; }
+@utility reveal-d5 { --reveal-delay: 320ms; }
+@utility reveal-d6 { --reveal-delay: 400ms; }
+@utility reveal-d7 { --reveal-delay: 480ms; }
+@utility reveal-d8 { --reveal-delay: 560ms; }

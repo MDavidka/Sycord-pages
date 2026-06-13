@@ -3,14 +3,16 @@ import clientPromise from "@/lib/mongodb"
 import { currencySymbols, themeConfigs } from "@/lib/webshop-types"
 import { Facebook, Instagram, Twitter, ShoppingCart } from "lucide-react"
 import { ObjectId } from "mongodb"
+import SitePageView from "@/components/builder/SitePageView"
 
 interface PageProps {
   params: Promise<{
     subdomain: string
   }>
+  searchParams?: Promise<{ page?: string }>
 }
 
-export default async function SubdomainPage({ params }: PageProps) {
+export default async function SubdomainPage({ params, searchParams }: PageProps) {
   const { subdomain } = await params
 
   console.log("[v0] Loading subdomain:", subdomain)
@@ -35,6 +37,14 @@ export default async function SubdomainPage({ params }: PageProps) {
 
     const project = userWithProject.projects[0];
     const projectObjectId = project._id;
+
+    // Live builder site: render the real block components (identical to the
+    // editor preview — styled and interactive).
+    if (project.builderConfig && (Array.isArray(project.builderConfig.blocks) || Array.isArray(project.builderConfig.pages))) {
+      const sp = searchParams ? await searchParams : {}
+      const initialPath = typeof sp?.page === "string" ? sp.page : "/"
+      return <SitePageView config={project.builderConfig} initialPath={initialPath} />
+    }
 
     console.log("[v0] Webshop: Project found. Name:", project.businessName, "Has AI code:", !!project.aiGeneratedCode)
 

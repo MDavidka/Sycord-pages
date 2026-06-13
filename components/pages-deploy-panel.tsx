@@ -130,15 +130,15 @@ function FileTreeItem({
         className={cn(
           "w-full flex items-center gap-1.5 py-1 px-2 text-[13px] rounded-md transition-all duration-150 group",
           isSelected
-            ? "bg-primary/15 text-primary"
-            : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200",
+            ? "bg-accent text-foreground ring-1 ring-primary/40"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
         )}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
         {node.type === "folder" ? (
           <ChevronRight
             className={cn(
-              "h-3 w-3 shrink-0 text-zinc-500 transition-transform",
+              "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
               isExpanded && "rotate-90",
             )}
           />
@@ -148,7 +148,7 @@ function FileTreeItem({
         <IconComp
           className={cn(
             "h-3.5 w-3.5 shrink-0",
-            node.type === "folder" ? "text-yellow-500" : "text-blue-400",
+            node.type === "folder" ? "text-foreground/70" : "text-muted-foreground",
           )}
         />
         <span className="truncate flex-1 text-left">{node.name}</span>
@@ -158,7 +158,7 @@ function FileTreeItem({
               e.stopPropagation()
               onDeleteFile(node.path)
             }}
-            className="h-4 w-4 shrink-0 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-zinc-500 hover:text-red-400 flex items-center justify-center transition-all"
+            className="h-4 w-4 shrink-0 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-muted-foreground hover:text-red-400 flex items-center justify-center transition-all"
           >
             <Trash2 className="h-2.5 w-2.5" />
           </button>
@@ -310,7 +310,7 @@ export function PagesDeployPanel({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Pages</h2>
-          <p className="text-sm text-zinc-500 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {pages.length} file{pages.length !== 1 ? "s" : ""} · Companion Server API deployment
           </p>
         </div>
@@ -333,14 +333,14 @@ export function PagesDeployPanel({
                 variant="outline"
                 size="sm"
                 onClick={onDeleteAll}
-                className="gap-2 border-zinc-700/50 text-zinc-400 hover:text-red-400 hover:border-red-500/30"
+                className="gap-2 border-border text-muted-foreground hover:text-red-400 hover:border-red-500/30"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete All
               </Button>
             </>
           )}
-          <Button variant="outline" size="sm" onClick={onGoToAI} className="gap-2 border-zinc-700/50">
+          <Button variant="outline" size="sm" onClick={onGoToAI} className="gap-2 border-border">
             <Sparkles className="h-3.5 w-3.5" />
             Generate
           </Button>
@@ -351,13 +351,13 @@ export function PagesDeployPanel({
       {isDeploying && (
         <Progress
           value={Math.max(deployProgress, 8)}
-          className="h-2 overflow-hidden rounded-full bg-zinc-800/80"
+          className="h-2 overflow-hidden rounded-full bg-muted"
           aria-label="Deployment progress"
         />
       )}
 
       {runtime && (
-        <Card className="border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+        <Card className="border-border bg-card backdrop-blur-sm overflow-hidden">
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-2.5">
               <div
@@ -368,12 +368,12 @@ export function PagesDeployPanel({
                   "bg-red-400",
                 )}
               />
-              <span className="text-sm font-medium text-zinc-200">
+              <span className="text-sm font-medium text-foreground">
                 {isRunning && isHealthy ? "Live" : isRunning ? "Deploying" : "Offline"}
               </span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Activity className="h-3 w-3" />
                 API: {runtime?.message || (isRunning ? "deployed" : "—")}
@@ -395,7 +395,7 @@ export function PagesDeployPanel({
             </div>
 
             {runtime?.lastDeployAt && (
-              <span className="text-[11px] text-zinc-600 ml-auto whitespace-nowrap">
+              <span className="text-[11px] text-muted-foreground/60 ml-auto whitespace-nowrap">
                 <Clock className="h-3 w-3 inline mr-1" />
                 {new Date(runtime.lastDeployAt).toLocaleString()}
               </span>
@@ -407,7 +407,7 @@ export function PagesDeployPanel({
                   variant="outline"
                   size="sm"
                   asChild
-                  className="h-7 gap-1.5 text-xs border-zinc-700/50"
+                  className="h-7 gap-1.5 text-xs border-border"
                 >
                   <a href={runtime.url || runtime.domain} target="_blank" rel="noreferrer">
                     <ExternalLink className="h-3 w-3" />
@@ -448,7 +448,7 @@ export function PagesDeployPanel({
                 <p className="text-sm font-medium text-red-300">
                   Deployment Error
                 </p>
-                <pre className="mt-2 text-xs whitespace-pre-wrap break-words rounded-lg bg-black/40 border border-red-500/15 p-3 text-red-200/80 max-h-48 overflow-y-auto font-mono">
+                <pre className="mt-2 text-xs whitespace-pre-wrap break-words rounded-lg bg-background border border-red-500/15 p-3 text-red-200/80 max-h-48 overflow-y-auto font-mono">
                   {deployError || runnerErrorDetails || "Deployment failed. Check Companion Server logs for details."}
                 </pre>
                 {onFetchLogs && (
@@ -469,13 +469,13 @@ export function PagesDeployPanel({
       )}
 
       {pages.length === 0 ? (
-        <Card className="border-dashed border-zinc-700/50 bg-zinc-900/20">
+        <Card className="border-dashed border-border bg-card">
           <CardContent className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full bg-zinc-800/50 p-4 mb-4">
-              <FileText className="h-8 w-8 text-zinc-600" />
+            <div className="rounded-full bg-muted p-4 mb-4">
+              <FileText className="h-8 w-8 text-muted-foreground/60" />
             </div>
-            <h3 className="text-lg font-medium text-zinc-300 mb-1.5">No pages yet</h3>
-            <p className="text-sm text-zinc-500 mb-6 max-w-sm">
+            <h3 className="text-lg font-medium text-foreground mb-1.5">No pages yet</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-sm">
               Use the AI builder to generate a website, then deploy it directly from here.
             </p>
             <Button onClick={onGoToAI} className="gap-2">
@@ -486,10 +486,10 @@ export function PagesDeployPanel({
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-1 border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+          <Card className="lg:col-span-1 border-border bg-card backdrop-blur-sm overflow-hidden">
             <CardHeader className="pb-2 pt-4 px-4">
               <CardTitle className="text-sm flex items-center gap-2">
-                <Folder className="h-4 w-4 text-yellow-500" />
+                <Folder className="h-4 w-4 text-foreground/70" />
                 Project Files
               </CardTitle>
               <CardDescription className="text-[11px]">
@@ -497,7 +497,7 @@ export function PagesDeployPanel({
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="h-[420px] overflow-y-auto custom-scrollbar border-t border-white/5">
+              <div className="h-[420px] overflow-y-auto custom-scrollbar border-t border-border">
                 <FileExplorer
                   pages={pages}
                   onSelectFile={handleSelectFile}
@@ -508,13 +508,13 @@ export function PagesDeployPanel({
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2 border-white/5 bg-white/[0.02] backdrop-blur-sm overflow-hidden flex flex-col">
+          <Card className="lg:col-span-2 border-border bg-card backdrop-blur-sm overflow-hidden flex flex-col">
             <CardHeader className="pb-2 pt-4 px-4 flex-shrink-0">
               {activeFileTab ? (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <FileCode className="h-4 w-4 text-blue-400 shrink-0" />
-                    <span className="text-sm font-medium truncate text-zinc-200">
+                    <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium truncate text-foreground">
                       {activeFileTab.name}
                     </span>
                     {activeFileTab.usedFor && (
@@ -524,13 +524,13 @@ export function PagesDeployPanel({
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] text-zinc-600 tabular-nums">
+                    <span className="text-[10px] text-muted-foreground/60 tabular-nums">
                       {activeFileTab.code.length.toLocaleString()} bytes
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 px-2 text-[11px] text-zinc-500 hover:text-zinc-200"
+                      className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
                       onClick={handleCopyCode}
                     >
                       {copiedCode ? (
@@ -542,7 +542,7 @@ export function PagesDeployPanel({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 text-zinc-500 hover:text-red-400"
+                      className="h-6 w-6 p-0 text-muted-foreground hover:text-red-400"
                       onClick={() => onDeletePage(activeFileTab.name)}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -551,30 +551,30 @@ export function PagesDeployPanel({
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <FileCode className="h-4 w-4 text-zinc-600" />
-                  <span className="text-sm text-zinc-500">Select a file to preview</span>
+                  <FileCode className="h-4 w-4 text-muted-foreground/60" />
+                  <span className="text-sm text-muted-foreground">Select a file to preview</span>
                 </div>
               )}
             </CardHeader>
             <CardContent className="p-0 flex-1 flex flex-col">
               {activeFileTab ? (
-                <div className="flex-1 overflow-auto bg-black/30 border-t border-white/5">
+                <div className="flex-1 overflow-auto bg-background border-t border-border">
                   <div className="flex">
-                    <div className="select-none text-[10px] text-zinc-600 font-mono leading-6 py-3 text-right pr-3 pl-2 bg-black/20 border-r border-white/5 min-w-[44px]">
+                    <div className="select-none text-[10px] text-muted-foreground/60 font-mono leading-6 py-3 text-right pr-3 pl-2 bg-background border-r border-border min-w-[44px]">
                       {activeFileTab.code.split("\n").map((_, i) => (
                         <div key={i}>{i + 1}</div>
                       ))}
                     </div>
-                    <pre className="flex-1 p-3 text-[12px] font-mono leading-6 text-zinc-300 overflow-auto custom-scrollbar whitespace-pre">
+                    <pre className="flex-1 p-3 text-[12px] font-mono leading-6 text-foreground overflow-auto custom-scrollbar whitespace-pre">
                       <code>{activeFileTab.code}</code>
                     </pre>
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center bg-black/20 border-t border-white/5 min-h-[420px]">
+                <div className="flex-1 flex items-center justify-center bg-background border-t border-border min-h-[420px]">
                   <div className="text-center">
-                    <Terminal className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
-                    <p className="text-sm text-zinc-500">Select a file from the explorer to preview its contents</p>
+                    <Terminal className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Select a file from the explorer to preview its contents</p>
                   </div>
                 </div>
               )}

@@ -1,0 +1,280 @@
+import type { BlockType } from "@/lib/builder/types"
+
+export interface BlockMeta {
+  type: BlockType
+  label: string
+  description: string
+  category: string
+  variants: string[]
+  defaultProps: Record<string, unknown>
+}
+
+export const baseBlockMetadata: BlockMeta[] = [
+  {
+    type: "navbar",
+    label: "Navbar",
+    description: "Navigation bar with logo, links, and CTA",
+    category: "Navigation",
+    variants: ["default", "centered"],
+    defaultProps: { logo: "Brand", links: ["Features", "Pricing", "About"], ctaText: "Get Started" },
+  },
+  {
+    type: "hero",
+    label: "Hero",
+    description: "Full-width hero section with headline and CTAs",
+    category: "Hero",
+    variants: ["centered", "split", "gradient", "minimal"],
+    defaultProps: { headline: "Your Headline Here", subheadline: "A compelling subheadline that explains your value proposition.", primaryCta: "Get Started", secondaryCta: "Learn More" },
+  },
+  {
+    type: "features",
+    label: "Features",
+    description: "Feature showcase with icon cards",
+    category: "Content",
+    variants: ["grid", "list", "alternating"],
+    defaultProps: { title: "Features", subtitle: "Everything you need", items: [{ icon: "Zap", title: "Fast", description: "Lightning fast performance" }, { icon: "Shield", title: "Secure", description: "Enterprise-grade security" }, { icon: "Globe", title: "Global", description: "Available worldwide" }] },
+  },
+  {
+    type: "pricing",
+    label: "Pricing",
+    description: "Pricing tiers with feature comparison",
+    category: "Commerce",
+    variants: ["simple", "comparison"],
+    defaultProps: { title: "Pricing", subtitle: "Choose the plan that fits your needs" },
+  },
+  {
+    type: "cta",
+    label: "Call to Action",
+    description: "Conversion-focused section with CTA button",
+    category: "Conversion",
+    variants: ["simple", "split"],
+    defaultProps: { headline: "Ready to get started?", subheadline: "Start building today.", buttonText: "Start Free" },
+  },
+  {
+    type: "footer",
+    label: "Footer",
+    description: "Page footer with links and copyright",
+    category: "Navigation",
+    variants: ["simple", "multi-column", "minimal"],
+    defaultProps: { logo: "Brand", copyright: "2026 Brand. All rights reserved.", links: ["Privacy", "Terms"] },
+  },
+  {
+    type: "testimonials",
+    label: "Testimonials",
+    description: "Customer testimonials with quotes and ratings",
+    category: "Social Proof",
+    variants: ["cards", "carousel", "spotlight"],
+    defaultProps: { title: "What our customers say" },
+  },
+  {
+    type: "stats",
+    label: "Stats",
+    description: "Key metrics and statistics display",
+    category: "Social Proof",
+    variants: ["grid", "bar", "counter"],
+    defaultProps: { title: "By the numbers" },
+  },
+  {
+    type: "faq",
+    label: "FAQ",
+    description: "Frequently asked questions accordion",
+    category: "Content",
+    variants: ["accordion"],
+    defaultProps: { title: "Frequently Asked Questions" },
+  },
+  {
+    type: "team",
+    label: "Team",
+    description: "Team member grid with photos and roles",
+    category: "Content",
+    variants: ["grid"],
+    defaultProps: { title: "Meet the Team" },
+  },
+  {
+    type: "contact",
+    label: "Contact",
+    description: "Contact form with name, email, and message",
+    category: "Forms",
+    variants: ["form"],
+    defaultProps: { title: "Get in Touch", subtitle: "We'd love to hear from you." },
+  },
+  {
+    type: "newsletter",
+    label: "Newsletter",
+    description: "Email subscription form with social proof",
+    category: "Conversion",
+    variants: ["simple"],
+    defaultProps: { title: "Stay in the loop", subtitle: "Get updates on new features.", buttonText: "Subscribe" },
+  },
+  {
+    type: "logocloud",
+    label: "Logo Cloud",
+    description: "Company logos with hover effects",
+    category: "Social Proof",
+    variants: ["default"],
+    defaultProps: { title: "Trusted by leading companies" },
+  },
+  {
+    type: "content",
+    label: "Content",
+    description: "Rich text content section",
+    category: "Content",
+    variants: ["prose", "columns", "highlight"],
+    defaultProps: { body: "## Getting Started\n\nWrite your content here. Supports **bold**, *italic*, and lists.\n\n- First item\n- Second item\n- Third item" },
+  },
+  {
+    type: "image",
+    label: "Image",
+    description: "Image with text overlay or side-by-side layout",
+    category: "Media",
+    variants: ["hero-image", "side-by-side", "grid"],
+    defaultProps: { title: "Visual Storytelling", subtitle: "A picture is worth a thousand words.", imageSide: "left" },
+  },
+  {
+    type: "video",
+    label: "Video",
+    description: "Embedded YouTube or Vimeo video",
+    category: "Media",
+    variants: ["youtube", "vimeo"],
+    defaultProps: { url: "", title: "Watch Our Story" },
+  },
+  {
+    type: "gallery",
+    label: "Gallery",
+    description: "Image gallery in grid or masonry layout",
+    category: "Media",
+    variants: ["grid", "masonry"],
+    defaultProps: { title: "Gallery" },
+  },
+  {
+    type: "divider",
+    label: "Divider",
+    description: "Visual separator between sections",
+    category: "Layout",
+    variants: ["line", "space", "dots"],
+    defaultProps: { height: 60, width: "full" },
+  },
+  {
+    type: "banner",
+    label: "Banner",
+    description: "Announcement bar or ribbon",
+    category: "Content",
+    variants: ["ribbon", "bar"],
+    defaultProps: { text: "New: We just launched v2.0!", linkText: "Learn more" },
+  },
+
+  // ---- Mini elements (shadcn-based, can be dropped anywhere) ----
+  {
+    type: "button",
+    label: "Button",
+    description: "A shadcn button you can place anywhere",
+    category: "Elements",
+    variants: ["default", "secondary", "outline", "ghost", "link", "destructive"],
+    defaultProps: { text: "Click me", size: "default", align: "left", url: "#", fullWidth: false, actionType: "url", pagePath: "", varKey: "", varOp: "add", varAmount: "20" },
+  },
+  {
+    type: "heading",
+    label: "Heading",
+    description: "A title / heading element",
+    category: "Elements",
+    variants: ["h1", "h2", "h3", "h4"],
+    defaultProps: { text: "Heading", align: "left" },
+  },
+  {
+    type: "text",
+    label: "Text",
+    description: "A paragraph of body text",
+    category: "Elements",
+    variants: ["base", "lead", "muted", "small"],
+    defaultProps: { text: "Write some text here. Drag me anywhere on the page.", align: "left" },
+  },
+  {
+    type: "badge",
+    label: "Badge",
+    description: "A small shadcn badge / pill",
+    category: "Elements",
+    variants: ["default", "secondary", "outline", "destructive"],
+    defaultProps: { text: "New", align: "left" },
+  },
+  {
+    type: "card",
+    label: "Card",
+    description: "A shadcn card with title and content",
+    category: "Elements",
+    variants: ["default", "ghost"],
+    defaultProps: { title: "Card title", description: "Card description goes here.", body: "Put any supporting content inside this card.", buttonText: "Action" },
+  },
+]
+
+/**
+ * The full shadcn/ui catalogue (57 components). Each is registered as a
+ * `ui-<slug>` block so it can be dragged onto the canvas like any other block.
+ * Renderers live in components/builder/blocks/ShadcnBlocks.tsx.
+ */
+function ui(type: string, label: string, category: string, variants: string[] = ["default"], defaultProps: Record<string, unknown> = {}): BlockMeta {
+  return { type: `ui-${type}`, label, category: `UI · ${category}`, variants, defaultProps, description: `${label} — shadcn/ui` }
+}
+
+export const shadcnMeta: BlockMeta[] = [
+  ui("accordion", "Accordion", "Navigation"),
+  ui("alert", "Alert", "Feedback", ["default", "destructive"], { title: "Heads up!", text: "You can add components to your app using the CLI." }),
+  ui("alert-dialog", "Alert Dialog", "Overlay", ["default"], { text: "Show dialog" }),
+  ui("aspect-ratio", "Aspect Ratio", "Display"),
+  ui("avatar", "Avatar", "Display"),
+  ui("badge", "Badge", "Display", ["default", "secondary", "outline", "destructive"], { text: "Badge" }),
+  ui("breadcrumb", "Breadcrumb", "Navigation"),
+  ui("button", "Button", "Forms", ["default", "secondary", "outline", "ghost", "link", "destructive"], { text: "Button" }),
+  ui("calendar", "Calendar", "Forms"),
+  ui("card", "Card", "Display", ["default"], { title: "Card title", text: "Card description goes here." }),
+  ui("carousel", "Carousel", "Display"),
+  ui("chart", "Chart", "Display"),
+  ui("checkbox", "Checkbox", "Forms", ["default"], { label: "Accept terms and conditions" }),
+  ui("collapsible", "Collapsible", "Navigation", ["default"], { text: "Toggle content" }),
+  ui("combobox", "Combobox", "Forms"),
+  ui("command", "Command", "Overlay"),
+  ui("context-menu", "Context Menu", "Overlay", ["default"], { text: "Right click here" }),
+  ui("data-table", "Data Table", "Display"),
+  ui("date-picker", "Date Picker", "Forms"),
+  ui("dialog", "Dialog", "Overlay", ["default"], { text: "Open dialog" }),
+  ui("drawer", "Drawer", "Overlay", ["default"], { text: "Open drawer" }),
+  ui("dropdown-menu", "Dropdown Menu", "Overlay", ["default"], { text: "Open menu" }),
+  ui("form", "Form", "Forms"),
+  ui("hover-card", "Hover Card", "Overlay", ["default"], { text: "Hover me" }),
+  ui("input", "Input", "Forms", ["default"], { placeholder: "Email" }),
+  ui("input-otp", "Input OTP", "Forms"),
+  ui("label", "Label", "Forms", ["default"], { text: "Your email address" }),
+  ui("menubar", "Menubar", "Navigation"),
+  ui("navigation-menu", "Navigation Menu", "Navigation"),
+  ui("pagination", "Pagination", "Navigation"),
+  ui("popover", "Popover", "Overlay", ["default"], { text: "Open popover" }),
+  ui("progress", "Progress", "Feedback", ["default"], { value: 60 }),
+  ui("radio-group", "Radio Group", "Forms"),
+  ui("resizable", "Resizable", "Layout"),
+  ui("scroll-area", "Scroll Area", "Layout"),
+  ui("select", "Select", "Forms"),
+  ui("separator", "Separator", "Layout"),
+  ui("sheet", "Sheet", "Overlay", ["default"], { text: "Open sheet" }),
+  ui("sidebar", "Sidebar", "Navigation"),
+  ui("skeleton", "Skeleton", "Feedback"),
+  ui("slider", "Slider", "Forms", ["default"], { value: 50 }),
+  ui("sonner", "Sonner", "Feedback", ["default"], { text: "Show toast" }),
+  ui("switch", "Switch", "Forms", ["default"], { label: "Airplane mode" }),
+  ui("table", "Table", "Display"),
+  ui("tabs", "Tabs", "Navigation"),
+  ui("textarea", "Textarea", "Forms", ["default"], { placeholder: "Type your message here." }),
+  ui("toast", "Toast", "Feedback", ["default"], { text: "Show toast" }),
+  ui("toggle", "Toggle", "Forms", ["default", "outline"], { text: "Bold" }),
+  ui("toggle-group", "Toggle Group", "Forms"),
+  ui("tooltip", "Tooltip", "Overlay", ["default"], { text: "Hover me" }),
+  ui("typography", "Typography", "Display"),
+  ui("field", "Field", "Forms"),
+  ui("input-group", "Input Group", "Forms"),
+  ui("item", "Item", "Display"),
+  ui("empty", "Empty", "Display"),
+  ui("kbd", "Kbd", "Display"),
+  ui("spinner", "Spinner", "Feedback"),
+]
+
+export const blockMetadata: BlockMeta[] = [...baseBlockMetadata, ...shadcnMeta]
+
+export const categories = [...new Set(blockMetadata.map((b) => b.category))]
