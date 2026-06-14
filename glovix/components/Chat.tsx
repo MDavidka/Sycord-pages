@@ -92,6 +92,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'getErrors': return 'Workspace';
             case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
             case 'checkDependencies': return 'package.json';
+            case 'deploy': return 'sycord.site';
             default: return '';
         }
     } catch {
@@ -116,6 +117,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'batchCreateFiles': return 'Multiple files';
             case 'getErrors': return 'Workspace';
             case 'checkDependencies': return 'package.json';
+            case 'deploy': return 'sycord.site';
             default: return '';
         }
     }

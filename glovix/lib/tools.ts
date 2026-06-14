@@ -107,6 +107,146 @@ async function persistFile(path: string, content: string): Promise<PageSyncResul
     return pageSync;
 }
 
+// ============================================================
+// SYCORD SERVER-SIDE WORKSPACE (execute / diagnostics / deploy)
+//
+// When embedded in a Sycord project, command execution, type diagnostics and
+// deploys run on a sandboxed server (the /api/workspace/* endpoints) instead of
+// the in-browser WebContainer. This avoids browser crashes / serialization
+// ("object can not be cloned") / "not a valid workspace" failures entirely.
+// ============================================================
+
+/** True when running inside a Sycord project (server-side workspace available). */
+function isServerWorkspace(): boolean {
+    return !!getHostProjectId();
+}
+
+/**
+ * Run a command on the server-side execution sandbox and stream its stdout +
+ * stderr into the terminal. Returns a clean summary for the AI.
+ */
+async function runCommandServerSide(
+    projectId: string,
+    command: string,
+    cwd: string | undefined,
+    ctx: ToolContext
+): Promise<string> {
+    // Dev servers / long-running watchers don't apply on the server sandbox —
+    // there is no live in-app preview. Direct the AI to deploy instead.
+    if (/\b(run\s+)?(dev|start|serve|preview|watch)\b/.test(command)) {
+        return `[SYSTEM] ℹ️ "${command}" is a long-running dev server, which is not used in the Sycord workspace (there is no live in-app preview). Build the project (e.g. "pnpm run build") and use the deploy tool to publish it to sycord.site.`;
+    }
+
+    ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
+    const writeToTerminal = createCleanTerminalWriter(ctx.addTerminalOutput);
+
+    try {
+        const res = await fetch(`/api/workspace/execute?projectId=${encodeURIComponent(projectId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command, cwd: cwd || '/' }),
+        });
+
+        if (!res.ok || !res.body) {
+            const msg = await res.text().catch(() => '');
+            return `[SYSTEM] ❌ Command "${command}" could not run on the Sycord server sandbox (HTTP ${res.status}). ${msg}`.trim();
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let output = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            output += chunk;
+            writeToTerminal(chunk);
+        }
+
+        // Surface any parsed errors into the Error Panel.
+        const parsed = parseErrorsFromOutput(output, command);
+        if (parsed.length > 0) {
+            useStore.getState().addParsedErrors(parsed);
+        }
+
+        const exitMatch = output.match(/\[sandbox\] exit code (\d+)/);
+        const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : 0;
+        const status = exitCode === 0 ? '✅' : '❌';
+
+        const MAX_OUTPUT_LENGTH = 3000;
+        let finalOutput = cleanTerminalOutput(output);
+        if (finalOutput.length > MAX_OUTPUT_LENGTH) {
+            finalOutput = finalOutput.slice(0, 500) + '\n...[truncated]...\n' + finalOutput.slice(-2500);
+        }
+
+        return `[SYSTEM] ${status} Command "${command}" ran on the Sycord server sandbox (exit code ${exitCode}).\nOutput:\n${finalOutput || '(no output)'}`;
+    } catch (e: any) {
+        return `Error running command "${command}" on the server sandbox: ${e.message}`;
+    }
+}
+
+/** Run structured TypeScript diagnostics on the server-side workspace. */
+async function typeCheckServerSide(projectId: string): Promise<string> {
+    try {
+        const res = await fetch(`/api/workspace/diagnostics?projectId=${encodeURIComponent(projectId)}`);
+        if (!res.ok) {
+            const msg = await res.text().catch(() => '');
+            return `[SYSTEM] ❌ Type check could not run on the Sycord server (HTTP ${res.status}). ${msg}`.trim();
+        }
+        const data = await res.json();
+        const errors: Array<{ file: string; line: number; message: string }> = Array.isArray(data?.errors) ? data.errors : [];
+
+        if (errors.length === 0) {
+            return '[SYSTEM] ✅ TypeScript check passed: No type errors found.';
+        }
+
+        // Feed the Error Panel.
+        try {
+            const parsed = errors.map((e) => ({
+                file: e.file,
+                line: e.line,
+                column: 1,
+                message: e.message,
+                type: 'typescript' as const,
+            }));
+            useStore.getState().addParsedErrors(parsed as any);
+        } catch { /* error panel is best-effort */ }
+
+        const lines = errors
+            .slice(0, 50)
+            .map((e) => `  ${e.file}:${e.line} — ${e.message}`)
+            .join('\n');
+        return `[SYSTEM] TypeScript check found ${errors.length} error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
+    } catch (e: any) {
+        return `Error running TypeScript check on the server: ${e.message}`;
+    }
+}
+
+/**
+ * Deploy the project's saved files to sycord.site edge hosting via the CDN
+ * Push API. Returns the live URL on success.
+ */
+export async function handleDeploy(): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ Deploy is only available when building inside a Sycord project.';
+    }
+    try {
+        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || data?.status !== 'success' || !data?.url) {
+            return `[SYSTEM] ❌ Deploy failed: ${data?.message || `HTTP ${res.status}`}`;
+        }
+        return `[SYSTEM] ✅ Deployed successfully. Your site is live at ${data.url}`;
+    } catch (e: any) {
+        return `Error deploying project: ${e.message}`;
+    }
+}
+
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
     {
@@ -237,11 +377,12 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'runCommand',
-            description: 'Run a shell command in the terminal. Use pnpm instead of npm for faster installs.',
+            description: 'Run a shell command on the Sycord server-side execution sandbox. Use pnpm for installs. Commands run server-side (not in the browser), so they never crash with serialization errors.',
             parameters: {
                 type: 'object',
                 properties: {
                     command: { type: 'string', description: 'The command to run, e.g., pnpm install' },
+                    cwd: { type: 'string', description: 'Optional working directory relative to the project root. Defaults to "/".' },
                 },
                 required: ['command'],
             },
@@ -378,6 +519,18 @@ export const TOOL_DEFINITIONS = [
         function: {
             name: 'getErrors',
             description: 'Get a summary of all current errors in the project: TypeScript errors, build errors, and runtime errors from the terminal. Use this to quickly understand what is broken.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'deploy',
+            description: 'Bundle the project and deploy it to sycord.site edge hosting (CDN Push API). Runs server-side and returns the live URL. Use when the user asks to publish, deploy, or go live.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -916,10 +1069,10 @@ export async function handleSearchInFiles(args: { query: string; filePattern?: s
 
 
 export async function handleRunCommand(
-    args: { command: string },
+    args: { command: string; cwd?: string },
     ctx: ToolContext
 ): Promise<string> {
-    const { command } = args;
+    const { command, cwd } = args;
 
     if (!command || typeof command !== 'string' || command.trim().length === 0) {
         return 'Error: Empty or invalid command.';
@@ -929,6 +1082,13 @@ export async function handleRunCommand(
     const dangerous = ['rm -rf /', 'rm -rf ~', 'mkfs', 'dd if=', ':(){', 'fork bomb'];
     if (dangerous.some(d => command.includes(d))) {
         return `Error: Dangerous command blocked: "${command}"`;
+    }
+
+    // When embedded in a Sycord project, run on the server-side execution
+    // sandbox instead of the browser WebContainer. The server is a real Node.js
+    // environment, so backend commands and "&&" chaining are allowed there.
+    if (isServerWorkspace()) {
+        return runCommandServerSide(getHostProjectId()!, command, cwd, ctx);
     }
 
     // Block background process operators — WebContainer shell doesn't support them
@@ -1119,6 +1279,11 @@ function parseBuildErrors(output: string): string | null {
 }
 
 export async function handleTypeCheck(ctx: ToolContext): Promise<string> {
+    // When embedded in a Sycord project, use the structured server-side
+    // diagnostics endpoint instead of spawning tsc in the browser WebContainer.
+    if (isServerWorkspace()) {
+        return typeCheckServerSide(getHostProjectId()!);
+    }
     try {
         ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ npx tsc --noEmit --pretty\x1b[0m\r\n`);
         const writeToTerminal = createCleanTerminalWriter(ctx.addTerminalOutput);
@@ -1363,6 +1528,12 @@ export async function handleBatchCreateFiles(
 }
 
 export async function handleGetErrors(ctx: ToolContext): Promise<string> {
+    // In a Sycord project, get structured diagnostics from the server instead
+    // of spawning tsc in the browser WebContainer.
+    if (isServerWorkspace()) {
+        return typeCheckServerSide(getHostProjectId()!);
+    }
+
     const results: string[] = [];
 
     // 1. TypeScript errors
@@ -1442,6 +1613,7 @@ async function _executeToolInternal(
     if (name === 'listFiles') return handleListFiles();
     if (name === 'checkDependencies') return handleCheckDependencies(ctx);
     if (name === 'getErrors') return handleGetErrors(ctx);
+    if (name === 'deploy') return handleDeploy();
 
     // Parse arguments
     const argsList = parseToolArguments(argsString);
@@ -1499,7 +1671,7 @@ async function _executeToolInternal(
                     result = await handleBatchCreateFiles(args, ctx);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, deploy`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
