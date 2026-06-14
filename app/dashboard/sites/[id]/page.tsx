@@ -1244,7 +1244,7 @@ export default function SiteSettingsPage() {
         { id: "overview", label: "Overview", icon: Layout },
         { id: "domain", label: "Domain", icon: Globe },
         { id: "pages", label: "Pages", icon: FileText },
-        { id: "ai", label: "Glovix", icon: Zap },
+        { id: "ai", label: "Syra", icon: Zap },
       ],
     },
     ...(siteType === "blog"
@@ -2019,7 +2019,7 @@ export default function SiteSettingsPage() {
                         >
                           <History className="h-4 w-4 text-zinc-500" />
                         </div>
-                        <p className="text-[14px] text-zinc-500">No changes yet — use Glovix to build your site</p>
+                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
                       </div>
                     )}
                   </div>

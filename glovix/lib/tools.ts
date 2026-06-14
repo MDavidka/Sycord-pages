@@ -4,23 +4,246 @@ import { parseToolArguments } from './utils';
 import { getHostProjectId } from './api';
 
 /**
- * When the builder is embedded inside the Sycord dashboard, persist a single
- * file to the project's pages API immediately so it shows up in the Pages tab
- * without waiting for the debounced auto-save.
+ * Result of attempting to persist a file to the project's Pages (MongoDB).
+ * - `saved`   → the file was written to the Pages store (source of truth)
+ * - `skipped` → not embedded in the dashboard, or a system/env file that must
+ *               never become a page (this is NOT an error)
+ * - `error`   → the Pages API rejected or could not be reached
  */
-async function syncFileToProjectPages(path: string, content: string): Promise<void> {
+type PageSyncResult =
+    | { status: 'saved' }
+    | { status: 'skipped' }
+    | { status: 'error'; message: string };
+
+/**
+ * Persist a single file to the project's Pages (MongoDB) via the REST API.
+ *
+ * This is the SOURCE OF TRUTH for the project's file base when Glovix is
+ * embedded in the Sycord dashboard. It is intentionally independent of the
+ * in-browser WebContainer filesystem so that a WebContainer failure — such as
+ * the "object can not be cloned" DataCloneError thrown by the preview bridge —
+ * can never block a file from being saved.
+ */
+async function syncFileToProjectPages(path: string, content: string): Promise<PageSyncResult> {
     const projectId = getHostProjectId();
-    if (!projectId) return;
-    // Skip system / picker files
-    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) return;
+    if (!projectId) return { status: 'skipped' };
+    // Skip system / picker / env files — these must never become pages
+    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) {
+        return { status: 'skipped' };
+    }
     try {
-        await fetch(`/api/projects/${projectId}/pages`, {
+        const res = await fetch(`/api/projects/${projectId}/pages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: path, content, usedFor: 'AI Builder' }),
         });
-    } catch (err) {
+        if (!res.ok) {
+            let message = `HTTP ${res.status}`;
+            try {
+                const data = await res.json();
+                if (data?.message) message = data.message;
+            } catch { /* response had no JSON body */ }
+            console.warn(`[GlovixTools] Pages API rejected "${path}": ${message}`);
+            return { status: 'error', message };
+        }
+        return { status: 'saved' };
+    } catch (err: any) {
+        const message = err?.message || 'network error';
         console.warn(`[GlovixTools] Failed to sync "${path}" to pages API:`, err);
+        return { status: 'error', message };
+    }
+}
+
+/**
+ * Best-effort write into the in-browser WebContainer filesystem so the live
+ * preview reflects the change. The WebContainer is a preview convenience only;
+ * when it is unavailable or its worker bridge throws (e.g. the
+ * "object can not be cloned" DataCloneError), we swallow the error so the save
+ * to Pages still succeeds. Returns the warning message, or null on success.
+ */
+async function tryWriteToWebContainer(path: string, content: string): Promise<string | null> {
+    try {
+        await writeFile(path, content);
+        return null;
+    } catch (e: any) {
+        const message = e?.message || String(e);
+        console.warn(`[GlovixTools] WebContainer preview write failed for "${path}" (file still saved to Pages):`, message);
+        return message;
+    }
+}
+
+/**
+ * Read a file's content. Prefer the WebContainer FS (it holds the freshest
+ * on-disk state), but transparently fall back to the in-memory store when the
+ * WebContainer is unavailable so reading/editing keeps working even if the
+ * preview bridge is broken.
+ */
+async function readFileResilient(path: string): Promise<string> {
+    try {
+        return await readFile(path);
+    } catch (e: any) {
+        const stored = useStore.getState().files[path];
+        if (stored?.file?.contents !== undefined) {
+            return stored.file.contents;
+        }
+        throw e;
+    }
+}
+
+/**
+ * Persist a file to every layer in the correct order of durability:
+ *   1. the in-memory store (drives the UI + preview mount), always
+ *   2. the project's Pages (MongoDB) — the durable source of truth
+ *   3. the WebContainer FS — best-effort live preview only
+ * Returns the Pages persistence result so callers can surface real failures.
+ */
+async function persistFile(path: string, content: string): Promise<PageSyncResult> {
+    const state = useStore.getState();
+    state.setFiles({ ...state.files, [path]: { file: { contents: content } } });
+    state.removeErrorsForFile(path);
+
+    const pageSync = await syncFileToProjectPages(path, content);
+    await tryWriteToWebContainer(path, content);
+    return pageSync;
+}
+
+// ============================================================
+// SYCORD SERVER-SIDE WORKSPACE (execute / diagnostics / deploy)
+//
+// When embedded in a Sycord project, command execution, type diagnostics and
+// deploys run on a sandboxed server (the /api/workspace/* endpoints) instead of
+// the in-browser WebContainer. This avoids browser crashes / serialization
+// ("object can not be cloned") / "not a valid workspace" failures entirely.
+// ============================================================
+
+/** True when running inside a Sycord project (server-side workspace available). */
+function isServerWorkspace(): boolean {
+    return !!getHostProjectId();
+}
+
+/**
+ * Run a command on the server-side execution sandbox and stream its stdout +
+ * stderr into the terminal. Returns a clean summary for the AI.
+ */
+async function runCommandServerSide(
+    projectId: string,
+    command: string,
+    cwd: string | undefined,
+    ctx: ToolContext
+): Promise<string> {
+    // Dev servers / long-running watchers don't apply on the server sandbox —
+    // there is no live in-app preview. Direct the AI to deploy instead.
+    if (/\b(run\s+)?(dev|start|serve|preview|watch)\b/.test(command)) {
+        return `[SYSTEM] ℹ️ "${command}" is a long-running dev server, which is not used in the Sycord workspace (there is no live in-app preview). Build the project (e.g. "pnpm run build") and use the deploy tool to publish it to sycord.site.`;
+    }
+
+    ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
+    const writeToTerminal = createCleanTerminalWriter(ctx.addTerminalOutput);
+
+    try {
+        const res = await fetch(`/api/workspace/execute?projectId=${encodeURIComponent(projectId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command, cwd: cwd || '/' }),
+        });
+
+        if (!res.ok || !res.body) {
+            const msg = await res.text().catch(() => '');
+            return `[SYSTEM] ❌ Command "${command}" could not run on the Sycord server sandbox (HTTP ${res.status}). ${msg}`.trim();
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let output = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            output += chunk;
+            writeToTerminal(chunk);
+        }
+
+        // Surface any parsed errors into the Error Panel.
+        const parsed = parseErrorsFromOutput(output, command);
+        if (parsed.length > 0) {
+            useStore.getState().addParsedErrors(parsed);
+        }
+
+        const exitMatch = output.match(/\[sandbox\] exit code (\d+)/);
+        const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : 0;
+        const status = exitCode === 0 ? '✅' : '❌';
+
+        const MAX_OUTPUT_LENGTH = 3000;
+        let finalOutput = cleanTerminalOutput(output);
+        if (finalOutput.length > MAX_OUTPUT_LENGTH) {
+            finalOutput = finalOutput.slice(0, 500) + '\n...[truncated]...\n' + finalOutput.slice(-2500);
+        }
+
+        return `[SYSTEM] ${status} Command "${command}" ran on the Sycord server sandbox (exit code ${exitCode}).\nOutput:\n${finalOutput || '(no output)'}`;
+    } catch (e: any) {
+        return `Error running command "${command}" on the server sandbox: ${e.message}`;
+    }
+}
+
+/** Run structured TypeScript diagnostics on the server-side workspace. */
+async function typeCheckServerSide(projectId: string): Promise<string> {
+    try {
+        const res = await fetch(`/api/workspace/diagnostics?projectId=${encodeURIComponent(projectId)}`);
+        if (!res.ok) {
+            const msg = await res.text().catch(() => '');
+            return `[SYSTEM] ❌ Type check could not run on the Sycord server (HTTP ${res.status}). ${msg}`.trim();
+        }
+        const data = await res.json();
+        const errors: Array<{ file: string; line: number; message: string }> = Array.isArray(data?.errors) ? data.errors : [];
+
+        if (errors.length === 0) {
+            return '[SYSTEM] ✅ TypeScript check passed: No type errors found.';
+        }
+
+        // Feed the Error Panel.
+        try {
+            const parsed = errors.map((e) => ({
+                file: e.file,
+                line: e.line,
+                column: 1,
+                message: e.message,
+                type: 'typescript' as const,
+            }));
+            useStore.getState().addParsedErrors(parsed as any);
+        } catch { /* error panel is best-effort */ }
+
+        const lines = errors
+            .slice(0, 50)
+            .map((e) => `  ${e.file}:${e.line} — ${e.message}`)
+            .join('\n');
+        return `[SYSTEM] TypeScript check found ${errors.length} error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
+    } catch (e: any) {
+        return `Error running TypeScript check on the server: ${e.message}`;
+    }
+}
+
+/**
+ * Deploy the project's saved files to sycord.site edge hosting via the CDN
+ * Push API. Returns the live URL on success.
+ */
+export async function handleDeploy(): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ Deploy is only available when building inside a Sycord project.';
+    }
+    try {
+        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || data?.status !== 'success' || !data?.url) {
+            return `[SYSTEM] ❌ Deploy failed: ${data?.message || `HTTP ${res.status}`}`;
+        }
+        return `[SYSTEM] ✅ Deployed successfully. Your site is live at ${data.url}`;
+    } catch (e: any) {
+        return `Error deploying project: ${e.message}`;
     }
 }
 
@@ -154,11 +377,12 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'runCommand',
-            description: 'Run a shell command in the terminal. Use pnpm instead of npm for faster installs.',
+            description: 'Run a shell command on the Sycord server-side execution sandbox. Use pnpm for installs. Commands run server-side (not in the browser), so they never crash with serialization errors.',
             parameters: {
                 type: 'object',
                 properties: {
                     command: { type: 'string', description: 'The command to run, e.g., pnpm install' },
+                    cwd: { type: 'string', description: 'Optional working directory relative to the project root. Defaults to "/".' },
                 },
                 required: ['command'],
             },
@@ -295,6 +519,18 @@ export const TOOL_DEFINITIONS = [
         function: {
             name: 'getErrors',
             description: 'Get a summary of all current errors in the project: TypeScript errors, build errors, and runtime errors from the terminal. Use this to quickly understand what is broken.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'deploy',
+            description: 'Bundle the project and deploy it to sycord.site edge hosting (CDN Push API). Runs server-side and returns the live URL. Use when the user asks to publish, deploy, or go live.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -570,17 +806,16 @@ export async function handleCreateFile(
     try {
         ctx.setSelectedFile(path);
 
-        await writeFile(path, content);
-        const state = useStore.getState();
-        state.setFiles({
-            ...state.files,
-            [path]: { file: { contents: content } }
-        });
-        // Clear errors for this file — it was just rewritten
-        state.removeErrorsForFile(path);
-        // Immediately sync to the project's pages API when embedded in dashboard
-        await syncFileToProjectPages(path, content);
-        return `[SYSTEM] File created: ${path} (${content.split('\n').length} lines)`;
+        // Save to Pages (MongoDB) first — this is the durable source of truth.
+        // The WebContainer preview write happens inside persistFile as a
+        // best-effort step and can never block the save.
+        const pageSync = await persistFile(path, content);
+
+        if (pageSync.status === 'error') {
+            return `Error saving file ${path} to Pages: ${pageSync.message}`;
+        }
+        const savedNote = pageSync.status === 'saved' ? ' (saved to Pages)' : '';
+        return `[SYSTEM] File created: ${path} (${content.split('\n').length} lines)${savedNote}`;
     } catch (e: any) {
         return `Error creating file ${path}: ${e.message}`;
     }
@@ -592,7 +827,7 @@ export async function handleEditFile(
     const { path, oldContent, newContent } = args;
 
     try {
-        const currentContent = await readFile(path);
+        const currentContent = await readFileResilient(path);
 
         // Exact match first
         if (currentContent.includes(oldContent)) {
@@ -602,14 +837,10 @@ export async function handleEditFile(
             }
 
             const newFileContent = currentContent.replace(oldContent, newContent);
-            await writeFile(path, newFileContent);
-            const state = useStore.getState();
-            state.setFiles({
-                ...state.files,
-                [path]: { file: { contents: newFileContent } }
-            });
-            state.removeErrorsForFile(path);
-            await syncFileToProjectPages(path, newFileContent);
+            const pageSync = await persistFile(path, newFileContent);
+            if (pageSync.status === 'error') {
+                return `Error saving file ${path} to Pages: ${pageSync.message}`;
+            }
             return `[SYSTEM] File edited: ${path}`;
         }
 
@@ -641,14 +872,10 @@ export async function handleEditFile(
             if (startIdx !== -1) {
                 const actualOld = contentLines.slice(startIdx, startIdx + oldLines.length).join('\n');
                 const newFileContent = currentContent.replace(actualOld, newContent);
-                await writeFile(path, newFileContent);
-                const state = useStore.getState();
-                state.setFiles({
-                    ...state.files,
-                    [path]: { file: { contents: newFileContent } }
-                });
-                state.removeErrorsForFile(path);
-                await syncFileToProjectPages(path, newFileContent);
+                const pageSync = await persistFile(path, newFileContent);
+                if (pageSync.status === 'error') {
+                    return `Error saving file ${path} to Pages: ${pageSync.message}`;
+                }
                 return `[SYSTEM] File edited: ${path} (matched with normalized whitespace)`;
             }
         }
@@ -683,7 +910,7 @@ export async function handleEditFile(
 export async function handleReadFile(args: { path: string }): Promise<string> {
     const { path } = args;
     try {
-        const content = await readFile(path);
+        const content = await readFileResilient(path);
         const lines = content.split('\n');
         // Add line numbers for easier reference
         const numbered = lines.map((l, i) => `${String(i + 1).padStart(4)} | ${l}`).join('\n');
@@ -699,7 +926,7 @@ export async function handleReadMultipleFiles(args: { paths: string[] }): Promis
 
     for (const path of paths) {
         try {
-            const content = await readFile(path);
+            const content = await readFileResilient(path);
             const lines = content.split('\n');
             const numbered = lines.map((l, i) => `${String(i + 1).padStart(4)} | ${l}`).join('\n');
             results.push(`━━━ ${path} (${lines.length} lines) ━━━\n${numbered}`);
@@ -842,10 +1069,10 @@ export async function handleSearchInFiles(args: { query: string; filePattern?: s
 
 
 export async function handleRunCommand(
-    args: { command: string },
+    args: { command: string; cwd?: string },
     ctx: ToolContext
 ): Promise<string> {
-    const { command } = args;
+    const { command, cwd } = args;
 
     if (!command || typeof command !== 'string' || command.trim().length === 0) {
         return 'Error: Empty or invalid command.';
@@ -855,6 +1082,13 @@ export async function handleRunCommand(
     const dangerous = ['rm -rf /', 'rm -rf ~', 'mkfs', 'dd if=', ':(){', 'fork bomb'];
     if (dangerous.some(d => command.includes(d))) {
         return `Error: Dangerous command blocked: "${command}"`;
+    }
+
+    // When embedded in a Sycord project, run on the server-side execution
+    // sandbox instead of the browser WebContainer. The server is a real Node.js
+    // environment, so backend commands and "&&" chaining are allowed there.
+    if (isServerWorkspace()) {
+        return runCommandServerSide(getHostProjectId()!, command, cwd, ctx);
     }
 
     // Block background process operators — WebContainer shell doesn't support them
@@ -1045,6 +1279,11 @@ function parseBuildErrors(output: string): string | null {
 }
 
 export async function handleTypeCheck(ctx: ToolContext): Promise<string> {
+    // When embedded in a Sycord project, use the structured server-side
+    // diagnostics endpoint instead of spawning tsc in the browser WebContainer.
+    if (isServerWorkspace()) {
+        return typeCheckServerSide(getHostProjectId()!);
+    }
     try {
         ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ npx tsc --noEmit --pretty\x1b[0m\r\n`);
         const writeToTerminal = createCleanTerminalWriter(ctx.addTerminalOutput);
@@ -1246,6 +1485,7 @@ export async function handleBatchCreateFiles(
 
     const results: string[] = [];
     let successCount = 0;
+    let pageErrorCount = 0;
     const newFilesMap: Record<string, { file: { contents: string } }> = {};
 
     for (const file of files) {
@@ -1254,18 +1494,24 @@ export async function handleBatchCreateFiles(
             continue;
         }
 
-        try {
-            await writeFile(file.path, file.content);
-            newFilesMap[file.path] = { file: { contents: file.content } };
+        newFilesMap[file.path] = { file: { contents: file.content } };
+
+        // Save to Pages (MongoDB) — the durable source of truth.
+        const pageSync = await syncFileToProjectPages(file.path, file.content);
+        // Best-effort live-preview write; never blocks the save.
+        await tryWriteToWebContainer(file.path, file.content);
+
+        if (pageSync.status === 'error') {
+            pageErrorCount++;
+            results.push(`  ⚠️ ${file.path} (preview updated, Pages save failed: ${pageSync.message})`);
+        } else {
             successCount++;
             results.push(`  ✅ ${file.path}`);
-        } catch (e: any) {
-            results.push(`  ❌ ${file.path}: ${e.message}`);
         }
     }
 
     // Single store update for all files (instead of N updates)
-    if (successCount > 0) {
+    if (Object.keys(newFilesMap).length > 0) {
         const state = useStore.getState();
         state.setFiles({ ...state.files, ...newFilesMap });
     }
@@ -1275,10 +1521,19 @@ export async function handleBatchCreateFiles(
         ctx.setSelectedFile(files[0].path);
     }
 
-    return `[SYSTEM] Batch create: ${successCount}/${files.length} files created.\n${results.join('\n')}`;
+    const tail = pageErrorCount > 0
+        ? `\n⚠️ ${pageErrorCount} file(s) could not be saved to Pages — see above.`
+        : '';
+    return `[SYSTEM] Batch create: ${successCount}/${files.length} files saved.\n${results.join('\n')}${tail}`;
 }
 
 export async function handleGetErrors(ctx: ToolContext): Promise<string> {
+    // In a Sycord project, get structured diagnostics from the server instead
+    // of spawning tsc in the browser WebContainer.
+    if (isServerWorkspace()) {
+        return typeCheckServerSide(getHostProjectId()!);
+    }
+
     const results: string[] = [];
 
     // 1. TypeScript errors
@@ -1358,6 +1613,7 @@ async function _executeToolInternal(
     if (name === 'listFiles') return handleListFiles();
     if (name === 'checkDependencies') return handleCheckDependencies(ctx);
     if (name === 'getErrors') return handleGetErrors(ctx);
+    if (name === 'deploy') return handleDeploy();
 
     // Parse arguments
     const argsList = parseToolArguments(argsString);
@@ -1415,7 +1671,7 @@ async function _executeToolInternal(
                     result = await handleBatchCreateFiles(args, ctx);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, deploy`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
