@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import AIChatInterface from "@/components/ai-chat-interface"
+import GlovixBuilder from "@/components/glovix-builder"
 import { type GeneratedPage } from "@/lib/types"
 import {
   Trash2,
@@ -1244,7 +1244,7 @@ export default function SiteSettingsPage() {
         { id: "overview", label: "Overview", icon: Layout },
         { id: "domain", label: "Domain", icon: Globe },
         { id: "pages", label: "Pages", icon: FileText },
-        { id: "ai", label: "Syra", icon: Zap },
+        { id: "ai", label: "Glovix", icon: Zap },
       ],
     },
     ...(siteType === "blog"
@@ -1362,7 +1362,7 @@ export default function SiteSettingsPage() {
           overflow: "hidden",
         }}
       >
-        {/* Header — hidden on the Syra (ai) tab so it renders full-screen with its own header */}
+        {/* Header — hidden on the Glovix (ai) tab so it renders full-screen with its own header */}
         {activeTab !== "ai" && (
         <header className={cn("border-b border-white/10 bg-background/50 backdrop-blur-sm z-20 shrink-0")}>
           <div className="flex items-center justify-between h-14 px-4 md:px-6">
@@ -2019,7 +2019,7 @@ export default function SiteSettingsPage() {
                         >
                           <History className="h-4 w-4 text-zinc-500" />
                         </div>
-                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
+                        <p className="text-[14px] text-zinc-500">No changes yet — use Glovix to build your site</p>
                       </div>
                     )}
                   </div>
@@ -2319,16 +2319,13 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: SYRA (AI BUILDER) */}
+            {/* TAB CONTENT: GLOVIX (AI BUILDER) */}
             {activeTab === "ai" && (
               <div className="h-full w-full flex flex-col">
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
-                    <div className="absolute inset-0 overflow-hidden custom-scrollbar">
-                      <AIChatInterface
-                        projectId={id}
-                        onBack={() => setActiveTab("overview")}
-                      />
+                    <div className="absolute inset-0 overflow-hidden">
+                      <GlovixBuilder />
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full">

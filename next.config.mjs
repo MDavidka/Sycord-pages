@@ -43,6 +43,23 @@ const nextConfig = {
       },
     ]
   },
+  async headers() {
+    // WebContainers (used by the Glovix AI builder) require the embedding
+    // document to be cross-origin isolated. These headers are intentionally
+    // scoped to the builder routes only so the rest of the app (Firebase auth
+    // popups, external embeds, etc.) is unaffected.
+    const crossOriginIsolation = [
+      { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+      { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+    ]
+
+    return [
+      { source: "/builder", headers: crossOriginIsolation },
+      { source: "/builder/:path*", headers: crossOriginIsolation },
+      { source: "/dashboard/sites/:id", headers: crossOriginIsolation },
+    ]
+  },
   images: {
     remotePatterns: [
       {
