@@ -122,8 +122,27 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /*
+   * Normalize the app background to the brand color #18191B and make it cover
+   * the entire screen — including the device "unsafe"/safe areas (notch,
+   * status bar, home indicator) and the iOS rubber-band overscroll region.
+   * Setting the background on <html> (not just <body>) guarantees the color
+   * fills the area behind the safe-area insets when viewport-fit=cover is used.
+   */
+  html {
+    background-color: #18191B;
+    color-scheme: dark;
+    /* Pad the body out from under the notch/home indicator on devices that
+       expose safe-area insets, while the background still bleeds underneath. */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+  }
   body {
     @apply bg-background text-foreground;
+    background-color: #18191B;
+    min-height: 100dvh;
   }
 }
 

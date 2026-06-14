@@ -44,5 +44,8 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Extend the layout into the device safe areas (notch, status bar, home
+  // indicator) so the #18191B background fills the whole screen edge-to-edge.
+  viewportFit: 'cover' as const,
   themeColor: '#18191B',
 };
