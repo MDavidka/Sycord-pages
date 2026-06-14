@@ -388,8 +388,14 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
           for (const part of parts) {
             // Capture thoughtSignature from any part (thought parts, text parts,
             // or functionCall parts) — whichever arrives first.
-            if (part.thoughtSignature) {
-              pendingSig = part.thoughtSignature
+            // The Vertex AI streaming response uses raw JSON with snake_case field
+            // names (thought_signature), while the Gemini Developer API and the
+            // SDK's non-streaming response use camelCase (thoughtSignature). We
+            // must handle both so the signature is never silently dropped.
+            const rawSig: string | undefined =
+              (part as any).thoughtSignature || (part as any).thought_signature
+            if (rawSig) {
+              pendingSig = rawSig
             }
 
             // Plain assistant text (skip internal "thought" summary parts).
@@ -402,7 +408,10 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
               // Signature goes on the FIRST functionCall only (per Gemini spec for
               // parallel calls). For sequential multi-step calls each step has its
               // own independent generation, so pendingSig is fresh each time.
-              const sig: string | undefined = part.thoughtSignature || (firstFcSent ? undefined : pendingSig)
+              // Also handle snake_case from raw Vertex streaming JSON.
+              const partSig: string | undefined =
+                (part as any).thoughtSignature || (part as any).thought_signature
+              const sig: string | undefined = partSig || (firstFcSent ? undefined : pendingSig)
               if (!firstFcSent) {
                 firstFcSent = true
                 // Don't clear pendingSig — the same signature may be referenced by
