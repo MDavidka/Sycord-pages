@@ -1,6 +1,28 @@
 import { executeCommand, writeFile, readFile, renameFile, deleteFile, autoInstallDependencies, smartInstall } from './webcontainer';
 import { useStore } from '../store';
 import { parseToolArguments } from './utils';
+import { getHostProjectId } from './api';
+
+/**
+ * When the builder is embedded inside the Sycord dashboard, persist a single
+ * file to the project's pages API immediately so it shows up in the Pages tab
+ * without waiting for the debounced auto-save.
+ */
+async function syncFileToProjectPages(path: string, content: string): Promise<void> {
+    const projectId = getHostProjectId();
+    if (!projectId) return;
+    // Skip system / picker files
+    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) return;
+    try {
+        await fetch(`/api/projects/${projectId}/pages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: path, content, usedFor: 'AI Builder' }),
+        });
+    } catch (err) {
+        console.warn(`[GlovixTools] Failed to sync "${path}" to pages API:`, err);
+    }
+}
 
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
@@ -556,6 +578,8 @@ export async function handleCreateFile(
         });
         // Clear errors for this file — it was just rewritten
         state.removeErrorsForFile(path);
+        // Immediately sync to the project's pages API when embedded in dashboard
+        await syncFileToProjectPages(path, content);
         return `[SYSTEM] File created: ${path} (${content.split('\n').length} lines)`;
     } catch (e: any) {
         return `Error creating file ${path}: ${e.message}`;
@@ -585,6 +609,7 @@ export async function handleEditFile(
                 [path]: { file: { contents: newFileContent } }
             });
             state.removeErrorsForFile(path);
+            await syncFileToProjectPages(path, newFileContent);
             return `[SYSTEM] File edited: ${path}`;
         }
 
@@ -623,6 +648,7 @@ export async function handleEditFile(
                     [path]: { file: { contents: newFileContent } }
                 });
                 state.removeErrorsForFile(path);
+                await syncFileToProjectPages(path, newFileContent);
                 return `[SYSTEM] File edited: ${path} (matched with normalized whitespace)`;
             }
         }

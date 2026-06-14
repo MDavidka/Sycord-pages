@@ -4,6 +4,39 @@ import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const { id } = await params
+
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
+    }
+
+    const client = await clientPromise
+    const db = client.db()
+
+    const user = await db.collection("users").findOne(
+      { id: session.user.id, "projects._id": new ObjectId(id) },
+      { projection: { "projects.$": 1 } }
+    )
+
+    if (!user || !user.projects?.[0]) {
+      return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
+
+    const pages = user.projects[0].pages ?? []
+    return NextResponse.json({ pages })
+  } catch (error: any) {
+    console.error("Error fetching pages:", error)
+    return NextResponse.json({ message: error.message }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {

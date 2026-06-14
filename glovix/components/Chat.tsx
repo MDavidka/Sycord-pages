@@ -7,7 +7,7 @@ import { sendMessage, Message, ToolCall } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES } from '../lib/projectTemplate';
-import { saveChatMessages, saveProject, createChat } from '../lib/api';
+import { saveChatMessages, saveProject, createChat, getHostProjectId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { MermaidBlock } from './MermaidBlock';
@@ -176,7 +176,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // Set system prompt in store for reference
     useEffect(() => {
         if (user) {
-            const prompt = getSystemPrompt(selectedModel);
+            const prompt = getSystemPrompt(selectedModel, getHostProjectId());
             setSystemPrompt(prompt);
         }
     }, [user, selectedModel]);
@@ -603,7 +603,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             'package.json, vite.config.ts, tsconfig.json, tailwind.config.js, postcss.config.js, index.html, src/main.tsx, src/App.tsx, src/index.css';
 
         // Build system prompt — always get fresh from getSystemPrompt
-        const currentSystemPrompt = getSystemPrompt(selectedModel);
+        const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
         const promptContent = currentSystemPrompt
             ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList)
             : `You are Glovix, an AI web developer. Project files: ${fileList}. Use tools to create/modify files. Run pnpm install then pnpm run dev to start.`;
