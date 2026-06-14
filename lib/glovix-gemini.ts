@@ -160,6 +160,23 @@ function wrapResponse(content: OpenAIContent | undefined): Record<string, unknow
   }
 }
 
+// Gemini "thinking" models attach a `thoughtSignature` to functionCall parts
+// that MUST be sent back when the call is replayed in history, or the API
+// rejects the request (400 "Function call is missing a thought_signature").
+// The OpenAI tool-call schema has nowhere to store it, so we smuggle it inside
+// the tool-call `id` (which Glovix round-trips verbatim) using this delimiter.
+const SIG_DELIM = "~~sig~~"
+
+function makeToolCallId(index: number, sig?: string): string {
+  return sig ? `fc-${index}-${Date.now()}${SIG_DELIM}${sig}` : `call_${index}_${Date.now()}`
+}
+
+function extractSignature(id: string | undefined): string | undefined {
+  if (!id) return undefined
+  const idx = id.indexOf(SIG_DELIM)
+  return idx === -1 ? undefined : id.slice(idx + SIG_DELIM.length)
+}
+
 function userParts(content: OpenAIContent | undefined): Part[] {
   if (typeof content === "string") return [{ text: content }]
   if (Array.isArray(content)) {
@@ -232,9 +249,13 @@ export function convertMessages(messages: OpenAIMessage[]): {
       if (text) parts.push({ text })
       if (Array.isArray(m.tool_calls)) {
         for (const tc of m.tool_calls) {
-          parts.push({
+          const part: Part = {
             functionCall: { name: tc.function?.name || "tool", args: parseArgs(tc.function?.arguments) },
-          })
+          }
+          // Replay the thought signature captured when the call was emitted.
+          const sig = extractSignature(tc.id)
+          if (sig) (part as { thoughtSignature?: string }).thoughtSignature = sig
+          parts.push(part)
         }
       }
       contents.push({ role: "model", parts: parts.length ? parts : [{ text: "" }] })
@@ -343,22 +364,24 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
         let toolIndex = 0
         let sawToolCall = false
         let usage: any = null
+        // Carries a thought signature forward to the function-call part it belongs
+        // to (Gemini sometimes attaches it to a preceding part within the turn).
+        let pendingSig: string | undefined
 
         for await (const chunk of genStream) {
-          let text: string | undefined
-          try {
-            text = chunk.text
-          } catch {
-            text = undefined
-          }
-          if (text) {
-            send({ ...base, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })
-          }
+          const parts: any[] = chunk.candidates?.[0]?.content?.parts ?? []
+          for (const part of parts) {
+            if (part.thoughtSignature) pendingSig = part.thoughtSignature
 
-          const fcs = chunk.functionCalls
-          if (fcs && fcs.length) {
-            for (const fc of fcs) {
+            // Plain assistant text (skip internal "thought" summary parts).
+            if (typeof part.text === "string" && part.text.length > 0 && !part.thought) {
+              send({ ...base, choices: [{ index: 0, delta: { content: part.text }, finish_reason: null }] })
+            }
+
+            if (part.functionCall) {
               sawToolCall = true
+              const sig: string | undefined = part.thoughtSignature || pendingSig
+              pendingSig = undefined
               send({
                 ...base,
                 choices: [
@@ -368,9 +391,12 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
                       tool_calls: [
                         {
                           index: toolIndex,
-                          id: `call_${toolIndex}_${Date.now()}`,
+                          id: makeToolCallId(toolIndex, sig),
                           type: "function",
-                          function: { name: fc.name || "tool", arguments: JSON.stringify(fc.args ?? {}) },
+                          function: {
+                            name: part.functionCall.name || "tool",
+                            arguments: JSON.stringify(part.functionCall.args ?? {}),
+                          },
                         },
                       ],
                     },
