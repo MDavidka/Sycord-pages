@@ -4,24 +4,107 @@ import { parseToolArguments } from './utils';
 import { getHostProjectId } from './api';
 
 /**
- * When the builder is embedded inside the Sycord dashboard, persist a single
- * file to the project's pages API immediately so it shows up in the Pages tab
- * without waiting for the debounced auto-save.
+ * Result of attempting to persist a file to the project's Pages (MongoDB).
+ * - `saved`   → the file was written to the Pages store (source of truth)
+ * - `skipped` → not embedded in the dashboard, or a system/env file that must
+ *               never become a page (this is NOT an error)
+ * - `error`   → the Pages API rejected or could not be reached
  */
-async function syncFileToProjectPages(path: string, content: string): Promise<void> {
+type PageSyncResult =
+    | { status: 'saved' }
+    | { status: 'skipped' }
+    | { status: 'error'; message: string };
+
+/**
+ * Persist a single file to the project's Pages (MongoDB) via the REST API.
+ *
+ * This is the SOURCE OF TRUTH for the project's file base when Glovix is
+ * embedded in the Sycord dashboard. It is intentionally independent of the
+ * in-browser WebContainer filesystem so that a WebContainer failure — such as
+ * the "object can not be cloned" DataCloneError thrown by the preview bridge —
+ * can never block a file from being saved.
+ */
+async function syncFileToProjectPages(path: string, content: string): Promise<PageSyncResult> {
     const projectId = getHostProjectId();
-    if (!projectId) return;
-    // Skip system / picker files
-    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) return;
+    if (!projectId) return { status: 'skipped' };
+    // Skip system / picker / env files — these must never become pages
+    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) {
+        return { status: 'skipped' };
+    }
     try {
-        await fetch(`/api/projects/${projectId}/pages`, {
+        const res = await fetch(`/api/projects/${projectId}/pages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: path, content, usedFor: 'AI Builder' }),
         });
-    } catch (err) {
+        if (!res.ok) {
+            let message = `HTTP ${res.status}`;
+            try {
+                const data = await res.json();
+                if (data?.message) message = data.message;
+            } catch { /* response had no JSON body */ }
+            console.warn(`[GlovixTools] Pages API rejected "${path}": ${message}`);
+            return { status: 'error', message };
+        }
+        return { status: 'saved' };
+    } catch (err: any) {
+        const message = err?.message || 'network error';
         console.warn(`[GlovixTools] Failed to sync "${path}" to pages API:`, err);
+        return { status: 'error', message };
     }
+}
+
+/**
+ * Best-effort write into the in-browser WebContainer filesystem so the live
+ * preview reflects the change. The WebContainer is a preview convenience only;
+ * when it is unavailable or its worker bridge throws (e.g. the
+ * "object can not be cloned" DataCloneError), we swallow the error so the save
+ * to Pages still succeeds. Returns the warning message, or null on success.
+ */
+async function tryWriteToWebContainer(path: string, content: string): Promise<string | null> {
+    try {
+        await writeFile(path, content);
+        return null;
+    } catch (e: any) {
+        const message = e?.message || String(e);
+        console.warn(`[GlovixTools] WebContainer preview write failed for "${path}" (file still saved to Pages):`, message);
+        return message;
+    }
+}
+
+/**
+ * Read a file's content. Prefer the WebContainer FS (it holds the freshest
+ * on-disk state), but transparently fall back to the in-memory store when the
+ * WebContainer is unavailable so reading/editing keeps working even if the
+ * preview bridge is broken.
+ */
+async function readFileResilient(path: string): Promise<string> {
+    try {
+        return await readFile(path);
+    } catch (e: any) {
+        const stored = useStore.getState().files[path];
+        if (stored?.file?.contents !== undefined) {
+            return stored.file.contents;
+        }
+        throw e;
+    }
+}
+
+/**
+ * Persist a file to every layer in the correct order of durability:
+ *   1. the in-memory store (drives the UI + preview mount), always
+ *   2. the project's Pages (MongoDB) — the durable source of truth
+ *   3. the WebContainer FS — best-effort live preview only
+ * Returns the Pages persistence result so callers can surface real failures.
+ */
+async function persistFile(path: string, content: string): Promise<PageSyncResult> {
+    const state = useStore.getState();
+    state.setFiles({ ...state.files, [path]: { file: { contents: content } } });
+    state.removeErrorsForFile(path);
+
+    const pageSync = await syncFileToProjectPages(path, content);
+    await tryWriteToWebContainer(path, content);
+    return pageSync;
 }
 
 // Tool definitions for AI
@@ -570,17 +653,16 @@ export async function handleCreateFile(
     try {
         ctx.setSelectedFile(path);
 
-        await writeFile(path, content);
-        const state = useStore.getState();
-        state.setFiles({
-            ...state.files,
-            [path]: { file: { contents: content } }
-        });
-        // Clear errors for this file — it was just rewritten
-        state.removeErrorsForFile(path);
-        // Immediately sync to the project's pages API when embedded in dashboard
-        await syncFileToProjectPages(path, content);
-        return `[SYSTEM] File created: ${path} (${content.split('\n').length} lines)`;
+        // Save to Pages (MongoDB) first — this is the durable source of truth.
+        // The WebContainer preview write happens inside persistFile as a
+        // best-effort step and can never block the save.
+        const pageSync = await persistFile(path, content);
+
+        if (pageSync.status === 'error') {
+            return `Error saving file ${path} to Pages: ${pageSync.message}`;
+        }
+        const savedNote = pageSync.status === 'saved' ? ' (saved to Pages)' : '';
+        return `[SYSTEM] File created: ${path} (${content.split('\n').length} lines)${savedNote}`;
     } catch (e: any) {
         return `Error creating file ${path}: ${e.message}`;
     }
@@ -592,7 +674,7 @@ export async function handleEditFile(
     const { path, oldContent, newContent } = args;
 
     try {
-        const currentContent = await readFile(path);
+        const currentContent = await readFileResilient(path);
 
         // Exact match first
         if (currentContent.includes(oldContent)) {
@@ -602,14 +684,10 @@ export async function handleEditFile(
             }
 
             const newFileContent = currentContent.replace(oldContent, newContent);
-            await writeFile(path, newFileContent);
-            const state = useStore.getState();
-            state.setFiles({
-                ...state.files,
-                [path]: { file: { contents: newFileContent } }
-            });
-            state.removeErrorsForFile(path);
-            await syncFileToProjectPages(path, newFileContent);
+            const pageSync = await persistFile(path, newFileContent);
+            if (pageSync.status === 'error') {
+                return `Error saving file ${path} to Pages: ${pageSync.message}`;
+            }
             return `[SYSTEM] File edited: ${path}`;
         }
 
@@ -641,14 +719,10 @@ export async function handleEditFile(
             if (startIdx !== -1) {
                 const actualOld = contentLines.slice(startIdx, startIdx + oldLines.length).join('\n');
                 const newFileContent = currentContent.replace(actualOld, newContent);
-                await writeFile(path, newFileContent);
-                const state = useStore.getState();
-                state.setFiles({
-                    ...state.files,
-                    [path]: { file: { contents: newFileContent } }
-                });
-                state.removeErrorsForFile(path);
-                await syncFileToProjectPages(path, newFileContent);
+                const pageSync = await persistFile(path, newFileContent);
+                if (pageSync.status === 'error') {
+                    return `Error saving file ${path} to Pages: ${pageSync.message}`;
+                }
                 return `[SYSTEM] File edited: ${path} (matched with normalized whitespace)`;
             }
         }
@@ -683,7 +757,7 @@ export async function handleEditFile(
 export async function handleReadFile(args: { path: string }): Promise<string> {
     const { path } = args;
     try {
-        const content = await readFile(path);
+        const content = await readFileResilient(path);
         const lines = content.split('\n');
         // Add line numbers for easier reference
         const numbered = lines.map((l, i) => `${String(i + 1).padStart(4)} | ${l}`).join('\n');
@@ -699,7 +773,7 @@ export async function handleReadMultipleFiles(args: { paths: string[] }): Promis
 
     for (const path of paths) {
         try {
-            const content = await readFile(path);
+            const content = await readFileResilient(path);
             const lines = content.split('\n');
             const numbered = lines.map((l, i) => `${String(i + 1).padStart(4)} | ${l}`).join('\n');
             results.push(`━━━ ${path} (${lines.length} lines) ━━━\n${numbered}`);
@@ -1246,6 +1320,7 @@ export async function handleBatchCreateFiles(
 
     const results: string[] = [];
     let successCount = 0;
+    let pageErrorCount = 0;
     const newFilesMap: Record<string, { file: { contents: string } }> = {};
 
     for (const file of files) {
@@ -1254,18 +1329,24 @@ export async function handleBatchCreateFiles(
             continue;
         }
 
-        try {
-            await writeFile(file.path, file.content);
-            newFilesMap[file.path] = { file: { contents: file.content } };
+        newFilesMap[file.path] = { file: { contents: file.content } };
+
+        // Save to Pages (MongoDB) — the durable source of truth.
+        const pageSync = await syncFileToProjectPages(file.path, file.content);
+        // Best-effort live-preview write; never blocks the save.
+        await tryWriteToWebContainer(file.path, file.content);
+
+        if (pageSync.status === 'error') {
+            pageErrorCount++;
+            results.push(`  ⚠️ ${file.path} (preview updated, Pages save failed: ${pageSync.message})`);
+        } else {
             successCount++;
             results.push(`  ✅ ${file.path}`);
-        } catch (e: any) {
-            results.push(`  ❌ ${file.path}: ${e.message}`);
         }
     }
 
     // Single store update for all files (instead of N updates)
-    if (successCount > 0) {
+    if (Object.keys(newFilesMap).length > 0) {
         const state = useStore.getState();
         state.setFiles({ ...state.files, ...newFilesMap });
     }
@@ -1275,7 +1356,10 @@ export async function handleBatchCreateFiles(
         ctx.setSelectedFile(files[0].path);
     }
 
-    return `[SYSTEM] Batch create: ${successCount}/${files.length} files created.\n${results.join('\n')}`;
+    const tail = pageErrorCount > 0
+        ? `\n⚠️ ${pageErrorCount} file(s) could not be saved to Pages — see above.`
+        : '';
+    return `[SYSTEM] Batch create: ${successCount}/${files.length} files saved.\n${results.join('\n')}${tail}`;
 }
 
 export async function handleGetErrors(ctx: ToolContext): Promise<string> {
