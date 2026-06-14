@@ -1,4 +1,16 @@
-// LocalStorage-only API for OpenSource version
+// API layer for Glovix.
+// When the builder is embedded in the Sycord dashboard and a project ID has
+// been provided via window.__glovixProjectId, file operations (save/load) are
+// routed to the existing /api/projects/[id]/pages REST endpoint so that files
+// appear in the project's Pages tab immediately.  When no project ID is set
+// (standalone /builder page), the implementation falls back to localStorage so
+// the open-source experience is unchanged.
+
+/** Returns the host project ID injected by GlovixBuilder, or null. */
+export function getHostProjectId(): string | null {
+    if (typeof window === 'undefined') return null;
+    return (window as any).__glovixProjectId ?? null;
+}
 
 const localStore = {
     get: (key: string) => {
@@ -107,12 +119,74 @@ export const saveChatMessages = async (chatId: string, messages: any[]) => {
 
 // Projects
 export const getProject = async (chatId: string): Promise<Project | null> => {
+    // When embedded in the dashboard, load files from the pages API so we
+    // restore the exact set of files the AI previously saved.
+    const projectId = getHostProjectId();
+    if (projectId) {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/pages`);
+            if (res.ok) {
+                const data = await res.json();
+                const pages: Array<{ name: string; content: string }> = data.pages ?? [];
+                if (pages.length === 0) return null;
+                // Reconstruct the files map that Glovix expects
+                const files: Record<string, { file: { contents: string } }> = {};
+                for (const page of pages) {
+                    files[page.name] = { file: { contents: page.content } };
+                }
+                return {
+                    id: projectId,
+                    user_id: '',
+                    chat_id: chatId,
+                    files,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                };
+            }
+        } catch (err) {
+            console.warn('[GlovixAPI] Failed to load pages from API, falling back to localStorage:', err);
+        }
+    }
+
     await new Promise(r => setTimeout(r, 50));
     const projects = localStore.get('projects') || {};
     return projects[chatId] || null;
 };
 
 export const saveProject = async (chatId: string, userId: string, files: any): Promise<Project> => {
+    // When embedded in the dashboard, persist every file to the pages API so
+    // it appears in the project's Pages tab immediately.
+    const projectId = getHostProjectId();
+    if (projectId) {
+        try {
+            const saves = Object.entries(files as Record<string, { file: { contents: string } }>)
+                // Skip system / internal files that should not appear as pages
+                .filter(([name]) =>
+                    !name.startsWith('.glovix/') &&
+                    name !== 'glovix-picker.js' &&
+                    !/^\.env(?:\.|$)/.test(name)
+                )
+                .map(([name, file]) =>
+                    fetch(`/api/projects/${projectId}/pages`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name,
+                            content: file.file.contents,
+                            usedFor: 'AI Builder',
+                        }),
+                    }).then(r => {
+                        if (!r.ok) console.warn(`[GlovixAPI] Failed to save page "${name}":`, r.status);
+                    })
+                );
+            await Promise.allSettled(saves);
+        } catch (err) {
+            console.warn('[GlovixAPI] Batch page save failed, falling back to localStorage:', err);
+        }
+    }
+
+    // Always also save to localStorage as a local cache / fallback for the
+    // standalone /builder page and for offline recovery.
     const projects = localStore.get('projects') || {};
     const project = {
         id: crypto.randomUUID(),

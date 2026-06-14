@@ -2325,7 +2325,7 @@ export default function SiteSettingsPage() {
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
                     <div className="absolute inset-0 overflow-hidden">
-                      <GlovixBuilder />
+                      <GlovixBuilder projectId={id} />
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full">

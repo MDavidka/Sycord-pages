@@ -248,13 +248,21 @@ export function convertMessages(messages: OpenAIMessage[]): {
       const text = contentToText(m.content)
       if (text) parts.push({ text })
       if (Array.isArray(m.tool_calls)) {
+        let firstTcInMessage = true
         for (const tc of m.tool_calls) {
           const part: Part = {
             functionCall: { name: tc.function?.name || "tool", args: parseArgs(tc.function?.arguments) },
           }
           // Replay the thought signature captured when the call was emitted.
-          const sig = extractSignature(tc.id)
-          if (sig) (part as { thoughtSignature?: string }).thoughtSignature = sig
+          // Per Gemini docs: only the FIRST functionCall part in each step needs
+          // (and should have) a thoughtSignature. Subsequent parallel FC parts in
+          // the same assistant message intentionally have no signature.
+          if (firstTcInMessage) {
+            const sig = extractSignature(tc.id)
+            // `thoughtSignature` is a first-class field on Part — no cast needed.
+            if (sig) (part as Part & { thoughtSignature: string }).thoughtSignature = sig
+            firstTcInMessage = false
+          }
           parts.push(part)
         }
       }
@@ -365,13 +373,30 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
         let sawToolCall = false
         let usage: any = null
         // Carries a thought signature forward to the function-call part it belongs
-        // to (Gemini sometimes attaches it to a preceding part within the turn).
+        // to. Gemini thinking models attach it to a preceding thought/text part OR
+        // directly on the functionCall part itself. We collect ALL signatures seen
+        // across the entire streaming response so that even if the thought chunk
+        // arrives in a different SSE event than the functionCall chunk, we still
+        // have the signature available. We only ever embed it on the FIRST function
+        // call of each response (per the Gemini docs for parallel FCs), and we
+        // DON'T clear it between chunks — only after the first FC consumes it.
         let pendingSig: string | undefined
+        let firstFcSent = false
 
         for await (const chunk of genStream) {
           const parts: any[] = chunk.candidates?.[0]?.content?.parts ?? []
           for (const part of parts) {
-            if (part.thoughtSignature) pendingSig = part.thoughtSignature
+            // Capture thoughtSignature from any part (thought parts, text parts,
+            // or functionCall parts) — whichever arrives first.
+            // The Vertex AI streaming response uses raw JSON with snake_case field
+            // names (thought_signature), while the Gemini Developer API and the
+            // SDK's non-streaming response use camelCase (thoughtSignature). We
+            // must handle both so the signature is never silently dropped.
+            const rawSig: string | undefined =
+              (part as any).thoughtSignature || (part as any).thought_signature
+            if (rawSig) {
+              pendingSig = rawSig
+            }
 
             // Plain assistant text (skip internal "thought" summary parts).
             if (typeof part.text === "string" && part.text.length > 0 && !part.thought) {
@@ -380,8 +405,19 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
 
             if (part.functionCall) {
               sawToolCall = true
-              const sig: string | undefined = part.thoughtSignature || pendingSig
-              pendingSig = undefined
+              // Signature goes on the FIRST functionCall only (per Gemini spec for
+              // parallel calls). For sequential multi-step calls each step has its
+              // own independent generation, so pendingSig is fresh each time.
+              // Also handle snake_case from raw Vertex streaming JSON.
+              const partSig: string | undefined =
+                (part as any).thoughtSignature || (part as any).thought_signature
+              const sig: string | undefined = partSig || (firstFcSent ? undefined : pendingSig)
+              if (!firstFcSent) {
+                firstFcSent = true
+                // Don't clear pendingSig — the same signature may be referenced by
+                // the very next part in an edge case; it will be naturally discarded
+                // since firstFcSent guards further use.
+              }
               send({
                 ...base,
                 choices: [
