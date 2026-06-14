@@ -606,7 +606,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
         const promptContent = currentSystemPrompt
             ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList)
-            : `You are Glovix, an AI web developer. Project files: ${fileList}. Use tools to create/modify files. Run pnpm install then pnpm run dev to start.`;
+            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.`;
 
         const SYSTEM_PROMPT: Message = {
             role: 'system',
@@ -1300,6 +1300,14 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             }
         }
 
+        // We are submitting this message ourselves — mark it as processed so the
+        // auto-process effect (which fires when messages.length === 1) does not
+        // also trigger a second AI response. This matters in chat-only/embedded
+        // mode where the chat is pre-selected before the first message.
+        if (chatId) {
+            autoProcessedRef.current = chatId;
+        }
+
         // Build AI message (what AI receives) - full file contents
         let aiText = input;
 
@@ -1646,7 +1654,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 target.style.height = 'auto';
                                 target.style.height = `${Math.min(target.scrollHeight, 250)}px`;
                             }}
-                            placeholder="How can Glovix help you today?"
+                            placeholder="How can Syra help you today?"
                             className={`w-full bg-transparent text-[13px] px-4 pt-4 pb-2 focus:outline-none resize-none overflow-y-auto ${isDark ? 'text-[#e5e5e5] placeholder:text-[#555]' : 'text-gray-900 placeholder:text-gray-400'}`}
                             style={{ height: 'auto', minHeight: '44px', maxHeight: '250px' }}
                             onKeyDown={(e) => {

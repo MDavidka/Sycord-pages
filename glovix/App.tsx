@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { MemoryRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './components/HomePage';
+import { EmbeddedChat } from './components/EmbeddedChat';
 import { useStore } from './store';
 import { getCurrentUser } from './lib/auth';
 import { getChatMessages, getProject, getChat } from './lib/api';
+import { getHostProjectId } from './lib/api';
 import { useAutoSave } from './lib/autoSave';
 import { mountFiles, autoInstallDependencies } from './lib/webcontainer';
 
@@ -121,6 +123,10 @@ function AppContent() {
 
     useAutoSave();
 
+    // When Syra is embedded inside a Sycord project, the whole experience is a
+    // single chat — no splash, no bar, no workbench, no navigation.
+    const embedded = !!getHostProjectId();
+
     useEffect(() => {
         document.documentElement.classList.toggle('light', theme === 'light');
     }, [theme]);
@@ -136,11 +142,18 @@ function AppContent() {
 
     const isDark = theme === 'dark';
 
+    // Embedded chat-only mode: render nothing but the chat. We don't show the
+    // "loading" splash here — the chat shell appears immediately and becomes
+    // interactive as soon as the (auto-login) user is ready.
+    if (embedded) {
+        return <EmbeddedChat />;
+    }
+
     if (loading) {
         return (
             <div className={`h-screen w-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#0a0a0a]' : 'bg-white'}`}>
                 <div className={`text-xl tracking-widest font-light ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Glovix Technologies
+                    Syra
                 </div>
                 <div className={`mt-6 w-8 h-0.5 ${isDark ? 'bg-white/20' : 'bg-gray-200'} overflow-hidden`}>
                     <div className={`h-full w-full ${isDark ? 'bg-white' : 'bg-gray-900'} animate-[loading_1s_ease-in-out_infinite]`}></div>
