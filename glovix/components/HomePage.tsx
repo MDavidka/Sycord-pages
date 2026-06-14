@@ -340,7 +340,7 @@ export function HomePage() {
                             </div>
 
                             {/* Project Cards - Grid with vertical layout */}
-                            <div className="grid grid-cols-3 gap-4 pb-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 pb-4">
                                 {recentChats.length > 0 ? (
                                     recentChats.map(chat => (
                                         <div
@@ -367,7 +367,7 @@ export function HomePage() {
                                         </div>
                                     ))
                                 ) : (
-                                    <div className={`col-span-3 text-center py-8 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                    <div className={`col-span-2 sm:col-span-3 text-center py-8 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                         No projects yet. Start building!
                                     </div>
                                 )}

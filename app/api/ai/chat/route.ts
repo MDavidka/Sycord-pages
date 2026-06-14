@@ -1,93 +1,56 @@
-// AI proxy for the Glovix builder.
+// AI endpoint for the Glovix builder — backed by Google Gemini on Vertex AI.
 //
-// The Glovix client posts OpenAI-compatible chat-completion requests (with
-// `stream: true`) to `/api/ai/chat`. In the original Vite app this path was a
-// dev-server proxy to `VITE_AI_ENDPOINT`. Here we replicate that behaviour as a
-// Next.js route handler so the upstream endpoint and API key stay server-side.
+// The Glovix client posts OpenAI-compatible chat-completion requests (streaming,
+// with `tools` / `tool_calls`) to `/api/ai/chat`. Instead of forwarding to an
+// external OpenAI-compatible "Vite AI" endpoint, this handler runs the request
+// on Gemini Vertex AI (the same engine the previous "Syra" builder used) and
+// streams the response back in OpenAI-compatible SSE so the client is unchanged.
 //
-// Configure via env:
-//   AI_ENDPOINT  – full OpenAI-compatible chat-completions URL
-//   AI_API_KEY   – bearer token injected when the client does not send one
-//
-// The client may also send its own `Authorization` header (set from the
-// in-app Settings → AI panel); when present and non-placeholder it takes
-// precedence over the server key.
+// Configure via env (see .env.example):
+//   GOOGLE_VERTEX_PROJECT / GOOGLE_VERTEX_LOCATION  -> full Vertex AI (ADC)
+//   GOOGLE_AIAGENT_API                              -> API key (express/dev API)
+//   GOOGLE_AIAGENT_MODEL                            -> model (default gemini-3.5-flash)
+
+import { isConfigured, streamOpenAICompatible } from "@/lib/glovix-gemini"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-const DEFAULT_ENDPOINT = "https://api.openai.com/v1/chat/completions"
-
-function resolveAuthorization(req: Request): string | null {
-  const incoming = req.headers.get("authorization")
-  const isUsable =
-    incoming &&
-    incoming.trim() !== "" &&
-    incoming.trim().toLowerCase() !== "bearer" &&
-    !incoming.includes("your_api_key_here")
-
-  if (isUsable) return incoming
-
-  const serverKey = process.env.AI_API_KEY
-  if (serverKey && serverKey !== "your_api_key_here") {
-    return `Bearer ${serverKey}`
-  }
-  return null
-}
+export const maxDuration = 300
 
 export async function POST(req: Request) {
-  const endpoint = process.env.AI_ENDPOINT || DEFAULT_ENDPOINT
-  const authorization = resolveAuthorization(req)
-
-  if (!authorization) {
+  if (!isConfigured()) {
     return new Response(
       JSON.stringify({
         error:
-          "Missing API key. Set AI_API_KEY in your environment, or configure a provider key in Settings → AI.",
+          "Gemini is not configured. Set GOOGLE_VERTEX_PROJECT (Vertex AI) or GOOGLE_AIAGENT_API in your environment.",
       }),
-      { status: 401, headers: { "Content-Type": "application/json" } },
+      { status: 503, headers: { "Content-Type": "application/json" } },
     )
   }
 
-  let body: string
+  let body: any
   try {
-    body = await req.text()
+    body = await req.json()
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid request body" }), {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     })
   }
 
-  let upstream: Response
-  try {
-    upstream = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: authorization,
-      },
-      body,
-      // @ts-expect-error - duplex is required by undici for streaming bodies
-      duplex: "half",
+  const messages = Array.isArray(body?.messages) ? body.messages : null
+  if (!messages) {
+    return new Response(JSON.stringify({ error: "Missing 'messages' array" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
     })
-  } catch (err: any) {
-    return new Response(
-      JSON.stringify({ error: `Upstream request failed: ${err?.message || "unknown error"}` }),
-      { status: 502, headers: { "Content-Type": "application/json" } },
-    )
   }
 
-  // Stream the upstream response straight back to the client, preserving the
-  // SSE content type so the Glovix stream parser keeps working.
-  const headers = new Headers()
-  const contentType = upstream.headers.get("content-type")
-  if (contentType) headers.set("Content-Type", contentType)
-  headers.set("Cache-Control", "no-cache, no-transform")
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers,
+  return streamOpenAICompatible({
+    messages,
+    tools: body?.tools,
+    temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+    maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+    model: typeof body?.model === "string" ? body.model : undefined,
   })
 }

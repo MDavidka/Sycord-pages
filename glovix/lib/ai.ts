@@ -195,11 +195,12 @@ async function _sendMessageInternal(
     const envKey = process.env.NEXT_PUBLIC_AI_API_KEY;
     const apiKeyToUse = (envKey && envKey !== 'your_api_key_here') ? envKey : aiApiKey;
 
-    if (!apiKeyToUse) {
-        throw new Error("Missing API Key. Please set VITE_AI_API_KEY in .env or configure it in Settings.");
+    // Auth is handled server-side by the Gemini Vertex bridge (/api/ai/chat).
+    // Only forward an Authorization header if the user explicitly configured a
+    // provider key in Settings / env; it is otherwise optional.
+    if (apiKeyToUse) {
+        headers['Authorization'] = `Bearer ${apiKeyToUse}`;
     }
-
-    headers['Authorization'] = `Bearer ${apiKeyToUse}`;
 
     // Use env model or fallback
     const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';

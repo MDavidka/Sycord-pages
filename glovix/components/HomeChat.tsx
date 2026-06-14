@@ -100,12 +100,12 @@ export function HomeChat() {
     ];
 
     return (
-        <div className="h-full flex flex-col items-center justify-center p-8">
+        <div className="h-full flex flex-col items-center justify-center p-4 md:p-8 overflow-y-auto">
             <div className="max-w-2xl w-full space-y-8">
                 {/* Header */}
                 <div className="text-center space-y-2">
                     <img src={isDark ? "/logo.png" : "/logo2.png"} alt="Glovix" className="h-12 mx-auto mb-4" />
-                    <h1 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    <h1 className={`text-3xl md:text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                         How can Glovix help you today?
                     </h1>
                     <p className={isDark ? 'text-[#a3a3a3]' : 'text-gray-500'}>

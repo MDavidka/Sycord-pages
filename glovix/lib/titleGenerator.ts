@@ -89,19 +89,18 @@ async function generateTitleWithAI(userText: string): Promise<string | null> {
         const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
 
         if (!apiKeyToUse) {
-            console.warn('[TitleGen] No API key, using fallback');
-            return null;
+            console.log('[TitleGen] No client key; using server-side Gemini Vertex');
         }
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
 
+        const titleHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (apiKeyToUse) titleHeaders['Authorization'] = `Bearer ${apiKeyToUse}`;
+
         const response = await fetch('/api/ai/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKeyToUse}`,
-            },
+            headers: titleHeaders,
             body: JSON.stringify({
                 model: actualModelId,
                 messages: [

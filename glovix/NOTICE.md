@@ -19,7 +19,11 @@ client-only island inside Next.js:
 - `src/index.css` was renamed to `glovix.css` and its `@tailwind` directives removed
   (the host app's Tailwind v4 pipeline supplies utilities).
 - The Vite dev-server AI proxy (`/api/ai/chat`) is reimplemented as a Next.js route
-  handler at `app/api/ai/chat/route.ts`.
+  handler backed by **Google Gemini on Vertex AI** (via `lib/glovix-gemini.ts`),
+  the same engine the old "Syra" builder used. It translates Glovix's
+  OpenAI-style requests to Gemini and streams responses back as OpenAI-compatible
+  SSE, so the client parser is unchanged. The provider API key is no longer
+  required on the client.
 - The mermaid CDN dynamic import is annotated with bundler-ignore comments.
 
 ## How it is mounted
@@ -33,5 +37,7 @@ for `/builder` and `/dashboard/sites/:id` in `next.config.mjs`.
 
 ## Configuration
 
-See `.env.example` for required/optional environment variables
-(`AI_ENDPOINT`, `AI_API_KEY`, `NEXT_PUBLIC_AI_MODEL`, and optional Tavily/legacy keys).
+See `.env.example` for environment variables. The builder runs on Gemini Vertex AI:
+`GOOGLE_VERTEX_PROJECT` (+ `GOOGLE_VERTEX_LOCATION`) for full Vertex AI with ADC, or
+`GOOGLE_AIAGENT_API` for an API key, with optional `GOOGLE_AIAGENT_MODEL`
+(default `gemini-3.5-flash`).

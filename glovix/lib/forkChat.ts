@@ -99,20 +99,16 @@ async function generateContextSummary(conversationText: string): Promise<string>
     const apiKeyToUse = (envKey && envKey !== 'your_api_key_here') ? envKey : aiApiKey;
     const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
 
-    if (!apiKeyToUse) {
-        throw new Error('No API key configured');
-    }
-
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKeyToUse) fetchHeaders['Authorization'] = `Bearer ${apiKeyToUse}`;
 
     try {
         const response = await fetch('/api/ai/chat', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKeyToUse}`,
-            },
+            headers: fetchHeaders,
             body: JSON.stringify({
                 model: actualModelId,
                 messages: [

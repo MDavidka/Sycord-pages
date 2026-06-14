@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Code2, Play, ChevronDown, ChevronUp, RotateCw, Download, Zap, Loader2, TerminalSquare, Trash2, AlertTriangle, Maximize2, Minimize2, MousePointer2 } from 'lucide-react';
+import { Code2, Play, ChevronDown, ChevronUp, RotateCw, Download, Zap, Loader2, TerminalSquare, Trash2, AlertTriangle, Maximize2, Minimize2, MousePointer2, PanelLeft } from 'lucide-react';
 import { useStore } from '../store';
 import { CodeEditor } from './CodeEditor';
 import { Terminal } from './Terminal';
@@ -27,6 +27,7 @@ export function Workbench() {
     const [showTerminal, setShowTerminal] = useState(true);
     const [terminalHeight, setTerminalHeight] = useState(220);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [showFilesMobile, setShowFilesMobile] = useState(false);
     const [urlPath, setUrlPath] = useState('/');
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const fullscreenIframeRef = useRef<HTMLIFrameElement>(null);
@@ -194,10 +195,19 @@ export function Workbench() {
     }, [terminalHeight]);
 
     return (
-        <div ref={containerRef} className={`flex-1 h-full flex flex-col overflow-hidden pt-2 pr-2 pb-2 gap-1.5 ${isDark ? 'bg-[#141414]' : 'bg-gray-100'}`}>
+        <div ref={containerRef} className={`flex-1 h-full flex flex-col overflow-hidden p-1.5 md:pt-2 md:pr-2 md:pb-2 md:pl-0 gap-1.5 ${isDark ? 'bg-[#141414]' : 'bg-gray-100'}`}>
             {/* Top bar */}
             <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-1">
+                    {activeTab === 'code' && (
+                        <button
+                            onClick={() => setShowFilesMobile(v => !v)}
+                            className={`md:hidden p-2 rounded-lg transition-colors ${isDark ? 'text-[#888] hover:text-white hover:bg-[#1a1a1a]' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'}`}
+                            title="Files"
+                        >
+                            <PanelLeft className="w-4 h-4" />
+                        </button>
+                    )}
                     <div className={`flex items-center rounded-lg p-0.5 ${isDark ? 'bg-[#1a1a1a]' : 'bg-gray-200'}`}>
                         <button
                             onClick={() => setActiveTab('code')}
@@ -226,11 +236,18 @@ export function Workbench() {
             </div>
 
             {/* Main content block - Files + Editor */}
-            <div className={`flex-1 flex overflow-hidden rounded-xl border ${isDark ? 'bg-[#141414] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
+            <div className={`flex-1 flex overflow-hidden rounded-xl border relative ${isDark ? 'bg-[#141414] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
                 {activeTab === 'code' ? (
                     <>
-                        {/* Files sidebar */}
-                        <div className={`w-56 flex flex-col overflow-hidden border-r ${isDark ? 'border-[#1f1f1f]' : 'border-gray-200'}`}>
+                        {/* Mobile drawer backdrop */}
+                        {showFilesMobile && (
+                            <div
+                                onClick={() => setShowFilesMobile(false)}
+                                className="md:hidden absolute inset-0 z-20 bg-black/40"
+                            />
+                        )}
+                        {/* Files sidebar (desktop column / mobile drawer) */}
+                        <div className={`${showFilesMobile ? 'flex absolute z-30 inset-y-0 left-0 w-3/4 max-w-[260px] shadow-2xl' : 'hidden'} md:relative md:flex md:w-56 md:max-w-none md:shadow-none flex-col overflow-hidden border-r ${isDark ? 'bg-[#141414] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
                             <div className={`h-9 flex items-center gap-3 px-3 border-b text-xs ${isDark ? 'border-[#1f1f1f] text-[#888]' : 'border-gray-200 text-gray-500'}`}>
                                 <span className={`font-medium ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}>Files</span>
                                 <span className="opacity-50">Search</span>
