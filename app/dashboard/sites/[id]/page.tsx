@@ -2325,7 +2325,11 @@ export default function SiteSettingsPage() {
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
                     <div className="absolute inset-0 overflow-hidden">
-                      <GlovixBuilder projectId={id} />
+                      <GlovixBuilder
+                        projectId={id}
+                        userImage={session?.user?.image}
+                        onBack={() => setActiveTab("overview")}
+                      />
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full">

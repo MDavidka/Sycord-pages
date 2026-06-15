@@ -17,14 +17,21 @@ interface GlovixBuilderProps {
    * created/edited files to the project's pages via the API instead of only
    * persisting them in localStorage. */
   projectId?: string
+  /** The signed-in user's avatar URL (e.g. Google profile picture) shown in the
+   * embedded mobile header. */
+  userImage?: string | null
+  /** Called when the user taps the back button in the embedded mobile header. */
+  onBack?: () => void
 }
 
-export default function GlovixBuilder({ projectId }: GlovixBuilderProps) {
+export default function GlovixBuilder({ projectId, userImage, onBack }: GlovixBuilderProps) {
   // Set synchronously during render so the ssr:false Glovix bundle can read the
   // project id on its very first render (child effects run before this parent's
   // effect, so a useEffect alone would be too late for embedded-mode detection).
   if (typeof window !== "undefined" && projectId) {
     ;(window as any).__glovixProjectId = projectId
+    ;(window as any).__glovixUserImage = userImage ?? undefined
+    ;(window as any).__glovixOnBack = onBack
   }
 
   // Expose the projectId to the Glovix store so the internal save logic can
@@ -35,10 +42,14 @@ export default function GlovixBuilder({ projectId }: GlovixBuilderProps) {
     if (projectId) {
       ;(window as any).__glovixProjectId = projectId
     }
+    ;(window as any).__glovixUserImage = userImage ?? undefined
+    ;(window as any).__glovixOnBack = onBack
     return () => {
       ;(window as any).__glovixProjectId = undefined
+      ;(window as any).__glovixUserImage = undefined
+      ;(window as any).__glovixOnBack = undefined
     }
-  }, [projectId])
+  }, [projectId, userImage, onBack])
 
   return (
     <div className="glovix-root h-full w-full">
