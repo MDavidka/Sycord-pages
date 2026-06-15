@@ -1,52 +1,48 @@
-// Base React + Vite + TypeScript + Tailwind project template
-// This is auto-generated when a new chat is created
+// Base Next.js (App Router) + TypeScript + Tailwind project template
+// This is auto-generated when a new chat is created. It is deployable with
+// `npm run build` (Next.js production build) — NOT a Vite SPA.
 
 export const BASE_PROJECT_FILES: Record<string, { file: { contents: string } }> = {
   'package.json': {
     file: {
       contents: `{
-  "name": "vite-react-app",
+  "name": "nextjs-app",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.1.0",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
-    "lucide-react": "^0.294.0",
-    "clsx": "^2.0.0",
-    "tailwind-merge": "^2.1.0"
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.408.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.4.0"
   },
   "devDependencies": {
-    "@types/react": "^18.2.37",
-    "@types/react-dom": "^18.2.15",
-    "@vitejs/plugin-react": "^4.2.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.5",
-    "typescript": "^5.2.2",
-    "vite": "^5.0.0"
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "typescript": "^5.5.3"
   }
 }`
     }
   },
-  'vite.config.ts': {
+  'next.config.mjs': {
     file: {
-      contents: `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+      contents: `/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+};
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 3000,
-    host: true
-  }
-})`
+export default nextConfig;`
     }
   },
   'tsconfig.json': {
@@ -54,117 +50,110 @@ export default defineConfig({
       contents: `{
   "compilerOptions": {
     "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
     "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }`
     }
   },
-  'tsconfig.node.json': {
+  'next-env.d.ts': {
     file: {
-      contents: `{
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
-  },
-  "include": ["vite.config.ts"]
-}`
+      contents: `/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/basic-features/typescript for more information.`
     }
   },
-  'tailwind.config.js': {
+  'tailwind.config.ts': {
     file: {
-      contents: `/** @type {import('tailwindcss').Config} */
-export default {
+      contents: `import type { Config } from "tailwindcss";
+
+const config: Config = {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {},
   },
   plugins: [],
-}`
+};
+
+export default config;`
     }
   },
-  'postcss.config.js': {
+  'postcss.config.mjs': {
     file: {
-      contents: `export default {
+      contents: `/** @type {import('postcss-load-config').Config} */
+const config = {
   plugins: {
     tailwindcss: {},
     autoprefixer: {},
   },
+};
+
+export default config;`
+    }
+  },
+  'app/layout.tsx': {
+    file: {
+      contents: `import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Next.js App",
+  description: "Built with Syra on the Sycord platform",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className="antialiased">{children}</body>
+    </html>
+  );
 }`
     }
   },
-  'index.html': {
+  'app/page.tsx': {
     file: {
-      contents: `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>React App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>`
-    }
-  },
-  'src/main.tsx': {
-    file: {
-      contents: `import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App'
-import './index.css'
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)`
-    }
-  },
-  'src/App.tsx': {
-    file: {
-      contents: `function App() {
+      contents: `export default function Home() {
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+    <main className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="text-center">
         <h1 className="text-4xl font-bold text-gray-900 mb-4">
           Welcome to Your App
         </h1>
         <p className="text-gray-600">
-          Start editing src/App.tsx to build your application
+          Start editing app/page.tsx to build your application
         </p>
       </div>
-    </div>
-  )
-}
-
-export default App`
+    </main>
+  );
+}`
     }
   },
-  'src/index.css': {
+  'app/globals.css': {
     file: {
       contents: `@tailwind base;
 @tailwind components;
@@ -177,13 +166,13 @@ export default App`
 export function getProjectStructure(): string {
   const paths = Object.keys(BASE_PROJECT_FILES).sort();
   const tree: string[] = ['Project structure:'];
-  
+
   for (const path of paths) {
     const depth = path.split('/').length - 1;
     const indent = '  '.repeat(depth);
     const name = path.split('/').pop() || path;
     tree.push(`${indent}📄 ${name}`);
   }
-  
+
   return tree.join('\n');
 }

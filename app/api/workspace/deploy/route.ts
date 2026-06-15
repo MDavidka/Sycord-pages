@@ -18,7 +18,7 @@ import {
   prepareProjectDeployFiles,
   validateApiDeployFiles,
 } from "@/lib/deploy/runner-client"
-import { isValidProjectId } from "@/lib/workspace/sandbox"
+import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -64,6 +64,22 @@ export async function POST(req: Request): Promise<Response> {
   const validationErrors = validateApiDeployFiles(files)
   if (validationErrors.length > 0) {
     return Response.json({ status: "error", message: validationErrors.join("; ") }, { status: 400 })
+  }
+
+  // Ensure the generated content is actually buildable (valid Next.js project)
+  // before we push it to the deploy pipeline — a clear, early failure beats a
+  // cryptic build error downstream.
+  const buildProblems = validateNextBuildable(
+    files.map((f) => ({ name: f.path, content: f.content })),
+  )
+  if (buildProblems.length > 0) {
+    return Response.json(
+      {
+        status: "error",
+        message: `Project is not buildable yet: ${buildProblems.join("; ")}`,
+      },
+      { status: 400 },
+    )
   }
 
   const github = getEnvGitHubCredentials()

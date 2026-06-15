@@ -602,7 +602,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         // Get current project files for context
         const currentFiles = useStore.getState().files;
         const fileList = Object.keys(currentFiles).filter(f => f !== 'glovix-picker.js').sort().join('\n') ||
-            'package.json, vite.config.ts, tsconfig.json, tailwind.config.js, postcss.config.js, index.html, src/main.tsx, src/App.tsx, src/index.css';
+            'package.json, next.config.mjs, tsconfig.json, tailwind.config.ts, postcss.config.mjs, app/layout.tsx, app/page.tsx, app/globals.css';
 
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
@@ -1080,7 +1080,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     console.log(`[Chat] Loop detected: ${consecutiveErrorCount} consecutive errors, injecting recovery hint`);
                     const recoveryMessage: Message = {
                         role: 'system',
-                        content: `⚠️ LOOP DETECTED: ${consecutiveErrorCount} consecutive tool errors. STOP and change your approach:\n1. Use getErrors() to see all current errors\n2. Use readFile() to check the actual file content\n3. If editFile keeps failing, use createFile to rewrite the entire file\n4. If pnpm install fails, check the package name with searchWeb\n5. Take a step back and think about what's actually wrong`
+                        content: `⚠️ LOOP DETECTED: ${consecutiveErrorCount} consecutive tool errors. STOP and change your approach:\n1. Use getErrors() to see all current errors\n2. Use readFile() to check the actual file content\n3. If editFile keeps failing, use createFile to rewrite the entire file\n4. If npm install fails, check the package name with searchWeb\n5. Take a step back and think about what's actually wrong`
                     };
                     currentMessages.push(recoveryMessage);
                     addMessage(recoveryMessage);
@@ -1408,7 +1408,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     }), [isDark]);
 
     return (
-        <div className={`flex flex-col h-full ${isDark ? 'bg-[#141414]' : 'bg-white'}`}>
+        <div className={`flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             {/* Messages Area */}
             <div
                 ref={scrollRef}

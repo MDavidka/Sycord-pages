@@ -113,3 +113,52 @@ const DANGEROUS_PATTERNS: RegExp[] = [
 export function isDangerousCommand(command: string): boolean {
   return DANGEROUS_PATTERNS.some((p) => p.test(command))
 }
+
+/**
+ * Validate that a project's files form a *buildable* Next.js app before we
+ * attempt to deploy them. This catches AI output that is missing the pieces a
+ * `npm run build` needs, surfacing a clear, actionable message instead of a
+ * cryptic downstream build failure.
+ *
+ * Returns an array of human-readable problems (empty when the project looks
+ * buildable).
+ */
+export function validateNextBuildable(files: WorkspaceFile[]): string[] {
+  const problems: string[] = []
+  const byName = new Map(files.map((f) => [f.name.replace(/^\/+/, ""), f]))
+  const names = Array.from(byName.keys())
+
+  // 1. package.json must exist, be valid JSON, and expose a `build` script.
+  const pkgFile = byName.get("package.json")
+  if (!pkgFile) {
+    problems.push('Missing "package.json" — a Next.js project needs one with a "build" script.')
+  } else {
+    let pkg: any
+    try {
+      pkg = JSON.parse(pkgFile.content)
+    } catch {
+      problems.push('"package.json" is not valid JSON and cannot be built.')
+    }
+    if (pkg) {
+      const buildScript = pkg?.scripts?.build
+      if (typeof buildScript !== "string" || buildScript.trim().length === 0) {
+        problems.push('"package.json" has no "scripts.build" command (expected e.g. "next build").')
+      }
+      const hasNextDep = !!(pkg?.dependencies?.next || pkg?.devDependencies?.next)
+      if (!hasNextDep) {
+        problems.push('"next" is not listed in package.json dependencies — add it so the app can build.')
+      }
+    }
+  }
+
+  // 2. There must be at least one route entry the build can compile.
+  const hasAppEntry = names.some((n) => /^app\/(.*\/)?(page|layout)\.(tsx|ts|jsx|js)$/.test(n))
+  const hasPagesEntry = names.some((n) => /^pages\/.+\.(tsx|ts|jsx|js)$/.test(n))
+  if (!hasAppEntry && !hasPagesEntry) {
+    problems.push(
+      'No route entry found — add an App Router entry (e.g. "app/page.tsx" and "app/layout.tsx") or a "pages/" file.',
+    )
+  }
+
+  return problems
+}

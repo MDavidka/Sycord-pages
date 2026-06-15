@@ -1,7 +1,7 @@
 import { executeCommand, writeFile, readFile, renameFile, deleteFile, autoInstallDependencies, smartInstall } from './webcontainer';
 import { useStore } from '../store';
 import { parseToolArguments } from './utils';
-import { getHostProjectId } from './api';
+import { getHostProjectId, getProjectPagesMap, deleteProjectPage, isPageBackedFile } from './api';
 
 /**
  * Result of attempting to persist a file to the project's Pages (MongoDB).
@@ -73,16 +73,58 @@ async function tryWriteToWebContainer(path: string, content: string): Promise<st
 }
 
 /**
- * Read a file's content. Prefer the WebContainer FS (it holds the freshest
- * on-disk state), but transparently fall back to the in-memory store when the
- * WebContainer is unavailable so reading/editing keeps working even if the
- * preview bridge is broken.
+ * Pull the project's file base from the Pages tab (MongoDB) — the SOURCE OF
+ * TRUTH when embedded in the dashboard — and mirror it into the in-memory store
+ * so the UI/preview stays in sync. System/internal files that are not stored as
+ * pages (`.glovix/`, `glovix-picker.js`, `.env*`) are preserved from the store.
+ *
+ * Returns the resulting files map, or null when not embedded (standalone
+ * /builder), in which case callers keep using the local store as before.
  */
-async function readFileResilient(path: string): Promise<string> {
+async function syncStoreFromPages(): Promise<Record<string, { file: { contents: string } }> | null> {
+    if (!getHostProjectId()) return null;
+    const pages = await getProjectPagesMap();
+    if (!pages) return null; // request failed — keep current local state
+
+    const state = useStore.getState();
+    // Start from page-backed truth, then re-attach local system/internal files
+    // that are intentionally never stored as pages.
+    const merged: Record<string, { file: { contents: string } }> = { ...pages };
+    for (const [name, file] of Object.entries(state.files)) {
+        if (!isPageBackedFile(name)) {
+            merged[name] = file;
+        }
+    }
+    state.setFiles(merged);
+    return merged;
+}
+
+/**
+ * Read a file's content. When embedded in a Sycord project the Pages tab is the
+ * source of truth, so we refresh from Pages first and read the freshly-synced
+ * content. We then fall back to the WebContainer FS / in-memory store for
+ * non-page files or when the Pages request is unavailable, so reads keep
+ * working even if a layer is temporarily broken.
+ */
+async function readFileResilient(path: string, opts?: { skipPagesSync?: boolean }): Promise<string> {
+    const normalized = path.replace(/^\/+/, '');
+
+    // Pages-first for page-backed files when embedded.
+    if (!opts?.skipPagesSync && getHostProjectId() && isPageBackedFile(normalized)) {
+        const synced = await syncStoreFromPages();
+        const fromPages = synced?.[normalized]?.file?.contents;
+        if (fromPages !== undefined) return fromPages;
+        // Not in Pages — fall through to WebContainer/store fallbacks below.
+    } else if (opts?.skipPagesSync) {
+        // Caller already synced from Pages — read the cached page content first.
+        const cached = useStore.getState().files[normalized]?.file?.contents;
+        if (cached !== undefined) return cached;
+    }
+
     try {
         return await readFile(path);
     } catch (e: any) {
-        const stored = useStore.getState().files[path];
+        const stored = useStore.getState().files[normalized] ?? useStore.getState().files[path];
         if (stored?.file?.contents !== undefined) {
             return stored.file.contents;
         }
@@ -134,7 +176,7 @@ async function runCommandServerSide(
     // Dev servers / long-running watchers don't apply on the server sandbox —
     // there is no live in-app preview. Direct the AI to deploy instead.
     if (/\b(run\s+)?(dev|start|serve|preview|watch)\b/.test(command)) {
-        return `[SYSTEM] ℹ️ "${command}" is a long-running dev server, which is not used in the Sycord workspace (there is no live in-app preview). Build the project (e.g. "pnpm run build") and use the deploy tool to publish it to sycord.site.`;
+        return `[SYSTEM] ℹ️ "${command}" is a long-running dev server, which is not used in the Sycord workspace (there is no live in-app preview). Build the project with "npm run build" and use the deploy tool to publish it to sycord.site.`;
     }
 
     ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
@@ -377,11 +419,11 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'runCommand',
-            description: 'Run a shell command on the Sycord server-side execution sandbox. Use pnpm for installs. Commands run server-side (not in the browser), so they never crash with serialization errors.',
+            description: 'Run a shell command on the Sycord server-side execution sandbox. Use npm for installs and "npm run build" to build the Next.js app. Commands run server-side (not in the browser), so they never crash with serialization errors.',
             parameters: {
                 type: 'object',
                 properties: {
-                    command: { type: 'string', description: 'The command to run, e.g., pnpm install' },
+                    command: { type: 'string', description: 'The command to run, e.g., npm install' },
                     cwd: { type: 'string', description: 'Optional working directory relative to the project root. Defaults to "/".' },
                 },
                 required: ['command'],
@@ -408,7 +450,7 @@ export const TOOL_DEFINITIONS = [
             parameters: {
                 type: 'object',
                 properties: {
-                    path: { type: 'string', description: 'Optional: specific file or directory to lint. Defaults to src/' },
+                    path: { type: 'string', description: 'Optional: specific file or directory to lint. Defaults to app/' },
                 },
                 required: [],
             },
@@ -441,7 +483,7 @@ export const TOOL_DEFINITIONS = [
             parameters: {
                 type: 'object',
                 properties: {
-                    url: { type: 'string', description: 'The URL to inspect (e.g., http://localhost:5173)' },
+                    url: { type: 'string', description: 'The URL to inspect (e.g., http://localhost:3000)' },
                     method: { type: 'string', description: 'HTTP method (GET, POST, etc.)', default: 'GET' },
                 },
                 required: ['url'],
@@ -924,9 +966,12 @@ export async function handleReadMultipleFiles(args: { paths: string[] }): Promis
     const { paths } = args;
     const results: string[] = [];
 
+    // Refresh from the Pages tab once for the whole batch (source of truth).
+    const synced = await syncStoreFromPages();
+
     for (const path of paths) {
         try {
-            const content = await readFileResilient(path);
+            const content = await readFileResilient(path, { skipPagesSync: !!synced });
             const lines = content.split('\n');
             const numbered = lines.map((l, i) => `${String(i + 1).padStart(4)} | ${l}`).join('\n');
             results.push(`━━━ ${path} (${lines.length} lines) ━━━\n${numbered}`);
@@ -952,7 +997,14 @@ export async function handleDeleteFile(args: { path: string }): Promise<string> 
     }
 
     try {
-        await deleteFile(path);
+        // Best-effort remove from the WebContainer preview FS.
+        try { await deleteFile(path); } catch { /* preview-only */ }
+
+        // Remove from the Pages tab (source of truth) when embedded.
+        if (getHostProjectId() && isPageBackedFile(path)) {
+            await deleteProjectPage(path);
+        }
+
         const state = useStore.getState();
         const newFiles = { ...state.files };
         // Delete the file and any children (for directories)
@@ -973,22 +1025,42 @@ export async function handleRenameFile(
 ): Promise<string> {
     const { oldPath, newPath } = args;
     try {
-        await renameFile(oldPath, newPath);
+        // Update the WebContainer preview FS (best-effort).
+        try { await renameFile(oldPath, newPath); } catch { /* preview-only */ }
+
         const state = useStore.getState();
         const newFiles = { ...state.files };
-        if (newFiles[oldPath]) {
-            newFiles[newPath] = newFiles[oldPath];
+        const moved = newFiles[oldPath];
+        if (moved) {
+            newFiles[newPath] = moved;
             delete newFiles[oldPath];
             state.setFiles(newFiles);
         }
+
+        // Reflect the rename in the Pages tab (source of truth): write the new
+        // page, then remove the old one.
+        if (getHostProjectId()) {
+            const content = moved?.file?.contents
+                ?? (await readFileResilient(newPath).catch(() => undefined))
+                ?? '';
+            if (isPageBackedFile(newPath)) {
+                await syncFileToProjectPages(newPath, content);
+            }
+            if (isPageBackedFile(oldPath)) {
+                await deleteProjectPage(oldPath);
+            }
+        }
+
         return `[SYSTEM] Renamed: ${oldPath} → ${newPath}`;
     } catch (e: any) {
         return `Error renaming ${oldPath}: ${e.message}`;
     }
 }
 
-export function handleListFiles(): string {
+export async function handleListFiles(): Promise<string> {
     try {
+        // Refresh from the Pages tab (source of truth) when embedded.
+        await syncStoreFromPages();
         const files = useStore.getState().files;
         const paths = Object.keys(files).filter(f => f !== 'glovix-picker.js').sort();
 
@@ -1027,6 +1099,8 @@ export function handleListFiles(): string {
 export async function handleSearchInFiles(args: { query: string; filePattern?: string }): Promise<string> {
     try {
         const { query, filePattern } = args;
+        // Refresh from the Pages tab (source of truth) when embedded.
+        await syncStoreFromPages();
         const files = useStore.getState().files;
         const results: string[] = [];
         let totalMatches = 0;
@@ -1093,7 +1167,7 @@ export async function handleRunCommand(
 
     // Block background process operators — WebContainer shell doesn't support them
     if (command.includes(' & ') || command.includes(' && ') || command.endsWith(' &')) {
-        return `[SYSTEM] ❌ BLOCKED: Cannot use "&" or "&&" operators. WebContainer does not support background processes or command chaining.\n\nRun each command separately using runCommand. For example:\n- First: runCommand("pnpm install")\n- Then: runCommand("pnpm run dev")`;
+        return `[SYSTEM] ❌ BLOCKED: Cannot use "&" or "&&" operators. WebContainer does not support background processes or command chaining.\n\nRun each command separately using runCommand. For example:\n- First: runCommand("npm install")\n- Then: runCommand("npm run build")`;
     }
 
     // Block backend server commands — they don't work in WebContainer
@@ -1110,7 +1184,7 @@ export async function handleRunCommand(
         /^docker-compose\s/i,
     ];
     if (backendPatterns.some(p => p.test(command.trim()))) {
-        return `[SYSTEM] ❌ BLOCKED: "${command}" cannot run in WebContainer.\n\nWebContainer is a browser-based runtime — it does NOT support backend servers, databases, or non-Node.js languages.\n\nAll apps must be client-side only (SPA). Use:\n- "pnpm run dev" to start Vite dev server\n- localStorage/IndexedDB for data persistence\n- External APIs via fetch() for real data`;
+        return `[SYSTEM] ❌ BLOCKED: "${command}" cannot run here.\n\nThis is a Next.js app, not a standalone backend server. Do NOT add a custom Node server.\n\nFor server logic, use Next.js Route Handlers (app/api/*/route.ts). Then:\n- "npm install" to add dependencies\n- "npm run build" to build the deployable Next.js app\n- Use BaaS (Supabase/Firebase/Neon) or fetch() for real data`;
     }
 
     try {
@@ -1295,7 +1369,7 @@ export async function handleTypeCheck(ctx: ToolContext): Promise<string> {
         if (exitCode === 0) {
             return '[SYSTEM] ✅ TypeScript check passed: No type errors found.';
         } else if (exitCode === 124) {
-            return '[SYSTEM] ⏰ TypeScript check timed out. The project may be too large or tsc is not installed. Try running `pnpm run dev` instead — Vite will show errors in the browser.';
+            return '[SYSTEM] ⏰ TypeScript check timed out. The project may be too large or tsc is not installed. Try running `npm run build` instead — Next.js will report type/build errors.';
         } else {
             // Parse and structure errors
             const errorLines = output.split('\n').filter(l => l.includes('error TS'));
@@ -1310,7 +1384,7 @@ export async function handleTypeCheck(ctx: ToolContext): Promise<string> {
             return `[SYSTEM] TypeScript check found ${errorCount} error(s):\n${cleanTerminalOutput(output).slice(0, 3000)}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them. Do NOT stop or report to the user until all errors are fixed.`;
         }
     } catch (e: any) {
-        return `Error running TypeScript check: ${e.message}. Try running \`pnpm run dev\` instead.`;
+        return `Error running TypeScript check: ${e.message}. Try running \`npm run build\` instead.`;
     }
 }
 
@@ -1610,7 +1684,7 @@ async function _executeToolInternal(
 ): Promise<string> {
     // Handle tools without arguments
     if (name === 'typeCheck') return handleTypeCheck(ctx);
-    if (name === 'listFiles') return handleListFiles();
+    if (name === 'listFiles') return await handleListFiles();
     if (name === 'checkDependencies') return handleCheckDependencies(ctx);
     if (name === 'getErrors') return handleGetErrors(ctx);
     if (name === 'deploy') return handleDeploy();
