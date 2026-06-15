@@ -289,6 +289,161 @@ export async function handleDeploy(): Promise<string> {
     }
 }
 
+// ============================================================
+// WORKSPACE AWARENESS + SPEED TOOLS
+// ============================================================
+
+/** Lightweight client-side framework/build detection from the current files. */
+function detectWorkspace(files: Record<string, { file: { contents: string } }>) {
+    const names = Object.keys(files).filter((n) => n !== 'glovix-picker.js');
+    let pkg: any = null;
+    const pkgRaw = files['package.json']?.file?.contents;
+    if (pkgRaw) { try { pkg = JSON.parse(pkgRaw); } catch { /* invalid json */ } }
+    const deps: Record<string, string> = pkg ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) } : {};
+    const scripts: Record<string, string> = pkg?.scripts || {};
+
+    let framework = 'unknown';
+    if (deps.next) framework = 'Next.js';
+    else if (deps.vite || names.includes('vite.config.ts') || names.includes('vite.config.js')) framework = 'Vite';
+    else if (deps.react) framework = 'React';
+    else if (names.some((n) => n.endsWith('index.html'))) framework = 'Static HTML';
+
+    let packageManager = 'npm';
+    if (files['pnpm-lock.yaml']) packageManager = 'pnpm';
+    else if (files['yarn.lock']) packageManager = 'yarn';
+    else if (files['bun.lockb']) packageManager = 'bun';
+
+    // Buildability (Next.js): package.json + build script + next dep + a route entry.
+    const problems: string[] = [];
+    if (!pkg) problems.push('No valid package.json.');
+    else {
+        if (!scripts.build) problems.push('No "build" script in package.json.');
+        if (!deps.next) problems.push('"next" is not in dependencies.');
+    }
+    const hasEntry = names.some((n) => /^app\/(.*\/)?(page|layout)\.(tsx|ts|jsx|js)$/.test(n))
+        || names.some((n) => /^pages\/.+\.(tsx|ts|jsx|js)$/.test(n));
+    if (!hasEntry) problems.push('No app/ or pages/ route entry found.');
+
+    const hasShadcn = !!files['components.json'];
+    return { names, pkg, deps, scripts, framework, packageManager, problems, hasShadcn };
+}
+
+export async function handleGetWorkspaceInfo(): Promise<string> {
+    try {
+        await syncStoreFromPages();
+        const files = useStore.getState().files;
+        const info = detectWorkspace(files);
+
+        const tree = info.names.sort().slice(0, 80).map((n) => `  • ${n}`).join('\n');
+        const depList = Object.keys(info.deps).sort().join(', ') || '(none)';
+        const scriptList = Object.entries(info.scripts).map(([k, v]) => `${k}: ${v}`).join(' | ') || '(none)';
+        const buildable = info.problems.length === 0
+            ? '✅ Buildable (Next.js)'
+            : `⚠️ Not buildable yet:\n${info.problems.map((p) => `    - ${p}`).join('\n')}`;
+
+        return [
+            `[SYSTEM] Workspace info`,
+            `Framework: ${info.framework}`,
+            `Package manager: ${info.packageManager}`,
+            `shadcn/ui configured: ${info.hasShadcn ? 'yes (components.json present)' : 'no'}`,
+            `Scripts: ${scriptList}`,
+            `Dependencies: ${depList}`,
+            `Build status: ${buildable}`,
+            `Files (${info.names.length}):`,
+            tree + (info.names.length > 80 ? `\n  … and ${info.names.length - 80} more` : ''),
+            ``,
+            `The VM can install dependencies and run the build for you via buildProject().`,
+        ].join('\n');
+    } catch (e: any) {
+        return `Error reading workspace info: ${e.message}`;
+    }
+}
+
+export async function handleBuildProject(ctx: ToolContext): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] buildProject runs on the Sycord server VM, which is only available inside a Sycord project.';
+    }
+    const files = useStore.getState().files;
+    const { packageManager } = detectWorkspace(files);
+    const installCmd = packageManager === 'npm' ? 'npm install' : `${packageManager} install`;
+    const buildCmd = packageManager === 'npm' ? 'npm run build' : `${packageManager} run build`;
+    ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${installCmd} && ${buildCmd}\x1b[0m\r\n`);
+    // The server VM allows && chaining and auto-installs dependencies.
+    const result = await runCommandServerSide(projectId, `${installCmd} && ${buildCmd}`, undefined, ctx);
+    if (result.includes('exit code 0')) {
+        return `[SYSTEM] ✅ buildProject: dependencies installed and "${buildCmd}" succeeded — the project is buildable and ready to deploy.\n${result}`;
+    }
+    return `[SYSTEM] ❌ buildProject: the build did not pass. Fix the errors below, then run buildProject again.\n${result}`;
+}
+
+export async function handleMultiEditFile(args: { path: string; edits: Array<{ oldContent: string; newContent: string }> }): Promise<string> {
+    const { path, edits } = args;
+    if (!Array.isArray(edits) || edits.length === 0) {
+        return `Error: multiEditFile requires a non-empty "edits" array for ${path}.`;
+    }
+    let content: string;
+    try {
+        content = await readFileResilient(path);
+    } catch (e: any) {
+        return `Error reading file ${path}: ${e.message}. Create it first with createFile.`;
+    }
+
+    const results: string[] = [];
+    let applied = 0;
+    edits.forEach((edit, i) => {
+        if (typeof edit?.oldContent !== 'string' || typeof edit?.newContent !== 'string') {
+            results.push(`  edit ${i + 1}: ❌ invalid (missing oldContent/newContent)`);
+            return;
+        }
+        const idx = content.indexOf(edit.oldContent);
+        if (idx === -1) {
+            results.push(`  edit ${i + 1}: ❌ oldContent not found`);
+            return;
+        }
+        if (content.indexOf(edit.oldContent, idx + edit.oldContent.length) !== -1) {
+            results.push(`  edit ${i + 1}: ❌ oldContent is not unique — add more context lines`);
+            return;
+        }
+        content = content.slice(0, idx) + edit.newContent + content.slice(idx + edit.oldContent.length);
+        applied++;
+        results.push(`  edit ${i + 1}: ✅ applied`);
+    });
+
+    if (applied === 0) {
+        return `[SYSTEM] ❌ multiEditFile made no changes to ${path}. Re-read the file and retry.\n${results.join('\n')}`;
+    }
+
+    const pageSync = await persistFile(path, content);
+    let footer = '';
+    if (pageSync.status === 'error') {
+        footer = `\n⚠️ Error saving file ${path} to Pages: ${pageSync.message}`;
+    }
+    return `[SYSTEM] multiEditFile applied ${applied}/${edits.length} edit(s) to ${path}:\n${results.join('\n')}${footer}`;
+}
+
+export async function handleAddShadcnComponents(args: { components: string[] }, ctx: ToolContext): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] addShadcnComponents runs the shadcn CLI on the Sycord server VM, which is only available inside a Sycord project.';
+    }
+    const components = (args.components || []).map((c) => String(c).trim()).filter(Boolean);
+    if (components.length === 0) {
+        return '[SYSTEM] addShadcnComponents needs at least one component name, e.g. ["button","card"].';
+    }
+    const files = useStore.getState().files;
+    if (!files['components.json']) {
+        return '[SYSTEM] ⚠️ components.json is missing. Create it first (the base template includes it) before adding shadcn components, or write the component files manually under components/ui/.';
+    }
+    const list = components.join(' ');
+    const cmd = `npx --yes shadcn@latest add ${list} --yes --overwrite`;
+    ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${cmd}\x1b[0m\r\n`);
+    const result = await runCommandServerSide(projectId, cmd, undefined, ctx);
+    // shadcn writes files to disk in the VM; mirror them back into Pages so they persist.
+    await syncStoreFromPages();
+    return `[SYSTEM] addShadcnComponents (${list}):\n${result}\n\nNote: if the CLI could not run, write the component files manually under components/ui/ instead.`;
+}
+
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
     {
@@ -553,6 +708,66 @@ export const TOOL_DEFINITIONS = [
                     },
                 },
                 required: ['files'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'getWorkspaceInfo',
+            description: 'Instantly inspect the workspace WITHOUT running a command: detected framework (Next.js/Vite/React/static), package manager, available npm scripts, declared dependencies, whether the project is buildable, and a compact file tree. Call this FIRST on an existing project to gain awareness in a single fast step instead of multiple listFiles/readFile calls.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'buildProject',
+            description: 'Install dependencies (auto-detecting npm/pnpm/yarn from the lockfile) AND run the production build in ONE server-side step, then report a concise pass/fail with the first errors. Much faster than running install and build as separate runCommand calls. Use this to verify the app compiles before deploying.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'multiEditFile',
+            description: 'Apply SEVERAL edits to a SINGLE file in one call (each edit is an exact find/replace). Far faster than multiple editFile round-trips. ALWAYS readFile first so every oldContent matches exactly. Edits are applied in order; the result reports which succeeded.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'The file to edit.' },
+                    edits: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                oldContent: { type: 'string', description: 'Exact text to find (must be unique).' },
+                                newContent: { type: 'string', description: 'Replacement text.' },
+                            },
+                            required: ['oldContent', 'newContent'],
+                        },
+                        description: 'Ordered list of find/replace edits to apply to the file.',
+                    },
+                },
+                required: ['path', 'edits'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'addShadcnComponents',
+            description: 'Add one or more shadcn/ui components to the project via the official CLI (runs `npx shadcn@latest add ... --yes --overwrite` server-side, installing any Radix deps). Use this instead of hand-writing component files. Requires components.json (present in the base template). Example components: button, card, input, dialog, dropdown-menu, tabs, sheet, sonner.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    components: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'shadcn component names to add, e.g. ["button","card","input"].',
+                    },
+                },
+                required: ['components'],
             },
         },
     },
@@ -1688,6 +1903,8 @@ async function _executeToolInternal(
     if (name === 'checkDependencies') return handleCheckDependencies(ctx);
     if (name === 'getErrors') return handleGetErrors(ctx);
     if (name === 'deploy') return handleDeploy();
+    if (name === 'getWorkspaceInfo') return await handleGetWorkspaceInfo();
+    if (name === 'buildProject') return await handleBuildProject(ctx);
 
     // Parse arguments
     const argsList = parseToolArguments(argsString);
@@ -1707,6 +1924,12 @@ async function _executeToolInternal(
                     break;
                 case 'editFile':
                     result = await handleEditFile(args);
+                    break;
+                case 'multiEditFile':
+                    result = await handleMultiEditFile(args);
+                    break;
+                case 'addShadcnComponents':
+                    result = await handleAddShadcnComponents(args, ctx);
                     break;
                 case 'readFile':
                     result = await handleReadFile(args);
@@ -1745,7 +1968,7 @@ async function _executeToolInternal(
                     result = await handleBatchCreateFiles(args, ctx);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, deploy`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, multiEditFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, buildProject, getWorkspaceInfo, addShadcnComponents, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, deploy`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

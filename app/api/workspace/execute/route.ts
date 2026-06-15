@@ -11,9 +11,11 @@
 
 import { spawn } from "node:child_process"
 import {
+  dangerousCommandReason,
   isDangerousCommand,
   loadProject,
   materializeWorkspace,
+  persistWorkspaceChanges,
   projectFiles,
   requireUserId,
   resolveCwd,
@@ -50,15 +52,21 @@ export async function POST(req: Request): Promise<Response> {
   const cwd = typeof body?.cwd === "string" ? body.cwd : undefined
 
   if (!command) return textResponse("Missing 'command'", 400)
-  if (isDangerousCommand(command)) return textResponse(`Dangerous command blocked: ${command}`, 400)
+  if (isDangerousCommand(command)) {
+    return textResponse(
+      `[sandbox] Blocked: ${dangerousCommandReason(command)}. The build VM only runs safe project commands (install, build, lint, file inspection).`,
+      400,
+    )
+  }
 
   const project = await loadProject(userId, projectId)
   if (!project) return textResponse("Project not found", 404)
 
   let root: string
   let workdir: string
+  const materialized = projectFiles(project)
   try {
-    root = await materializeWorkspace(projectId, projectFiles(project))
+    root = await materializeWorkspace(projectId, materialized)
     workdir = resolveCwd(root, cwd)
   } catch (err: any) {
     return textResponse(`Failed to prepare workspace: ${err?.message || "unknown error"}`, 400)
@@ -110,8 +118,22 @@ export async function POST(req: Request): Promise<Response> {
       child.on("error", (err) => enqueue(`\n[sandbox] ${err.message}\n`))
       child.on("close", (code) => {
         clearTimeout(timer)
-        enqueue(`\n[sandbox] exit code ${code ?? 0}\n`)
-        finish()
+        // Persist any new/changed source files generated in the VM (e.g. shadcn
+        // components, codegen) back into Pages — the workspace is ephemeral.
+        void (async () => {
+          try {
+            const changed = await persistWorkspaceChanges(userId, projectId, root, materialized)
+            if (changed.length > 0) {
+              const preview = changed.slice(0, 20).join(", ")
+              const more = changed.length > 20 ? ` …(+${changed.length - 20} more)` : ""
+              enqueue(`\n[sandbox] saved ${changed.length} file(s) to Pages: ${preview}${more}\n`)
+            }
+          } catch {
+            /* write-back is best-effort */
+          }
+          enqueue(`\n[sandbox] exit code ${code ?? 0}\n`)
+          finish()
+        })()
       })
 
       // If the client disconnects, kill the process.

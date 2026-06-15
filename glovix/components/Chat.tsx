@@ -1450,9 +1450,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors active:scale-95 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-900 hover:bg-black/10'}`}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors active:scale-95 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-900 hover:bg-black/10'}`}
                         >
-                            <Undo2 className="h-5 w-5" />
+                            <Undo2 className="h-4 w-4" />
                         </button>
 
                         {/* Centered title */}
@@ -1464,7 +1464,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                         <button
                             type="button"
                             aria-label="Profile"
-                            className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}
+                            className={`flex h-8 w-8 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}
                         >
                             {profileImage && !profileImgError ? (
                                 <img
@@ -1475,7 +1475,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     className="h-full w-full object-cover"
                                 />
                             ) : (
-                                <User className="h-5 w-5" />
+                                <User className="h-4 w-4" />
                             )}
                         </button>
                     </div>
@@ -1490,7 +1490,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             >
                 <div
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">

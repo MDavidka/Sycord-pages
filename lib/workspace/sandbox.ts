@@ -100,18 +100,170 @@ export function resolveCwd(root: string, cwd?: string): string {
   return safeJoin(root, rel.length > 0 ? rel : ".")
 }
 
-/** Commands that must never run in the sandbox, regardless of who asks. */
+// Directories whose contents must never be written back to Pages (build
+// artifacts / dependencies / VCS) and per-file limits for the write-back.
+const WRITEBACK_EXCLUDED_DIRS = new Set([
+  "node_modules", ".next", ".git", "dist", "build", "out", ".cache", ".turbo", "coverage", ".vercel",
+])
+const WRITEBACK_MAX_FILES = 200
+const WRITEBACK_MAX_FILE_BYTES = 256 * 1024
+
+/** True for a source file we are willing to persist back into Pages. */
+function isPersistableWorkspaceFile(rel: string): boolean {
+  if (isDisallowedFile(rel)) return false
+  if (rel.split("/").some((seg) => WRITEBACK_EXCLUDED_DIRS.has(seg))) return false
+  // Page-name validation mirrors the /pages API.
+  if (rel.includes("..") || rel.startsWith("/") || rel.includes("\0")) return false
+  if (/[<>:"|?*]/.test(rel) || rel.length > 255) return false
+  return true
+}
+
+/** Recursively collect persistable text files (name → content) under `root`. */
+async function collectWorkspaceFiles(root: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  async function walk(dir: string): Promise<void> {
+    if (out.size >= WRITEBACK_MAX_FILES) return
+    let entries: any[]
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (out.size >= WRITEBACK_MAX_FILES) return
+      const abs = path.join(dir, entry.name)
+      const rel = path.relative(root, abs).split(path.sep).join("/")
+      if (entry.isDirectory()) {
+        if (WRITEBACK_EXCLUDED_DIRS.has(entry.name)) continue
+        await walk(abs)
+        continue
+      }
+      if (!entry.isFile()) continue
+      if (!isPersistableWorkspaceFile(rel)) continue
+      try {
+        const stat = await fs.stat(abs)
+        if (stat.size > WRITEBACK_MAX_FILE_BYTES) continue
+        const buf = await fs.readFile(abs)
+        if (buf.includes(0)) continue // skip binary files
+        out.set(rel, buf.toString("utf8"))
+      } catch {
+        /* unreadable — skip */
+      }
+    }
+  }
+  await walk(root)
+  return out
+}
+
+/**
+ * After a command runs in the VM, persist any NEW or CHANGED source files back
+ * into the project's Pages (MongoDB) so generated code (e.g. shadcn components,
+ * codegen output) is durable — the VM workspace itself is ephemeral. Build
+ * artifacts and dependencies are excluded. Returns the changed file names.
+ */
+export async function persistWorkspaceChanges(
+  userId: string,
+  projectId: string,
+  root: string,
+  originalFiles: WorkspaceFile[],
+): Promise<string[]> {
+  if (!isValidProjectId(projectId)) return []
+  const original = new Map(originalFiles.map((f) => [f.name.replace(/^\/+/, ""), f.content]))
+  const current = await collectWorkspaceFiles(root)
+
+  const changed: Array<{ name: string; content: string }> = []
+  for (const [name, content] of current) {
+    if (original.get(name) !== content) changed.push({ name, content })
+  }
+  if (changed.length === 0) return []
+
+  const client = await clientPromise
+  const db = client.db()
+  const user = await db.collection("users").findOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    { projection: { "projects.$": 1 } },
+  )
+  const project = user?.projects?.[0]
+  if (!project) return []
+
+  const pages: any[] = Array.isArray(project.pages) ? project.pages : []
+  const byName = new Map(pages.map((p: any) => [p.name, p]))
+  const now = new Date()
+  for (const { name, content } of changed) {
+    const existing = byName.get(name)
+    if (existing) {
+      existing.content = content
+      existing.updatedAt = now
+    } else {
+      const page = { name, content, usedFor: "VM", createdAt: now, updatedAt: now }
+      pages.push(page)
+      byName.set(name, page)
+    }
+  }
+
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    { $set: { "projects.$.pages": pages } },
+  )
+
+  return changed.map((c) => c.name)
+}
+
+/**
+ * Commands that must never run in the sandbox, regardless of who asks. The VM
+ * is for building Next.js apps only — destructive, privilege-escalating,
+ * remote-code-execution and credential-exfiltration commands are rejected so a
+ * generated (or prompt-injected) script can never harm the host or leak data.
+ */
 const DANGEROUS_PATTERNS: RegExp[] = [
-  /rm\s+-rf?\s+(\/|~|\$HOME)/i,
+  // Filesystem destruction
+  /rm\s+-[a-z]*r[a-z]*f?\s+(\/|~|\$HOME|\.\.|\*)/i,
   /\bmkfs\b/i,
   /\bdd\s+if=/i,
-  /:\s*\(\s*\)\s*\{/, // fork bomb
-  />\s*\/dev\/(sd|nvme|disk)/i,
-  /\bshutdown\b|\breboot\b|\bhalt\b/i,
+  /\b(shred|wipefs)\b/i,
+  />\s*\/dev\/(sd|nvme|disk|null\/)/i,
+  // Fork bomb
+  /:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/,
+  /\.\s*\(\s*\)\s*\{.*\}\s*;/,
+  // Power / process control
+  /\b(shutdown|reboot|halt|poweroff|init\s+0|telinit)\b/i,
+  /\bkillall\b|\bkill\s+-9\s+-1\b/i,
+  // Privilege escalation
+  /\b(sudo|su\s+-|doas)\b/i,
+  /\bchmod\s+-?R?\s*777\s+\//i,
+  /\bchown\s+-R\s+\w+\s+\//i,
+  // Remote code execution: pipe a download straight into a shell
+  /\b(curl|wget|fetch)\b[^|]*\|\s*(sudo\s+)?(ba|z|da|c)?sh\b/i,
+  /\b(curl|wget)\b[^|]*\|\s*(python|node|perl|ruby|php)\b/i,
+  // Reverse shells
+  /\bnc\b.*\s-e\b|\bncat\b.*\s-e\b/i,
+  /bash\s+-i\s+>\s*&?\s*\/dev\/tcp\//i,
+  /\/dev\/tcp\//i,
+  // Credential / secret exfiltration
+  /\b(cat|less|head|tail|cp|scp|curl|tar)\b[^\n]*(\/etc\/(passwd|shadow|sudoers)|\.ssh\/|id_rsa|\.aws\/credentials|\.npmrc)/i,
+  /\b(printenv|env)\b[^|\n]*\|\s*(curl|wget|nc)\b/i,
+  // Supply-chain / publishing from the sandbox
+  /\bnpm\s+(publish|adduser|login|token)\b/i,
+  /\b(pnpm|yarn)\s+publish\b/i,
+  // Crypto miners
+  /\b(xmrig|minerd|cgminer|ethminer|cpuminer)\b/i,
 ]
 
 export function isDangerousCommand(command: string): boolean {
   return DANGEROUS_PATTERNS.some((p) => p.test(command))
+}
+
+/** A short, AI-readable explanation for why a command was rejected. */
+export function dangerousCommandReason(command: string): string {
+  if (/\b(sudo|su\s+-|doas)\b/i.test(command)) return "privilege escalation (sudo/su) is not allowed in the VM"
+  if (/\b(curl|wget|fetch)\b[^|]*\|\s*\w+sh\b/i.test(command) || /\/dev\/tcp\//i.test(command))
+    return "piping remote scripts into a shell / opening network shells is blocked"
+  if (/rm\s+-[a-z]*r/i.test(command) || /\bmkfs\b|\bdd\s+if=/i.test(command))
+    return "destructive filesystem commands are blocked"
+  if (/passwd|shadow|id_rsa|\.aws|\.npmrc|\.ssh/i.test(command))
+    return "reading/exfiltrating credentials is blocked"
+  if (/\bnpm\s+(publish|adduser|login)\b/i.test(command)) return "publishing/login from the VM is blocked"
+  return "this command is not permitted in the build VM"
 }
 
 /**
