@@ -68,7 +68,7 @@ export function EmbeddedChat() {
     }, [user, setCurrentChatId, setMessages, setFiles]);
 
     return (
-        <div className={`h-full w-full overflow-hidden ${isDark ? 'bg-[#141414] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
+        <div className={`h-full w-full overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
             <Chat />
         </div>
     );

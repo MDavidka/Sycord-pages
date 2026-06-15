@@ -122,9 +122,43 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Normalize the platform background so Sycord + Syra share one color and it
+     fills the whole viewport, including the device "unsafe" areas (notch /
+     status bar / home indicator) and the iOS overscroll/rubber-band region. */
+  html {
+    background-color: #18191B;
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground;
+    background-color: #18191B;
+    min-height: 100dvh;
+    /* Avoid a white flash / mismatched color when content bounces past edges */
+    overscroll-behavior: none;
   }
+}
+
+/* ── Safe-area helpers ──
+   Use these utilities on fixed headers / bottom bars / full-bleed containers
+   so content stays clear of the notch & home indicator while the background
+   color still extends edge-to-edge underneath them. */
+.safe-area-bg {
+  background-color: #18191B;
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.min-h-screen-safe {
+  min-height: 100dvh;
 }
 
 .text-gradient {

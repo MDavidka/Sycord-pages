@@ -140,9 +140,9 @@ export function Workbench() {
             await smartInstall(addTerminalOutput);
 
             setStatus('starting');
-            addTerminalOutput('$ pnpm run dev\n');
+            addTerminalOutput('$ npm run dev\n');
             // Fire and forget — dev server is long-running, don't await
-            executeCommand('pnpm', ['run', 'dev'], (output) => {
+            executeCommand('npm', ['run', 'dev'], (output) => {
                 writeToTerminal(output);
             }, -1);
         } catch (e: any) {

@@ -39,11 +39,20 @@ export interface AiClient {
   model: string
 }
 
+// The Vertex AI "global" location. Routing through the global endpoint spreads
+// requests across every region, giving the largest aggregate capacity and far
+// fewer 429 RESOURCE_EXHAUSTED errors than any single region. This is the
+// default for the builder.
+export const GLOBAL_LOCATION = "global"
+
 function readEnv() {
   const apiKey = process.env.GOOGLE_AIAGENT_API || process.env.GOOGLE_AIAGENT_API_KEY || ""
   const project = process.env.GOOGLE_VERTEX_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || ""
+  // Default to the GLOBAL endpoint. A specific region can still be pinned via
+  // GOOGLE_VERTEX_LOCATION / GOOGLE_CLOUD_LOCATION, but absent that we always
+  // use "global".
   const location =
-    process.env.GOOGLE_VERTEX_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || "global"
+    process.env.GOOGLE_VERTEX_LOCATION || process.env.GOOGLE_CLOUD_LOCATION || GLOBAL_LOCATION
   const useVertex = (process.env.GOOGLE_GENAI_USE_VERTEXAI ?? "true").toLowerCase() !== "false"
   return { apiKey, project, location, useVertex }
 }
@@ -56,31 +65,39 @@ export function isConfigured(): boolean {
 // Global Vertex AI endpoint. The `global` location routes requests across all
 // regions, which has the largest aggregate capacity and is far less likely to
 // return 429 RESOURCE_EXHAUSTED than any single region. We pin the base URL
-// explicitly so we always hit the global endpoint when location is "global".
+// explicitly so we always hit the global endpoint when the location is global.
 const VERTEX_GLOBAL_BASE_URL = "https://aiplatform.googleapis.com/"
 
-/** Construct the Gemini client, preferring Vertex AI. */
+/** Construct the Gemini client, preferring Vertex AI on the GLOBAL endpoint. */
 export function getAiClient(): AiClient {
   const { apiKey, project, location, useVertex } = readEnv()
+  const isGlobal = location === GLOBAL_LOCATION
+  // Force the global base URL whenever we're on the global location so the
+  // request never falls back to a regional host (regional hosts 429 sooner).
+  const globalHttpOptions = isGlobal ? { httpOptions: { baseUrl: VERTEX_GLOBAL_BASE_URL } } : {}
 
   if (useVertex && project) {
-    // Use the GLOBAL endpoint to mitigate 429s. A caller can still pin a region
-    // via GOOGLE_VERTEX_LOCATION / GOOGLE_CLOUD_LOCATION; only when the location
-    // is "global" do we force the global base URL.
-    const isGlobal = location === "global"
+    // Full Vertex AI mode (Application Default Credentials). Default location is
+    // "global"; a caller can still pin a region via GOOGLE_VERTEX_LOCATION /
+    // GOOGLE_CLOUD_LOCATION.
     return {
       ai: new GoogleGenAI({
         vertexai: true,
         project,
         location,
-        ...(isGlobal ? { httpOptions: { baseUrl: VERTEX_GLOBAL_BASE_URL } } : {}),
+        ...globalHttpOptions,
       }),
       mode: "vertex",
       model: GEMINI_MODEL,
     }
   }
   if (useVertex && apiKey) {
-    return { ai: new GoogleGenAI({ vertexai: true, apiKey }), mode: "vertex-express", model: GEMINI_MODEL }
+    // Vertex express mode (API key). Also target the global endpoint.
+    return {
+      ai: new GoogleGenAI({ vertexai: true, apiKey, ...globalHttpOptions }),
+      mode: "vertex-express",
+      model: GEMINI_MODEL,
+    }
   }
   if (apiKey) {
     return { ai: new GoogleGenAI({ apiKey }), mode: "developer", model: GEMINI_MODEL }

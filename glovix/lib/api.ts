@@ -153,6 +153,65 @@ export const getProject = async (chatId: string): Promise<Project | null> => {
     return projects[chatId] || null;
 };
 
+// ── Pages tab (project file source of truth) ──
+// When embedded in the dashboard, the project's Pages array (MongoDB) is the
+// single source of truth for the file base. These helpers let the builder read
+// and mutate the Pages tab directly instead of relying on a separate in-memory
+// copy of the files.
+
+/** True for files that are NOT stored as project Pages (system/internal). */
+export function isPageBackedFile(name: string): boolean {
+    if (!name) return false;
+    if (name.startsWith('.glovix/')) return false;
+    if (name === 'glovix-picker.js') return false;
+    if (/^\.env(?:\.|$)/.test(name) || /\/\.env(?:\.|$)/.test(name)) return false;
+    return true;
+}
+
+/**
+ * Fetch the project's Pages and return them as a Glovix files map
+ * (`{ [path]: { file: { contents } } }`). Returns null when not embedded in a
+ * project or when the request fails, so callers can fall back to local state.
+ */
+export const getProjectPagesMap = async (): Promise<Record<string, { file: { contents: string } }> | null> => {
+    const projectId = getHostProjectId();
+    if (!projectId) return null;
+    try {
+        const res = await fetch(`/api/projects/${projectId}/pages`);
+        if (!res.ok) {
+            console.warn('[GlovixAPI] getProjectPagesMap failed:', res.status);
+            return null;
+        }
+        const data = await res.json();
+        const pages: Array<{ name: string; content: string }> = data.pages ?? [];
+        const files: Record<string, { file: { contents: string } }> = {};
+        for (const page of pages) {
+            if (typeof page?.name === 'string' && typeof page?.content === 'string') {
+                files[page.name.replace(/^\/+/, '')] = { file: { contents: page.content } };
+            }
+        }
+        return files;
+    } catch (err) {
+        console.warn('[GlovixAPI] getProjectPagesMap error:', err);
+        return null;
+    }
+};
+
+/** Delete a single page from the project's Pages tab. No-op when not embedded. */
+export const deleteProjectPage = async (name: string): Promise<boolean> => {
+    const projectId = getHostProjectId();
+    if (!projectId) return false;
+    try {
+        const res = await fetch(`/api/projects/${projectId}/pages?name=${encodeURIComponent(name)}`, {
+            method: 'DELETE',
+        });
+        return res.ok;
+    } catch (err) {
+        console.warn(`[GlovixAPI] deleteProjectPage("${name}") error:`, err);
+        return false;
+    }
+};
+
 export const saveProject = async (chatId: string, userId: string, files: any): Promise<Project> => {
     // When embedded in the dashboard, persist every file to the pages API so
     // it appears in the project's Pages tab immediately.

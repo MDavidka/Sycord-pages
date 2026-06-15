@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Plus, Image as ImageIcon, X, ChevronRight, MousePointer2 } from 'lucide-react';
+import { FileCode, Plus, Image as ImageIcon, X, ChevronRight, MousePointer2, Undo2, User } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
@@ -142,6 +142,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     const setSystemPrompt = useStore(s => s.setSystemPrompt);
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
+    const [profileImgError, setProfileImgError] = useState(false);
 
     // Local actions state
     const [actions, setActions] = useState<StreamingAction[]>([]);
@@ -602,7 +603,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         // Get current project files for context
         const currentFiles = useStore.getState().files;
         const fileList = Object.keys(currentFiles).filter(f => f !== 'glovix-picker.js').sort().join('\n') ||
-            'package.json, vite.config.ts, tsconfig.json, tailwind.config.js, postcss.config.js, index.html, src/main.tsx, src/App.tsx, src/index.css';
+            'package.json, next.config.mjs, tsconfig.json, tailwind.config.ts, postcss.config.mjs, app/layout.tsx, app/page.tsx, app/globals.css';
 
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
@@ -1080,7 +1081,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     console.log(`[Chat] Loop detected: ${consecutiveErrorCount} consecutive errors, injecting recovery hint`);
                     const recoveryMessage: Message = {
                         role: 'system',
-                        content: `⚠️ LOOP DETECTED: ${consecutiveErrorCount} consecutive tool errors. STOP and change your approach:\n1. Use getErrors() to see all current errors\n2. Use readFile() to check the actual file content\n3. If editFile keeps failing, use createFile to rewrite the entire file\n4. If pnpm install fails, check the package name with searchWeb\n5. Take a step back and think about what's actually wrong`
+                        content: `⚠️ LOOP DETECTED: ${consecutiveErrorCount} consecutive tool errors. STOP and change your approach:\n1. Use getErrors() to see all current errors\n2. Use readFile() to check the actual file content\n3. If editFile keeps failing, use createFile to rewrite the entire file\n4. If npm install fails, check the package name with searchWeb\n5. Take a step back and think about what's actually wrong`
                     };
                     currentMessages.push(recoveryMessage);
                     addMessage(recoveryMessage);
@@ -1407,15 +1408,90 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
     }), [isDark]);
 
+    // Embedded inside a Sycord project → show the mobile chrome (back button,
+    // centered "Syra" title, profile avatar) with a progressive blur on top and
+    // safe-area aware spacing. The host injects the real Google avatar + a back
+    // handler via window globals (see GlovixBuilder).
+    const embedded = typeof window !== 'undefined' && !!getHostProjectId();
+    const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
+    const profileImage = hostUserImage || user?.photoURL;
+    const handleBack = () => {
+        const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
+        if (typeof fn === 'function') fn();
+    };
+
     return (
-        <div className={`flex flex-col h-full ${isDark ? 'bg-[#141414]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+            {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
+            {embedded && (
+                <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
+                    {/* Progressive blur — strongest at the very top, fading to clear so
+                        content scrolls smoothly underneath. Layered for a true gradient blur. */}
+                    <div className="absolute inset-0 -z-10" aria-hidden="true">
+                        <div
+                            className="absolute inset-0 backdrop-blur-[3px]"
+                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)' }}
+                        />
+                        <div
+                            className="absolute inset-0 backdrop-blur-[10px]"
+                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
+                        />
+                        <div
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                        />
+                    </div>
+
+                    <div
+                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-3"
+                        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
+                    >
+                        {/* Back button */}
+                        <button
+                            type="button"
+                            onClick={handleBack}
+                            aria-label="Back"
+                            className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors active:scale-95 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-900 hover:bg-black/10'}`}
+                        >
+                            <Undo2 className="h-5 w-5" />
+                        </button>
+
+                        {/* Centered title */}
+                        <h1 className={`absolute left-1/2 -translate-x-1/2 text-[22px] font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            Syra
+                        </h1>
+
+                        {/* Profile avatar */}
+                        <button
+                            type="button"
+                            aria-label="Profile"
+                            className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}
+                        >
+                            {profileImage && !profileImgError ? (
+                                <img
+                                    src={profileImage}
+                                    alt="Profile"
+                                    referrerPolicy="no-referrer"
+                                    onError={() => setProfileImgError(true)}
+                                    className="h-full w-full object-cover"
+                                />
+                            ) : (
+                                <User className="h-5 w-5" />
+                            )}
+                        </button>
+                    </div>
+                </header>
+            )}
+
             {/* Messages Area */}
             <div
                 ref={scrollRef}
                 onScroll={onScroll}
                 className="flex-1 overflow-y-auto scrollbar-hide"
             >
-                <div className="max-w-2xl mx-auto px-6 py-6 space-y-5">
+                <div
+                    className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
+                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
                             {group.role === 'assistant' && group.thinking && (
@@ -1571,7 +1647,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             </div>
 
             {/* Input Area - centered with margins */}
-            <div className="px-4 pb-4">
+            <div className="px-4 pb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
                 <div className={`max-w-[720px] mx-auto rounded-2xl ${isDark ? 'bg-[#1a1a1a] border border-[#2a2a2a]' : 'bg-gray-50 border border-gray-200'}`}>
                     <form
                         onSubmit={handleSubmit}
