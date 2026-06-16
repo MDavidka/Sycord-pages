@@ -221,30 +221,30 @@ export function Layout() {
             {/* Chat Panel */}
             <div className={`${mobileTab === 'chat' ? 'flex' : 'hidden'} md:flex h-full flex-col pl-2 pt-2 pb-2 gap-1.5 w-full md:w-[30%] md:min-w-[280px] md:max-w-[450px]`}>
                 {/* Top bar with project menu */}
-                <div className="flex items-center gap-2 px-1 h-8 relative" ref={projectMenuRef}>
+                <div className="flex items-center gap-1.5 px-1 h-7 relative" ref={projectMenuRef}>
                     <button
                         onClick={() => { setShowProjectMenu(!showProjectMenu); setIsRenaming(false); }}
                         className={`flex items-center gap-2 px-2 py-1 rounded-lg transition-colors ${isDark ? 'hover:bg-[#1f1f1f]' : 'hover:bg-gray-200'}`}
                     >
-                        <img src={isDark ? "/logo.png" : "/logo2.png"} alt="Glovix" className="h-5 object-contain" />
+                        <img src={isDark ? "/logo.png" : "/logo2.png"} alt="Glovix" className="h-3.5 object-contain" />
                         {projectTitle === 'Untitled Project' ? (
                             // Loading skeleton with blur effect
                             <div className="flex items-center gap-1">
-                                <div className={`h-3 rounded animate-pulse ${isDark ? 'bg-[#333]' : 'bg-gray-300'}`} style={{ width: '80px' }} />
-                                <div className={`h-3 rounded animate-pulse ${isDark ? 'bg-[#333]' : 'bg-gray-300'}`} style={{ width: '60px', animationDelay: '0.1s' }} />
+                                <div className={`h-2.5 rounded animate-pulse ${isDark ? 'bg-[#333]' : 'bg-gray-300'}`} style={{ width: '70px' }} />
+                                <div className={`h-2.5 rounded animate-pulse ${isDark ? 'bg-[#333]' : 'bg-gray-300'}`} style={{ width: '50px', animationDelay: '0.1s' }} />
                             </div>
                         ) : shouldAnimate ? (
                             <StreamingText 
                                 text={projectTitle}
-                                className={`text-sm font-medium truncate max-w-[150px] ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}
+                                className={`text-xs font-medium truncate max-w-[130px] ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}
                                 speed={40}
                             />
                         ) : (
-                            <span className={`text-sm font-medium truncate max-w-[150px] ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}>
+                            <span className={`text-xs font-medium truncate max-w-[130px] ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}>
                                 {projectTitle}
                             </span>
                         )}
-                        <ChevronDown className={`w-4 h-4 ${isDark ? 'text-[#666]' : 'text-gray-400'}`} />
+                        <ChevronDown className={`w-3 h-3 ${isDark ? 'text-[#666]' : 'text-gray-400'}`} />
                     </button>
 
                     {/* Project Dropdown Menu */}

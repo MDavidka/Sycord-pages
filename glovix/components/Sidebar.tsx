@@ -89,7 +89,7 @@ export function Sidebar({ onClose }: SidebarProps) {
             <div className={`w-64 flex flex-col h-full backdrop-blur-xl ${isDark ? 'bg-black/40 border-r border-white/10' : 'bg-white/40 border-r border-black/10'}`}>
                 {/* Header */}
                 <div className="px-3 py-2.5 flex items-center justify-between">
-                    <img src={isDark ? "/logo.png" : "/logo2.png"} alt="Glovix" className="h-5 object-contain" />
+                    <img src={isDark ? "/logo.png" : "/logo2.png"} alt="Glovix" className="h-3.5 object-contain" />
                     {onClose && (
                         <button onClick={onClose} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-[#666] hover:text-white hover:bg-[#1a1a1a]' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'}`}>
                             <PanelLeftClose className="w-4 h-4" />
@@ -136,10 +136,6 @@ export function Sidebar({ onClose }: SidebarProps) {
                             )}
                         </div>
                     )}
-                </div>
-
-                {/* Bottom Cards */}
-                <div className="px-2 pb-2 space-y-1">
                 </div>
 
                 {/* User Avatar with Menu */}
