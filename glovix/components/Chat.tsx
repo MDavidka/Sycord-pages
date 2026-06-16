@@ -1450,13 +1450,13 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors active:scale-95 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-900 hover:bg-black/10'}`}
+                            className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors active:scale-95 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-900 hover:bg-black/10'}`}
                         >
-                            <Undo2 className="h-5 w-5" />
+                            <Undo2 className="h-4 w-4" />
                         </button>
 
                         {/* Centered title */}
-                        <h1 className={`absolute left-1/2 -translate-x-1/2 text-[22px] font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        <h1 className={`absolute left-1/2 -translate-x-1/2 text-[16px] font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
                             Syra
                         </h1>
 
@@ -1464,7 +1464,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                         <button
                             type="button"
                             aria-label="Profile"
-                            className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}
+                            className={`flex h-8 w-8 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}
                         >
                             {profileImage && !profileImgError ? (
                                 <img
@@ -1475,7 +1475,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     className="h-full w-full object-cover"
                                 />
                             ) : (
-                                <User className="h-5 w-5" />
+                                <User className="h-4 w-4" />
                             )}
                         </button>
                     </div>

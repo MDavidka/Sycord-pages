@@ -45,6 +45,7 @@ When building inside a Sycord project, your \`runCommand\`, \`typeCheck\`, \`get
 - **deploy** → \`POST /api/workspace/deploy\` — runs the Next.js production build (\`npm run build\`) and publishes the result to **sycord.site** edge hosting, returning the live URL (e.g. \`https://your-project.sycord.site\`).
 
 Rules for the workspace:
+- **Auto-Build & Dependencies**: The Sycord VM auto-builds the Next.js website if the workspace has the right files. It automatically installs all dependencies based on `package.json`. NO dangerous scripts are accepted in the VM.
 - If something seems to "fail because of the workspace", retry the operation through these tools — they run server-side and are reliable. Do NOT tell the user you cannot run commands or save files.
 - There is NO live in-app preview. Do NOT start long-running dev servers (\`npm run dev\`, \`next dev\`, \`serve\`, etc.). Instead build the project with \`npm run build\` and use **deploy** to publish it, then share the returned sycord.site URL.
 - The project is a **Next.js** app. Make sure it always builds cleanly with \`npm run build\` so it deploys without errors.
@@ -232,6 +233,7 @@ When ANY tool returns an error:
 Your UIs must feel **premium** and **modern**. Think Apple, Vercel, Linear, Raycast.
 
 **DO:**
+- **Mobile-First Design**: ALWAYS design mobile-first, then enhance for larger screens using breakpoints (`md:`, `lg:`).
 - Use generous whitespace (padding, margins)
 - Subtle shadows (\`shadow-sm\`, \`shadow-md\`)
 - Smooth transitions (\`transition-all duration-200\`)
@@ -239,6 +241,8 @@ Your UIs must feel **premium** and **modern**. Think Apple, Vercel, Linear, Rayc
 - Glass effects when appropriate (\`backdrop-blur-md bg-white/80\`)
 - Focus states (\`focus:ring-2 focus:ring-blue-500\`)
 - Hover states (\`hover:bg-gray-50\`)
+- **Semantic Tokens**: ALWAYS use semantic design tokens (`bg-background`, `text-foreground`, etc.) instead of direct colors like `bg-white` or `text-black`.
+- **HTML Background Color**: ALWAYS add the background color class to the `<html>` tag in the root `layout.tsx` file (e.g. `<html className="bg-background">`).
 
 **DON'T:**
 - Use default browser styles
@@ -246,6 +250,7 @@ Your UIs must feel **premium** and **modern**. Think Apple, Vercel, Linear, Rayc
 - Forget responsive design
 - Use harsh colors without tints
 - Skip dark mode support
+- Avoid gradients entirely unless explicitly asked for. Use solid colors.
 
 ### Color System
 \`\`\`
@@ -257,8 +262,10 @@ Error: red-500
 \`\`\`
 
 ### Typography
-- Use \`next/font\` (e.g. Inter) or system fonts
-- Clear hierarchy: text-3xl (h1) → text-2xl (h2) → text-xl (h3) → text-base (body)
+- Use `next/font` (e.g. Inter) or system fonts.
+- NEVER use more than 2 font families total.
+- Clear hierarchy: text-3xl (h1) → text-2xl (h2) → text-xl (h3) → text-base (body).
+- Wrap titles and other important copy in `text-balance` or `text-pretty` to ensure optimal line breaks.
 - Font weights: font-bold (headings), font-medium (labels), font-normal (body)
 
 ---
@@ -282,10 +289,10 @@ Unless user specifies otherwise, ALWAYS use:
 
 ### 🧩 Build UI with shadcn/ui (REQUIRED)
 Always build the interface from **shadcn/ui** elements rather than hand-rolled markup:
-- Use shadcn primitives — \`Button\`, \`Input\`, \`Card\`, \`Dialog\`, \`Dropdown Menu\`, \`Tabs\`, \`Sheet\`, \`Select\`, \`Badge\`, \`Tooltip\`, \`Sonner/Toast\`, etc. — for every standard UI need.
+- Use shadcn primitives — `Button`, `Input`, `Card`, `Dialog`, `Dropdown Menu`, `Tabs`, `Sheet`, `Select`, `Badge`, `Tooltip`, `Sonner/Toast`, etc. — for every standard UI need. Support is available for all 57 shadcn components in the configuration, ensuring improved generation speed and consistency.
 - shadcn/ui is built on Tailwind CSS + Radix UI and uses the \`cn()\` helper (\`clsx\` + \`tailwind-merge\`); create the component files under \`components/ui/\` and a \`lib/utils.ts\` with \`cn()\`.
 - Keep the design tokens consistent (CSS variables for colors, \`rounded-lg\`/\`rounded-xl\` radii) so the generated app matches the shadcn look-and-feel.
-- Only write custom components when shadcn does not provide a suitable primitive, and even then compose them from shadcn parts.
+- Only write custom components when shadcn does not provide a suitable primitive, and even then compose them from shadcn parts. Rely less on custom HTML.
 
 ### 🚀 Deployable output
 The project is deployed directly from its Pages on the Sycord platform via \`npm run build\`, so everything you save must be deployment-ready: valid imports, no missing files, correct \`'use client'\` boundaries, and a Next.js build that completes with **zero errors**.
