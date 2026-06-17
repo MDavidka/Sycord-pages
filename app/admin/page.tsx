@@ -358,7 +358,7 @@ export default function AdminPage() {
     }
   }
 
-  const runDeployerSetup = async () => {
+  const runDeployerSetup = async (reset = false) => {
     if (!deployerHost || !deployerPassword) {
       toast.error("Please enter the VPS host and root password")
       return
@@ -381,6 +381,7 @@ export default function AdminPage() {
           port: 22,
           baseDomain: "sycord.site",
           skipCloudflare,
+          resetTunnel: reset,
         }),
       })
 
@@ -422,6 +423,10 @@ export default function AdminPage() {
               } else if (data.type === "status") {
                 setTunnelStatus(data.running ? "active" : "inactive")
                 setTunnelLoginUrl(null)
+                if (data.reset) {
+                  toast.success("Tunnel reset and rebuilt successfully")
+                  setDeployerSetupResult({ success: true, reset: true })
+                }
               }
             } else if (eventType === "error") {
               setDeployerSetupError(data.error || "Setup failed")
@@ -988,11 +993,19 @@ export default function AdminPage() {
                         {deployerDebugLoading ? "Loading..." : "Check Connection"}
                       </Button>
                       <Button
-                        onClick={runDeployerSetup}
+                        onClick={() => runDeployerSetup(false)}
                         disabled={deployerSetupRunning || !deployerHost || !deployerPassword}
                         className="bg-purple-600 hover:bg-purple-700 rounded-xl text-xs"
                       >
                         {deployerSetupRunning ? "Running..." : "Run Setup"}
+                      </Button>
+                      <Button
+                        onClick={() => { if (confirm("This will delete and recreate the Cloudflare tunnel. Continue?")) runDeployerSetup(true) }}
+                        disabled={deployerSetupRunning || !deployerHost || !deployerPassword}
+                        variant="outline"
+                        className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl text-xs"
+                      >
+                        Reset Tunnel
                       </Button>
                     </div>
                     <label className="flex items-center gap-2 mt-3 cursor-pointer">

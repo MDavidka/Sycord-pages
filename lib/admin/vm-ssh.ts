@@ -332,6 +332,8 @@ credentials-file: ${credentialsPath}
 ingress:
   - hostname: "*.${baseDomain}"
     service: http://127.0.0.1:80
+  - hostname: "${baseDomain}"
+    service: http://127.0.0.1:80
   - service: http_status:404
 `
 
@@ -368,6 +370,98 @@ export async function installCloudflaredService(ssh: NodeSSH, logs: string[]): P
   }
 
   return active
+}
+
+export async function registerCloudflaredWildcardDns(
+  ssh: NodeSSH,
+  tunnelId: string,
+  baseDomain: string,
+  logs: string[],
+): Promise<{ success: boolean; detail: string }> {
+  logs.push(`[cloudflare] Registering wildcard DNS route for *.${baseDomain}...`)
+  const result = await ssh.execCommand(`cloudflared tunnel route dns ${tunnelId} "*.${baseDomain}" 2>&1`)
+  const out = result.stdout + result.stderr
+  logs.push(`[cloudflare] Wildcard DNS: ${out.trim().slice(0, 300)}`)
+
+  const ok = result.code === 0 || out.includes("added") || out.includes("already exists") || out.includes("SUCCESS")
+  return { success: ok, detail: out.trim().slice(0, 200) }
+}
+
+export async function resetCloudflaredTunnel(
+  ssh: NodeSSH,
+  baseDomain: string,
+  logs: string[],
+): Promise<{ success: boolean; tunnelId?: string; credentialsPath?: string; error?: string }> {
+  logs.push("[cloudflare] === RESETTING CLOUDFLARE TUNNEL ===")
+
+  // Stop and disable service
+  await ssh.execCommand("systemctl stop cloudflared 2>&1 || true")
+  await ssh.execCommand("systemctl disable cloudflared 2>&1 || true")
+
+  // Delete existing tunnel
+  const listResult = await ssh.execCommand("cloudflared tunnel list --output json 2>&1 || echo '[]'")
+  try {
+    const tunnels = JSON.parse(listResult.stdout)
+    if (Array.isArray(tunnels)) {
+      for (const t of tunnels) {
+        const tid = t.id || t.name
+        if (tid) {
+          logs.push(`[cloudflare] Deleting tunnel: ${tid}`)
+          await ssh.execCommand(`cloudflared tunnel delete -f ${tid} 2>&1 || true`)
+        }
+      }
+    }
+  } catch {
+    logs.push("[cloudflare] Could not parse tunnel list, trying force cleanup")
+    await ssh.execCommand("cloudflared tunnel cleanup 2>&1 || true")
+  }
+
+  // Clean up configs and credentials
+  await ssh.execCommand("rm -f /etc/cloudflared/config.yml 2>&1 || true")
+  await ssh.execCommand("rm -f /root/.cloudflared/*.json 2>&1 || true")
+  await ssh.execCommand("rm -f /root/.cloudflared/cert.pem 2>&1 || true")
+
+  // Uninstall service
+  await ssh.execCommand("cloudflared service uninstall 2>&1 || true")
+  await ssh.execCommand("systemctl daemon-reload 2>&1 || true")
+
+  logs.push("[cloudflare] Tunnel fully reset — starting fresh setup")
+
+  // Re-install cloudflared
+  const installed = await installCloudflared(ssh, logs)
+  if (!installed) {
+    return { success: false, error: "Cloudflared re-install failed" }
+  }
+
+  // The user needs to re-authenticate (login)
+  const { loggedIn } = await checkCloudflaredLogin(ssh, logs)
+  if (!loggedIn) {
+    return { success: false, error: "Cloudflare login required after reset — run Setup Deployer to authenticate" }
+  }
+
+  // Create new tunnel
+  const tunnel = await createCloudflaredTunnel(ssh, logs)
+  if (!tunnel) {
+    return { success: false, error: "Failed to create new tunnel" }
+  }
+
+  // Write config
+  const configOk = await writeCloudflaredConfig(ssh, tunnel.tunnelId, tunnel.credentialsPath, baseDomain, logs)
+  if (!configOk) {
+    return { success: false, error: "Failed to write config" }
+  }
+
+  // Register wildcard DNS
+  const dnsResult = await registerCloudflaredWildcardDns(ssh, tunnel.tunnelId, baseDomain, logs)
+  logs.push(`[cloudflare] DNS registration: ${dnsResult.success ? "ok" : "failed"} — ${dnsResult.detail}`)
+
+  // Install and start service
+  const serviceOk = await installCloudflaredService(ssh, logs)
+  if (!serviceOk) {
+    return { success: false, error: "Service start failed after reset" }
+  }
+
+  return { success: true, tunnelId: tunnel.tunnelId, credentialsPath: tunnel.credentialsPath }
 }
 
 export async function getTunnelStatus(ssh: NodeSSH, logs: string[]): Promise<{ running: boolean; info: string }> {

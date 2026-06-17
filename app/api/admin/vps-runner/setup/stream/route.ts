@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server"
 import {
   bootstrapDeployVmRunner,
   generateRunnerToken,
@@ -14,6 +13,8 @@ import {
   getTunnelStatus,
   saveTunnelStateToDb,
   getTunnelStateFromDb,
+  registerCloudflaredWildcardDns,
+  resetCloudflaredTunnel,
   type VmSetupInput,
 } from "@/lib/admin/vm-ssh"
 import { proxyRunner, requireAdminResponse, runnerHeaders } from "../../_shared"
@@ -61,12 +62,13 @@ export async function POST(request: Request) {
   const port = Number(body.port || 22)
   const baseDomain = String(body.baseDomain || "sycord.site").trim()
   const skipCloudflare = body.skipCloudflare === true
+  const resetTunnel = body.resetTunnel === true
 
   const sshInput: VmSetupInput | undefined = host && password
     ? { host, password, port, baseDomain, runnerToken: generateRunnerToken() }
     : undefined
 
-  return runSetupStream(sshInput, skipCloudflare)
+  return runSetupStream(sshInput, skipCloudflare, resetTunnel)
 }
 
 function defaultSshInput(): VmSetupInput | undefined {
@@ -84,7 +86,7 @@ async function getSshClient(sshInput?: VmSetupInput) {
   return ssh
 }
 
-async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false) {
+async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false, resetTunnel = false) {
   const runnerUrl = sshInput?.host
     ? `http://${sshInput.host}:5050`
     : VPS_SERVER_URL
@@ -125,8 +127,8 @@ async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false) {
           send(logEvent("Runner reachable — skipping full bootstrap"))
 
           if (!skipCloudflare) {
-            send(stageEvent("cloudflare-check", "running", "Setting up Cloudflare Tunnel"))
-            await runCloudflareSetup(sshInput, baseDomain, send, controller)
+            send(stageEvent("cloudflare-check", "running", resetTunnel ? "Resetting and reconfiguring Cloudflare Tunnel" : "Setting up Cloudflare Tunnel"))
+            await runCloudflareSetup(sshInput, baseDomain, send, controller, resetTunnel)
           }
 
           send(stageEvent("complete", "success", "Runner setup complete"))
@@ -164,8 +166,8 @@ async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false) {
         send(stageEvent("bootstrap", "success", "VM runner bootstrapped and started"))
 
         if (!skipCloudflare) {
-          send(stageEvent("cloudflare-check", "running", "Setting up Cloudflare Tunnel"))
-          await runCloudflareSetup(sshInput, baseDomain, send, controller)
+          send(stageEvent("cloudflare-check", "running", resetTunnel ? "Resetting and reconfiguring Cloudflare Tunnel" : "Setting up Cloudflare Tunnel"))
+          await runCloudflareSetup(sshInput, baseDomain, send, controller, resetTunnel)
         }
 
         send(stageEvent("diagnostics", "running", "Collecting final diagnostics"))
@@ -209,6 +211,7 @@ async function runCloudflareSetup(
   baseDomain: string,
   send: (data: Uint8Array) => void,
   controller: ReadableStreamDefaultController,
+  reset = false,
 ) {
   try {
     const ssh = await getSshClient(sshInput)
@@ -216,6 +219,26 @@ async function runCloudflareSetup(
     const emitLog = (line: string) => {
       logs.push(line)
       send(logEvent(line))
+    }
+
+    if (reset) {
+      emitLog("[cloudflare] === FULL TUNNEL RESET ===")
+      const resetResult = await resetCloudflaredTunnel(ssh, baseDomain, logs)
+      if (!resetResult.success) {
+        send(stageEvent("cloudflare-error", "error", resetResult.error || "Reset failed"))
+        send(tunnelEvent("login-needed", { url: null }))
+        return
+      }
+      send(stageEvent("cloudflare-tunnel-reset", "success", "Tunnel reset and rebuilt successfully"))
+      send(tunnelEvent("status", { running: true, reset: true }))
+
+      await saveTunnelStateToDb(
+        sshInput?.host || process.env.VPS_SSH_HOST || "",
+        baseDomain,
+        resetResult.tunnelId || "",
+        resetResult.credentialsPath || "",
+      )
+      return
     }
 
     const state = await getTunnelStateFromDb()
@@ -293,6 +316,14 @@ async function runCloudflareSetup(
       return
     }
     send(stageEvent("cloudflare-config", "success", "Config written"))
+
+    send(stageEvent("cloudflare-dns", "running", "Registering wildcard DNS *.${baseDomain}..."))
+    const dnsResult = await registerCloudflaredWildcardDns(ssh, tunnel.tunnelId, baseDomain, logs)
+    if (dnsResult.success) {
+      send(stageEvent("cloudflare-dns", "success", `Wildcard DNS *.${baseDomain} registered`))
+    } else {
+      send(stageEvent("cloudflare-dns", "error", `DNS registration: ${dnsResult.detail}`))
+    }
 
     send(stageEvent("cloudflare-service", "running", "Installing and starting Cloudflare service"))
     const serviceOk = await installCloudflaredService(ssh, logs)
