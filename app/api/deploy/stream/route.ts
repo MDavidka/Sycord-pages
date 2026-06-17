@@ -153,22 +153,21 @@ export async function POST(request: Request) {
         const finalUrl = publish.url
         if (!publish.success) {
           log("publish", `Publish error: ${publish.error || "Unknown"}`)
+          write("message", createStageEvent("publish", "error", publish.error || "Publish failed"))
         }
 
         if (publish.tunnelRoute) {
-          log("publish", `Tunnel DNS route: ${publish.tunnelRoute.updated ? "added" : "skipped"} — ${publish.tunnelRoute.detail}`)
-        }
-
-        if (publish.health) {
-          if (publish.health.ok) {
-            log("publish", `Health check passed (HTTP ${publish.health.status})`)
+          if (publish.tunnelRoute.updated) {
+            log("publish", `Tunnel DNS: ${publish.tunnelRoute.detail}`)
           } else {
-            log("publish", `Health check warning: ${publish.health.error || "unknown"}`)
+            log("publish", `Tunnel DNS skipped: ${publish.tunnelRoute.detail}`)
+            log("publish", "The site may still be accessible via the wildcard ingress (*.sycord.site → nginx) if DNS points to Cloudflare")
           }
         }
 
-        log("publish", `Site published at ${finalUrl} (port ${publish.port})`)
-        write("message", createStageEvent("publish", "success", `Site live at ${finalUrl}${publish.health?.ok ? ' — health check OK' : ''}`))
+        log("publish", `Site deployed at ${finalUrl} (port ${publish.port})`)
+        log("publish", `To verify: curl -H 'Host: ${containerName}.${domain}' http://127.0.0.1`)
+        write("message", createStageEvent("publish", "success", `Live at ${finalUrl}${publish.tunnelRoute?.updated ? '' : ' — DNS route pending'}`))
         write("message", createStageEvent("saving", "running", "Saving deployment result"))
 
         await db.collection("users").updateOne(

@@ -480,6 +480,12 @@ async function startPm2Site(
 ): Promise<boolean> {
   const pm2Name = `sycord-${projectName}`.slice(0, 30)
 
+  // Verify the build output exists before trying to start
+  const buildCheck = await ssh.execCommand(`ls ${workspaceName}/.next ${workspaceName}/out ${workspaceName}/dist 2>&1 || echo "NO_BUILD_OUTPUT"`)
+  if (buildCheck.stdout.includes("NO_BUILD_OUTPUT") && !buildCheck.stdout.includes(".next")) {
+    return false
+  }
+
   // Stop existing instance if any
   await ssh.execCommand(`pm2 delete "${pm2Name}" 2>&1 || true`)
 
@@ -516,19 +522,51 @@ async function updateCloudflareTunnelRoute(
   port: number,
 ): Promise<{ updated: boolean; detail: string }> {
   try {
-    const domain = hostname.substring(hostname.indexOf(".") + 1)
+    // Discover the actual tunnel name/ID from config files — cloudflared may
+    // read from /etc/cloudflared/config.yml OR ~/.cloudflared/<id>.yml
+    const configFiles = await ssh.execCommand(
+      "cat /etc/cloudflared/config.yml 2>/dev/null; " +
+      "cat /root/.cloudflared/config.yml 2>/dev/null; " +
+      "ls /root/.cloudflared/*.json 2>/dev/null | head -5; " +
+      "cloudflared tunnel list --output json 2>/dev/null || echo 'NO_LIST'"
+    )
+    let tunnelName = ""
 
-    const check = await ssh.execCommand("cloudflared tunnel info sycord-deployer 2>&1 || echo 'NO_TUNNEL'")
-    if (check.stdout.includes("NO_TUNNEL") || check.stdout.includes("not found")) {
-      return { updated: false, detail: "Cloudflare tunnel 'sycord-deployer' not found — run Setup Deployer first" }
+    // Try parsing from config files
+    const lines = configFiles.stdout.split("\n")
+    for (const line of lines) {
+      const m = line.match(/^tunnel:\s*(\S+)/)
+      if (m) { tunnelName = m[1]; break }
     }
 
-    const routeResult = await ssh.execCommand(`cloudflared tunnel route dns sycord-deployer ${hostname} 2>&1`)
+    // If still not found, try cloudflared tunnel list JSON
+    if (!tunnelName && configFiles.stdout.includes('"id"')) {
+      try {
+        const idx = configFiles.stdout.indexOf('[')
+        if (idx >= 0) {
+          const tunnels = JSON.parse(configFiles.stdout.slice(idx))
+          if (Array.isArray(tunnels) && tunnels.length > 0) {
+            tunnelName = tunnels[0].id || tunnels[0].name
+          }
+        }
+      } catch {}
+    }
+
+    if (!tunnelName) {
+      return { updated: false, detail: "No cloudflare tunnel found — run Setup Deployer first" }
+    }
+
+    // Try route DNS with the discovered tunnel name
+    const routeResult = await ssh.execCommand(`cloudflared tunnel route dns ${tunnelName} ${hostname} 2>&1`)
     const routeOut = routeResult.stdout + routeResult.stderr
 
+    const ok = routeResult.code === 0 || routeOut.includes("already exists") || routeOut.includes("added") || routeOut.includes("SUCCESS")
+
     return {
-      updated: routeResult.code === 0 || routeOut.includes("already exists") || routeOut.includes("added"),
-      detail: routeOut.trim().slice(0, 300),
+      updated: ok,
+      detail: ok
+        ? `DNS route added for ${hostname} via tunnel ${tunnelName.slice(0, 8)}...`
+        : `Route DNS failed: ${routeOut.trim().slice(0, 200)}`,
     }
   } catch (err: any) {
     return { updated: false, detail: err?.message || "Tunnel route command failed" }

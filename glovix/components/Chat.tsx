@@ -1747,10 +1747,17 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                                             <pre className="text-[10px] text-amber-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{debugInfo.cloudflare.live.dnsRoutes}</pre>
                                                         </div>
                                                     )}
-                                                    {debugInfo.cloudflare.live.pm2Processes && (
+                                                                                     {debugInfo.cloudflare.live.pm2Processes && (
                                                         <div className="mt-1">
                                                             <div className="text-[10px] text-white/40 mb-0.5">PM2 Processes:</div>
-                                                            <pre className="text-[10px] text-emerald-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{debugInfo.cloudflare.live.pm2Processes}</pre>
+                                                            {Array.isArray(debugInfo.cloudflare.live.pm2Processes)
+                                                                ? debugInfo.cloudflare.live.pm2Processes.map((p: any, i: number) => (
+                                                                    <div key={i} className={`text-[10px] ${p.status === 'online' ? 'text-emerald-300' : 'text-red-300'}`}>
+                                                                        {p.name} [{p.status}] pid={p.pid} port={p.port} cpu={p.cpu}% mem={p.memory} ↑{p.uptime}
+                                                                    </div>
+                                                                ))
+                                                                : <pre className="text-[10px] text-emerald-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{String(debugInfo.cloudflare.live.pm2Processes)}</pre>
+                                                            }
                                                         </div>
                                                     )}
                                                 </>

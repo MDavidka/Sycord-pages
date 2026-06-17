@@ -56,14 +56,28 @@ async function getTunnelDebugInfo(): Promise<Record<string, unknown>> {
     const ssh = new NodeSSH()
     await ssh.connect(credentials)
 
-    const [serviceStatus, tunnelInfo, ingressConfig, dnsRoutes, nginxSites, pm2List] = await Promise.all([
+    const [serviceStatus, ingressConfig, nginxSites, pm2List] = await Promise.all([
       ssh.execCommand("systemctl is-active cloudflared 2>&1 || echo 'inactive'"),
-      ssh.execCommand("cloudflared tunnel info sycord-deployer 2>&1 || echo 'NO_TUNNEL'"),
       ssh.execCommand("cat /etc/cloudflared/config.yml 2>&1 || echo 'NO_CONFIG'"),
-      ssh.execCommand("cloudflared tunnel route dns list sycord-deployer 2>&1 | head -30 || echo 'NO_ROUTES'"),
       ssh.execCommand("ls /etc/nginx/sites-enabled/ 2>&1 || echo 'NO_SITES'"),
-      ssh.execCommand("pm2 list --no-color 2>&1 | head -40 || echo 'NO_PM2'"),
+      ssh.execCommand("pm2 jlist 2>&1 | head -80 || echo 'NO_PM2'"),
     ])
+
+    // Discover tunnel name from config
+    let tunnelName = ""
+    const configMatch = ingressConfig.stdout.match(/^tunnel:\s*(\S+)/m)
+    if (configMatch) tunnelName = configMatch[1]
+
+    let tunnelInfo = { raw: "no tunnel name found" }
+    let dnsRoutes = "no tunnel name"
+    if (tunnelName) {
+      const [infoResult, routesResult] = await Promise.all([
+        ssh.execCommand(`cloudflared tunnel info ${tunnelName} 2>&1 || echo 'NO_INFO'`),
+        ssh.execCommand(`cloudflared tunnel route dns list ${tunnelName} 2>&1 | head -30 || echo 'NO_ROUTES'`),
+      ])
+      tunnelInfo = { raw: infoResult.stdout.trim().slice(0, 500) }
+      dnsRoutes = routesResult.stdout.trim().slice(0, 500)
+    }
 
     ssh.dispose()
 
@@ -77,16 +91,34 @@ async function getTunnelDebugInfo(): Promise<Record<string, unknown>> {
       return result
     }
 
+    // Parse PM2 processes from jlist JSON
+    let pm2Processes: any[] = []
+    try {
+      const jlist = JSON.parse(pm2List.stdout)
+      pm2Processes = Array.isArray(jlist) ? jlist.map((p: any) => ({
+        name: p.name,
+        status: p.pm2_env?.status,
+        pid: p.pid,
+        uptime: p.pm2_env?.pm_uptime ? Math.round((Date.now() - p.pm2_env.pm_uptime) / 1000) + "s" : "?",
+        cpu: p.monit?.cpu,
+        memory: p.monit?.memory ? Math.round(p.monit.memory / 1024 / 1024) + "MB" : "?",
+        port: (p.pm2_env?.PORT || p.pm2_env?.env?.PORT || "?"),
+      })) : []
+    } catch {}
+
+    ssh.dispose()
+
     return {
       configured: true,
       serviceActive: serviceStatus.stdout.includes("active"),
       serviceOutput: serviceStatus.stdout.trim(),
-      tunnelInfo: parseTunnelInfo(tunnelInfo.stdout),
-      tunnelRawInfo: tunnelInfo.stdout.trim().slice(0, 500),
+      tunnelName: tunnelName || "unknown",
+      tunnelInfo: parseTunnelInfo(tunnelInfo.raw || ""),
+      tunnelRawInfo: (tunnelInfo.raw || "").slice(0, 500),
       ingressConfig: ingressConfig.stdout.trim().slice(0, 1000),
-      dnsRoutes: dnsRoutes.stdout.trim().slice(0, 500),
+      dnsRoutes: dnsRoutes.slice(0, 500),
       nginxSites: nginxSites.stdout.trim().split("\n").filter(Boolean),
-      pm2Processes: pm2List.stdout.trim().slice(0, 500),
+      pm2Processes,
     }
   } catch (err: any) {
     return { configured: false, error: err?.message || "Tunnel debug failed" }
