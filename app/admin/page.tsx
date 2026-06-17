@@ -134,7 +134,6 @@ export default function AdminPage() {
   const [deployerSetupError, setDeployerSetupError] = useState<string | null>(null)
   const [deployerDebugInfo, setDeployerDebugInfo] = useState<any>(null)
   const [deployerDebugLoading, setDeployerDebugLoading] = useState(false)
-  const [tunnelLoginUrl, setTunnelLoginUrl] = useState<string | null>(null)
   const [tunnelStatus, setTunnelStatus] = useState<string | null>(null)
   const [skipCloudflare, setSkipCloudflare] = useState(false)
 
@@ -368,7 +367,6 @@ export default function AdminPage() {
     setDeployerSetupLogs([])
     setDeployerSetupResult(null)
     setDeployerSetupError(null)
-    setTunnelLoginUrl(null)
     setTunnelStatus(null)
 
     try {
@@ -413,16 +411,8 @@ export default function AdminPage() {
               setDeployerSetupResult(data)
               toast.success("Deployer setup completed")
             } else if (eventType === "tunnel") {
-              if (data.type === "login-needed") {
-                setTunnelLoginUrl(data.url)
-                toast.info("Cloudflare authentication required — open the link below")
-              } else if (data.type === "login-timeout") {
-                setTunnelLoginUrl(null)
-                setTunnelStatus("timeout")
-                toast.error("Cloudflare authentication timed out")
-              } else if (data.type === "status") {
+              if (data.type === "status") {
                 setTunnelStatus(data.running ? "active" : "inactive")
-                setTunnelLoginUrl(null)
                 if (data.reset) {
                   toast.success("Tunnel reset and rebuilt successfully")
                   setDeployerSetupResult({ success: true, reset: true })
@@ -1019,26 +1009,18 @@ export default function AdminPage() {
                     </label>
                   </div>
 
-                  {tunnelLoginUrl && (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="animate-pulse h-2 w-2 rounded-full bg-amber-500" />
-                        <span className="text-xs font-medium text-amber-200">Cloudflare Auth Required</span>
-                      </div>
-                      <p className="text-xs text-amber-100/80 mb-2">
-                        Open the link below in a new tab and authorize the Cloudflare Tunnel. The setup will continue automatically.
-                      </p>
-                      <a
-                        href={tunnelLoginUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg font-medium"
-                      >
-                        Open Authentication Page
-                      </a>
-                      <p className="text-[10px] text-amber-100/50 mt-2 truncate">{tunnelLoginUrl}</p>
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Cloud className="h-4 w-4 text-blue-300" />
+                      <span className="text-xs font-medium text-blue-200">Cloudflare Tunnel (automatic)</span>
                     </div>
-                  )}
+                    <p className="text-[11px] text-blue-100/70 leading-relaxed">
+                      The tunnel is provisioned automatically through the Cloudflare API — no browser
+                      login required. Setup creates one named tunnel, points <span className="font-mono">*.sycord.site</span>{" "}
+                      at it, and runs cloudflared on the VM as a 24/7 service. Every deployed project is then
+                      reachable at <span className="font-mono">&lt;project&gt;.sycord.site</span>.
+                    </p>
+                  </div>
 
                   {tunnelStatus === "active" && (
                     <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center gap-2">
@@ -1047,11 +1029,13 @@ export default function AdminPage() {
                     </div>
                   )}
 
-                  {tunnelStatus === "timeout" && (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <XCircle className="h-4 w-4 text-red-400" />
-                        <span className="text-xs text-red-200">Auth timed out — click Run Setup to retry</span>
+                  {tunnelStatus === "inactive" && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-400" />
+                        <span className="text-xs text-amber-200">
+                          Tunnel installed but no edge connections yet — check the VM can reach Cloudflare on outbound port 7844.
+                        </span>
                       </div>
                     </div>
                   )}

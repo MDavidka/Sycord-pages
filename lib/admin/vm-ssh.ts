@@ -29,8 +29,11 @@ export type VmSetupResult = {
 }
 
 function getSshConfig(input?: VmSetupInput): SshConfig {
-  const host = input?.host || process.env.VPS_SSH_HOST
-  const password = input?.password || process.env.VPS_SSH_ROOT_PASSWORD
+  // Accept both env var naming schemes so the admin setuper and the per-project
+  // deploy path (lib/deploy/ssh-deploy.ts) always target the same VM.
+  const host = input?.host || process.env.VPS_SSH_HOST || process.env.VPS_HOST
+  const password =
+    input?.password || process.env.VPS_SSH_ROOT_PASSWORD || process.env.VPS_ROOT_PSW
   const port = Number(input?.port || process.env.VPS_SSH_PORT || "22")
 
   if (!host || !password) {
@@ -41,7 +44,7 @@ function getSshConfig(input?: VmSetupInput): SshConfig {
     host,
     password,
     port,
-    username: "root",
+    username: process.env.VPS_USERNAME || "root",
   }
 }
 
@@ -214,6 +217,49 @@ export async function installCloudflared(ssh: NodeSSH, logs: string[]): Promise<
     logs.push(`[cloudflare] Already installed: ${check.stdout.trim()}`)
   }
   return true
+}
+
+/**
+ * Install and run cloudflared as a systemd service using a remotely-managed
+ * tunnel run token. This requires NO interactive `cloudflared tunnel login`
+ * and NO cert.pem — the token (obtained from the Cloudflare API) is all that
+ * is needed. The ingress + DNS are managed remotely via the API.
+ */
+export async function runCloudflaredWithToken(
+  ssh: NodeSSH,
+  token: string,
+  logs: string[],
+): Promise<{ success: boolean; error?: string }> {
+  logs.push("[cloudflare] Installing token-based cloudflared service...")
+
+  // Remove any previous (interactive / config-file based) setup so the
+  // token-based service starts cleanly.
+  await ssh.execCommand("systemctl stop cloudflared 2>&1 || true")
+  await ssh.execCommand("cloudflared service uninstall 2>&1 || true")
+  await ssh.execCommand("rm -f /etc/cloudflared/config.yml 2>&1 || true")
+  await ssh.execCommand("systemctl daemon-reload 2>&1 || true")
+
+  // `cloudflared service install <token>` writes the systemd unit and starts it.
+  const install = await ssh.execCommand(`cloudflared service install ${token} 2>&1`)
+  logs.push(`[cloudflare] service install: ${(install.stdout + install.stderr).trim().slice(0, 300)}`)
+
+  await ssh.execCommand("systemctl daemon-reload 2>&1 || true")
+  await ssh.execCommand("systemctl enable cloudflared 2>&1 || true")
+  const start = await ssh.execCommand(
+    "systemctl restart cloudflared 2>&1 && sleep 5 && systemctl is-active cloudflared 2>&1",
+  )
+  const active = start.stdout.includes("active")
+  logs.push(`[cloudflare] Service status: ${start.stdout.trim()}`)
+
+  if (!active) {
+    const journal = await ssh.execCommand("journalctl -u cloudflared --no-pager -n 30 2>&1 || true")
+    for (const line of journal.stdout.split("\n").slice(-15)) {
+      if (line.trim()) logs.push(`  ${line.trim()}`)
+    }
+    return { success: false, error: "cloudflared service failed to become active" }
+  }
+
+  return { success: true }
 }
 
 export async function checkCloudflaredLogin(ssh: NodeSSH, logs: string[]): Promise<{ loggedIn: boolean; certPath?: string }> {
@@ -486,7 +532,7 @@ export async function saveTunnelStateToDb(
   host: string,
   baseDomain: string,
   tunnelId: string,
-  credentialsPath: string,
+  credentialsPath?: string,
 ): Promise<void> {
   try {
     const client = await clientPromise
@@ -498,7 +544,8 @@ export async function saveTunnelStateToDb(
           host,
           baseDomain,
           tunnelId,
-          credentialsPath,
+          credentialsPath: credentialsPath || null,
+          mode: "api",
           configured: true,
           configuredAt: new Date(),
         },
