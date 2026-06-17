@@ -9,21 +9,52 @@ export const dynamic = "force-dynamic"
 
 async function getTunnelDebugInfo(): Promise<Record<string, unknown>> {
   try {
-    const vps = getVpsDebugInfo()
-    if (!vps.passwordConfigured || vps.host === "not set") {
-      return { configured: false, reason: "VPS credentials not set" }
+    let credentials: { host: string; username: string; password: string; port: number } | null = null
+
+    // Try env vars first
+    if (process.env.VPS_HOST && process.env.VPS_ROOT_PSW) {
+      credentials = {
+        host: process.env.VPS_HOST,
+        username: process.env.VPS_USERNAME || "root",
+        password: process.env.VPS_ROOT_PSW,
+        port: 22,
+      }
+    }
+
+    // Fall back to stored deployer config from DB
+    if (!credentials) {
+      try {
+        const client = await clientPromise
+        const db = client.db()
+        const deployer = await db.collection("deployer_config").findOne({ key: "cloudflare_tunnel" })
+        if (deployer?.host) {
+          // We don't store passwords, try docker SSH keys or env
+          if (process.env.VPS_ROOT_PSW) {
+            credentials = {
+              host: deployer.host,
+              username: "root",
+              password: process.env.VPS_ROOT_PSW,
+              port: 22,
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (!credentials) {
+      const vps = getVpsDebugInfo()
+      return {
+        configured: false,
+        reason: `VPS credentials not set. Have env: VPS_HOST=${!!process.env.VPS_HOST}, VPS_ROOT_PSW=${!!process.env.VPS_ROOT_PSW}, deployer_config in DB=${"checked"}`,
+        envHost: process.env.VPS_HOST || "not set",
+        envUser: process.env.VPS_USERNAME || "not set",
+        envPsw: !!process.env.VPS_ROOT_PSW,
+      }
     }
 
     const { NodeSSH } = await import("node-ssh")
     const ssh = new NodeSSH()
-    const vpsConfig = {
-      host: process.env.VPS_HOST || vps.host,
-      username: process.env.VPS_USERNAME || "root",
-      password: process.env.VPS_ROOT_PSW || "",
-      port: 22,
-    }
-
-    await ssh.connect(vpsConfig)
+    await ssh.connect(credentials)
 
     const [serviceStatus, tunnelInfo, ingressConfig, dnsRoutes, nginxSites, pm2List] = await Promise.all([
       ssh.execCommand("systemctl is-active cloudflared 2>&1 || echo 'inactive'"),

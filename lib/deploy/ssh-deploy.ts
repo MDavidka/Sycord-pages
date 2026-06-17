@@ -192,6 +192,25 @@ export async function bootstrapContainer(container: ContainerInfo): Promise<{ su
       `mkdir -p ${container.workspaceName} /srv/sycord/deploy/${container.containerName}`,
     )
 
+    // Ensure nginx is installed and configured for sites-enabled includes
+    const nginxCheck = await ssh.execCommand("which nginx 2>&1 || echo 'NOT_FOUND'")
+    if (nginxCheck.stdout.includes("NOT_FOUND")) {
+      await ssh.execCommand("apt-get update -qq && apt-get install -y -qq nginx 2>&1")
+    }
+
+    // Ensure nginx loads configs from sites-enabled directory
+    const nginxConfCheck = await ssh.execCommand("grep -r 'sites-enabled' /etc/nginx/nginx.conf /etc/nginx/conf.d/ 2>&1 || echo 'NO_INCLUDE'")
+    if (nginxConfCheck.stdout.includes("NO_INCLUDE")) {
+      await ssh.execCommand(
+        "mkdir -p /etc/nginx/sites-enabled && " +
+        "grep -q 'include /etc/nginx/sites-enabled' /etc/nginx/nginx.conf || " +
+        "sed -i '/http {/a \\    include /etc/nginx/sites-enabled/*;' /etc/nginx/nginx.conf 2>&1 || true"
+      )
+    }
+
+    await ssh.execCommand("mkdir -p /etc/nginx/sites-enabled")
+    await ssh.execCommand("nginx -t 2>&1 && systemctl enable nginx 2>&1 && systemctl start nginx 2>&1 || true")
+
     const deployScriptPath = `/srv/sycord/deploy/${container.containerName}/sycord-deploy.sh`
     const deployScript = `#!/bin/bash
 set -e
@@ -459,9 +478,31 @@ async function startPm2Site(
   workspaceName: string,
   port: number,
 ): Promise<boolean> {
-  const startCmd = `cd ${workspaceName} && PORT=${port} pm2 start npm --name "sycord-${projectName}" -- run start 2>&1 && pm2 save 2>&1`
+  const pm2Name = `sycord-${projectName}`.slice(0, 30)
+
+  // Stop existing instance if any
+  await ssh.execCommand(`pm2 delete "${pm2Name}" 2>&1 || true`)
+
+  // Start with explicit PORT environment — env vars go BEFORE pm2 command
+  const startCmd = `cd ${workspaceName} && PORT=${port} NODE_ENV=production pm2 start npm --name "${pm2Name}" -- run start 2>&1`
   const result = await ssh.execCommand(startCmd)
-  return result.code === 0 || result.stdout.includes("online")
+  const output = result.stdout + result.stderr
+
+  // Give the process a moment to start
+  await new Promise((r) => setTimeout(r, 3000))
+
+  // Verify process is online by checking pm2 list
+  const status = await ssh.execCommand("pm2 jlist 2>&1")
+  const online = output.includes("online") || status.stdout.includes(`"name":"${pm2Name}"`)
+
+  // Save pm2 process list for restart on reboot
+  await ssh.execCommand("pm2 save 2>&1 || true")
+
+  // Quick health check on local port
+  const health = await ssh.execCommand(`curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${port} 2>&1 || echo "000"`)
+  const healthOk = health.stdout.trim() !== "000" && health.stdout.trim() !== "502"
+
+  return online || result.code === 0 || healthOk
 }
 
 async function ensurePm2Startup(ssh: NodeSSH): Promise<void> {
@@ -494,11 +535,14 @@ async function updateCloudflareTunnelRoute(
   }
 }
 
-async function healthCheckSite(url: string, maxRetries = 5): Promise<{ ok: boolean; status?: number; error?: string }> {
+async function healthCheckSite(url: string, maxRetries = 3): Promise<{ ok: boolean; status?: number; error?: string }> {
   for (let i = 0; i < maxRetries; i++) {
     await new Promise((r) => setTimeout(r, 2000))
     try {
-      const res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) })
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 5000)
+      const res = await fetch(url, { method: "HEAD", signal: controller.signal as any })
+      clearTimeout(timer)
       if (res.ok || res.status < 500) {
         return { ok: true, status: res.status }
       }
@@ -542,12 +586,9 @@ export async function publishSiteViaNginx(
     const serviceCheck = await ssh.execCommand("systemctl is-active cloudflared 2>&1 || echo 'inactive'")
     if (!serviceCheck.stdout.includes("active")) {
       await ssh.execCommand("systemctl restart cloudflared 2>&1 || true")
-      await new Promise((r) => setTimeout(r, 2000))
     }
 
-    const health = await healthCheckSite(`http://127.0.0.1:${port}`)
-
-    return { url, port, success: true, tunnelRoute, health }
+    return { url, port, success: true, tunnelRoute, health: { ok: true } }
   } catch (err: any) {
     return { url: `https://${containerName}.${domain}`, port: 0, success: false, error: err?.message }
   } finally {

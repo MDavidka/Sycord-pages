@@ -1719,6 +1719,48 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
                                         <div>Containers: {debugInfo.containers?.total ?? 0}</div>
                                     </div>
+                                    {debugInfo.cloudflare && (
+                                        <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
+                                            <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>Cloudflare Tunnel</div>
+                                            <div>Tunnel Setup: <span className={debugInfo.cloudflare?.tunnelSetup ? 'text-green-400' : 'text-red-400'}>{debugInfo.cloudflare?.tunnelSetup ? 'Yes' : 'No'}</span></div>
+                                            {debugInfo.cloudflare?.tunnelConfig && (
+                                                <>
+                                                    <div>Tunnel ID: {debugInfo.cloudflare.tunnelConfig.tunnelId}</div>
+                                                    <div>Base Domain: {debugInfo.cloudflare.tunnelConfig.baseDomain}</div>
+                                                </>
+                                            )}
+                                            {debugInfo.cloudflare?.live?.configured ? (
+                                                <>
+                                                    <div>Service: <span className={debugInfo.cloudflare.live.serviceActive ? 'text-green-400' : 'text-red-400'}>{debugInfo.cloudflare.live.serviceActive ? 'Active' : 'Down'}</span></div>
+                                                    {debugInfo.cloudflare.live.tunnelInfo?.connector && <div>Connector: {debugInfo.cloudflare.live.tunnelInfo.connector}</div>}
+                                                    {debugInfo.cloudflare.live.nginxSites && debugInfo.cloudflare.live.nginxSites.length > 0 && (
+                                                        <div className="mt-1">
+                                                            <div className="text-[10px] text-white/40 mb-0.5">Nginx Sites:</div>
+                                                            {debugInfo.cloudflare.live.nginxSites.map((site: string, i: number) => (
+                                                                <div key={i} className="text-[10px] text-purple-300">{site}</div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    {debugInfo.cloudflare.live.dnsRoutes && (
+                                                        <div className="mt-1">
+                                                            <div className="text-[10px] text-white/40 mb-0.5">DNS Routes:</div>
+                                                            <pre className="text-[10px] text-amber-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{debugInfo.cloudflare.live.dnsRoutes}</pre>
+                                                        </div>
+                                                    )}
+                                                    {debugInfo.cloudflare.live.pm2Processes && (
+                                                        <div className="mt-1">
+                                                            <div className="text-[10px] text-white/40 mb-0.5">PM2 Processes:</div>
+                                                            <pre className="text-[10px] text-emerald-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{debugInfo.cloudflare.live.pm2Processes}</pre>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <div className="text-red-400 text-[10px]">
+                                                    {debugInfo.cloudflare?.live?.error || debugInfo.cloudflare?.live?.reason || 'Tunnel not configured — run Setup Deployer'}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <div className={`text-xs ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>Timestamp: {debugInfo.timestamp}</div>
                                 </div>
                             )}
