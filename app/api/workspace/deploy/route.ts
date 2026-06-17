@@ -1,32 +1,28 @@
-// POST /api/workspace/deploy  — deploy (CDN Push API)
-//
-// Single command that bundles the project's client-side SPA (its saved pages)
-// and deploys the static files to sycord.site edge hosting. Reuses the existing
-// GitHub + Companion Server deploy pipeline used by /api/deploy/stream, but
-// returns a single clean JSON payload instead of an SSE stream.
-//
-// Response: { "status": "success", "url": "https://project-id.sycord.site" }
-
 import { getServerSession } from "next-auth/next"
 import { ObjectId } from "mongodb"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
-import { deployViaGitTree, ensureRepo, getEnvGitHubCredentials } from "@/lib/deploy/github"
 import {
-  callCompanionDeploy,
-  callCompanionHealth,
   prepareProjectDeployFiles,
   validateApiDeployFiles,
+  getSycordDomain,
 } from "@/lib/deploy/runner-client"
+import {
+  bootstrapContainer,
+  ensureContainer,
+  getContainer,
+  sshDeployFiles,
+  publishSiteViaNginx,
+} from "@/lib/deploy/ssh-deploy"
 import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-function slugifyRepoName(project: any, projectId: string): string {
+function slugifyContainerName(project: any, projectId: string): string {
   return (
-    project?.githubRepo ||
+    project?.containerName ||
     project?.businessName?.toLowerCase().replace(/[^a-z0-9-]/g, "-") ||
     `project-${projectId}`
   )
@@ -48,80 +44,84 @@ export async function POST(req: Request): Promise<Response> {
 
   const projectId = (new URL(req.url).searchParams.get("projectId") || body?.projectId || "").toString()
   if (!isValidProjectId(projectId)) {
-    return Response.json({ status: "error", message: "Invalid projectId" }, { status: 400 })
+    return Response.json({ status: "error", message: "Invalid project ID" }, { status: 400 })
   }
 
   const client = await clientPromise
   const db = client.db()
   const user = await db.collection("users").findOne({ id: userId })
-  const project = user?.projects?.find((p: any) => p?._id?.toString() === projectId)
+  const project = user?.projects?.find((p: any) => p._id.toString() === projectId)
+
   if (!project) {
     return Response.json({ status: "error", message: "Project not found" }, { status: 404 })
   }
 
-  // Bundle the project's saved pages into deployable static files.
   const files = prepareProjectDeployFiles(project)
   const validationErrors = validateApiDeployFiles(files)
   if (validationErrors.length > 0) {
     return Response.json({ status: "error", message: validationErrors.join("; ") }, { status: 400 })
   }
 
-  // Ensure the generated content is actually buildable (valid Next.js project)
-  // before we push it to the deploy pipeline — a clear, early failure beats a
-  // cryptic build error downstream.
   const buildProblems = validateNextBuildable(
     files.map((f) => ({ name: f.path, content: f.content })),
   )
   if (buildProblems.length > 0) {
-    return Response.json(
-      {
-        status: "error",
-        message: `Project is not buildable yet: ${buildProblems.join("; ")}`,
-      },
-      { status: 400 },
-    )
+    return Response.json({ status: "error", message: buildProblems.join("; ") }, { status: 400 })
   }
 
-  const github = getEnvGitHubCredentials()
-  if (!github) {
-    return Response.json(
-      { status: "error", message: "Deployment backend is not configured (missing GitHub credentials)." },
-      { status: 503 },
-    )
+  const containerName = slugifyContainerName(project, projectId)
+  const domain = getSycordDomain()
+
+  let container = await getContainer(projectId)
+  if (!container) {
+    container = await ensureContainer(project, projectId)
+    const bootstrap = await bootstrapContainer(container)
+    if (!bootstrap.success) {
+      return Response.json({ status: "error", message: bootstrap.error || "Container bootstrap failed" }, { status: 500 })
+    }
   }
 
-  try {
-    const repo = slugifyRepoName(project, projectId)
-    const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
+  const deployResult = await sshDeployFiles(container, files)
 
-    // Push the bundled files to the project's repository.
-    await deployViaGitTree(github.owner, repo, files, github.token)
+  let finalUrl = `https://${containerName}.${domain}`
 
-    // Trigger the Companion Server (sycord.site) CDN deployment.
-    await callCompanionHealth()
-    const companion = await callCompanionDeploy(repoId)
-    const url = companion.url || `https://${repo}.sycord.site`
+  if (deployResult.success) {
+    const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
+    if (publish.url) finalUrl = publish.url
 
     await db.collection("users").updateOne(
       { id: userId, "projects._id": new ObjectId(projectId) },
       {
         $set: {
-          "projects.$.githubOwner": github.owner,
-          "projects.$.githubRepo": repo,
-          "projects.$.githubRepoId": repoId,
-          "projects.$.githubUrl": gitUrl,
-          "projects.$.cloudflareUrl": url,
-          "projects.$.deploymentMode": "api",
+          "projects.$.deploymentMode": "ssh",
+          "projects.$.containerName": containerName,
+          "projects.$.deploymentRuntime": {
+            mode: "ssh",
+            domain: containerName,
+            url: finalUrl,
+            status: "deployed",
+            health: "healthy",
+            lastHealthCheckAt: new Date(),
+            lastDeployAt: new Date(),
+            lastDeployError: null,
+          },
           "projects.$.deployedAt": new Date(),
         },
       },
     )
 
-    return Response.json({ status: "success", url })
-  } catch (err: any) {
-    return Response.json(
-      { status: "error", message: err?.message || "Deployment failed" },
-      { status: 500 },
-    )
+    return Response.json({ status: "success", url: finalUrl, containerName })
   }
+
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    {
+      $set: {
+        "projects.$.deploymentRuntime.status": "failed",
+        "projects.$.deploymentRuntime.lastDeployError": deployResult.error,
+      },
+    },
+  )
+
+  return Response.json({ status: "error", message: deployResult.error || "SSH deployment failed" }, { status: 500 })
 }

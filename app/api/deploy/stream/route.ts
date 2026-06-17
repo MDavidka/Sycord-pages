@@ -3,10 +3,7 @@ import { ObjectId } from "mongodb"
 import * as Sentry from "@sentry/nextjs"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
-import { deployViaGitTree, ensureRepo, getEnvGitHubCredentials } from "@/lib/deploy/github"
 import {
-  callCompanionDeploy,
-  callCompanionHealth,
   createErrorEvent,
   createLogEvent,
   createResultEvent,
@@ -16,11 +13,19 @@ import {
   redactSecrets,
   toSseChunk,
   validateApiDeployFiles,
+  getSycordDomain,
 } from "@/lib/deploy/runner-client"
+import {
+  bootstrapContainer,
+  ensureContainer,
+  getContainer,
+  sshDeployFiles,
+  publishSiteViaNginx,
+} from "@/lib/deploy/ssh-deploy"
 
-function slugifyRepoName(project: any, projectId: string) {
+function slugifyContainerName(project: any, projectId: string) {
   return (
-    project?.githubRepo ||
+    project?.containerName ||
     project?.businessName?.toLowerCase().replace(/[^a-z0-9-]/g, "-") ||
     `project-${projectId}`
   )
@@ -42,11 +47,6 @@ export async function POST(request: Request) {
     return new Response(JSON.stringify({ error: "Missing projectId" }), { status: 400 })
   }
 
-  const github = getEnvGitHubCredentials()
-  if (!github) {
-    return new Response(JSON.stringify({ error: "GitHub credentials not configured" }), { status: 400 })
-  }
-
   const client = await clientPromise
   const db = client.db()
   const user = await db.collection("users").findOne({ id: userId })
@@ -61,8 +61,9 @@ export async function POST(request: Request) {
     return new Response(JSON.stringify({ success: false, error: validationErrors.join("; ") }), { status: 400 })
   }
 
-  const repo = slugifyRepoName(project, projectId)
-  const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
+  const containerName = slugifyContainerName(project, projectId)
+  const domain = getSycordDomain()
+  const liveUrl = `https://${containerName}.${domain}`
   const envVars = getProjectEnvVars(project)
   const encoder = new TextEncoder()
 
@@ -71,75 +72,117 @@ export async function POST(request: Request) {
       const write = (event: string, data: unknown) => controller.enqueue(encoder.encode(toSseChunk(event, data)))
       const logSummary: string[] = []
 
-      const log = (source: "sycord" | "github" | "api", line: string) => {
+      const log = (source: "ssh" | "build" | "publish", line: string) => {
         const safeLine = redactSecrets(line)
         logSummary.push(`[${source}] ${safeLine}`)
         write("message", createLogEvent(source, safeLine))
       }
 
       try {
-        write("message", createStageEvent("queued", "running", "Queued for API deployment"))
-        write("message", createStageEvent("github", "running", "Preparing GitHub repository"))
-        log("github", `Repository ${repo} ready`)
+        write("message", createStageEvent("queued", "running", "Queued for SSH deployment"))
+        write("message", createStageEvent("preparing", "running", "Preparing container"))
 
-        write("message", createStageEvent("preparing-files", "running", "Preparing project files"))
-        log("sycord", `Prepared ${files.length} files for Companion Server deployment`)
+        let container = await getContainer(projectId)
+        if (!container) {
+          write("message", createStageEvent("container-setup", "running", "Creating SSH container"))
+          log("ssh", "Creating new container for project")
+          container = await ensureContainer(project, projectId)
+          const bootstrap = await bootstrapContainer(container)
+          if (!bootstrap.success) {
+            write("message", createStageEvent("failed", "error", bootstrap.error || "Container bootstrap failed"))
+            write("message", createErrorEvent(bootstrap.error || "Container bootstrap failed", "container-setup"))
+            controller.close()
+            return
+          }
+          write("message", createStageEvent("container-setup", "success", "Container provisioned"))
+          log("ssh", `Container ${container.containerName} ready at ${container.workspaceName}`)
+        } else {
+          log("ssh", `Reusing container ${container.containerName}`)
+        }
 
-        write("message", createStageEvent("github", "running", "Pushing source to GitHub"))
-        await deployViaGitTree(github.owner, repo, files, github.token)
-        log("github", `Updated ${gitUrl}`)
+        write("message", createStageEvent("upload", "running", `Uploading ${files.length} files via SSH`))
+        log("ssh", `Deploying ${files.length} files`)
 
-        write("message", createStageEvent("saving", "running", "Saving repository credentials for Companion Server"))
-        await db.collection("users").updateOne(
-          { id: userId },
-          {
-            $set: {
-              [`git_connection.${repoId}`]: {
-                username: github.owner,
-                repo_id: String(repoId),
-                git_url: gitUrl,
-                git_token: github.token,
-                repo_name: repo,
-                project_id: projectId,
-                deployed_at: new Date(),
-                env_vars: envVars,
+        await db.collection("containers").updateOne(
+          { projectId },
+          { $set: { lastDeployAt: new Date() } },
+          { upsert: true },
+        )
+
+        const deployResult = await sshDeployFiles(container, files)
+
+        for (const line of deployResult.logs) {
+          log("ssh", line)
+        }
+
+        if (!deployResult.success) {
+          write("message", createStageEvent("failed", "error", deployResult.error || "Deploy failed"))
+          write("message", createErrorEvent(deployResult.error || "Deploy failed", "publish", summarizeLogs(logSummary)))
+
+          await db.collection("users").updateOne(
+            { id: userId, "projects._id": new ObjectId(projectId) },
+            {
+              $set: {
+                "projects.$.deploymentMode": "ssh",
+                "projects.$.deploymentRuntime": {
+                  mode: "ssh",
+                  domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
+                  url: liveUrl,
+                  status: "failed",
+                  health: "unhealthy",
+                  lastHealthCheckAt: new Date(),
+                  lastDeployAt: new Date(),
+                  lastDeployError: deployResult.error,
+                },
+                "projects.$.lastDeployLogsSummary": summarizeLogs(logSummary),
+                "projects.$.lastFailedStage": "publish",
+                "projects.$.lastDeployError": deployResult.error,
+                "projects.$.containerName": containerName,
               },
             },
-          },
-        )
-        log("sycord", `Registered numeric repository ID ${repoId}`)
+          )
+          controller.close()
+          return
+        }
 
-        write("message", createStageEvent("health-check", "running", "Checking Companion Server health"))
-        await callCompanionHealth()
-        log("api", "Companion Server is reachable")
+        write("message", createStageEvent("publish", "success", "Files deployed and build started"))
+        write("message", createStageEvent("publish", "running", "Configuring nginx and starting site via PM2"))
+        log("publish", `Setting up nginx proxy for ${containerName}.${domain}`)
 
-        write("message", createStageEvent("deploy-api", "running", "Triggering Companion Server deployment API"))
-        const companion = await callCompanionDeploy(repoId)
-        const liveUrl = companion.url || ""
-        const domain = liveUrl ? liveUrl.replace(/^https?:\/\//, "") : ""
-        log("api", companion.message || "Companion Server deployment complete")
+        const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
+        const finalUrl = publish.url
+        if (!publish.success) {
+          log("publish", `Publish error: ${publish.error || "Unknown"}`)
+          write("message", createStageEvent("publish", "error", publish.error || "Publish failed"))
+        }
 
+        if (publish.tunnelRoute) {
+          if (publish.tunnelRoute.updated) {
+            log("publish", `Tunnel DNS: ${publish.tunnelRoute.detail}`)
+          } else {
+            log("publish", `Tunnel DNS skipped: ${publish.tunnelRoute.detail}`)
+            log("publish", "The site may still be accessible via the wildcard ingress (*.sycord.site → nginx) if DNS points to Cloudflare")
+          }
+        }
+
+        log("publish", `Site deployed at ${finalUrl} (port ${publish.port})`)
+        log("publish", `To verify: curl -H 'Host: ${containerName}.${domain}' http://127.0.0.1`)
+        write("message", createStageEvent("publish", "success", `Live at ${finalUrl}${publish.tunnelRoute?.updated ? '' : ' — DNS route pending'}`))
         write("message", createStageEvent("saving", "running", "Saving deployment result"))
+
         await db.collection("users").updateOne(
           { id: userId, "projects._id": new ObjectId(projectId) },
           {
             $set: {
-              "projects.$.githubOwner": github.owner,
-              "projects.$.githubRepo": repo,
-              "projects.$.githubRepoId": repoId,
-              "projects.$.githubUrl": gitUrl,
-              "projects.$.cloudflareUrl": liveUrl || null,
-              "projects.$.deploymentMode": "api",
+              "projects.$.containerName": containerName,
+              "projects.$.deploymentMode": "ssh",
               "projects.$.deploymentRuntime": {
-                mode: "api",
-                domain: domain || null,
-                url: liveUrl || null,
+                mode: "ssh",
+                domain: finalUrl ? finalUrl.replace(/^https?:\/\//, "") : null,
+                url: finalUrl,
                 status: "deployed",
-                health: "healthy",
-                message: companion.message,
-                projectName: companion.projectName,
-                username: companion.username,
-                repoId: companion.repoId || String(repoId),
+                health: publish.health?.ok ? "healthy" : "unhealthy",
+                message: `Deployed via SSH | Port ${publish.port} | Tunnel: ${publish.tunnelRoute?.updated ? "routed" : "wildcard"}`,
                 lastHealthCheckAt: new Date(),
                 lastDeployAt: new Date(),
                 lastDeployError: null,
@@ -149,18 +192,18 @@ export async function POST(request: Request) {
               "projects.$.lastDeployError": null,
               "projects.$.lastDeployWarning": null,
               "projects.$.deployedAt": new Date(),
+              "projects.$.deployPort": publish.port,
             },
           },
         )
 
         write("message", createStageEvent("saving", "success", "Deployment result saved"))
-        write("message", createStageEvent("complete", "success", companion.message || "Deployment finished"))
+        write("message", createStageEvent("complete", "success", "Deployment finished via SSH"))
         write(
           "message",
           createResultEvent({
-            url: liveUrl,
+            url: finalUrl,
             domain,
-            repoId: String(repoId),
             health: { ok: true, htmlOk: true },
           }),
         )
@@ -170,11 +213,8 @@ export async function POST(request: Request) {
           tags: {
             area: "deploy-stream",
             project_id: projectId,
-            repo,
-            stage: "companion-api",
-          },
-          extra: {
-            response: error?.response,
+            container: containerName,
+            stage: "ssh-deploy",
           },
         })
 
@@ -182,9 +222,9 @@ export async function POST(request: Request) {
           { id: userId, "projects._id": new ObjectId(projectId) },
           {
             $set: {
-              "projects.$.deploymentMode": "api",
+              "projects.$.deploymentMode": "ssh",
               "projects.$.deploymentRuntime": {
-                mode: "api",
+                mode: "ssh",
                 domain: null,
                 url: null,
                 status: "failed",
@@ -194,17 +234,14 @@ export async function POST(request: Request) {
                 lastDeployError: message,
               },
               "projects.$.lastDeployLogsSummary": summarizeLogs(logSummary),
-              "projects.$.lastFailedStage": "companion-api",
+              "projects.$.lastFailedStage": "ssh-deploy",
               "projects.$.lastDeployError": message,
-            },
-            $unset: {
-              "projects.$.cloudflareUrl": "",
             },
           },
         )
 
         write("message", createStageEvent("failed", "error", message))
-        write("message", createErrorEvent(message, "companion-api", summarizeLogs(logSummary)))
+        write("message", createErrorEvent(message, "ssh-deploy", summarizeLogs(logSummary)))
       } finally {
         controller.close()
       }

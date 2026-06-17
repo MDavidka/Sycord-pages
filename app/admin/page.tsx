@@ -57,7 +57,14 @@ import {
   User,
   ChevronDown,
   Calendar,
-  ExternalLink
+  ExternalLink,
+  Terminal,
+  Monitor,
+  Play,
+  Square,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react"
 
 const availableIcons = [
@@ -91,11 +98,12 @@ const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
   { id: "server" as const, label: "Server", icon: Server },
+  { id: "deployer" as const, label: "Deployer", icon: Monitor },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
 ]
 
-type TabId = "overview" | "users" | "server" | "tickets" | "paptos"
+type TabId = "overview" | "users" | "server" | "deployer" | "tickets" | "paptos"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -115,6 +123,20 @@ export default function AdminPage() {
   // PAP & TOS State
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
   const [termsOfService, setTermsOfService] = useState("Edit your terms of service here...")
+
+  // Deployer Setup State
+  const [deployerHost, setDeployerHost] = useState("")
+  const [deployerUsername, setDeployerUsername] = useState("root")
+  const [deployerPassword, setDeployerPassword] = useState("")
+  const [deployerSetupRunning, setDeployerSetupRunning] = useState(false)
+  const [deployerSetupLogs, setDeployerSetupLogs] = useState<string[]>([])
+  const [deployerSetupResult, setDeployerSetupResult] = useState<any>(null)
+  const [deployerSetupError, setDeployerSetupError] = useState<string | null>(null)
+  const [deployerDebugInfo, setDeployerDebugInfo] = useState<any>(null)
+  const [deployerDebugLoading, setDeployerDebugLoading] = useState(false)
+  const [tunnelLoginUrl, setTunnelLoginUrl] = useState<string | null>(null)
+  const [tunnelStatus, setTunnelStatus] = useState<string | null>(null)
+  const [skipCloudflare, setSkipCloudflare] = useState(false)
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -320,6 +342,106 @@ export default function AdminPage() {
     .toUpperCase() || "A"
 
   const blockedCount = users.filter(u => u.isBlocked).length
+
+  // Deployer setup functions
+  const fetchDeployerDebug = async () => {
+    setDeployerDebugLoading(true)
+    setDeployerDebugInfo(null)
+    try {
+      const res = await fetch("/api/debug", { headers: { Accept: "application/json" } })
+      const data = await res.json()
+      setDeployerDebugInfo(data)
+    } catch (err: any) {
+      setDeployerDebugInfo({ error: err?.message || "Debug request failed" })
+    } finally {
+      setDeployerDebugLoading(false)
+    }
+  }
+
+  const runDeployerSetup = async (reset = false) => {
+    if (!deployerHost || !deployerPassword) {
+      toast.error("Please enter the VPS host and root password")
+      return
+    }
+
+    setDeployerSetupRunning(true)
+    setDeployerSetupLogs([])
+    setDeployerSetupResult(null)
+    setDeployerSetupError(null)
+    setTunnelLoginUrl(null)
+    setTunnelStatus(null)
+
+    try {
+      const res = await fetch("/api/admin/vps-runner/setup/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: deployerHost,
+          rootPassword: deployerPassword,
+          port: 22,
+          baseDomain: "sycord.site",
+          skipCloudflare,
+          resetTunnel: reset,
+        }),
+      })
+
+      if (!res.ok || !res.body) throw new Error("Setup stream failed")
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const blocks = buffer.split("\n\n")
+        buffer = blocks.pop() || ""
+
+        for (const block of blocks) {
+          const eventLine = block.split("\n").find(l => l.startsWith("event:"))
+          const dataLine = block.split("\n").find(l => l.startsWith("data:"))
+          if (!eventLine || !dataLine) continue
+          const eventType = eventLine.slice(6).trim()
+          try {
+            const data = JSON.parse(dataLine.slice(5).trim())
+            if (eventType === "log") {
+              setDeployerSetupLogs(prev => [...prev, data.line || ""])
+            } else if (eventType === "stage") {
+              setDeployerSetupLogs(prev => [...prev, `[${data.status.toUpperCase()}] ${data.stage}: ${data.message}`])
+            } else if (eventType === "result") {
+              setDeployerSetupResult(data)
+              toast.success("Deployer setup completed")
+            } else if (eventType === "tunnel") {
+              if (data.type === "login-needed") {
+                setTunnelLoginUrl(data.url)
+                toast.info("Cloudflare authentication required — open the link below")
+              } else if (data.type === "login-timeout") {
+                setTunnelLoginUrl(null)
+                setTunnelStatus("timeout")
+                toast.error("Cloudflare authentication timed out")
+              } else if (data.type === "status") {
+                setTunnelStatus(data.running ? "active" : "inactive")
+                setTunnelLoginUrl(null)
+                if (data.reset) {
+                  toast.success("Tunnel reset and rebuilt successfully")
+                  setDeployerSetupResult({ success: true, reset: true })
+                }
+              }
+            } else if (eventType === "error") {
+              setDeployerSetupError(data.error || "Setup failed")
+              toast.error(data.error || "Setup failed")
+            }
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      setDeployerSetupError(err?.message || "Setup failed")
+      toast.error(err?.message || "Setup failed")
+    } finally {
+      setDeployerSetupRunning(false)
+    }
+  }
 
 
 
@@ -809,6 +931,189 @@ export default function AdminPage() {
           </div>
         )}
 
+
+        {/* Deployer Tab */}
+        {activeTab === "deployer" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Setup Deployer</h2>
+              <p className="text-sm text-white/40">Configure and deploy the Sycord deployment server on your Ubuntu VPS</p>
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-4">
+              <div className="flex items-center gap-2">
+                <Monitor className="h-4 w-4 text-purple-400" />
+                <h3 className="text-sm font-semibold text-white">VPS Configuration</h3>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-white/70">VPS Host</label>
+                    <Input
+                      type="text"
+                      placeholder="e.g., 192.168.1.100 or server.example.com"
+                      value={deployerHost}
+                      onChange={(e) => setDeployerHost(e.target.value)}
+                      className="bg-black/40 border-white/10 text-white placeholder:text-white/30 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-white/70">SSH Username</label>
+                    <Input
+                      type="text"
+                      placeholder="root"
+                      value={deployerUsername}
+                      onChange={(e) => setDeployerUsername(e.target.value)}
+                      className="bg-black/40 border-white/10 text-white placeholder:text-white/30 rounded-xl"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-white/70">Root Password</label>
+                    <Input
+                      type="password"
+                      placeholder="Root password for SSH"
+                      value={deployerPassword}
+                      onChange={(e) => setDeployerPassword(e.target.value)}
+                      className="bg-black/40 border-white/10 text-white placeholder:text-white/30 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
+                    <h4 className="text-sm font-medium text-white/70 mb-3">Quick Actions</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={fetchDeployerDebug}
+                        disabled={deployerDebugLoading}
+                        variant="outline"
+                        className="border-white/10 text-white hover:bg-white/10 rounded-xl text-xs"
+                      >
+                        {deployerDebugLoading ? "Loading..." : "Check Connection"}
+                      </Button>
+                      <Button
+                        onClick={() => runDeployerSetup(false)}
+                        disabled={deployerSetupRunning || !deployerHost || !deployerPassword}
+                        className="bg-purple-600 hover:bg-purple-700 rounded-xl text-xs"
+                      >
+                        {deployerSetupRunning ? "Running..." : "Run Setup"}
+                      </Button>
+                      <Button
+                        onClick={() => { if (confirm("This will delete and recreate the Cloudflare tunnel. Continue?")) runDeployerSetup(true) }}
+                        disabled={deployerSetupRunning || !deployerHost || !deployerPassword}
+                        variant="outline"
+                        className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl text-xs"
+                      >
+                        Reset Tunnel
+                      </Button>
+                    </div>
+                    <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={skipCloudflare}
+                        onChange={(e) => setSkipCloudflare(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-white/20 bg-black/40"
+                      />
+                      <span className="text-[11px] text-white/50">Skip Cloudflare Tunnel setup</span>
+                    </label>
+                  </div>
+
+                  {tunnelLoginUrl && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="animate-pulse h-2 w-2 rounded-full bg-amber-500" />
+                        <span className="text-xs font-medium text-amber-200">Cloudflare Auth Required</span>
+                      </div>
+                      <p className="text-xs text-amber-100/80 mb-2">
+                        Open the link below in a new tab and authorize the Cloudflare Tunnel. The setup will continue automatically.
+                      </p>
+                      <a
+                        href={tunnelLoginUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg font-medium"
+                      >
+                        Open Authentication Page
+                      </a>
+                      <p className="text-[10px] text-amber-100/50 mt-2 truncate">{tunnelLoginUrl}</p>
+                    </div>
+                  )}
+
+                  {tunnelStatus === "active" && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <span className="text-xs text-emerald-200">Cloudflare Tunnel connected</span>
+                    </div>
+                  )}
+
+                  {tunnelStatus === "timeout" && (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <XCircle className="h-4 w-4 text-red-400" />
+                        <span className="text-xs text-red-200">Auth timed out — click Run Setup to retry</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {deployerDebugInfo && (
+                    <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4 max-h-48 overflow-y-auto">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`h-2 w-2 rounded-full ${deployerDebugInfo.vps?.sshReachable ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="text-xs font-medium text-white/70">Connection Status</span>
+                      </div>
+                      <pre className="text-[10px] text-white/50 font-mono whitespace-pre-wrap">
+                        {JSON.stringify(deployerDebugInfo, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Setup Logs */}
+            {(deployerSetupLogs.length > 0 || deployerSetupRunning || deployerSetupError || deployerSetupResult) && (
+              <div className="rounded-2xl bg-black/40 border border-white/[0.08] overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="h-4 w-4 text-white/40" />
+                    <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Setup Output</span>
+                    {deployerSetupRunning && <span className="text-[10px] text-amber-400 animate-pulse">Running...</span>}
+                  </div>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto font-mono text-[11px] leading-5 p-4">
+                  {deployerSetupLogs.length === 0 ? (
+                    <p className="text-zinc-600 text-center py-8">Waiting for output...</p>
+                  ) : (
+                    deployerSetupLogs.map((line, i) => (
+                      <p key={i} className={`${
+                        /error|fail|ERR/i.test(line) ? "text-red-300" :
+                        /warn/i.test(line) ? "text-amber-300" :
+                        /success|complete|ok|active/i.test(line) ? "text-emerald-300" :
+                        "text-zinc-400"
+                      }`}>{line}</p>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {deployerSetupResult && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+                <CheckCircle2 className="h-4 w-4 inline mr-2" />
+                Deployer setup completed successfully.
+                {deployerSetupResult.runnerUrl && <span className="block mt-1 text-xs">Runner: {deployerSetupResult.runnerUrl}</span>}
+              </div>
+            )}
+
+            {deployerSetupError && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">
+                <XCircle className="h-4 w-4 inline mr-2" />
+                {deployerSetupError}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tickets Tab */}
         {activeTab === "tickets" && (
