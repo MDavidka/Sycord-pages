@@ -229,22 +229,48 @@ export async function checkCloudflaredLogin(ssh: NodeSSH, logs: string[]): Promi
 
 export async function startCloudflaredLogin(ssh: NodeSSH, logs: string[]): Promise<{ loginUrl: string | null; error?: string }> {
   logs.push("[cloudflare] Starting tunnel login process...")
-  const login = await ssh.execCommand("cloudflared tunnel login 2>&1", { timeout: 15000 })
 
-  const combined = login.stdout + login.stderr
-  logs.push(`[cloudflare] Login output: ${combined}`)
+  // cloudflared tunnel login outputs a URL then blocks waiting for browser auth.
+  // Run it in background, capture output to a temp file, then read the URL.
+  const runBg = await ssh.execCommand(
+    "nohup cloudflared tunnel login > /tmp/cloudflared-login.log 2>&1 & sleep 4 && cat /tmp/cloudflared-login.log 2>&1",
+  )
 
-  const urlMatch = combined.match(/https:\/\/[^\s]+/)
+  const combined = runBg.stdout + runBg.stderr
+  logs.push(`[cloudflare] Login output: ${combined.slice(0, 500)}`)
+
+  // Try multiple URL patterns
+  const urlMatch = combined.match(/https:\/\/[^\s\n]+/)
   if (urlMatch) {
-    logs.push(`[cloudflare] Login URL: ${urlMatch[0]}`)
+    logs.push(`[cloudflare] Login URL found: ${urlMatch[0]}`)
     return { loginUrl: urlMatch[0] }
   }
 
-  if (combined.includes("cert.pem")) {
+  // Check if cert already exists (already logged in previously)
+  if (combined.includes("You have an existing certificate") || combined.includes("cert.pem")) {
+    logs.push("[cloudflare] Already have a certificate — skipping login")
     return { loginUrl: null }
   }
 
-  return { loginUrl: null, error: "Could not extract login URL from cloudflared output" }
+  // If no URL found, check if the file was written
+  const fileCheck = await ssh.execCommand("cat /tmp/cloudflared-login.log 2>&1 || echo 'NO_FILE'")
+  logs.push(`[cloudflare] File content: ${fileCheck.stdout.slice(0, 500)}`)
+  const fileMatch = fileCheck.stdout.match(/https:\/\/[^\s\n]+/)
+  if (fileMatch) {
+    return { loginUrl: fileMatch[0] }
+  }
+
+  logs.push("[cloudflare] No login URL found in output — trying alternate command")
+  // Try alternate: cloudflared login (without 'tunnel')
+  const altRun = await ssh.execCommand(
+    "nohup cloudflared login > /tmp/cloudflared-login2.log 2>&1 & sleep 3 && cat /tmp/cloudflared-login2.log 2>&1",
+  )
+  const altMatch = altRun.stdout.match(/https:\/\/[^\s\n]+/)
+  if (altMatch) {
+    return { loginUrl: altMatch[0] }
+  }
+
+  return { loginUrl: null, error: "Could not extract login URL. Check VM manually with: cloudflared tunnel login" }
 }
 
 export async function pollCloudflaredCert(ssh: NodeSSH, logs: string[]): Promise<{ ready: boolean }> {

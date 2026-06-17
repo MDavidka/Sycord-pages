@@ -247,18 +247,22 @@ async function runCloudflareSetup(
       if (login.loginUrl) {
         send(tunnelEvent("login-needed", { url: login.loginUrl }))
         send(logEvent(`[cloudflare] Open this URL to authenticate: ${login.loginUrl}`))
-        send(stageEvent("cloudflare-auth", "running", `Waiting for Cloudflare authentication — open the link above`))
+        send(stageEvent("cloudflare-auth", "running", "Waiting for Cloudflare authentication — open the link shown above"))
 
         let certReady = false
-        for (let i = 0; i < 60; i++) {
+        for (let i = 0; i < 90; i++) {
           await new Promise(resolve => setTimeout(resolve, 2000))
           const { ready } = await pollCloudflaredCert(ssh, logs)
           if (ready) {
             certReady = true
             break
           }
-          if (i % 5 === 0) {
-            send(logEvent(`[cloudflare] Waiting for authentication... (${(i + 1) * 2}s)`))
+          if (i % 3 === 0) {
+            send(logEvent(`[cloudflare] Waiting for browser authentication... (${Math.round((i + 1) * 2)}s elapsed)`))
+          }
+          // Every 15 seconds, send a keepalive so the connection doesn't timeout
+          if (i % 7 === 0 && i > 0) {
+            send(tunnelEvent("polling", { elapsed: Math.round((i + 1) * 2) }))
           }
         }
 
