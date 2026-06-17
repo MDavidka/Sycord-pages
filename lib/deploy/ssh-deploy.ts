@@ -469,16 +469,59 @@ async function ensurePm2Startup(ssh: NodeSSH): Promise<void> {
   await ssh.execCommand("pm2 save 2>&1 || true")
 }
 
+async function updateCloudflareTunnelRoute(
+  ssh: NodeSSH,
+  hostname: string,
+  port: number,
+): Promise<{ updated: boolean; detail: string }> {
+  try {
+    const domain = hostname.substring(hostname.indexOf(".") + 1)
+
+    const check = await ssh.execCommand("cloudflared tunnel info sycord-deployer 2>&1 || echo 'NO_TUNNEL'")
+    if (check.stdout.includes("NO_TUNNEL") || check.stdout.includes("not found")) {
+      return { updated: false, detail: "Cloudflare tunnel 'sycord-deployer' not found — run Setup Deployer first" }
+    }
+
+    const routeResult = await ssh.execCommand(`cloudflared tunnel route dns sycord-deployer ${hostname} 2>&1`)
+    const routeOut = routeResult.stdout + routeResult.stderr
+
+    return {
+      updated: routeResult.code === 0 || routeOut.includes("already exists") || routeOut.includes("added"),
+      detail: routeOut.trim().slice(0, 300),
+    }
+  } catch (err: any) {
+    return { updated: false, detail: err?.message || "Tunnel route command failed" }
+  }
+}
+
+async function healthCheckSite(url: string, maxRetries = 5): Promise<{ ok: boolean; status?: number; error?: string }> {
+  for (let i = 0; i < maxRetries; i++) {
+    await new Promise((r) => setTimeout(r, 2000))
+    try {
+      const res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) })
+      if (res.ok || res.status < 500) {
+        return { ok: true, status: res.status }
+      }
+    } catch (err: any) {
+      if (i === maxRetries - 1) {
+        return { ok: false, error: err?.message || "Health check failed" }
+      }
+    }
+  }
+  return { ok: false, error: "Health check timeout after retries" }
+}
+
 export async function publishSiteViaNginx(
   containerName: string,
   workspaceName: string,
   domain: string,
-): Promise<{ url: string; port: number; success: boolean; error?: string }> {
+): Promise<{ url: string; port: number; success: boolean; error?: string; tunnelRoute?: { updated: boolean; detail: string }; health?: { ok: boolean; status?: number; error?: string } }> {
   const vps = getVpsConfig()
   const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
   try {
     const port = await allocatePort(ssh)
     const serverName = `${containerName}.${domain}`
+    const url = `https://${serverName}`
 
     await writeNginxSiteConfig(ssh, serverName, port)
 
@@ -486,15 +529,25 @@ export async function publishSiteViaNginx(
 
     const started = await startPm2Site(ssh, containerName, workspaceName, port)
     if (!started) {
-      return { url: `https://${serverName}`, port, success: false, error: "PM2 start failed" }
+      return { url, port, success: false, error: "PM2 start failed" }
     }
 
     const nginxOk = await reloadNginx(ssh)
     if (!nginxOk) {
-      return { url: `https://${serverName}`, port, success: false, error: "Nginx reload failed" }
+      return { url, port, success: false, error: "Nginx reload failed" }
     }
 
-    return { url: `https://${serverName}`, port, success: true }
+    const tunnelRoute = await updateCloudflareTunnelRoute(ssh, serverName, port)
+
+    const serviceCheck = await ssh.execCommand("systemctl is-active cloudflared 2>&1 || echo 'inactive'")
+    if (!serviceCheck.stdout.includes("active")) {
+      await ssh.execCommand("systemctl restart cloudflared 2>&1 || true")
+      await new Promise((r) => setTimeout(r, 2000))
+    }
+
+    const health = await healthCheckSite(`http://127.0.0.1:${port}`)
+
+    return { url, port, success: true, tunnelRoute, health }
   } catch (err: any) {
     return { url: `https://${containerName}.${domain}`, port: 0, success: false, error: err?.message }
   } finally {

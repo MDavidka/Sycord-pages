@@ -152,10 +152,23 @@ export async function POST(request: Request) {
         const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
         const finalUrl = publish.url
         if (!publish.success) {
-          log("publish", `Publish warning: ${publish.error || "Unknown"}`)
+          log("publish", `Publish error: ${publish.error || "Unknown"}`)
         }
-        log("publish", `Site published at ${finalUrl}`)
-        write("message", createStageEvent("publish", "success", `Site live at ${finalUrl}`))
+
+        if (publish.tunnelRoute) {
+          log("publish", `Tunnel DNS route: ${publish.tunnelRoute.updated ? "added" : "skipped"} — ${publish.tunnelRoute.detail}`)
+        }
+
+        if (publish.health) {
+          if (publish.health.ok) {
+            log("publish", `Health check passed (HTTP ${publish.health.status})`)
+          } else {
+            log("publish", `Health check warning: ${publish.health.error || "unknown"}`)
+          }
+        }
+
+        log("publish", `Site published at ${finalUrl} (port ${publish.port})`)
+        write("message", createStageEvent("publish", "success", `Site live at ${finalUrl}${publish.health?.ok ? ' — health check OK' : ''}`))
         write("message", createStageEvent("saving", "running", "Saving deployment result"))
 
         await db.collection("users").updateOne(
@@ -169,8 +182,8 @@ export async function POST(request: Request) {
                 domain: finalUrl ? finalUrl.replace(/^https?:\/\//, "") : null,
                 url: finalUrl,
                 status: "deployed",
-                health: "healthy",
-                message: "Deployed via SSH",
+                health: publish.health?.ok ? "healthy" : "unhealthy",
+                message: `Deployed via SSH | Port ${publish.port} | Tunnel: ${publish.tunnelRoute?.updated ? "routed" : "wildcard"}`,
                 lastHealthCheckAt: new Date(),
                 lastDeployAt: new Date(),
                 lastDeployError: null,
@@ -180,6 +193,7 @@ export async function POST(request: Request) {
               "projects.$.lastDeployError": null,
               "projects.$.lastDeployWarning": null,
               "projects.$.deployedAt": new Date(),
+              "projects.$.deployPort": publish.port,
             },
           },
         )
