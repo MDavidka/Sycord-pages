@@ -1,90 +1,67 @@
 import { NextResponse } from "next/server"
-import { manageDeployVmRunnerService, probeDeployVmSsh, readDeployVmDiagnostics } from "@/lib/admin/vm-ssh"
-import { proxyRunner, requireAdminResponse } from "../_shared"
+import {
+  buildAdminStatus,
+  controlAllWorkspaceContainers,
+  destroyAllWorkspaceContainers,
+  ensureHostSetup,
+} from "@/lib/admin/workspace-provision"
+import { requireAdminResponse } from "../_shared"
 
-const ACTION_PATHS: Record<string, string> = {
-  start: "/api/runner/start",
-  stop: "/api/runner/stop",
-  destroy: "/api/runner/destroy",
-  setup: "/api/setup",
-}
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+export const maxDuration = 300
 
+// Host-level actions for the admin "Runner" tab, mapped to the container model:
+//   setup   -> bootstrap the Docker host
+//   start   -> start all workspace containers
+//   stop    -> stop all workspace containers
+//   destroy -> remove all workspace containers (host stays intact)
 export async function POST(request: Request) {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
 
   const body = await request.json().catch(() => ({}))
   const action = typeof body.action === "string" ? body.action : ""
-  const path = ACTION_PATHS[action]
-  if (!path) {
-    return NextResponse.json({ success: false, error: "Invalid runner action" }, { status: 400 })
-  }
 
-  const upstream = await proxyRunner(path, { method: "POST" })
-  const shouldFallback = upstream.status >= 400
+  try {
+    if (action === "setup") {
+      const result = await ensureHostSetup()
+      const status = await buildAdminStatus().catch(() => null)
+      return NextResponse.json(
+        { success: result.success, message: result.success ? "Host configured" : result.error, logs: result.logs, ...(status || {}) },
+        { status: result.success ? 200 : 500 },
+      )
+    }
 
-  if (!shouldFallback) {
-    return upstream
-  }
-
-  if (action === "setup") {
-    return upstream
-  }
-
-  const ssh = await probeDeployVmSsh()
-  if (!ssh.reachable) {
-    return upstream
-  }
-
-  if (action === "start" || action === "stop") {
-    try {
-      const result = await manageDeployVmRunnerService(action)
+    if (action === "start" || action === "stop") {
+      const result = await controlAllWorkspaceContainers(action)
+      const status = await buildAdminStatus().catch(() => null)
       return NextResponse.json(
         {
           success: result.success,
-          message:
-            action === "start"
-              ? result.success
-                ? "Runner service is active on the deploy VM"
-                : "Failed to start runner service over SSH"
-              : result.success
-                ? "Runner service stopped on the deploy VM"
-                : "Failed to stop runner service over SSH",
+          message: result.success
+            ? `Workspace containers ${action === "start" ? "started" : "stopped"}`
+            : `Failed to ${action} workspace containers`,
           logs: result.logs,
-          runner: result.diagnostics.runner,
-          nginx: result.diagnostics.nginx,
-          cloudflared: result.diagnostics.cloudflared,
-          diagnostics: result.diagnostics.diagnostics,
-          degraded: true,
-          apiOnline: false,
+          ...(status || {}),
         },
         { status: result.success ? 200 : 500 },
       )
-    } catch (error: any) {
+    }
+
+    if (action === "destroy") {
+      const result = await destroyAllWorkspaceContainers()
       return NextResponse.json(
-        {
-          success: false,
-          error: error?.message || "Failed to control runner service over SSH",
-          degraded: true,
-          apiOnline: false,
-        },
-        { status: 500 },
+        { success: result.success, message: result.success ? "All workspace containers removed" : "Destroy failed", logs: result.logs },
+        { status: result.success ? 200 : 500 },
       )
     }
-  }
 
-  const diagnostics = await readDeployVmDiagnostics().catch(() => null)
-  return NextResponse.json(
-    {
-      success: action === "destroy" ? false : Boolean(diagnostics?.runner?.running),
-      error: "Runner API is unavailable",
-      runner: diagnostics?.runner ?? null,
-      nginx: diagnostics?.nginx ?? null,
-      cloudflared: diagnostics?.cloudflared ?? null,
-      diagnostics: diagnostics?.diagnostics ?? null,
-      degraded: true,
-      apiOnline: false,
-    },
-    { status: action === "destroy" ? 503 : 200 },
-  )
+    return NextResponse.json({ success: false, error: "Invalid runner action" }, { status: 400 })
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error?.message || "Action failed", apiOnline: false },
+      { status: 500 },
+    )
+  }
 }
