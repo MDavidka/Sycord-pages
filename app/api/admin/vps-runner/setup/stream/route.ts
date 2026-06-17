@@ -317,7 +317,7 @@ async function runCloudflareSetup(
     }
     send(stageEvent("cloudflare-config", "success", "Config written"))
 
-    send(stageEvent("cloudflare-dns", "running", "Registering wildcard DNS *.${baseDomain}..."))
+    send(stageEvent("cloudflare-dns", "running", `Registering wildcard DNS *.${baseDomain}...`))
     const dnsResult = await registerCloudflaredWildcardDns(ssh, tunnel.tunnelId, baseDomain, logs)
     if (dnsResult.success) {
       send(stageEvent("cloudflare-dns", "success", `Wildcard DNS *.${baseDomain} registered`))

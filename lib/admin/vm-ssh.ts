@@ -293,13 +293,13 @@ export async function createCloudflaredTunnel(ssh: NodeSSH, logs: string[]): Pro
     const idMatch = (create.stdout + create.stderr).match(/Created tunnel\s+\S+\s+with id\s+([a-f0-9-]+)/i) ||
       (create.stdout + create.stderr).match(/"([a-f0-9-]{36})"/)
     if (idMatch) {
-      tunnelId = idMatch[1]
+      tunnelId = idMatch[1].trim()
     } else {
       logs.push("[cloudflare] Failed to parse tunnel ID from creation output")
       return null
     }
   } else {
-    tunnelId = existing.stdout.replace(/"id":"|"/g, "")
+    tunnelId = existing.stdout.replace(/"id":"|"/g, "").trim()
     logs.push(`[cloudflare] Existing tunnel found: ${tunnelId}`)
   }
 
@@ -352,21 +352,27 @@ echo "CONFIG_WRITTEN"`)
 export async function installCloudflaredService(ssh: NodeSSH, logs: string[]): Promise<boolean> {
   logs.push("[cloudflare] Installing cloudflared systemd service...")
 
+  // Stop any existing instance first
+  await ssh.execCommand("systemctl stop cloudflared 2>&1 || true")
+
   const result = await ssh.execCommand("cloudflared service install 2>&1")
   logs.push(`[cloudflare] Service install: ${result.stdout}`)
   if (result.stderr) logs.push(`[cloudflare] Service stderr: ${result.stderr}`)
 
   await ssh.execCommand("systemctl daemon-reload 2>&1")
   await ssh.execCommand("systemctl enable cloudflared 2>&1")
-  const start = await ssh.execCommand("systemctl restart cloudflared 2>&1 && sleep 3 && systemctl is-active cloudflared 2>&1")
+  const start = await ssh.execCommand("systemctl restart cloudflared 2>&1 && sleep 4 && systemctl is-active cloudflared 2>&1")
 
   const active = start.stdout.includes("active")
-  logs.push(`[cloudflare] Service start: ${start.stdout.trim()}`)
+  logs.push(`[cloudflare] Service status: ${start.stdout.trim()}`)
   if (!active && start.stderr) logs.push(`[cloudflare] Service error: ${start.stderr}`)
 
   if (!active) {
-    const journal = await ssh.execCommand("journalctl -u cloudflared --no-pager -n 20 2>&1 || true")
-    logs.push(`[cloudflare] Journal: ${journal.stdout}`)
+    const journal = await ssh.execCommand("journalctl -u cloudflared --no-pager -n 30 2>&1 || true")
+    logs.push(`[cloudflare] Journal (last 30):`)
+    for (const line of journal.stdout.split("\n").slice(-15)) {
+      if (line.trim()) logs.push(`  ${line.trim()}`)
+    }
   }
 
   return active
@@ -378,8 +384,10 @@ export async function registerCloudflaredWildcardDns(
   baseDomain: string,
   logs: string[],
 ): Promise<{ success: boolean; detail: string }> {
-  logs.push(`[cloudflare] Registering wildcard DNS route for *.${baseDomain}...`)
-  const result = await ssh.execCommand(`cloudflared tunnel route dns ${tunnelId} "*.${baseDomain}" 2>&1`)
+  const wildcard = `*.${baseDomain}`
+  const cleanId = tunnelId.trim()
+  logs.push(`[cloudflare] Registering wildcard DNS route for ${wildcard} via tunnel ${cleanId.slice(0, 8)}...`)
+  const result = await ssh.execCommand(`cloudflared tunnel route dns ${cleanId} ${wildcard} 2>&1`)
   const out = result.stdout + result.stderr
   logs.push(`[cloudflare] Wildcard DNS: ${out.trim().slice(0, 300)}`)
 
