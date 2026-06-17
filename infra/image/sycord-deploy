@@ -1,0 +1,42 @@
+#!/bin/bash
+# ============================================================================
+# Sycord — In-container deployer (sycord-deploy)
+# ----------------------------------------------------------------------------
+# Compiles the Next.js production build, packages the artifacts into the shared
+# /deployments volume, and triggers the host CDN receiver to publish the site.
+#
+# Relies on $WORKSPACE_ID being set in the container environment (injected at
+# provisioning time).
+# ============================================================================
+set -e
+
+if [ -z "${WORKSPACE_ID:-}" ]; then
+  echo "Error: WORKSPACE_ID is not set in the container environment." >&2
+  exit 1
+fi
+
+cd /workspace
+
+echo "Compiling Next.js production build..."
+if [ ! -d ".next" ]; then
+  if command -v pnpm >/dev/null 2>&1 && [ -f "pnpm-lock.yaml" ]; then
+    pnpm run build
+  else
+    npm run build
+  fi
+fi
+
+echo "Packaging build files..."
+# Package the build output, public assets and package manifest.
+TAR_TARGETS=".next package.json"
+[ -d public ] && TAR_TARGETS="$TAR_TARGETS public"
+tar -czf "/deployments/${WORKSPACE_ID}-build.tar.gz" $TAR_TARGETS
+
+echo "Triggering host edge CDN deployment..."
+if [ -x "/deployments/receive-deploy.sh" ]; then
+  /deployments/receive-deploy.sh "$WORKSPACE_ID"
+else
+  echo "Note: build tarball written to /deployments/${WORKSPACE_ID}-build.tar.gz (host receiver will publish it)."
+fi
+
+echo "Deployment finished successfully."

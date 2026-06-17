@@ -1,45 +1,12 @@
 import { NextResponse } from "next/server"
 import { isAdmin } from "@/lib/is-admin"
 
-const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
+// NOTE: The legacy single-runner proxy (proxyRunner -> :5050) has been removed.
+// The admin "Runner" surface now manages the Docker host + per-project
+// workspace containers directly over SSH via lib/admin/workspace-provision.ts.
 
 export async function assertAdmin() {
   return isAdmin()
-}
-
-export function runnerHeaders(extra?: HeadersInit) {
-  const headers = new Headers(extra)
-  headers.set("Content-Type", "application/json")
-  if (process.env.VPS_RUNNER_TOKEN) {
-    headers.set("Authorization", `Bearer ${process.env.VPS_RUNNER_TOKEN}`)
-  }
-  return headers
-}
-
-export async function proxyRunner(path: string, init?: RequestInit) {
-  try {
-    const response = await fetch(`${VPS_SERVER_URL}${path}`, {
-      ...init,
-      headers: runnerHeaders(init?.headers),
-    })
-
-    const text = await response.text()
-    return new Response(text || JSON.stringify({ success: response.ok }), {
-      status: response.status,
-      headers: {
-        "Content-Type": response.headers.get("content-type") || "application/json",
-      },
-    })
-  } catch {
-    return NextResponse.json(
-      {
-        success: false,
-        online: false,
-        error: "Runner API is unavailable",
-      },
-      { status: 503 },
-    )
-  }
 }
 
 export async function requireAdminResponse() {
@@ -47,4 +14,13 @@ export async function requireAdminResponse() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   return null
+}
+
+/** Extract optional custom-VM overrides from an admin request body. */
+export function parseVpsOverrides(body: any) {
+  const host = String(body?.host || "").trim()
+  const password = String(body?.rootPassword || body?.password || "")
+  const port = Number(body?.port || 22)
+  if (!host || !password) return undefined
+  return { host, password, port: Number.isFinite(port) ? port : 22, username: "root" }
 }
