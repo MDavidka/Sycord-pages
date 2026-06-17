@@ -231,6 +231,71 @@ export async function ensureWildcardDns(
 // Status
 // ---------------------------------------------------------------------------
 
+export type CloudflareCheck = {
+  ok: boolean
+  detail: string
+}
+
+export type CloudflareVerification = {
+  configured: boolean
+  authMode: "token" | "global-key"
+  account: CloudflareCheck
+  zone: CloudflareCheck & { zoneName?: string }
+  tunnel: CloudflareCheck & { tunnelId?: string; status?: string; connections?: number }
+}
+
+/**
+ * Independently verify each Cloudflare credential so the admin UI can show a
+ * precise reason instead of a generic "authentication error". Uses the account
+ * and zone GET endpoints (which work with both API tokens and Global API keys).
+ */
+export async function verifyCloudflareCredentials(): Promise<CloudflareVerification> {
+  const env = getCloudflareEnv()
+  if (!env) {
+    return {
+      configured: false,
+      authMode: "token",
+      account: { ok: false, detail: "CLOUDFLARE_API_KEY / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_ZONE_ID not all set" },
+      zone: { ok: false, detail: "Not checked — credentials missing" },
+      tunnel: { ok: false, detail: "Not checked — credentials missing" },
+    }
+  }
+
+  const authMode: "token" | "global-key" = env.apiEmail ? "global-key" : "token"
+
+  // 1. Account access
+  const accountRes = await cfFetch<{ id: string; name: string }>(env, `/accounts/${env.accountId}`)
+  const account: CloudflareCheck = accountRes.ok
+    ? { ok: true, detail: `Account "${accountRes.data?.result?.name || env.accountId}" accessible` }
+    : { ok: false, detail: accountRes.error || `Account ${env.accountId} not accessible (status ${accountRes.status})` }
+
+  // 2. Zone access
+  const zoneRes = await cfFetch<{ id: string; name: string }>(env, `/zones/${env.zoneId}`)
+  const zone: CloudflareVerification["zone"] = zoneRes.ok
+    ? { ok: true, detail: `Zone "${zoneRes.data?.result?.name}" accessible`, zoneName: zoneRes.data?.result?.name }
+    : { ok: false, detail: zoneRes.error || `Zone ${env.zoneId} not accessible (status ${zoneRes.status})` }
+
+  // 3. Existing tunnel (optional — absence is fine, setup will create it)
+  let tunnel: CloudflareVerification["tunnel"] = { ok: true, detail: "No tunnel yet — will be created during setup" }
+  if (account.ok) {
+    const existing = await findExistingTunnel(env, process.env.CLOUDFLARE_TUNNEL_NAME || "sycord-deployer")
+    if (existing) {
+      const status = await getTunnelApiStatus(env, existing.id)
+      tunnel = {
+        ok: true,
+        tunnelId: existing.id,
+        status: status?.status,
+        connections: status?.connections,
+        detail: status
+          ? `Tunnel ${existing.id.slice(0, 8)}… is ${status.status} (${status.connections} edge connections)`
+          : `Tunnel ${existing.id.slice(0, 8)}… exists`,
+      }
+    }
+  }
+
+  return { configured: true, authMode, account, zone, tunnel }
+}
+
 export async function getTunnelApiStatus(
   env: CloudflareEnv,
   tunnelId: string,

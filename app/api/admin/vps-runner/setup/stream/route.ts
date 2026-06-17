@@ -84,12 +84,15 @@ async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false, r
         send(stageEvent("ssh-check", "running", "Checking SSH connectivity to deploy VM"))
         const sshProbe = await probeDeployVmSsh(sshInput)
         if (!sshProbe.reachable) {
+          const hasHost = !!(process.env.VPS_HOST || process.env.VPS_SSH_HOST)
+          const hasPassword = !!(process.env.VPS_ROOT_PSW || process.env.VPS_SSH_ROOT_PASSWORD)
           send(stageEvent("ssh-check", "error", "SSH connection to deploy VM failed"))
           send(logEvent(`SSH error: ${sshProbe.error || "Unknown SSH error"}`))
+          send(logEvent(`Env presence: host=${hasHost ? "set" : "MISSING"}, password=${hasPassword ? "set" : "MISSING"}`))
           send(errorEvent(
-            sshInput
-              ? "SSH login failed. Check VM IP and root password."
-              : "Deploy VM SSH login failed. Check VPS_SSH_HOST and VPS_SSH_ROOT_PASSWORD.",
+            !hasHost || !hasPassword
+              ? "Deploy VM credentials are not set. Configure VPS_HOST + VPS_ROOT_PSW (or VPS_SSH_HOST + VPS_SSH_ROOT_PASSWORD) in the environment."
+              : `Deploy VM SSH login failed: ${sshProbe.error || "authentication rejected"}. Verify the root password and that password auth is enabled on the VM.`,
             "ssh-check"
           ))
           controller.close()

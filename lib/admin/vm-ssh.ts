@@ -563,6 +563,8 @@ export async function getTunnelStateFromDb(): Promise<{
   credentialsPath?: string
   baseDomain?: string
   host?: string
+  mode?: string
+  configuredAt?: Date
 } | null> {
   try {
     const client = await clientPromise
