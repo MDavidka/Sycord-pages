@@ -4,19 +4,12 @@ import {
   probeDeployVmSsh,
   readDeployVmDiagnostics,
   installCloudflared,
-  checkCloudflaredLogin,
-  startCloudflaredLogin,
-  pollCloudflaredCert,
-  createCloudflaredTunnel,
-  writeCloudflaredConfig,
-  installCloudflaredService,
+  runCloudflaredWithToken,
   getTunnelStatus,
   saveTunnelStateToDb,
-  getTunnelStateFromDb,
-  registerCloudflaredWildcardDns,
-  resetCloudflaredTunnel,
   type VmSetupInput,
 } from "@/lib/admin/vm-ssh"
+import { cloudflareConfigured, provisionTunnel, getTunnelApiStatus, getCloudflareEnv } from "@/lib/admin/cloudflare-api"
 import { proxyRunner, requireAdminResponse, runnerHeaders } from "../../_shared"
 
 const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
@@ -75,17 +68,6 @@ function defaultSshInput(): VmSetupInput | undefined {
   return undefined
 }
 
-async function getSshClient(sshInput?: VmSetupInput) {
-  const { NodeSSH } = await import("node-ssh")
-  const ssh = new NodeSSH()
-  const host = sshInput?.host || process.env.VPS_SSH_HOST
-  const password = sshInput?.password || process.env.VPS_SSH_ROOT_PASSWORD
-  const port = sshInput?.port || Number(process.env.VPS_SSH_PORT || "22")
-  if (!host || !password) throw new Error("Missing VM host or root password")
-  await ssh.connect({ host, username: "root", password, port })
-  return ssh
-}
-
 async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false, resetTunnel = false) {
   const runnerUrl = sshInput?.host
     ? `http://${sshInput.host}:5050`
@@ -102,12 +84,15 @@ async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false, r
         send(stageEvent("ssh-check", "running", "Checking SSH connectivity to deploy VM"))
         const sshProbe = await probeDeployVmSsh(sshInput)
         if (!sshProbe.reachable) {
+          const hasHost = !!(process.env.VPS_HOST || process.env.VPS_SSH_HOST)
+          const hasPassword = !!(process.env.VPS_ROOT_PSW || process.env.VPS_SSH_ROOT_PASSWORD)
           send(stageEvent("ssh-check", "error", "SSH connection to deploy VM failed"))
           send(logEvent(`SSH error: ${sshProbe.error || "Unknown SSH error"}`))
+          send(logEvent(`Env presence: host=${hasHost ? "set" : "MISSING"}, password=${hasPassword ? "set" : "MISSING"}`))
           send(errorEvent(
-            sshInput
-              ? "SSH login failed. Check VM IP and root password."
-              : "Deploy VM SSH login failed. Check VPS_SSH_HOST and VPS_SSH_ROOT_PASSWORD.",
+            !hasHost || !hasPassword
+              ? "Deploy VM credentials are not set. Configure VPS_HOST + VPS_ROOT_PSW (or VPS_SSH_HOST + VPS_SSH_ROOT_PASSWORD) in the environment."
+              : `Deploy VM SSH login failed: ${sshProbe.error || "authentication rejected"}. Verify the root password and that password auth is enabled on the VM.`,
             "ssh-check"
           ))
           controller.close()
@@ -213,137 +198,99 @@ async function runCloudflareSetup(
   controller: ReadableStreamDefaultController,
   reset = false,
 ) {
+  let ssh: any = null
   try {
-    const ssh = await getSshClient(sshInput)
+    // 1. Verify Cloudflare API credentials are present.
+    if (!cloudflareConfigured()) {
+      send(stageEvent("cloudflare-api", "error", "Cloudflare API not configured"))
+      send(logEvent("[cloudflare] Missing CLOUDFLARE_API_KEY / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_ZONE_ID"))
+      send(errorEvent(
+        "Cloudflare API is not configured. Set CLOUDFLARE_API_KEY, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ZONE_ID in the environment.",
+        "cloudflare-api",
+      ))
+      return
+    }
+
     const logs: string[] = []
     const emitLog = (line: string) => {
       logs.push(line)
       send(logEvent(line))
     }
 
-    if (reset) {
-      emitLog("[cloudflare] === FULL TUNNEL RESET ===")
-      const resetResult = await resetCloudflaredTunnel(ssh, baseDomain, logs)
-      if (!resetResult.success) {
-        send(stageEvent("cloudflare-error", "error", resetResult.error || "Reset failed"))
-        send(tunnelEvent("login-needed", { url: null }))
-        return
-      }
-      send(stageEvent("cloudflare-tunnel-reset", "success", "Tunnel reset and rebuilt successfully"))
-      send(tunnelEvent("status", { running: true, reset: true }))
-
-      await saveTunnelStateToDb(
-        sshInput?.host || process.env.VPS_SSH_HOST || "",
-        baseDomain,
-        resetResult.tunnelId || "",
-        resetResult.credentialsPath || "",
-      )
+    // 2. Provision the tunnel entirely via the Cloudflare API:
+    //    create/reuse tunnel -> wildcard ingress -> wildcard DNS. No browser login.
+    send(stageEvent("cloudflare-api", "running", "Provisioning Cloudflare Tunnel via API"))
+    const provision = await provisionTunnel(baseDomain, emitLog)
+    if (!provision.success || !provision.tunnel) {
+      send(stageEvent("cloudflare-api", "error", provision.error || "Tunnel provisioning failed"))
+      send(errorEvent(provision.error || "Failed to provision Cloudflare tunnel", "cloudflare-api"))
       return
     }
+    send(stageEvent("cloudflare-api", "success", `Tunnel ready: ${provision.tunnel.id.slice(0, 8)}...`))
+    send(stageEvent("cloudflare-dns", "success", `Wildcard DNS *.${baseDomain} pointed at the tunnel`))
 
-    const state = await getTunnelStateFromDb()
-    if (state?.configured) {
-      emitLog("[cloudflare] Existing tunnel configuration found, verifying...")
-      const status = await getTunnelStatus(ssh, logs)
-      if (status.running) {
-        send(stageEvent("cloudflare-check", "success", "Cloudflare Tunnel already running"))
-        send(tunnelEvent("status", { running: true, info: status.info, alreadySetup: true }))
-        ssh.dispose()
-        return
-      }
-      emitLog("[cloudflare] Tunnel not running — reconfiguring...")
-    }
+    // 3. Install + run the token-based cloudflared service on the VM.
+    send(stageEvent("cloudflare-service", "running", reset ? "Reinstalling cloudflared service on VM" : "Installing cloudflared service on VM"))
+    const { NodeSSH } = await import("node-ssh")
+    ssh = new NodeSSH()
+    const host = sshInput?.host || process.env.VPS_SSH_HOST || process.env.VPS_HOST
+    const password = sshInput?.password || process.env.VPS_SSH_ROOT_PASSWORD || process.env.VPS_ROOT_PSW
+    const port = sshInput?.port || Number(process.env.VPS_SSH_PORT || "22")
+    if (!host || !password) throw new Error("Missing VM host or root password")
+    await ssh.connect({ host, username: process.env.VPS_USERNAME || "root", password, port })
 
-    send(stageEvent("cloudflare-install", "running", "Installing cloudflared"))
     const installed = await installCloudflared(ssh, logs)
+    logs.slice(-5).forEach((l) => send(logEvent(l)))
     if (!installed) {
-      send(stageEvent("cloudflare-install", "error", "Failed to install cloudflared"))
-      ssh.dispose()
+      send(stageEvent("cloudflare-service", "error", "Failed to install cloudflared binary"))
+      send(errorEvent("Failed to install cloudflared on the VM", "cloudflare-service"))
       return
     }
-    send(stageEvent("cloudflare-install", "success", "Cloudflared installed"))
 
-    const { loggedIn } = await checkCloudflaredLogin(ssh, logs)
-    if (!loggedIn) {
-      send(stageEvent("cloudflare-auth", "running", "Starting Cloudflare authentication"))
-      const login = await startCloudflaredLogin(ssh, logs)
-      if (login.loginUrl) {
-        send(tunnelEvent("login-needed", { url: login.loginUrl }))
-        send(logEvent(`[cloudflare] Open this URL to authenticate: ${login.loginUrl}`))
-        send(stageEvent("cloudflare-auth", "running", "Waiting for Cloudflare authentication — open the link shown above"))
+    const run = await runCloudflaredWithToken(ssh, provision.tunnel.token, logs)
+    logs.slice(-8).forEach((l) => send(logEvent(l)))
+    if (!run.success) {
+      send(stageEvent("cloudflare-service", "error", run.error || "cloudflared service failed to start"))
+      send(errorEvent(run.error || "cloudflared service failed to start", "cloudflare-service"))
+      return
+    }
+    send(stageEvent("cloudflare-service", "success", "cloudflared running 24/7 via systemd"))
 
-        let certReady = false
-        for (let i = 0; i < 90; i++) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          const { ready } = await pollCloudflaredCert(ssh, logs)
-          if (ready) {
-            certReady = true
-            break
-          }
-          if (i % 3 === 0) {
-            send(logEvent(`[cloudflare] Waiting for browser authentication... (${Math.round((i + 1) * 2)}s elapsed)`))
-          }
-          // Every 15 seconds, send a keepalive so the connection doesn't timeout
-          if (i % 7 === 0 && i > 0) {
-            send(tunnelEvent("polling", { elapsed: Math.round((i + 1) * 2) }))
-          }
-        }
-
-        if (!certReady) {
-          send(stageEvent("cloudflare-auth", "error", "Authentication timed out — retry setup"))
-          send(tunnelEvent("login-timeout", { message: "Cloudflare authentication timed out after 120s. Re-run setup to try again." }))
-          ssh.dispose()
-          return
-        }
+    // 4. Verify edge connectivity through the Cloudflare API.
+    send(stageEvent("cloudflare-verify", "running", "Verifying tunnel connections to Cloudflare edge"))
+    let apiStatus: { status: string; connections: number } | null = null
+    const env = getCloudflareEnv()
+    if (env) {
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 2000))
+        apiStatus = await getTunnelApiStatus(env, provision.tunnel.id)
+        if (apiStatus && (apiStatus.status === "healthy" || apiStatus.connections > 0)) break
       }
-      send(stageEvent("cloudflare-auth", "success", "Cloudflare authenticated"))
     }
+    const cliStatus = await getTunnelStatus(ssh, logs).catch(() => ({ running: false, info: "" }))
+    const healthy = (apiStatus?.connections ?? 0) > 0 || apiStatus?.status === "healthy" || cliStatus.running
+    send(stageEvent(
+      "cloudflare-verify",
+      healthy ? "success" : "error",
+      healthy
+        ? `Tunnel healthy (${apiStatus?.connections ?? 0} edge connections)`
+        : "Tunnel installed but no edge connections yet — check VM firewall (outbound 7844)",
+    ))
+    send(tunnelEvent("status", {
+      running: healthy,
+      tunnelId: provision.tunnel.id,
+      connections: apiStatus?.connections ?? 0,
+      mode: "api",
+    }))
 
-    send(stageEvent("cloudflare-tunnel", "running", "Creating Cloudflare Tunnel"))
-    const tunnel = await createCloudflaredTunnel(ssh, logs)
-    if (!tunnel) {
-      send(stageEvent("cloudflare-tunnel", "error", "Failed to create tunnel"))
-      ssh.dispose()
-      return
-    }
-    send(stageEvent("cloudflare-tunnel", "success", `Tunnel created: ${tunnel.tunnelId.slice(0, 8)}...`))
-
-    send(stageEvent("cloudflare-config", "running", "Writing Cloudflare config"))
-    const configOk = await writeCloudflaredConfig(ssh, tunnel.tunnelId, tunnel.credentialsPath, baseDomain, logs)
-    if (!configOk) {
-      send(stageEvent("cloudflare-config", "error", "Failed to write config"))
-      ssh.dispose()
-      return
-    }
-    send(stageEvent("cloudflare-config", "success", "Config written"))
-
-    send(stageEvent("cloudflare-dns", "running", `Registering wildcard DNS *.${baseDomain}...`))
-    const dnsResult = await registerCloudflaredWildcardDns(ssh, tunnel.tunnelId, baseDomain, logs)
-    if (dnsResult.success) {
-      send(stageEvent("cloudflare-dns", "success", `Wildcard DNS *.${baseDomain} registered`))
-    } else {
-      send(stageEvent("cloudflare-dns", "error", `DNS registration: ${dnsResult.detail}`))
-    }
-
-    send(stageEvent("cloudflare-service", "running", "Installing and starting Cloudflare service"))
-    const serviceOk = await installCloudflaredService(ssh, logs)
-    if (serviceOk) {
-      send(stageEvent("cloudflare-service", "success", "Cloudflare Tunnel service running 24/7"))
-      send(tunnelEvent("status", { running: true, info: "Tunnel active" }))
-    } else {
-      send(stageEvent("cloudflare-service", "error", "Service install failed — check logs"))
-    }
-
-    await saveTunnelStateToDb(
-      sshInput?.host || process.env.VPS_SSH_HOST || "",
-      baseDomain,
-      tunnel.tunnelId,
-      tunnel.credentialsPath,
-    )
-
-    ssh.dispose()
+    // 5. Persist state.
+    await saveTunnelStateToDb(host, baseDomain, provision.tunnel.id)
   } catch (err: any) {
     send(logEvent(`[cloudflare] Setup error: ${err?.message || "Unknown"}`))
     send(stageEvent("cloudflare-error", "error", err?.message || "Cloudflare setup failed"))
+  } finally {
+    if (ssh) {
+      try { ssh.dispose() } catch {}
+    }
   }
 }

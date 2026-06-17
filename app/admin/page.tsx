@@ -63,6 +63,7 @@ import {
   Play,
   Square,
   RefreshCw,
+  Wrench,
   CheckCircle2,
   XCircle,
 } from "lucide-react"
@@ -124,17 +125,13 @@ export default function AdminPage() {
   const [privacyPolicy, setPrivacyPolicy] = useState("Edit your privacy policy here...")
   const [termsOfService, setTermsOfService] = useState("Edit your terms of service here...")
 
-  // Deployer Setup State
-  const [deployerHost, setDeployerHost] = useState("")
-  const [deployerUsername, setDeployerUsername] = useState("root")
-  const [deployerPassword, setDeployerPassword] = useState("")
+  // Deployer Setup State (env-driven — no on-screen credentials)
   const [deployerSetupRunning, setDeployerSetupRunning] = useState(false)
   const [deployerSetupLogs, setDeployerSetupLogs] = useState<string[]>([])
   const [deployerSetupResult, setDeployerSetupResult] = useState<any>(null)
   const [deployerSetupError, setDeployerSetupError] = useState<string | null>(null)
-  const [deployerDebugInfo, setDeployerDebugInfo] = useState<any>(null)
-  const [deployerDebugLoading, setDeployerDebugLoading] = useState(false)
-  const [tunnelLoginUrl, setTunnelLoginUrl] = useState<string | null>(null)
+  const [preflight, setPreflight] = useState<any>(null)
+  const [preflightLoading, setPreflightLoading] = useState(false)
   const [tunnelStatus, setTunnelStatus] = useState<string | null>(null)
   const [skipCloudflare, setSkipCloudflare] = useState(false)
 
@@ -344,31 +341,24 @@ export default function AdminPage() {
   const blockedCount = users.filter(u => u.isBlocked).length
 
   // Deployer setup functions
-  const fetchDeployerDebug = async () => {
-    setDeployerDebugLoading(true)
-    setDeployerDebugInfo(null)
+  const fetchPreflight = async () => {
+    setPreflightLoading(true)
     try {
-      const res = await fetch("/api/debug", { headers: { Accept: "application/json" } })
+      const res = await fetch("/api/admin/vps-runner/preflight", { headers: { Accept: "application/json" } })
       const data = await res.json()
-      setDeployerDebugInfo(data)
+      setPreflight(data)
     } catch (err: any) {
-      setDeployerDebugInfo({ error: err?.message || "Debug request failed" })
+      setPreflight({ error: err?.message || "Preflight request failed" })
     } finally {
-      setDeployerDebugLoading(false)
+      setPreflightLoading(false)
     }
   }
 
   const runDeployerSetup = async (reset = false) => {
-    if (!deployerHost || !deployerPassword) {
-      toast.error("Please enter the VPS host and root password")
-      return
-    }
-
     setDeployerSetupRunning(true)
     setDeployerSetupLogs([])
     setDeployerSetupResult(null)
     setDeployerSetupError(null)
-    setTunnelLoginUrl(null)
     setTunnelStatus(null)
 
     try {
@@ -376,9 +366,6 @@ export default function AdminPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          host: deployerHost,
-          rootPassword: deployerPassword,
-          port: 22,
           baseDomain: "sycord.site",
           skipCloudflare,
           resetTunnel: reset,
@@ -413,16 +400,8 @@ export default function AdminPage() {
               setDeployerSetupResult(data)
               toast.success("Deployer setup completed")
             } else if (eventType === "tunnel") {
-              if (data.type === "login-needed") {
-                setTunnelLoginUrl(data.url)
-                toast.info("Cloudflare authentication required — open the link below")
-              } else if (data.type === "login-timeout") {
-                setTunnelLoginUrl(null)
-                setTunnelStatus("timeout")
-                toast.error("Cloudflare authentication timed out")
-              } else if (data.type === "status") {
+              if (data.type === "status") {
                 setTunnelStatus(data.running ? "active" : "inactive")
-                setTunnelLoginUrl(null)
                 if (data.reset) {
                   toast.success("Tunnel reset and rebuilt successfully")
                   setDeployerSetupResult({ success: true, reset: true })
@@ -440,6 +419,7 @@ export default function AdminPage() {
       toast.error(err?.message || "Setup failed")
     } finally {
       setDeployerSetupRunning(false)
+      fetchPreflight()
     }
   }
 
@@ -449,6 +429,13 @@ export default function AdminPage() {
     const tab = searchParams.get("tab")
     if (tab && tabs.some((item) => item.id === tab)) setActiveTab(tab as TabId)
   }, [searchParams])
+
+  useEffect(() => {
+    if (activeTab === "deployer" && !preflight && !preflightLoading) {
+      fetchPreflight()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
   return (
     <div className="min-h-screen bg-[#101010]">
       {/* Header */}
@@ -941,134 +928,183 @@ export default function AdminPage() {
             </div>
 
             <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <Monitor className="h-4 w-4 text-purple-400" />
-                <h3 className="text-sm font-semibold text-white">VPS Configuration</h3>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Monitor className="h-4 w-4 text-purple-400" />
+                  <h3 className="text-sm font-semibold text-white">Deployer Status</h3>
+                </div>
+                <Button
+                  onClick={fetchPreflight}
+                  disabled={preflightLoading}
+                  variant="ghost"
+                  size="sm"
+                  className="text-white/60 hover:text-white hover:bg-white/10 rounded-xl text-xs"
+                >
+                  <RotateCcw className={`h-3.5 w-3.5 mr-1.5 ${preflightLoading ? "animate-spin" : ""}`} />
+                  {preflightLoading ? "Checking..." : "Refresh"}
+                </Button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-white/70">VPS Host</label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., 192.168.1.100 or server.example.com"
-                      value={deployerHost}
-                      onChange={(e) => setDeployerHost(e.target.value)}
-                      className="bg-black/40 border-white/10 text-white placeholder:text-white/30 rounded-xl"
-                    />
+              <p className="text-[11px] text-white/40">
+                All credentials are read from the server environment — no IP or root password needed here.
+                Run setup once the checks below are green.
+              </p>
+
+              {/* Overall readiness banner */}
+              {preflight && !preflight.error && (
+                <div className={`rounded-xl border p-3 flex items-center gap-2 ${
+                  preflight.ready ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10"
+                }`}>
+                  {preflight.ready ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-amber-400" />
+                  )}
+                  <span className={`text-xs font-medium ${preflight.ready ? "text-emerald-200" : "text-amber-200"}`}>
+                    {preflight.ready
+                      ? "All credentials verified — ready to run setup"
+                      : "Some checks need attention before setup will succeed"}
+                  </span>
+                </div>
+              )}
+
+              {/* Granular checks */}
+              {preflight && !preflight.error && (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {/* Environment variables */}
+                  <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4 space-y-2">
+                    <h4 className="text-xs font-semibold text-white/70 uppercase tracking-wider mb-1">Environment</h4>
+                    {[
+                      { label: "VM host", c: preflight.env?.vpsHost?.ok, d: preflight.env?.vpsHost?.source ? `${preflight.env.vpsHost.source} = ${preflight.env.vpsHost.value}` : "not set (VPS_HOST / VPS_SSH_HOST)" },
+                      { label: "VM root password", c: preflight.env?.vpsPassword?.ok, d: preflight.env?.vpsPassword?.source || "not set (VPS_ROOT_PSW / VPS_SSH_ROOT_PASSWORD)" },
+                      { label: "CLOUDFLARE_API_KEY", c: preflight.env?.cloudflareApiKey?.ok, d: preflight.env?.cloudflareApiKey?.ok ? "set" : "not set" },
+                      { label: "CLOUDFLARE_ACCOUNT_ID", c: preflight.env?.cloudflareAccountId?.ok, d: preflight.env?.cloudflareAccountId?.ok ? "set" : "not set" },
+                      { label: "CLOUDFLARE_ZONE_ID", c: preflight.env?.cloudflareZoneId?.ok, d: preflight.env?.cloudflareZoneId?.ok ? "set" : "not set" },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-start gap-2">
+                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${row.c ? "bg-emerald-500" : "bg-red-500"}`} />
+                        <div className="min-w-0">
+                          <p className="text-xs text-white/80">{row.label}</p>
+                          <p className="text-[10px] text-white/40 font-mono truncate">{row.d}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-white/70">SSH Username</label>
-                    <Input
-                      type="text"
-                      placeholder="root"
-                      value={deployerUsername}
-                      onChange={(e) => setDeployerUsername(e.target.value)}
-                      className="bg-black/40 border-white/10 text-white placeholder:text-white/30 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-white/70">Root Password</label>
-                    <Input
-                      type="password"
-                      placeholder="Root password for SSH"
-                      value={deployerPassword}
-                      onChange={(e) => setDeployerPassword(e.target.value)}
-                      className="bg-black/40 border-white/10 text-white placeholder:text-white/30 rounded-xl"
-                    />
+
+                  {/* Connectivity + Cloudflare */}
+                  <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4 space-y-2">
+                    <h4 className="text-xs font-semibold text-white/70 uppercase tracking-wider mb-1">Connectivity</h4>
+                    {[
+                      { label: "SSH to VM", c: preflight.ssh?.ok, d: preflight.ssh?.detail },
+                      { label: `Cloudflare account (${preflight.cloudflare?.authMode || "token"})`, c: preflight.cloudflare?.account?.ok, d: preflight.cloudflare?.account?.detail },
+                      { label: "Cloudflare zone", c: preflight.cloudflare?.zone?.ok, d: preflight.cloudflare?.zone?.detail },
+                      { label: "Cloudflare tunnel", c: preflight.cloudflare?.tunnel?.ok, d: preflight.cloudflare?.tunnel?.detail },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-start gap-2">
+                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${row.c ? "bg-emerald-500" : "bg-red-500"}`} />
+                        <div className="min-w-0">
+                          <p className="text-xs text-white/80">{row.label}</p>
+                          <p className="text-[10px] text-white/40 font-mono break-words">{row.d}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {preflight.diagnostics && (
+                      <div className="pt-2 mt-2 border-t border-white/5 space-y-2">
+                        {[
+                          { label: "Runner :5050", c: preflight.checks?.runnerRunning },
+                          { label: "Nginx :80", c: preflight.checks?.nginxRunning },
+                          { label: "cloudflared service", c: preflight.checks?.cloudflaredRunning },
+                        ].map((row) => (
+                          <div key={row.label} className="flex items-center gap-2">
+                            <div className={`h-2 w-2 rounded-full shrink-0 ${row.c ? "bg-emerald-500" : "bg-zinc-600"}`} />
+                            <p className="text-xs text-white/70">{row.label}: <span className={row.c ? "text-emerald-300" : "text-zinc-500"}>{row.c ? "active" : "down"}</span></p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
+              )}
 
-                <div className="space-y-3">
-                  <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
-                    <h4 className="text-sm font-medium text-white/70 mb-3">Quick Actions</h4>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={fetchDeployerDebug}
-                        disabled={deployerDebugLoading}
-                        variant="outline"
-                        className="border-white/10 text-white hover:bg-white/10 rounded-xl text-xs"
-                      >
-                        {deployerDebugLoading ? "Loading..." : "Check Connection"}
-                      </Button>
-                      <Button
-                        onClick={() => runDeployerSetup(false)}
-                        disabled={deployerSetupRunning || !deployerHost || !deployerPassword}
-                        className="bg-purple-600 hover:bg-purple-700 rounded-xl text-xs"
-                      >
-                        {deployerSetupRunning ? "Running..." : "Run Setup"}
-                      </Button>
-                      <Button
-                        onClick={() => { if (confirm("This will delete and recreate the Cloudflare tunnel. Continue?")) runDeployerSetup(true) }}
-                        disabled={deployerSetupRunning || !deployerHost || !deployerPassword}
-                        variant="outline"
-                        className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl text-xs"
-                      >
-                        Reset Tunnel
-                      </Button>
-                    </div>
-                    <label className="flex items-center gap-2 mt-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={skipCloudflare}
-                        onChange={(e) => setSkipCloudflare(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded border-white/20 bg-black/40"
-                      />
-                      <span className="text-[11px] text-white/50">Skip Cloudflare Tunnel setup</span>
-                    </label>
-                  </div>
-
-                  {tunnelLoginUrl && (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="animate-pulse h-2 w-2 rounded-full bg-amber-500" />
-                        <span className="text-xs font-medium text-amber-200">Cloudflare Auth Required</span>
-                      </div>
-                      <p className="text-xs text-amber-100/80 mb-2">
-                        Open the link below in a new tab and authorize the Cloudflare Tunnel. The setup will continue automatically.
-                      </p>
-                      <a
-                        href={tunnelLoginUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg font-medium"
-                      >
-                        Open Authentication Page
-                      </a>
-                      <p className="text-[10px] text-amber-100/50 mt-2 truncate">{tunnelLoginUrl}</p>
-                    </div>
-                  )}
-
-                  {tunnelStatus === "active" && (
-                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                      <span className="text-xs text-emerald-200">Cloudflare Tunnel connected</span>
-                    </div>
-                  )}
-
-                  {tunnelStatus === "timeout" && (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
-                      <div className="flex items-center gap-2 mb-1">
-                        <XCircle className="h-4 w-4 text-red-400" />
-                        <span className="text-xs text-red-200">Auth timed out — click Run Setup to retry</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {deployerDebugInfo && (
-                    <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4 max-h-48 overflow-y-auto">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className={`h-2 w-2 rounded-full ${deployerDebugInfo.vps?.sshReachable ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-xs font-medium text-white/70">Connection Status</span>
-                      </div>
-                      <pre className="text-[10px] text-white/50 font-mono whitespace-pre-wrap">
-                        {JSON.stringify(deployerDebugInfo, null, 2)}
-                      </pre>
-                    </div>
-                  )}
+              {preflight?.error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+                  Preflight failed: {preflight.error}
                 </div>
+              )}
+
+              {/* Actions */}
+              <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
+                <h4 className="text-sm font-medium text-white/70 mb-3">Actions</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => runDeployerSetup(false)}
+                    disabled={deployerSetupRunning}
+                    className="bg-purple-600 hover:bg-purple-700 rounded-xl text-xs"
+                  >
+                    {deployerSetupRunning ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5 mr-1.5" />}
+                    {deployerSetupRunning ? "Running..." : "Run Setup"}
+                  </Button>
+                  <Button
+                    onClick={() => { if (confirm("This will reinstall the Cloudflare tunnel service on the VM. Continue?")) runDeployerSetup(true) }}
+                    disabled={deployerSetupRunning}
+                    variant="outline"
+                    className="border-red-500/30 text-red-300 hover:bg-red-500/10 rounded-xl text-xs"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                    Reset Tunnel
+                  </Button>
+                </div>
+                <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={skipCloudflare}
+                    onChange={(e) => setSkipCloudflare(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-white/20 bg-black/40"
+                  />
+                  <span className="text-[11px] text-white/50">Skip Cloudflare Tunnel setup (runner only)</span>
+                </label>
               </div>
+
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Cloud className="h-4 w-4 text-blue-300" />
+                  <span className="text-xs font-medium text-blue-200">Cloudflare Tunnel (automatic)</span>
+                </div>
+                <p className="text-[11px] text-blue-100/70 leading-relaxed">
+                  The tunnel is provisioned automatically through the Cloudflare API — no browser
+                  login required. Setup creates one named tunnel, points <span className="font-mono">*.sycord.site</span>{" "}
+                  at it, and runs cloudflared on the VM as a 24/7 service. Every deployed project is then
+                  reachable at <span className="font-mono">&lt;project&gt;.sycord.site</span>.
+                </p>
+              </div>
+
+              {tunnelStatus === "active" && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <span className="text-xs text-emerald-200">Cloudflare Tunnel connected</span>
+                </div>
+              )}
+
+              {tunnelStatus === "inactive" && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs text-amber-200">
+                      Tunnel installed but no edge connections yet — check the VM can reach Cloudflare on outbound port 7844.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Raw debug */}
+              {preflight && (
+                <details className="rounded-xl border border-white/[0.08] bg-black/20 p-4">
+                  <summary className="text-xs font-medium text-white/60 cursor-pointer select-none">Raw preflight JSON</summary>
+                  <pre className="text-[10px] text-white/50 font-mono whitespace-pre-wrap mt-3 max-h-64 overflow-y-auto">
+                    {JSON.stringify(preflight, null, 2)}
+                  </pre>
+                </details>
+              )}
             </div>
 
             {/* Setup Logs */}

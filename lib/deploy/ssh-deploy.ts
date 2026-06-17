@@ -76,10 +76,12 @@ export function generateSshKeyPair(): { privateKey: string; publicKey: string } 
 }
 
 function getVpsConfig(): { host: string; username: string; password: string; port: number } {
-  const host = process.env.VPS_HOST
+  // Accept both env var naming schemes so the per-project deploy path and the
+  // admin setuper (lib/admin/vm-ssh.ts) always target the same VM.
+  const host = process.env.VPS_HOST || process.env.VPS_SSH_HOST
   const username = process.env.VPS_USERNAME || "root"
-  const password = process.env.VPS_ROOT_PSW
-  const port = 22
+  const password = process.env.VPS_ROOT_PSW || process.env.VPS_SSH_ROOT_PASSWORD
+  const port = Number(process.env.VPS_SSH_PORT || "22")
 
   if (!host || !password) {
     throw new Error("VPS_HOST and VPS_ROOT_PSW environment variables are required")
@@ -90,10 +92,10 @@ function getVpsConfig(): { host: string; username: string; password: string; por
 
 export function getVpsDebugInfo(): Record<string, unknown> {
   return {
-    host: process.env.VPS_HOST || "not set",
+    host: process.env.VPS_HOST || process.env.VPS_SSH_HOST || "not set",
     username: process.env.VPS_USERNAME || "root",
-    passwordConfigured: !!process.env.VPS_ROOT_PSW,
-    port: 22,
+    passwordConfigured: !!(process.env.VPS_ROOT_PSW || process.env.VPS_SSH_ROOT_PASSWORD),
+    port: Number(process.env.VPS_SSH_PORT || "22"),
   }
 }
 
@@ -516,60 +518,58 @@ async function ensurePm2Startup(ssh: NodeSSH): Promise<void> {
   await ssh.execCommand("pm2 save 2>&1 || true")
 }
 
+/**
+ * With the API-managed tunnel, all `*.<baseDomain>` traffic is already routed
+ * to this VM's nginx (:80) via the wildcard ingress + wildcard DNS created by
+ * the admin setuper. So a freshly deployed `<project>.<baseDomain>` is reachable
+ * immediately once its nginx vhost exists — no per-host CLI command is needed
+ * (and the old `cloudflared tunnel route dns` CLI cannot work with token-based
+ * tunnels because there is no local cert.pem).
+ *
+ * As an optional belt-and-suspenders, if the Cloudflare API is configured we
+ * also ensure an explicit per-host CNAME exists (harmless; the wildcard already
+ * covers it). We then confirm the cloudflared service is running on the VM.
+ */
 async function updateCloudflareTunnelRoute(
   ssh: NodeSSH,
   hostname: string,
-  port: number,
+  _port: number,
 ): Promise<{ updated: boolean; detail: string }> {
   try {
-    // Discover the actual tunnel name/ID from config files — cloudflared may
-    // read from /etc/cloudflared/config.yml OR ~/.cloudflared/<id>.yml
-    const configFiles = await ssh.execCommand(
-      "cat /etc/cloudflared/config.yml 2>/dev/null; " +
-      "cat /root/.cloudflared/config.yml 2>/dev/null; " +
-      "ls /root/.cloudflared/*.json 2>/dev/null | head -5; " +
-      "cloudflared tunnel list --output json 2>/dev/null || echo 'NO_LIST'"
-    )
-    let tunnelName = ""
-
-    // Try parsing from config files
-    const lines = configFiles.stdout.split("\n")
-    for (const line of lines) {
-      const m = line.match(/^tunnel:\s*(\S+)/)
-      if (m) { tunnelName = m[1]; break }
+    // Make sure the tunnel daemon is up so traffic can flow.
+    const serviceCheck = await ssh.execCommand("systemctl is-active cloudflared 2>&1 || echo 'inactive'")
+    const running = serviceCheck.stdout.includes("active")
+    if (!running) {
+      await ssh.execCommand("systemctl restart cloudflared 2>&1 || true")
     }
 
-    // If still not found, try cloudflared tunnel list JSON
-    if (!tunnelName && configFiles.stdout.includes('"id"')) {
-      try {
-        const idx = configFiles.stdout.indexOf('[')
-        if (idx >= 0) {
-          const tunnels = JSON.parse(configFiles.stdout.slice(idx))
-          if (Array.isArray(tunnels) && tunnels.length > 0) {
-            tunnelName = tunnels[0].id || tunnels[0].name
-          }
+    // Optionally ensure an explicit per-host DNS record via the Cloudflare API.
+    try {
+      const { getCloudflareEnv, ensureTunnelDns } = await import("@/lib/admin/cloudflare-api")
+      const { getTunnelStateFromDb } = await import("@/lib/admin/vm-ssh")
+      const env = getCloudflareEnv()
+      const state = await getTunnelStateFromDb()
+      if (env && state?.tunnelId) {
+        const dns = await ensureTunnelDns(env, hostname, state.tunnelId)
+        return {
+          updated: dns.ok,
+          detail: dns.ok
+            ? `Reachable via wildcard tunnel; per-host DNS ${dns.created ? "created" : "verified"} for ${hostname}`
+            : `Wildcard tunnel handles routing (per-host DNS skipped: ${dns.error})`,
         }
-      } catch {}
+      }
+    } catch {
+      /* API not available — wildcard still covers the host */
     }
-
-    if (!tunnelName) {
-      return { updated: false, detail: "No cloudflare tunnel found — run Setup Deployer first" }
-    }
-
-    // Try route DNS with the discovered tunnel name
-    const routeResult = await ssh.execCommand(`cloudflared tunnel route dns ${tunnelName} ${hostname} 2>&1`)
-    const routeOut = routeResult.stdout + routeResult.stderr
-
-    const ok = routeResult.code === 0 || routeOut.includes("already exists") || routeOut.includes("added") || routeOut.includes("SUCCESS")
 
     return {
-      updated: ok,
-      detail: ok
-        ? `DNS route added for ${hostname} via tunnel ${tunnelName.slice(0, 8)}...`
-        : `Route DNS failed: ${routeOut.trim().slice(0, 200)}`,
+      updated: running,
+      detail: running
+        ? `Reachable via wildcard tunnel (*.${hostname.split(".").slice(1).join(".")} → nginx)`
+        : "cloudflared service was not active — restarted it; run Setup Deployer if the site stays unreachable",
     }
   } catch (err: any) {
-    return { updated: false, detail: err?.message || "Tunnel route command failed" }
+    return { updated: false, detail: err?.message || "Tunnel route check failed" }
   }
 }
 
