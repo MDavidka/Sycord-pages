@@ -4,6 +4,16 @@ import {
   generateRunnerToken,
   probeDeployVmSsh,
   readDeployVmDiagnostics,
+  installCloudflared,
+  checkCloudflaredLogin,
+  startCloudflaredLogin,
+  pollCloudflaredCert,
+  createCloudflaredTunnel,
+  writeCloudflaredConfig,
+  installCloudflaredService,
+  getTunnelStatus,
+  saveTunnelStateToDb,
+  getTunnelStateFromDb,
   type VmSetupInput,
 } from "@/lib/admin/vm-ssh"
 import { proxyRunner, requireAdminResponse, runnerHeaders } from "../../_shared"
@@ -30,15 +40,17 @@ function errorEvent(error: string, stage?: string) {
   return event(`event: error\ndata: ${JSON.stringify({ error, stage, timestamp: new Date().toISOString() })}`)
 }
 
-// Legacy GET endpoint - uses env vars
+function tunnelEvent(type: string, data: Record<string, unknown>) {
+  return event(`event: tunnel\ndata: ${JSON.stringify({ type, ...data, timestamp: new Date().toISOString() })}`)
+}
+
 export async function GET() {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
 
-  return runSetupStream()
+  return runSetupStream(defaultSshInput())
 }
 
-// New POST endpoint - accepts user-provided credentials
 export async function POST(request: Request) {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
@@ -48,31 +60,48 @@ export async function POST(request: Request) {
   const password = String(body.rootPassword || body.password || "")
   const port = Number(body.port || 22)
   const baseDomain = String(body.baseDomain || "sycord.site").trim()
+  const skipCloudflare = body.skipCloudflare === true
 
-  // If credentials provided, use them; otherwise fall back to env vars
   const sshInput: VmSetupInput | undefined = host && password
     ? { host, password, port, baseDomain, runnerToken: generateRunnerToken() }
     : undefined
 
-  return runSetupStream(sshInput)
+  return runSetupStream(sshInput, skipCloudflare)
 }
 
-async function runSetupStream(sshInput?: VmSetupInput) {
+function defaultSshInput(): VmSetupInput | undefined {
+  return undefined
+}
+
+async function getSshClient(sshInput?: VmSetupInput) {
+  const { NodeSSH } = await import("node-ssh")
+  const ssh = new NodeSSH()
+  const host = sshInput?.host || process.env.VPS_SSH_HOST
+  const password = sshInput?.password || process.env.VPS_SSH_ROOT_PASSWORD
+  const port = sshInput?.port || Number(process.env.VPS_SSH_PORT || "22")
+  if (!host || !password) throw new Error("Missing VM host or root password")
+  await ssh.connect({ host, username: "root", password, port })
+  return ssh
+}
+
+async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false) {
   const runnerUrl = sshInput?.host
     ? `http://${sshInput.host}:5050`
     : VPS_SERVER_URL
 
+  const baseDomain = sshInput?.baseDomain || "sycord.site"
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (data: Uint8Array) => controller.enqueue(data)
+      let ssh: any = null
 
       try {
         send(stageEvent("ssh-check", "running", "Checking SSH connectivity to deploy VM"))
-
-        const ssh = await probeDeployVmSsh(sshInput)
-        if (!ssh.reachable) {
+        const sshProbe = await probeDeployVmSsh(sshInput)
+        if (!sshProbe.reachable) {
           send(stageEvent("ssh-check", "error", "SSH connection to deploy VM failed"))
-          send(logEvent(`SSH error: ${ssh.error || "Unknown SSH error"}`))
+          send(logEvent(`SSH error: ${sshProbe.error || "Unknown SSH error"}`))
           send(errorEvent(
             sshInput
               ? "SSH login failed. Check VM IP and root password."
@@ -82,54 +111,42 @@ async function runSetupStream(sshInput?: VmSetupInput) {
           controller.close()
           return
         }
-        send(stageEvent("ssh-check", "success", "SSH connection to deploy VM established"))
-        send(logEvent("Root SSH access to deploy VM confirmed"))
-        if (sshInput?.host) {
-          send(logEvent(`Connected to VM at ${sshInput.host}:${sshInput.port || 22}`))
-        }
+        send(stageEvent("ssh-check", "success", "SSH connection established"))
+        if (sshInput?.host) send(logEvent(`Connected to VM at ${sshInput.host}:${sshInput.port || 22}`))
 
-        // Try to reach the runner API first
-        send(stageEvent("runner-check", "running", "Checking if runner API is already online"))
+        send(stageEvent("runner-check", "running", "Checking if runner API is online"))
         const runnerCheck = await fetch(`${runnerUrl}/api/status`, {
           headers: runnerHeaders({ Accept: "application/json" }),
         }).catch(() => null)
 
         if (runnerCheck?.ok) {
           const status = await runnerCheck.json().catch(() => ({}))
-          send(stageEvent("runner-check", "success", "Runner API is online - running setup scripts on VM"))
-          send(logEvent("Runner API reachable, triggering setup via API"))
+          send(stageEvent("runner-check", "success", "Runner API already online"))
+          send(logEvent("Runner reachable — skipping full bootstrap"))
 
-          const setupRes = await fetch(`${runnerUrl}/api/setup`, {
-            method: "POST",
-            headers: runnerHeaders(),
-          }).catch(() => null)
-
-          if (setupRes?.ok) {
-            const data = await setupRes.json().catch(() => ({}))
-            for (const line of (data?.logs || "").split("\n").filter(Boolean)) {
-              send(logEvent(line))
-            }
-            send(stageEvent("setup", "success", "Runner setup completed"))
-            send(resultEvent({
-              success: true,
-              online: true,
-              setupComplete: true,
-              nginx: data.nginx || { running: true },
-              runner: data.runner || { running: true },
-              cloudflared: data.cloudflared || { running: true },
-              runnerUrl,
-              runnerToken: sshInput?.runnerToken,
-              baseDomain: sshInput?.baseDomain,
-            }))
-            controller.close()
-            return
+          if (!skipCloudflare) {
+            send(stageEvent("cloudflare-check", "running", "Setting up Cloudflare Tunnel"))
+            await runCloudflareSetup(sshInput, baseDomain, send, controller)
           }
+
+          send(stageEvent("complete", "success", "Runner setup complete"))
+          send(resultEvent({
+            success: true,
+            online: true,
+            setupComplete: true,
+            nginx: status.nginx || { running: true },
+            runner: status.runner || { running: true },
+            cloudflared: status.cloudflared || { running: true },
+            runnerUrl,
+            baseDomain,
+          }))
+          controller.close()
+          return
         }
 
-        // Runner not online - bootstrap over SSH
-        send(stageEvent("runner-check", "error", "Runner API not reachable - bootstrapping over SSH"))
-        send(stageEvent("bootstrap", "running", "Uploading vm-runner to deploy VM via SCP"))
-        send(logEvent("Starting full bootstrap: copy vm-runner/, run setup scripts, install service"))
+        send(stageEvent("runner-check", "error", "Runner not reachable — bootstrapping via SSH"))
+        send(stageEvent("bootstrap", "running", "Uploading and installing vm-runner"))
+        send(logEvent("Starting full bootstrap over SSH"))
 
         const result = await bootstrapDeployVmRunner(sshInput)
         if (result.logs) {
@@ -138,33 +155,41 @@ async function runSetupStream(sshInput?: VmSetupInput) {
           }
         }
 
-        if (result.success) {
-          send(stageEvent("bootstrap", "success", "VM runner bootstrapped and started"))
-
-          // Read final diagnostics
-          send(stageEvent("diagnostics", "running", "Collecting final diagnostics"))
-          const diag = await readDeployVmDiagnostics(sshInput).catch(() => null)
-          send(stageEvent("diagnostics", "success", "Diagnostics collected"))
-          send(stageEvent("complete", "success", "Runner setup complete"))
-          send(resultEvent({
-            success: true,
-            online: true,
-            setupComplete: true,
-            nginx: diag?.nginx || { running: true },
-            runner: diag?.runner || { running: true },
-            cloudflared: diag?.cloudflared || { running: true },
-            runnerUrl: result.runnerUrl,
-            runnerToken: result.runnerToken,
-            baseDomain: result.baseDomain,
-          }))
-        } else {
+        if (!result.success) {
           send(stageEvent("bootstrap", "error", result.error || "Bootstrap failed"))
-          send(errorEvent(result.error || "Deploy VM runner bootstrap failed", "bootstrap"))
+          send(errorEvent(result.error || "Runner bootstrap failed", "bootstrap"))
+          controller.close()
+          return
         }
+        send(stageEvent("bootstrap", "success", "VM runner bootstrapped and started"))
+
+        if (!skipCloudflare) {
+          send(stageEvent("cloudflare-check", "running", "Setting up Cloudflare Tunnel"))
+          await runCloudflareSetup(sshInput, baseDomain, send, controller)
+        }
+
+        send(stageEvent("diagnostics", "running", "Collecting final diagnostics"))
+        const diag = await readDeployVmDiagnostics(sshInput).catch(() => null)
+        send(stageEvent("diagnostics", "success", "Diagnostics collected"))
+        send(stageEvent("complete", "success", "Runner setup complete"))
+        send(resultEvent({
+          success: true,
+          online: true,
+          setupComplete: true,
+          nginx: diag?.nginx || { running: true },
+          runner: diag?.runner || { running: true },
+          cloudflared: diag?.cloudflared || { running: true },
+          runnerUrl: result.runnerUrl,
+          runnerToken: result.runnerToken,
+          baseDomain,
+        }))
       } catch (error: any) {
         send(stageEvent("error", "error", error?.message || "Setup failed"))
         send(errorEvent(error?.message || "Unknown setup error"))
       } finally {
+        if (ssh) {
+          try { ssh.dispose() } catch {}
+        }
         controller.close()
       }
     },
@@ -177,4 +202,113 @@ async function runSetupStream(sshInput?: VmSetupInput) {
       Connection: "keep-alive",
     },
   })
+}
+
+async function runCloudflareSetup(
+  sshInput: VmSetupInput | undefined,
+  baseDomain: string,
+  send: (data: Uint8Array) => void,
+  controller: ReadableStreamDefaultController,
+) {
+  try {
+    const ssh = await getSshClient(sshInput)
+    const logs: string[] = []
+    const emitLog = (line: string) => {
+      logs.push(line)
+      send(logEvent(line))
+    }
+
+    const state = await getTunnelStateFromDb()
+    if (state?.configured) {
+      emitLog("[cloudflare] Existing tunnel configuration found, verifying...")
+      const status = await getTunnelStatus(ssh, logs)
+      if (status.running) {
+        send(stageEvent("cloudflare-check", "success", "Cloudflare Tunnel already running"))
+        send(tunnelEvent("status", { running: true, info: status.info, alreadySetup: true }))
+        ssh.dispose()
+        return
+      }
+      emitLog("[cloudflare] Tunnel not running — reconfiguring...")
+    }
+
+    send(stageEvent("cloudflare-install", "running", "Installing cloudflared"))
+    const installed = await installCloudflared(ssh, logs)
+    if (!installed) {
+      send(stageEvent("cloudflare-install", "error", "Failed to install cloudflared"))
+      ssh.dispose()
+      return
+    }
+    send(stageEvent("cloudflare-install", "success", "Cloudflared installed"))
+
+    const { loggedIn } = await checkCloudflaredLogin(ssh, logs)
+    if (!loggedIn) {
+      send(stageEvent("cloudflare-auth", "running", "Starting Cloudflare authentication"))
+      const login = await startCloudflaredLogin(ssh, logs)
+      if (login.loginUrl) {
+        send(tunnelEvent("login-needed", { url: login.loginUrl }))
+        send(logEvent(`[cloudflare] Open this URL to authenticate: ${login.loginUrl}`))
+        send(stageEvent("cloudflare-auth", "running", `Waiting for Cloudflare authentication — open the link above`))
+
+        let certReady = false
+        for (let i = 0; i < 60; i++) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const { ready } = await pollCloudflaredCert(ssh, logs)
+          if (ready) {
+            certReady = true
+            break
+          }
+          if (i % 5 === 0) {
+            send(logEvent(`[cloudflare] Waiting for authentication... (${(i + 1) * 2}s)`))
+          }
+        }
+
+        if (!certReady) {
+          send(stageEvent("cloudflare-auth", "error", "Authentication timed out — retry setup"))
+          send(tunnelEvent("login-timeout", { message: "Cloudflare authentication timed out after 120s. Re-run setup to try again." }))
+          ssh.dispose()
+          return
+        }
+      }
+      send(stageEvent("cloudflare-auth", "success", "Cloudflare authenticated"))
+    }
+
+    send(stageEvent("cloudflare-tunnel", "running", "Creating Cloudflare Tunnel"))
+    const tunnel = await createCloudflaredTunnel(ssh, logs)
+    if (!tunnel) {
+      send(stageEvent("cloudflare-tunnel", "error", "Failed to create tunnel"))
+      ssh.dispose()
+      return
+    }
+    send(stageEvent("cloudflare-tunnel", "success", `Tunnel created: ${tunnel.tunnelId.slice(0, 8)}...`))
+
+    send(stageEvent("cloudflare-config", "running", "Writing Cloudflare config"))
+    const configOk = await writeCloudflaredConfig(ssh, tunnel.tunnelId, tunnel.credentialsPath, baseDomain, logs)
+    if (!configOk) {
+      send(stageEvent("cloudflare-config", "error", "Failed to write config"))
+      ssh.dispose()
+      return
+    }
+    send(stageEvent("cloudflare-config", "success", "Config written"))
+
+    send(stageEvent("cloudflare-service", "running", "Installing and starting Cloudflare service"))
+    const serviceOk = await installCloudflaredService(ssh, logs)
+    if (serviceOk) {
+      send(stageEvent("cloudflare-service", "success", "Cloudflare Tunnel service running 24/7"))
+      send(tunnelEvent("status", { running: true, info: "Tunnel active" }))
+    } else {
+      send(stageEvent("cloudflare-service", "error", "Service install failed — check logs"))
+    }
+
+    await saveTunnelStateToDb(
+      sshInput?.host || process.env.VPS_SSH_HOST || "",
+      baseDomain,
+      tunnel.tunnelId,
+      tunnel.credentialsPath,
+    )
+
+    ssh.dispose()
+  } catch (err: any) {
+    send(logEvent(`[cloudflare] Setup error: ${err?.message || "Unknown"}`))
+    send(stageEvent("cloudflare-error", "error", err?.message || "Cloudflare setup failed"))
+  }
 }

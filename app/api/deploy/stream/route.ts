@@ -20,6 +20,7 @@ import {
   ensureContainer,
   getContainer,
   sshDeployFiles,
+  publishSiteViaNginx,
 } from "@/lib/deploy/ssh-deploy"
 
 function slugifyContainerName(project: any, projectId: string) {
@@ -145,6 +146,16 @@ export async function POST(request: Request) {
         }
 
         write("message", createStageEvent("publish", "success", "Files deployed and build started"))
+        write("message", createStageEvent("publish", "running", "Configuring nginx and starting site via PM2"))
+        log("publish", `Setting up nginx proxy for ${containerName}.${domain}`)
+
+        const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
+        const finalUrl = publish.url
+        if (!publish.success) {
+          log("publish", `Publish warning: ${publish.error || "Unknown"}`)
+        }
+        log("publish", `Site published at ${finalUrl}`)
+        write("message", createStageEvent("publish", "success", `Site live at ${finalUrl}`))
         write("message", createStageEvent("saving", "running", "Saving deployment result"))
 
         await db.collection("users").updateOne(
@@ -155,8 +166,8 @@ export async function POST(request: Request) {
               "projects.$.deploymentMode": "ssh",
               "projects.$.deploymentRuntime": {
                 mode: "ssh",
-                domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
-                url: liveUrl,
+                domain: finalUrl ? finalUrl.replace(/^https?:\/\//, "") : null,
+                url: finalUrl,
                 status: "deployed",
                 health: "healthy",
                 message: "Deployed via SSH",
@@ -178,7 +189,7 @@ export async function POST(request: Request) {
         write(
           "message",
           createResultEvent({
-            url: liveUrl,
+            url: finalUrl,
             domain,
             health: { ok: true, htmlOk: true },
           }),

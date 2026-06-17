@@ -12,6 +12,7 @@ import {
   ensureContainer,
   getContainer,
   sshDeployFiles,
+  publishSiteViaNginx,
 } from "@/lib/deploy/ssh-deploy"
 import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
@@ -82,9 +83,12 @@ export async function POST(req: Request): Promise<Response> {
 
   const deployResult = await sshDeployFiles(container, files)
 
-  const liveUrl = `https://${containerName}.${domain}`
+  let finalUrl = `https://${containerName}.${domain}`
 
   if (deployResult.success) {
+    const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
+    if (publish.url) finalUrl = publish.url
+
     await db.collection("users").updateOne(
       { id: userId, "projects._id": new ObjectId(projectId) },
       {
@@ -94,7 +98,7 @@ export async function POST(req: Request): Promise<Response> {
           "projects.$.deploymentRuntime": {
             mode: "ssh",
             domain: containerName,
-            url: liveUrl,
+            url: finalUrl,
             status: "deployed",
             health: "healthy",
             lastHealthCheckAt: new Date(),
@@ -106,7 +110,7 @@ export async function POST(req: Request): Promise<Response> {
       },
     )
 
-    return Response.json({ status: "success", url: liveUrl, containerName })
+    return Response.json({ status: "success", url: finalUrl, containerName })
   }
 
   await db.collection("users").updateOne(

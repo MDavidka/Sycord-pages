@@ -22,6 +22,7 @@ export type DeployStreamEvent =
         | "upload"
         | "build"
         | "publish"
+        | "saving"
         | "health-check"
         | "complete"
         | "failed"

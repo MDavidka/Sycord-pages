@@ -31,6 +31,7 @@ export type DeployStreamEvent =
         | "upload"
         | "build"
         | "publish"
+        | "saving"
         | "health-check"
         | "complete"
         | "failed"
@@ -400,6 +401,104 @@ export async function probeSshConnection(): Promise<{ reachable: boolean; error?
         configured: !!(process.env.VPS_HOST && process.env.VPS_ROOT_PSW),
       },
     }
+  }
+}
+
+const PORT_START = 4100
+const PORT_END = 4999
+
+async function allocatePort(ssh: NodeSSH): Promise<number> {
+  for (let port = PORT_START; port <= PORT_END; port++) {
+    const check = await ssh.execCommand(`ss -ltnp | grep ':${port} ' || true`)
+    if (!check.stdout.trim()) return port
+  }
+  throw new Error("No available ports in range 4100-4999")
+}
+
+async function writeNginxSiteConfig(
+  ssh: NodeSSH,
+  serverName: string,
+  port: number,
+): Promise<void> {
+  const config = `server {
+  listen 80;
+  server_name ${serverName};
+
+  location / {
+    proxy_pass http://127.0.0.1:${port};
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 300;
+    proxy_connect_timeout 300;
+    proxy_send_timeout 300;
+  }
+}
+`
+
+  const safeName = serverName.replace(/[^a-zA-Z0-9._-]/g, "-")
+  await ssh.execCommand(`cat > /etc/nginx/sites-enabled/sycord-${safeName}.conf << 'NGINX_EOF'
+${config}
+NGINX_EOF`)
+}
+
+async function reloadNginx(ssh: NodeSSH): Promise<boolean> {
+  const test = await ssh.execCommand("nginx -t 2>&1")
+  if (test.code !== 0) return false
+  const reload = await ssh.execCommand("systemctl reload nginx 2>&1")
+  return reload.code === 0
+}
+
+async function startPm2Site(
+  ssh: NodeSSH,
+  projectName: string,
+  workspaceName: string,
+  port: number,
+): Promise<boolean> {
+  const startCmd = `cd ${workspaceName} && PORT=${port} pm2 start npm --name "sycord-${projectName}" -- run start 2>&1 && pm2 save 2>&1`
+  const result = await ssh.execCommand(startCmd)
+  return result.code === 0 || result.stdout.includes("online")
+}
+
+async function ensurePm2Startup(ssh: NodeSSH): Promise<void> {
+  await ssh.execCommand("pm2 startup systemd -u root --hp /root 2>&1 || true")
+  await ssh.execCommand("pm2 save 2>&1 || true")
+}
+
+export async function publishSiteViaNginx(
+  containerName: string,
+  workspaceName: string,
+  domain: string,
+): Promise<{ url: string; port: number; success: boolean; error?: string }> {
+  const vps = getVpsConfig()
+  const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
+  try {
+    const port = await allocatePort(ssh)
+    const serverName = `${containerName}.${domain}`
+
+    await writeNginxSiteConfig(ssh, serverName, port)
+
+    await ensurePm2Startup(ssh)
+
+    const started = await startPm2Site(ssh, containerName, workspaceName, port)
+    if (!started) {
+      return { url: `https://${serverName}`, port, success: false, error: "PM2 start failed" }
+    }
+
+    const nginxOk = await reloadNginx(ssh)
+    if (!nginxOk) {
+      return { url: `https://${serverName}`, port, success: false, error: "Nginx reload failed" }
+    }
+
+    return { url: `https://${serverName}`, port, success: true }
+  } catch (err: any) {
+    return { url: `https://${containerName}.${domain}`, port: 0, success: false, error: err?.message }
+  } finally {
+    ssh.dispose()
   }
 }
 

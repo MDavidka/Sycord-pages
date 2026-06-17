@@ -134,6 +134,9 @@ export default function AdminPage() {
   const [deployerSetupError, setDeployerSetupError] = useState<string | null>(null)
   const [deployerDebugInfo, setDeployerDebugInfo] = useState<any>(null)
   const [deployerDebugLoading, setDeployerDebugLoading] = useState(false)
+  const [tunnelLoginUrl, setTunnelLoginUrl] = useState<string | null>(null)
+  const [tunnelStatus, setTunnelStatus] = useState<string | null>(null)
+  const [skipCloudflare, setSkipCloudflare] = useState(false)
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -365,6 +368,8 @@ export default function AdminPage() {
     setDeployerSetupLogs([])
     setDeployerSetupResult(null)
     setDeployerSetupError(null)
+    setTunnelLoginUrl(null)
+    setTunnelStatus(null)
 
     try {
       const res = await fetch("/api/admin/vps-runner/setup/stream", {
@@ -375,6 +380,7 @@ export default function AdminPage() {
           rootPassword: deployerPassword,
           port: 22,
           baseDomain: "sycord.site",
+          skipCloudflare,
         }),
       })
 
@@ -401,10 +407,22 @@ export default function AdminPage() {
             if (eventType === "log") {
               setDeployerSetupLogs(prev => [...prev, data.line || ""])
             } else if (eventType === "stage") {
-              setDeployerSetupLogs(prev => [...prev, `[${data.status}] ${data.message}`])
+              setDeployerSetupLogs(prev => [...prev, `[${data.status.toUpperCase()}] ${data.stage}: ${data.message}`])
             } else if (eventType === "result") {
               setDeployerSetupResult(data)
               toast.success("Deployer setup completed")
+            } else if (eventType === "tunnel") {
+              if (data.type === "login-needed") {
+                setTunnelLoginUrl(data.url)
+                toast.info("Cloudflare authentication required — open the link below")
+              } else if (data.type === "login-timeout") {
+                setTunnelLoginUrl(null)
+                setTunnelStatus("timeout")
+                toast.error("Cloudflare authentication timed out")
+              } else if (data.type === "status") {
+                setTunnelStatus(data.running ? "active" : "inactive")
+                setTunnelLoginUrl(null)
+              }
             } else if (eventType === "error") {
               setDeployerSetupError(data.error || "Setup failed")
               toast.error(data.error || "Setup failed")
@@ -977,7 +995,53 @@ export default function AdminPage() {
                         {deployerSetupRunning ? "Running..." : "Run Setup"}
                       </Button>
                     </div>
+                    <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={skipCloudflare}
+                        onChange={(e) => setSkipCloudflare(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-white/20 bg-black/40"
+                      />
+                      <span className="text-[11px] text-white/50">Skip Cloudflare Tunnel setup</span>
+                    </label>
                   </div>
+
+                  {tunnelLoginUrl && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="animate-pulse h-2 w-2 rounded-full bg-amber-500" />
+                        <span className="text-xs font-medium text-amber-200">Cloudflare Auth Required</span>
+                      </div>
+                      <p className="text-xs text-amber-100/80 mb-2">
+                        Open the link below in a new tab and authorize the Cloudflare Tunnel. The setup will continue automatically.
+                      </p>
+                      <a
+                        href={tunnelLoginUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs rounded-lg font-medium"
+                      >
+                        Open Authentication Page
+                      </a>
+                      <p className="text-[10px] text-amber-100/50 mt-2 truncate">{tunnelLoginUrl}</p>
+                    </div>
+                  )}
+
+                  {tunnelStatus === "active" && (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      <span className="text-xs text-emerald-200">Cloudflare Tunnel connected</span>
+                    </div>
+                  )}
+
+                  {tunnelStatus === "timeout" && (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <XCircle className="h-4 w-4 text-red-400" />
+                        <span className="text-xs text-red-200">Auth timed out — click Run Setup to retry</span>
+                      </div>
+                    </div>
+                  )}
 
                   {deployerDebugInfo && (
                     <div className="rounded-xl border border-white/[0.08] bg-black/20 p-4 max-h-48 overflow-y-auto">

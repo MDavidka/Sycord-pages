@@ -1,6 +1,7 @@
 import path from "node:path"
 import * as crypto from "node:crypto"
 import { NodeSSH } from "node-ssh"
+import clientPromise from "@/lib/mongodb"
 
 type SshConfig = {
   host: string
@@ -181,6 +182,220 @@ export async function manageDeployVmRunnerService(action: "start" | "stop" | "re
 
 export function generateRunnerToken(): string {
   return crypto.randomBytes(32).toString("hex")
+}
+
+export type TunnelSetupState = {
+  phase: "install" | "login-needed" | "login-polling" | "create-tunnel" | "config" | "service" | "complete" | "error"
+  tunnelId?: string
+  credentialsPath?: string
+  loginUrl?: string
+  error?: string
+  logs: string[]
+  baseDomain: string
+  host: string
+}
+
+export async function installCloudflared(ssh: NodeSSH, logs: string[]): Promise<boolean> {
+  logs.push("[cloudflare] Checking cloudflared installation...")
+  const check = await ssh.execCommand("cloudflared --version 2>&1 || echo 'NOT_INSTALLED'")
+
+  if (check.stdout.includes("NOT_INSTALLED")) {
+    logs.push("[cloudflare] Installing cloudflared...")
+    const install = await ssh.execCommand(
+      "curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb && dpkg -i /tmp/cloudflared.deb && rm /tmp/cloudflared.deb && cloudflared --version 2>&1",
+    )
+    logs.push(`[cloudflare] Install: ${install.stdout}`)
+    if (install.stderr) logs.push(`[cloudflare] Install stderr: ${install.stderr}`)
+    if (install.code !== 0) {
+      logs.push(`[cloudflare] Install failed: ${install.stderr || install.stdout}`)
+      return false
+    }
+  } else {
+    logs.push(`[cloudflare] Already installed: ${check.stdout.trim()}`)
+  }
+  return true
+}
+
+export async function checkCloudflaredLogin(ssh: NodeSSH, logs: string[]): Promise<{ loggedIn: boolean; certPath?: string }> {
+  logs.push("[cloudflare] Checking existing tunnel authentication...")
+  const certCheck = await ssh.execCommand("ls /root/.cloudflared/cert.pem 2>&1 || echo 'NO_CERT'")
+  if (!certCheck.stdout.includes("NO_CERT")) {
+    logs.push("[cloudflare] Existing cert.pem found — already authenticated")
+    return { loggedIn: true, certPath: "/root/.cloudflared/cert.pem" }
+  }
+  logs.push("[cloudflare] No existing cert found — login required")
+  return { loggedIn: false }
+}
+
+export async function startCloudflaredLogin(ssh: NodeSSH, logs: string[]): Promise<{ loginUrl: string | null; error?: string }> {
+  logs.push("[cloudflare] Starting tunnel login process...")
+  const login = await ssh.execCommand("cloudflared tunnel login 2>&1", { timeout: 15000 })
+
+  const combined = login.stdout + login.stderr
+  logs.push(`[cloudflare] Login output: ${combined}`)
+
+  const urlMatch = combined.match(/https:\/\/[^\s]+/)
+  if (urlMatch) {
+    logs.push(`[cloudflare] Login URL: ${urlMatch[0]}`)
+    return { loginUrl: urlMatch[0] }
+  }
+
+  if (combined.includes("cert.pem")) {
+    return { loginUrl: null }
+  }
+
+  return { loginUrl: null, error: "Could not extract login URL from cloudflared output" }
+}
+
+export async function pollCloudflaredCert(ssh: NodeSSH, logs: string[]): Promise<{ ready: boolean }> {
+  const certCheck = await ssh.execCommand("test -f /root/.cloudflared/cert.pem && echo 'READY' || echo 'WAITING'")
+  const ready = certCheck.stdout.includes("READY")
+  if (ready) logs.push("[cloudflare] Authentication certificate found — ready to proceed")
+  return { ready }
+}
+
+export async function createCloudflaredTunnel(ssh: NodeSSH, logs: string[]): Promise<{ tunnelId: string; credentialsPath: string } | null> {
+  logs.push("[cloudflare] Creating named tunnel 'sycord-deployer'...")
+  const existing = await ssh.execCommand("cloudflared tunnel list --output json 2>&1 | grep -o '\"id\":\"[^\"]*\"' | head -1 || echo 'NO_TUNNEL'")
+
+  let tunnelId: string
+  if (existing.stdout.includes("NO_TUNNEL")) {
+    const create = await ssh.execCommand("cloudflared tunnel create sycord-deployer 2>&1")
+    logs.push(`[cloudflare] Create output: ${create.stdout}`)
+    if (create.stderr) logs.push(`[cloudflare] Create stderr: ${create.stderr}`)
+
+    const idMatch = (create.stdout + create.stderr).match(/Created tunnel\s+\S+\s+with id\s+([a-f0-9-]+)/i) ||
+      (create.stdout + create.stderr).match(/"([a-f0-9-]{36})"/)
+    if (idMatch) {
+      tunnelId = idMatch[1]
+    } else {
+      logs.push("[cloudflare] Failed to parse tunnel ID from creation output")
+      return null
+    }
+  } else {
+    tunnelId = existing.stdout.replace(/"id":"|"/g, "")
+    logs.push(`[cloudflare] Existing tunnel found: ${tunnelId}`)
+  }
+
+  const credentialsPath = `/root/.cloudflared/${tunnelId}.json`
+
+  const credentialsCheck = await ssh.execCommand(`test -f ${credentialsPath} && echo 'EXISTS' || echo 'MISSING'`)
+  if (credentialsCheck.stdout.includes("MISSING")) {
+    const list = await ssh.execCommand(`cloudflared tunnel list --output json 2>&1`)
+    logs.push(`[cloudflare] Tunnel list: ${list.stdout}`)
+    if (list.stdout.includes(tunnelId)) {
+      logs.push(`[cloudflare] Credentials should be at ${credentialsPath}`)
+    }
+  }
+
+  return { tunnelId, credentialsPath }
+}
+
+export async function writeCloudflaredConfig(
+  ssh: NodeSSH,
+  tunnelId: string,
+  credentialsPath: string,
+  baseDomain: string,
+  logs: string[],
+): Promise<boolean> {
+  logs.push("[cloudflare] Writing cloudflared config...")
+
+  const config = `tunnel: ${tunnelId}
+credentials-file: ${credentialsPath}
+
+ingress:
+  - hostname: "*.${baseDomain}"
+    service: http://127.0.0.1:80
+  - service: http_status:404
+`
+
+  await ssh.execCommand("mkdir -p /etc/cloudflared")
+  const escapedConfig = config.replace(/'/g, "'\\''")
+  const writeResult = await ssh.execCommand(`cat > /etc/cloudflared/config.yml << 'CLOUDFLARED_EOF'
+${config}
+CLOUDFLARED_EOF
+echo "CONFIG_WRITTEN"`)
+
+  logs.push(`[cloudflare] Config write: ${writeResult.stdout}`)
+  if (writeResult.stderr) logs.push(`[cloudflare] Config stderr: ${writeResult.stderr}`)
+  return writeResult.stdout.includes("CONFIG_WRITTEN")
+}
+
+export async function installCloudflaredService(ssh: NodeSSH, logs: string[]): Promise<boolean> {
+  logs.push("[cloudflare] Installing cloudflared systemd service...")
+
+  const result = await ssh.execCommand("cloudflared service install 2>&1")
+  logs.push(`[cloudflare] Service install: ${result.stdout}`)
+  if (result.stderr) logs.push(`[cloudflare] Service stderr: ${result.stderr}`)
+
+  await ssh.execCommand("systemctl daemon-reload 2>&1")
+  await ssh.execCommand("systemctl enable cloudflared 2>&1")
+  const start = await ssh.execCommand("systemctl restart cloudflared 2>&1 && sleep 3 && systemctl is-active cloudflared 2>&1")
+
+  const active = start.stdout.includes("active")
+  logs.push(`[cloudflare] Service start: ${start.stdout.trim()}`)
+  if (!active && start.stderr) logs.push(`[cloudflare] Service error: ${start.stderr}`)
+
+  if (!active) {
+    const journal = await ssh.execCommand("journalctl -u cloudflared --no-pager -n 20 2>&1 || true")
+    logs.push(`[cloudflare] Journal: ${journal.stdout}`)
+  }
+
+  return active
+}
+
+export async function getTunnelStatus(ssh: NodeSSH, logs: string[]): Promise<{ running: boolean; info: string }> {
+  const status = await ssh.execCommand("systemctl is-active cloudflared 2>&1 || echo 'inactive'")
+  const info = await ssh.execCommand("cloudflared tunnel info sycord-deployer 2>&1 || echo 'no-info'")
+  logs.push(`[cloudflare] Status: ${status.stdout.trim()}, Info: ${info.stdout.trim()}`)
+  return {
+    running: status.stdout.includes("active"),
+    info: info.stdout.trim(),
+  }
+}
+
+export async function saveTunnelStateToDb(
+  host: string,
+  baseDomain: string,
+  tunnelId: string,
+  credentialsPath: string,
+): Promise<void> {
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    await db.collection("deployer_config").updateOne(
+      { key: "cloudflare_tunnel" },
+      {
+        $set: {
+          host,
+          baseDomain,
+          tunnelId,
+          credentialsPath,
+          configured: true,
+          configuredAt: new Date(),
+        },
+      },
+      { upsert: true },
+    )
+  } catch (err: any) {
+    console.error("[cloudflare] Failed to save tunnel state:", err?.message)
+  }
+}
+
+export async function getTunnelStateFromDb(): Promise<{
+  configured: boolean
+  tunnelId?: string
+  credentialsPath?: string
+  baseDomain?: string
+  host?: string
+} | null> {
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    return db.collection("deployer_config").findOne({ key: "cloudflare_tunnel" }) as any
+  } catch {
+    return null
+  }
 }
 
 export async function bootstrapDeployVmRunner(input?: VmSetupInput): Promise<VmSetupResult> {

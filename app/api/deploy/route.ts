@@ -14,6 +14,7 @@ import {
   ensureContainer,
   sshDeployFiles,
   getContainer,
+  publishSiteViaNginx,
 } from "@/lib/deploy/ssh-deploy"
 
 function slugifyContainerName(project: any, projectId: string) {
@@ -74,7 +75,12 @@ export async function POST(request: Request) {
 
     const deployResult = await sshDeployFiles(container, files)
     const domain = getSycordDomain()
-    const liveUrl = `https://${containerName}.${domain}`
+    let finalUrl = `https://${containerName}.${domain}`
+
+    if (deployResult.success) {
+      const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
+      if (publish.url) finalUrl = publish.url
+    }
 
     if (!deployResult.success) {
       await db.collection("users").updateOne(
@@ -84,8 +90,8 @@ export async function POST(request: Request) {
             "projects.$.deploymentMode": "ssh",
             "projects.$.deploymentRuntime": {
               mode: "ssh",
-              domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
-              url: liveUrl,
+              domain: finalUrl ? finalUrl.replace(/^https?:\/\//, "") : null,
+              url: finalUrl,
               status: "failed",
               health: "unhealthy",
               lastHealthCheckAt: new Date(),
@@ -118,8 +124,8 @@ export async function POST(request: Request) {
           "projects.$.deploymentMode": "ssh",
           "projects.$.deploymentRuntime": {
             mode: "ssh",
-            domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
-            url: liveUrl,
+            domain: finalUrl ? finalUrl.replace(/^https?:\/\//, "") : null,
+            url: finalUrl,
             status: "deployed",
             health: "healthy",
             message: "Deployed via SSH",
@@ -138,7 +144,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      url: liveUrl,
+      url: finalUrl,
       domain: domain,
       filesCount: files.length,
       message: "Deployment complete via SSH",
