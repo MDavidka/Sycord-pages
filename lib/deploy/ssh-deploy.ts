@@ -1,0 +1,435 @@
+import * as crypto from "node:crypto"
+import * as path from "node:path"
+import { NodeSSH } from "node-ssh"
+import clientPromise from "@/lib/mongodb"
+
+export type SshDeploymentMode = "ssh"
+
+export type DeployFile = {
+  path: string
+  content: string
+}
+
+export type ContainerInfo = {
+  projectId: string
+  containerName: string
+  workspaceName: string
+  privateKey: string
+  publicKey: string
+  host: string
+  port: number
+  createdAt: Date
+}
+
+export type DeployStreamEvent =
+  | {
+      type: "stage"
+      stage:
+        | "queued"
+        | "preparing"
+        | "container-setup"
+        | "upload"
+        | "build"
+        | "publish"
+        | "health-check"
+        | "complete"
+        | "failed"
+      status: "pending" | "running" | "success" | "error"
+      message: string
+      timestamp: string
+    }
+  | {
+      type: "log"
+      source: "ssh" | "build" | "publish" | "health"
+      line: string
+      timestamp: string
+    }
+  | {
+      type: "result"
+      success: true
+      url: string
+      domain: string
+      health: unknown
+      warning?: string
+      timestamp: string
+    }
+  | {
+      type: "error"
+      error: string
+      stage?: string
+      logs?: string[]
+      timestamp: string
+    }
+
+function now() {
+  return new Date().toISOString()
+}
+
+export function generateSshKeyPair(): { privateKey: string; publicKey: string } {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+    modulusLength: 4096,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  })
+  return { privateKey, publicKey }
+}
+
+function getVpsConfig(): { host: string; username: string; password: string; port: number } {
+  const host = process.env.VPS_HOST
+  const username = process.env.VPS_USERNAME || "root"
+  const password = process.env.VPS_ROOT_PSW
+  const port = 22
+
+  if (!host || !password) {
+    throw new Error("VPS_HOST and VPS_ROOT_PSW environment variables are required")
+  }
+
+  return { host, username, password, port }
+}
+
+export function getVpsDebugInfo(): Record<string, unknown> {
+  return {
+    host: process.env.VPS_HOST || "not set",
+    username: process.env.VPS_USERNAME || "root",
+    passwordConfigured: !!process.env.VPS_ROOT_PSW,
+    port: 22,
+  }
+}
+
+async function getSshConnection(host: string, username: string, password: string, port: number): Promise<NodeSSH> {
+  const ssh = new NodeSSH()
+  await ssh.connect({ host, username, password, port })
+  return ssh
+}
+
+function stripLeadingSlash(input: string) {
+  return input.replace(/^\/+/, "")
+}
+
+export function prepareProjectDeployFiles(project: any): DeployFile[] {
+  const pages = Array.isArray(project?.pages) ? project.pages : []
+  return pages
+    .filter((page: any) => typeof page?.name === "string" && typeof page?.content === "string")
+    .map((page: any) => ({
+      path: stripLeadingSlash(page.name),
+      content: page.content,
+    }))
+}
+
+export function validateSshDeployFiles(files: DeployFile[]): string[] {
+  const errors: string[] = []
+  if (!files.length) {
+    errors.push("No files to deploy")
+    return errors
+  }
+  for (const file of files) {
+    if (!file.path || file.path.startsWith("/") || file.path.includes("..")) {
+      errors.push(`Invalid deploy path: ${file.path || "(empty)"}`)
+      continue
+    }
+    if (/^\.env(?:\.|$)/.test(file.path) || /\/\.env(?:\.|$)/.test(file.path)) {
+      errors.push(`Env files must not be deployed: ${file.path}`)
+    }
+  }
+  return errors
+}
+
+export function slugifyContainerName(project: any, projectId: string): string {
+  return (
+    project?.containerName ||
+    (project?.businessName
+      ? project.businessName.toLowerCase().replace(/[^a-z0-9-]/g, "-")
+      : `project-${projectId}`)
+  )
+}
+
+export async function ensureContainer(
+  project: any,
+  projectId: string,
+): Promise<ContainerInfo> {
+  const client = await clientPromise
+  const db = client.db()
+
+  const existing = await db.collection("containers").findOne({ projectId })
+  if (existing) {
+    return existing as unknown as ContainerInfo
+  }
+
+  const vps = getVpsConfig()
+  const containerName = slugifyContainerName(project, projectId)
+  const workspaceName = `/srv/sycord/workspaces/${containerName}`
+  const keys = generateSshKeyPair()
+
+  const container: ContainerInfo = {
+    projectId,
+    containerName,
+    workspaceName,
+    privateKey: keys.privateKey,
+    publicKey: keys.publicKey,
+    host: vps.host,
+    port: vps.port,
+    createdAt: new Date(),
+  }
+
+  await db.collection("containers").insertOne(container as any)
+
+  return container
+}
+
+export async function getContainer(projectId: string): Promise<ContainerInfo | null> {
+  const client = await clientPromise
+  const db = client.db()
+  return db.collection("containers").findOne({ projectId }) as unknown as ContainerInfo | null
+}
+
+export async function bootstrapContainer(container: ContainerInfo): Promise<{ success: boolean; error?: string }> {
+  const vps = getVpsConfig()
+  const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
+
+  try {
+    await ssh.execCommand(
+      `mkdir -p ${container.workspaceName} /srv/sycord/deploy/${container.containerName}`,
+    )
+
+    const deployScriptPath = `/srv/sycord/deploy/${container.containerName}/sycord-deploy.sh`
+    const deployScript = `#!/bin/bash
+set -e
+# Sycord Deploy Script for container: ${container.containerName}
+WORKSPACE="${container.workspaceName}"
+DEPLOY_DIR="/srv/sycord/deploy/${container.containerName}"
+PUBLISH_DIR="/var/www/sycord/${container.containerName}"
+
+echo "[sycord-deploy] Starting deployment for ${container.containerName}..."
+
+# Extract build
+mkdir -p "\$WORKSPACE"
+if [ -f "\$DEPLOY_DIR/build.tar.gz" ]; then
+  tar -xzf "\$DEPLOY_DIR/build.tar.gz" -C "\$WORKSPACE"
+  echo "[sycord-deploy] Build extracted to \$WORKSPACE"
+else
+  echo "[sycord-deploy] No build.tar.gz found — using workspace files directly"
+fi
+
+# Install deps and build
+cd "\$WORKSPACE"
+if [ -f "package.json" ]; then
+  npm install --legacy-peer-deps --prefer-offline 2>&1
+  npm run build 2>&1
+fi
+
+# Publish
+mkdir -p "\$PUBLISH_DIR"
+if [ -d ".next" ] || [ -d "out" ]; then
+  cp -r .next "\$PUBLISH_DIR/" 2>/dev/null || true
+  cp -r out "\$PUBLISH_DIR/" 2>/dev/null || true
+  echo "[sycord-deploy] Published to \$PUBLISH_DIR"
+fi
+
+echo "[sycord-deploy] Deployment complete"
+`
+
+    await ssh.execCommand(`cat > ${deployScriptPath} << 'SYCORD_EOF'
+${deployScript}
+SYCORD_EOF
+chmod +x ${deployScriptPath}`)
+
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Container bootstrap failed" }
+  } finally {
+    ssh.dispose()
+  }
+}
+
+export async function sshDeployFiles(
+  container: ContainerInfo,
+  files: DeployFile[],
+): Promise<{ success: boolean; error?: string; logs: string[] }> {
+  const vps = getVpsConfig()
+  const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
+  const logs: string[] = []
+
+  try {
+    logs.push(`[ssh-deploy] Connected to ${vps.host}`)
+    logs.push(`[ssh-deploy] Deploying ${files.length} files to ${container.workspaceName}`)
+
+    await ssh.execCommand(`mkdir -p ${container.workspaceName}`)
+
+    for (const file of files) {
+      const remotePath = path.posix.join(container.workspaceName, file.path)
+      await ssh.execCommand(`mkdir -p "$(dirname "${remotePath}")"`)
+      await ssh.execCommand(`cat > "${remotePath}" << 'FILECONTENT_EOF'
+${file.content}
+FILECONTENT_EOF`)
+      logs.push(`[ssh-deploy] Written: ${file.path}`)
+    }
+
+    const buildDir = `/srv/sycord/deploy/${container.containerName}`
+    await ssh.execCommand(`mkdir -p ${buildDir}`)
+
+    await ssh.execCommand(`cd ${container.workspaceName} && tar -czf ${buildDir}/build.tar.gz . 2>&1 || true`)
+
+    const deployScript = `/srv/sycord/deploy/${container.containerName}/sycord-deploy.sh`
+    const buildResult = await ssh.execCommand(`bash ${deployScript} 2>&1`)
+    logs.push(`[ssh-deploy] Build output: ${buildResult.stdout}`)
+    if (buildResult.stderr) {
+      logs.push(`[ssh-deploy] Build stderr: ${buildResult.stderr}`)
+    }
+
+    if (buildResult.code !== 0) {
+      return { success: false, error: `Build failed with exit code ${buildResult.code}`, logs }
+    }
+
+    const publishDir = `/var/www/sycord/${container.containerName}`
+    const publishCheck = await ssh.execCommand(`ls ${publishDir} 2>&1 || echo "EMPTY_DIR"`)
+
+    logs.push(`[ssh-deploy] Published to ${publishDir}`)
+    if (publishCheck.stdout.includes("EMPTY_DIR")) {
+      logs.push("[ssh-deploy] Warning: publish directory is empty")
+    }
+
+    return { success: true, logs }
+  } catch (err: any) {
+    logs.push(`[ssh-deploy] Error: ${err?.message || "Unknown error"}`)
+    return { success: false, error: err?.message || "SSH deployment failed", logs }
+  } finally {
+    ssh.dispose()
+  }
+}
+
+export async function sshExecuteCommand(
+  container: ContainerInfo,
+  command: string,
+  cwd?: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number | null }> {
+  const vps = getVpsConfig()
+  const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
+
+  try {
+    const workDir = cwd ? path.posix.join(container.workspaceName, cwd.replace(/^\/+/, "")) : container.workspaceName
+
+    const result = await ssh.execCommand(command, { cwd: workDir })
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.code,
+    }
+  } finally {
+    ssh.dispose()
+  }
+}
+
+export function createStageEvent(
+  stage: Extract<DeployStreamEvent, { type: "stage" }>["stage"],
+  status: Extract<DeployStreamEvent, { type: "stage" }>["status"],
+  message: string,
+): DeployStreamEvent {
+  return { type: "stage", stage, status, message, timestamp: now() }
+}
+
+export function createLogEvent(
+  source: Extract<DeployStreamEvent, { type: "log" }>["source"],
+  line: string,
+): DeployStreamEvent {
+  return { type: "log", source, line: redactSecrets(line), timestamp: now() }
+}
+
+export function createErrorEvent(error: string, stage?: string, logs?: string[]): DeployStreamEvent {
+  return {
+    type: "error",
+    error: redactSecrets(error),
+    stage,
+    logs: logs?.map((line) => redactSecrets(line)),
+    timestamp: now(),
+  }
+}
+
+export function createResultEvent(result: {
+  url: string
+  domain: string
+  health: unknown
+  warning?: string
+}): DeployStreamEvent {
+  return {
+    type: "result",
+    success: true,
+    url: result.url,
+    domain: result.domain,
+    health: result.health,
+    warning: result.warning,
+    timestamp: now(),
+  }
+}
+
+export function toSseChunk(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+}
+
+export function redactSecrets(input: string): string {
+  return input
+    .replace(/(token|secret|apikey|api_key|password|privatekey)\s*[:=]\s*([^\s]+)/gi, "$1=[redacted]")
+    .replace(/(TURSO_AUTH_TOKEN|GITHUB_TOKEN|GITHUB_API_TOKEN|DATABASE_URL)=([^\s]+)/g, "$1=[redacted]")
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "[redacted-database-url]")
+    .replace(/libsql:\/\/[^\s]+/gi, "[redacted-database-url]")
+    .replace(/-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----[^-]*-----END\s+(RSA\s+)?PRIVATE\s+KEY-----/gi, "[redacted-ssh-key]")
+}
+
+export async function probeSshConnection(): Promise<{ reachable: boolean; error?: string; debug: Record<string, unknown> }> {
+  try {
+    const vps = getVpsConfig()
+    const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
+    const result = await ssh.execCommand("echo connected && hostname && whoami")
+    ssh.dispose()
+
+    return {
+      reachable: true,
+      debug: {
+        host: vps.host,
+        username: vps.username,
+        port: vps.port,
+        response: result.stdout.trim(),
+        configured: true,
+      },
+    }
+  } catch (err: any) {
+    return {
+      reachable: false,
+      error: err?.message || "SSH probe failed",
+      debug: {
+        error: err?.message,
+        configured: !!(process.env.VPS_HOST && process.env.VPS_ROOT_PSW),
+      },
+    }
+  }
+}
+
+export async function getVpsDiagnostics(): Promise<Record<string, unknown>> {
+  try {
+    const vps = getVpsConfig()
+    const ssh = await getSshConnection(vps.host, vps.username, vps.password, vps.port)
+
+    const [containers, disk, memory, uptime, dockerPs] = await Promise.all([
+      ssh.execCommand("ls /srv/sycord/workspaces/ 2>&1 || echo 'no-workspaces'"),
+      ssh.execCommand("df -h / | tail -n1 || true"),
+      ssh.execCommand("free -h | grep Mem || true"),
+      ssh.execCommand("uptime || true"),
+      ssh.execCommand("docker ps --format '{{.Names}} {{.Status}}' 2>&1 || echo 'no-docker'"),
+    ])
+    ssh.dispose()
+
+    return {
+      host: vps.host,
+      username: vps.username,
+      containers: containers.stdout.trim().split("\n").filter(Boolean),
+      disk: disk.stdout.trim(),
+      memory: memory.stdout.trim(),
+      uptime: uptime.stdout.trim(),
+      dockerProcesses: dockerPs.stdout.trim().split("\n").filter(Boolean),
+    }
+  } catch (err: any) {
+    return {
+      error: err?.message || "Failed to get VPS diagnostics",
+      configured: !!(process.env.VPS_HOST && process.env.VPS_ROOT_PSW),
+    }
+  }
+}

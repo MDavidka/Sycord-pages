@@ -5,17 +5,20 @@ import * as Sentry from "@sentry/nextjs"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
 import {
-  callCompanionDeploy,
-  callCompanionHealth,
-  getProjectEnvVars,
   prepareProjectDeployFiles,
   validateApiDeployFiles,
+  getSycordDomain,
 } from "@/lib/deploy/runner-client"
-import { deployViaGitTree, ensureRepo, getEnvGitHubCredentials } from "@/lib/deploy/github"
+import {
+  bootstrapContainer,
+  ensureContainer,
+  sshDeployFiles,
+  getContainer,
+} from "@/lib/deploy/ssh-deploy"
 
-function slugifyRepoName(project: any, projectId: string) {
+function slugifyContainerName(project: any, projectId: string) {
   return (
-    project?.githubRepo ||
+    project?.containerName ||
     project?.businessName?.toLowerCase().replace(/[^a-z0-9-]/g, "-") ||
     `project-${projectId}`
   )
@@ -25,30 +28,9 @@ function summarizeLogs(logs: string[]) {
   return logs.slice(-40)
 }
 
-function captureDeployFailure(input: {
-  projectId: string
-  repo: string
-  error: string
-  stage?: string
-  response?: any
-}) {
-  Sentry.captureException(new Error(`Companion deploy failed: ${input.error}`), {
-    tags: {
-      area: "deploy",
-      project_id: input.projectId,
-      repo: input.repo,
-      stage: input.stage || "unknown",
-      deployment_mode: "api",
-    },
-    extra: {
-      response: input.response,
-    },
-  })
-}
-
 export async function POST(request: Request) {
   let sentryProjectId = "unknown"
-  let sentryRepo = "unknown"
+  let sentryContainer = "unknown"
 
   try {
     const session = await getServerSession(authOptions)
@@ -61,11 +43,6 @@ export async function POST(request: Request) {
     sentryProjectId = projectId || "unknown"
     if (!projectId) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
-    }
-
-    const github = getEnvGitHubCredentials()
-    if (!github) {
-      return NextResponse.json({ error: "GitHub credentials not configured" }, { status: 400 })
     }
 
     const client = await clientPromise
@@ -83,60 +60,74 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: validationErrors.join("; ") }, { status: 400 })
     }
 
-    const repo = slugifyRepoName(project, projectId)
-    sentryRepo = repo
-    const { repoId, gitUrl } = await ensureRepo(github.owner, repo, github.token)
-    const envVars = getProjectEnvVars(project)
+    const containerName = slugifyContainerName(project, projectId)
+    sentryContainer = containerName
 
-    await deployViaGitTree(github.owner, repo, files, github.token)
+    let container = await getContainer(projectId)
+    if (!container) {
+      container = await ensureContainer(project, projectId)
+      const bootstrap = await bootstrapContainer(container)
+      if (!bootstrap.success) {
+        return NextResponse.json({ error: bootstrap.error || "Container bootstrap failed" }, { status: 500 })
+      }
+    }
 
-    await db.collection("users").updateOne(
-      { id: userId },
-      {
-        $set: {
-          [`git_connection.${repoId}`]: {
-            username: github.owner,
-            repo_id: String(repoId),
-            git_url: gitUrl,
-            git_token: github.token,
-            repo_name: repo,
-            project_id: projectId,
-            deployed_at: new Date(),
-            env_vars: envVars,
+    const deployResult = await sshDeployFiles(container, files)
+    const domain = getSycordDomain()
+    const liveUrl = `https://${containerName}.${domain}`
+
+    if (!deployResult.success) {
+      await db.collection("users").updateOne(
+        { id: userId, "projects._id": new ObjectId(projectId) },
+        {
+          $set: {
+            "projects.$.deploymentMode": "ssh",
+            "projects.$.deploymentRuntime": {
+              mode: "ssh",
+              domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
+              url: liveUrl,
+              status: "failed",
+              health: "unhealthy",
+              lastHealthCheckAt: new Date(),
+              lastDeployAt: new Date(),
+              lastDeployError: deployResult.error,
+            },
+            "projects.$.lastDeployLogsSummary": summarizeLogs(deployResult.logs),
+            "projects.$.lastFailedStage": "publish",
+            "projects.$.lastDeployError": deployResult.error,
+            "projects.$.containerName": containerName,
           },
         },
-      },
-    )
+      )
 
-    await callCompanionHealth()
-    const companion = await callCompanionDeploy(repoId)
-    const liveUrl = companion.url
+      captureDeployFailure({
+        projectId: sentryProjectId,
+        container: sentryContainer,
+        error: deployResult.error || "SSH deploy failed",
+        stage: "publish",
+      })
+
+      return NextResponse.json({ error: deployResult.error || "SSH deployment failed" }, { status: 500 })
+    }
 
     await db.collection("users").updateOne(
       { id: userId, "projects._id": new ObjectId(projectId) },
       {
         $set: {
-          "projects.$.githubOwner": github.owner,
-          "projects.$.githubRepo": repo,
-          "projects.$.githubRepoId": repoId,
-          "projects.$.githubUrl": gitUrl,
-          "projects.$.cloudflareUrl": liveUrl,
-          "projects.$.deploymentMode": "api",
+          "projects.$.containerName": containerName,
+          "projects.$.deploymentMode": "ssh",
           "projects.$.deploymentRuntime": {
-            mode: "api",
+            mode: "ssh",
             domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
             url: liveUrl,
             status: "deployed",
             health: "healthy",
-            message: companion.message,
-            projectName: companion.projectName,
-            username: companion.username,
-            repoId: companion.repoId || String(repoId),
+            message: "Deployed via SSH",
             lastHealthCheckAt: new Date(),
             lastDeployAt: new Date(),
             lastDeployError: null,
           },
-          "projects.$.lastDeployLogsSummary": summarizeLogs([companion.message || "Companion Server deployment complete"]),
+          "projects.$.lastDeployLogsSummary": summarizeLogs(deployResult.logs),
           "projects.$.lastFailedStage": null,
           "projects.$.lastDeployError": null,
           "projects.$.lastDeployWarning": null,
@@ -148,27 +139,39 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       url: liveUrl,
-      githubUrl: gitUrl,
-      cloudflareUrl: liveUrl,
+      domain: domain,
       filesCount: files.length,
-      message: companion.message || "Deployment complete",
-      repoId: String(repoId),
-      deploymentMode: "api",
+      message: "Deployment complete via SSH",
+      deploymentMode: "ssh",
       running: true,
       health_ok: true,
       health: { ok: true, htmlOk: true },
-      domain: liveUrl ? liveUrl.replace(/^https?:\/\//, "") : null,
-      projectName: companion.projectName,
-      username: companion.username,
+      containerName,
     })
   } catch (error: any) {
     captureDeployFailure({
       projectId: sentryProjectId,
-      repo: sentryRepo,
+      container: sentryContainer,
       error: error?.message || "Deploy failed",
-      stage: "companion-api",
-      response: error?.response,
+      stage: "ssh-deploy",
     })
     return NextResponse.json({ error: error?.message || "Deploy failed" }, { status: 500 })
   }
+}
+
+function captureDeployFailure(input: {
+  projectId: string
+  container: string
+  error: string
+  stage?: string
+}) {
+  Sentry.captureException(new Error(`SSH deploy failed: ${input.error}`), {
+    tags: {
+      area: "deploy",
+      project_id: input.projectId,
+      container: input.container,
+      stage: input.stage || "unknown",
+      deployment_mode: "ssh",
+    },
+  })
 }

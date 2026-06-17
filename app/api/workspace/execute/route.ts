@@ -1,29 +1,15 @@
-// POST /api/workspace/execute  — runCommand (Execution Sandbox API)
-//
-// Runs a command on an isolated server-side Node.js sandbox scoped to a single
-// project, instead of the user's browser. The project's saved files (pages) are
-// materialized into a temp workspace, the command runs there, and stdout+stderr
-// are streamed back as plain-text chunks. This avoids the browser WebContainer
-// crashes / serialization ("object can not be cloned") failures entirely.
-//
-// Request:  { "command": "pnpm install", "cwd": "/" }   (?projectId=<id>)
-// Response: streamed stdout + stderr (text/plain chunks)
-
-import { spawn } from "node:child_process"
 import {
   isDangerousCommand,
   loadProject,
-  materializeWorkspace,
   projectFiles,
   requireUserId,
-  resolveCwd,
 } from "@/lib/workspace/sandbox"
+import { getContainer, sshExecuteCommand } from "@/lib/deploy/ssh-deploy"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-// Hard ceiling for a single command so a hung process can't run forever.
 const COMMAND_TIMEOUT_MS = 180_000
 
 function textResponse(body: string, status: number): Response {
@@ -55,19 +41,15 @@ export async function POST(req: Request): Promise<Response> {
   const project = await loadProject(userId, projectId)
   if (!project) return textResponse("Project not found", 404)
 
-  let root: string
-  let workdir: string
-  try {
-    root = await materializeWorkspace(projectId, projectFiles(project))
-    workdir = resolveCwd(root, cwd)
-  } catch (err: any) {
-    return textResponse(`Failed to prepare workspace: ${err?.message || "unknown error"}`, 400)
+  const container = await getContainer(projectId)
+  if (!container) {
+    return textResponse("Container not provisioned. Deploy first to create workspace.", 400)
   }
 
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
+    async start(controller) {
       let closed = false
       const enqueue = (text: string) => {
         if (closed) return
@@ -87,43 +69,32 @@ export async function POST(req: Request): Promise<Response> {
         }
       }
 
-      // Run through a shell so the AI can use the same command strings it would
-      // type in a terminal. Execution is sandboxed to the project workspace dir.
-      const child = spawn(command, {
-        cwd: workdir,
-        shell: true,
-        env: { ...process.env, CI: "1", NO_COLOR: "1", FORCE_COLOR: "0" },
-      })
-
       const timer = setTimeout(() => {
-        enqueue(`\n[sandbox] Command timed out after ${COMMAND_TIMEOUT_MS / 1000}s — killed.\n`)
-        try {
-          child.kill("SIGKILL")
-        } catch {
-          /* noop */
-        }
+        enqueue(`\n[ssh-exec] Command timed out after ${COMMAND_TIMEOUT_MS / 1000}s — killed.\n`)
+        finish()
       }, COMMAND_TIMEOUT_MS)
 
       enqueue(`$ ${command}\n`)
-      child.stdout.on("data", (chunk: Buffer) => enqueue(chunk.toString()))
-      child.stderr.on("data", (chunk: Buffer) => enqueue(chunk.toString()))
-      child.on("error", (err) => enqueue(`\n[sandbox] ${err.message}\n`))
-      child.on("close", (code) => {
-        clearTimeout(timer)
-        enqueue(`\n[sandbox] exit code ${code ?? 0}\n`)
-        finish()
-      })
 
-      // If the client disconnects, kill the process.
-      req.signal?.addEventListener("abort", () => {
+      try {
+        const result = await sshExecuteCommand(container, command, cwd)
         clearTimeout(timer)
-        try {
-          child.kill("SIGKILL")
-        } catch {
-          /* noop */
+
+        if (result.stdout) {
+          enqueue(result.stdout)
+          if (!result.stdout.endsWith("\n")) enqueue("\n")
         }
+        if (result.stderr) {
+          enqueue(result.stderr)
+          if (!result.stderr.endsWith("\n")) enqueue("\n")
+        }
+        enqueue(`\n[ssh-exec] exit code ${result.exitCode ?? "unknown"}\n`)
+      } catch (err: any) {
+        clearTimeout(timer)
+        enqueue(`\n[ssh-exec] Error: ${err?.message || "SSH execution failed"}\n`)
+      } finally {
         finish()
-      })
+      }
     },
   })
 

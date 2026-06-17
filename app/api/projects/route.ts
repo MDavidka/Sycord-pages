@@ -6,6 +6,7 @@ import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
 import { ObjectId } from "mongodb"
+import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -260,6 +261,12 @@ export async function POST(request: Request) {
     )
 
     console.log("[Project Creation] Project created successfully embedded in user:", projectId.toString())
+
+    // Trigger container setup in background (don't block response)
+    const projectIdStr = projectId.toString()
+    ensureContainer(newProject, projectIdStr)
+      .then((container) => bootstrapContainer(container))
+      .catch((err) => console.error("[Project Creation] Container setup failed:", err?.message))
 
     // Return the new project. We cast _id to string for JSON serialization compatibility if needed,
     // but Next.js usually handles ObjectId in JSON response or we should stringify it.
