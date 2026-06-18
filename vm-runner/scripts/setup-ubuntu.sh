@@ -1,47 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AUTO_FIX_PORT_80="${SYCORD_AUTO_FIX_PORT_80:-1}"
+AUTO_FIX_PORT="${SYCORD_AUTO_FIX_PORT:-1}"
+NGINX_PORT="${SYCORD_NGINX_PORT:-80}"
+CENTRAL_PORT="${SYCORD_CENTRAL_PORT:-3000}"
+RUNNER_PORT="${RUNNER_PORT:-5050}"
+BASE_DOMAIN="${SYCORD_BASE_DOMAIN:-sycord.site}"
+RUNNER_DIR="${SYCORD_RUNNER_DIR:-/srv/sycord/vm-runner}"
+NGINX_SITES="/etc/nginx/sites-enabled"
+SYCORD_WILDCARD_CONF="${NGINX_SITES}/sycord-wildcard.conf"
 
 log() {
   printf '%s\n' "${1:-}"
 }
 
 diagnostics() {
-  log "== Port 80 owner via ss =="
-  ss -ltnp | grep ':80' || true
+  log "== Port ${NGINX_PORT} owner via ss =="
+  ss -ltnp | grep ":${NGINX_PORT}" || true
   log
-  log "== Port 80 owner via lsof =="
-  lsof -nP -iTCP:80 -sTCP:LISTEN || true
+  log "== Port ${NGINX_PORT} owner via lsof =="
+  lsof -nP -iTCP:${NGINX_PORT} -sTCP:LISTEN || true
+  log
+  log "== Port ${RUNNER_PORT} owner via ss =="
+  ss -ltnp | grep ":${RUNNER_PORT}" || true
   log
   log "== Related services =="
   systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true
   log
-  log "== Port 80 PID details =="
-  print_port_80_pid_details || true
 }
 
-related_service_units() {
-  systemctl list-units --type=service --all --no-legend \
-    | awk '{print $1}' \
-    | grep -Ei 'flask|python|gunicorn|sycord|server|runner|caddy' \
-    | grep -Evi 'sycord-vm-runner|nginx|cloudflared' || true
+nginx_port_is_busy() {
+  ss -ltnp | grep -q ":${NGINX_PORT}"
 }
 
-port_80_is_busy() {
-  ss -ltnp | grep -q ':80'
-}
-
-port_80_owner_text() {
+nginx_port_owner_text() {
   {
-    ss -ltnp | grep ':80' || true
-    lsof -nP -iTCP:80 -sTCP:LISTEN || true
-    print_port_80_pid_details || true
+    ss -ltnp | grep ":${NGINX_PORT}" || true
+    lsof -nP -iTCP:${NGINX_PORT} -sTCP:LISTEN || true
   } | sed '/^\s*$/d'
 }
 
-port_80_pid() {
-  ss -ltnp | grep ':80' | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n1
+nginx_port_pid() {
+  ss -ltnp | grep ":${NGINX_PORT}" | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -n1
 }
 
 service_for_pid() {
@@ -68,99 +68,11 @@ ppid_for_pid() {
   ps -p "${pid}" -o ppid= 2>/dev/null | tr -d ' '
 }
 
-startup_references_for_pattern() {
-  local pattern="$1"
-  grep -RInE "${pattern}" /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system /etc/rc.local /etc/crontab /var/spool/cron/crontabs/root /root/.config/systemd /root 2>/dev/null \
-    | grep -vE '/root/myapp/cloudflared|/srv/sycord/vm-runner|sycord-vm-runner' \
-    || true
-}
-
-print_port_80_pid_details() {
-  local pid service exe ps_line
-  pid="$(port_80_pid)"
-  [[ -z "${pid}" ]] && return 0
-  service="$(service_for_pid "${pid}")"
-  exe="$(exe_for_pid "${pid}")"
-  ps_line="$(process_line_for_pid "${pid}")"
-  log "PID: ${pid}"
-  [[ -n "${service}" ]] && log "Service: ${service}"
-  [[ -n "${exe}" ]] && log "Executable: ${exe}"
-  [[ -n "${ps_line}" ]] && log "Process: ${ps_line}"
-  log "Startup references:"
-  startup_references_for_pattern "${exe:-/go/bin/main}|/go/bin/main|main /go/bin/main" || true
-}
-
-looks_like_old_sycord_stack() {
-  local owner_text="$1"
-  if [[ -z "${owner_text}" ]]; then
-    return 1
-  fi
-  grep -Eiq 'flask|python|gunicorn|caddy|sycord|server|runner|main|node|static' <<<"${owner_text}"
-}
-
-disable_startup_references() {
-  local service_lines matched_service
-  service_lines="$(startup_references_for_pattern '/go/bin/main|main /go/bin/main|/root/myapp')"
-  if [[ -n "${service_lines}" ]]; then
-    log "Found startup references for old public app:"
-    log "${service_lines}"
-  fi
-
-  matched_service="$(grep -oE '[[:alnum:]_.@-]+\.service' <<<"${service_lines}" | sort -u || true)"
-  if [[ -n "${matched_service}" ]]; then
-    while read -r unit; do
-      [[ -z "${unit}" ]] && continue
-      if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${unit}"; then
-        continue
-      fi
-      log "Stopping startup unit: ${unit}"
-      systemctl stop "${unit}" || true
-      log "Disabling startup unit: ${unit}"
-      systemctl disable "${unit}" || true
-    done <<<"${matched_service}"
-  fi
-}
-
-kill_port_80_pid() {
-  local pid ppid exe ps_line parent_line
-  pid="$(port_80_pid)"
-  [[ -z "${pid}" ]] && return 0
-  ppid="$(ppid_for_pid "${pid}")"
-  exe="$(exe_for_pid "${pid}")"
-  ps_line="$(process_line_for_pid "${pid}")"
-  parent_line="$(process_line_for_pid "${ppid}")"
-
-  if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${exe} ${ps_line}"; then
-    log "Refusing to kill protected port 80 owner: ${ps_line}"
-    return 0
-  fi
-
-  disable_startup_references
-
-  log "Stopping raw port 80 owner PID ${pid}"
-  kill "${pid}" || true
-  sleep 2
-  if kill -0 "${pid}" 2>/dev/null; then
-    log "PID ${pid} still alive, sending SIGKILL"
-    kill -9 "${pid}" || true
-  fi
-
-  if [[ -n "${ppid}" ]] && [[ "${ppid}" != "1" ]] && ! grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${parent_line}"; then
-    log "Stopping parent PID ${ppid}: ${parent_line}"
-    kill "${ppid}" || true
-    sleep 1
-    if kill -0 "${ppid}" 2>/dev/null; then
-      log "Parent PID ${ppid} still alive, sending SIGKILL"
-      kill -9 "${ppid}" || true
-    fi
-  fi
-}
-
-stop_old_services() {
+stop_foreign_process_on_nginx_port() {
   local pid service exe
-  pid="$(port_80_pid)"
+  pid="$(nginx_port_pid)"
   if [[ -z "${pid}" ]]; then
-    log "No process found on port 80"
+    log "No foreign process on port ${NGINX_PORT}"
     return 0
   fi
 
@@ -168,47 +80,38 @@ stop_old_services() {
   exe="$(exe_for_pid "${pid}")"
 
   if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${exe} ${service}"; then
-    log "Port 80 is held by a protected service (nginx/cloudflared/runner) — skipping cleanup"
+    log "Port ${NGINX_PORT} is held by a protected service — skipping cleanup"
     return 0
   fi
 
-  log "Port 80 owner: PID=${pid} service=${service:-none} exe=${exe:-unknown}"
+  log "Foreign process on port ${NGINX_PORT}: PID=${pid} service=${service:-none} exe=${exe:-unknown}"
 
-  # Step 1: Stop and mask the systemd service if we can find it
   if [[ -n "${service}" ]]; then
     log "Stopping systemd unit: ${service}"
     systemctl stop "${service}" 2>/dev/null || true
-    log "Disabling systemd unit: ${service}"
     systemctl disable "${service}" 2>/dev/null || true
-    log "Masking systemd unit to prevent restart: ${service}"
     systemctl mask "${service}" 2>/dev/null || true
     sleep 1
   fi
 
-  # Step 2: Also search for and disable any startup references
-  disable_startup_references
-
-  # Step 3: If still running, kill directly
   if kill -0 "${pid}" 2>/dev/null; then
-    log "PID ${pid} still alive, sending SIGTERM"
+    log "Sending SIGTERM to PID ${pid}"
     kill "${pid}" 2>/dev/null || true
     sleep 3
   fi
 
   if kill -0 "${pid}" 2>/dev/null; then
-    log "PID ${pid} still alive after SIGTERM, sending SIGKILL"
+    log "Sending SIGKILL to PID ${pid}"
     kill -9 "${pid}" 2>/dev/null || true
     sleep 2
   fi
 
-  # Step 4: If STILL running, kill everything on port 80
   if kill -0 "${pid}" 2>/dev/null; then
-    log "PID ${pid} refuses to die, using fuser -k 80/tcp as last resort"
-    fuser -k 80/tcp 2>/dev/null || true
+    log "PID ${pid} refuses to die, using fuser -k ${NGINX_PORT}/tcp"
+    fuser -k ${NGINX_PORT}/tcp 2>/dev/null || true
     sleep 2
   fi
 
-  # Step 5: Kill parent
   local ppid parent_line
   ppid="$(ppid_for_pid "${pid}")"
   if [[ -n "${ppid}" ]] && [[ "${ppid}" != "1" ]]; then
@@ -220,54 +123,75 @@ stop_old_services() {
       kill -9 "${ppid}" 2>/dev/null || true
     fi
   fi
+}
 
-  # Step 6: Additional — find any service by scanning systemd for this executable
-  if [[ -n "${exe}" ]]; then
-    local extra_units
-    extra_units="$(systemctl list-units --type=service --all --no-legend 2>/dev/null | awk '{print $1}' | while read -r u; do
-      local ep
-      ep="$(systemctl show -p ExecStart "${u}" 2>/dev/null | head -1 || true)"
-      if [[ "${ep}" == *"${exe}"* ]]; then
-        echo "${u}"
-      fi
-    done || true)"
-    if [[ -n "${extra_units}" ]]; then
-      while read -r unit; do
-        [[ -z "${unit}" ]] && continue
-        if grep -Eiq 'nginx|cloudflared|sycord-vm-runner' <<<"${unit}"; then continue; fi
-        log "Found additional service matching exe: ${unit}"
-        systemctl stop "${unit}" 2>/dev/null || true
-        systemctl disable "${unit}" 2>/dev/null || true
-        systemctl mask "${unit}" 2>/dev/null || true
-      done <<<"${extra_units}"
-    fi
+write_nginx_wildcard_config() {
+  if [[ -f "${SYCORD_WILDCARD_CONF}" ]]; then
+    log "Wildcard proxy config already exists at ${SYCORD_WILDCARD_CONF}"
+    return 0
+  fi
+
+  mkdir -p "${NGINX_SITES}"
+
+  local template="${RUNNER_DIR}/templates/nginx-wildcard.conf"
+  if [[ -f "${template}" ]]; then
+    log "Installing wildcard proxy config from template"
+    sed -e "s/__NGINX_PORT__/${NGINX_PORT}/g" \
+        -e "s/__CENTRAL_PORT__/${CENTRAL_PORT}/g" \
+        "${template}" > "${SYCORD_WILDCARD_CONF}"
+  else
+    log "Template not found — writing static wildcard config"
+    cat > "${SYCORD_WILDCARD_CONF}" << 'WILDCARD_EOF'
+server {
+    listen __NGINX_PORT__;
+    server_name *.sycord.site sycord.site;
+
+    location / {
+        proxy_pass http://127.0.0.1:__CENTRAL_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 3600;
+        proxy_connect_timeout 60;
+        proxy_send_timeout 3600;
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding on;
+    }
+}
+WILDCARD_EOF
+    sed -i "s/__NGINX_PORT__/${NGINX_PORT}/g; s/__CENTRAL_PORT__/${CENTRAL_PORT}/g" "${SYCORD_WILDCARD_CONF}"
   fi
 }
 
 ensure_nginx() {
   log "Validating Nginx configuration"
   nginx -t
-  log "Restarting Nginx"
-  systemctl restart nginx
+  log "Enabling and (re)starting Nginx"
   systemctl enable nginx
+  if systemctl is-active nginx >/dev/null 2>&1; then
+    systemctl reload nginx
+  else
+    systemctl start nginx
+  fi
   systemctl is-active nginx >/dev/null
 }
 
-ensure_runner_nginx_config() {
-  local runner_conf="/etc/nginx/sites-enabled/sycord-runner.conf"
-  if [[ -f "${runner_conf}" ]]; then
-    log "Runner nginx config already exists"
-    return 0
-  fi
+# ---------------------------------------------------------------------------
+# Main bootstrap
+# ---------------------------------------------------------------------------
 
-  if [[ -f "/srv/sycord/vm-runner/templates/nginx-runner.conf" ]]; then
-    log "Installing runner proxy config (server.sycord.site → :5050)"
-    cp /srv/sycord/vm-runner/templates/nginx-runner.conf "${runner_conf}"
-    nginx -t && systemctl reload nginx
-  else
-    log "Runner proxy template not found — the runner will create it on startup"
-  fi
-}
+log "=== Sycord Dynamic Reverse Proxy Setup ==="
+log "Nginx port:     ${NGINX_PORT}  (wildcard *.${BASE_DOMAIN} → per-site PM2)"
+log "Runner port:    ${RUNNER_PORT}  (deployer API: api.${BASE_DOMAIN})"
+log "Central port:   ${CENTRAL_PORT}"
+log "Base domain:    ${BASE_DOMAIN}"
+log "Runner dir:     ${RUNNER_DIR}"
+log ""
 
 apt-get update
 apt-get install -y nginx curl git lsof ca-certificates
@@ -286,34 +210,28 @@ chmod 700 /srv/sycord/env
 
 diagnostics
 
-if port_80_is_busy; then
-  OWNER_TEXT="$(port_80_owner_text)"
+if nginx_port_is_busy; then
+  OWNER_TEXT="$(nginx_port_owner_text)"
 
-  # Nginx on port 80 is the desired state. Skip cleanup.
   if grep -Eiq 'nginx' <<<"${OWNER_TEXT}"; then
-    log
-    log "Port 80 is held by nginx — correct. Cloudflare Tunnel → Nginx → Next.js sites."
+    log "Port ${NGINX_PORT} is held by nginx — correct."
   else
-    log
-    log "Port 80 is occupied by a non-nginx process:"
+    log "Port ${NGINX_PORT} is occupied by a non-nginx process:"
     log "${OWNER_TEXT}"
 
-    if [[ "${AUTO_FIX_PORT_80}" == "1" ]]; then
-      log
-      log "Attempting automatic cleanup of port 80 owner..."
-      stop_old_services
+    if [[ "${AUTO_FIX_PORT}" == "1" ]]; then
+      log "Attempting automatic cleanup of port ${NGINX_PORT} owner..."
+      stop_foreign_process_on_nginx_port
       sleep 2
     fi
 
-    # Re-check after cleanup
-    if port_80_is_busy; then
+    if nginx_port_is_busy; then
       local final_owner
-      final_owner="$(port_80_owner_text)"
+      final_owner="$(nginx_port_owner_text)"
       if grep -Eiq 'nginx' <<<"${final_owner}"; then
-        log "Cleanup succeeded — nginx now holds port 80."
+        log "Cleanup succeeded — nginx now holds port ${NGINX_PORT}."
       else
-        log
-        log "SETUP ERROR: Port 80 still occupied after cleanup. Nginx cannot start."
+        log "SETUP ERROR: Port ${NGINX_PORT} still occupied after cleanup. Nginx cannot start."
         log "${final_owner}"
         exit 1
       fi
@@ -322,13 +240,13 @@ if port_80_is_busy; then
   fi
 fi
 
+write_nginx_wildcard_config
 ensure_nginx
-ensure_runner_nginx_config
 
-log
+log ""
 log "Ubuntu setup complete"
 log "Expected final state:"
-log "- nginx active on :80 → proxies *.sycord.site to Next.js sites"
-log "- server.sycord.site → :5050 (runner API)"
-log "- sycord-vm-runner active on :5050"
-log "- cloudflared active (optional)"
+log "- nginx active on :${NGINX_PORT}  → wildcard *.${BASE_DOMAIN} → :${CENTRAL_PORT} (or per-site ports)"
+log "- runner active on :${RUNNER_PORT} → deployer API (api.${BASE_DOMAIN} via Cloudflare direct)"
+log "- Cloudflare ingress: api.${BASE_DOMAIN} → localhost:${RUNNER_PORT}"
+log "- Cloudflare ingress: *.${BASE_DOMAIN} → localhost:${NGINX_PORT}"

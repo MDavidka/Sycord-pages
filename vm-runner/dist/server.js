@@ -11,7 +11,7 @@ import { getProjectRoot, validateProjectId } from "./paths.js";
 import { deleteProcess, stopProcess } from "./processes.js";
 import { getWebsiteState, readState, removeWebsiteState, upsertWebsiteState } from "./state.js";
 import { runHealthCheck } from "./health.js";
-import { ensureRunnerProxyConfig, reloadProxy, removeProxyConfig } from "./proxy.js";
+import { ensureWildcardProxyConfig, reloadProxy, removeProxyConfig, writeProxyConfig, getAllProxyConfigs, } from "./proxy.js";
 const app = Fastify({ logger: true });
 app.addHook("preHandler", requireBearerToken);
 app.get("/api/status", async () => {
@@ -182,8 +182,72 @@ app.post("/api/deploy/:projectId/stream", async (request, reply) => {
         reply.raw.end();
     }
 });
+app.get("/api/proxy", async () => {
+    const state = await readState();
+    const configs = await getAllProxyConfigs().catch(() => []);
+    return {
+        success: true,
+        nginxPort: config.nginxPort,
+        nginxSitesDir: config.nginxSitesDir,
+        proxyConfigs: configs.map((c) => ({
+            id: c.projectId,
+            path: c.path,
+            exists: c.exists,
+        })),
+        websites: Object.values(state.websites).map((s) => ({
+            projectId: s.projectId,
+            domain: s.domain,
+            port: s.port,
+            status: s.status,
+        })),
+    };
+});
+app.post("/api/proxy/reload", async (_request, reply) => {
+    try {
+        await reloadProxy();
+        return { success: true, message: "Nginx reloaded" };
+    }
+    catch (err) {
+        return reply.code(500).send({ success: false, error: err?.message || "Nginx reload failed" });
+    }
+});
+app.post("/api/proxy/write", async (request, reply) => {
+    const body = request.body;
+    if (!body.projectId || !body.serverName || !body.port) {
+        return reply.code(400).send({ success: false, error: "projectId, serverName, and port required" });
+    }
+    try {
+        await writeProxyConfig(body.projectId, body.serverName, body.port);
+        await reloadProxy();
+        return { success: true, projectId: body.projectId, serverName: body.serverName, port: body.port };
+    }
+    catch (err) {
+        return reply.code(500).send({ success: false, error: err?.message || "Proxy config write failed" });
+    }
+});
+app.delete("/api/proxy/:projectId", async (request, reply) => {
+    const { projectId } = request.params;
+    try {
+        await removeProxyConfig(projectId);
+        await reloadProxy();
+        return { success: true };
+    }
+    catch (err) {
+        return reply.code(500).send({ success: false, error: err?.message || "Proxy config removal failed" });
+    }
+});
+app.post("/api/proxy/ensure-wildcard", async (_request, reply) => {
+    try {
+        await ensureWildcardProxyConfig();
+        await reloadProxy().catch(() => undefined);
+        return { success: true, message: "Wildcard proxy config ensured" };
+    }
+    catch (err) {
+        return reply.code(500).send({ success: false, error: err?.message || "Wildcard proxy config failed" });
+    }
+});
 ensureBaseDirectories()
-    .then(() => ensureRunnerProxyConfig())
+    .then(() => ensureWildcardProxyConfig())
     .then(() => reloadProxy().catch(() => undefined))
     .then(() => app.listen({ host: config.host, port: config.port }))
     .catch((error) => {

@@ -79,7 +79,7 @@ export async function probeDeployVmSsh(input?: VmSetupInput) {
 export async function readDeployVmDiagnostics(input?: VmSetupInput) {
   return withRootSsh(async (ssh) => {
     const port80 = await ssh.execCommand("ss -ltnp | grep ':80' || true")
-    const port5050 = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
+    const port5050diag = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
     const nginx = await ssh.execCommand("systemctl is-active nginx || true")
     const cloudflared = await ssh.execCommand("systemctl is-active cloudflared || true")
     const cloudflaredProcess = await ssh.execCommand("pgrep -af cloudflared || true")
@@ -125,9 +125,9 @@ export async function readDeployVmDiagnostics(input?: VmSetupInput) {
             : null,
       },
       runner: {
-        running: Boolean(port5050.stdout.trim()),
+        running: Boolean(port5050diag.stdout.trim()),
         port: 5050,
-        portOwner: port5050.stdout.trim() || null,
+        portOwner: port5050diag.stdout.trim() || null,
       },
       cloudflared: {
         running: cloudflared.stdout.trim() === "active" || Boolean(cloudflaredProcess.stdout.trim()),
@@ -376,6 +376,8 @@ export async function writeCloudflaredConfig(
 credentials-file: ${credentialsPath}
 
 ingress:
+  - hostname: "api.${baseDomain}"
+    service: http://127.0.0.1:5050
   - hostname: "*.${baseDomain}"
     service: http://127.0.0.1:80
   - hostname: "${baseDomain}"
