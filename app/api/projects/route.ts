@@ -91,107 +91,72 @@ export async function POST(request: Request) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Website in Progress</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        html, body {
-            min-height: 100dvh;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-            background-color: #141414;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .logo-container {
-            position: absolute;
-            top: 20%;
-            left: 15%;
-        }
-        .logo {
-            width: 48px;
-            height: 24px;
-            background-color: rgba(255, 255, 255, 0.6);
-            border-radius: 4px;
-            clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 50%, 0 100%);
-        }
-        .content {
-            text-align: left;
-            max-width: 600px;
-            width: 100%;
-            padding: 2rem;
-            margin-left: -15%;
-        }
-        @media (max-width: 768px) {
-            .logo-container {
-                top: 20%;
-                left: 10%;
-            }
-            .content {
-                margin-left: 0;
-                padding-left: 10%;
-            }
-        }
-        h1 {
-            font-size: 2.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            letter-spacing: -0.025em;
-        }
-        p {
-            font-size: 1.125rem;
-            color: #a1a1aa;
-            margin-bottom: 3.5rem;
-        }
-        .return-btn {
-            background-color: rgba(255, 255, 255, 0.4);
-            color: #ffffff;
-            border: none;
-            border-radius: 9999px;
-            padding: 0.75rem 2.5rem;
-            font-size: 1.25rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .return-btn:hover {
-            background-color: rgba(255, 255, 255, 0.5);
-        }
-        .footer {
-            position: absolute;
-            bottom: 5%;
-            text-align: center;
-            width: 100%;
-            color: #a1a1aa;
-            font-size: 0.875rem;
-        }
-    </style>
+    <title>Quantum Innovations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <div class="logo-container">
-        <div class="logo"></div>
-    </div>
-    <div class="content">
-        <h1>Here is your site</h1>
-        <p>set up your website stile on the dasboard</p>
-        <button class="return-btn" onclick="window.parent !== window ? window.parent.postMessage('returnToDashboard', '*') : window.location.href='/'">return</button>
-    </div>
-    <div class="footer">
-        privacy and policy &bull; terms of condition
-    </div>
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen flex flex-col">
+    <!-- Navigation -->
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="text-xl font-bold text-blue-600">Quantum Innovations</div>
+            <nav class="hidden md:flex space-x-8 text-sm font-medium text-gray-700">
+                <a href="#" class="hover:text-blue-600">Home</a>
+                <a href="#" class="hover:text-blue-600">Services</a>
+                <a href="#" class="hover:text-blue-600">About</a>
+                <a href="#" class="hover:text-blue-600">Contact</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <main class="flex-grow flex flex-col justify-center">
+        <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+            <h1 class="text-4xl sm:text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-6">
+                Welcome to Quantum Innovations
+            </h1>
+            <p class="mt-4 max-w-2xl mx-auto text-xl text-gray-500 mb-10">
+                Pioneering the future of technology with cutting-edge solutions designed to transform your business and elevate your success.
+            </p>
+            <div class="flex justify-center gap-4">
+                <a href="#" class="px-8 py-3 rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700 transition">Get Started</a>
+                <a href="#" class="px-8 py-3 rounded-md bg-white border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition">Learn More</a>
+            </div>
+        </section>
+
+        <!-- Features Grid -->
+        <section class="bg-white py-16">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+                    <div class="p-6 bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
+                        <div class="w-12 h-12 mx-auto bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Advanced Analytics</h3>
+                        <p class="text-gray-600">Unlock powerful insights with our next-generation data analytics platform.</p>
+                    </div>
+                    <div class="p-6 bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
+                        <div class="w-12 h-12 mx-auto bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Cloud Architecture</h3>
+                        <p class="text-gray-600">Scalable and secure cloud infrastructure tailored to your enterprise needs.</p>
+                    </div>
+                    <div class="p-6 bg-gray-50 rounded-lg border border-gray-100 shadow-sm">
+                        <div class="w-12 h-12 mx-auto bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1m-1.636 6.364l-.707-.707M3 12h1m1.636-6.364l.707.707M12 21v-1m-4.636-6.364l.707.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg>
+                        </div>
+                        <h3 class="text-xl font-bold mb-2">Machine Learning</h3>
+                        <p class="text-gray-600">Intelligent AI solutions that learn and adapt to optimize your workflows.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white py-8 border-t border-gray-200 text-center mt-auto">
+        <p class="text-gray-500 text-sm">&copy; 2024 Quantum Innovations. All rights reserved.</p>
+    </footer>
 </body>
 </html>`;
 
