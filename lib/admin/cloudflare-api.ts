@@ -4,13 +4,13 @@
 // required a browser auth step and a cert.pem on the VM) with fully automated
 // API calls. The flow is:
 //   1. Create (or reuse) a named tunnel with config_src="cloudflare"  -> tunnel id + run token
-//   2. PUT the ingress configuration so *.<baseDomain> -> http://127.0.0.1:5050
+//   2. PUT ingress: api.<baseDomain> → :5050 (runner), *.<baseDomain> → :80 (nginx)
 //   3. Ensure a proxied wildcard DNS CNAME *.<baseDomain> -> <id>.cfargotunnel.com
 //   4. On the VM: `cloudflared service install <token>` (no cert.pem needed)
 //
-// A single tunnel + wildcard DNS serves every project: nginx on the VM routes
-// each <project>.<baseDomain> by Host header to the project's local port, so a
-// new deployment becomes reachable immediately without any extra Cloudflare calls.
+// A single tunnel + dual ingress serves everything:
+//   api.<baseDomain> → runner:5050 (deploy API, direct)
+//   *.<baseDomain> → nginx:80 → per-site PM2 processes
 
 const CF_API_BASE = "https://api.cloudflare.com/client/v4"
 const TUNNEL_NAME = process.env.CLOUDFLARE_TUNNEL_NAME || "sycord-deployer"
@@ -156,15 +156,17 @@ export async function putWildcardIngress(
   env: CloudflareEnv,
   tunnelId: string,
   baseDomain: string,
-  localService = "http://127.0.0.1:5050",
+  runnerService = "http://127.0.0.1:5050",
+  nginxService = "http://127.0.0.1:80",
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await cfFetch(env, `/accounts/${env.accountId}/cfd_tunnel/${tunnelId}/configurations`, {
     method: "PUT",
     body: JSON.stringify({
       config: {
         ingress: [
-          { hostname: `*.${baseDomain}`, service: localService, originRequest: {} },
-          { hostname: baseDomain, service: localService, originRequest: {} },
+          { hostname: `api.${baseDomain}`, service: runnerService, originRequest: {} },
+          { hostname: `*.${baseDomain}`, service: nginxService, originRequest: {} },
+          { hostname: baseDomain, service: nginxService, originRequest: {} },
           { service: "http_status:404" },
         ],
       },
@@ -336,7 +338,7 @@ export async function provisionTunnel(
   }
   log(`[cloudflare-api] Tunnel ${created ? "created" : "reused"}: ${tunnel.id}`)
 
-  log(`[cloudflare-api] Setting ingress: *.${baseDomain} -> http://127.0.0.1:5050`)
+  log(`[cloudflare-api] Setting ingress: api.${baseDomain} -> http://127.0.0.1:5050, *.${baseDomain} -> http://127.0.0.1:80`)
   const ingress = await putWildcardIngress(env, tunnel.id, baseDomain)
   if (!ingress.ok) {
     return { success: false, error: `Failed to set tunnel ingress: ${ingress.error}` }

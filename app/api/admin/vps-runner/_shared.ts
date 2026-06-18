@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isAdmin } from "@/lib/is-admin"
 
-const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5051"
+const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
 
 export async function assertAdmin() {
   return isAdmin()

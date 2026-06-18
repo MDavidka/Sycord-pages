@@ -8,15 +8,16 @@ function readNumber(name: string, fallback: number) {
 export const config = {
   host: process.env.RUNNER_HOST || "0.0.0.0",
 
-  /** Internal port the vm-runner Fastify API listens on */
-  port: readNumber("RUNNER_PORT", 5051),
+  /** Internal port the vm-runner Fastify API listens on — the deployer API */
+  port: readNumber("RUNNER_PORT", 5050),
 
   token: process.env.VPS_RUNNER_TOKEN || "",
   baseDomain: process.env.SYCORD_BASE_DOMAIN || "sycord.site",
 
-  /** Port Nginx listens on — the main reverse proxy / gatekeeper.
-   *  Cloudflare Tunnel routes *.sycord.site → localhost:<nginxPort>. */
-  nginxPort: readNumber("SYCORD_NGINX_PORT", 5050),
+  /** Port Nginx listens on for wildcard *.sycord.site → per-site routing.
+   *  Cloudflare Tunnel routes *.sycord.site → localhost:<nginxPort>.
+   *  The runner API (api.sycord.site) is served directly on :5050 via Cloudflare. */
+  nginxPort: readNumber("SYCORD_NGINX_PORT", 80),
 
   /** Default backend for the Nginx wildcard block (multi-tenant central app).
    *  Individual per-site server blocks override this with project-specific ports. */
@@ -39,4 +40,7 @@ export const config = {
 
   pm2Binary: process.env.SYCORD_PM2_BIN || "pm2",
   setupScriptPath: path.join(process.cwd(), "scripts", "setup-ubuntu.sh"),
+
+  /** Optional cloudflared config template path */
+  cloudflaredConfigTemplatePath: path.join(process.cwd(), "templates", "cloudflared-config.yml"),
 }

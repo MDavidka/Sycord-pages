@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNNER_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-NGINX_PORT="${SYCORD_NGINX_PORT:-5050}"
-RUNNER_PORT="${RUNNER_PORT:-5051}"
+NGINX_PORT="${SYCORD_NGINX_PORT:-80}"
+RUNNER_PORT="${RUNNER_PORT:-5050}"
 CENTRAL_PORT="${SYCORD_CENTRAL_PORT:-3000}"
 
 cd "${RUNNER_DIR}"
@@ -14,7 +14,7 @@ npm run build
 
 cat >/etc/systemd/system/sycord-vm-runner.service <<'EOF'
 [Unit]
-Description=Sycord VM Runner
+Description=Sycord VM Runner — Deployer API + Proxy Manager
 After=network.target
 
 [Service]

@@ -78,9 +78,8 @@ export async function probeDeployVmSsh(input?: VmSetupInput) {
 
 export async function readDeployVmDiagnostics(input?: VmSetupInput) {
   return withRootSsh(async (ssh) => {
-    const port80 = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
-    const port5050 = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
-    const port5051 = await ssh.execCommand("ss -ltnp | grep ':5051' || true")
+    const port80 = await ssh.execCommand("ss -ltnp | grep ':80' || true")
+    const port5050diag = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
     const nginx = await ssh.execCommand("systemctl is-active nginx || true")
     const cloudflared = await ssh.execCommand("systemctl is-active cloudflared || true")
     const cloudflaredProcess = await ssh.execCommand("pgrep -af cloudflared || true")
@@ -126,9 +125,9 @@ export async function readDeployVmDiagnostics(input?: VmSetupInput) {
             : null,
       },
       runner: {
-        running: Boolean(port5051.stdout.trim()),
-        port: 5051,
-        portOwner: port5051.stdout.trim() || null,
+        running: Boolean(port5050diag.stdout.trim()),
+        port: 5050,
+        portOwner: port5050diag.stdout.trim() || null,
       },
       cloudflared: {
         running: cloudflared.stdout.trim() === "active" || Boolean(cloudflaredProcess.stdout.trim()),
@@ -153,8 +152,8 @@ export async function manageDeployVmRunnerService(action: "start" | "stop" | "re
         : `systemctl ${action} sycord-vm-runner && systemctl status sycord-vm-runner --no-pager || true`
 
     const result = await ssh.execCommand(command)
-    const runnerSocket = await ssh.execCommand("ss -ltnp | grep ':5051' || true")
-    const nginxSocket = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
+    const runnerSocket = await ssh.execCommand("ss -ltnp | grep ':5050' || true")
+    const nginxSocket = await ssh.execCommand("ss -ltnp | grep ':80' || true")
     const cloudflared = await ssh.execCommand("pgrep -af cloudflared || true")
 
     return {
@@ -377,10 +376,12 @@ export async function writeCloudflaredConfig(
 credentials-file: ${credentialsPath}
 
 ingress:
+  - hostname: "api.${baseDomain}"
+    service: http://127.0.0.1:5050
   - hostname: "*.${baseDomain}"
-    service: http://127.0.0.1:5050
+    service: http://127.0.0.1:80
   - hostname: "${baseDomain}"
-    service: http://127.0.0.1:5050
+    service: http://127.0.0.1:80
   - service: http_status:404
 `
 
@@ -676,18 +677,18 @@ export async function bootstrapDeployVmRunner(input?: VmSetupInput): Promise<VmS
     }
 
     phase = "verify"
-    emit("Verifying runner is listening on port 5051...")
-    const verify = await ssh.execCommand("ss -ltnp | grep ':5051 ' || true")
+    emit("Verifying runner is listening on port 5050...")
+    const verify = await ssh.execCommand("ss -ltnp | grep ':5050 ' || true")
     emit(verify.stdout)
     emit(verify.stderr)
 
     const success = Boolean(verify.stdout.trim())
-    const runnerUrl = `http://${host}:5051`
+    const runnerUrl = `http://${host}:5050`
     
     return {
       success,
       phase,
-      error: success ? null : "Runner process not found on port 5051 after start",
+      error: success ? null : "Runner process not found on port 5050 after start",
       logs: steps.filter(Boolean).join("\n").trim(),
       runnerUrl: success ? runnerUrl : undefined,
       runnerToken: success ? runnerToken : undefined,

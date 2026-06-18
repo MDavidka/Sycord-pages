@@ -442,7 +442,7 @@ async function writeNginxSiteConfig(
   port: number,
 ): Promise<void> {
   const config = `server {
-  listen 5050;
+  listen 80;
   server_name ${serverName};
 
   location / {
@@ -520,7 +520,7 @@ async function ensurePm2Startup(ssh: NodeSSH): Promise<void> {
 
 /**
  * With the API-managed tunnel, all `*.<baseDomain>` traffic is already routed
- * to this VM's nginx (:5050) via the wildcard ingress + wildcard DNS created by
+ * to this VM's nginx (:80) via the wildcard ingress + wildcard DNS created by
  * the admin setuper. So a freshly deployed `<project>.<baseDomain>` is reachable
  * immediately once its nginx vhost exists — no per-host CLI command is needed
  * (and the old `cloudflared tunnel route dns` CLI cannot work with token-based

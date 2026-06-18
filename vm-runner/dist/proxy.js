@@ -57,6 +57,24 @@ export async function ensureRunnerProxyConfig() {
 export async function removeProxyConfig(projectId) {
     await fs.rm(getProxyConfigPath(projectId), { force: true });
 }
+export async function getAllProxyConfigs() {
+    const results = [];
+    let entries = [];
+    try {
+        entries = await fs.readdir(config.nginxSitesDir);
+    }
+    catch {
+        return results;
+    }
+    for (const entry of entries) {
+        if (!entry.endsWith(".conf"))
+            continue;
+        const entryPath = `${config.nginxSitesDir}/${entry}`;
+        const projectId = entry.replace(/^sycord-/, "").replace(/\.conf$/, "");
+        results.push({ projectId, path: entryPath, exists: true });
+    }
+    return results;
+}
 export async function reloadProxy() {
     const test = await runCommand("nginx", ["-t"]);
     if (test.code !== 0) {

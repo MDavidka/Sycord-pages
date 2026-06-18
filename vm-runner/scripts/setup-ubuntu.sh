@@ -2,14 +2,13 @@
 set -euo pipefail
 
 AUTO_FIX_PORT="${SYCORD_AUTO_FIX_PORT:-1}"
-NGINX_PORT="${SYCORD_NGINX_PORT:-5050}"
+NGINX_PORT="${SYCORD_NGINX_PORT:-80}"
 CENTRAL_PORT="${SYCORD_CENTRAL_PORT:-3000}"
-RUNNER_PORT="${RUNNER_PORT:-5051}"
+RUNNER_PORT="${RUNNER_PORT:-5050}"
 BASE_DOMAIN="${SYCORD_BASE_DOMAIN:-sycord.site}"
 RUNNER_DIR="${SYCORD_RUNNER_DIR:-/srv/sycord/vm-runner}"
 NGINX_SITES="/etc/nginx/sites-enabled"
 SYCORD_WILDCARD_CONF="${NGINX_SITES}/sycord-wildcard.conf"
-SYCORD_RUNNER_CONF="${NGINX_SITES}/sycord-runner.conf"
 
 log() {
   printf '%s\n' "${1:-}"
@@ -21,6 +20,9 @@ diagnostics() {
   log
   log "== Port ${NGINX_PORT} owner via lsof =="
   lsof -nP -iTCP:${NGINX_PORT} -sTCP:LISTEN || true
+  log
+  log "== Port ${RUNNER_PORT} owner via ss =="
+  ss -ltnp | grep ":${RUNNER_PORT}" || true
   log
   log "== Related services =="
   systemctl list-units --type=service --all | grep -Ei 'flask|python|runner|sycord|server|nginx|caddy|cloudflared' || true
@@ -131,11 +133,7 @@ write_nginx_wildcard_config() {
 
   mkdir -p "${NGINX_SITES}"
 
-  local template="/srv/sycord/vm-runner/templates/nginx-wildcard.conf"
-  if [[ ! -f "${template}" ]]; then
-    template="${RUNNER_DIR}/templates/nginx-wildcard.conf"
-  fi
-
+  local template="${RUNNER_DIR}/templates/nginx-wildcard.conf"
   if [[ -f "${template}" ]]; then
     log "Installing wildcard proxy config from template"
     sed -e "s/__NGINX_PORT__/${NGINX_PORT}/g" \
@@ -146,7 +144,7 @@ write_nginx_wildcard_config() {
     cat > "${SYCORD_WILDCARD_CONF}" << 'WILDCARD_EOF'
 server {
     listen __NGINX_PORT__;
-    server_name *.sycord.site;
+    server_name *.sycord.site sycord.site;
 
     location / {
         proxy_pass http://127.0.0.1:__CENTRAL_PORT__;
@@ -170,51 +168,6 @@ WILDCARD_EOF
   fi
 }
 
-write_nginx_runner_config() {
-  if [[ -f "${SYCORD_RUNNER_CONF}" ]]; then
-    log "Runner proxy config already exists at ${SYCORD_RUNNER_CONF}"
-    return 0
-  fi
-
-  local template="/srv/sycord/vm-runner/templates/nginx-runner.conf"
-  if [[ ! -f "${template}" ]]; then
-    template="${RUNNER_DIR}/templates/nginx-runner.conf"
-  fi
-
-  if [[ -f "${template}" ]]; then
-    log "Installing runner proxy config from template"
-    sed -e "s/__NGINX_PORT__/${NGINX_PORT}/g" \
-        -e "s/__RUNNER_PORT__/${RUNNER_PORT}/g" \
-        -e "s/__BASE_DOMAIN__/${BASE_DOMAIN}/g" \
-        "${template}" > "${SYCORD_RUNNER_CONF}"
-  else
-    log "Writing static runner proxy config"
-    cat > "${SYCORD_RUNNER_CONF}" << RUNNER_EOF
-server {
-    listen ${NGINX_PORT};
-    server_name server.${BASE_DOMAIN};
-
-    location / {
-        proxy_pass http://127.0.0.1:${RUNNER_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 3600;
-        proxy_connect_timeout 60;
-        proxy_send_timeout 3600;
-        proxy_buffering off;
-        proxy_cache off;
-        chunked_transfer_encoding on;
-    }
-}
-RUNNER_EOF
-  fi
-}
-
 ensure_nginx() {
   log "Validating Nginx configuration"
   nginx -t
@@ -233,9 +186,9 @@ ensure_nginx() {
 # ---------------------------------------------------------------------------
 
 log "=== Sycord Dynamic Reverse Proxy Setup ==="
-log "Nginx port:     ${NGINX_PORT}"
+log "Nginx port:     ${NGINX_PORT}  (wildcard *.${BASE_DOMAIN} → per-site PM2)"
+log "Runner port:    ${RUNNER_PORT}  (deployer API: api.${BASE_DOMAIN})"
 log "Central port:   ${CENTRAL_PORT}"
-log "Runner port:    ${RUNNER_PORT}"
 log "Base domain:    ${BASE_DOMAIN}"
 log "Runner dir:     ${RUNNER_DIR}"
 log ""
@@ -288,13 +241,12 @@ if nginx_port_is_busy; then
 fi
 
 write_nginx_wildcard_config
-write_nginx_runner_config
 ensure_nginx
 
 log ""
 log "Ubuntu setup complete"
 log "Expected final state:"
-log "- nginx active on :${NGINX_PORT} — wildcard *.${BASE_DOMAIN} → :${CENTRAL_PORT} (central app)"
-log "- server.${BASE_DOMAIN} → :${RUNNER_PORT} (runner API)"
-log "- sycord-vm-runner active on :${RUNNER_PORT}"
-log "- cloudflared routes *.${BASE_DOMAIN} → localhost:${NGINX_PORT}"
+log "- nginx active on :${NGINX_PORT}  → wildcard *.${BASE_DOMAIN} → :${CENTRAL_PORT} (or per-site ports)"
+log "- runner active on :${RUNNER_PORT} → deployer API (api.${BASE_DOMAIN} via Cloudflare direct)"
+log "- Cloudflare ingress: api.${BASE_DOMAIN} → localhost:${RUNNER_PORT}"
+log "- Cloudflare ingress: *.${BASE_DOMAIN} → localhost:${NGINX_PORT}"
