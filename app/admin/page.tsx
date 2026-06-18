@@ -996,6 +996,7 @@ export default function AdminPage() {
                     <h4 className="text-xs font-semibold text-white/70 uppercase tracking-wider mb-1">Connectivity</h4>
                     {[
                       { label: "SSH to VM", c: preflight.ssh?.ok, d: preflight.ssh?.detail },
+                      { label: `Runner API auth (${preflight.runner?.tokenSource || "none"})`, c: preflight.runner?.ok, d: preflight.runner?.detail },
                       { label: `Cloudflare account (${preflight.cloudflare?.authMode || "token"})`, c: preflight.cloudflare?.account?.ok, d: preflight.cloudflare?.account?.detail },
                       { label: "Cloudflare zone", c: preflight.cloudflare?.zone?.ok, d: preflight.cloudflare?.zone?.detail },
                       { label: "Cloudflare tunnel", c: preflight.cloudflare?.tunnel?.ok, d: preflight.cloudflare?.tunnel?.detail },

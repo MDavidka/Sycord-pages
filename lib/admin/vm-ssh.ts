@@ -187,6 +187,44 @@ export function generateRunnerToken(): string {
   return crypto.randomBytes(32).toString("hex")
 }
 
+/**
+ * Single source of truth for the vm-runner bearer token. Order:
+ *   1. VPS_RUNNER_TOKEN env (if you manage it yourself)
+ *   2. token persisted in `deployer_config` (key: vm_runner)
+ *   3. generate once and persist it
+ * Both the runner installer and the API proxy use this, so the token the
+ * server presents always matches the one baked into the VM service.
+ */
+export async function getRunnerTokenFromDb(): Promise<string | null> {
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    const doc = await db.collection("deployer_config").findOne({ key: "vm_runner" })
+    return (doc?.token as string) || null
+  } catch {
+    return null
+  }
+}
+
+export async function getOrCreateRunnerToken(): Promise<string> {
+  if (process.env.VPS_RUNNER_TOKEN) return process.env.VPS_RUNNER_TOKEN
+  const existing = await getRunnerTokenFromDb()
+  if (existing) return existing
+  const token = generateRunnerToken()
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    await db.collection("deployer_config").updateOne(
+      { key: "vm_runner" },
+      { $set: { token, createdAt: new Date() } },
+      { upsert: true },
+    )
+  } catch (err: any) {
+    console.error("[runner] Failed to persist runner token:", err?.message)
+  }
+  return token
+}
+
 export type TunnelSetupState = {
   phase: "install" | "login-needed" | "login-polling" | "create-tunnel" | "config" | "service" | "complete" | "error"
   tunnelId?: string
@@ -578,7 +616,7 @@ export async function getTunnelStateFromDb(): Promise<{
 export async function bootstrapDeployVmRunner(input?: VmSetupInput): Promise<VmSetupResult> {
   const localRunnerDir = path.join(process.cwd(), "vm-runner")
   const remoteRunnerDir = "/srv/sycord/vm-runner"
-  const runnerToken = input?.runnerToken || process.env.VPS_RUNNER_TOKEN || generateRunnerToken()
+  const runnerToken = input?.runnerToken || (await getOrCreateRunnerToken())
   const baseDomain = input?.baseDomain || "sycord.site"
   const host = input?.host || process.env.VPS_SSH_HOST || ""
 

@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server"
 import { probeDeployVmSsh, readDeployVmDiagnostics, getTunnelStateFromDb } from "@/lib/admin/vm-ssh"
 import { verifyCloudflareCredentials } from "@/lib/admin/cloudflare-api"
-import { requireAdminResponse } from "../_shared"
+import { requireAdminResponse, resolveRunnerToken, runnerHeaders } from "../_shared"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+
+const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
 
 function maskHost(host?: string): string | null {
   if (!host) return null
@@ -65,12 +67,63 @@ export async function GET() {
   // Cloudflare credential verification (account / zone / tunnel)
   const cloudflare = await verifyCloudflareCredentials()
 
+  // Runner API auth check — distinguishes offline vs. token mismatch (401).
+  const runnerToken = await resolveRunnerToken()
+  let runner: { ok: boolean; reachable: boolean; authenticated: boolean; tokenSource: string; detail: string } = {
+    ok: false,
+    reachable: false,
+    authenticated: false,
+    tokenSource: process.env.VPS_RUNNER_TOKEN ? "env (VPS_RUNNER_TOKEN)" : runnerToken ? "database" : "none",
+    detail: "Not checked",
+  }
+  try {
+    const res = await fetch(`${VPS_SERVER_URL}/api/status`, {
+      headers: runnerHeaders({ Accept: "application/json" }, runnerToken),
+      signal: AbortSignal.timeout(6000),
+    })
+    if (res.status === 401) {
+      runner = {
+        ok: false,
+        reachable: true,
+        authenticated: false,
+        tokenSource: runner.tokenSource,
+        detail: "Runner reachable but rejected the token (401). Re-run setup to reinstall it with the persisted token.",
+      }
+    } else if (res.ok) {
+      runner = {
+        ok: true,
+        reachable: true,
+        authenticated: true,
+        tokenSource: runner.tokenSource,
+        detail: "Runner API reachable and authenticated",
+      }
+    } else {
+      runner = {
+        ok: false,
+        reachable: true,
+        authenticated: false,
+        tokenSource: runner.tokenSource,
+        detail: `Runner responded with HTTP ${res.status}`,
+      }
+    }
+  } catch {
+    runner = {
+      ok: false,
+      reachable: false,
+      authenticated: false,
+      tokenSource: runner.tokenSource,
+      detail: "Runner API not reachable (will be bootstrapped over SSH during setup)",
+    }
+  }
+
   // Persisted tunnel state
   const state = await getTunnelStateFromDb().catch(() => null)
 
   const checks = {
     sshReady: ssh.ok,
     cloudflareReady: cloudflare.configured && cloudflare.account.ok && cloudflare.zone.ok,
+    runnerReachable: runner.reachable,
+    runnerAuthenticated: runner.authenticated,
     runnerRunning: !!diagnostics?.runner?.running,
     nginxRunning: !!diagnostics?.nginx?.running,
     cloudflaredRunning: !!diagnostics?.cloudflared?.running,
@@ -84,6 +137,7 @@ export async function GET() {
     env,
     ssh,
     cloudflare,
+    runner,
     diagnostics,
     tunnelState: state
       ? {

@@ -1,6 +1,5 @@
 import {
   bootstrapDeployVmRunner,
-  generateRunnerToken,
   probeDeployVmSsh,
   readDeployVmDiagnostics,
   installCloudflared,
@@ -10,7 +9,7 @@ import {
   type VmSetupInput,
 } from "@/lib/admin/vm-ssh"
 import { cloudflareConfigured, provisionTunnel, getTunnelApiStatus, getCloudflareEnv } from "@/lib/admin/cloudflare-api"
-import { proxyRunner, requireAdminResponse, runnerHeaders } from "../../_shared"
+import { proxyRunner, requireAdminResponse, runnerHeaders, resolveRunnerToken } from "../../_shared"
 
 const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
 
@@ -58,7 +57,7 @@ export async function POST(request: Request) {
   const resetTunnel = body.resetTunnel === true
 
   const sshInput: VmSetupInput | undefined = host && password
-    ? { host, password, port, baseDomain, runnerToken: generateRunnerToken() }
+    ? { host, password, port, baseDomain }
     : undefined
 
   return runSetupStream(sshInput, skipCloudflare, resetTunnel)
@@ -103,7 +102,7 @@ async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false, r
 
         send(stageEvent("runner-check", "running", "Checking if runner API is online"))
         const runnerCheck = await fetch(`${runnerUrl}/api/status`, {
-          headers: runnerHeaders({ Accept: "application/json" }),
+          headers: runnerHeaders({ Accept: "application/json" }, await resolveRunnerToken()),
         }).catch(() => null)
 
         if (runnerCheck?.ok) {
