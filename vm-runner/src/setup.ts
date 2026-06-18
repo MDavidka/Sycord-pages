@@ -66,19 +66,18 @@ async function portListenerDetails(port: number) {
   const service = pid
     ? await commandOutput("bash", ["-lc", `grep -oE '[^/[:space:]]+\\.service' /proc/${pid}/cgroup | head -n1 || true`])
     : { ok: false, stdout: "", stderr: "" }
-  const startupRefs = executable.stdout || process.stdout
-    ? await commandOutput(
-        "bash",
-        [
-          "-lc",
-          `grep -RInE '${(executable.stdout || "").replace(/[.[\]{}()*+?^$|\\]/g, "\\$&")}|/go/bin/main|main /go/bin/main|/root/myapp' /etc/systemd/system /lib/systemd/system /usr/lib/systemd/system /etc/rc.local /etc/crontab /var/spool/cron/crontabs/root /root/.config/systemd /root 2>/dev/null | grep -vE '/root/myapp/cloudflared|/srv/sycord/vm-runner|sycord-vm-runner' || true`,
-        ],
-      )
-    : { ok: false, stdout: "", stderr: "" }
-  const owner = [ss.stdout, lsof.stdout, service.stdout && `service=${service.stdout}`, executable.stdout && `exe=${executable.stdout}`, process.stdout && `process=${process.stdout}`]
+
+  const owner = [
+    ss.stdout,
+    lsof.stdout,
+    service.stdout && `service=${service.stdout}`,
+    executable.stdout && `exe=${executable.stdout}`,
+    process.stdout && `process=${process.stdout}`,
+  ]
     .filter(Boolean)
     .join("\n")
     .trim()
+
   return {
     listening: Boolean(owner),
     owner: owner || null,
@@ -88,7 +87,6 @@ async function portListenerDetails(port: number) {
     executable: executable.stdout || null,
     process: process.stdout || null,
     parentProcess: parentProcess.stdout || null,
-    startupReferences: startupRefs.stdout ? startupRefs.stdout.split("\n").filter(Boolean) : [],
     ss: ss.stdout || null,
     lsof: lsof.stdout || null,
   }
@@ -114,18 +112,22 @@ export async function getSetupStatus() {
   const cloudflaredService = await checkSystemdService("cloudflared")
   const cloudflaredProcess = await checkProcessRunning("cloudflared")
   const runnerListener = await portListenerDetails(config.port)
-  const port80 = await portListenerDetails(80)
-  const port80Owner = port80.owner
-  const port80Available = !port80.listening || Boolean(port80.service?.includes("nginx.service")) || Boolean(port80.process?.includes("nginx"))
+  const nginxPortListener = await portListenerDetails(config.nginxPort)
+
+  const nginxPortAvailable =
+    !nginxPortListener.listening ||
+    Boolean(nginxPortListener.service?.includes("nginx.service")) ||
+    Boolean(nginxPortListener.process?.includes("nginx"))
 
   const nginx = {
     installed: nginxService.installed,
     running: nginxService.running,
     enabled: nginxService.enabled,
     status: nginxService.status,
-    port80Available,
-    port80Owner,
-    error: port80Available ? null : "Port 80 already in use",
+    port: config.nginxPort,
+    portAvailable: nginxPortAvailable,
+    portOwner: nginxPortListener.owner,
+    error: nginxPortAvailable ? null : `Port ${config.nginxPort} already in use by a foreign process`,
   }
 
   const runner = {
@@ -134,6 +136,12 @@ export async function getSetupStatus() {
     status: runnerListener.listening ? "online" : "offline",
     port: config.port,
     portOwner: runnerListener.owner,
+  }
+
+  const tunnel = {
+    ...cloudflaredService,
+    ok: cloudflaredService.running || cloudflaredProcess.running,
+    status: cloudflaredService.running || cloudflaredProcess.running ? "online" : "offline",
   }
 
   return {
@@ -147,15 +155,11 @@ export async function getSetupStatus() {
       stateFileReady: stateExists,
     },
     nginx,
-    tunnel: {
-      ...cloudflaredService,
-      ok: cloudflaredService.running || cloudflaredProcess.running,
-      status: cloudflaredService.running || cloudflaredProcess.running ? "online" : "offline",
-    },
+    tunnel,
     cloudflared: {
       ...cloudflaredService,
-      ok: cloudflaredService.running || cloudflaredProcess.running,
-      running: cloudflaredService.running || cloudflaredProcess.running,
+      ok: tunnel.ok,
+      running: tunnel.ok,
       processes: cloudflaredProcess.processes,
     },
     proxy: {
@@ -173,13 +177,13 @@ export async function getSetupStatus() {
       percent: await diskUsage(),
     },
     diagnostics: {
-      port80,
+      nginxPort: nginxPortListener,
       runnerPort: runnerListener,
       cloudflaredProcesses: cloudflaredProcess.processes,
       relatedServices: await relatedServices(),
     },
     warning: nginx.error
-      ? "Port 80 is already in use. Nginx cannot start. Cloudflare Tunnel may be routing to the wrong service."
+      ? `Port ${config.nginxPort} is occupied by a non-nginx process. Nginx cannot bind. Cloudflare Tunnel may be routing to the wrong service.`
       : null,
   }
 }
@@ -191,7 +195,8 @@ export async function runSetup() {
   const result = await runCommand("bash", [config.setupScriptPath], {
     env: {
       ...process.env,
-      SYCORD_AUTO_FIX_PORT_80: "1",
+      SYCORD_AUTO_FIX_PORT: "1",
+      SYCORD_NGINX_PORT: String(config.nginxPort),
     },
   })
 
@@ -201,7 +206,7 @@ export async function runSetup() {
   const { success: _statusSuccess, ...restStatus } = status
   return {
     success: result.code === 0 && status.nginx.running,
-    phase: result.code === 0 ? "complete" : "nginx-port-80",
+    phase: result.code === 0 ? "complete" : "nginx-port-busy",
     logs,
     ...restStatus,
     error: result.code === 0 ? null : status.nginx.error || "Setup failed",

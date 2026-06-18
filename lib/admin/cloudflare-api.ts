@@ -4,7 +4,7 @@
 // required a browser auth step and a cert.pem on the VM) with fully automated
 // API calls. The flow is:
 //   1. Create (or reuse) a named tunnel with config_src="cloudflare"  -> tunnel id + run token
-//   2. PUT the ingress configuration so *.<baseDomain> -> http://127.0.0.1:80
+//   2. PUT the ingress configuration so *.<baseDomain> -> http://127.0.0.1:5050
 //   3. Ensure a proxied wildcard DNS CNAME *.<baseDomain> -> <id>.cfargotunnel.com
 //   4. On the VM: `cloudflared service install <token>` (no cert.pem needed)
 //
@@ -156,7 +156,7 @@ export async function putWildcardIngress(
   env: CloudflareEnv,
   tunnelId: string,
   baseDomain: string,
-  localService = "http://127.0.0.1:80",
+  localService = "http://127.0.0.1:5050",
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await cfFetch(env, `/accounts/${env.accountId}/cfd_tunnel/${tunnelId}/configurations`, {
     method: "PUT",
@@ -336,7 +336,7 @@ export async function provisionTunnel(
   }
   log(`[cloudflare-api] Tunnel ${created ? "created" : "reused"}: ${tunnel.id}`)
 
-  log(`[cloudflare-api] Setting ingress: *.${baseDomain} -> http://127.0.0.1:80`)
+  log(`[cloudflare-api] Setting ingress: *.${baseDomain} -> http://127.0.0.1:5050`)
   const ingress = await putWildcardIngress(env, tunnel.id, baseDomain)
   if (!ingress.ok) {
     return { success: false, error: `Failed to set tunnel ingress: ${ingress.error}` }

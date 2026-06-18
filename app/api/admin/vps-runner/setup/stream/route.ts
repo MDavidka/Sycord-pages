@@ -12,7 +12,7 @@ import {
 import { cloudflareConfigured, provisionTunnel, getTunnelApiStatus, getCloudflareEnv } from "@/lib/admin/cloudflare-api"
 import { proxyRunner, requireAdminResponse, runnerHeaders } from "../../_shared"
 
-const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5050"
+const VPS_SERVER_URL = process.env.VPS_SERVER_URL || "http://127.0.0.1:5051"
 
 function event(chunk: string) {
   return new TextEncoder().encode(`${chunk}\n\n`)
@@ -70,7 +70,7 @@ function defaultSshInput(): VmSetupInput | undefined {
 
 async function runSetupStream(sshInput?: VmSetupInput, skipCloudflare = false, resetTunnel = false) {
   const runnerUrl = sshInput?.host
-    ? `http://${sshInput.host}:5050`
+    ? `http://${sshInput.host}:5051`
     : VPS_SERVER_URL
 
   const baseDomain = sshInput?.baseDomain || "sycord.site"

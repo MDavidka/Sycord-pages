@@ -11,7 +11,7 @@ import { getProjectRoot, validateProjectId } from "./paths.js";
 import { deleteProcess, stopProcess } from "./processes.js";
 import { getWebsiteState, readState, removeWebsiteState, upsertWebsiteState } from "./state.js";
 import { runHealthCheck } from "./health.js";
-import { ensureRunnerProxyConfig, reloadProxy, removeProxyConfig } from "./proxy.js";
+import { ensureRunnerProxyConfig, ensureWildcardProxyConfig, reloadProxy, removeProxyConfig } from "./proxy.js";
 const app = Fastify({ logger: true });
 app.addHook("preHandler", requireBearerToken);
 app.get("/api/status", async () => {
@@ -183,6 +183,7 @@ app.post("/api/deploy/:projectId/stream", async (request, reply) => {
     }
 });
 ensureBaseDirectories()
+    .then(() => ensureWildcardProxyConfig())
     .then(() => ensureRunnerProxyConfig())
     .then(() => reloadProxy().catch(() => undefined))
     .then(() => app.listen({ host: config.host, port: config.port }))
