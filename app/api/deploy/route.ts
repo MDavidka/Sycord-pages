@@ -2,8 +2,16 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { ObjectId, type Db } from "mongodb"
 import * as Sentry from "@sentry/nextjs"
+import { classifySentryIssuesSequentially } from "@/lib/sentry-ai"
+import {
+  createSentryLogHash,
+  createUnclassifiedSentryIssue,
+  redactSentryLog,
+  type SentryIssue,
+  type SentryIssueSource,
+} from "@/lib/sentry-log-parser"
 
 const GITHUB_API_BASE = "https://api.github.com"
 const SYCORD_DEPLOY_API_BASE = process.env.VPS_SERVER_URL || "https://server.sycord.site"
@@ -93,6 +101,48 @@ async function waitForRepoInitialization(owner: string, repo: string, token: str
       }
     }
   }
+}
+
+async function saveDeploymentSentryIssue(input: {
+  db: Db
+  userId: string
+  projectId: string
+  source: SentryIssueSource
+  rawLog: string
+  deploymentId?: string
+}) {
+  if (!ObjectId.isValid(input.projectId)) return
+  const safeLog = redactSentryLog(input.rawLog)
+  const logHash = createSentryLogHash(input.projectId, input.source, safeLog, input.deploymentId)
+  const user = await input.db.collection("users").findOne(
+    {
+      id: input.userId,
+      "projects._id": new ObjectId(input.projectId),
+      "projects.sentryIssues.logHash": logHash,
+    },
+    { projection: { _id: 1 } },
+  )
+  if (user) return
+
+  const [classified] = await classifySentryIssuesSequentially([
+    createUnclassifiedSentryIssue({
+      projectId: input.projectId,
+      source: input.source,
+      rawLog: safeLog,
+      logHash,
+      deploymentId: input.deploymentId,
+    }),
+  ] as SentryIssue[])
+
+  await input.db.collection("users").updateOne(
+    { id: input.userId, "projects._id": new ObjectId(input.projectId) },
+    {
+      $push: {
+        "projects.$.sentryIssues": classified,
+      },
+      $set: { "projects.$.updatedAt": new Date() },
+    } as any,
+  )
 }
 
 /**
@@ -284,15 +334,18 @@ function deployFailurePayload(data: any, error: string, deploymentMode: Deployme
 }
 
 export async function POST(request: Request) {
+  let sentryContext: { db: Db; userId: string; projectId: string; deploymentId: string } | null = null
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { projectId } = await request.json()
     if (!projectId) return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
+    const deploymentId = new ObjectId().toString()
 
     const client = await clientPromise
     const db = client.db()
+    sentryContext = { db, userId: session.user.id, projectId, deploymentId }
 
     // 1. Credentials
     const envCredentials = getEnvGitHubCredentials()
@@ -335,7 +388,17 @@ export async function POST(request: Request) {
         files.push({ path: "index.html", content: project.aiGeneratedCode })
     }
 
-    if (files.length === 0) return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
+    if (files.length === 0) {
+      await saveDeploymentSentryIssue({
+        db,
+        userId: session.user.id,
+        projectId,
+        source: "vm-build",
+        rawLog: "Deployment failed: No files to deploy.",
+        deploymentId,
+      })
+      return NextResponse.json({ error: "No files to deploy." }, { status: 400 })
+    }
 
     const deploymentMode = resolveDeploymentMode(files)
     const deploymentErrors = validateFilesForDeployment(files, deploymentMode)
@@ -384,6 +447,14 @@ export async function POST(request: Request) {
         const deployFailure = triggerRes.ok ? deployErrorFromResponse(triggerData) : (triggerData.error || `VM deploy failed with HTTP ${triggerRes.status}`)
         if (deployFailure) {
           console.error(`[Deploy] Downstream VPS deploy failed:`, triggerData)
+          await saveDeploymentSentryIssue({
+            db,
+            userId: session.user.id,
+            projectId,
+            source: "vm-deploy",
+            rawLog: `Downstream VPS deploy failed with HTTP ${triggerRes.status}:\n${JSON.stringify(triggerData, null, 2)}`,
+            deploymentId,
+          })
           captureDeployFailure({ error: deployFailure, projectId, repo, subdomain: repo, data: triggerData })
           await db.collection("users").updateOne(
               { id: session.user.id, "projects._id": new ObjectId(projectId) },
@@ -423,6 +494,14 @@ export async function POST(request: Request) {
         if (vpsUrl) deployMessage = "Deployed to Sycord VPS!"
     } catch (e) {
         console.error("Sycord Deploy Error:", e)
+        await saveDeploymentSentryIssue({
+          db,
+          userId: session.user.id,
+          projectId,
+          source: "vm-deploy",
+          rawLog: `Sycord Deploy Error:\n${e instanceof Error ? e.stack || e.message : String(e)}`,
+          deploymentId,
+        })
         const message = e instanceof Error ? e.message : String(e)
         captureDeployFailure({ error: message, projectId, repo, subdomain: repo })
         await db.collection("users").updateOne(
@@ -523,6 +602,16 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error("[Deploy] Error:", error)
+    if (sentryContext) {
+      await saveDeploymentSentryIssue({
+        db: sentryContext.db,
+        userId: sentryContext.userId,
+        projectId: sentryContext.projectId,
+        source: "vm-deploy",
+        rawLog: `Deployment failed:\n${error instanceof Error ? error.stack || error.message : String(error)}`,
+        deploymentId: sentryContext.deploymentId,
+      })
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

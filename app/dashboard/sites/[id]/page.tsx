@@ -84,6 +84,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
+import { SentryAdminPanel, type DashboardSentryIssue } from "@/components/sentry-admin-panel"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -583,7 +584,7 @@ export default function SiteSettingsPage() {
   const [productError, setProductError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
+    "overview" | "domain" | "pages" | "ai" | "sentry" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
   >("overview")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -668,6 +669,10 @@ export default function SiteSettingsPage() {
   // Auto-Fix State
   const [logs, setLogs] = useState<string[]>([])
   const [hasDeployError, setHasDeployError] = useState(false)
+  const [sentryIssues, setSentryIssues] = useState<DashboardSentryIssue[]>([])
+  const [sentryLoading, setSentryLoading] = useState(false)
+  const [sentryRescanning, setSentryRescanning] = useState(false)
+  const [sentryError, setSentryError] = useState<string | null>(null)
 
   const runnerErrorDetails = useMemo(() => {
     if (!Array.isArray(logs) || logs.length === 0) return null
@@ -676,6 +681,11 @@ export default function SiteSettingsPage() {
     if (relevant.length === 0) return null
     return relevant.slice(-10).join("\n")
   }, [logs])
+
+  const sentryMarkedCount = useMemo(
+    () => sentryIssues.filter((issue) => issue.aiDecision === "mark" || issue.status === "marked").length,
+    [sentryIssues],
+  )
 
   // Database / Firebase connection state
   const [databaseConnected, setDatabaseConnected] = useState(false)
@@ -806,6 +816,38 @@ export default function SiteSettingsPage() {
     }
   }
 
+  const fetchSentryIssues = async () => {
+    if (!id) return
+    setSentryLoading(true)
+    setSentryError(null)
+    try {
+      const res = await fetch(`/api/projects/${id}/sentry`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message || "Failed to load Sentry issues")
+      setSentryIssues(Array.isArray(data.issues) ? data.issues : [])
+    } catch (e) {
+      setSentryError(e instanceof Error ? e.message : "Failed to load Sentry issues")
+    } finally {
+      setSentryLoading(false)
+    }
+  }
+
+  const rescanSentryIssues = async () => {
+    if (!id) return
+    setSentryRescanning(true)
+    setSentryError(null)
+    try {
+      const res = await fetch(`/api/projects/${id}/sentry`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message || "Failed to re-scan activity")
+      setSentryIssues(Array.isArray(data.issues) ? data.issues : [])
+    } catch (e) {
+      setSentryError(e instanceof Error ? e.message : "Failed to re-scan activity")
+    } finally {
+      setSentryRescanning(false)
+    }
+  }
+
   useEffect(() => {
     if (!id) return
 
@@ -823,6 +865,7 @@ export default function SiteSettingsPage() {
             setProfileImage(data.profileImage || "")
             setLogoLoadError(false) // Reset error state when loading new data
             if (data.firebaseConnected) setDatabaseConnected(true)
+            setSentryIssues(Array.isArray(data.sentryIssues) ? data.sentryIssues : [])
 
             if (data.pages && Array.isArray(data.pages)) {
               setGeneratedPages(
@@ -891,6 +934,10 @@ export default function SiteSettingsPage() {
       })
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
   }, [])
+
+  useEffect(() => {
+    if (activeTab === "sentry") fetchSentryIssues()
+  }, [activeTab, id])
 
   // Fetch already-connected integrations when the integrations tab becomes active
   useEffect(() => {
@@ -1275,6 +1322,7 @@ export default function SiteSettingsPage() {
         { id: "domain", label: "Domain", icon: Globe },
         { id: "pages", label: "Pages", icon: FileText },
         { id: "ai", label: "Syra", icon: Zap },
+        { id: "sentry", label: "Sentry", icon: Shield, badge: sentryMarkedCount > 0 ? String(sentryMarkedCount) : undefined },
       ],
     },
     ...(siteType === "blog"
@@ -1342,11 +1390,11 @@ export default function SiteSettingsPage() {
           onExpandChange={setIsDesktopSidebarExpanded}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
-          session={session}
+          session={session ?? undefined}
           subscription={subscription}
           planCredit={planCredit}
           userInitials={userInitials}
@@ -1362,11 +1410,11 @@ export default function SiteSettingsPage() {
           onClose={() => setIsSidebarOpen(false)}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={(tab) => setActiveTab(tab as typeof activeTab)}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
-          session={session}
+          session={session ?? undefined}
           subscription={subscription}
           planCredit={planCredit}
           userInitials={userInitials}
@@ -1561,7 +1609,7 @@ export default function SiteSettingsPage() {
 
 
         <main className={cn("flex-1 relative", activeTab === "ai" ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
-          <div className={cn("mx-auto", activeTab === "ai" ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : "max-w-6xl space-y-8 pb-8")}>
+          <div className={cn("mx-auto", activeTab === "ai" ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : activeTab === "sentry" ? "max-w-7xl space-y-8 pb-8" : "max-w-6xl space-y-8 pb-8")}>
 
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
@@ -2359,6 +2407,17 @@ export default function SiteSettingsPage() {
                   )}
                 </div>
               </div>
+            )}
+
+            {/* TAB CONTENT: SENTRY */}
+            {activeTab === "sentry" && (
+              <SentryAdminPanel
+                issues={sentryIssues}
+                loading={sentryLoading}
+                rescanning={sentryRescanning}
+                error={sentryError}
+                onRescan={rescanSentryIssues}
+              />
             )}
 
             {/* TAB CONTENT: PAYOUTS (formerly Payments) */}

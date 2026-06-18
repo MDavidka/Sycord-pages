@@ -10,6 +10,8 @@ import {
 import type { ModelSelection } from "@/lib/ai-provider"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import { classifySentryIssuesSequentially } from "@/lib/sentry-ai"
+import { createUnclassifiedSentryIssue, extractAiGenerationIssues, type SentryIssue } from "@/lib/sentry-log-parser"
 
 interface GeneratedFile {
   path: string
@@ -223,6 +225,39 @@ async function mergeRequiredEnvVars(
   return toAdd.length
 }
 
+async function saveAiGenerationSentryIssues(userId: string, projectId: string, extractedIssues: ReturnType<typeof extractAiGenerationIssues>) {
+  if (!ObjectId.isValid(projectId) || extractedIssues.length === 0) return
+  const client = await clientPromise
+  const db = client.db()
+  const user = await db.collection("users").findOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    { projection: { "projects.$": 1 } },
+  )
+  const project = Array.isArray(user?.projects) ? user.projects[0] : null
+  const existingHashes = new Set(
+    Array.isArray(project?.sentryIssues)
+      ? project.sentryIssues.map((issue: { logHash?: string }) => issue.logHash).filter(Boolean)
+      : [],
+  )
+  const newIssues = extractedIssues
+    .filter((issue) => !existingHashes.has(issue.logHash))
+    .map((issue) => createUnclassifiedSentryIssue({ projectId, ...issue }))
+
+  if (newIssues.length === 0) return
+  const classified = await classifySentryIssuesSequentially(newIssues as SentryIssue[])
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": new ObjectId(projectId) },
+    {
+      $push: {
+        "projects.$.sentryIssues": { $each: classified },
+      },
+      $set: {
+        "projects.$.updatedAt": new Date(),
+      },
+    } as any,
+  )
+}
+
 // Defensive redaction for legacy generated files. New builder output never
 // emits `.env`; deploy env vars come from project settings/server env only.
 function redactEnvFiles(files: GeneratedFile[]): GeneratedFile[] {
@@ -248,8 +283,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
+  let body: {
+    prompt?: string
+    projectId?: string
+    model?: unknown
+    quality?: unknown
+  } = {}
+
   try {
-    const body = (await req.json().catch(() => ({}))) as {
+    body = (await req.json().catch(() => ({}))) as {
       prompt?: string
       projectId?: string
       model?: unknown
@@ -305,6 +347,19 @@ export async function POST(req: Request) {
     // Redact any legacy secret file values from files we send back to the UI.
     const safeFiles = redactEnvFiles(result.files)
 
+    if (projectId) {
+      await saveAiGenerationSentryIssues(
+        session.user.id,
+        projectId,
+        extractAiGenerationIssues({
+          projectId,
+          buildErrors: result.build.ok ? [] : result.build.errors,
+          warnings: result.warnings,
+          logs: result.logs,
+        }),
+      )
+    }
+
     return NextResponse.json({
       message,
       manifest: result.manifest,
@@ -325,6 +380,17 @@ export async function POST(req: Request) {
       envVarsAdded,
     })
   } catch (error) {
+    const failedProjectId = typeof body.projectId === "string" ? body.projectId : undefined
+    if (failedProjectId) {
+      await saveAiGenerationSentryIssues(
+        session.user.id,
+        failedProjectId,
+        extractAiGenerationIssues({
+          projectId: failedProjectId,
+          failedError: error instanceof Error ? error.stack || error.message : String(error),
+        }),
+      )
+    }
     return NextResponse.json(
       {
         message: "Builder failed",

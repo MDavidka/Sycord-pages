@@ -1,45 +1,63 @@
 import { MongoClient } from "mongodb";
 
-const uri = process.env.MONGO_URI;
-const defaultDbName = process.env.MONGO_DB_NAME || "main";
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
-
-function missingMongoPromise(): Promise<MongoClient> {
-  const error = new Error("Missing MONGO_URI environment variable");
-  console.warn(error.message);
-  return {
-    then: (onfulfilled, onrejected) => Promise.reject(error).then(onfulfilled, onrejected),
-    catch: (onrejected) => Promise.reject(error).catch(onrejected),
-    finally: (onfinally) => Promise.reject(error).finally(onfinally),
-    [Symbol.toStringTag]: "Promise",
-  } as Promise<MongoClient>;
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-if (!uri) {
-  clientPromise = missingMongoPromise();
-} else if (process.env.NODE_ENV === "development") {
-  // In development mode, use a global variable so that the value
-  // is preserved across module reloads caused by HMR (Hot Module Replacement).
-  if (!global._mongoClientPromise) {
-    client = new MongoClient(uri, {});
-    global._mongoClientPromise = client.connect().then((connected) => {
-      const originalDb = connected.db.bind(connected);
-      connected.db = (dbName?: string, options?: any) =>
-        originalDb(dbName || defaultDbName, options);
-      return connected;
-    });
+const defaultDbName = process.env.MONGO_DB_NAME || "main";
+
+function connectMongo(): Promise<MongoClient> {
+  const uri = process.env.MONGO_URI;
+  if (!uri) {
+    console.warn("Missing MONGO_URI environment variable");
+    return Promise.reject(new Error("Missing MONGO_URI environment variable"));
   }
-  clientPromise = global._mongoClientPromise;
-} else {
-  // In production mode, it's best to not use a global variable.
-  client = new MongoClient(uri, {});
-  clientPromise = client.connect().then((connected) => {
+
+  const client = new MongoClient(uri, {});
+  return client.connect().then((connected) => {
     const originalDb = connected.db.bind(connected);
     connected.db = (dbName?: string, options?: any) =>
       originalDb(dbName || defaultDbName, options);
     return connected;
   });
 }
+
+function getClientPromise(): Promise<MongoClient> {
+  if (process.env.NODE_ENV === "development") {
+    // In development mode, use a global variable so that the value
+    // is preserved across module reloads caused by HMR (Hot Module Replacement).
+    if (!globalThis._mongoClientPromise) {
+      globalThis._mongoClientPromise = connectMongo();
+    }
+    return globalThis._mongoClientPromise;
+  }
+  return connectMongo();
+}
+
+let productionClientPromise: Promise<MongoClient> | undefined;
+
+const clientPromise = {
+  then<TResult1 = MongoClient, TResult2 = never>(
+    onfulfilled?: ((value: MongoClient) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+  ) {
+    if (process.env.NODE_ENV === "development") {
+      return getClientPromise().then(onfulfilled, onrejected);
+    }
+    productionClientPromise ??= getClientPromise();
+    return productionClientPromise.then(onfulfilled, onrejected);
+  },
+  catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | null) {
+    return this.then(null, onrejected);
+  },
+  finally(onfinally?: (() => void) | null) {
+    if (process.env.NODE_ENV === "development") {
+      return getClientPromise().finally(onfinally);
+    }
+    productionClientPromise ??= getClientPromise();
+    return productionClientPromise.finally(onfinally);
+  },
+  [Symbol.toStringTag]: "Promise",
+} as Promise<MongoClient>;
 
 export default clientPromise;
