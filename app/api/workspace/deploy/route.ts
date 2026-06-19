@@ -18,6 +18,7 @@ import {
 import {
   ensureAndDeployApplication,
   isDokployConfigured,
+  toDokployAppName,
 } from "@/lib/deploy/dokploy-client"
 import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
@@ -84,22 +85,30 @@ export async function POST(req: Request): Promise<Response> {
   // configured.
   // -------------------------------------------------------------------------
   if (isDokployConfigured()) {
+    // Build a Dokploy-safe, unique app name (lowercase slug + stable suffix
+    // derived from the project id) to avoid HTTP 400s from invalid characters
+    // or duplicate application names.
+    const dokployAppName = toDokployAppName(
+      project.businessName || project.name || containerName,
+      projectId,
+    )
+
     // Auto-provisioning chain (Dokploy project -> environment -> application ->
     // deploy). Reuse any ids already stored on the project; create what's
     // missing. Body overrides + DOKPLOY_ENVIRONMENT_ID are honoured too.
     const result = await ensureAndDeployApplication({
-      name: project.businessName || containerName,
-      appName: containerName,
-      projectName: project.businessName || containerName,
+      name: project.businessName || dokployAppName,
+      appName: dokployAppName,
+      projectName: toDokployAppName(project.businessName || dokployAppName, projectId),
       existingApplicationId: project.dokployApplicationId || null,
       existingProjectId: project.dokployProjectId || null,
       existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
       env: getProjectEnvVars(project),
       title: "Sycord AI deploy",
-      description: `Deployment for ${containerName}`,
+      description: `Deployment for ${dokployAppName}`,
     })
 
-    const finalUrl = `https://${containerName}.${domain}`
+    const finalUrl = `https://${dokployAppName}.${domain}`
 
     if (!result.success) {
       await db.collection("users").updateOne(
@@ -127,14 +136,14 @@ export async function POST(req: Request): Promise<Response> {
       {
         $set: {
           "projects.$.deploymentMode": "dokploy",
-          "projects.$.containerName": containerName,
+          "projects.$.containerName": dokployAppName,
           "projects.$.dokployProjectId": result.projectId,
           "projects.$.dokployEnvironmentId": result.environmentId,
           "projects.$.dokployApplicationId": result.applicationId,
-          "projects.$.dokployAppName": containerName,
+          "projects.$.dokployAppName": dokployAppName,
           "projects.$.deploymentRuntime": {
             mode: "dokploy",
-            domain: containerName,
+            domain: dokployAppName,
             url: finalUrl,
             projectId: result.projectId,
             environmentId: result.environmentId,
@@ -153,7 +162,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({
       status: "success",
       url: finalUrl,
-      containerName,
+      containerName: dokployAppName,
       projectId: result.projectId,
       environmentId: result.environmentId,
       applicationId: result.applicationId,

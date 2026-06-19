@@ -89,15 +89,37 @@ function extractError(status: number, body: unknown): string {
   if (body && typeof body === "object") {
     const obj = body as Record<string, any>
     // Dokploy/tRPC error shapes seen in the wild.
+    const zod =
+      obj.error?.json?.zodError ||
+      obj.error?.data?.zodError ||
+      obj.error?.zodError
+    if (zod && typeof zod === "object") {
+      // Surface the first field validation error when present.
+      try {
+        const flat = JSON.stringify(zod)
+        return `Dokploy validation error (HTTP ${status}): ${flat.slice(0, 300)}`
+      } catch {
+        /* fall through */
+      }
+    }
     return (
       obj.error?.message ||
       obj.error?.json?.message ||
       obj.message ||
-      obj.error ||
+      (typeof obj.error === "string" ? obj.error : null) ||
       `Request failed with status ${status}`
     )
   }
-  if (typeof body === "string" && body.trim()) return body
+  if (typeof body === "string") {
+    const trimmed = body.trim()
+    if (!trimmed) return `Request failed with status ${status}`
+    // HTML error page — surface a concise hint instead of the whole document.
+    if (trimmed.startsWith("<")) {
+      const title = trimmed.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim()
+      return `Dokploy returned an HTML error page (HTTP ${status})${title ? `: ${title}` : ""}`
+    }
+    return trimmed.slice(0, 300)
+  }
   return `Request failed with status ${status}`
 }
 
@@ -320,10 +342,19 @@ export const application = {
     description?: string | null
     serverId?: string | null
   }) {
+    // Only send populated fields — Dokploy returns HTTP 400 on some null/empty
+    // optionals. appName is sanitized to Dokploy's slug rules as a safety net.
+    const body: Record<string, unknown> = {
+      name: input.name,
+      environmentId: input.environmentId,
+    }
+    if (input.appName) body.appName = toDokployAppName(input.appName)
+    if (input.description) body.description = input.description
+    if (input.serverId) body.serverId = input.serverId
     return dokployRequest<DokployApplication>({
       method: "POST",
       endpoint: "application.create",
-      body: { ...input },
+      body,
     })
   },
 
@@ -434,6 +465,29 @@ export function toDokployEnvString(envVars: Record<string, string>): string {
     .filter(([key]) => key)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n")
+}
+
+/**
+ * Produces a Dokploy-safe application name: lowercase, alphanumeric + hyphens,
+ * no leading/trailing or repeated hyphens, must start with a letter. When a
+ * `seed` is given (e.g. the project id) a short deterministic suffix is added
+ * so names are unique across projects and re-deploys stay idempotent.
+ */
+export function toDokployAppName(name: string, seed?: string): string {
+  let slug = String(name || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+  if (!slug) slug = "app"
+  if (!/^[a-z]/.test(slug)) slug = `app-${slug}`
+  if (seed) {
+    let h = 0
+    for (let i = 0; i < seed.length; i++) h = (Math.imul(h, 31) + seed.charCodeAt(i)) >>> 0
+    slug = `${slug}-${h.toString(36).slice(0, 6)}`
+  }
+  return slug.slice(0, 63).replace(/-+$/g, "")
 }
 
 // ---------------------------------------------------------------------------
