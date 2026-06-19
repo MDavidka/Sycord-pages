@@ -32,6 +32,8 @@ export type DokployConfig = {
   apiUrl: string
   apiKey: string
   serverId?: string
+  /** Dokploy environmentId an application is created under (required to create). */
+  environmentId?: string
 }
 
 export class DokployConfigError extends Error {
@@ -46,6 +48,7 @@ export function getDokployConfig(): DokployConfig {
   const apiUrl = (process.env.DOKPLOY_API_URL || DEFAULT_DOKPLOY_API_URL).replace(/\/+$/, "")
   const apiKey = process.env.DOKPLOY_API_KEY || ""
   const serverId = process.env.DOKPLOY_SERVER_ID || undefined
+  const environmentId = process.env.DOKPLOY_ENVIRONMENT_ID || undefined
 
   if (!apiKey) {
     throw new DokployConfigError(
@@ -53,7 +56,7 @@ export function getDokployConfig(): DokployConfig {
     )
   }
 
-  return { apiUrl, apiKey, serverId }
+  return { apiUrl, apiKey, serverId, environmentId }
 }
 
 /** Whether the Dokploy client has the minimum config to run. */
@@ -431,4 +434,207 @@ export function toDokployEnvString(envVars: Record<string, string>): string {
     .filter(([key]) => key)
     .map(([key, value]) => `${key}=${value}`)
     .join("\n")
+}
+
+
+// ---------------------------------------------------------------------------
+// High-level orchestration: "make a container (if not yet made) and deploy".
+//
+// This is what the Syra AI builder's deploy() tool calls. It:
+//   1. Uses an existing Dokploy applicationId when the project already has one.
+//   2. Otherwise creates a fresh application (the "container") via
+//      application.create.
+//   3. Optionally syncs env vars.
+//   4. Triggers a deployment via application.deploy.
+// ---------------------------------------------------------------------------
+
+export type EnsureDeployStep = {
+  step: string
+  ok: boolean
+  status: number
+  endpoint: string
+  error: string | null
+}
+
+export type EnsureDeployResult = {
+  success: boolean
+  /** The Dokploy applicationId used or created. */
+  applicationId: string | null
+  appName: string | null
+  /** True when a brand-new application was created during this call. */
+  created: boolean
+  /** First non-null error encountered. */
+  error: string | null
+  steps: EnsureDeployStep[]
+  /** Raw payload from the final deploy call. */
+  data: unknown
+}
+
+/** Best-effort extraction of an applicationId from Dokploy's create response. */
+export function extractApplicationId(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null
+  const obj = data as Record<string, any>
+  return (
+    obj.applicationId ||
+    obj.id ||
+    obj.result?.data?.json?.applicationId ||
+    obj.result?.data?.json?.id ||
+    obj.json?.applicationId ||
+    obj.data?.applicationId ||
+    obj.data?.id ||
+    null
+  )
+}
+
+function toStep(step: string, result: DokployResult): EnsureDeployStep {
+  return {
+    step,
+    ok: result.ok,
+    status: result.status,
+    endpoint: result.endpoint,
+    error: result.error,
+  }
+}
+
+export type EnsureAndDeployInput = {
+  /** Human-readable name for the Dokploy application. */
+  name: string
+  /** Stable slug used as appName + for the public URL. */
+  appName?: string
+  /** Pass when the project already has a Dokploy application. */
+  existingApplicationId?: string | null
+  /** Override the env-configured environmentId (required to create). */
+  environmentId?: string
+  /** Override the env-configured serverId. */
+  serverId?: string | null
+  /** Env vars to persist before deploying. */
+  env?: Record<string, string> | null
+  title?: string
+  description?: string
+}
+
+export async function ensureAndDeployApplication(
+  input: EnsureAndDeployInput,
+): Promise<EnsureDeployResult> {
+  const steps: EnsureDeployStep[] = []
+
+  let config: DokployConfig
+  try {
+    config = getDokployConfig()
+  } catch (err: any) {
+    return {
+      success: false,
+      applicationId: input.existingApplicationId || null,
+      appName: input.appName || null,
+      created: false,
+      error: err?.message || "Dokploy is not configured",
+      steps,
+      data: null,
+    }
+  }
+
+  let applicationId = input.existingApplicationId || null
+  let created = false
+
+  // 1. Create the application/container if the project doesn't have one yet.
+  if (!applicationId) {
+    const environmentId = input.environmentId || config.environmentId
+    if (!environmentId) {
+      return {
+        success: false,
+        applicationId: null,
+        appName: input.appName || null,
+        created: false,
+        error:
+          "Cannot create a Dokploy application: no environmentId. Set DOKPLOY_ENVIRONMENT_ID or store one on the project.",
+        steps,
+        data: null,
+      }
+    }
+
+    const createResult = await application.create({
+      name: input.name,
+      appName: input.appName,
+      environmentId,
+      serverId: input.serverId ?? config.serverId ?? null,
+    })
+    steps.push(toStep("create", createResult))
+
+    if (!createResult.ok) {
+      return {
+        success: false,
+        applicationId: null,
+        appName: input.appName || null,
+        created: false,
+        error: createResult.error || "Failed to create Dokploy application",
+        steps,
+        data: null,
+      }
+    }
+
+    applicationId = extractApplicationId(createResult.data)
+    created = true
+
+    if (!applicationId) {
+      return {
+        success: false,
+        applicationId: null,
+        appName: input.appName || null,
+        created: true,
+        error: "Created the application but could not determine its applicationId from the response.",
+        steps,
+        data: createResult.data,
+      }
+    }
+  }
+
+  // 2. Sync env vars (optional, best-effort but surfaced on failure).
+  if (input.env && Object.keys(input.env).length > 0) {
+    const envResult = await application.saveEnvironment({
+      applicationId,
+      env: toDokployEnvString(input.env),
+      createEnvFile: true,
+    })
+    steps.push(toStep("saveEnvironment", envResult))
+    if (!envResult.ok) {
+      return {
+        success: false,
+        applicationId,
+        appName: input.appName || null,
+        created,
+        error: envResult.error || "Failed to save environment variables",
+        steps,
+        data: null,
+      }
+    }
+  }
+
+  // 3. Trigger the deployment.
+  const deployResult = await application.deploy(applicationId, {
+    title: input.title,
+    description: input.description,
+  })
+  steps.push(toStep("deploy", deployResult))
+
+  if (!deployResult.ok) {
+    return {
+      success: false,
+      applicationId,
+      appName: input.appName || null,
+      created,
+      error: deployResult.error || "Failed to start deployment",
+      steps,
+      data: deployResult.data,
+    }
+  }
+
+  return {
+    success: true,
+    applicationId,
+    appName: input.appName || null,
+    created,
+    error: null,
+    steps,
+    data: deployResult.data,
+  }
 }

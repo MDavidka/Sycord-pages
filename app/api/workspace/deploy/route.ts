@@ -5,6 +5,7 @@ import clientPromise from "@/lib/mongodb"
 import {
   prepareProjectDeployFiles,
   validateApiDeployFiles,
+  getProjectEnvVars,
   getSycordDomain,
 } from "@/lib/deploy/runner-client"
 import {
@@ -14,6 +15,10 @@ import {
   sshDeployFiles,
   publishSiteViaNginx,
 } from "@/lib/deploy/ssh-deploy"
+import {
+  ensureAndDeployApplication,
+  isDokployConfigured,
+} from "@/lib/deploy/dokploy-client"
 import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -72,6 +77,79 @@ export async function POST(req: Request): Promise<Response> {
   const containerName = slugifyContainerName(project, projectId)
   const domain = getSycordDomain()
 
+  // -------------------------------------------------------------------------
+  // Primary path: deploy via the Dokploy ("version" container) API at
+  // sycord.site. Creates the application/container on first deploy, then
+  // triggers a deployment. Falls back to the SSH path when Dokploy isn't
+  // configured.
+  // -------------------------------------------------------------------------
+  if (isDokployConfigured()) {
+    const result = await ensureAndDeployApplication({
+      name: project.businessName || containerName,
+      appName: containerName,
+      existingApplicationId: project.dokployApplicationId || null,
+      env: getProjectEnvVars(project),
+      title: "Sycord AI deploy",
+      description: `Deployment for ${containerName}`,
+    })
+
+    const finalUrl = `https://${containerName}.${domain}`
+
+    if (!result.success) {
+      await db.collection("users").updateOne(
+        { id: userId, "projects._id": new ObjectId(projectId) },
+        {
+          $set: {
+            "projects.$.deploymentMode": "dokploy",
+            "projects.$.deploymentRuntime.status": "failed",
+            "projects.$.deploymentRuntime.lastDeployError": result.error,
+            ...(result.applicationId ? { "projects.$.dokployApplicationId": result.applicationId } : {}),
+          },
+        },
+      )
+      return Response.json(
+        { status: "error", message: result.error || "Dokploy deployment failed", steps: result.steps },
+        { status: 502 },
+      )
+    }
+
+    await db.collection("users").updateOne(
+      { id: userId, "projects._id": new ObjectId(projectId) },
+      {
+        $set: {
+          "projects.$.deploymentMode": "dokploy",
+          "projects.$.containerName": containerName,
+          "projects.$.dokployApplicationId": result.applicationId,
+          "projects.$.dokployAppName": containerName,
+          "projects.$.deploymentRuntime": {
+            mode: "dokploy",
+            domain: containerName,
+            url: finalUrl,
+            applicationId: result.applicationId,
+            status: "deployed",
+            health: "healthy",
+            lastHealthCheckAt: new Date(),
+            lastDeployAt: new Date(),
+            lastDeployError: null,
+          },
+          "projects.$.deployedAt": new Date(),
+        },
+      },
+    )
+
+    return Response.json({
+      status: "success",
+      url: finalUrl,
+      containerName,
+      applicationId: result.applicationId,
+      created: result.created,
+      steps: result.steps,
+    })
+  }
+
+  // -------------------------------------------------------------------------
+  // Fallback path: SSH / nginx / PM2 on the configured VPS.
+  // -------------------------------------------------------------------------
   let container = await getContainer(projectId)
   if (!container) {
     container = await ensureContainer(project, projectId)

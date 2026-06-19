@@ -265,8 +265,9 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
 }
 
 /**
- * Deploy the project's saved files to sycord.site edge hosting via the CDN
- * Push API. Returns the live URL on success.
+ * Deploy the project to sycord.site via the Dokploy ("version" container) API.
+ * On first deploy it provisions the container/application, then triggers a
+ * deployment. Returns the live URL on success.
  */
 export async function handleDeploy(): Promise<string> {
     const projectId = getHostProjectId();
@@ -572,7 +573,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: 'Bundle the project and deploy it to sycord.site edge hosting (CDN Push API). Runs server-side and returns the live URL. Use when the user asks to publish, deploy, or go live.',
+            description: 'Deploy the project to sycord.site using the Dokploy container API. On the first deploy it automatically provisions the container/application, then starts a deployment and returns the live URL. Use when the user asks to publish, deploy, or go live.',
             parameters: {
                 type: 'object',
                 properties: {},
