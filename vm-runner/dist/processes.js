@@ -5,7 +5,7 @@ import { config } from "./config.js";
 export async function runCommand(command, args, options = {}) {
     const child = spawn(command, args, {
         cwd: options.cwd,
-        env: { ...process.env, ...options.env },
+        env: { ...process.env, ...options.env, PATH: (options.env?.PATH || process.env.PATH || '') + ':/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin' },
         stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout = [];
