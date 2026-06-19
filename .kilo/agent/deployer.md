@@ -329,3 +329,38 @@ curl -X POST "https://sycord.site/api/docker.restartContainer" \
   -H "Content-Type: application/json" \
   -d '{ "containerId": "f3a9c1e2b7d4" }'
 ```
+
+
+---
+
+# Auto-provisioning chain (project -> environment -> application -> deploy)
+
+The Syra `deploy()` tool (`POST /api/workspace/deploy`) now provisions the full
+Dokploy hierarchy automatically. `ensureAndDeployApplication()` in
+`lib/deploy/dokploy-client.ts` runs this chain, reusing any ids already stored
+on the project and creating only what's missing:
+
+1. **Project** — reuse `project.dokployProjectId`, else `POST /project.create`.
+   (Dokploy auto-creates a default "production" environment with the project.)
+2. **Environment** — reuse `project.dokployEnvironmentId`, else
+   `GET /environment.byProjectId` (pick "production" or the first), else
+   `POST /environment.create { name: "production", projectId }`.
+3. **Application (container)** — reuse `project.dokployApplicationId`, else
+   `POST /application.create { name, appName, environmentId }`.
+4. **Env vars** — `POST /application.saveEnvironment` (when the project has any).
+5. **Deploy** — `POST /application.deploy { applicationId }`.
+
+All ids created along the way are persisted back onto the project document
+(`dokployProjectId`, `dokployEnvironmentId`, `dokployApplicationId`,
+`dokployAppName`) so subsequent deploys reuse them.
+
+Endpoints used: `project.create`, `project.one`, `project.all`,
+`environment.create`, `environment.one`, `environment.byProjectId`
+(see https://docs.dokploy.com/docs/api/project and /environment).
+
+Resolution precedence for the environment: stored project id ->
+`DOKPLOY_ENVIRONMENT_ID` env -> auto-create. With a valid `DOKPLOY_API_KEY`,
+no manual `environmentId` is required anymore — it is created on first deploy.
+
+Success JSON adds `projectId`, `environmentId`, `applicationId`,
+`createdProject`, `createdEnvironment`, `created` and a `steps[]` trace.

@@ -84,17 +84,16 @@ export async function POST(req: Request): Promise<Response> {
   // configured.
   // -------------------------------------------------------------------------
   if (isDokployConfigured()) {
-    // Per-project Dokploy environment (Option B). Falls back to the
-    // DOKPLOY_ENVIRONMENT_ID env var inside ensureAndDeployApplication when the
-    // project document doesn't carry one. Accepts a body override too.
-    const environmentId =
-      project.dokployEnvironmentId || body?.environmentId || undefined
-
+    // Auto-provisioning chain (Dokploy project -> environment -> application ->
+    // deploy). Reuse any ids already stored on the project; create what's
+    // missing. Body overrides + DOKPLOY_ENVIRONMENT_ID are honoured too.
     const result = await ensureAndDeployApplication({
       name: project.businessName || containerName,
       appName: containerName,
+      projectName: project.businessName || containerName,
       existingApplicationId: project.dokployApplicationId || null,
-      environmentId,
+      existingProjectId: project.dokployProjectId || null,
+      existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
       env: getProjectEnvVars(project),
       title: "Sycord AI deploy",
       description: `Deployment for ${containerName}`,
@@ -110,6 +109,9 @@ export async function POST(req: Request): Promise<Response> {
             "projects.$.deploymentMode": "dokploy",
             "projects.$.deploymentRuntime.status": "failed",
             "projects.$.deploymentRuntime.lastDeployError": result.error,
+            // Persist whatever was provisioned before the failure so retries reuse it.
+            ...(result.projectId ? { "projects.$.dokployProjectId": result.projectId } : {}),
+            ...(result.environmentId ? { "projects.$.dokployEnvironmentId": result.environmentId } : {}),
             ...(result.applicationId ? { "projects.$.dokployApplicationId": result.applicationId } : {}),
           },
         },
@@ -126,13 +128,16 @@ export async function POST(req: Request): Promise<Response> {
         $set: {
           "projects.$.deploymentMode": "dokploy",
           "projects.$.containerName": containerName,
+          "projects.$.dokployProjectId": result.projectId,
+          "projects.$.dokployEnvironmentId": result.environmentId,
           "projects.$.dokployApplicationId": result.applicationId,
           "projects.$.dokployAppName": containerName,
-          ...(environmentId ? { "projects.$.dokployEnvironmentId": environmentId } : {}),
           "projects.$.deploymentRuntime": {
             mode: "dokploy",
             domain: containerName,
             url: finalUrl,
+            projectId: result.projectId,
+            environmentId: result.environmentId,
             applicationId: result.applicationId,
             status: "deployed",
             health: "healthy",
@@ -149,8 +154,12 @@ export async function POST(req: Request): Promise<Response> {
       status: "success",
       url: finalUrl,
       containerName,
+      projectId: result.projectId,
+      environmentId: result.environmentId,
       applicationId: result.applicationId,
       created: result.created,
+      createdProject: result.createdProject,
+      createdEnvironment: result.createdEnvironment,
       steps: result.steps,
     })
   }
