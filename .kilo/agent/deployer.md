@@ -198,3 +198,134 @@ Uses HUP signal — never `restart` in production.
 - **EADDRINUSE retry:** If PM2 start fails with EADDRINUSE, retries with a fresh port.
 - **Graceful degradation:** Failed deployments leave state for debugging, never leave orphaned processes.
 - **Auth required:** All runner API endpoints require Bearer token (VPS_RUNNER_TOKEN).
+
+
+---
+
+# Dokploy Deployer — the "version" container API (NEW)
+
+A new deployment backend runs as a Dokploy instance reachable at **`sycord.site`**.
+The app integrates with it through Dokploy's tRPC-flavoured REST API. This is an
+alternative to the SSH/PM2/Nginx runner documented above.
+
+## Authentication & Base URL
+
+- Base URL: `https://sycord.site/api` (env: `DOKPLOY_API_URL`)
+- Every request sends header `x-api-key: <DOKPLOY_API_KEY>`
+- Endpoints are namespaced: `docker.*` (container mgmt) and `application.*` (deploy)
+- GET endpoints take query params; POST endpoints take a JSON body.
+
+Reference docs:
+- Docker: https://docs.dokploy.com/docs/api/docker
+- Application: https://docs.dokploy.com/docs/api/application
+
+## Code surface
+
+- Client: `lib/deploy/dokploy-client.ts` — typed `docker.*` and `application.*` helpers.
+- Route: `app/api/deploy/dokploy/route.ts` — authenticated GET (status) + POST (deploy).
+
+## App-facing route: `/api/deploy/dokploy`
+
+### GET — status / listings
+```
+GET /api/deploy/dokploy                     # list all containers
+GET /api/deploy/dokploy?applicationId=abc   # single application detail
+GET /api/deploy/dokploy?appName=my-app      # containers matching an app name
+```
+
+Success JSON:
+```json
+{
+  "success": true,
+  "endpoint": "docker.getContainers",
+  "resource": "containers",
+  "data": [
+    {
+      "containerId": "f3a9c1e2b7d4",
+      "name": "my-app",
+      "image": "my-app:latest",
+      "state": "running",
+      "status": "Up 2 hours"
+    }
+  ]
+}
+```
+
+### POST — deploy / lifecycle
+Request body:
+```json
+{
+  "projectId": "665f1c...",          // optional: resolves applicationId from the project doc
+  "applicationId": "app_abc123",     // required if no projectId mapping exists
+  "appName": "my-app",               // optional: used for reload + public URL
+  "action": "deploy",                // deploy | redeploy | start | stop | reload
+  "title": "Manual deploy",
+  "description": "Triggered from dashboard",
+  "syncEnv": true                    // optional: push project env vars first
+}
+```
+
+Success JSON:
+```json
+{
+  "success": true,
+  "action": "deploy",
+  "applicationId": "app_abc123",
+  "appName": "my-app",
+  "url": "https://my-app.sycord.site",
+  "domain": "sycord.site",
+  "data": { "deploymentId": "dep_789", "status": "running" },
+  "steps": [
+    { "step": "saveEnvironment", "result": { "ok": true, "status": 200, "endpoint": "application.saveEnvironment" } },
+    { "step": "deploy", "result": { "ok": true, "status": 200, "endpoint": "application.deploy" } }
+  ]
+}
+```
+
+Error JSON (upstream Dokploy failure):
+```json
+{
+  "success": false,
+  "action": "deploy",
+  "applicationId": "app_abc123",
+  "appName": "my-app",
+  "error": "Application not found",
+  "steps": [
+    { "step": "deploy", "result": { "ok": false, "status": 404, "error": "Application not found", "endpoint": "application.deploy" } }
+  ]
+}
+```
+
+## Project mapping
+
+To deploy by `projectId`, store the Dokploy ids on the project document:
+- `project.dokployApplicationId` — the Dokploy applicationId
+- `project.dokployAppName` — the Dokploy appName (used for reload + URL)
+
+## Raw Dokploy endpoints wrapped by the client
+
+Docker (`docker.*`): `getContainers`, `restartContainer`, `startContainer`,
+`stopContainer`, `killContainer`, `removeContainer`, `getConfig`,
+`getContainersByAppNameMatch`, `getContainersByAppLabel`,
+`getStackContainersByAppName`, `getServiceContainersByAppName`.
+
+Application (`application.*`): `create`, `one`, `deploy`, `redeploy`, `start`,
+`stop`, `reload`, `saveEnvironment`, `readLogs`, `search`.
+
+Example raw calls:
+```bash
+# List containers
+curl -X GET "https://sycord.site/api/docker.getContainers" -H "x-api-key: $DOKPLOY_API_KEY"
+
+# Deploy an application
+curl -X POST "https://sycord.site/api/application.deploy" \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "applicationId": "app_abc123" }'
+
+# Restart a container
+curl -X POST "https://sycord.site/api/docker.restartContainer" \
+  -H "x-api-key: $DOKPLOY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "containerId": "f3a9c1e2b7d4" }'
+```
