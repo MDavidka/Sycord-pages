@@ -84,10 +84,17 @@ export async function POST(req: Request): Promise<Response> {
   // configured.
   // -------------------------------------------------------------------------
   if (isDokployConfigured()) {
+    // Per-project Dokploy environment (Option B). Falls back to the
+    // DOKPLOY_ENVIRONMENT_ID env var inside ensureAndDeployApplication when the
+    // project document doesn't carry one. Accepts a body override too.
+    const environmentId =
+      project.dokployEnvironmentId || body?.environmentId || undefined
+
     const result = await ensureAndDeployApplication({
       name: project.businessName || containerName,
       appName: containerName,
       existingApplicationId: project.dokployApplicationId || null,
+      environmentId,
       env: getProjectEnvVars(project),
       title: "Sycord AI deploy",
       description: `Deployment for ${containerName}`,
@@ -121,6 +128,7 @@ export async function POST(req: Request): Promise<Response> {
           "projects.$.containerName": containerName,
           "projects.$.dokployApplicationId": result.applicationId,
           "projects.$.dokployAppName": containerName,
+          ...(environmentId ? { "projects.$.dokployEnvironmentId": environmentId } : {}),
           "projects.$.deploymentRuntime": {
             mode: "dokploy",
             domain: containerName,
