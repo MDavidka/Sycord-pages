@@ -887,29 +887,35 @@ function unwrap(data: unknown): any {
 export function extractApplicationId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.applicationId || core.appId || core.id || core._id || null
+  return core.applicationId || core.application?.applicationId || core.appId || core.id || core._id || null
 }
 
 /** Extract a projectId from a project.create / project.one response. */
 export function extractProjectId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.projectId || core.id || core._id || null
+  return core.projectId || core.project?.projectId || core.id || core._id || null
 }
 
 /** Extract an environmentId from an environment.create / environment.one response. */
 export function extractEnvironmentId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.environmentId || core.envId || core.id || core._id || null
+  return core.environmentId || core.environment?.environmentId || core.envId || core.id || core._id || null
 }
 
 /** A newly-created project usually embeds its default (production) environment. */
 export function extractEnvironmentIdFromProject(data: unknown): string | null {
   const core = unwrap(data)
+  if (!core || typeof core !== "object") return null
+  // { environment: { environmentId: "..." } } wrapper from project.create
+  if (core.environment?.environmentId) return core.environment.environmentId
+  // { environments: [{ environmentId: "..." }] } list from project.one
   const envs = core?.environments
   if (Array.isArray(envs) && envs.length > 0) {
-    return envs[0].environmentId || envs[0].envId || envs[0].id || envs[0]._id || null
+    const prod = envs.find((e: any) => String(e?.name || "").toLowerCase() === "production")
+    const chosen = prod || envs[0]
+    return chosen.environmentId || chosen.envId || chosen.id || chosen._id || null
   }
   return null
 }
