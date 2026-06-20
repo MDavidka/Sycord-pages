@@ -864,6 +864,15 @@ export type EnsureDeployResult = {
 /** Unwraps the various tRPC-style envelopes Dokploy may return. */
 function unwrap(data: unknown): any {
   if (!data || typeof data !== "object") return data
+  // tRPC batch responses come as arrays: [{ result: { data: { json: { ... } } } }]
+  if (Array.isArray(data) && data.length > 0) {
+    const first = data[0]
+    if (first && typeof first === "object") {
+      const obj = first as Record<string, any>
+      return obj.result?.data?.json ?? obj
+    }
+    return data
+  }
   const obj = data as Record<string, any>
   return obj.result?.data?.json ?? obj.json ?? obj.data ?? obj
 }
