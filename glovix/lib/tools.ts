@@ -265,6 +265,31 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
 }
 
 /**
+ * Save the project's source files to GitHub (creates the repo on first save).
+ * This must run before deploy() so Dokploy has a git source to build from.
+ */
+export async function handleSave(): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ Save is only available when building inside a Sycord project.';
+    }
+    try {
+        const res = await fetch(`/api/workspace/github-save?projectId=${encodeURIComponent(projectId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || data?.status !== 'success' || !data?.url) {
+            return `[SYSTEM] ❌ Save failed: ${data?.message || `HTTP ${res.status}`}`;
+        }
+        return `[SYSTEM] ✅ Saved ${data.filesCount} file(s) to GitHub: ${data.url} (branch ${data.branch}). You can now deploy().`;
+    } catch (e: any) {
+        return `Error saving project to GitHub: ${e.message}`;
+    }
+}
+
+/**
  * Deploy the project to sycord.site via the Dokploy ("version" container) API.
  * On first deploy it provisions the container/application, then triggers a
  * deployment. Returns the live URL on success.
@@ -572,8 +597,20 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'save',
+            description: 'Save the project source files to GitHub (creates the repository on first save). Call this BEFORE deploy() — Dokploy deploys by building the GitHub repository. Use when the user asks to save, push to GitHub, or before publishing.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'deploy',
-            description: 'Deploy the project to sycord.site using the Dokploy container API. On the first deploy it automatically provisions the container/application, then starts a deployment and returns the live URL. Use when the user asks to publish, deploy, or go live.',
+            description: 'Deploy the project to sycord.site using the Dokploy container API. IMPORTANT: call save() first to push the project to GitHub — Dokploy builds from the GitHub repo. On the first deploy it provisions the container/application, attaches the GitHub source, then starts a deployment and returns the live URL. Use when the user asks to publish, deploy, or go live.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1688,6 +1725,7 @@ async function _executeToolInternal(
     if (name === 'listFiles') return await handleListFiles();
     if (name === 'checkDependencies') return handleCheckDependencies(ctx);
     if (name === 'getErrors') return handleGetErrors(ctx);
+    if (name === 'save') return handleSave();
     if (name === 'deploy') return handleDeploy();
 
     // Parse arguments
@@ -1746,7 +1784,7 @@ async function _executeToolInternal(
                     result = await handleBatchCreateFiles(args, ctx);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, deploy`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

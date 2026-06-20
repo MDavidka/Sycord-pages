@@ -93,9 +93,33 @@ export async function POST(req: Request): Promise<Response> {
       projectId,
     )
 
+    // Dokploy builds from a git source. The project must be pushed to GitHub
+    // first (via the save() tool / /api/workspace/github-save).
+    const ghOwner = project.githubOwner as string | undefined
+    const ghRepo = project.githubRepo as string | undefined
+    if (!ghOwner || !ghRepo) {
+      return Response.json(
+        {
+          status: "error",
+          message:
+            "No GitHub source found for this project. Run save() first to push the project to GitHub, then deploy.",
+        },
+        { status: 409 },
+      )
+    }
+
+    const source = {
+      owner: ghOwner,
+      repository: ghRepo,
+      branch: (project.githubBranch as string | undefined) || "main",
+      buildPath: "/",
+      githubId: (project.dokployGithubId as string | undefined) || null,
+      gitUrl: (project.githubUrl ? `${project.githubUrl}.git` : undefined) as string | undefined,
+    }
+
     // Auto-provisioning chain (Dokploy project -> environment -> application ->
-    // deploy). Reuse any ids already stored on the project; create what's
-    // missing. Body overrides + DOKPLOY_ENVIRONMENT_ID are honoured too.
+    // attach git source -> deploy). Reuse any ids already stored on the
+    // project; create what's missing.
     const result = await ensureAndDeployApplication({
       name: project.businessName || dokployAppName,
       appName: dokployAppName,
@@ -104,6 +128,7 @@ export async function POST(req: Request): Promise<Response> {
       existingProjectId: project.dokployProjectId || null,
       existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
       env: getProjectEnvVars(project),
+      source,
       title: "Sycord AI deploy",
       description: `Deployment for ${dokployAppName}`,
     })

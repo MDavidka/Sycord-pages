@@ -34,6 +34,8 @@ export type DokployConfig = {
   serverId?: string
   /** Dokploy environmentId an application is created under (required to create). */
   environmentId?: string
+  /** Dokploy GitHub provider id (the GitHub App installation) for saveGithubProvider. */
+  githubId?: string
 }
 
 export class DokployConfigError extends Error {
@@ -49,6 +51,7 @@ export function getDokployConfig(): DokployConfig {
   const apiKey = process.env.DOKPLOY_API_KEY || ""
   const serverId = process.env.DOKPLOY_SERVER_ID || undefined
   const environmentId = process.env.DOKPLOY_ENVIRONMENT_ID || undefined
+  const githubId = process.env.DOKPLOY_GITHUB_ID || undefined
 
   if (!apiKey) {
     throw new DokployConfigError(
@@ -56,7 +59,7 @@ export function getDokployConfig(): DokployConfig {
     )
   }
 
-  return { apiUrl, apiKey, serverId, environmentId }
+  return { apiUrl, apiKey, serverId, environmentId, githubId }
 }
 
 /** Whether the Dokploy client has the minimum config to run. */
@@ -432,6 +435,49 @@ export const application = {
     })
   },
 
+  /** POST /application.saveGithubProvider — link a GitHub App-connected repo. */
+  saveGithubProvider(input: {
+    applicationId: string
+    repository: string
+    owner: string
+    branch: string
+    githubId: string
+    buildPath?: string | null
+    triggerType?: string
+    enableSubmodules?: boolean
+  }) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.saveGithubProvider",
+      body: {
+        buildPath: "/",
+        triggerType: "push",
+        ...input,
+      },
+    })
+  },
+
+  /** POST /application.saveGitProvider — link a public/custom git URL (no GitHub App needed). */
+  saveGitProvider(input: {
+    applicationId: string
+    customGitUrl: string
+    customGitBranch: string
+    customGitBuildPath?: string | null
+    customGitSSHKeyId?: string | null
+    enableSubmodules?: boolean
+    watchPaths?: string[] | null
+  }) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.saveGitProvider",
+      body: {
+        customGitBuildPath: "/",
+        watchPaths: null,
+        ...input,
+      },
+    })
+  },
+
   /** GET /application.readLogs */
   readLogs(applicationId: string, opts: { tail?: number; since?: string; search?: string } = {}) {
     return dokployRequest({
@@ -686,6 +732,21 @@ export type EnsureAndDeployInput = {
   serverId?: string | null
   /** Env vars to persist before deploying. */
   env?: Record<string, string> | null
+  /**
+   * Git source to attach to the application before deploying. When `githubId`
+   * is provided, the Dokploy GitHub App provider is used; otherwise the public
+   * git URL (custom git provider) is used.
+   */
+  source?: {
+    owner: string
+    repository: string
+    branch?: string
+    buildPath?: string
+    /** Dokploy GitHub provider id; falls back to DOKPLOY_GITHUB_ID. */
+    githubId?: string | null
+    /** Public git clone URL, e.g. https://github.com/owner/repo.git */
+    gitUrl?: string
+  }
   title?: string
   description?: string
 }
@@ -873,6 +934,41 @@ export async function ensureAndDeployApplication(
     steps.push(toStep("application.saveEnvironment", envResult))
     if (!envResult.ok) {
       return done(false, envResult.error || "Failed to save environment variables", null)
+    }
+  }
+
+  // 2b. Attach the git source so Dokploy has something to build.
+  if (input.source) {
+    const branch = input.source.branch || "main"
+    const githubId = input.source.githubId || config.githubId || null
+    let sourceResult: DokployResult
+
+    if (githubId) {
+      sourceResult = await application.saveGithubProvider({
+        applicationId: state.applicationId,
+        repository: input.source.repository,
+        owner: input.source.owner,
+        branch,
+        githubId,
+        buildPath: input.source.buildPath || "/",
+        triggerType: "push",
+      })
+      steps.push(toStep("application.saveGithubProvider", sourceResult))
+    } else {
+      const gitUrl =
+        input.source.gitUrl ||
+        `https://github.com/${input.source.owner}/${input.source.repository}.git`
+      sourceResult = await application.saveGitProvider({
+        applicationId: state.applicationId,
+        customGitUrl: gitUrl,
+        customGitBranch: branch,
+        customGitBuildPath: input.source.buildPath || "/",
+      })
+      steps.push(toStep("application.saveGitProvider", sourceResult))
+    }
+
+    if (!sourceResult.ok) {
+      return done(false, sourceResult.error || "Failed to attach git source to the application", null)
     }
   }
 
