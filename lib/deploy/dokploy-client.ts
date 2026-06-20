@@ -15,7 +15,7 @@
 //   DOKPLOY_SERVER_ID -> optional default serverId forwarded to every call
 // ---------------------------------------------------------------------------
 
-const DEFAULT_DOKPLOY_API_URL = process.env.DOKPLOY_API_URL || "http://localhost:3000/api"
+const DEFAULT_DOKPLOY_API_URL = "https://sycord.site/api"
 
 export type DokployResult<T = unknown> = {
   ok: boolean
@@ -47,7 +47,7 @@ export class DokployConfigError extends Error {
 
 /** Reads + validates Dokploy config from the environment. Throws if no key. */
 export function getDokployConfig(): DokployConfig {
-  const apiUrl = (process.env.DOKPLOY_API_URL || DEFAULT_DOKPLOY_API_URL).replace(/\/+$/, "")
+  const apiUrl = DEFAULT_DOKPLOY_API_URL.replace(/\/+$/, "")
   const apiKey = process.env.DOKPLOY_API_KEY || ""
   const serverId = process.env.DOKPLOY_SERVER_ID || undefined
   const environmentId = process.env.DOKPLOY_ENVIRONMENT_ID || undefined
@@ -1206,7 +1206,7 @@ export type DokployHealth = {
 }
 
 export async function checkDokployHealth(): Promise<DokployHealth> {
-  const apiUrl = (process.env.DOKPLOY_API_URL || DEFAULT_DOKPLOY_API_URL).replace(/\/+$/, "")
+  const apiUrl = DEFAULT_DOKPLOY_API_URL.replace(/\/+$/, "")
   const hasKey = Boolean(process.env.DOKPLOY_API_KEY)
   if (!hasKey) {
     return { reachable: false, apiUrl, hasKey: false, error: "DOKPLOY_API_KEY is not set" }
