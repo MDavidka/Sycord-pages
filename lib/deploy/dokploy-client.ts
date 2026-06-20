@@ -1153,6 +1153,18 @@ export async function ensureAndDeployApplication(
         createResult.data,
       )
     }
+
+    // 1c. Set the build type to Dockerfile so Dokploy uses the project's Dockerfile.
+    const buildTypeResult = await application.saveBuildType({
+      applicationId: state.applicationId,
+      buildType: "dockerfile",
+      dockerfile: "Dockerfile",
+      dockerContextPath: "/",
+    })
+    steps.push(toStep("application.saveBuildType", buildTypeResult))
+    if (!buildTypeResult.ok) {
+      return done(false, buildTypeResult.error || "Failed to set Dockerfile build type", null)
+    }
   }
 
   // 2. Sync env vars (surfaced on failure).

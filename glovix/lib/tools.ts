@@ -408,6 +408,81 @@ export async function handleGenerateDomain(args: Record<string, unknown>): Promi
     return callDokployApi("generateDomain", { appName });
 }
 
+/**
+ * Generate a Dockerfile optimized for the project framework.
+ * When framework is not specified, produces a multi-stage Next.js Dockerfile.
+ */
+export async function handleCreateDockerfile(args: Record<string, unknown>): Promise<string> {
+    const framework = typeof args.framework === "string" ? args.framework.toLowerCase() : "nextjs";
+    const nodeVersion = (typeof args.nodeVersion === "string" ? args.nodeVersion : "22") || "22";
+    const port = (typeof args.port === "string" ? args.port : "3000") || "3000";
+
+    let dockerfile = "";
+    if (framework === "nextjs" || framework === "next") {
+        dockerfile = `# syntax=docker/dockerfile:1
+FROM node:${nodeVersion}-alpine AS base
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+FROM node:${nodeVersion}-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+COPY . .
+RUN npm run build
+
+FROM base AS runner
+WORKDIR /app
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+EXPOSE ${port}
+ENV PORT=${port}
+CMD ["node", "server.js"]
+`;
+    } else if (framework === "react" || framework === "vite") {
+        dockerfile = `# syntax=docker/dockerfile:1
+FROM node:${nodeVersion}-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci && npm cache clean --force
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine AS runner
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+`;
+    } else {
+        dockerfile = `# syntax=docker/dockerfile:1
+FROM node:${nodeVersion}-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+COPY . .
+RUN npm run build
+EXPOSE ${port}
+ENV PORT=${port}
+CMD ["npm", "start"]
+`;
+    }
+
+    try {
+        await writeFile("Dockerfile", dockerfile);
+        const projectId = getHostProjectId();
+        if (projectId) {
+            await syncFileToProjectPages("Dockerfile", dockerfile);
+        }
+        return `[SYSTEM] ✅ Created Dockerfile for ${framework} (Node ${nodeVersion}, port ${port}). Make sure to call save() then deploy().`;
+    } catch (e: any) {
+        return `Error creating Dockerfile: ${e.message}`;
+    }
+}
+
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
     {
@@ -783,6 +858,22 @@ export const TOOL_DEFINITIONS = [
                     appName: { type: 'string', description: 'The Dokploy appName (container name) to generate a domain for (required)' },
                 },
                 required: ['appName'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'createDockerfile',
+            description: 'Generate a Dockerfile for the project. Dokploy requires a Dockerfile to build and deploy. Creates a multi-stage Node.js Dockerfile optimized for the chosen framework. Call this BEFORE save() and deploy() if the project lacks a Dockerfile.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    framework: { type: 'string', description: 'Project framework: "nextjs", "react", "vite", or "node" (default: "nextjs")' },
+                    nodeVersion: { type: 'string', description: 'Node.js version to use (default: "22")' },
+                    port: { type: 'string', description: 'Port the app listens on (default: "3000")' },
+                },
+                required: [],
             },
         },
     },
@@ -1966,8 +2057,11 @@ async function _executeToolInternal(
                 case 'generateDomain':
                     result = await handleGenerateDomain(args);
                     break;
+                case 'createDockerfile':
+                    result = await handleCreateDockerfile(args);
+                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, createDockerfile`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
