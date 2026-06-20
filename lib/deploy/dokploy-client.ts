@@ -868,34 +868,40 @@ function unwrap(data: unknown): any {
   if (Array.isArray(data) && data.length > 0) {
     const first = data[0]
     if (first && typeof first === "object") {
-      const obj = first as Record<string, any>
-      return obj.result?.data?.json ?? obj
+      return unwrap(first)
     }
     return data
   }
   const obj = data as Record<string, any>
-  return obj.result?.data?.json ?? obj.json ?? obj.data ?? obj
+  // Standard tRPC envelope: result.data.json
+  if (obj.result?.data?.json && typeof obj.result.data.json === "object") return obj.result.data.json
+  // result.data without json wrapper
+  if (obj.result?.data && typeof obj.result.data === "object") return obj.result.data
+  // result only
+  if (obj.result && typeof obj.result === "object") return obj.result
+  // Direct json or data wrapper
+  return obj.json ?? obj.data ?? obj
 }
 
 /** Best-effort extraction of an applicationId from Dokploy's create response. */
 export function extractApplicationId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.applicationId || core.id || null
+  return core.applicationId || core.appId || core.id || core._id || null
 }
 
 /** Extract a projectId from a project.create / project.one response. */
 export function extractProjectId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.projectId || core.id || null
+  return core.projectId || core.id || core._id || null
 }
 
 /** Extract an environmentId from an environment.create / environment.one response. */
 export function extractEnvironmentId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.environmentId || core.id || null
+  return core.environmentId || core.envId || core.id || core._id || null
 }
 
 /** A newly-created project usually embeds its default (production) environment. */
@@ -903,7 +909,7 @@ export function extractEnvironmentIdFromProject(data: unknown): string | null {
   const core = unwrap(data)
   const envs = core?.environments
   if (Array.isArray(envs) && envs.length > 0) {
-    return envs[0].environmentId || envs[0].id || null
+    return envs[0].environmentId || envs[0].envId || envs[0].id || envs[0]._id || null
   }
   return null
 }
@@ -1008,13 +1014,14 @@ async function ensureProjectAndEnvironment(
     projectId = extractProjectId(created.data)
     createdProject = true
     if (!projectId) {
+      const rawPreview = JSON.stringify(created.data).slice(0, 500)
       return {
         ok: false,
         projectId: null,
         environmentId: null,
         createdProject: true,
         createdEnvironment: false,
-        error: "Created the project but could not determine its projectId from the response.",
+        error: `Created the project but could not determine its projectId from the response. Raw response: ${rawPreview}`,
       }
     }
     // The freshly created project typically embeds its default environment.
@@ -1045,13 +1052,14 @@ async function ensureProjectAndEnvironment(
     environmentId = extractEnvironmentId(created.data)
     createdEnvironment = true
     if (!environmentId) {
+      const rawPreview = JSON.stringify(created.data).slice(0, 500)
       return {
         ok: false,
         projectId,
         environmentId: null,
         createdProject,
         createdEnvironment: true,
-        error: "Created the environment but could not determine its environmentId from the response.",
+        error: `Created the environment but could not determine its environmentId from the response. Raw response: ${rawPreview}`,
       }
     }
   }
@@ -1132,9 +1140,10 @@ export async function ensureAndDeployApplication(
     state.applicationId = extractApplicationId(createResult.data)
     state.created = true
     if (!state.applicationId) {
+      const rawPreview = JSON.stringify(createResult.data).slice(0, 500)
       return done(
         false,
-        "Created the application but could not determine its applicationId from the response.",
+        `Created the application but could not determine its applicationId from the response. Raw response: ${rawPreview}`,
         createResult.data,
       )
     }
