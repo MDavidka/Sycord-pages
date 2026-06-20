@@ -315,6 +315,99 @@ export async function handleDeploy(): Promise<string> {
     }
 }
 
+async function callDokployApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
+    try {
+        const res = await fetch("/api/deploy/dokploy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, ...extra }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.success) {
+            return `[SYSTEM] ❌ Dokploy ${action} failed: ${data?.error || data?.message || `HTTP ${res.status}`}`;
+        }
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return `Error calling Dokploy API (${action}): ${e.message}`;
+    }
+}
+
+async function callDokployGet(params: Record<string, string>): Promise<string> {
+    try {
+        const qs = new URLSearchParams(params).toString();
+        const res = await fetch(`/api/deploy/dokploy?${qs}`, {
+            headers: { Accept: "application/json" },
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.success) {
+            return `[SYSTEM] ❌ Dokploy query failed: ${data?.error || data?.message || `HTTP ${res.status}`}`;
+        }
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return `Error calling Dokploy API (query): ${e.message}`;
+    }
+}
+
+/**
+ * Create a new Dokploy project.
+ */
+export async function handleCreateProject(args: Record<string, unknown>): Promise<string> {
+    const name = typeof args.name === "string" ? args.name.trim() : "";
+    if (!name) return "[SYSTEM] ❌ Project name is required.";
+    return callDokployApi("createProject", { projectName: name, projectDescription: (args.description as string) || null });
+}
+
+/**
+ * Create a new environment in a Dokploy project.
+ */
+export async function handleCreateEnvironment(args: Record<string, unknown>): Promise<string> {
+    const name = typeof args.name === "string" ? args.name.trim() : "";
+    const projectId = typeof args.projectId === "string" ? args.projectId.trim() : "";
+    if (!name) return "[SYSTEM] ❌ Environment name is required.";
+    if (!projectId) return "[SYSTEM] ❌ projectId is required to create an environment.";
+    return callDokployApi("createEnvironment", { environmentName: name, environmentProjectId: projectId });
+}
+
+/**
+ * List Dokploy projects or containers.
+ */
+export async function handleListDokployResources(args: Record<string, unknown>): Promise<string> {
+    const resource = (typeof args.resource === "string" ? args.resource : "containers") as string;
+    const params: Record<string, string> = { resource };
+    if (args.projectId && typeof args.projectId === "string") params.projectId = args.projectId;
+    if (args.applicationId && typeof args.applicationId === "string") params.applicationId = args.applicationId;
+    if (args.appName && typeof args.appName === "string") params.appName = args.appName;
+    return callDokployGet(params);
+}
+
+/**
+ * Manage a Docker container (start, stop, restart, kill, remove).
+ */
+export async function handleManageContainer(args: Record<string, unknown>): Promise<string> {
+    const containerId = typeof args.containerId === "string" ? args.containerId.trim() : "";
+    const operation = (typeof args.operation === "string" ? args.operation : "restart") as string;
+    if (!containerId) return "[SYSTEM] ❌ containerId is required.";
+    const actionMap: Record<string, string> = {
+        restart: "restartContainer",
+        start: "startContainer",
+        stop: "stopContainer",
+        kill: "killContainer",
+        remove: "removeContainer",
+    };
+    const action = actionMap[operation];
+    if (!action) return `[SYSTEM] ❌ Unknown container operation: "${operation}". Use restart, start, stop, kill, or remove.`;
+    return callDokployApi(action, { containerId });
+}
+
+/**
+ * Generate a Traefik domain for a Dokploy application.
+ */
+export async function handleGenerateDomain(args: Record<string, unknown>): Promise<string> {
+    const appName = typeof args.appName === "string" ? args.appName.trim() : "";
+    if (!appName) return "[SYSTEM] ❌ appName is required to generate a domain.";
+    return callDokployApi("generateDomain", { appName });
+}
+
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
     {
@@ -615,6 +708,81 @@ export const TOOL_DEFINITIONS = [
                 type: 'object',
                 properties: {},
                 required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'createDokployProject',
+            description: 'Create a new project in Dokploy. Use this when you need to set up a new project container before deploying.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Project name (required)' },
+                    description: { type: 'string', description: 'Optional project description' },
+                },
+                required: ['name'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'createDokployEnvironment',
+            description: 'Create a new environment inside a Dokploy project (e.g., "production", "staging").',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Environment name, e.g. "production" or "staging" (required)' },
+                    projectId: { type: 'string', description: 'Dokploy project ID to create the environment in (required)' },
+                },
+                required: ['name', 'projectId'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'listDokployResources',
+            description: 'List Dokploy projects, environments, containers, deployments, or domains. Use to inspect what is currently deployed.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    resource: { type: 'string', description: 'Resource type: "projects", "environments", "containers", "deployments", or "domains" (default: "containers")' },
+                    projectId: { type: 'string', description: 'Filter environments or deployments by projectId' },
+                    applicationId: { type: 'string', description: 'Filter deployments or domains by applicationId' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'manageContainer',
+            description: 'Manage a Dokploy Docker container: restart, start, stop, kill, or remove it.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    containerId: { type: 'string', description: 'The Docker container ID or name (required)' },
+                    operation: { type: 'string', description: 'Operation: "restart", "start", "stop", "kill", or "remove" (default: "restart")' },
+                },
+                required: ['containerId', 'operation'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'generateDomain',
+            description: 'Generate a Traefik domain for a Dokploy application so it gets a public URL.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    appName: { type: 'string', description: 'The Dokploy appName (container name) to generate a domain for (required)' },
+                },
+                required: ['appName'],
             },
         },
     },
@@ -1783,8 +1951,23 @@ async function _executeToolInternal(
                 case 'batchCreateFiles':
                     result = await handleBatchCreateFiles(args, ctx);
                     break;
+                case 'createDokployProject':
+                    result = await handleCreateProject(args);
+                    break;
+                case 'createDokployEnvironment':
+                    result = await handleCreateEnvironment(args);
+                    break;
+                case 'listDokployResources':
+                    result = await handleListDokployResources(args);
+                    break;
+                case 'manageContainer':
+                    result = await handleManageContainer(args);
+                    break;
+                case 'generateDomain':
+                    result = await handleGenerateDomain(args);
+                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

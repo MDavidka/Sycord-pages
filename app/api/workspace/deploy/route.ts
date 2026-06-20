@@ -9,13 +9,6 @@ import {
   getSycordDomain,
 } from "@/lib/deploy/runner-client"
 import {
-  bootstrapContainer,
-  ensureContainer,
-  getContainer,
-  sshDeployFiles,
-  publishSiteViaNginx,
-} from "@/lib/deploy/ssh-deploy"
-import {
   ensureAndDeployApplication,
   isDokployConfigured,
   toDokployAppName,
@@ -53,6 +46,13 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ status: "error", message: "Invalid project ID" }, { status: 400 })
   }
 
+  if (!isDokployConfigured()) {
+    return Response.json(
+      { status: "error", message: "Dokploy is not configured. Set DOKPLOY_API_KEY and DOKPLOY_API_URL." },
+      { status: 503 },
+    )
+  }
+
   const client = await clientPromise
   const db = client.db()
   const user = await db.collection("users").findOne({ id: userId })
@@ -78,179 +78,106 @@ export async function POST(req: Request): Promise<Response> {
   const containerName = slugifyContainerName(project, projectId)
   const domain = getSycordDomain()
 
-  // -------------------------------------------------------------------------
-  // Primary path: deploy via the Dokploy ("version" container) API at
-  // sycord.site. Creates the application/container on first deploy, then
-  // triggers a deployment. Falls back to the SSH path when Dokploy isn't
-  // configured.
-  // -------------------------------------------------------------------------
-  if (isDokployConfigured()) {
-    // Build a Dokploy-safe, unique app name (lowercase slug + stable suffix
-    // derived from the project id) to avoid HTTP 400s from invalid characters
-    // or duplicate application names.
-    const dokployAppName = toDokployAppName(
-      project.businessName || project.name || containerName,
-      projectId,
+  const dokployAppName = toDokployAppName(
+    project.businessName || project.name || containerName,
+    projectId,
+  )
+
+  const ghOwner = project.githubOwner as string | undefined
+  const ghRepo = project.githubRepo as string | undefined
+  if (!ghOwner || !ghRepo) {
+    return Response.json(
+      {
+        status: "error",
+        message:
+          "No GitHub source found for this project. Run save() first to push the project to GitHub, then deploy.",
+      },
+      { status: 409 },
     )
+  }
 
-    // Dokploy builds from a git source. The project must be pushed to GitHub
-    // first (via the save() tool / /api/workspace/github-save).
-    const ghOwner = project.githubOwner as string | undefined
-    const ghRepo = project.githubRepo as string | undefined
-    if (!ghOwner || !ghRepo) {
-      return Response.json(
-        {
-          status: "error",
-          message:
-            "No GitHub source found for this project. Run save() first to push the project to GitHub, then deploy.",
-        },
-        { status: 409 },
-      )
-    }
+  const source = {
+    owner: ghOwner,
+    repository: ghRepo,
+    branch: (project.githubBranch as string | undefined) || "main",
+    buildPath: "/",
+    githubId: (project.dokployGithubId as string | undefined) || null,
+    gitUrl: (project.githubUrl ? `${project.githubUrl}.git` : undefined) as string | undefined,
+  }
 
-    const source = {
-      owner: ghOwner,
-      repository: ghRepo,
-      branch: (project.githubBranch as string | undefined) || "main",
-      buildPath: "/",
-      githubId: (project.dokployGithubId as string | undefined) || null,
-      gitUrl: (project.githubUrl ? `${project.githubUrl}.git` : undefined) as string | undefined,
-    }
+  const result = await ensureAndDeployApplication({
+    name: project.businessName || dokployAppName,
+    appName: dokployAppName,
+    projectName: toDokployAppName(project.businessName || dokployAppName, projectId),
+    existingApplicationId: project.dokployApplicationId || null,
+    existingProjectId: project.dokployProjectId || null,
+    existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
+    env: getProjectEnvVars(project),
+    source,
+    title: "Sycord AI deploy",
+    description: `Deployment for ${dokployAppName}`,
+  })
 
-    // Auto-provisioning chain (Dokploy project -> environment -> application ->
-    // attach git source -> deploy). Reuse any ids already stored on the
-    // project; create what's missing.
-    const result = await ensureAndDeployApplication({
-      name: project.businessName || dokployAppName,
-      appName: dokployAppName,
-      projectName: toDokployAppName(project.businessName || dokployAppName, projectId),
-      existingApplicationId: project.dokployApplicationId || null,
-      existingProjectId: project.dokployProjectId || null,
-      existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
-      env: getProjectEnvVars(project),
-      source,
-      title: "Sycord AI deploy",
-      description: `Deployment for ${dokployAppName}`,
-    })
+  const finalUrl = `https://${dokployAppName}.${domain}`
 
-    const finalUrl = `https://${dokployAppName}.${domain}`
-
-    if (!result.success) {
-      await db.collection("users").updateOne(
-        { id: userId, "projects._id": new ObjectId(projectId) },
-        {
-          $set: {
-            "projects.$.deploymentMode": "dokploy",
-            "projects.$.deploymentRuntime.status": "failed",
-            "projects.$.deploymentRuntime.lastDeployError": result.error,
-            // Persist whatever was provisioned before the failure so retries reuse it.
-            ...(result.projectId ? { "projects.$.dokployProjectId": result.projectId } : {}),
-            ...(result.environmentId ? { "projects.$.dokployEnvironmentId": result.environmentId } : {}),
-            ...(result.applicationId ? { "projects.$.dokployApplicationId": result.applicationId } : {}),
-          },
-        },
-      )
-      return Response.json(
-        { status: "error", message: result.error || "Dokploy deployment failed", steps: result.steps },
-        { status: 502 },
-      )
-    }
-
+  if (!result.success) {
     await db.collection("users").updateOne(
       { id: userId, "projects._id": new ObjectId(projectId) },
       {
         $set: {
           "projects.$.deploymentMode": "dokploy",
-          "projects.$.containerName": dokployAppName,
-          "projects.$.dokployProjectId": result.projectId,
-          "projects.$.dokployEnvironmentId": result.environmentId,
-          "projects.$.dokployApplicationId": result.applicationId,
-          "projects.$.dokployAppName": dokployAppName,
-          "projects.$.deploymentRuntime": {
-            mode: "dokploy",
-            domain: dokployAppName,
-            url: finalUrl,
-            projectId: result.projectId,
-            environmentId: result.environmentId,
-            applicationId: result.applicationId,
-            status: "deployed",
-            health: "healthy",
-            lastHealthCheckAt: new Date(),
-            lastDeployAt: new Date(),
-            lastDeployError: null,
-          },
-          "projects.$.deployedAt": new Date(),
+          "projects.$.deploymentRuntime.status": "failed",
+          "projects.$.deploymentRuntime.lastDeployError": result.error,
+          ...(result.projectId ? { "projects.$.dokployProjectId": result.projectId } : {}),
+          ...(result.environmentId ? { "projects.$.dokployEnvironmentId": result.environmentId } : {}),
+          ...(result.applicationId ? { "projects.$.dokployApplicationId": result.applicationId } : {}),
         },
       },
     )
-
-    return Response.json({
-      status: "success",
-      url: finalUrl,
-      containerName: dokployAppName,
-      projectId: result.projectId,
-      environmentId: result.environmentId,
-      applicationId: result.applicationId,
-      created: result.created,
-      createdProject: result.createdProject,
-      createdEnvironment: result.createdEnvironment,
-      steps: result.steps,
-    })
-  }
-
-  // -------------------------------------------------------------------------
-  // Fallback path: SSH / nginx / PM2 on the configured VPS.
-  // -------------------------------------------------------------------------
-  let container = await getContainer(projectId)
-  if (!container) {
-    container = await ensureContainer(project, projectId)
-    const bootstrap = await bootstrapContainer(container)
-    if (!bootstrap.success) {
-      return Response.json({ status: "error", message: bootstrap.error || "Container bootstrap failed" }, { status: 500 })
-    }
-  }
-
-  const deployResult = await sshDeployFiles(container, files)
-
-  let finalUrl = `https://${containerName}.${domain}`
-
-  if (deployResult.success) {
-    const publish = await publishSiteViaNginx(containerName, container.workspaceName, domain)
-    if (publish.url) finalUrl = publish.url
-
-    await db.collection("users").updateOne(
-      { id: userId, "projects._id": new ObjectId(projectId) },
-      {
-        $set: {
-          "projects.$.deploymentMode": "ssh",
-          "projects.$.containerName": containerName,
-          "projects.$.deploymentRuntime": {
-            mode: "ssh",
-            domain: containerName,
-            url: finalUrl,
-            status: "deployed",
-            health: "healthy",
-            lastHealthCheckAt: new Date(),
-            lastDeployAt: new Date(),
-            lastDeployError: null,
-          },
-          "projects.$.deployedAt": new Date(),
-        },
-      },
+    return Response.json(
+      { status: "error", message: result.error || "Dokploy deployment failed", steps: result.steps },
+      { status: 502 },
     )
-
-    return Response.json({ status: "success", url: finalUrl, containerName })
   }
 
   await db.collection("users").updateOne(
     { id: userId, "projects._id": new ObjectId(projectId) },
     {
       $set: {
-        "projects.$.deploymentRuntime.status": "failed",
-        "projects.$.deploymentRuntime.lastDeployError": deployResult.error,
+        "projects.$.deploymentMode": "dokploy",
+        "projects.$.containerName": dokployAppName,
+        "projects.$.dokployProjectId": result.projectId,
+        "projects.$.dokployEnvironmentId": result.environmentId,
+        "projects.$.dokployApplicationId": result.applicationId,
+        "projects.$.dokployAppName": dokployAppName,
+        "projects.$.deploymentRuntime": {
+          mode: "dokploy",
+          domain: dokployAppName,
+          url: finalUrl,
+          projectId: result.projectId,
+          environmentId: result.environmentId,
+          applicationId: result.applicationId,
+          status: "deployed",
+          health: "healthy",
+          lastHealthCheckAt: new Date(),
+          lastDeployAt: new Date(),
+          lastDeployError: null,
+        },
+        "projects.$.deployedAt": new Date(),
       },
     },
   )
 
-  return Response.json({ status: "error", message: deployResult.error || "SSH deployment failed" }, { status: 500 })
+  return Response.json({
+    status: "success",
+    url: finalUrl,
+    containerName: dokployAppName,
+    projectId: result.projectId,
+    environmentId: result.environmentId,
+    applicationId: result.applicationId,
+    created: result.created,
+    createdProject: result.createdProject,
+    createdEnvironment: result.createdEnvironment,
+    steps: result.steps,
+  })
 }

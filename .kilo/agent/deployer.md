@@ -1,366 +1,112 @@
 # Sycord Deployer Architecture (AI Agent Reference)
 
+## Deployment Backend
+
+All deployments go through **Dokploy** — a container-based deployment platform running on the VPS.
+The old SSH/PM2/Nginx runner has been removed.
+
 ## Traffic Flow
 
 ```
-User opens <user>.sycord.site
-  → Cloudflare DNS (wildcard CNAME *.sycord.site)
-    → Cloudflare Tunnel (cloudflared daemon on VM)
-      → Nginx :80 (wildcard server_name *.sycord.site)
-        → PM2 project :4100–4999 (Next.js per-site)
+User opens <appName>.sycord.site
+  → Dokploy Traefik ingress
+    → Docker container running the deployed app
 
-User calls deploy API at api.sycord.site
-  → Cloudflare DNS → Cloudflare Tunnel
-    → Runner :5050 (Fastify — this is the deployer API)
+Deploy calls go through the Next.js API routes:
+  Syra AI → /api/workspace/deploy → Dokploy API (localhost:3000/api)
 ```
 
-## Port Map
+## Dokploy API
 
-| Port | Owner | Purpose |
-|------|-------|---------|
-| 5050 | vm-runner (Fastify) | Deployer API — handles deploy(), proxy management, health checks |
-| 80   | Nginx | Reverse proxy — wildcard *.sycord.site → per-site PM2 |
-| 3000 | Central app (default) | Multi-tenant fallback backend (configurable) |
-| 4100–4999 | PM2 | Per-project Next.js sites |
+The Dokploy API uses tRPC-flavoured REST endpoints at `{baseUrl}/api/{resource}.{action}`.
 
-## Cloudflare Tunnel Ingress
+### Configuration (env vars)
+- `DOKPLOY_API_URL` — base URL (default: `http://localhost:3000/api`)
+- `DOKPLOY_API_KEY` — `x-api-key` header value for authentication
+- `DOKPLOY_SERVER_ID` — optional default server ID
+- `DOKPLOY_ENVIRONMENT_ID` — optional default environment ID
+- `DOKPLOY_GITHUB_ID` — GitHub App provider id
 
-```yaml
-ingress:
-  - hostname: "api.sycord.site"
-    service: http://localhost:5050   # runner API, direct
-  - hostname: "*.sycord.site"
-    service: http://localhost:80     # nginx → per-site
-  - hostname: "sycord.site"
-    service: http://localhost:80
-  - service: http_status:404
+### Code Surface
+- **Client:** `lib/deploy/dokploy-client.ts` — typed API client for all Dokploy endpoints
+- **Route:** `app/api/deploy/dokploy/route.ts` — authenticated GET (list) + POST (all actions)
+- **Deploy route:** `app/api/workspace/deploy/route.ts` — primary deploy() endpoint with auto-provisioning
+- **Debug route:** `app/api/debug/route.ts` — checks Dokploy API health
+- **AI tools:** `glovix/lib/tools.ts` — `save`, `deploy`, `createDokployProject`, `createDokployEnvironment`, `listDokployResources`, `manageContainer`, `generateDomain`
+
+### API Endpoints Available
+
+**Docker (`docker.*`):** `getContainers`, `restartContainer`, `startContainer`, `stopContainer`, `killContainer`, `removeContainer`, `getConfig`, `getContainersByAppNameMatch`, `getContainersByAppLabel`, `getStackContainersByAppName`, `getServiceContainersByAppName`, `uploadFileToContainer`
+
+**Application (`application.*`):** `create`, `one`, `deploy`, `redeploy`, `start`, `stop`, `reload`, `delete`, `markRunning`, `clearDeployments`, `cancelDeployment`, `saveEnvironment`, `saveBuildType`, `saveGithubProvider`, `saveGitProvider`, `saveDockerProvider`, `saveBitbucketProvider`, `saveGiteaProvider`, `saveGitlabProvider`, `disconnectGitProvider`, `readLogs`, `search`
+
+**Project (`project.*`):** `create`, `one`, `all`, `remove`, `update`
+
+**Environment (`environment.*`):** `create`, `one`, `byProjectId`, `remove`, `update`
+
+**Domain (`domain.*`):** `create`, `byApplicationId`, `one`, `delete`, `generateDomain`, `update`
+
+### App-facing Route: `/api/deploy/dokploy`
+
+#### GET — listings
+```
+GET /api/deploy/dokploy                          # list all containers
+GET /api/deploy/dokploy?applicationId=abc        # single application detail
+GET /api/deploy/dokploy?appName=my-app           # containers by app name
+GET /api/deploy/dokploy?resource=projects         # list all projects
+GET /api/deploy/dokploy?resource=projects&projectId=abc   # single project
+GET /api/deploy/dokploy?resource=environments&projectId=abc  # environments by project
+GET /api/deploy/dokploy?resource=domains&applicationId=abc   # domains by application
+GET /api/deploy/dokploy?resource=deployments&applicationId=abc # deployments by application
 ```
 
-**Critical:** `api.sycord.site` routes DIRECTLY to the runner:5050, bypassing Nginx.
-All other traffic goes through Nginx:80.
-
-## Deployer API (Runner on :5050)
-
-The runner is a Fastify HTTP server at `/srv/sycord/vm-runner/`.
-Systemd unit: `sycord-vm-runner.service`
-
-### Core Endpoints
-
-```
-POST /api/deploy/:projectId          — deploy a Next.js project
-POST /api/deploy/:projectId/stream   — SSE-streamed deploy with real-time logs
-GET  /api/status                     — full system status
-GET  /api/setup/status               — diagnostics (nginx, cloudflared, runner, ports)
-POST /api/setup                      — run bootstrap (install deps, configure nginx)
-GET  /api/websites                   — list all deployed sites
-GET  /api/websites/:projectId        — get single site state
-POST /api/websites/:projectId/start  — start a stopped site
-POST /api/websites/:projectId/stop   — stop a running site
-POST /api/websites/:projectId/restart
-DELETE /api/websites/:projectId      — delete site, PM2 process, nginx config
-GET  /api/websites/:projectId/logs?type=runtime&limit=300
-POST /api/websites/:projectId/health — run local health check
-```
-
-### Proxy Management Endpoints (NEW)
-
-```
-GET  /api/proxy                      — list all nginx proxy configs + sites
-POST /api/proxy/reload               — reload nginx (nginx -t && systemctl reload nginx)
-POST /api/proxy/write                — write nginx vhost config ({ projectId, serverName, port })
-DELETE /api/proxy/:projectId          — remove nginx vhost config
-POST /api/proxy/ensure-wildcard      — ensure sycord-wildcard.conf exists
-```
-
-### Deployment Payload
-
+#### POST — all actions
 ```json
-{
-  "files": [
-    { "path": "package.json", "content": "..." },
-    { "path": "app/page.tsx", "content": "..." }
-  ],
-  "subdomain": "userproject",
-  "deployment_mode": "next-server",
-  "env_vars": { "DATABASE_URL": "..." }
-}
+{ "action": "createProject", "projectName": "My Project", "projectDescription": "Optional" }
+{ "action": "createEnvironment", "environmentName": "staging", "environmentProjectId": "abc" }
+{ "action": "restartContainer", "containerId": "def456" }
+{ "action": "startContainer", "containerId": "def456" }
+{ "action": "stopContainer", "containerId": "def456" }
+{ "action": "killContainer", "containerId": "def456" }
+{ "action": "removeContainer", "containerId": "def456" }
+{ "action": "generateDomain", "appName": "my-app" }
+{ "action": "deploy", "applicationId": "app_123", "syncEnv": true }
+{ "action": "redeploy", "applicationId": "app_123" }
+{ "action": "start", "applicationId": "app_123" }
+{ "action": "stop", "applicationId": "app_123" }
+{ "action": "reload", "applicationId": "app_123", "appName": "my-app" }
+{ "action": "delete", "applicationId": "app_123" }
 ```
 
-### Deployment Response (includes detailed debug)
+## Auto-provisioning Chain (deploy tool)
 
-```json
-{
-  "success": true,
-  "project_id": "abc123",
-  "domain": "userproject.sycord.site",
-  "url": "https://userproject.sycord.site",
-  "port": 4101,
-  "processName": "sycord-site-abc123",
-  "running": true,
-  "build": { "ok": true, "logs": [...] },
-  "health": { "ok": true, "htmlOk": true, "statusCode": 200 },
-  "debug": {
-    "startedAt": "2026-06-18T...",
-    "completedAt": "2026-06-18T...",
-    "durationMs": 45200,
-    "cwd": "/srv/sycord/sites/abc123/current",
-    "envFile": "/srv/sycord/env/abc123.env",
-    "fileCount": 42,
-    "envVarCount": 3,
-    "nodeVersion": "v22.14.0",
-    "npmVersion": "10.9.8",
-    "portAllocation": { "phase": "fresh", "attempts": 1 },
-    "pm2Start": { "attempts": 1, "exitCodes": [0], "eaddrRetries": 0 },
-    "nginx": {
-      "configPath": "/etc/nginx/sites-enabled/abc123.conf",
-      "serverName": "userproject.sycord.site",
-      "proxyPort": 4101,
-      "nginxPort": 80,
-      "reloaded": true
-    },
-    "healthChecks": {
-      "local": { "url": "http://127.0.0.1:4101/", "ok": true, "htmlOk": true, "statusCode": 200 },
-      "public": { "urls": ["https://userproject.sycord.site/", "http://userproject.sycord.site/"], "ok": true, "htmlOk": true, "protocol": "https" }
-    }
-  }
-}
-```
+The `deploy()` tool (`POST /api/workspace/deploy`) provisions the full Dokploy hierarchy:
 
-## Deployment Pipeline (deployProject function)
+1. **Project** — reuse `project.dokployProjectId`, else `POST /project.create`
+2. **Environment** — reuse `project.dokployEnvironmentId`, else `GET /environment.byProjectId`, else `POST /environment.create`
+3. **Application** — reuse `project.dokployApplicationId`, else `POST /application.create`
+4. **Env vars** — `POST /application.saveEnvironment`
+5. **Git source** — `POST /application.saveGithubProvider` or `saveGitProvider`
+6. **Deploy** — `POST /application.deploy`
 
-1. **Write files** → `/srv/sycord/sites/<projectId>/current/`
-2. **Write env** → `/srv/sycord/env/<projectId>.env` (chmod 600)
-3. **npm install + npm run build** — in project cwd
-4. **Allocate port** — scan 4100–4999 for free port
-5. **PM2 start** — `pm2 start npm --name sycord-site-<id> -- run start` with PORT env
-6. **Write nginx vhost** → `/etc/nginx/sites-enabled/<projectId>.conf` (listen 80, server_name <sub>.sycord.site, proxy_pass :<port>)
-7. **Nginx graceful reload** — `systemctl reload nginx` (HUP signal, zero downtime)
-8. **Health check local** — `http://127.0.0.1:<port>/` validates HTML response
-9. **Health check public** — `https://<subdomain>.sycord.site/` via Cloudflare
+All ids are persisted on the project document for reuse on subsequent deploys.
 
-## Nginx Configuration
+## AI Tools
 
-### Wildcard config (`/etc/nginx/sites-enabled/sycord-wildcard.conf`)
-Listens on port 80, `server_name *.sycord.site sycord.site`, proxies to central backend (default :3000). This is the fallback — per-site configs with exact server_name matches take priority.
+| Tool | Description |
+|------|-------------|
+| `save` | Push project files to GitHub (required before deploy) |
+| `deploy` | Deploy project via Dokploy (auto-provisions project/environment/app) |
+| `createDokployProject` | Create a new Dokploy project |
+| `createDokployEnvironment` | Create a new environment in a Dokploy project |
+| `listDokployResources` | List projects, environments, containers, deployments, or domains |
+| `manageContainer` | Restart, start, stop, kill, or remove a Docker container |
+| `generateDomain` | Generate a Traefik domain for a Dokploy application |
 
-### Per-site config (`/etc/nginx/sites-enabled/<projectId>.conf`)
-Listens on port 80, exact `server_name <sub>.sycord.site`, proxies to `127.0.0.1:<projectPort>`.
+## /debug Command
 
-### Graceful reload
-```
-nginx -t && systemctl reload nginx
-```
-Uses HUP signal — never `restart` in production.
-
-## State File (`/srv/sycord/runner/state.json`)
-```json
-{
-  "websites": {
-    "abc123": {
-      "projectId": "abc123",
-      "subdomain": "userproject",
-      "domain": "userproject.sycord.site",
-      "port": 4101,
-      "processName": "sycord-site-abc123",
-      "status": "running",
-      "health": "healthy",
-      "lastDeployAt": "...",
-      "lastHealthCheckAt": "..."
-    }
-  },
-  "ports": { "4101": "abc123" }
-}
-```
-
-## Directory Layout (on VM)
-
-```
-/srv/sycord/
-  sites/<projectId>/current/    — project source files
-  logs/<projectId>/              — deploy.log, build.log, runtime.log, error.log, health.log
-  env/<projectId>.env            — environment variables (chmod 600)
-  runner/state.json              — persistent state
-  vm-runner/                     — the runner source & dist
-    dist/server.js               — compiled entrypoint
-    templates/
-      nginx-site.conf            — per-site nginx vhost template
-      nginx-wildcard.conf        — wildcard fallback template
-      cloudflared-config.yml     — cloudflare tunnel config template
-    scripts/
-      setup-ubuntu.sh            — full bootstrap script
-      install-service.sh         — systemd service installer
-```
-
-## Key Principles
-
-- **Zero downtime:** Nginx reloads via HUP signal only. Never restart in production.
-- **Port collision prevention:** Port allocator scans 4100–4999, checks OS-level availability.
-- **EADDRINUSE retry:** If PM2 start fails with EADDRINUSE, retries with a fresh port.
-- **Graceful degradation:** Failed deployments leave state for debugging, never leave orphaned processes.
-- **Auth required:** All runner API endpoints require Bearer token (VPS_RUNNER_TOKEN).
-
-
----
-
-# Dokploy Deployer — the "version" container API (NEW)
-
-A new deployment backend runs as a Dokploy instance reachable at **`sycord.site`**.
-The app integrates with it through Dokploy's tRPC-flavoured REST API. This is an
-alternative to the SSH/PM2/Nginx runner documented above.
-
-## Authentication & Base URL
-
-- Base URL: `https://sycord.site/api` (env: `DOKPLOY_API_URL`)
-- Every request sends header `x-api-key: <DOKPLOY_API_KEY>`
-- Endpoints are namespaced: `docker.*` (container mgmt) and `application.*` (deploy)
-- GET endpoints take query params; POST endpoints take a JSON body.
-
-Reference docs:
-- Docker: https://docs.dokploy.com/docs/api/docker
-- Application: https://docs.dokploy.com/docs/api/application
-
-## Code surface
-
-- Client: `lib/deploy/dokploy-client.ts` — typed `docker.*` and `application.*` helpers.
-- Route: `app/api/deploy/dokploy/route.ts` — authenticated GET (status) + POST (deploy).
-
-## App-facing route: `/api/deploy/dokploy`
-
-### GET — status / listings
-```
-GET /api/deploy/dokploy                     # list all containers
-GET /api/deploy/dokploy?applicationId=abc   # single application detail
-GET /api/deploy/dokploy?appName=my-app      # containers matching an app name
-```
-
-Success JSON:
-```json
-{
-  "success": true,
-  "endpoint": "docker.getContainers",
-  "resource": "containers",
-  "data": [
-    {
-      "containerId": "f3a9c1e2b7d4",
-      "name": "my-app",
-      "image": "my-app:latest",
-      "state": "running",
-      "status": "Up 2 hours"
-    }
-  ]
-}
-```
-
-### POST — deploy / lifecycle
-Request body:
-```json
-{
-  "projectId": "665f1c...",          // optional: resolves applicationId from the project doc
-  "applicationId": "app_abc123",     // required if no projectId mapping exists
-  "appName": "my-app",               // optional: used for reload + public URL
-  "action": "deploy",                // deploy | redeploy | start | stop | reload
-  "title": "Manual deploy",
-  "description": "Triggered from dashboard",
-  "syncEnv": true                    // optional: push project env vars first
-}
-```
-
-Success JSON:
-```json
-{
-  "success": true,
-  "action": "deploy",
-  "applicationId": "app_abc123",
-  "appName": "my-app",
-  "url": "https://my-app.sycord.site",
-  "domain": "sycord.site",
-  "data": { "deploymentId": "dep_789", "status": "running" },
-  "steps": [
-    { "step": "saveEnvironment", "result": { "ok": true, "status": 200, "endpoint": "application.saveEnvironment" } },
-    { "step": "deploy", "result": { "ok": true, "status": 200, "endpoint": "application.deploy" } }
-  ]
-}
-```
-
-Error JSON (upstream Dokploy failure):
-```json
-{
-  "success": false,
-  "action": "deploy",
-  "applicationId": "app_abc123",
-  "appName": "my-app",
-  "error": "Application not found",
-  "steps": [
-    { "step": "deploy", "result": { "ok": false, "status": 404, "error": "Application not found", "endpoint": "application.deploy" } }
-  ]
-}
-```
-
-## Project mapping
-
-To deploy by `projectId`, store the Dokploy ids on the project document:
-- `project.dokployApplicationId` — the Dokploy applicationId
-- `project.dokployAppName` — the Dokploy appName (used for reload + URL)
-
-## Raw Dokploy endpoints wrapped by the client
-
-Docker (`docker.*`): `getContainers`, `restartContainer`, `startContainer`,
-`stopContainer`, `killContainer`, `removeContainer`, `getConfig`,
-`getContainersByAppNameMatch`, `getContainersByAppLabel`,
-`getStackContainersByAppName`, `getServiceContainersByAppName`.
-
-Application (`application.*`): `create`, `one`, `deploy`, `redeploy`, `start`,
-`stop`, `reload`, `saveEnvironment`, `readLogs`, `search`.
-
-Example raw calls:
-```bash
-# List containers
-curl -X GET "https://sycord.site/api/docker.getContainers" -H "x-api-key: $DOKPLOY_API_KEY"
-
-# Deploy an application
-curl -X POST "https://sycord.site/api/application.deploy" \
-  -H "x-api-key: $DOKPLOY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "applicationId": "app_abc123" }'
-
-# Restart a container
-curl -X POST "https://sycord.site/api/docker.restartContainer" \
-  -H "x-api-key: $DOKPLOY_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "containerId": "f3a9c1e2b7d4" }'
-```
-
-
----
-
-# Auto-provisioning chain (project -> environment -> application -> deploy)
-
-The Syra `deploy()` tool (`POST /api/workspace/deploy`) now provisions the full
-Dokploy hierarchy automatically. `ensureAndDeployApplication()` in
-`lib/deploy/dokploy-client.ts` runs this chain, reusing any ids already stored
-on the project and creating only what's missing:
-
-1. **Project** — reuse `project.dokployProjectId`, else `POST /project.create`.
-   (Dokploy auto-creates a default "production" environment with the project.)
-2. **Environment** — reuse `project.dokployEnvironmentId`, else
-   `GET /environment.byProjectId` (pick "production" or the first), else
-   `POST /environment.create { name: "production", projectId }`.
-3. **Application (container)** — reuse `project.dokployApplicationId`, else
-   `POST /application.create { name, appName, environmentId }`.
-4. **Env vars** — `POST /application.saveEnvironment` (when the project has any).
-5. **Deploy** — `POST /application.deploy { applicationId }`.
-
-All ids created along the way are persisted back onto the project document
-(`dokployProjectId`, `dokployEnvironmentId`, `dokployApplicationId`,
-`dokployAppName`) so subsequent deploys reuse them.
-
-Endpoints used: `project.create`, `project.one`, `project.all`,
-`environment.create`, `environment.one`, `environment.byProjectId`
-(see https://docs.dokploy.com/docs/api/project and /environment).
-
-Resolution precedence for the environment: stored project id ->
-`DOKPLOY_ENVIRONMENT_ID` env -> auto-create. With a valid `DOKPLOY_API_KEY`,
-no manual `environmentId` is required anymore — it is created on first deploy.
-
-Success JSON adds `projectId`, `environmentId`, `applicationId`,
-`createdProject`, `createdEnvironment`, `created` and a `steps[]` trace.
+The `/debug` slash command in the chat pane checks if the Dokploy API is reachable:
+- Shows whether `DOKPLOY_API_KEY` is configured
+- Shows whether the API URL responds
+- Shows project count and latency
+- No SSH/VPS/Cloudflare probing
