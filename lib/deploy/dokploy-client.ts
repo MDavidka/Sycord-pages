@@ -977,6 +977,12 @@ export type EnsureAndDeployInput = {
   }
   title?: string
   description?: string
+  /** Dockerfile path relative to repo root (defaults to "Dockerfile"). */
+  dockerfile?: string
+  /** Build type (defaults to "dockerfile"). */
+  buildType?: "dockerfile" | "heroku_buildpacks" | "paketo_buildpacks" | "nixpacks" | "static" | "railpack"
+  /** Docker build context path (defaults to "/"). */
+  dockerContextPath?: string
 }
 
 /**
@@ -1154,12 +1160,12 @@ export async function ensureAndDeployApplication(
       )
     }
 
-    // 1c. Set the build type to Dockerfile so Dokploy uses the project's Dockerfile.
+    // 1c. Set the build type so Dokploy knows how to build the project.
     const buildTypeResult = await application.saveBuildType({
       applicationId: state.applicationId,
-      buildType: "dockerfile",
-      dockerfile: "Dockerfile",
-      dockerContextPath: "/",
+      buildType: input.buildType || "dockerfile",
+      dockerfile: input.dockerfile || "Dockerfile",
+      dockerContextPath: input.dockerContextPath || "/",
     })
     steps.push(toStep("application.saveBuildType", buildTypeResult))
     if (!buildTypeResult.ok) {
