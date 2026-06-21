@@ -281,11 +281,12 @@ export async function handleSave(): Promise<string> {
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
-            return `[SYSTEM] ❌ Save failed: ${data?.message || `HTTP ${res.status}`}`;
+            const errMsg = data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Save failed: " + errMsg;
         }
-        return `[SYSTEM] ✅ Saved ${data.filesCount} file(s) to GitHub: ${data.url} (branch ${data.branch}). You can now deploy().`;
+        return "[SYSTEM] ✅ Saved " + data.filesCount + " file(s) to GitHub: " + data.url + " (branch " + data.branch + "). You can now deploy().";
     } catch (e: any) {
-        return `Error saving project to GitHub: ${e.message}`;
+        return "Error saving project to GitHub: " + e.message;
     }
 }
 
@@ -331,26 +332,12 @@ export async function handleDeploy(): Promise<string> {
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
-            return `[SYSTEM] ❌ Deploy failed: ${data?.message || `HTTP ${res.status}`}`;
+            const errMsg = data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Deploy failed: " + errMsg;
         }
-        return `[SYSTEM] ✅ Deployed successfully. Your site is live at ${data.url}`;
+        return "[SYSTEM] ✅ Deployed successfully. Your site is live at " + data.url;
     } catch (e: any) {
-        return `Error deploying project: ${e.message}`;
-    }
-}
-    try {
-        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}',
-        });
-        const data = await res.json().catch(() => ({} as any));
-        if (!res.ok || data?.status !== 'success' || !data?.url) {
-            return `[SYSTEM] ❌ Deploy failed: ${data?.message || `HTTP ${res.status}`}`;
-        }
-        return `[SYSTEM] ✅ Deployed successfully. Your site is live at ${data.url}`;
-    } catch (e: any) {
-        return `Error deploying project: ${e.message}`;
+        return "Error deploying project: " + e.message;
     }
 }
 
@@ -363,27 +350,29 @@ async function callDokployApi(action: string, extra: Record<string, unknown> = {
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || !data?.success) {
-            return `[SYSTEM] ❌ Dokploy ${action} failed: ${data?.error || data?.message || `HTTP ${res.status}`}`;
+            const errMsg = data?.error || data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Dokploy " + action + " failed: " + errMsg;
         }
         return JSON.stringify(data, null, 2);
     } catch (e: any) {
-        return `Error calling Dokploy API (${action}): ${e.message}`;
+        return "Error calling Dokploy API (" + action + "): " + e.message;
     }
 }
 
 async function callDokployGet(params: Record<string, string>): Promise<string> {
     try {
         const qs = new URLSearchParams(params).toString();
-        const res = await fetch(`/api/deploy/dokploy?${qs}`, {
+        const res = await fetch("/api/deploy/dokploy?" + qs, {
             headers: { Accept: "application/json" },
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || !data?.success) {
-            return `[SYSTEM] ❌ Dokploy query failed: ${data?.error || data?.message || `HTTP ${res.status}`}`;
+            const errMsg = data?.error || data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Dokploy query failed: " + errMsg;
         }
         return JSON.stringify(data, null, 2);
     } catch (e: any) {
-        return `Error calling Dokploy API (query): ${e.message}`;
+        return "Error calling Dokploy API (query): " + e.message;
     }
 }
 
