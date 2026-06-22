@@ -281,18 +281,26 @@ export async function handleSave(): Promise<string> {
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
-            return `[SYSTEM] ❌ Save failed: ${data?.message || `HTTP ${res.status}`}`;
+            const errMsg = data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Save failed: " + errMsg;
         }
-        return `[SYSTEM] ✅ Saved ${data.filesCount} file(s) to GitHub: ${data.url} (branch ${data.branch}). You can now deploy().`;
+        return "[SYSTEM] ✅ Saved " + data.filesCount + " file(s) to GitHub: " + data.url + " (branch " + data.branch + "). You can now deploy().";
     } catch (e: any) {
-        return `Error saving project to GitHub: ${e.message}`;
+        return "Error saving project to GitHub: " + e.message;
     }
 }
 
 /**
- * Deploy the project to sycord.site via the Dokploy ("version" container) API.
- * On first deploy it provisions the container/application, then triggers a
- * deployment. Returns the live URL on success.
+ * Deploy the project to sycord.site via the Dokploy API.
+ *
+ * This single call handles EVERYTHING server-side:
+ *  - Auto-generates a Dockerfile if one doesn't exist in project pages
+ *  - Provisions a Dokploy project (reuses existing per-user project)
+ *  - Creates an environment + application configured for Dockerfile build
+ *  - Attaches the GitHub source and triggers the deployment
+ *
+ * No browser-side file checks or WebContainer — everything runs on the server.
+ * Returns the live URL and all provisioned IDs on success.
  */
 export async function handleDeploy(): Promise<string> {
     const projectId = getHostProjectId();
@@ -300,18 +308,223 @@ export async function handleDeploy(): Promise<string> {
         return '[SYSTEM] ❌ Deploy is only available when building inside a Sycord project.';
     }
     try {
-        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}`, {
+        const res = await fetch("/api/workspace/deploy?projectId=" + encodeURIComponent(projectId), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: '{}',
+            body: JSON.stringify({
+                buildType: "dockerfile",
+                dockerfile: "Dockerfile",
+                dockerContextPath: "/",
+            }),
         });
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
-            return `[SYSTEM] ❌ Deploy failed: ${data?.message || `HTTP ${res.status}`}`;
+            const errMsg = data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
         }
-        return `[SYSTEM] ✅ Deployed successfully. Your site is live at ${data.url}`;
+        return "[SYSTEM] ✅ Deployed successfully.\n\n" +
+            "Live URL: " + data.url + "\n" +
+            "Project ID: " + (data.projectId || "auto") + "\n" +
+            "Environment ID: " + (data.environmentId || "auto") + "\n" +
+            "Application ID: " + (data.applicationId || "auto") + "\n" +
+            "Created: project=" + (data.createdProject ? "yes" : "no") + ", env=" + (data.createdEnvironment ? "yes" : "no") + ", app=" + (data.created ? "yes" : "no");
     } catch (e: any) {
-        return `Error deploying project: ${e.message}`;
+        return "Error deploying project: " + e.message;
+    }
+}
+
+async function callDokployApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
+    try {
+        const res = await fetch("/api/deploy/dokploy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, ...extra }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.success) {
+            const errMsg = data?.error || data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Dokploy " + action + " failed: " + errMsg;
+        }
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return "Error calling Dokploy API (" + action + "): " + e.message;
+    }
+}
+
+async function callDokployGet(params: Record<string, string>): Promise<string> {
+    try {
+        const qs = new URLSearchParams(params).toString();
+        const res = await fetch("/api/deploy/dokploy?" + qs, {
+            headers: { Accept: "application/json" },
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.success) {
+            const errMsg = data?.error || data?.message || "HTTP " + res.status;
+            return "[SYSTEM] ❌ Dokploy query failed: " + errMsg;
+        }
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return "Error calling Dokploy API (query): " + e.message;
+    }
+}
+
+/**
+ * Create a new Dokploy project.
+ */
+export async function handleCreateProject(args: Record<string, unknown>): Promise<string> {
+    const name = typeof args.name === "string" ? args.name.trim() : "";
+    if (!name) return "[SYSTEM] ❌ Project name is required.";
+    return callDokployApi("createProject", { projectName: name, projectDescription: (args.description as string) || null });
+}
+
+/**
+ * Create a new environment in a Dokploy project.
+ */
+export async function handleCreateEnvironment(args: Record<string, unknown>): Promise<string> {
+    const name = typeof args.name === "string" ? args.name.trim() : "";
+    const projectId = typeof args.projectId === "string" ? args.projectId.trim() : "";
+    if (!name) return "[SYSTEM] ❌ Environment name is required.";
+    if (!projectId) return "[SYSTEM] ❌ projectId is required to create an environment.";
+    return callDokployApi("createEnvironment", { environmentName: name, environmentProjectId: projectId });
+}
+
+/**
+ * List Dokploy projects or containers.
+ */
+export async function handleListDokployResources(args: Record<string, unknown>): Promise<string> {
+    const resource = (typeof args.resource === "string" ? args.resource : "containers") as string;
+    const params: Record<string, string> = { resource };
+    if (args.projectId && typeof args.projectId === "string") params.projectId = args.projectId;
+    if (args.applicationId && typeof args.applicationId === "string") params.applicationId = args.applicationId;
+    if (args.appName && typeof args.appName === "string") params.appName = args.appName;
+    return callDokployGet(params);
+}
+
+/**
+ * Manage a Docker container (start, stop, restart, kill, remove).
+ */
+export async function handleManageContainer(args: Record<string, unknown>): Promise<string> {
+    const containerId = typeof args.containerId === "string" ? args.containerId.trim() : "";
+    const operation = (typeof args.operation === "string" ? args.operation : "restart") as string;
+    if (!containerId) return "[SYSTEM] ❌ containerId is required.";
+    const actionMap: Record<string, string> = {
+        restart: "restartContainer",
+        start: "startContainer",
+        stop: "stopContainer",
+        kill: "killContainer",
+        remove: "removeContainer",
+    };
+    const action = actionMap[operation];
+    if (!action) return `[SYSTEM] ❌ Unknown container operation: "${operation}". Use restart, start, stop, kill, or remove.`;
+    return callDokployApi(action, { containerId });
+}
+
+/**
+ * Generate a Traefik domain for a Dokploy application.
+ */
+export async function handleGenerateDomain(args: Record<string, unknown>): Promise<string> {
+    const appName = typeof args.appName === "string" ? args.appName.trim() : "";
+    if (!appName) return "[SYSTEM] ❌ appName is required to generate a domain.";
+    return callDokployApi("generateDomain", { appName });
+}
+
+/**
+ * Generate a Dockerfile optimized for the project framework.
+ * - Multi-stage builds for small final images
+ * - Falls back from npm ci to npm install when package-lock.json is missing
+ * - Runs as non-root user in runner stages
+ * - Uses Docker build cache efficiently with COPY package*.json first
+ */
+export async function handleCreateDockerfile(args: Record<string, unknown>): Promise<string> {
+    const framework = typeof args.framework === "string" ? args.framework.toLowerCase() : "nextjs";
+    const nodeVersion = (typeof args.nodeVersion === "string" ? args.nodeVersion : "22") || "22";
+    const port = (typeof args.port === "string" ? args.port : "3000") || "3000";
+
+    // npm ci fails if package-lock.json is missing — fall back to npm install
+    const npmInstall = "npm install --no-audit --no-fund --prefer-offline && npm cache clean --force";
+    const npmCi = "(npm ci && npm cache clean --force) || (" + npmInstall + ")";
+
+    let dockerfile = "";
+    if (framework === "nextjs" || framework === "next") {
+        dockerfile = "# syntax=docker/dockerfile:1\n" +
+"# Multi-stage Next.js Dockerfile — optimized for Dokploy deployments\n" +
+"FROM node:" + nodeVersion + "-alpine AS deps\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN apk add --no-cache libc6-compat && " + npmCi + "\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY --from=deps /app/node_modules ./node_modules\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS runner\n" +
+"WORKDIR /app\n" +
+"RUN addgroup -S appgroup && adduser -S appuser -G appgroup\n" +
+"COPY --from=builder /app/public ./public\n" +
+"COPY --from=builder /app/.next/standalone ./\n" +
+"COPY --from=builder /app/.next/static ./.next/static\n" +
+"RUN chown -R appuser:appgroup /app\n" +
+"USER appuser\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"ENV NODE_ENV=production\n" +
+"HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\\n" +
+"  CMD wget -qO- http://127.0.0.1:" + port + "/ || exit 1\n" +
+"CMD [\"node\", \"server.js\"]\n";
+    } else if (framework === "react" || framework === "vite") {
+        dockerfile = "# syntax=docker/dockerfile:1\n" +
+"# React / Vite static site Dockerfile\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM nginx:alpine AS runner\n" +
+"COPY --from=builder /app/dist /usr/share/nginx/html\n" +
+"COPY nginx.conf /etc/nginx/conf.d/default.conf 2>/dev/null; true\n" +
+"RUN echo 'server { listen 80; root /usr/share/nginx/html; index index.html; location / { try_files $uri /index.html; } }' > /etc/nginx/conf.d/default.conf\n" +
+"EXPOSE 80\n" +
+"HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \\\n" +
+"  CMD wget -qO- http://127.0.0.1:80/ || exit 1\n" +
+"CMD [\"nginx\", \"-g\", \"daemon off;\"]\n";
+    } else {
+        dockerfile = "# syntax=docker/dockerfile:1\n" +
+"# Generic Node.js Dockerfile\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build 2>/dev/null; true\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS runner\n" +
+"WORKDIR /app\n" +
+"RUN addgroup -S appgroup && adduser -S appuser -G appgroup\n" +
+"COPY --from=builder /app ./\n" +
+"RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev --no-audit --no-fund\n" +
+"RUN chown -R appuser:appgroup /app\n" +
+"USER appuser\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"ENV NODE_ENV=production\n" +
+"HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\\n" +
+"  CMD wget -qO- http://127.0.0.1:" + port + "/ || exit 1\n" +
+"CMD [\"node\", \"server.js\"]\n";
+    }
+
+    try {
+        await writeFile("Dockerfile", dockerfile);
+        const projectId = getHostProjectId();
+        if (projectId) {
+            await syncFileToProjectPages("Dockerfile", dockerfile);
+        }
+        return "[SYSTEM] ✅ Created Dockerfile for " + framework + " (Node " + nodeVersion + ", port " + port + "). Make sure to call save() then deploy().";
+    } catch (e: any) {
+        return "Error creating Dockerfile: " + e.message;
     }
 }
 
@@ -610,10 +823,101 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: 'Deploy the project to sycord.site using the Dokploy container API. IMPORTANT: call save() first to push the project to GitHub — Dokploy builds from the GitHub repo. On the first deploy it provisions the container/application, attaches the GitHub source, then starts a deployment and returns the live URL. Use when the user asks to publish, deploy, or go live.',
+            description: 'Deploy the project to sycord.site. Handles EVERYTHING automatically: generates a Dockerfile if missing, creates the Dokploy project/environment/application, configures Docker build type, attaches the GitHub source, and triggers the build. No separate tools needed — just call deploy() when ready. Returns the live URL and all provisioned IDs on success.',
             parameters: {
                 type: 'object',
                 properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'createDokployProject',
+            description: 'Create a new project in Dokploy. Use this when you need to set up a new project container before deploying.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Project name (required)' },
+                    description: { type: 'string', description: 'Optional project description' },
+                },
+                required: ['name'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'createDokployEnvironment',
+            description: 'Create a new environment inside a Dokploy project (e.g., "production", "staging").',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Environment name, e.g. "production" or "staging" (required)' },
+                    projectId: { type: 'string', description: 'Dokploy project ID to create the environment in (required)' },
+                },
+                required: ['name', 'projectId'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'listDokployResources',
+            description: 'List Dokploy projects, environments, containers, deployments, or domains. Use to inspect what is currently deployed.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    resource: { type: 'string', description: 'Resource type: "projects", "environments", "containers", "deployments", or "domains" (default: "containers")' },
+                    projectId: { type: 'string', description: 'Filter environments or deployments by projectId' },
+                    applicationId: { type: 'string', description: 'Filter deployments or domains by applicationId' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'manageContainer',
+            description: 'Manage a Dokploy Docker container: restart, start, stop, kill, or remove it.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    containerId: { type: 'string', description: 'The Docker container ID or name (required)' },
+                    operation: { type: 'string', description: 'Operation: "restart", "start", "stop", "kill", or "remove" (default: "restart")' },
+                },
+                required: ['containerId', 'operation'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'generateDomain',
+            description: 'Generate a Traefik domain for a Dokploy application so it gets a public URL.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    appName: { type: 'string', description: 'The Dokploy appName (container name) to generate a domain for (required)' },
+                },
+                required: ['appName'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'createDockerfile',
+            description: 'Generate a Dockerfile for the project. Dokploy requires a Dockerfile to build and deploy. Creates a multi-stage Node.js Dockerfile optimized for the chosen framework. Call this BEFORE save() and deploy() if the project lacks a Dockerfile.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    framework: { type: 'string', description: 'Project framework: "nextjs", "react", "vite", or "node" (default: "nextjs")' },
+                    nodeVersion: { type: 'string', description: 'Node.js version to use (default: "22")' },
+                    port: { type: 'string', description: 'Port the app listens on (default: "3000")' },
+                },
                 required: [],
             },
         },
@@ -1783,8 +2087,26 @@ async function _executeToolInternal(
                 case 'batchCreateFiles':
                     result = await handleBatchCreateFiles(args, ctx);
                     break;
+                case 'createDokployProject':
+                    result = await handleCreateProject(args);
+                    break;
+                case 'createDokployEnvironment':
+                    result = await handleCreateEnvironment(args);
+                    break;
+                case 'listDokployResources':
+                    result = await handleListDokployResources(args);
+                    break;
+                case 'manageContainer':
+                    result = await handleManageContainer(args);
+                    break;
+                case 'generateDomain':
+                    result = await handleGenerateDomain(args);
+                    break;
+                case 'createDockerfile':
+                    result = await handleCreateDockerfile(args);
+                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, createDockerfile`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

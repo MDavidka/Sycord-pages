@@ -1,7 +1,5 @@
 const DEFAULT_SYCORD_DOMAIN = process.env.SYCORD_BASE_DOMAIN || "sycord.site"
 
-export type DeploymentMode = "ssh"
-
 export type DeployFile = {
   path: string
   content: string
@@ -32,7 +30,7 @@ export type DeployStreamEvent =
     }
   | {
       type: "log"
-      source: "ssh" | "build" | "publish" | "health"
+      source: "build" | "publish" | "health"
       line: string
       timestamp: string
     }
@@ -52,10 +50,6 @@ export type DeployStreamEvent =
       logs?: string[]
       timestamp: string
     }
-
-function now() {
-  return new Date().toISOString()
-}
 
 function stripLeadingSlash(input: string) {
   return input.replace(/^\/+/, "")
@@ -105,14 +99,14 @@ export function createStageEvent(
   status: Extract<DeployStreamEvent, { type: "stage" }>["status"],
   message: string,
 ): DeployStreamEvent {
-  return { type: "stage", stage, status, message, timestamp: now() }
+  return { type: "stage", stage, status, message, timestamp: new Date().toISOString() }
 }
 
 export function createLogEvent(
   source: Extract<DeployStreamEvent, { type: "log" }>["source"],
   line: string,
 ): DeployStreamEvent {
-  return { type: "log", source, line: redactSecrets(line), timestamp: now() }
+  return { type: "log", source, line: redactSecrets(line), timestamp: new Date().toISOString() }
 }
 
 export function createErrorEvent(error: string, stage?: string, logs?: string[]): DeployStreamEvent {
@@ -121,7 +115,7 @@ export function createErrorEvent(error: string, stage?: string, logs?: string[])
     error: redactSecrets(error),
     stage,
     logs: logs?.map((line) => redactSecrets(line)),
-    timestamp: now(),
+    timestamp: new Date().toISOString(),
   }
 }
 
@@ -138,7 +132,7 @@ export function createResultEvent(result: {
     domain: result.domain,
     health: result.health,
     warning: result.warning,
-    timestamp: now(),
+    timestamp: new Date().toISOString(),
   }
 }
 

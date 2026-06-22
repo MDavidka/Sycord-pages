@@ -15,7 +15,7 @@
 //   DOKPLOY_SERVER_ID -> optional default serverId forwarded to every call
 // ---------------------------------------------------------------------------
 
-const DEFAULT_DOKPLOY_API_URL = process.env.DOKPLOY_API_URL || "https://sycord.site/api"
+const DEFAULT_DOKPLOY_API_URL = "https://sycord.site/api"
 
 export type DokployResult<T = unknown> = {
   ok: boolean
@@ -47,7 +47,7 @@ export class DokployConfigError extends Error {
 
 /** Reads + validates Dokploy config from the environment. Throws if no key. */
 export function getDokployConfig(): DokployConfig {
-  const apiUrl = (process.env.DOKPLOY_API_URL || DEFAULT_DOKPLOY_API_URL).replace(/\/+$/, "")
+  const apiUrl = DEFAULT_DOKPLOY_API_URL.replace(/\/+$/, "")
   const apiKey = process.env.DOKPLOY_API_KEY || ""
   const serverId = process.env.DOKPLOY_SERVER_ID || undefined
   const environmentId = process.env.DOKPLOY_ENVIRONMENT_ID || undefined
@@ -320,6 +320,38 @@ export const docker = {
       query: { appName, ...opts },
     })
   },
+
+  /** POST /docker.uploadFileToContainer — multipart form upload */
+  async uploadFileToContainer(input: {
+    containerId: string
+    file: File | Blob
+    destinationPath: string
+    serverId?: string
+  }) {
+    const config = getDokployConfig()
+    const formData = new FormData()
+    formData.append("containerId", input.containerId)
+    formData.append("file", input.file)
+    formData.append("destinationPath", input.destinationPath)
+    if (input.serverId || config.serverId) {
+      formData.append("serverId", input.serverId || config.serverId || "")
+    }
+    const url = buildUrl(config.apiUrl, "docker.uploadFileToContainer")
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "x-api-key": config.apiKey },
+        body: formData,
+      })
+      const parsed = await parseBody(res)
+      if (!res.ok) {
+        return { ok: false as const, status: res.status, data: null, error: extractError(res.status, parsed), endpoint: "docker.uploadFileToContainer" }
+      }
+      return { ok: true as const, status: res.status, data: parsed, error: null, endpoint: "docker.uploadFileToContainer" }
+    } catch (err: any) {
+      return { ok: false as const, status: 0, data: null, error: err?.message || "Upload failed", endpoint: "docker.uploadFileToContainer" }
+    }
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -415,6 +447,42 @@ export const application = {
     })
   },
 
+  /** POST /application.delete */
+  delete(applicationId: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.delete",
+      body: { applicationId },
+    })
+  },
+
+  /** POST /application.markRunning */
+  markRunning(applicationId: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.markRunning",
+      body: { applicationId },
+    })
+  },
+
+  /** POST /application.clearDeployments */
+  clearDeployments(applicationId: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.clearDeployments",
+      body: { applicationId },
+    })
+  },
+
+  /** POST /application.cancelDeployment */
+  cancelDeployment(applicationId: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.cancelDeployment",
+      body: { applicationId },
+    })
+  },
+
   /** POST /application.saveEnvironment */
   saveEnvironment(input: {
     applicationId: string
@@ -432,6 +500,25 @@ export const application = {
         createEnvFile: true,
         ...input,
       },
+    })
+  },
+
+  /** POST /application.saveBuildType */
+  saveBuildType(input: {
+    applicationId: string
+    buildType: "dockerfile" | "heroku_buildpacks" | "paketo_buildpacks" | "nixpacks" | "static" | "railpack"
+    dockerfile?: string | null
+    dockerContextPath?: string | null
+    dockerBuildStage?: string | null
+    herokuVersion?: string | null
+    railpackVersion?: string | null
+    publishDirectory?: string | null
+    isStaticSpa?: boolean | null
+  }) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "application.saveBuildType",
+      body: { ...input },
     })
   },
 
@@ -570,6 +657,16 @@ export const project = {
   all() {
     return dokployRequest<DokployProject[]>({ method: "GET", endpoint: "project.all" })
   },
+
+  /** POST /project.remove */
+  remove(projectId: string) {
+    return dokployRequest({ method: "POST", endpoint: "project.remove", body: { projectId } })
+  },
+
+  /** POST /project.update */
+  update(input: { projectId: string; name?: string; description?: string | null; env?: string }) {
+    return dokployRequest<DokployProject>({ method: "POST", endpoint: "project.update", body: { ...input } })
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -608,6 +705,116 @@ export const environment = {
       method: "GET",
       endpoint: "environment.byProjectId",
       query: { projectId },
+    })
+  },
+
+  /** POST /environment.remove */
+  remove(environmentId: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "environment.remove",
+      body: { environmentId },
+    })
+  },
+
+  /** POST /environment.update */
+  update(input: { environmentId: string; name?: string; description?: string; projectId?: string; env?: string }) {
+    return dokployRequest<DokployEnvironment>({
+      method: "POST",
+      endpoint: "environment.update",
+      body: { ...input },
+    })
+  },
+}
+
+// ---------------------------------------------------------------------------
+// Domain API — https://docs.dokploy.com/docs/api/domain
+// ---------------------------------------------------------------------------
+
+export type DokployDomain = {
+  domainId: string
+  host?: string
+  path?: string | null
+  port?: number | null
+  https?: boolean
+  certificateType?: string
+  applicationId?: string | null
+  composeId?: string | null
+  serviceName?: string | null
+  [key: string]: unknown
+}
+
+export const domain = {
+  /** POST /domain.create */
+  create(input: {
+    host: string
+    path?: string | null
+    port?: number | null
+    https?: boolean
+    applicationId?: string | null
+    certificateType?: string
+    composeId?: string | null
+    serviceName?: string | null
+    domainType?: string | null
+  }) {
+    return dokployRequest<DokployDomain>({
+      method: "POST",
+      endpoint: "domain.create",
+      body: { ...input },
+    })
+  },
+
+  /** GET /domain.byApplicationId */
+  byApplicationId(applicationId: string) {
+    return dokployRequest<DokployDomain[]>({
+      method: "GET",
+      endpoint: "domain.byApplicationId",
+      query: { applicationId },
+    })
+  },
+
+  /** GET /domain.one */
+  one(domainId: string) {
+    return dokployRequest<DokployDomain>({
+      method: "GET",
+      endpoint: "domain.one",
+      query: { domainId },
+    })
+  },
+
+  /** POST /domain.delete */
+  delete(domainId: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "domain.delete",
+      body: { domainId },
+    })
+  },
+
+  /** POST /domain.generateDomain — generate a Traefik domain for an appName */
+  generateDomain(appName: string, serverId?: string) {
+    return dokployRequest({
+      method: "POST",
+      endpoint: "domain.generateDomain",
+      body: { appName, ...(serverId ? { serverId } : {}) },
+    })
+  },
+
+  /** POST /domain.update */
+  update(input: {
+    domainId: string
+    host: string
+    path?: string | null
+    port?: number | null
+    https?: boolean
+    certificateType?: string
+    serviceName?: string | null
+    domainType?: string | null
+  }) {
+    return dokployRequest<DokployDomain>({
+      method: "POST",
+      endpoint: "domain.update",
+      body: { ...input },
     })
   },
 }
@@ -657,37 +864,58 @@ export type EnsureDeployResult = {
 /** Unwraps the various tRPC-style envelopes Dokploy may return. */
 function unwrap(data: unknown): any {
   if (!data || typeof data !== "object") return data
+  // tRPC batch responses come as arrays: [{ result: { data: { json: { ... } } } }]
+  if (Array.isArray(data) && data.length > 0) {
+    const first = data[0]
+    if (first && typeof first === "object") {
+      return unwrap(first)
+    }
+    return data
+  }
   const obj = data as Record<string, any>
-  return obj.result?.data?.json ?? obj.json ?? obj.data ?? obj
+  // Standard tRPC envelope: result.data.json
+  if (obj.result?.data?.json && typeof obj.result.data.json === "object") return obj.result.data.json
+  // result.data without json wrapper
+  if (obj.result?.data && typeof obj.result.data === "object") return obj.result.data
+  // result only
+  if (obj.result && typeof obj.result === "object") return obj.result
+  // Direct json or data wrapper
+  return obj.json ?? obj.data ?? obj
 }
 
 /** Best-effort extraction of an applicationId from Dokploy's create response. */
 export function extractApplicationId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.applicationId || core.id || null
+  return core.applicationId || core.application?.applicationId || core.appId || core.id || core._id || null
 }
 
 /** Extract a projectId from a project.create / project.one response. */
 export function extractProjectId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.projectId || core.id || null
+  return core.projectId || core.project?.projectId || core.id || core._id || null
 }
 
 /** Extract an environmentId from an environment.create / environment.one response. */
 export function extractEnvironmentId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
-  return core.environmentId || core.id || null
+  return core.environmentId || core.environment?.environmentId || core.envId || core.id || core._id || null
 }
 
 /** A newly-created project usually embeds its default (production) environment. */
 export function extractEnvironmentIdFromProject(data: unknown): string | null {
   const core = unwrap(data)
+  if (!core || typeof core !== "object") return null
+  // { environment: { environmentId: "..." } } wrapper from project.create
+  if (core.environment?.environmentId) return core.environment.environmentId
+  // { environments: [{ environmentId: "..." }] } list from project.one
   const envs = core?.environments
   if (Array.isArray(envs) && envs.length > 0) {
-    return envs[0].environmentId || envs[0].id || null
+    const prod = envs.find((e: any) => String(e?.name || "").toLowerCase() === "production")
+    const chosen = prod || envs[0]
+    return chosen.environmentId || chosen.envId || chosen.id || chosen._id || null
   }
   return null
 }
@@ -749,6 +977,12 @@ export type EnsureAndDeployInput = {
   }
   title?: string
   description?: string
+  /** Dockerfile path relative to repo root (defaults to "Dockerfile"). */
+  dockerfile?: string
+  /** Build type (defaults to "dockerfile"). */
+  buildType?: "dockerfile" | "heroku_buildpacks" | "paketo_buildpacks" | "nixpacks" | "static" | "railpack"
+  /** Docker build context path (defaults to "/"). */
+  dockerContextPath?: string
 }
 
 /**
@@ -792,13 +1026,14 @@ async function ensureProjectAndEnvironment(
     projectId = extractProjectId(created.data)
     createdProject = true
     if (!projectId) {
+      const rawPreview = JSON.stringify(created.data).slice(0, 500)
       return {
         ok: false,
         projectId: null,
         environmentId: null,
         createdProject: true,
         createdEnvironment: false,
-        error: "Created the project but could not determine its projectId from the response.",
+        error: `Created the project but could not determine its projectId from the response. Raw response: ${rawPreview}`,
       }
     }
     // The freshly created project typically embeds its default environment.
@@ -829,13 +1064,14 @@ async function ensureProjectAndEnvironment(
     environmentId = extractEnvironmentId(created.data)
     createdEnvironment = true
     if (!environmentId) {
+      const rawPreview = JSON.stringify(created.data).slice(0, 500)
       return {
         ok: false,
         projectId,
         environmentId: null,
         createdProject,
         createdEnvironment: true,
-        error: "Created the environment but could not determine its environmentId from the response.",
+        error: `Created the environment but could not determine its environmentId from the response. Raw response: ${rawPreview}`,
       }
     }
   }
@@ -916,11 +1152,24 @@ export async function ensureAndDeployApplication(
     state.applicationId = extractApplicationId(createResult.data)
     state.created = true
     if (!state.applicationId) {
+      const rawPreview = JSON.stringify(createResult.data).slice(0, 500)
       return done(
         false,
-        "Created the application but could not determine its applicationId from the response.",
+        `Created the application but could not determine its applicationId from the response. Raw response: ${rawPreview}`,
         createResult.data,
       )
+    }
+
+    // 1c. Set the build type so Dokploy knows how to build the project.
+    const buildTypeResult = await application.saveBuildType({
+      applicationId: state.applicationId,
+      buildType: input.buildType || "dockerfile",
+      dockerfile: input.dockerfile || "Dockerfile",
+      dockerContextPath: input.dockerContextPath || "/",
+    })
+    steps.push(toStep("application.saveBuildType", buildTypeResult))
+    if (!buildTypeResult.ok) {
+      return done(false, buildTypeResult.error || "Failed to set Dockerfile build type", null)
     }
   }
 
@@ -983,4 +1232,41 @@ export async function ensureAndDeployApplication(
   }
 
   return done(true, null, deployResult.data)
+}
+
+// ---------------------------------------------------------------------------
+// Health check — quick probe to verify the Dokploy API is reachable
+// ---------------------------------------------------------------------------
+
+export type DokployHealth = {
+  reachable: boolean
+  apiUrl: string
+  hasKey: boolean
+  error?: string
+  projectsCount?: number
+  latencyMs?: number
+}
+
+export async function checkDokployHealth(): Promise<DokployHealth> {
+  const apiUrl = DEFAULT_DOKPLOY_API_URL.replace(/\/+$/, "")
+  const hasKey = Boolean(process.env.DOKPLOY_API_KEY)
+  if (!hasKey) {
+    return { reachable: false, apiUrl, hasKey: false, error: "DOKPLOY_API_KEY is not set" }
+  }
+  try {
+    const start = Date.now()
+    const result = await project.all()
+    const latencyMs = Date.now() - start
+    const count = Array.isArray(result.data) ? result.data.length : 0
+    return {
+      reachable: result.ok,
+      apiUrl,
+      hasKey: true,
+      projectsCount: count,
+      latencyMs,
+      error: result.ok ? undefined : result.error || undefined,
+    }
+  } catch (err: any) {
+    return { reachable: false, apiUrl, hasKey: true, error: err?.message || "Health check failed" }
+  }
 }

@@ -1669,7 +1669,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             {debugLoading && (
                 <div className={`px-4 pb-2 ${isDark ? 'text-[#888]' : 'text-gray-500'} text-xs flex items-center gap-2`}>
                     <span className="animate-spin">⟳</span>
-                    Fetching VM debug info...
+                    Checking Dokploy API...
                 </div>
             )}
             {debugInfo && !debugLoading && (
@@ -1677,8 +1677,8 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     <div className={`max-w-[720px] mx-auto rounded-xl overflow-hidden ${isDark ? 'bg-[#1c1c1c] border border-[#2a2a2a]' : 'bg-gray-50 border border-gray-200'}`}>
                         <div className={`flex items-center justify-between px-4 py-2.5 border-b ${isDark ? 'border-[#2a2a2a]' : 'border-gray-200'}`}>
                             <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${debugInfo.vps?.sshReachable ? 'bg-green-500' : 'bg-red-500'}`} />
-                                <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>VM Connection Debug</span>
+                                <div className={`w-2 h-2 rounded-full ${debugInfo.dokploy?.reachable ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Dokploy API Status</span>
                             </div>
                             <button type="button" onClick={() => setDebugInfo(null)}
                                 className={`p-1 rounded ${isDark ? 'hover:bg-[#2a2a2a] text-[#666]' : 'hover:bg-gray-200 text-gray-400'}`}>
@@ -1691,83 +1691,14 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             ) : (
                                 <div className="space-y-2">
                                     <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                        <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>VPS Configuration</div>
-                                        <div>Host: <span className={isDark ? 'text-[#7c3aed]' : 'text-purple-700'}>{debugInfo.vps?.config?.host || 'N/A'}</span></div>
-                                        <div>Username: {debugInfo.vps?.config?.username || 'N/A'}</div>
-                                        <div>Password Set: <span className={debugInfo.vps?.config?.passwordConfigured ? 'text-green-400' : 'text-red-400'}>{debugInfo.vps?.config?.passwordConfigured ? 'Yes' : 'No'}</span></div>
-                                        <div>SSH Reachable: <span className={debugInfo.vps?.sshReachable ? 'text-green-400' : 'text-red-400'}>{debugInfo.vps?.sshReachable ? 'Yes' : 'No'}</span></div>
-                                        {debugInfo.vps?.sshError && <div className="text-red-400">SSH Error: {debugInfo.vps.sshError}</div>}
+                                        <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>Dokploy API</div>
+                                        <div>Configured: <span className={debugInfo.dokploy?.configured ? 'text-green-400' : 'text-red-400'}>{debugInfo.dokploy?.configured ? 'Yes' : 'No'}</span></div>
+                                        <div>Reachable: <span className={debugInfo.dokploy?.reachable ? 'text-green-400' : 'text-red-400'}>{debugInfo.dokploy?.reachable ? 'Yes' : 'No'}</span></div>
+                                        <div>API URL: <span className={isDark ? 'text-[#7c3aed]' : 'text-purple-700'}>{debugInfo.dokploy?.apiUrl || 'N/A'}</span></div>
+                                        {debugInfo.dokploy?.projectsCount !== undefined && <div>Projects: {debugInfo.dokploy.projectsCount}</div>}
+                                        {debugInfo.dokploy?.latencyMs && <div>Latency: {debugInfo.dokploy.latencyMs}ms</div>}
+                                        {debugInfo.dokploy?.error && <div className="text-red-400">Error: {debugInfo.dokploy.error}</div>}
                                     </div>
-                                    {debugInfo.vps?.sshReachable && debugInfo.vps?.diagnostics && (
-                                        <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                            <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>VPS Diagnostics</div>
-                                            <div className="whitespace-pre-wrap">
-                                                {typeof debugInfo.vps.diagnostics === 'object'
-                                                    ? Object.entries(debugInfo.vps.diagnostics).map(([k, v]) => (
-                                                        <div key={k}>{k}: {typeof v === 'string' ? v : Array.isArray(v) ? v.join(', ') : JSON.stringify(v)}</div>
-                                                    ))
-                                                    : String(debugInfo.vps.diagnostics)}
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                        <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>Environment Status</div>
-                                        <div>VPS_HOST: <span className={debugInfo.env?.VPS_HOST_set ? 'text-green-400' : 'text-red-400'}>{debugInfo.env?.VPS_HOST_set ? 'Set' : 'Missing'}</span></div>
-                                        <div>VPS_USERNAME: <span className={debugInfo.env?.VPS_USERNAME_set ? 'text-green-400' : 'text-red-400'}>{debugInfo.env?.VPS_USERNAME_set ? 'Set' : 'Missing'}</span></div>
-                                        <div>VPS_ROOT_PSW: <span className={debugInfo.env?.VPS_ROOT_PSW_set ? 'text-green-400' : 'text-red-400'}>{debugInfo.env?.VPS_ROOT_PSW_set ? 'Set' : 'Missing'}</span></div>
-                                    </div>
-                                    <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                        <div>Containers: {debugInfo.containers?.total ?? 0}</div>
-                                    </div>
-                                    {debugInfo.cloudflare && (
-                                        <div className={`${isDark ? 'text-[#aaa]' : 'text-gray-700'}`}>
-                                            <div className={`text-xs font-semibold mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>Cloudflare Tunnel</div>
-                                            <div>Tunnel Setup: <span className={debugInfo.cloudflare?.tunnelSetup ? 'text-green-400' : 'text-red-400'}>{debugInfo.cloudflare?.tunnelSetup ? 'Yes' : 'No'}</span></div>
-                                            {debugInfo.cloudflare?.tunnelConfig && (
-                                                <>
-                                                    <div>Tunnel ID: {debugInfo.cloudflare.tunnelConfig.tunnelId}</div>
-                                                    <div>Base Domain: {debugInfo.cloudflare.tunnelConfig.baseDomain}</div>
-                                                </>
-                                            )}
-                                            {debugInfo.cloudflare?.live?.configured ? (
-                                                <>
-                                                    <div>Service: <span className={debugInfo.cloudflare.live.serviceActive ? 'text-green-400' : 'text-red-400'}>{debugInfo.cloudflare.live.serviceActive ? 'Active' : 'Down'}</span></div>
-                                                    {debugInfo.cloudflare.live.tunnelInfo?.connector && <div>Connector: {debugInfo.cloudflare.live.tunnelInfo.connector}</div>}
-                                                    {debugInfo.cloudflare.live.nginxSites && debugInfo.cloudflare.live.nginxSites.length > 0 && (
-                                                        <div className="mt-1">
-                                                            <div className="text-[10px] text-white/40 mb-0.5">Nginx Sites:</div>
-                                                            {debugInfo.cloudflare.live.nginxSites.map((site: string, i: number) => (
-                                                                <div key={i} className="text-[10px] text-purple-300">{site}</div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {debugInfo.cloudflare.live.dnsRoutes && (
-                                                        <div className="mt-1">
-                                                            <div className="text-[10px] text-white/40 mb-0.5">DNS Routes:</div>
-                                                            <pre className="text-[10px] text-amber-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{debugInfo.cloudflare.live.dnsRoutes}</pre>
-                                                        </div>
-                                                    )}
-                                                                                     {debugInfo.cloudflare.live.pm2Processes && (
-                                                        <div className="mt-1">
-                                                            <div className="text-[10px] text-white/40 mb-0.5">PM2 Processes:</div>
-                                                            {Array.isArray(debugInfo.cloudflare.live.pm2Processes)
-                                                                ? debugInfo.cloudflare.live.pm2Processes.map((p: any, i: number) => (
-                                                                    <div key={i} className={`text-[10px] ${p.status === 'online' ? 'text-emerald-300' : 'text-red-300'}`}>
-                                                                        {p.name} [{p.status}] pid={p.pid} port={p.port} cpu={p.cpu}% mem={p.memory} ↑{p.uptime}
-                                                                    </div>
-                                                                ))
-                                                                : <pre className="text-[10px] text-emerald-200 whitespace-pre-wrap max-h-20 overflow-y-auto">{String(debugInfo.cloudflare.live.pm2Processes)}</pre>
-                                                            }
-                                                        </div>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <div className="text-red-400 text-[10px]">
-                                                    {debugInfo.cloudflare?.live?.error || debugInfo.cloudflare?.live?.reason || 'Tunnel not configured — run Setup Deployer'}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
                                     <div className={`text-xs ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>Timestamp: {debugInfo.timestamp}</div>
                                 </div>
                             )}
