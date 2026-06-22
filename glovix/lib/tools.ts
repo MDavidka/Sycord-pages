@@ -291,10 +291,18 @@ export async function handleSave(): Promise<string> {
 }
 
 /**
- * Deploy the project to sycord.site via the Dokploy container API.
- * Checks for a Dockerfile — auto-generates one if missing. On first deploy
- * it provisions the container/application, then triggers a deployment.
- * Returns the live URL on success.
+ * Deploy the project to sycord.site via the Dokploy API.
+ *
+ * This single tool handles EVERYTHING:
+ *  - Auto-generates a Dockerfile if one doesn't exist
+ *  - Provisions a Dokploy project (reuses existing per-user project)
+ *  - Creates an environment inside the project
+ *  - Creates an application configured for Dockerfile build
+ *  - Attaches the GitHub source
+ *  - Triggers the deployment
+ *
+ * No separate container/project/environment tools needed — deploy() does it all.
+ * Returns the live URL and all provisioned IDs on success.
  */
 export async function handleDeploy(): Promise<string> {
     const projectId = getHostProjectId();
@@ -316,12 +324,12 @@ export async function handleDeploy(): Promise<string> {
                 // Auto-generate a Next.js Dockerfile.
                 const genResult = await handleCreateDockerfile({ framework: "nextjs" });
                 if (genResult.includes("❌") || genResult.includes("Error")) {
-                    return `[SYSTEM] ❌ No Dockerfile found and auto-generation failed: ${genResult}. Please run createDockerfile() first.`;
+                    return "[SYSTEM] ❌ No Dockerfile found and auto-generation failed: " + genResult + ". Please run createDockerfile() first.";
                 }
             }
         }
 
-        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}`, {
+        const res = await fetch("/api/workspace/deploy?projectId=" + encodeURIComponent(projectId), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -333,9 +341,14 @@ export async function handleDeploy(): Promise<string> {
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
             const errMsg = data?.message || "HTTP " + res.status;
-            return "[SYSTEM] ❌ Deploy failed: " + errMsg;
+            return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug info: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
         }
-        return "[SYSTEM] ✅ Deployed successfully. Your site is live at " + data.url;
+        return "[SYSTEM] ✅ Deployed successfully.\n\n" +
+            "Live URL: " + data.url + "\n" +
+            "Project ID: " + (data.projectId || "auto") + "\n" +
+            "Environment ID: " + (data.environmentId || "auto") + "\n" +
+            "Application ID: " + (data.applicationId || "auto") + "\n" +
+            "Created: project=" + (data.createdProject ? "yes" : "no") + ", env=" + (data.createdEnvironment ? "yes" : "no") + ", app=" + (data.created ? "yes" : "no");
     } catch (e: any) {
         return "Error deploying project: " + e.message;
     }
@@ -831,7 +844,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: 'Deploy the project to sycord.site using the Dokploy container API. Auto-generates a Dockerfile if one does not exist, then pushes to GitHub (save) and triggers a Dokploy build + deployment. Returns the live URL on success. Use when the user asks to publish, deploy, or go live.',
+            description: 'Deploy the project to sycord.site. Handles EVERYTHING automatically: generates a Dockerfile if missing, creates the Dokploy project/environment/application, configures Docker build type, attaches the GitHub source, and triggers the build. No separate tools needed — just call deploy() when ready. Returns the live URL and all provisioned IDs on success.',
             parameters: {
                 type: 'object',
                 properties: {},
