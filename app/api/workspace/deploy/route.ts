@@ -13,6 +13,7 @@ import {
   isDokployConfigured,
   toDokployAppName,
 } from "@/lib/deploy/dokploy-client"
+import { assignDokployService } from "@/lib/deploy/assign-service"
 import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -169,13 +170,37 @@ export async function POST(req: Request): Promise<Response> {
     gitUrl: (project.githubUrl ? `${project.githubUrl}.git` : undefined) as string | undefined,
   }
 
+  // Make sure the project owns a Dokploy service (its own application id inside
+  // the one shared Dokploy project) before deploying. When the service was
+  // already assigned at creation time this is a no-op reuse; otherwise we
+  // lazily assign it now so deploy() always targets the same stable id.
+  let dokployApplicationId = (project.dokployApplicationId as string | undefined) || null
+  let dokployProjectId = (project.dokployProjectId as string | undefined) || null
+  let dokployEnvironmentId =
+    (project.dokployEnvironmentId as string | undefined) || (body?.environmentId as string | undefined) || null
+
+  if (!dokployApplicationId) {
+    const assigned = await assignDokployService({
+      userId,
+      projectId,
+      businessName: project.businessName || dokployAppName,
+      existingProjectId: dokployProjectId,
+      existingEnvironmentId: dokployEnvironmentId,
+    })
+    if (assigned?.applicationId) {
+      dokployApplicationId = assigned.applicationId
+      dokployProjectId = assigned.projectId || dokployProjectId
+      dokployEnvironmentId = assigned.environmentId || dokployEnvironmentId
+    }
+  }
+
   const result = await ensureAndDeployApplication({
     name: project.businessName || dokployAppName,
     appName: dokployAppName,
     projectName: toDokployAppName(project.businessName || dokployAppName, projectId),
-    existingApplicationId: project.dokployApplicationId || null,
-    existingProjectId: project.dokployProjectId || null,
-    existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
+    existingApplicationId: dokployApplicationId,
+    existingProjectId: dokployProjectId,
+    existingEnvironmentId: dokployEnvironmentId,
     buildType: (body?.buildType as any) || "dockerfile",
     dockerfile: (body?.dockerfile as string) || "Dockerfile",
     dockerContextPath: (body?.dockerContextPath as string) || "/",
@@ -219,6 +244,7 @@ export async function POST(req: Request): Promise<Response> {
         "projects.$.dokployAppName": dokployAppName,
         "projects.$.deploymentRuntime": {
           mode: "dokploy",
+          type: "docker",
           domain: dokployAppName,
           url: finalUrl,
           projectId: result.projectId,

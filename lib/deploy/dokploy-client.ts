@@ -10,9 +10,13 @@
 //   https://docs.dokploy.com/docs/api/application
 //
 // Configure via env (see .env.example):
-//   DOKPLOY_API_URL   -> base API url   (default: https://sycord.site/api)
-//   DOKPLOY_API_KEY   -> x-api-key token
-//   DOKPLOY_SERVER_ID -> optional default serverId forwarded to every call
+//   DOKPLOY_API_URL        -> base API url   (default: https://sycord.site/api)
+//   DOKPLOY_API_KEY        -> x-api-key token
+//   DOKPLOY_SERVER_ID      -> optional default serverId forwarded to every call
+//   DOKPLOY_PROJECT_ID     -> the single shared Dokploy project that holds every
+//                             Sycord website service (one project, many services)
+//   DOKPLOY_ENVIRONMENT_ID -> environment (inside the shared project) services
+//                             are created under
 // ---------------------------------------------------------------------------
 
 const DEFAULT_DOKPLOY_API_URL = "https://sycord.site/api"
@@ -32,6 +36,8 @@ export type DokployConfig = {
   apiUrl: string
   apiKey: string
   serverId?: string
+  /** The single shared Dokploy projectId that holds every website service. */
+  projectId?: string
   /** Dokploy environmentId an application is created under (required to create). */
   environmentId?: string
   /** Dokploy GitHub provider id (the GitHub App installation) for saveGithubProvider. */
@@ -50,6 +56,7 @@ export function getDokployConfig(): DokployConfig {
   const apiUrl = DEFAULT_DOKPLOY_API_URL.replace(/\/+$/, "")
   const apiKey = process.env.DOKPLOY_API_KEY || ""
   const serverId = process.env.DOKPLOY_SERVER_ID || undefined
+  const projectId = process.env.DOKPLOY_PROJECT_ID || undefined
   const environmentId = process.env.DOKPLOY_ENVIRONMENT_ID || undefined
   const githubId = process.env.DOKPLOY_GITHUB_ID || undefined
 
@@ -59,7 +66,7 @@ export function getDokployConfig(): DokployConfig {
     )
   }
 
-  return { apiUrl, apiKey, serverId, environmentId, githubId }
+  return { apiUrl, apiKey, serverId, projectId, environmentId, githubId }
 }
 
 /** Whether the Dokploy client has the minimum config to run. */
@@ -1116,6 +1123,11 @@ export async function ensureAndDeployApplication(
   if (!state.environmentId && config.environmentId) {
     state.environmentId = config.environmentId
   }
+  // Keep the shared projectId in sync so callers/UI can surface it even when we
+  // resolve the environment straight from env config (one shared project).
+  if (!state.projectId && config.projectId) {
+    state.projectId = config.projectId
+  }
 
   // 1. Provision the application/container if the project doesn't have one yet.
   if (!state.applicationId) {
@@ -1232,6 +1244,326 @@ export async function ensureAndDeployApplication(
   }
 
   return done(true, null, deployResult.data)
+}
+
+// ---------------------------------------------------------------------------
+// Shared-project provisioning: assign every Sycord website its own Dokploy
+// service (application) inside ONE shared Dokploy project.
+//
+// "One project, many services": all websites live under a single Dokploy
+// project (configured via DOKPLOY_PROJECT_ID, or auto-created by name) and each
+// website gets a dedicated application — its own service id (applicationId).
+// ---------------------------------------------------------------------------
+
+/** Name used when auto-creating the shared project (override via env). */
+function getSharedProjectName(): string {
+  return process.env.DOKPLOY_PROJECT_NAME || "Sycord Websites"
+}
+
+export type SharedProjectEnv = {
+  ok: boolean
+  projectId: string | null
+  environmentId: string | null
+  createdProject: boolean
+  createdEnvironment: boolean
+  error: string | null
+  steps: EnsureDeployStep[]
+}
+
+/**
+ * Resolves the single shared Dokploy project + an environment to deploy into.
+ * Resolution order:
+ *   1. Use DOKPLOY_PROJECT_ID / DOKPLOY_ENVIRONMENT_ID when configured.
+ *   2. Otherwise find an existing project by the shared name.
+ *   3. Otherwise create the shared project (Dokploy seeds a "production" env).
+ * The environment is then resolved from config, the project's env list, or a
+ * freshly-created "production" environment.
+ */
+export async function resolveSharedProjectEnvironment(
+  config?: DokployConfig,
+): Promise<SharedProjectEnv> {
+  const steps: EnsureDeployStep[] = []
+  let cfg: DokployConfig
+  try {
+    cfg = config || getDokployConfig()
+  } catch (err: any) {
+    return {
+      ok: false,
+      projectId: null,
+      environmentId: null,
+      createdProject: false,
+      createdEnvironment: false,
+      error: err?.message || "Dokploy is not configured",
+      steps,
+    }
+  }
+
+  let projectId = cfg.projectId || null
+  let environmentId = cfg.environmentId || null
+  let createdProject = false
+  let createdEnvironment = false
+
+  // When the environment is configured but the project isn't, try to learn the
+  // projectId from the environment so the UI can still surface it.
+  if (!projectId && environmentId) {
+    const env = await environment.one(environmentId)
+    steps.push(toStep("environment.one", env))
+    if (env.ok) {
+      const core = unwrap(env.data) as any
+      projectId = core?.projectId || core?.project?.projectId || null
+    }
+  }
+
+  // Locate (or create) the shared project when no projectId is configured.
+  if (!projectId) {
+    const all = await project.all()
+    steps.push(toStep("project.all", all))
+    if (all.ok) {
+      const list = Array.isArray(unwrap(all.data)) ? (unwrap(all.data) as any[]) : []
+      const sharedName = getSharedProjectName().toLowerCase()
+      const found = list.find((p: any) => String(p?.name || "").toLowerCase() === sharedName)
+      if (found) projectId = extractProjectId(found) || found.projectId || found.id || null
+    }
+  }
+
+  if (!projectId) {
+    const created = await project.create({
+      name: getSharedProjectName(),
+      description: "Shared project holding every Sycord website service.",
+    })
+    steps.push(toStep("project.create", created))
+    if (!created.ok) {
+      return {
+        ok: false,
+        projectId: null,
+        environmentId: null,
+        createdProject: false,
+        createdEnvironment: false,
+        error: created.error || "Failed to create the shared Dokploy project",
+        steps,
+      }
+    }
+    projectId = extractProjectId(created.data)
+    createdProject = true
+    if (!environmentId) environmentId = extractEnvironmentIdFromProject(created.data)
+    if (!projectId) {
+      return {
+        ok: false,
+        projectId: null,
+        environmentId: null,
+        createdProject: true,
+        createdEnvironment: false,
+        error: "Created the shared project but could not determine its projectId.",
+        steps,
+      }
+    }
+  }
+
+  // Resolve an environment inside the shared project.
+  if (!environmentId) {
+    const list = await environment.byProjectId(projectId)
+    steps.push(toStep("environment.byProjectId", list))
+    if (list.ok) environmentId = pickEnvironmentIdFromList(list.data)
+  }
+
+  if (!environmentId) {
+    const created = await environment.create({ name: "production", projectId })
+    steps.push(toStep("environment.create", created))
+    if (!created.ok) {
+      return {
+        ok: false,
+        projectId,
+        environmentId: null,
+        createdProject,
+        createdEnvironment: false,
+        error: created.error || "Failed to create an environment in the shared project",
+        steps,
+      }
+    }
+    environmentId = extractEnvironmentId(created.data)
+    createdEnvironment = true
+  }
+
+  if (!environmentId) {
+    return {
+      ok: false,
+      projectId,
+      environmentId: null,
+      createdProject,
+      createdEnvironment,
+      error: "Could not resolve a Dokploy environment in the shared project.",
+      steps,
+    }
+  }
+
+  return { ok: true, projectId, environmentId, createdProject, createdEnvironment, error: null, steps }
+}
+
+export type EnsureServiceResult = {
+  success: boolean
+  projectId: string | null
+  environmentId: string | null
+  applicationId: string | null
+  appName: string | null
+  /** True when a brand-new application (service) was created during this call. */
+  created: boolean
+  error: string | null
+  steps: EnsureDeployStep[]
+}
+
+/**
+ * Assigns a website its own Dokploy service (application) inside the shared
+ * project WITHOUT triggering a deployment. Used at project-creation time so
+ * every site gets a stable service id (applicationId) up front. The service is
+ * pre-configured as a Docker (Dockerfile) build type, ready for deploy().
+ *
+ * Idempotent: pass `existingApplicationId` to verify/reuse a previously
+ * assigned service instead of creating a duplicate.
+ */
+export async function ensureDokployService(input: {
+  /** Human-readable name for the Dokploy application. */
+  name: string
+  /** Stable slug used as the appName + public URL. */
+  appName: string
+  /** Reuse an already-assigned service id when present. */
+  existingApplicationId?: string | null
+  existingProjectId?: string | null
+  existingEnvironmentId?: string | null
+  /** Override the env-configured serverId. */
+  serverId?: string | null
+  /** Dockerfile path relative to repo root (defaults to "Dockerfile"). */
+  dockerfile?: string
+  dockerContextPath?: string
+}): Promise<EnsureServiceResult> {
+  const steps: EnsureDeployStep[] = []
+
+  let config: DokployConfig
+  try {
+    config = getDokployConfig()
+  } catch (err: any) {
+    return {
+      success: false,
+      projectId: input.existingProjectId || null,
+      environmentId: input.existingEnvironmentId || null,
+      applicationId: input.existingApplicationId || null,
+      appName: input.appName,
+      created: false,
+      error: err?.message || "Dokploy is not configured",
+      steps,
+    }
+  }
+
+  let projectId = input.existingProjectId || config.projectId || null
+  let environmentId = input.existingEnvironmentId || config.environmentId || null
+
+  // Reuse an already-assigned service when we can confirm it still exists.
+  if (input.existingApplicationId) {
+    const existing = await application.one(input.existingApplicationId)
+    steps.push(toStep("application.one", existing))
+    if (existing.ok) {
+      const core = unwrap(existing.data) as any
+      return {
+        success: true,
+        projectId,
+        environmentId: core?.environmentId || environmentId,
+        applicationId: input.existingApplicationId,
+        appName: core?.appName || input.appName,
+        created: false,
+        error: null,
+        steps,
+      }
+    }
+    // Fall through and create a fresh service when the old id is gone.
+  }
+
+  // Resolve the shared project + environment when not already known.
+  if (!environmentId) {
+    const shared = await resolveSharedProjectEnvironment(config)
+    steps.push(...shared.steps)
+    if (!shared.ok || !shared.environmentId) {
+      return {
+        success: false,
+        projectId: shared.projectId,
+        environmentId: null,
+        applicationId: null,
+        appName: input.appName,
+        created: false,
+        error: shared.error || "Could not resolve the shared Dokploy project/environment",
+        steps,
+      }
+    }
+    projectId = shared.projectId
+    environmentId = shared.environmentId
+  }
+
+  // Create the application (the website's service).
+  const createResult = await application.create({
+    name: input.name,
+    appName: input.appName,
+    environmentId,
+    serverId: input.serverId ?? config.serverId ?? null,
+  })
+  steps.push(toStep("application.create", createResult))
+  if (!createResult.ok) {
+    return {
+      success: false,
+      projectId,
+      environmentId,
+      applicationId: null,
+      appName: input.appName,
+      created: false,
+      error: createResult.error || "Failed to create the Dokploy service",
+      steps,
+    }
+  }
+
+  const applicationId = extractApplicationId(createResult.data)
+  if (!applicationId) {
+    return {
+      success: false,
+      projectId,
+      environmentId,
+      applicationId: null,
+      appName: input.appName,
+      created: true,
+      error: "Created the service but could not determine its applicationId.",
+      steps,
+    }
+  }
+
+  // Mark it as a Docker (Dockerfile) build type up front.
+  const buildTypeResult = await application.saveBuildType({
+    applicationId,
+    buildType: "dockerfile",
+    dockerfile: input.dockerfile || "Dockerfile",
+    dockerContextPath: input.dockerContextPath || "/",
+  })
+  steps.push(toStep("application.saveBuildType", buildTypeResult))
+  // A failed build-type call shouldn't lose the service id — deploy() re-applies
+  // it. Surface the error but still return the assigned id.
+  if (!buildTypeResult.ok) {
+    return {
+      success: false,
+      projectId,
+      environmentId,
+      applicationId,
+      appName: input.appName,
+      created: true,
+      error: buildTypeResult.error || "Service created but setting Docker build type failed",
+      steps,
+    }
+  }
+
+  return {
+    success: true,
+    projectId,
+    environmentId,
+    applicationId,
+    appName: input.appName,
+    created: true,
+    error: null,
+    steps,
+  }
 }
 
 // ---------------------------------------------------------------------------

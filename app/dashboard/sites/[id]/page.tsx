@@ -382,6 +382,51 @@ const PLAN_LABELS: Record<string, string> = {
 const getPlanLabel = (subscription: string) =>
   PLAN_LABELS[subscription] ?? "Sycord"
 
+// A single label/value row with a copy button — used by the Dokploy service
+// debug panel on the settings tab.
+const DebugInfoRow = ({
+  label,
+  value,
+  mono = true,
+}: {
+  label: string
+  value?: string | null
+  mono?: boolean
+}) => {
+  const [copied, setCopied] = useState(false)
+  const display = value && String(value).trim().length > 0 ? String(value) : "—"
+  const canCopy = display !== "—"
+
+  const handleCopy = () => {
+    if (!canCopy) return
+    try {
+      navigator.clipboard.writeText(display)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-white/5 last:border-0">
+      <span className="text-xs text-muted-foreground shrink-0">{label}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className={cn("text-xs truncate text-foreground/90", mono && "font-mono")}>{display}</span>
+        {canCopy && (
+          <button
+            onClick={handleCopy}
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            title={`Copy ${label}`}
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Extract SidebarContent to a separate component to avoid re-renders
 const SidebarContent = ({
   project,
@@ -2771,6 +2816,85 @@ export default function SiteSettingsPage() {
                         {planCredit}€ available this month
                       </p>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Deployment service (Dokploy) — debug info */}
+                <Card className="bg-card/50 backdrop-blur-sm border-white/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Database className="h-4 w-4 text-primary" />
+                      Deployment Service
+                    </CardTitle>
+                    <CardDescription>
+                      Debug info for this site&apos;s Dokploy service. Every site is assigned its own
+                      service id inside one shared deployer project.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {(() => {
+                      const runtime = deploymentRuntime || project?.deploymentRuntime || {}
+                      const serviceId =
+                        project?.dokployApplicationId || runtime?.applicationId || null
+                      const dokployProjectId =
+                        project?.dokployProjectId || runtime?.projectId || null
+                      const environmentId =
+                        project?.dokployEnvironmentId || runtime?.environmentId || null
+                      const appName =
+                        project?.dokployAppName || runtime?.domain || null
+                      const serviceType = runtime?.type || (serviceId ? "docker" : null)
+                      const statusRaw = runtime?.status || (serviceId ? "provisioned" : "not assigned")
+                      const assignError = runtime?.serviceAssignmentError || null
+                      const serviceUrl = runtime?.url || null
+
+                      const statusColor =
+                        statusRaw === "deployed"
+                          ? "bg-green-500/15 text-green-400 border-green-500/30"
+                          : statusRaw === "failed"
+                          ? "bg-red-500/15 text-red-400 border-red-500/30"
+                          : statusRaw === "provisioned"
+                          ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                          : "bg-white/10 text-muted-foreground border-white/15"
+
+                      return (
+                        <>
+                          <div className="flex items-center justify-between gap-3 pb-1">
+                            <span className="text-xs text-muted-foreground">Status</span>
+                            <div className="flex items-center gap-2">
+                              {serviceType && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-white/15 bg-white/5 text-foreground/80 uppercase tracking-wide">
+                                  {serviceType}
+                                </span>
+                              )}
+                              <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize", statusColor)}>
+                                {statusRaw}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg bg-black/20 border border-white/10 px-3 py-1">
+                            <DebugInfoRow label="Service ID" value={serviceId} />
+                            <DebugInfoRow label="Project ID" value={dokployProjectId} />
+                            <DebugInfoRow label="Environment ID" value={environmentId} />
+                            <DebugInfoRow label="App Name" value={appName} />
+                            {serviceUrl && <DebugInfoRow label="URL" value={serviceUrl} mono={false} />}
+                          </div>
+
+                          {!serviceId && !assignError && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              A deployer service is being assigned for this site. Refresh in a moment.
+                            </p>
+                          )}
+                          {assignError && (
+                            <p className="text-xs text-destructive flex items-start gap-1.5">
+                              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <span>Service assignment issue: {assignError}</span>
+                            </p>
+                          )}
+                        </>
+                      )
+                    })()}
                   </CardContent>
                 </Card>
               </div>

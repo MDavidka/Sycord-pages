@@ -31,6 +31,8 @@ export async function GET() {
       configured: true,
       reachable: health.reachable,
       apiUrl: health.apiUrl,
+      sharedProjectId: process.env.DOKPLOY_PROJECT_ID || null,
+      environmentId: process.env.DOKPLOY_ENVIRONMENT_ID || null,
       projectsCount: health.projectsCount ?? 0,
       latencyMs: health.latencyMs ?? null,
       error: health.error ?? null,
