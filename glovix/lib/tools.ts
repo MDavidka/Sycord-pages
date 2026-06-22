@@ -293,15 +293,13 @@ export async function handleSave(): Promise<string> {
 /**
  * Deploy the project to sycord.site via the Dokploy API.
  *
- * This single tool handles EVERYTHING:
- *  - Auto-generates a Dockerfile if one doesn't exist
+ * This single call handles EVERYTHING server-side:
+ *  - Auto-generates a Dockerfile if one doesn't exist in project pages
  *  - Provisions a Dokploy project (reuses existing per-user project)
- *  - Creates an environment inside the project
- *  - Creates an application configured for Dockerfile build
- *  - Attaches the GitHub source
- *  - Triggers the deployment
+ *  - Creates an environment + application configured for Dockerfile build
+ *  - Attaches the GitHub source and triggers the deployment
  *
- * No separate container/project/environment tools needed — deploy() does it all.
+ * No browser-side file checks or WebContainer — everything runs on the server.
  * Returns the live URL and all provisioned IDs on success.
  */
 export async function handleDeploy(): Promise<string> {
@@ -310,25 +308,6 @@ export async function handleDeploy(): Promise<string> {
         return '[SYSTEM] ❌ Deploy is only available when building inside a Sycord project.';
     }
     try {
-        // Check if a Dockerfile exists in the project files.
-        const pages = getProjectPagesMap();
-        const hasDockerfile = pages && "Dockerfile" in pages;
-        if (!hasDockerfile) {
-            // Try WebContainer FS as fallback.
-            let wcHas = false;
-            try {
-                await readFile("Dockerfile");
-                wcHas = true;
-            } catch { /* not found */ }
-            if (!wcHas) {
-                // Auto-generate a Next.js Dockerfile.
-                const genResult = await handleCreateDockerfile({ framework: "nextjs" });
-                if (genResult.includes("❌") || genResult.includes("Error")) {
-                    return "[SYSTEM] ❌ No Dockerfile found and auto-generation failed: " + genResult + ". Please run createDockerfile() first.";
-                }
-            }
-        }
-
         const res = await fetch("/api/workspace/deploy?projectId=" + encodeURIComponent(projectId), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -341,7 +320,7 @@ export async function handleDeploy(): Promise<string> {
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
             const errMsg = data?.message || "HTTP " + res.status;
-            return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug info: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
+            return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
         }
         return "[SYSTEM] ✅ Deployed successfully.\n\n" +
             "Live URL: " + data.url + "\n" +

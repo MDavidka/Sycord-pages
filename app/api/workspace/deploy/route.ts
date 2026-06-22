@@ -19,6 +19,51 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
+function generateDockerfile(framework: string, nodeVersion: string, port: string): string {
+  const npmInstall = "npm install --no-audit --no-fund --prefer-offline && npm cache clean --force"
+  const npmCi = "(npm ci && npm cache clean --force) || (" + npmInstall + ")"
+  if (framework === "nextjs" || framework === "next") {
+    return "# syntax=docker/dockerfile:1\n" +
+"FROM node:" + nodeVersion + "-alpine AS deps\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN apk add --no-cache libc6-compat && " + npmCi + "\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY --from=deps /app/node_modules ./node_modules\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS runner\n" +
+"WORKDIR /app\n" +
+"RUN addgroup -S appgroup && adduser -S appuser -G appgroup\n" +
+"COPY --from=builder /app/public ./public\n" +
+"COPY --from=builder /app/.next/standalone ./\n" +
+"COPY --from=builder /app/.next/static ./.next/static\n" +
+"RUN chown -R appuser:appgroup /app\n" +
+"USER appuser\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"ENV NODE_ENV=production\n" +
+"CMD [\"node\", \"server.js\"]\n"
+  }
+  return "# syntax=docker/dockerfile:1\n" +
+"FROM node:" + nodeVersion + "-alpine\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build 2>/dev/null; true\n" +
+"RUN addgroup -S appgroup && adduser -S appuser -G appgroup\n" +
+"RUN chown -R appuser:appgroup /app\n" +
+"USER appuser\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"ENV NODE_ENV=production\n" +
+"CMD [\"node\", \"server.js\"]\n"
+}
+
 function slugifyContainerName(project: any, projectId: string): string {
   return (
     project?.containerName ||
@@ -60,6 +105,25 @@ export async function POST(req: Request): Promise<Response> {
 
   if (!project) {
     return Response.json({ status: "error", message: "Project not found" }, { status: 404 })
+  }
+
+  // Auto-generate Dockerfile if missing from project pages
+  const pages = Array.isArray(project.pages) ? project.pages : []
+  const hasDockerfile = pages.some((p: any) => p.name === "Dockerfile" || p.name === "/Dockerfile")
+  if (!hasDockerfile) {
+    const dockerfile = generateDockerfile("nextjs", "22", "3000")
+    await db.collection("users").updateOne(
+      { id: userId, "projects._id": new ObjectId(projectId) },
+      {
+        $push: {
+          "projects.$.pages": {
+            name: "Dockerfile",
+            content: dockerfile,
+            updatedAt: new Date(),
+          },
+        } as any,
+      },
+    )
   }
 
   const files = prepareProjectDeployFiles(project)
