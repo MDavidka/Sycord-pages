@@ -438,65 +438,90 @@ export async function handleGenerateDomain(args: Record<string, unknown>): Promi
 
 /**
  * Generate a Dockerfile optimized for the project framework.
- * When framework is not specified, produces a multi-stage Next.js Dockerfile.
+ * - Multi-stage builds for small final images
+ * - Falls back from npm ci to npm install when package-lock.json is missing
+ * - Runs as non-root user in runner stages
+ * - Uses Docker build cache efficiently with COPY package*.json first
  */
 export async function handleCreateDockerfile(args: Record<string, unknown>): Promise<string> {
     const framework = typeof args.framework === "string" ? args.framework.toLowerCase() : "nextjs";
     const nodeVersion = (typeof args.nodeVersion === "string" ? args.nodeVersion : "22") || "22";
     const port = (typeof args.port === "string" ? args.port : "3000") || "3000";
 
+    // npm ci fails if package-lock.json is missing — fall back to npm install
+    const npmInstall = "npm install --no-audit --no-fund --prefer-offline && npm cache clean --force";
+    const npmCi = "(npm ci && npm cache clean --force) || (" + npmInstall + ")";
+
     let dockerfile = "";
     if (framework === "nextjs" || framework === "next") {
-        dockerfile = `# syntax=docker/dockerfile:1
-FROM node:${nodeVersion}-alpine AS base
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-
-FROM node:${nodeVersion}-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci && npm cache clean --force
-COPY . .
-RUN npm run build
-
-FROM base AS runner
-WORKDIR /app
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-
-EXPOSE ${port}
-ENV PORT=${port}
-CMD ["node", "server.js"]
-`;
+        dockerfile = "# syntax=docker/dockerfile:1\n" +
+"# Multi-stage Next.js Dockerfile — optimized for Dokploy deployments\n" +
+"FROM node:" + nodeVersion + "-alpine AS deps\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN apk add --no-cache libc6-compat && " + npmCi + "\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY --from=deps /app/node_modules ./node_modules\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS runner\n" +
+"WORKDIR /app\n" +
+"RUN addgroup -S appgroup && adduser -S appuser -G appgroup\n" +
+"COPY --from=builder /app/public ./public\n" +
+"COPY --from=builder /app/.next/standalone ./\n" +
+"COPY --from=builder /app/.next/static ./.next/static\n" +
+"RUN chown -R appuser:appgroup /app\n" +
+"USER appuser\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"ENV NODE_ENV=production\n" +
+"HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\\n" +
+"  CMD wget -qO- http://127.0.0.1:" + port + "/ || exit 1\n" +
+"CMD [\"node\", \"server.js\"]\n";
     } else if (framework === "react" || framework === "vite") {
-        dockerfile = `# syntax=docker/dockerfile:1
-FROM node:${nodeVersion}-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci && npm cache clean --force
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine AS runner
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-`;
+        dockerfile = "# syntax=docker/dockerfile:1\n" +
+"# React / Vite static site Dockerfile\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM nginx:alpine AS runner\n" +
+"COPY --from=builder /app/dist /usr/share/nginx/html\n" +
+"COPY nginx.conf /etc/nginx/conf.d/default.conf 2>/dev/null; true\n" +
+"RUN echo 'server { listen 80; root /usr/share/nginx/html; index index.html; location / { try_files $uri /index.html; } }' > /etc/nginx/conf.d/default.conf\n" +
+"EXPOSE 80\n" +
+"HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \\\n" +
+"  CMD wget -qO- http://127.0.0.1:80/ || exit 1\n" +
+"CMD [\"nginx\", \"-g\", \"daemon off;\"]\n";
     } else {
-        dockerfile = `# syntax=docker/dockerfile:1
-FROM node:${nodeVersion}-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-COPY . .
-RUN npm run build
-EXPOSE ${port}
-ENV PORT=${port}
-CMD ["npm", "start"]
-`;
+        dockerfile = "# syntax=docker/dockerfile:1\n" +
+"# Generic Node.js Dockerfile\n" +
+"FROM node:" + nodeVersion + "-alpine AS builder\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build 2>/dev/null; true\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS runner\n" +
+"WORKDIR /app\n" +
+"RUN addgroup -S appgroup && adduser -S appuser -G appgroup\n" +
+"COPY --from=builder /app ./\n" +
+"RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev --no-audit --no-fund\n" +
+"RUN chown -R appuser:appgroup /app\n" +
+"USER appuser\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"ENV NODE_ENV=production\n" +
+"HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \\\n" +
+"  CMD wget -qO- http://127.0.0.1:" + port + "/ || exit 1\n" +
+"CMD [\"node\", \"server.js\"]\n";
     }
 
     try {
@@ -505,9 +530,9 @@ CMD ["npm", "start"]
         if (projectId) {
             await syncFileToProjectPages("Dockerfile", dockerfile);
         }
-        return `[SYSTEM] ✅ Created Dockerfile for ${framework} (Node ${nodeVersion}, port ${port}). Make sure to call save() then deploy().`;
+        return "[SYSTEM] ✅ Created Dockerfile for " + framework + " (Node " + nodeVersion + ", port " + port + "). Make sure to call save() then deploy().";
     } catch (e: any) {
-        return `Error creating Dockerfile: ${e.message}`;
+        return "Error creating Dockerfile: " + e.message;
     }
 }
 
