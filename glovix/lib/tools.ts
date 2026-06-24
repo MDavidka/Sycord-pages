@@ -166,6 +166,11 @@ function isServerWorkspace(): boolean {
 /**
  * Run a command on the server-side execution sandbox and stream its stdout +
  * stderr into the terminal. Returns a clean summary for the AI.
+ *
+ * NOTE: Sycord is a Docker-based deployment platform. Commands here run in a
+ * sandbox for diagnostics/validation ONLY. Actual deployment goes through
+ * Dokploy Docker containers. Do NOT use this for building or installing
+ * dependencies for deployment.
  */
 async function runCommandServerSide(
     projectId: string,
@@ -175,8 +180,18 @@ async function runCommandServerSide(
 ): Promise<string> {
     // Dev servers / long-running watchers don't apply on the server sandbox —
     // there is no live in-app preview. Direct the AI to deploy instead.
+    // Also block npm install/build since deployment is Docker-based.
     if (/\b(run\s+)?(dev|start|serve|preview|watch)\b/.test(command)) {
         return `[SYSTEM] ℹ️ "${command}" is a long-running dev server, which is not used in the Sycord workspace (there is no live in-app preview). Build the project with "npm run build" and use the deploy tool to publish it to sycord.site.`;
+    }
+
+    // Sycord is Docker-based - block npm install/build commands
+    if (/\bnpm\s+(install|ci|run\s+build|run\s+dev)\b/.test(command)) {
+        return `[SYSTEM] ℹ️ Sycord is a Docker-based deployment platform. Do NOT run "${command}" on the VPS. For deployment:
+1. Use save() to push your code to GitHub
+2. Use deploy() to build and deploy via Dokploy Docker containers
+3. Dokploy handles all npm dependency installation and builds inside Docker
+If you need to validate your code, use typeCheck() or lintCheck() instead.`;
     }
 
     ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
@@ -293,14 +308,27 @@ export async function handleSave(): Promise<string> {
 /**
  * Deploy the project to sycord.site via the Dokploy API.
  *
+ * IMPORTANT: This is a Docker-based deployment platform. The AI should NEVER
+ * attempt to run npm install, npm build, or any other VPS-level commands.
+ * Everything is handled through Docker containers managed by Dokploy.
+ *
+ * Deployment Logic (Per-User Project, Per-Deployment Service):
+ * 1. User's Dokploy Project ID is reused across all their deployments
+ * 2. Each new deployment gets its own Application/Service ID under that project
+ * 3. The Dockerfile is auto-generated if missing
+ * 4. Dokploy builds via GitHub source and deploys to Docker
+ *
  * This single call handles EVERYTHING server-side:
  *  - Auto-generates a Dockerfile if one doesn't exist in project pages
- *  - Provisions a Dokploy project (reuses existing per-user project)
- *  - Creates an environment + application configured for Dockerfile build
+ *  - Reuses existing Dokploy project for this user (creates if first time)
+ *  - Creates a NEW application/service for this specific deployment
+ *  - Configures Dockerfile build type (always Docker, never nixpacks/heroku)
  *  - Attaches the GitHub source and triggers the deployment
  *
  * No browser-side file checks or WebContainer — everything runs on the server.
  * Returns the live URL and all provisioned IDs on success.
+ *
+ * IMPORTANT: Always call save() BEFORE deploy() to push code to GitHub first.
  */
 export async function handleDeploy(): Promise<string> {
     const projectId = getHostProjectId();
@@ -823,7 +851,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: 'Deploy the project to sycord.site. Handles EVERYTHING automatically: generates a Dockerfile if missing, creates the Dokploy project/environment/application, configures Docker build type, attaches the GitHub source, and triggers the build. No separate tools needed — just call deploy() when ready. Returns the live URL and all provisioned IDs on success.',
+            description: 'Deploy the project to sycord.site via Dokploy Docker containers. Handles EVERYTHING: generates a Dockerfile if missing, reuses existing user project, creates NEW application/service for this deployment, configures Docker build type (NOT nixpacks/heroku), attaches GitHub source, and triggers the build. IMPORTANT: Always call save() BEFORE deploy(). Project ID is reused per user; Service/Application ID is unique per deployment. Returns the live URL and all provisioned IDs on success.',
             parameters: {
                 type: 'object',
                 properties: {},

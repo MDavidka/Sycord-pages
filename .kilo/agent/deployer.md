@@ -1,27 +1,44 @@
 # Sycord Deployer Architecture (AI Agent Reference)
 
+## CRITICAL: Docker-Based Deployment Only
+
+**Sycord is a Docker-based deployment platform managed by Dokploy. There is NO VPS/SSH/PM2/Nginx deployment.**
+
+### What the AI MUST NOT do:
+- ❌ DO NOT run `npm install`, `npm run build`, `npm run dev`, or any npm/npx commands on a VPS
+- ❌ DO NOT attempt to SSH into servers or run shell commands
+- ❌ DO NOT use PM2, systemd, or init scripts
+- ❌ DO NOT configure nginx, Apache, or reverse proxies manually
+- ❌ DO NOT try to "download dependencies" or "compile code" outside of Docker
+
+### How deployment works:
+- ✅ ALL deployments go through the `deploy()` tool → Dokploy API → Docker containers
+- ✅ Dokploy handles building (via Dockerfile + Git source or direct Docker image)
+- ✅ Traefik handles routing via labels, not manual nginx config
+- ✅ Everything is containerized - the AI never touches the host system
+
 ## Deployment Backend
 
-All deployments go through **Dokploy** — a container-based deployment platform running on the VPS.
-The old SSH/PM2/Nginx runner has been removed.
+All deployments go through **Dokploy** — a container-based deployment platform. The old SSH/PM2/Nginx runner has been removed completely.
 
 ## Traffic Flow
 
 ```
 User opens <appName>.sycord.site
-  → Dokploy Traefik ingress
+  → Dokploy Traefik ingress (reads Docker labels)
     → Docker container running the deployed app
 
-Deploy calls go through the Next.js API routes:
-  Syra AI → /api/workspace/deploy → Dokploy API (localhost:3000/api)
+AI deploy call flow:
+  deploy() → /api/workspace/deploy → Dokploy API (sycord.site/api)
 ```
 
 ## Dokploy API
 
 The Dokploy API uses tRPC-flavoured REST endpoints at `{baseUrl}/api/{resource}.{action}`.
+Base URL: `https://sycord.site/api`
 
 ### Configuration (env vars)
-- `DOKPLOY_API_URL` — base URL (default: `http://localhost:3000/api`)
+- `DOKPLOY_API_URL` — base URL (default: `https://sycord.site/api`)
 - `DOKPLOY_API_KEY` — `x-api-key` header value for authentication
 - `DOKPLOY_SERVER_ID` — optional default server ID
 - `DOKPLOY_ENVIRONMENT_ID` — optional default environment ID
@@ -31,12 +48,10 @@ The Dokploy API uses tRPC-flavoured REST endpoints at `{baseUrl}/api/{resource}.
 - **Client:** `lib/deploy/dokploy-client.ts` — typed API client for all Dokploy endpoints
 - **Route:** `app/api/deploy/dokploy/route.ts` — authenticated GET (list) + POST (all actions)
 - **Deploy route:** `app/api/workspace/deploy/route.ts` — primary deploy() endpoint with auto-provisioning
-- **Debug route:** `app/api/debug/route.ts` — checks Dokploy API health
+- **Debug route:** `app/api/debug/route.ts` — checks Dokploy API health (use `/dubrg` command)
 - **AI tools:** `glovix/lib/tools.ts` — `save`, `deploy`, `createDokployProject`, `createDokployEnvironment`, `listDokployResources`, `manageContainer`, `generateDomain`
 
 ### API Endpoints Available
-
-**Docker (`docker.*`):** `getContainers`, `restartContainer`, `startContainer`, `stopContainer`, `killContainer`, `removeContainer`, `getConfig`, `getContainersByAppNameMatch`, `getContainersByAppLabel`, `getStackContainersByAppName`, `getServiceContainersByAppName`, `uploadFileToContainer`
 
 **Application (`application.*`):** `create`, `one`, `deploy`, `redeploy`, `start`, `stop`, `reload`, `delete`, `markRunning`, `clearDeployments`, `cancelDeployment`, `saveEnvironment`, `saveBuildType`, `saveGithubProvider`, `saveGitProvider`, `saveDockerProvider`, `saveBitbucketProvider`, `saveGiteaProvider`, `saveGitlabProvider`, `disconnectGitProvider`, `readLogs`, `search`
 
@@ -46,115 +61,180 @@ The Dokploy API uses tRPC-flavoured REST endpoints at `{baseUrl}/api/{resource}.
 
 **Domain (`domain.*`):** `create`, `byApplicationId`, `one`, `delete`, `generateDomain`, `update`
 
-### App-facing Route: `/api/deploy/dokploy`
+**Docker (`docker.*`):** `getContainers`, `restartContainer`, `startContainer`, `stopContainer`, `killContainer`, `removeContainer`, `getConfig`, `getContainersByAppNameMatch`, `getContainersByAppLabel`, `getStackContainersByAppName`, `getServiceContainersByAppName`, `uploadFileToContainer`
 
-#### GET — listings
+## Project/Service ID Architecture (Per-User Logic)
+
+### The Key Rule: ONE Project per User, ONE Application per Deployment
+
 ```
-GET /api/deploy/dokploy                          # list all containers
-GET /api/deploy/dokploy?applicationId=abc        # single application detail
-GET /api/deploy/dokploy?appName=my-app           # containers by app name
-GET /api/deploy/dokploy?resource=projects         # list all projects
-GET /api/deploy/dokploy?resource=projects&projectId=abc   # single project
-GET /api/deploy/dokploy?resource=environments&projectId=abc  # environments by project
-GET /api/deploy/dokploy?resource=domains&applicationId=abc   # domains by application
-GET /api/deploy/dokploy?resource=deployments&applicationId=abc # deployments by application
+User Account
+  └── Dokploy Project (same ID for ALL user's deployments)
+        └── Environment (e.g., "production")
+              └── Application/Service (NEW per project/deployment)
+                    └── Docker container(s)
 ```
 
-#### POST — all actions
+### How it works:
+
+1. **Project ID (constant per user):**
+   - Each user has ONE Dokploy project that is created on their first deployment
+   - All subsequent deployments for that user reuse the SAME project
+   - Project ID is stored as `dokployProjectId` on the user's project document
+   - The project name can be the user's business name or "Sycord User - {userId}"
+
+2. **Service/Application ID (unique per deployment/project):**
+   - Each new project deployment gets its OWN application (service) in Dokploy
+   - Stored as `dokployApplicationId` on the project document
+   - Multiple applications can exist under one project (one per deployed app)
+
+3. **Environment:**
+   - The default "production" environment is auto-created with the project
+   - Stored as `dokployEnvironmentId`
+
+### Deployment Resolution Order:
+1. **Project:** Reuse `dokployProjectId` if exists, otherwise create new
+2. **Environment:** Reuse `dokployEnvironmentId` if exists, otherwise fetch or create "production"
+3. **Application:** Reuse `dokployApplicationId` if exists (for this specific project), otherwise create new
+4. **Build Type:** Always `dockerfile` (not nixpacks, heroku_buildpacks, etc.)
+5. **Git Source:** Attach via `saveGithubProvider` or `saveGitProvider`
+6. **Deploy:** Trigger via `application.deploy`
+
+## /dubrg Command (Debug Connection Status)
+
+Use the `/dubrg` slash command to check if Dokploy is properly connected:
+
+The command calls `GET /api/debug` which returns:
+- **`configured`**: Whether `DOKPLOY_API_KEY` is set
+- **`reachable`**: Whether the Dokploy API responds
+- **`apiUrl`**: The configured API URL
+- **`projectsCount`**: Number of projects (indicates successful auth)
+- **`latencyMs`**: API response time
+- **`error`**: Error message if not reachable (e.g., "Invalid API key", "Connection refused")
+
+### Debug Response Examples:
+
+**Connected:**
 ```json
-{ "action": "createProject", "projectName": "My Project", "projectDescription": "Optional" }
-{ "action": "createEnvironment", "environmentName": "staging", "environmentProjectId": "abc" }
-{ "action": "restartContainer", "containerId": "def456" }
-{ "action": "startContainer", "containerId": "def456" }
-{ "action": "stopContainer", "containerId": "def456" }
-{ "action": "killContainer", "containerId": "def456" }
-{ "action": "removeContainer", "containerId": "def456" }
-{ "action": "generateDomain", "appName": "my-app" }
-{ "action": "deploy", "applicationId": "app_123", "syncEnv": true }
-{ "action": "redeploy", "applicationId": "app_123" }
-{ "action": "start", "applicationId": "app_123" }
-{ "action": "stop", "applicationId": "app_123" }
-{ "action": "reload", "applicationId": "app_123", "appName": "my-app" }
-{ "action": "delete", "applicationId": "app_123" }
+{
+  "timestamp": "2024-...",
+  "dokploy": {
+    "configured": true,
+    "reachable": true,
+    "apiUrl": "https://sycord.site/api",
+    "projectsCount": 3,
+    "latencyMs": 45
+  }
+}
 ```
 
-## Auto-provisioning Chain (deploy tool)
-
-The `deploy()` tool (`POST /api/workspace/deploy`) provisions the full Dokploy hierarchy:
-
-1. **Project** — reuse `project.dokployProjectId`, else `POST /project.create`
-2. **Environment** — reuse `project.dokployEnvironmentId`, else `GET /environment.byProjectId`, else `POST /environment.create`
-3. **Application** — reuse `project.dokployApplicationId`, else `POST /application.create`
-4. **Env vars** — `POST /application.saveEnvironment`
-5. **Git source** — `POST /application.saveGithubProvider` or `saveGitProvider`
-6. **Deploy** — `POST /application.deploy`
-
-All ids are persisted on the project document for reuse on subsequent deploys.
+**Not Connected (reason shown):**
+```json
+{
+  "timestamp": "2024-...",
+  "dokploy": {
+    "configured": true,
+    "reachable": false,
+    "apiUrl": "https://sycord.site/api",
+    "projectsCount": 0,
+    "latencyMs": null,
+    "error": "Invalid API key"
+  }
+}
+```
 
 ## AI Tools
 
 | Tool | Description |
 |------|-------------|
-| `save` | Push project files to GitHub (required before deploy) |
-| `deploy` | Deploy project via Dokploy (auto-provisions project/environment/app) |
-| `createDokployProject` | Create a new Dokploy project |
+| `save` | Push project files to GitHub (required BEFORE deploy) |
+| `deploy` | Deploy project via Dokploy (auto-provisions project/environment/app, builds via Docker) |
+| `createDokployProject` | Create a new Dokploy project (rarely needed - deploy() auto-creates) |
 | `createDokployEnvironment` | Create a new environment in a Dokploy project |
 | `listDokployResources` | List projects, environments, containers, deployments, or domains |
 | `manageContainer` | Restart, start, stop, kill, or remove a Docker container |
 | `generateDomain` | Generate a Traefik domain for a Dokploy application |
 
-## /debug Command
+## deploy() Tool Detailed Logic
 
-The `/debug` slash command in the chat pane checks if the Dokploy API is reachable:
-- Shows whether `DOKPLOY_API_KEY` is configured
-- Shows whether the API URL responds
-- Shows project count and latency
-- No SSH/VPS/Cloudflare probing
+The `deploy()` tool (`POST /api/workspace/deploy`) performs this exact sequence:
 
-## Docker Infrastructure Knowledge
+```
+1. INPUT: projectId, GitHub source (owner/repo/branch)
 
-### Docker Socket & Permissions
-Dokploy and the backend run inside Docker but need to manage other containers. Mount the host Docker socket:
-```bash
-sudo chmod 666 /var/run/docker.sock
-docker run -v /var/run/docker.sock:/var/run/docker.sock ...
+2. CHECK: Is Dokploy configured?
+   - No → Return error "Dokploy is not configured"
+
+3. GET USER PROJECT from MongoDB
+   - Find user's project document
+   - Extract: dokployProjectId, dokployEnvironmentId, dokployApplicationId
+
+4. AUTO-GENERATE DOCKERFILE if missing
+   - Create multi-stage Dockerfile for the project type (Next.js, React, etc.)
+   - Save to project pages
+
+5. ENSURE DOKPLOY PROJECT (reuse if exists)
+   - If dokployProjectId exists → skip creation
+   - Else → POST /project.create with user/business name
+   - Save returned projectId to user's project document
+
+6. ENSURE ENVIRONMENT (reuse if exists)
+   - If dokployEnvironmentId exists → skip
+   - Else → GET /environment.byProjectId (look for "production")
+   - If none found → POST /environment.create with name="production"
+   - Save returned environmentId
+
+7. ENSURE APPLICATION/SERVICE (create if not exists for this deployment)
+   - If dokployApplicationId exists → skip creation
+   - Else → POST /application.create with:
+       - name: app name
+       - appName: sanitized slug
+       - environmentId: from step 6
+   - Save returned applicationId
+
+8. CONFIGURE BUILD TYPE (always dockerfile)
+   - POST /application.saveBuildType with:
+       - buildType: "dockerfile"
+       - dockerfile: "Dockerfile"
+       - dockerContextPath: "/"
+
+9. ATTACH GIT SOURCE
+   - POST /application.saveGithubProvider (if GitHub App connected)
+     OR
+   - POST /application.saveGitProvider (if public git URL)
+
+10. SAVE ENV VARS
+    - POST /application.saveEnvironment with env variables
+
+11. TRIGGER DEPLOY
+    - POST /application.deploy
+
+12. SAVE RESULT
+    - Update MongoDB with all IDs
+    - Return: url, projectId, environmentId, applicationId, created flags
 ```
 
-### Isolated Docker Network
-All workspace containers, proxies, and tunnels must run on the same Docker network to resolve each other by container name:
-```bash
-docker network create --subnet=172.18.0.0/16 sycord-net
-docker run --network sycord-net ...
-```
+## Dockerfile Requirements
 
-### Dockerfile Best Practices (auto-generated by `createDockerfile` tool)
+Every deployed application MUST have a Dockerfile. The `deploy()` tool auto-generates one if missing.
 
-1. **npm ci vs npm install**: `npm ci` is faster but crashes if `package-lock.json` is missing. The tool auto-falls back: `(npm ci && npm cache clean --force) || (npm install --no-audit --no-fund --prefer-offline && npm cache clean --force)`
+### Dockerfile Must:
+- Use multi-stage builds (deps → builder → runner)
+- Run as non-root user in runner stage
+- Expose the correct port
+- Set `ENV NODE_ENV=production`
+- Include HEALTHCHECK directive
 
-2. **Non-root user**: Runner stages create a dedicated `appuser:appgroup` non-root user with `chown -R appuser:appgroup /app` before `USER appuser`.
+### Dockerfile Auto-generation:
+The system auto-generates Dockerfiles for:
+- **Next.js**: Multi-stage with standalone output
+- **React/Vite**: Build → nginx static serving
+- **Generic Node.js**: Build → production install
 
-3. **Multi-stage builds**: Separate `deps` → `builder` → `runner` stages for minimal final image size.
+## Important Notes
 
-4. **Cache invalidation**: Docker caches `COPY . .` aggressively. Bumping the version in `package.json` on every save forces cache invalidation.
-
-5. **Layer ordering**: `COPY package*.json` before `COPY . .` so dependency installs are cached unless package.json changes.
-
-6. **Health checks**: All runner stages include `HEALTHCHECK` with wget probes every 30s.
-
-7. **libc6-compat**: Alpine-based `deps` stage installs `libc6-compat` for native module compatibility.
-
-### Dynamic Port Mapping
-Let Docker allocate free host ports to avoid collisions:
-```bash
-docker run -p "0:22" ...  # Docker allocates random host port for container port 22
-docker port <container_name> 22 | cut -d':' -f2  # retrieve allocated port
-```
-
-### TypeScript Crypto Bypass
-When generating SSH keys with `crypto.generateKeyPairSync`, TypeScript's type definitions throw overload errors on `"ed25519"`. Always cast:
-```typescript
-crypto.generateKeyPairSync("ed25519" as any, { ... } as any)
-```
-
-### Dokploy Build Type
-Dokploy applications must be configured to use Dockerfile builds. The `deploy()` flow automatically calls `application.saveBuildType` with `buildType: "dockerfile"` and `dockerfile: "Dockerfile"`.
+1. **Services are ALWAYS Docker type** - No heroku_buildpacks, nixpacks, or other build types
+2. **No VPS commands** - The AI should never try to run `npm install` or similar on the host
+3. **Project is per-user** - One project ID reused for all deployments by the same user
+4. **Service is per-deployment** - Each project/deployment gets its own application ID
+5. **Always save() before deploy()** - GitHub source is required for Dokploy to build
