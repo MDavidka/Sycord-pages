@@ -7,6 +7,7 @@ import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
 import { ObjectId } from "mongodb"
 import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
+import { assignDokployService } from "@/lib/deploy/assign-service"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -267,6 +268,17 @@ export async function POST(request: Request) {
     ensureContainer(newProject, projectIdStr)
       .then((container) => bootstrapContainer(container))
       .catch((err) => console.error("[Project Creation] Container setup failed:", err?.message))
+
+    // Auto-assign a Dokploy service (its own application/service id inside the
+    // one shared Dokploy project) so deploy() can reuse the same id later. This
+    // runs in the background so a slow/unavailable Dokploy never blocks creation.
+    assignDokployService({
+      userId: session.user.id,
+      projectId: projectIdStr,
+      businessName: safeBody.businessName,
+    }).catch((err) =>
+      console.error("[Project Creation] Dokploy service assignment failed:", err?.message),
+    )
 
     // Return the new project. We cast _id to string for JSON serialization compatibility if needed,
     // but Next.js usually handles ObjectId in JSON response or we should stringify it.
