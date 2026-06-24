@@ -318,12 +318,17 @@ export async function handleSave(): Promise<string> {
  * 3. The Dockerfile is auto-generated if missing
  * 4. Dokploy builds via GitHub source and deploys to Docker
  *
- * This single call handles EVERYTHING server-side:
+ * This single call performs three operations server-side:
+ *  1. Set Application Build Type to Dockerfile (/application.saveBuildType)
+ *  2. Create/ensure Application Domain (/domain.create) with host <appName>.sycord.site
+ *  3. Trigger Deployment (/application.deploy) to build and serve the Docker container
+ *
+ * Also handles:
  *  - Auto-generates a Dockerfile if one doesn't exist in project pages
  *  - Reuses existing Dokploy project for this user (creates if first time)
  *  - Creates a NEW application/service for this specific deployment
  *  - Configures Dockerfile build type (always Docker, never nixpacks/heroku)
- *  - Attaches the GitHub source and triggers the deployment
+ *  - Attaches the GitHub source before triggering the deployment
  *
  * No browser-side file checks or WebContainer — everything runs on the server.
  * Returns the live URL and all provisioned IDs on success.
@@ -851,7 +856,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: 'Deploy the project to sycord.site via Dokploy Docker containers. Handles EVERYTHING: generates a Dockerfile if missing, reuses existing user project, creates NEW application/service for this deployment, configures Docker build type (NOT nixpacks/heroku), attaches GitHub source, and triggers the build. IMPORTANT: Always call save() BEFORE deploy(). Project ID is reused per user; Service/Application ID is unique per deployment. Returns the live URL and all provisioned IDs on success.',
+            description: "Deploy the project to sycord.site via Dokploy Docker containers. Performs three operations: (1) sets Application Build Type to Dockerfile, (2) creates domain <appName>.sycord.site with HTTPS (Let's Encrypt), (3) triggers deployment to build and serve the Docker container. Also auto-generates Dockerfile if missing, reuses existing user project, creates new application/service per deployment, configures Docker build type (NOT nixpacks/heroku), and attaches GitHub source. IMPORTANT: Always call save() BEFORE deploy(). Project ID is reused per user; Application ID is unique per deployment. Returns the live URL and all provisioned IDs on success.",
             parameters: {
                 type: 'object',
                 properties: {},
