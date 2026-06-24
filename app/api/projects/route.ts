@@ -7,6 +7,7 @@ import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
 import { ObjectId } from "mongodb"
 import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
+import { ensureProjectAndEnvironment, application, toDokployAppName, isDokployConfigured } from "@/lib/deploy/dokploy-client"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -267,6 +268,46 @@ export async function POST(request: Request) {
     ensureContainer(newProject, projectIdStr)
       .then((container) => bootstrapContainer(container))
       .catch((err) => console.error("[Project Creation] Container setup failed:", err?.message))
+
+    if (isDokployConfigured()) {
+      const dokployAppName = toDokployAppName(safeBody.businessName || `project-${projectIdStr}`, projectIdStr)
+      ensureProjectAndEnvironment({
+        projectName: toDokployAppName(safeBody.businessName || dokployAppName, projectIdStr),
+        description: safeBody.businessDescription || "Auto-created Dokploy project",
+        existingProjectId: null
+      }, []).then(async (ensured) => {
+        if (ensured.ok && ensured.environmentId) {
+          const createResult = await application.create({
+            name: safeBody.businessName || dokployAppName,
+            appName: dokployAppName,
+            environmentId: ensured.environmentId,
+          })
+          if (createResult.ok) {
+            const appId = (createResult.data as any)?.id || (createResult.data as any)?.applicationId || null;
+            if (appId) {
+              await db.collection("users").updateOne(
+                { id: session.user.id, "projects._id": projectId },
+                {
+                  $set: {
+                    "projects.$.dokployProjectId": ensured.projectId,
+                    "projects.$.dokployEnvironmentId": ensured.environmentId,
+                    "projects.$.dokployApplicationId": appId,
+                    "projects.$.dokployAppName": dokployAppName,
+                    "projects.$.deploymentMode": "dokploy",
+                  } as any
+                }
+              )
+              // mark as docker type service
+              await application.saveBuildType({
+                applicationId: appId,
+                buildType: "dockerfile",
+                dockerfile: "Dockerfile"
+              })
+            }
+          }
+        }
+      }).catch((err) => console.error("[Project Creation] Dokploy setup failed:", err?.message))
+    }
 
     // Return the new project. We cast _id to string for JSON serialization compatibility if needed,
     // but Next.js usually handles ObjectId in JSON response or we should stringify it.

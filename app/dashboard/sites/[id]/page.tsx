@@ -2773,6 +2773,47 @@ export default function SiteSettingsPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <Card className="bg-card/50 backdrop-blur-sm border-white/10">
+                  <CardHeader>
+                    <CardTitle>Deployment Debug Info</CardTitle>
+                    <CardDescription>Advanced deployment configuration and service IDs.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Dokploy Project ID</Label>
+                      <Input
+                        readOnly
+                        value={project?.dokployProjectId || "Not deployed yet"}
+                        className="bg-black/20 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Dokploy Environment ID</Label>
+                      <Input
+                        readOnly
+                        value={project?.dokployEnvironmentId || "Not deployed yet"}
+                        className="bg-black/20 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Dokploy Application ID</Label>
+                      <Input
+                        readOnly
+                        value={project?.dokployApplicationId || "Not deployed yet"}
+                        className="bg-black/20 font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Deployment Type / Mode</Label>
+                      <Input
+                        readOnly
+                        value={project?.deploymentMode === "dokploy" ? "Docker (Dockerfile)" : (project?.deploymentMode || "docker")}
+                        className="bg-black/20 font-mono text-xs"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
