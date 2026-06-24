@@ -38,7 +38,7 @@ import {
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen w-full bg-[#18191B] text-white">
+    <main className="min-h-screen w-full bg-[#101010] text-white">
       <Hero />
       <TrustStrip />
       <HowItWorks />
@@ -59,7 +59,7 @@ function Hero() {
     <section
       className="relative w-full overflow-hidden"
       style={{
-        backgroundColor: "#18191B",
+        backgroundColor: "#101010",
         backgroundImage:
           "radial-gradient(rgba(255,255,255,0.07) 1.6px, transparent 1.6px)",
         backgroundSize: "38px 38px",
@@ -75,19 +75,19 @@ function Hero() {
             width={56}
             height={56}
             priority
-            className="h-12 w-12 opacity-90 sm:h-14 sm:w-14"
+            className="h-9 w-9 opacity-90 sm:h-10 sm:w-10"
           />
         </Link>
 
         <Link
           href="/dashboard"
           aria-label="Open dashboard"
-          className="flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#1d1e21] px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#212327]"
+          className="flex items-center gap-1.5 rounded-2xl border border-[#2a2c30] bg-[#101010] px-2.5 py-1.5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#1a1a1a]"
         >
-          <span className="hidden text-sm font-medium text-[#A7AAB0] sm:inline">
+          <span className="hidden text-xs font-medium text-[#A7AAB0] sm:inline">
             Dashboard
           </span>
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-[#0f1012] text-sm font-semibold text-white">
+          <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-[#101010] text-xs font-semibold text-white">
             M
           </span>
         </Link>
@@ -125,7 +125,7 @@ function Hero() {
           </Link>
           <Link
             href="#showcase"
-            className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#1d1e21] px-5 py-3 text-sm font-semibold text-[#E5E7EB] transition-colors hover:bg-[#212327]"
+            className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#101010] px-5 py-3 text-sm font-semibold text-[#E5E7EB] transition-colors hover:bg-[#1a1a1a]"
           >
             See demo
           </Link>
@@ -143,19 +143,19 @@ function Hero() {
 function HeroPreview() {
   return (
     <div
-      className="relative w-full overflow-hidden rounded-t-[36px] border border-b-0 border-[#2a2c30] bg-[#1b1c1f] p-5 shadow-[0_-30px_80px_-40px_rgba(0,0,0,0.8)] sm:rounded-t-[55px] sm:p-8"
+      className="relative w-full overflow-hidden rounded-t-[36px] border border-b-0 border-[#2a2c30] bg-[#101010] p-5 shadow-[0_-30px_80px_-40px_rgba(0,0,0,0.8)] sm:rounded-t-[55px] sm:p-8"
       style={{ minHeight: 460 }}
     >
       {/* Top toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#0f1012]">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#101010]">
             <Code2 className="h-3.5 w-3.5 text-white/80" />
           </div>
           <span className="text-sm font-semibold text-white">Editor</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-[#2a2c30] bg-[#0f1012] px-2.5 py-1 text-[11px] text-[#A7AAB0] sm:inline-flex">
+          <span className="hidden items-center gap-1.5 rounded-full border border-[#2a2c30] bg-[#101010] px-2.5 py-1 text-[11px] text-[#A7AAB0] sm:inline-flex">
             <MousePointerClick className="h-3 w-3" />
             Drag &amp; drop
           </span>
@@ -185,7 +185,7 @@ function HeroPreview() {
               className={`flex items-center justify-between rounded-xl border border-[#2a2c30] px-3 py-2.5 text-xs font-medium ${
                 active
                   ? "bg-white text-black"
-                  : "bg-[#15171a] text-[#E5E7EB]"
+                  : "bg-[#101010] text-[#E5E7EB]"
               }`}
             >
               {label}
@@ -195,19 +195,19 @@ function HeroPreview() {
         </div>
 
         {/* Browser-like preview */}
-        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#15171a] sm:col-span-8">
+        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#101010] sm:col-span-8">
           <div className="flex items-center justify-between border-b border-[#2a2c30] px-4 py-2.5">
             <div className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
               <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
               <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
             </div>
-            <div className="rounded-md bg-[#0f1012] px-2 py-0.5 text-[11px] text-[#A7AAB0]">
+            <div className="rounded-md bg-[#101010] px-2 py-0.5 text-[11px] text-[#A7AAB0]">
               myportfolio.sycord.app
             </div>
             <div className="w-10" />
           </div>
-          <div className="aspect-[16/10] w-full bg-gradient-to-br from-[#1b1d20] to-[#0f1012] p-5">
+          <div className="aspect-[16/10] w-full bg-gradient-to-br from-[#101010] to-[#101010] p-5">
             <div className="h-2.5 w-28 rounded bg-white/80" />
             <div className="mt-2 h-1.5 w-44 rounded bg-white/30" />
             <div className="mt-5 grid grid-cols-3 gap-2">
@@ -222,13 +222,13 @@ function HeroPreview() {
 
       {/* Bottom row: hosting status + analytics */}
       <div className="mt-4 grid grid-cols-12 gap-4">
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#15171a] p-4 lg:col-span-7">
+        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#101010] p-4 lg:col-span-7">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
               <Server className="h-3.5 w-3.5" />
               Hosting
             </div>
-            <span className="rounded-full border border-[#2a2c30] bg-[#0f1012] px-2 py-0.5 text-[11px] text-emerald-300">
+            <span className="rounded-full border border-[#2a2c30] bg-[#101010] px-2 py-0.5 text-[11px] text-emerald-300">
               Healthy
             </span>
           </div>
@@ -238,7 +238,7 @@ function HeroPreview() {
             <MetricBlock label="Cache hit" value="98%" />
           </div>
         </div>
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#15171a] p-4 lg:col-span-5">
+        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#101010] p-4 lg:col-span-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
               <TrendingUp className="h-3.5 w-3.5" />
@@ -265,7 +265,7 @@ function StatusCard({
   tag: string
 }) {
   return (
-    <div className="rounded-2xl border border-[#2a2c30] bg-[#15171a] p-3">
+    <div className="rounded-2xl border border-[#2a2c30] bg-[#101010] p-3">
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#A7AAB0]">
         {icon}
         {title}
@@ -280,7 +280,7 @@ function StatusCard({
 
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[#2a2c30] bg-[#0f1012] p-3">
+    <div className="rounded-xl border border-[#2a2c30] bg-[#101010] p-3">
       <div className="text-[11px] uppercase tracking-wider text-[#A7AAB0]">
         {label}
       </div>
@@ -333,7 +333,7 @@ function TrustStrip() {
         {items.map((it) => (
           <div
             key={it.label}
-            className="inline-flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#1d1e21] px-3.5 py-2 text-xs font-medium text-[#E5E7EB] sm:text-sm"
+            className="inline-flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#101010] px-3.5 py-2 text-xs font-medium text-[#E5E7EB] sm:text-sm"
           >
             <span className="text-[#A7AAB0]">{it.icon}</span>
             {it.label}
@@ -377,10 +377,10 @@ function HowItWorks() {
         {steps.map((s) => (
           <div
             key={s.n}
-            className="rounded-3xl border border-[#2a2c30] bg-[#1d1e21] p-6 transition-colors hover:bg-[#212327]"
+            className="rounded-3xl border border-[#2a2c30] bg-[#101010] p-6 transition-colors hover:bg-[#1a1a1a]"
           >
             <div className="flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#0f1012] text-white">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#101010] text-white">
                 {s.icon}
               </span>
               <span className="text-xs font-semibold tracking-widest text-[#A7AAB0]">
@@ -506,8 +506,8 @@ function FeatureCard({
   body: string
 }) {
   return (
-    <div className="rounded-3xl border border-[#2a2c30] bg-[#1d1e21] p-6 transition-colors hover:bg-[#212327]">
-      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#0f1012] text-white">
+    <div className="rounded-3xl border border-[#2a2c30] bg-[#101010] p-6 transition-colors hover:bg-[#1a1a1a]">
+      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#101010] text-white">
         {icon}
       </span>
       <h3 className="mt-5 text-base font-semibold text-white">{title}</h3>
@@ -530,13 +530,13 @@ function ProductShowcase() {
       />
       <div className="mt-10 grid gap-4 lg:grid-cols-2">
         {/* Editor preview */}
-        <div className="rounded-3xl border border-[#2a2c30] bg-[#1d1e21] p-5">
+        <div className="rounded-3xl border border-[#2a2c30] bg-[#101010] p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
               <Code2 className="h-3.5 w-3.5" />
               Editor
             </div>
-            <span className="rounded-full border border-[#2a2c30] bg-[#0f1012] px-2 py-0.5 text-[11px] text-[#A7AAB0]">
+            <span className="rounded-full border border-[#2a2c30] bg-[#101010] px-2 py-0.5 text-[11px] text-[#A7AAB0]">
               Drag &amp; drop
             </span>
           </div>
@@ -548,7 +548,7 @@ function ProductShowcase() {
                   className={`flex items-center justify-between rounded-xl border border-[#2a2c30] px-3 py-2 text-xs ${
                     i === 0
                       ? "bg-white text-black"
-                      : "bg-[#0f1012] text-[#E5E7EB]"
+                      : "bg-[#101010] text-[#E5E7EB]"
                   }`}
                 >
                   {s}
@@ -556,7 +556,7 @@ function ProductShowcase() {
                 </div>
               ))}
             </div>
-            <div className="col-span-8 rounded-2xl border border-[#2a2c30] bg-[#0f1012] p-4">
+            <div className="col-span-8 rounded-2xl border border-[#2a2c30] bg-[#101010] p-4">
               <div className="h-2 w-32 rounded bg-white/80" />
               <div className="mt-2 h-1.5 w-44 rounded bg-white/30" />
               <div className="mt-4 grid grid-cols-2 gap-2">
@@ -580,7 +580,7 @@ function ProductShowcase() {
         </div>
 
         {/* Hosting / dashboard panel */}
-        <div className="rounded-3xl border border-[#2a2c30] bg-[#1d1e21] p-5">
+        <div className="rounded-3xl border border-[#2a2c30] bg-[#101010] p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
               <Server className="h-3.5 w-3.5" />
@@ -612,7 +612,7 @@ function ProductShowcase() {
             <PanelStat label="Visitors" value="12.4k" suffix="+18%" />
           </div>
 
-          <div className="mt-4 rounded-2xl border border-[#2a2c30] bg-[#0f1012] p-4">
+          <div className="mt-4 rounded-2xl border border-[#2a2c30] bg-[#101010] p-4">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold text-white">
                 Domain status
@@ -659,7 +659,7 @@ function PanelStat({
   accent?: "emerald"
 }) {
   return (
-    <div className="rounded-2xl border border-[#2a2c30] bg-[#0f1012] p-3">
+    <div className="rounded-2xl border border-[#2a2c30] bg-[#101010] p-3">
       <div className="text-[11px] uppercase tracking-wider text-[#A7AAB0]">
         {label}
       </div>
@@ -700,7 +700,7 @@ function Templates() {
         {items.map((t) => (
           <div
             key={t.label}
-            className="group relative overflow-hidden rounded-3xl border border-[#2a2c30] bg-[#1d1e21] p-5 transition-colors hover:bg-[#212327]"
+            className="group relative overflow-hidden rounded-3xl border border-[#2a2c30] bg-[#101010] p-5 transition-colors hover:bg-[#1a1a1a]"
           >
             <div
               className={`aspect-[16/9] w-full rounded-2xl border border-[#2a2c30] bg-gradient-to-br ${t.hue}`}
@@ -710,7 +710,7 @@ function Templates() {
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/40 text-white">
                     {t.icon}
                   </span>
-                  <span className="rounded-full border border-[#2a2c30] bg-[#0f1012] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[#A7AAB0]">
+                  <span className="rounded-full border border-[#2a2c30] bg-[#101010] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[#A7AAB0]">
                     Template
                   </span>
                 </div>
@@ -793,14 +793,14 @@ function Pricing() {
             key={p.name}
             className={`flex flex-col rounded-3xl border p-6 transition-colors ${
               p.highlighted
-                ? "border-white/20 bg-[#212327] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]"
-                : "border-[#2a2c30] bg-[#1d1e21] hover:bg-[#212327]"
+                ? "border-white/20 bg-[#101010] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]"
+                : "border-[#2a2c30] bg-[#101010] hover:bg-[#1a1a1a]"
             }`}
           >
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-white">{p.name}</h3>
               {p.highlighted ? (
-                <span className="rounded-full border border-[#2a2c30] bg-[#0f1012] px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">
+                <span className="rounded-full border border-[#2a2c30] bg-[#101010] px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">
                   Popular
                 </span>
               ) : null}
@@ -825,7 +825,7 @@ function Pricing() {
               className={`mt-6 inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
                 p.highlighted
                   ? "bg-white text-black hover:bg-white/90"
-                  : "border border-[#2a2c30] bg-[#0f1012] text-white hover:bg-[#15171a]"
+                  : "border border-[#2a2c30] bg-[#101010] text-white hover:bg-[#1a1a1a]"
               }`}
             >
               {p.cta}
@@ -868,7 +868,7 @@ function FAQ() {
         title="Frequently asked questions"
         subtitle="Everything you need to know to get started."
       />
-      <div className="mt-8 rounded-3xl border border-[#2a2c30] bg-[#1d1e21]">
+      <div className="mt-8 rounded-3xl border border-[#2a2c30] bg-[#101010]">
         <Accordion type="single" collapsible className="w-full">
           {faqs.map((f, i) => (
             <AccordionItem
@@ -897,7 +897,7 @@ function FinalCTA() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <div
-        className="overflow-hidden rounded-[36px] border border-[#2a2c30] bg-[#1d1e21] p-10 text-center sm:rounded-[55px] sm:p-16"
+        className="overflow-hidden rounded-[36px] border border-[#2a2c30] bg-[#101010] p-10 text-center sm:rounded-[55px] sm:p-16"
         style={{
           backgroundImage:
             "radial-gradient(rgba(255,255,255,0.05) 1.4px, transparent 1.4px)",
@@ -923,7 +923,7 @@ function FinalCTA() {
           </Link>
           <Link
             href="#showcase"
-            className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#0f1012] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#15171a]"
+            className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#101010] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1a1a1a]"
           >
             See demo
           </Link>
@@ -972,7 +972,7 @@ function Footer() {
   ]
   return (
     <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:px-8 sm:mt-32">
-      <div className="rounded-3xl border border-[#2a2c30] bg-[#1d1e21] p-8 sm:p-10">
+      <div className="rounded-3xl border border-[#2a2c30] bg-[#101010] p-8 sm:p-10">
         <div className="grid gap-8 lg:grid-cols-5">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2">
@@ -1039,7 +1039,7 @@ function SectionHeading({
 }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
-      <span className="inline-flex items-center rounded-full border border-[#2a2c30] bg-[#1d1e21] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#A7AAB0]">
+      <span className="inline-flex items-center rounded-full border border-[#2a2c30] bg-[#101010] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#A7AAB0]">
         {eyebrow}
       </span>
       <h2

@@ -130,7 +130,7 @@ export default function BusinessReportPage() {
       `}</style>
 
       {/* ── Screen toolbar ── */}
-      <div className="no-print sticky top-0 z-50 bg-[#18191B] border-b border-white/10 px-4 py-2.5 flex items-center justify-between gap-2">
+      <div className="no-print sticky top-0 z-50 bg-[#101010] border-b border-white/10 px-4 py-2.5 flex items-center justify-between gap-2">
         <Link href="/" className="flex items-center gap-2 flex-shrink-0">
           <Image src="/logo.png" alt="Sycord" width={22} height={22} className="opacity-90" />
           <span className="text-white font-bold text-sm tracking-tight">Sycord</span>
@@ -151,7 +151,7 @@ export default function BusinessReportPage() {
           )}
           <Button
             onClick={() => window.print()}
-            className="bg-white text-[#18191B] hover:bg-white/90 text-xs font-semibold px-4 h-8 rounded-full flex items-center gap-1.5 flex-shrink-0"
+            className="bg-white text-[#101010] hover:bg-white/90 text-xs font-semibold px-4 h-8 rounded-full flex items-center gap-1.5 flex-shrink-0"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export PDF</span>

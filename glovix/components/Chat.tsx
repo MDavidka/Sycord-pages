@@ -1440,7 +1440,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     };
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#101010]' : 'bg-white'}`}>
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -1456,7 +1456,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
                         />
                         <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#101010] via-[#101010]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
                         />
                     </div>
 

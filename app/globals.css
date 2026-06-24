@@ -6,7 +6,7 @@
 
 :root {
   /* Dark theme enforced as default */
-  --background: #18191B;
+  --background: #101010;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.145 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -42,7 +42,7 @@
 }
 
 .dark {
-  --background: #18191B;
+  --background: #101010;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.145 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -126,12 +126,12 @@
      fills the whole viewport, including the device "unsafe" areas (notch /
      status bar / home indicator) and the iOS overscroll/rubber-band region. */
   html {
-    background-color: #18191B;
+    background-color: #101010;
     color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground;
-    background-color: #18191B;
+    background-color: #101010;
     min-height: 100dvh;
     /* Avoid a white flash / mismatched color when content bounces past edges */
     overscroll-behavior: none;
@@ -143,7 +143,7 @@
    so content stays clear of the notch & home indicator while the background
    color still extends edge-to-edge underneath them. */
 .safe-area-bg {
-  background-color: #18191B;
+  background-color: #101010;
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);

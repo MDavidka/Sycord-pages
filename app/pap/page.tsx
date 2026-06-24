@@ -8,9 +8,9 @@ export const metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <div className="min-h-screen bg-[#18191B] flex flex-col items-center overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-[#101010] flex flex-col items-center overflow-x-hidden font-sans">
       {/* Header */}
-      <header className="w-full px-4 md:px-8 py-4 md:py-6 flex items-center justify-between z-20 sticky top-0 bg-[#18191B]/95 backdrop-blur-sm border-b border-white/5">
+      <header className="w-full px-4 md:px-8 py-4 md:py-6 flex items-center justify-between z-20 sticky top-0 bg-[#101010]/95 backdrop-blur-sm border-b border-white/5">
         <Link href="/" className="flex items-center gap-2 md:gap-3">
           <Image src="/logo.png" alt="Sycord Logo" width={28} height={28} className="opacity-90" />
           <span className="text-base md:text-xl font-bold text-white tracking-tight">Sycord</span>
