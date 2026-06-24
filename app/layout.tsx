@@ -13,8 +13,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="bg-[#101010] dark">
-      <body className={`${inter.className} font-sans antialiased bg-[#101010]`}>
+    <html lang="en" suppressHydrationWarning className="bg-[#18191B] dark">
+      <body className={`${inter.className} font-sans antialiased bg-[#18191B]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
           <AuthProvider>
             {children}
@@ -45,5 +45,5 @@ export const viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover' as const,
-  themeColor: '#101010',
+  themeColor: '#18191B',
 };

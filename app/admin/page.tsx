@@ -437,9 +437,9 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
   return (
-    <div className="min-h-screen bg-[#101010]">
+    <div className="min-h-screen bg-[#18191B]">
       {/* Header */}
-      <header className="border-b border-white/5 sticky top-0 bg-[#101010]/95 backdrop-blur-xl z-50">
+      <header className="border-b border-white/5 sticky top-0 bg-[#18191B]/95 backdrop-blur-xl z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-4 md:gap-6">
             <Link href="/dashboard" className="flex items-center gap-2">

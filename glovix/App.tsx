@@ -101,7 +101,7 @@ function ChatPage() {
 
     if (accessDenied) {
         return (
-            <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#101010] p-4">
+            <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#18191B] p-4">
                 <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
                 <p className="text-[#a3a3a3] mb-6">You don't have permission to view this chat.</p>
                 <button
@@ -151,7 +151,7 @@ function AppContent() {
 
     if (loading) {
         return (
-            <div className={`h-screen w-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#101010]' : 'bg-white'}`}>
+            <div className={`h-screen w-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
                 <div className={`text-xl tracking-widest font-light ${isDark ? 'text-white' : 'text-gray-900'}`}>
                     Syra
                 </div>

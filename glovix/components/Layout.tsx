@@ -211,7 +211,7 @@ export function Layout() {
     }, [updateThumb]);
 
     return (
-        <div className={`h-screen w-screen flex flex-col overflow-hidden ${isDark ? 'bg-[#101010] text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'}`}>
+        <div className={`h-screen w-screen flex flex-col overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'}`}>
             {/* Settings Modal */}
             {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
@@ -332,7 +332,7 @@ export function Layout() {
                 </div>
 
                 {/* Chat content block */}
-                <div className={`flex-1 flex flex-col overflow-hidden rounded-xl border ${isDark ? 'bg-[#101010] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
+                <div className={`flex-1 flex flex-col overflow-hidden rounded-xl border ${isDark ? 'bg-[#18191B] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
                     <Chat scrollRef={chatScrollRef} onScroll={handleChatScroll} />
                 </div>
             </div>

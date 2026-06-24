@@ -220,7 +220,7 @@ function drawLetterhead(
 
   ctx.drawImage(logoBmp, PAGE_LEFT, y, LOGO_SIZE, LOGO_SIZE)
   ctx.font = "bold 16px Inter, system-ui, sans-serif"
-  ctx.fillStyle = "#101010"
+  ctx.fillStyle = "#18191B"
   ctx.textBaseline = "middle"
   ctx.fillText("Sycord", PAGE_LEFT + LOGO_SIZE + HEADER_GAP, y + LOGO_SIZE / 2)
   ctx.textBaseline = "alphabetic"
@@ -267,7 +267,7 @@ function drawPageFooter(
 
   /* Name and title below signature */
   ctx.font = "bold 8px Inter, system-ui, sans-serif"
-  ctx.fillStyle = "#101010"
+  ctx.fillStyle = "#18191B"
   ctx.fillText(SIGNER_NAME, nameX, footerY + 38)
 
   ctx.font = "8px Inter, system-ui, sans-serif"
@@ -299,7 +299,7 @@ function drawBlock(
   switch (block.type) {
     case "title": {
       ctx.font = "bold 20px Inter, system-ui, sans-serif"
-      ctx.fillStyle = "#101010"
+      ctx.fillStyle = "#18191B"
       ctx.fillText("Általános Szerződési Feltételek", PAGE_LEFT, y + 16)
       y += 28
 
@@ -311,7 +311,7 @@ function drawBlock(
     }
     case "section-title": {
       ctx.font = sectionTitleFont
-      ctx.fillStyle = "#101010"
+      ctx.fillStyle = "#18191B"
       ctx.fillText(block.text!, PAGE_LEFT, y + 14)
       y += 18 + 8
       break

@@ -8,7 +8,7 @@ import { ArrowLeft, Globe, Shield, Zap } from "lucide-react"
 export default function LoginForm() {
   return (
     <main
-      className="relative min-h-screen w-full overflow-hidden bg-[#101010] text-white"
+      className="relative min-h-screen w-full overflow-hidden bg-[#18191B] text-white"
       style={{
         backgroundImage:
           "radial-gradient(rgba(255,255,255,0.07) 1.6px, transparent 1.6px)",
@@ -31,7 +31,7 @@ export default function LoginForm() {
 
         <Link
           href="/"
-          className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#101010] px-2.5 py-1.5 text-xs font-medium text-[#A7AAB0] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#1a1a1a] hover:text-white"
+          className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-2.5 py-1.5 text-xs font-medium text-[#A7AAB0] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#212327] hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Vissza a főoldalra</span>
@@ -44,10 +44,10 @@ export default function LoginForm() {
         <div className="flex items-start justify-center lg:items-center">
           <div className="w-full max-w-md">
             <div
-              className="rounded-3xl border border-[#2a2c30] bg-[#101010] p-6 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_30px_80px_-40px_rgba(0,0,0,0.8)] sm:p-8"
+              className="rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_30px_80px_-40px_rgba(0,0,0,0.8)] sm:p-8"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#101010]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#18191B]">
                   <Image
                     src="/logo.png"
                     alt="Sycord"
@@ -182,8 +182,8 @@ function FeatureRow({
   desc: string
 }) {
   return (
-    <li className="flex items-start gap-4 rounded-2xl border border-[#2a2c30] bg-[#101010] p-4">
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#101010] text-white">
+    <li className="flex items-start gap-4 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4">
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#18191B] text-white">
         {icon}
       </div>
       <div>

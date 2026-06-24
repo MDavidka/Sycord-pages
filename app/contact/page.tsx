@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button"
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-[#101010] flex flex-col items-center font-sans">
+    <div className="min-h-screen bg-[#18191B] flex flex-col items-center font-sans">
       {/* Header */}
-      <header className="w-full px-4 md:px-8 py-4 md:py-6 flex items-center justify-between sticky top-0 bg-[#101010]/95 backdrop-blur-sm border-b border-white/5 z-20">
+      <header className="w-full px-4 md:px-8 py-4 md:py-6 flex items-center justify-between sticky top-0 bg-[#18191B]/95 backdrop-blur-sm border-b border-white/5 z-20">
         <Link href="/" className="flex items-center gap-2 md:gap-3">
           <Image src="/logo.png" alt="Sycord Logo" width={28} height={28} className="opacity-90" />
           <span className="text-base md:text-xl font-bold text-white tracking-tight">Sycord</span>
@@ -87,7 +87,7 @@ export default function ContactPage() {
             <p className="text-[#8A8E91] text-sm mb-6 max-w-md mx-auto">
               Sign up for free and create your first website in under 5 minutes.
             </p>
-            <Button asChild className="bg-white text-[#101010] hover:bg-white/90 font-semibold px-8 h-11 rounded-full">
+            <Button asChild className="bg-white text-[#18191B] hover:bg-white/90 font-semibold px-8 h-11 rounded-full">
               <Link href="/login">Get Started Free</Link>
             </Button>
           </div>

@@ -1295,7 +1295,7 @@ export default function SiteSettingsPage() {
   return (
     <div 
       className="flex h-[100dvh] overflow-hidden relative"
-      style={{ backgroundColor: "#101010" }}
+      style={{ backgroundColor: "#18191B" }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -1358,7 +1358,7 @@ export default function SiteSettingsPage() {
         animate={{ x: isSidebarOpen ? "70%" : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.9 }}
         style={{
-          backgroundColor: "#101010",
+          backgroundColor: "#18191B",
           overflow: "hidden",
         }}
       >
