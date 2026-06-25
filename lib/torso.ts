@@ -2,9 +2,10 @@
  * Torso HTTP API client — a drop-in replacement for the MongoDB clientPromise.
  *
  * Environment:
- *   TORSO_URL    — Torso base URL, e.g.  https://api.torso.io/v1
- *   TORSO_TOKEN  — Bearer token for authentication
- *   TORSO_DB     — Database name (defaults to "sycord")
+ *   TORSO_URL      — Torso base URL, e.g. https://api.torso.io
+ *   TORSO_TOKEN    — Bearer token for authentication
+ *   TORSO_DB       — Database name (defaults to "sycord")
+ *   TORSO_API_PATH — API prefix (defaults to /api/databases; set /api/v1/databases if needed)
  *
  * The exported `torsoPromise` mimics the MongoDB driver API surface so that
  * existing route files can switch from:
@@ -14,21 +15,24 @@
  * with zero changes to the call sites (db.collection().findOne, etc.).
  *
  * Operations implemented:
- *   findOne    → GET  /collections/:name/items?id_field=:value
- *   find       → GET  /collections/:name/items (query params for filter)
- *   updateOne  → PUT  /collections/:name/items/:id  or  POST /collections/:name/items (upsert)
- *   insertOne  → POST /collections/:name/items
- *   deleteOne → DELETE /collections/:name/items/:id
- *   deleteMany → POST /collections/:name/items/bulk-delete
+ *   findOne    → GET  /api/databases/:db/collections/:name/items?id_field=:value
+ *   find       → GET  /api/databases/:db/collections/:name/items
+ *   updateOne  → PUT  /api/databases/:db/collections/:name/items/:id  or  POST (upsert)
+ *   insertOne  → POST /api/databases/:db/collections/:name/items
+ *   deleteOne  → DELETE /api/databases/:db/collections/:name/items/:id
+ *   deleteMany → POST /api/databases/:db/collections/:name/items/bulk-delete
  *
  * Projection is simulated client-side (field selection on the returned object).
- * $push / $pull / $setOnInsert on embedded arrays are handled by the
- * server-side Torso rules.
+ * $push / $pull / $setOnInsert on embedded arrays are handled via read-modify-write.
+ * The Torso internal ID (_tid) is preserved for update/delete operations.
  */
 
 const TORSO_URL = process.env.TORSO_URL?.replace(/\/$/, "");
 const TORSO_TOKEN = process.env.TORSO_TOKEN;
 const TORSO_DB = process.env.TORSO_DB || "sycord";
+// API path prefix — Torso uses /api/databases/:db as the base path.
+// Set TORSO_API_PATH env var to override if needed (e.g. /api/v1/databases for v1 API)
+const TORSO_API_PREFIX = process.env.TORSO_API_PATH || "/api/databases";
 
 if (!TORSO_URL || !TORSO_TOKEN) {
   console.warn(
@@ -56,7 +60,9 @@ async function torsoFetch<T = unknown>(
     );
   }
 
-  const url = `${TORSO_URL}/api/databases/${TORSO_DB}${path}`;
+  // Build full URL: base + api path + db + collection path
+  // e.g. https://api.torso.io/api/databases/sycord/collections/users/items?id=xxx
+  const url = `${TORSO_URL}${TORSO_API_PREFIX}/${TORSO_DB}${path}`;
   const { signal } = options;
 
   const res = await fetch(url, {
@@ -80,7 +86,7 @@ async function torsoFetch<T = unknown>(
   const text = await res.text().catch(() => "");
 
   if (!res.ok) {
-    throw new Error(`Torso API error ${res.status} on ${options.method || "GET"} ${path}: ${text.slice(0, 200)}`);
+    throw new Error(`Torso API error ${res.status} on ${options.method || "GET"} ${url}: ${text.slice(0, 200)}`);
   }
 
   if (!text.trim()) {
@@ -91,7 +97,7 @@ async function torsoFetch<T = unknown>(
     return JSON.parse(text) as T;
   } catch {
     // Torso may return non-JSON on some endpoints; return empty object
-    console.warn(`[torso] Non-JSON response on ${path}:`, text.slice(0, 100));
+    console.warn(`[torso] Non-JSON response on ${options.method || "GET"} ${url}:`, text.slice(0, 100));
     return {} as T;
   }
 }
@@ -100,15 +106,24 @@ async function torsoFetch<T = unknown>(
 // Torso REST → MongoDB-like result shape
 // ---------------------------------------------------------------------------
 
-/** Strip internal Torso fields (_tid, _rev, etc.) from a returned item. */
+/** Strip internal Torso fields (_rev, _ts) from a returned item. Preserve _tid for updates. */
 function cleanItem(item: Record<string, unknown>): Record<string, unknown> {
   if (!item || typeof item !== "object") return item;
   const cleaned: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(item)) {
-    if (k === "_tid" || k === "_rev" || k === "_ts") continue;
+    // Keep _tid — it's needed for update/delete operations
+    if (k === "_rev" || k === "_ts") continue;
     cleaned[k] = v;
   }
   return cleaned;
+}
+
+/**
+ * Extract the Torso internal ID from a document response.
+ * Torso may return it as `_tid`, `id`, `_id`, or `tid`.
+ */
+function extractTorsoId(doc: Record<string, unknown>): string | undefined {
+  return (doc._tid ?? doc.id ?? doc._id ?? doc.tid) as string | undefined;
 }
 
 function applyProjection<T extends Record<string, unknown>>(
@@ -139,31 +154,45 @@ class TorsoCollection {
    */
   async findOne<T = Record<string, unknown>>(
     filter: Record<string, unknown>,
-    options?: { projection?: Record<string, unknown> }
+    options?: { projection?: Record<string, unknown>; limit?: number; skip?: number }
   ): Promise<T | null> {
     const [field, value] = Object.entries(filter)[0] ?? [];
-    const params = new URLSearchParams({
-      [field]: String(value),
-    });
+    if (!field) {
+      console.warn(`[torso] findOne ${this.name}: empty filter, returning null`);
+      return null;
+    }
 
-    // Support multi-field filters by adding extra_params
+    // Use simple id=value format as default (works for most REST APIs)
+    const params = new URLSearchParams({ [field]: String(value) });
+
+    // Support multi-field filters via extra_params
     const extraFields = Object.entries(filter).slice(1);
     if (extraFields.length > 0) {
-      extraFields.forEach(([k, v]) => {
+      for (const [k, v] of extraFields) {
         params.append("extra_params", `${k}=${encodeURIComponent(String(v))}`);
-      });
+      }
     }
+
+    if (options?.limit) params.append("limit", String(options.limit));
+    if (options?.skip) params.append("skip", String(options.skip));
 
     const path = `/collections/${this.name}/items?${params.toString()}`;
 
     try {
-      const data = await torsoFetch<{ items?: T[]; data?: T[]; result?: T[] }>(path);
-      // Handle various Torso response formats
-      const items = data?.items ?? data?.data ?? data?.result ?? [];
-      const item = Array.isArray(items) ? items[0] : null;
+      const raw = await torsoFetch<any>(path);
+      const data = raw?.data ?? raw?.items ?? raw?.result ?? raw;
+      const item = Array.isArray(data) ? data[0] : data;
       if (!item) return null;
-      const cleaned = cleanItem(item as Record<string, unknown>);
-      return applyProjection(cleaned, options?.projection) as T;
+
+      // Always preserve _tid for update/delete operations, even if projection is used
+      const torsoId = extractTorsoId(item);
+      const cleaned = cleanItem(item);
+      if (torsoId) cleaned._tid = torsoId;
+
+      const result = applyProjection(cleaned, options?.projection);
+      // If projection was used, still include _tid for callers that need it
+      if (torsoId && !result._tid) (result as any)._tid = torsoId;
+      return result as T;
     } catch (err) {
       console.error(`[torso] findOne ${this.name} error:`, err);
       return null;
@@ -223,32 +252,23 @@ class TorsoCollection {
     update: Record<string, unknown>,
     options?: { upsert?: boolean }
   ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount?: number }> {
-    // First, find the document to get its Torso ID (_tid or id)
+    // First, find the document to get its Torso ID
     const doc = await this.findOne<Record<string, unknown>>(filter);
     const now = new Date().toISOString();
 
     if (doc) {
-      // Update existing document
-      // Flatten $set, $push, $pull operations into a flat update payload
-      const flatUpdate: Record<string, unknown> = {};
-      let hasSet = false;
-      let hasPushPull = false;
-
-      const sets = update.$set as Record<string, unknown> | undefined;
-      if (sets) {
-        hasSet = true;
-        for (const [k, v] of Object.entries(sets)) {
-          flatUpdate[k] = v;
-        }
+      const torsoId = extractTorsoId(doc);
+      if (!torsoId) {
+        console.warn(`[torso] updateOne ${this.name}: doc found but no Torso ID (_tid/id/_id)`);
+        return { matchedCount: 0, modifiedCount: 0 };
       }
 
-      // For $push / $pull on embedded arrays, we need to handle them specially
+      const sets = update.$set as Record<string, unknown> | undefined;
       const pushOps = update.$push as Record<string, unknown> | undefined;
       const pullOps = update.$pull as Record<string, unknown> | undefined;
 
       if (pushOps || pullOps) {
-        hasPushPull = true;
-        // Merge existing doc with pushes/pulls
+        // For $push/$pull: read-modify-write on the embedded array
         const merged = { ...doc };
 
         if (pushOps) {
@@ -260,7 +280,6 @@ class TorsoCollection {
         if (pullOps) {
           for (const [k, v] of Object.entries(pullOps)) {
             const existing = Array.isArray(merged[k]) ? merged[k] : [];
-            // Simple pull by matching object fields
             merged[k] = existing.filter((item: unknown) => {
               if (typeof v !== "object" || v === null) return true;
               return !Object.entries(v as Record<string, unknown>).every(
@@ -269,20 +288,12 @@ class TorsoCollection {
             });
           }
         }
-
-        // Apply $set on top
         if (sets) {
-          for (const [k, v] of Object.entries(sets)) {
-            merged[k] = v;
-          }
+          for (const [k, v] of Object.entries(sets)) merged[k] = v;
         }
 
-        // PUT full document with merged state
-        // Try _tid first, then fall back to id
-        const docId = (doc._tid || doc.id) as string | undefined;
-        if (!docId) return { matchedCount: 0, modifiedCount: 0 };
         try {
-          await torsoFetch(`/collections/${this.name}/items/${docId}`, {
+          await torsoFetch(`/collections/${this.name}/items/${torsoId}`, {
             method: "PUT",
             body: { ...merged, updatedAt: now },
           });
@@ -296,21 +307,16 @@ class TorsoCollection {
       // Pure $set update
       const merged = { ...doc };
       if (sets) {
-        for (const [k, v] of Object.entries(sets)) {
-          merged[k] = v;
-        }
+        for (const [k, v] of Object.entries(sets)) merged[k] = v;
       }
       merged.updatedAt = now;
 
-      // Try _tid first, then fall back to id
-      const docId = (doc._tid || doc.id) as string | undefined;
-      if (!docId) return { matchedCount: 0, modifiedCount: 0 };
       try {
-        await torsoFetch(`/collections/${this.name}/items/${docId}`, {
+        await torsoFetch(`/collections/${this.name}/items/${torsoId}`, {
           method: "PUT",
           body: merged,
         });
-        return { matchedCount: 1, modifiedCount: hasSet ? 1 : 0 };
+        return { matchedCount: 1, modifiedCount: sets ? 1 : 0 };
       } catch (err) {
         console.error(`[torso] updateOne ${this.name} error:`, err);
         return { matchedCount: 1, modifiedCount: 0 };
@@ -332,10 +338,13 @@ class TorsoCollection {
       newDoc.updatedAt = new Date().toISOString();
 
       try {
-        const created = await torsoFetch<{ _tid: string }>(
-          `/collections/${this.name}/items`,
-          { method: "POST", body: newDoc }
-        );
+        const created = await torsoFetch<any>(`/collections/${this.name}/items`, {
+          method: "POST",
+          body: newDoc,
+        });
+        // Capture the Torso ID from the response so future updates work
+        const newId = extractTorsoId(created);
+        if (newId) console.log(`[torso] upsert ${this.name}: created with id=${newId}`);
         return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
       } catch (err) {
         console.error(`[torso] upsert ${this.name} error:`, err);
@@ -426,13 +435,27 @@ class TorsoDatabase {
 let torsoPromise: Promise<{ db: () => TorsoDatabase }>;
 
 function createTorsoClient(): Promise<{ db: () => TorsoDatabase }> {
+  // Verify the configuration by doing a test request
+  const testUrl = `${TORSO_URL}${TORSO_API_PREFIX}/${TORSO_DB}/collections`;
+  console.log(`[torso] Initializing with base URL: ${testUrl}`);
+
   if (!TORSO_URL || !TORSO_TOKEN) {
     console.warn("[torso] Warning: TORSO_URL or TORSO_TOKEN is not set. Auth will fail until configured.");
     return Promise.resolve({ db: () => new TorsoDatabase() });
   }
 
-  // Skip health check — just try to use the client. Errors surface on first use.
-  return Promise.resolve({ db: () => new TorsoDatabase() });
+  // Test the connection on startup
+  return torsoFetch<{ data?: any; collections?: any[] }>(`/collections`)
+    .then((data) => {
+      const collections = data?.data?.collections ?? data?.collections ?? [];
+      console.log(`[torso] Connected. Available collections:`, collections);
+      return { db: () => new TorsoDatabase() };
+    })
+    .catch((err) => {
+      console.error(`[torso] Connection test failed: ${err?.message}`);
+      console.warn(`[torso] Will continue without connection — operations will fail.`);
+      return { db: () => new TorsoDatabase() };
+    });
 }
 
 // Development: preserve connection across HMR (same pattern as MongoDB)

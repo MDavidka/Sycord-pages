@@ -250,14 +250,36 @@ export async function POST(request: Request) {
   }
 
   try {
-    await db.collection("users").updateOne(
+    const result = await db.collection("users").updateOne(
       { id: session.user.id },
       {
         $push: {
           projects: newProject
-        } as any // TypeScript might complain about pushing to 'projects' if schema not defined
+        } as any
       }
     )
+
+    if (!result.upsertedCount && !result.modifiedCount) {
+      // If user doc doesn't exist, create it first with the project
+      const userResult = await db.collection("users").updateOne(
+        { id: session.user.id },
+        {
+          $setOnInsert: {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            image: session.user.image,
+            projects: [newProject],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        },
+        { upsert: true }
+      )
+      if (!userResult.upsertedCount && !userResult.modifiedCount) {
+        throw new Error("Failed to create project: could not update user document")
+      }
+    }
 
     console.log("[Project Creation] Project created successfully embedded in user:", projectId.toString())
 
