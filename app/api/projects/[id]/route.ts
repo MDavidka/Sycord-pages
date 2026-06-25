@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const client = await clientPromise
   const db = client.db()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    const project = user.projects.find((p: any) => p._id.toString() === id)
+    const project = user.projects.find((p: any) => p._id?.toString() === id || p._id === id)
 
     if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
@@ -74,7 +74,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const db = client.db()
   const body = await request.json()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -91,7 +91,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const result = await db.collection("users").updateOne(
     {
         id: session.user.id,
-        "projects._id": new ObjectId(id)
+        "projects._id": id
     },
     { $set: updateFields }
   )
@@ -113,7 +113,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const client = await clientPromise
   const db = client.db()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -123,7 +123,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         { id: session.user.id },
         {
             $pull: {
-                projects: { _id: new ObjectId(id) }
+                projects: { _id: id }
             } as any
         }
     )

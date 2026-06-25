@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -95,7 +95,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { searchParams } = new URL(request.url)
   const productId = searchParams.get("productId")
 
-  if (!productId || !ObjectId.isValid(productId)) {
+  if (!productId || !productId.trim()) {
     return NextResponse.json({ message: "Invalid product ID" }, { status: 400 })
   }
 
@@ -107,7 +107,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   // I will leave it as is to avoid scope creep, just updating project verification where it existed.
 
   const result = await db.collection("products").deleteOne({
-    _id: new ObjectId(productId),
+    _id: productId,
   })
 
   if (result.deletedCount === 0) {

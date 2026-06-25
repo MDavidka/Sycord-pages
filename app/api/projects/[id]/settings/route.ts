@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 const isValidHexColor = (color: string): boolean => {
   if (!color || typeof color !== "string") return false
@@ -55,14 +55,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const client = await clientPromise
   const db = client.db()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     console.error("[v0] Invalid ID format:", id)
     return NextResponse.json({ message: "Invalid ID format" }, { status: 400 })
   }
 
   try {
     const settings = await db.collection("webshop_settings").findOne({
-      projectId: new ObjectId(id), // Consistent ObjectId usage
+      projectId: id, // Using string ID
     })
 
     if (!settings) {
@@ -121,7 +121,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const client = await clientPromise
   const db = client.db()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     console.error("[v0] Invalid ID format:", id)
     return NextResponse.json({ message: "Invalid ID format" }, { status: 400 })
   }
@@ -156,11 +156,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const result = await db.collection("webshop_settings").updateOne(
-      { projectId: new ObjectId(id) }, // Storing as ObjectId preferred
+      { projectId: id }, // Using string ID
       {
         $set: {
           ...sanitizedSettings,
-          projectId: new ObjectId(id),
+          projectId: id,
           updatedAt: new Date(),
         },
       },
@@ -169,7 +169,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     console.log("[v0] Database update result:", result)
 
-    const savedSettings = await db.collection("webshop_settings").findOne({ projectId: new ObjectId(id) })
+    const savedSettings = await db.collection("webshop_settings").findOne({ projectId: id })
     return NextResponse.json({ success: true, settings: savedSettings, result })
   } catch (error: any) {
     console.error("[v0] Settings update error:", error)

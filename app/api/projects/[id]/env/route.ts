@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 /**
  * Project Environment Variables API
@@ -28,7 +28,7 @@ export async function GET(
     const client = await clientPromise
     const db = client.db()
     const user = await db.collection("users").findOne(
-      { id: session.user.id, "projects._id": new ObjectId(projectId) },
+      { id: session.user.id, "projects._id": projectId },
       { projection: { "projects.$": 1 } }
     )
     const project = user?.projects?.[0]
@@ -72,12 +72,12 @@ export async function POST(
 
     // Remove existing var with same key, then add new one
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": new ObjectId(projectId) },
+      { id: session.user.id, "projects._id": projectId },
       { $pull: { "projects.$.envVars": { key } } as any }
     )
 
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": new ObjectId(projectId) },
+      { id: session.user.id, "projects._id": projectId },
       {
         $push: {
           "projects.$.envVars": {
@@ -119,7 +119,7 @@ export async function DELETE(
     const db = client.db()
 
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": new ObjectId(projectId) },
+      { id: session.user.id, "projects._id": projectId },
       { $pull: { "projects.$.envVars": { key } } as any }
     )
 

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 const GITHUB_API_BASE = "https://api.github.com"
 
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
     }
 
-    if (!ObjectId.isValid(projectId)) {
+    if (!projectId || !projectId.trim()) {
       return NextResponse.json({ error: "Invalid projectId format" }, { status: 400 })
     }
 
@@ -305,7 +305,7 @@ export async function POST(request: Request) {
     await db.collection("users").updateOne(
       {
         id: session.user.id,
-        "projects._id": new ObjectId(projectId)
+        "projects._id": projectId
       },
       {
         $set: {

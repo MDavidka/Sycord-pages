@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
-import { ObjectId } from "mongodb"
+
 import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
 
 export async function POST(request: Request) {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   }
 
   // Fetch user doc to check limits and existing projects
-  const userDoc = await db.collection("users").findOne({ id: session.user.id })
+  const userDoc = await db.collection("users").findOne<{ projects?: any[] }>({ id: session.user.id })
   const userProjects = userDoc?.projects || []
 
   // @ts-ignore
@@ -200,19 +200,18 @@ export async function POST(request: Request) {
   let deploymentData: any = null
 
   if (body.subdomain) {
-    if (typeof body.subdomain !== 'string') {
-        // just ignore invalid subdomain type
-    } else {
-        sanitizedSubdomain = body.subdomain
+    if (typeof body.subdomain === 'string') {
+        const cleaned = body.subdomain
           .toLowerCase()
           .trim()
           .replace(/[^a-z0-9-]/g, "-")
           .replace(/^-+|-+$/g, "")
 
-        if (sanitizedSubdomain.length >= 3 && !containsCurseWords(sanitizedSubdomain)) {
+        if (cleaned.length >= 3 && !containsCurseWords(cleaned)) {
+            sanitizedSubdomain = cleaned
             deploymentData = {
-              subdomain: sanitizedSubdomain,
-              domain: `${sanitizedSubdomain}.pages.dev`,
+              subdomain: cleaned,
+              domain: `${cleaned}.pages.dev`,
               status: "active",
               createdAt: new Date(),
               updatedAt: new Date(),
@@ -225,7 +224,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const projectId = new ObjectId()
+  const projectId = crypto.randomUUID()
 
   const newProject = {
     _id: projectId,
@@ -247,7 +246,7 @@ export async function POST(request: Request) {
     ], // Initialize with idle page
     deployment: deploymentData, // Embed deployment info
     // Legacy fields for compatibility if needed, but we try to move away
-    deploymentId: deploymentData ? new ObjectId() : null,
+    deploymentId: deploymentData ? crypto.randomUUID() : null,
   }
 
   try {

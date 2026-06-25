@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { ObjectId } from "mongodb"
+
 
 export async function DELETE(
   req: Request,
@@ -15,14 +15,14 @@ export async function DELETE(
 
   try {
     const { id } = await params
-    if (!ObjectId.isValid(id)) {
+    if (!id || !id.trim()) {
       return new NextResponse("Invalid ID", { status: 400 })
     }
 
     const client = await clientPromise
     const db = client.db()
 
-    await db.collection("monitors").deleteOne({ _id: new ObjectId(id) })
+    await db.collection("monitors").deleteOne({ _id: id })
 
     return new NextResponse(null, { status: 204 })
   } catch (error) {

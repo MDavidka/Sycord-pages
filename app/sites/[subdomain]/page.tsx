@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import { currencySymbols, themeConfigs } from "@/lib/webshop-types"
 import { Facebook, Instagram, Twitter, ShoppingCart } from "lucide-react"
-import { ObjectId } from "mongodb"
+
 
 interface PageProps {
   params: Promise<{
@@ -34,7 +34,6 @@ export default async function SubdomainPage({ params }: PageProps) {
     }
 
     const project = userWithProject.projects[0];
-    const projectObjectId = project._id;
 
     console.log("[v0] Webshop: Project found. Name:", project.businessName, "Has AI code:", !!project.aiGeneratedCode)
 
@@ -68,8 +67,8 @@ export default async function SubdomainPage({ params }: PageProps) {
     // Wait, "deployment project and pages should be merged".
     // I will leave products/settings in their collections for now unless I see errors or further instructions.
 
-    const settings = await db.collection("webshop_settings").findOne({ projectId: projectObjectId })
-    const products = await db.collection("products").find({ projectId: projectObjectId }).toArray()
+    const settings = await db.collection("webshop_settings").findOne({ projectId: project._id })
+    const products = await db.collection("products").find({ projectId: project._id }).toArray()
 
     const shopSettings = settings || {
       theme: "tech",

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/is-admin"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 
 export async function POST(request: Request, { params }: { params: Promise<{ userId: string }> }) {
   try {
