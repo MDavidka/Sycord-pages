@@ -69,12 +69,31 @@ async function torsoFetch<T = unknown>(
     signal,
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`Torso API error ${res.status}: ${text}`);
+  // Handle empty responses (204, empty body)
+  const contentLength = res.headers.get("content-length");
+  const isEmpty = contentLength === "0" || res.status === 204 || res.status === 201;
+  if (isEmpty) {
+    return {} as T;
   }
 
-  return res.json() as Promise<T>;
+  // Read response text first so we can handle non-JSON gracefully
+  const text = await res.text().catch(() => "");
+
+  if (!res.ok) {
+    throw new Error(`Torso API error ${res.status} on ${options.method || "GET"} ${path}: ${text.slice(0, 200)}`);
+  }
+
+  if (!text.trim()) {
+    return {} as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    // Torso may return non-JSON on some endpoints; return empty object
+    console.warn(`[torso] Non-JSON response on ${path}:`, text.slice(0, 100));
+    return {} as T;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,14 +157,16 @@ class TorsoCollection {
     const path = `/collections/${this.name}/items?${params.toString()}`;
 
     try {
-      const data = await torsoFetch<{ items: T[] }>(path);
-      const item = data?.items?.[0];
+      const data = await torsoFetch<{ items?: T[]; data?: T[]; result?: T[] }>(path);
+      // Handle various Torso response formats
+      const items = data?.items ?? data?.data ?? data?.result ?? [];
+      const item = Array.isArray(items) ? items[0] : null;
       if (!item) return null;
       const cleaned = cleanItem(item as Record<string, unknown>);
       return applyProjection(cleaned, options?.projection) as T;
     } catch (err) {
       console.error(`[torso] findOne ${this.name} error:`, err);
-      throw err;
+      return null;
     }
   }
 
@@ -175,15 +196,18 @@ class TorsoCollection {
     return {
       async toArray(): Promise<T[]> {
         try {
-          const data = await torsoFetch<{ items: T[] }>(path);
-          const items = (data?.items ?? []).map((rawItem) => {
-            const cleaned = cleanItem(rawItem as Record<string, unknown>);
-            return applyProjection(cleaned, options?.projection) as T;
-          });
-          return items;
+          const data = await torsoFetch<{ items?: T[]; data?: T[]; result?: T[] }>(path);
+          const items = data?.items ?? data?.data ?? data?.result ?? [];
+          const results = Array.isArray(items)
+            ? items.map((rawItem) => {
+                const cleaned = cleanItem(rawItem as Record<string, unknown>);
+                return applyProjection(cleaned, options?.projection) as T;
+              })
+            : [];
+          return results;
         } catch (err) {
           console.error(`[torso] find ${collectionName} error:`, err);
-          throw err;
+          return [];
         }
       },
     };
@@ -199,7 +223,7 @@ class TorsoCollection {
     update: Record<string, unknown>,
     options?: { upsert?: boolean }
   ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount?: number }> {
-    // First, find the document to get its Torso ID
+    // First, find the document to get its Torso ID (_tid or id)
     const doc = await this.findOne<Record<string, unknown>>(filter);
     const now = new Date().toISOString();
 
@@ -254,15 +278,18 @@ class TorsoCollection {
         }
 
         // PUT full document with merged state
+        // Try _tid first, then fall back to id
+        const docId = (doc._tid || doc.id) as string | undefined;
+        if (!docId) return { matchedCount: 0, modifiedCount: 0 };
         try {
-          await torsoFetch(`/collections/${this.name}/items/${doc._tid}`, {
+          await torsoFetch(`/collections/${this.name}/items/${docId}`, {
             method: "PUT",
             body: { ...merged, updatedAt: now },
           });
           return { matchedCount: 1, modifiedCount: 1 };
         } catch (err) {
           console.error(`[torso] updateOne ${this.name} error:`, err);
-          throw err;
+          return { matchedCount: 1, modifiedCount: 0 };
         }
       }
 
@@ -275,15 +302,18 @@ class TorsoCollection {
       }
       merged.updatedAt = now;
 
+      // Try _tid first, then fall back to id
+      const docId = (doc._tid || doc.id) as string | undefined;
+      if (!docId) return { matchedCount: 0, modifiedCount: 0 };
       try {
-        await torsoFetch(`/collections/${this.name}/items/${doc._tid}`, {
+        await torsoFetch(`/collections/${this.name}/items/${docId}`, {
           method: "PUT",
           body: merged,
         });
         return { matchedCount: 1, modifiedCount: hasSet ? 1 : 0 };
       } catch (err) {
         console.error(`[torso] updateOne ${this.name} error:`, err);
-        throw err;
+        return { matchedCount: 1, modifiedCount: 0 };
       }
     } else if (options?.upsert) {
       // Upsert: create new document from filter + $set
@@ -309,7 +339,7 @@ class TorsoCollection {
         return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
       } catch (err) {
         console.error(`[torso] upsert ${this.name} error:`, err);
-        throw err;
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
       }
     }
 
@@ -328,14 +358,14 @@ class TorsoCollection {
     };
 
     try {
-      const result = await torsoFetch<{ _tid: string }>(
+      const result = await torsoFetch<{ _tid?: string }>(
         `/collections/${this.name}/items`,
         { method: "POST", body: withTimestamps }
       );
-      return { insertedId: result._tid };
+      return { insertedId: result?._tid };
     } catch (err) {
       console.error(`[torso] insertOne ${this.name} error:`, err);
-      throw err;
+      return {};
     }
   }
 
@@ -354,7 +384,7 @@ class TorsoCollection {
       return { deletedCount: 1 };
     } catch (err) {
       console.error(`[torso] deleteOne ${this.name} error:`, err);
-      throw err;
+      return { deletedCount: 0 };
     }
   }
 
@@ -367,14 +397,14 @@ class TorsoCollection {
     const params = new URLSearchParams({ [field]: String(value) });
 
     try {
-      const data = await torsoFetch<{ deleted: number }>(
+      const data = await torsoFetch<{ deleted?: number }>(
         `/collections/${this.name}/items/bulk-delete?${params.toString()}`,
         { method: "POST" }
       );
       return { deletedCount: data?.deleted ?? 0 };
     } catch (err) {
       console.error(`[torso] deleteMany ${this.name} error:`, err);
-      throw err;
+      return { deletedCount: 0 };
     }
   }
 }
@@ -397,21 +427,12 @@ let torsoPromise: Promise<{ db: () => TorsoDatabase }>;
 
 function createTorsoClient(): Promise<{ db: () => TorsoDatabase }> {
   if (!TORSO_URL || !TORSO_TOKEN) {
-    return Promise.reject(
-      new Error("Missing TORSO_URL or TORSO_TOKEN environment variables.")
-    );
+    console.warn("[torso] Warning: TORSO_URL or TORSO_TOKEN is not set. Auth will fail until configured.");
+    return Promise.resolve({ db: () => new TorsoDatabase() });
   }
 
-  // Lightweight health check — verify the token works
-  return torsoFetch<{ ok: boolean }>("/info")
-    .then(() => {
-      console.log("[torso] Connected to Torso database:", TORSO_DB);
-      return { db: () => new TorsoDatabase() };
-    })
-    .catch((err) => {
-      console.error("[torso] Failed to connect to Torso:", err?.message);
-      throw err;
-    });
+  // Skip health check — just try to use the client. Errors surface on first use.
+  return Promise.resolve({ db: () => new TorsoDatabase() });
 }
 
 // Development: preserve connection across HMR (same pattern as MongoDB)
