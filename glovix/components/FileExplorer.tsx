@@ -93,12 +93,12 @@ const FileTreeNode = memo(({
                 onContextMenu={(e) => onContextMenu(e, node.path, 'file')}
                 className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
                     selectedFile === node.path
-                        ? isDark ? 'bg-[#262626] text-white' : 'bg-blue-100 text-blue-900'
-                        : isDark ? 'text-[#a3a3a3] hover:bg-[#262626] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        ? isDark ? 'bg-accent text-white' : 'bg-blue-100 text-blue-900'
+                        : isDark ? 'text-muted-foreground hover:bg-accent hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
                 style={{ paddingLeft: `${level * 12 + 8}px` }}
             >
-                <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-[#a3a3a3]' : 'text-gray-400'}`} />
+                <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-muted-foreground' : 'text-gray-400'}`} />
                 {renamingPath === node.path ? (
                     <input
                         ref={inputRef}
@@ -121,7 +121,7 @@ const FileTreeNode = memo(({
             <div
                 onClick={() => setIsOpen(!isOpen)}
                 onContextMenu={(e) => onContextMenu(e, node.path, 'folder')}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? 'text-[#a3a3a3] hover:bg-[#262626] hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? 'text-muted-foreground hover:bg-accent hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
                 style={{ paddingLeft: `${level * 12 + 8}px` }}
             >
                 {isOpen ? <ChevronDown className="w-3 h-3 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 flex-shrink-0" />}
@@ -341,20 +341,20 @@ export function FileExplorer() {
 
     return (
         <div 
-            className={`h-full p-2 overflow-y-auto text-sm custom-scrollbar ${isDark ? 'text-[#a3a3a3]' : 'text-gray-600'}`}
+            className={`h-full p-2 overflow-y-auto text-sm custom-scrollbar ${isDark ? 'text-muted-foreground' : 'text-gray-600'}`}
             onContextMenu={(e) => handleContextMenu(e, '', 'root')}
         >
-            <div className={`font-semibold mb-2 px-2 text-xs uppercase tracking-wider ${isDark ? 'text-[#525252]' : 'text-gray-400'}`}>Files</div>
+            <div className={`font-semibold mb-2 px-2 text-xs uppercase tracking-wider ${isDark ? 'text-muted-foreground/60' : 'text-gray-400'}`}>Files</div>
             
             {Object.keys(files).length === 0 && !newItemType && (
-                <div className={`italic px-2 ${isDark ? 'text-[#525252]' : 'text-gray-400'}`}>No files</div>
+                <div className={`italic px-2 ${isDark ? 'text-muted-foreground/60' : 'text-gray-400'}`}>No files</div>
             )}
             
             {/* New item input at root level */}
             {newItemType && !newItemParent && (
                 <div className="flex items-center gap-2 px-2 py-1.5" style={{ paddingLeft: '8px' }}>
                     {newItemType === 'file' ? (
-                        <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-[#a3a3a3]' : 'text-gray-400'}`} />
+                        <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-muted-foreground' : 'text-gray-400'}`} />
                     ) : (
                         <Folder className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     )}
@@ -391,17 +391,17 @@ export function FileExplorer() {
             {/* Context Menu */}
             {contextMenu.visible && (
                 <div 
-                    className={`fixed z-50 min-w-[180px] rounded-lg overflow-hidden shadow-xl ${isDark ? 'bg-[#1a1a1a] border border-[#2a2a2a]' : 'bg-white border border-gray-200'}`}
+                    className={`fixed z-50 min-w-[180px] rounded-lg overflow-hidden shadow-xl ${isDark ? 'bg-card border border-border' : 'bg-white border border-gray-200'}`}
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* New file/folder */}
-                    <div className={`py-1 ${isDark ? 'border-b border-[#2a2a2a]' : 'border-b border-gray-100'}`}>
-                        <button onClick={handleNewFile} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                    <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
+                        <button onClick={handleNewFile} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                             <FileText className="w-4 h-4 opacity-0" />
                             New file...
                         </button>
-                        <button onClick={handleNewFolder} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                        <button onClick={handleNewFolder} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                             <FolderPlus className="w-4 h-4 opacity-0" />
                             New folder...
                         </button>
@@ -409,12 +409,12 @@ export function FileExplorer() {
 
                     {/* Target/Lock */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className={`py-1 ${isDark ? 'border-b border-[#2a2a2a]' : 'border-b border-gray-100'}`}>
-                            <button className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                        <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
+                            <button className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <Target className="w-4 h-4" />
                                 Target file
                             </button>
-                            <button className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                            <button className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <Lock className="w-4 h-4" />
                                 Lock file
                             </button>
@@ -423,12 +423,12 @@ export function FileExplorer() {
 
                     {/* Cut/Copy */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className={`py-1 ${isDark ? 'border-b border-[#2a2a2a]' : 'border-b border-gray-100'}`}>
-                            <button onClick={handleCut} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                        <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
+                            <button onClick={handleCut} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <Scissors className="w-4 h-4 opacity-0" />
                                 Cut
                             </button>
-                            <button onClick={handleCopy} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                            <button onClick={handleCopy} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <Copy className="w-4 h-4 opacity-0" />
                                 Copy
                             </button>
@@ -437,12 +437,12 @@ export function FileExplorer() {
 
                     {/* Copy path */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className={`py-1 ${isDark ? 'border-b border-[#2a2a2a]' : 'border-b border-gray-100'}`}>
-                            <button onClick={handleCopyPath} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                        <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
+                            <button onClick={handleCopyPath} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <span className="w-4" />
                                 Copy path
                             </button>
-                            <button onClick={handleCopyRelativePath} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                            <button onClick={handleCopyRelativePath} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <span className="w-4" />
                                 Copy relative path
                             </button>
@@ -452,12 +452,12 @@ export function FileExplorer() {
                     {/* Rename/Delete */}
                     {contextMenu.targetType !== 'root' && (
                         <div className="py-1">
-                            <button onClick={handleRename} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-[#ccc] hover:bg-[#252525]' : 'text-gray-700 hover:bg-gray-50'}`}>
+                            <button onClick={handleRename} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
                                 <span className="w-4" />
                                 Rename...
                             </button>
                             {contextMenu.targetPath !== '.glovix' && !contextMenu.targetPath.startsWith('.glovix/') && (
-                                <button onClick={handleDelete} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 text-red-400 ${isDark ? 'hover:bg-[#252525]' : 'hover:bg-gray-50'}`}>
+                                <button onClick={handleDelete} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 text-red-400 ${isDark ? 'hover:bg-accent' : 'hover:bg-gray-50'}`}>
                                     <Trash2 className="w-4 h-4 opacity-0" />
                                     Delete
                                 </button>
