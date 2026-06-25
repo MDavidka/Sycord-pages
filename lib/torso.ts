@@ -27,7 +27,11 @@
  * The Torso internal ID (_tid) is preserved for update/delete operations.
  */
 
-const TORSO_URL = process.env.TORSO_URL?.replace(/\/$/, "");
+const _rawTorsoUrl = process.env.TORSO_URL;
+// Auto-prepend https:// if scheme is missing
+const TORSO_URL = _rawTorsoUrl
+  ? (_rawTorsoUrl.match(/^https?:\/\//i) ? _rawTorsoUrl : `https://${_rawTorsoUrl}`).replace(/\/$/, "")
+  : "";
 const TORSO_TOKEN = process.env.TORSO_TOKEN;
 const TORSO_DB = process.env.TORSO_DB || "sycord";
 // API path prefix — Torso uses /api/databases/:db as the base path.
@@ -65,15 +69,50 @@ async function torsoFetch<T = unknown>(
   const url = `${TORSO_URL}${TORSO_API_PREFIX}/${TORSO_DB}${path}`;
   const { signal } = options;
 
-  const res = await fetch(url, {
-    method: options.method || "GET",
-    headers: {
-      Authorization: `Bearer ${TORSO_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: options.body != null ? JSON.stringify(options.body) : undefined,
-    signal,
-  });
+  // Add a 15-second timeout so requests don't hang forever
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  // Combine caller's signal with our timeout signal
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      throw new Error("Request aborted");
+    }
+    signal.addEventListener("abort", () => controller.abort());
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: options.method || "GET",
+      headers: {
+        Authorization: `Bearer ${TORSO_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: options.body != null ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    // Provide a clearer error message for common issues
+    if (err?.cause?.code === "ECONNREFUSED") {
+      throw new Error(`Torso connection refused at ${url}. Check TORSO_URL.`);
+    }
+    if (err?.cause?.code === "ENOTFOUND") {
+      throw new Error(`Torso host not found: ${TORSO_URL}. Check TORSO_URL.`);
+    }
+    if (err?.cause?.message?.includes("unknown scheme")) {
+      throw new Error(
+        `Torso URL has invalid scheme. Set TORSO_URL to a full URL like "https://api.torso.io" (got "${TORSO_URL}")`
+      );
+    }
+    if (err?.name === "AbortError") {
+      throw new Error(`Torso request to ${url} timed out after 15s`);
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   // Handle empty responses (204, empty body)
   const contentLength = res.headers.get("content-length");
@@ -124,6 +163,102 @@ function cleanItem(item: Record<string, unknown>): Record<string, unknown> {
  */
 function extractTorsoId(doc: Record<string, unknown>): string | undefined {
   return (doc._tid ?? doc.id ?? doc._id ?? doc.tid) as string | undefined;
+}
+
+/**
+ * Chainable query object that mirrors MongoDB driver's Cursor API.
+ * Supports: .sort(), .limit(), .skip(), .toArray()
+ */
+class TorsoQuery<T = Record<string, unknown>> {
+  private sortField: string | null = null;
+  private sortOrder: 1 | -1 = 1;
+  private limitValue?: number;
+  private skipValue?: number;
+
+  constructor(
+    private collectionName: string,
+    private params: URLSearchParams,
+    private projection?: Record<string, unknown>
+  ) {}
+
+  /** Sort the results by a field. Mirrors MongoDB driver: cursor.sort({ field: 1 | -1 }) */
+  sort(sortSpec: Record<string, 1 | -1>): this {
+    const entries = Object.entries(sortSpec);
+    if (entries.length > 0) {
+      const [field, order] = entries[0];
+      this.sortField = field;
+      this.sortOrder = order === -1 ? -1 : 1;
+    }
+    return this;
+  }
+
+  /** Limit the number of results. */
+  limit(n: number): this {
+    this.limitValue = n;
+    return this;
+  }
+
+  /** Skip the first N results. */
+  skip(n: number): this {
+    this.skipValue = n;
+    return this;
+  }
+
+  /** Execute the query and return all matching documents as an array. */
+  async toArray(): Promise<T[]> {
+    try {
+      // Clone params so we don't mutate the original
+      const params = new URLSearchParams(this.params);
+
+      // Apply sort — Torso typically supports `sort` and `order` params
+      if (this.sortField) {
+        params.append("sort", this.sortField);
+        params.append("order", this.sortOrder === -1 ? "desc" : "asc");
+      }
+
+      // Apply limit/skip
+      if (this.limitValue != null) params.append("limit", String(this.limitValue));
+      if (this.skipValue != null) params.append("skip", String(this.skipValue));
+
+      const queryString = params.toString();
+      const path = `/collections/${this.collectionName}/items${queryString ? `?${queryString}` : ""}`;
+
+      const raw = await torsoFetch<any>(path);
+      const data = raw?.data ?? raw?.items ?? raw?.result ?? raw;
+      const items = Array.isArray(data) ? data : data ? [data] : [];
+
+      // Apply client-side sort as fallback (Torso may not support sort param)
+      let results = items.map((rawItem: unknown) => {
+        const cleaned = cleanItem(rawItem as Record<string, unknown>);
+        return applyProjection(cleaned, this.projection) as T;
+      });
+
+      // Client-side sort (works regardless of Torso's sort support)
+      if (this.sortField) {
+        const field = this.sortField;
+        const order = this.sortOrder;
+        results.sort((a: any, b: any) => {
+          const av = a?.[field];
+          const bv = b?.[field];
+          if (av == null && bv == null) return 0;
+          if (av == null) return order === 1 ? -1 : 1;
+          if (bv == null) return order === 1 ? 1 : -1;
+          if (av < bv) return order === 1 ? -1 : 1;
+          if (av > bv) return order === 1 ? 1 : -1;
+          return 0;
+        });
+      }
+
+      // Apply client-side limit/skip
+      if (this.skipValue != null && this.skipValue > 0) results = results.slice(this.skipValue);
+      if (this.limitValue != null && this.limitValue >= 0) results = results.slice(0, this.limitValue);
+
+      return results;
+    } catch (err) {
+      console.error(`[torso] find ${this.collectionName}.toArray error:`, err);
+      return [];
+    }
+  }
 }
 
 function applyProjection<T extends Record<string, unknown>>(
@@ -201,45 +336,25 @@ class TorsoCollection {
 
   /**
    * Find multiple documents.
+   * Returns a chainable query object (sort, limit, skip, toArray) to mirror MongoDB driver.
    * Torso: GET /collections/:name/items
    */
-  async find<T = Record<string, unknown>>(
+  find<T = Record<string, unknown>>(
     filter: Record<string, unknown> = {},
     options?: {
       projection?: Record<string, unknown>;
       limit?: number;
       skip?: number;
     }
-  ): Promise<{ toArray(): Promise<T[]> }> {
+  ): TorsoQuery<T> {
     const params = new URLSearchParams();
-    const collectionName = this.name;
     for (const [k, v] of Object.entries(filter)) {
       params.append("extra_params", `${k}=${encodeURIComponent(String(v))}`);
     }
     if (options?.limit) params.append("limit", String(options.limit));
     if (options?.skip) params.append("skip", String(options.skip));
 
-    const query = params.toString();
-    const path = `/collections/${this.name}/items${query ? `?${query}` : ""}`;
-
-    return {
-      async toArray(): Promise<T[]> {
-        try {
-          const data = await torsoFetch<{ items?: T[]; data?: T[]; result?: T[] }>(path);
-          const items = data?.items ?? data?.data ?? data?.result ?? [];
-          const results = Array.isArray(items)
-            ? items.map((rawItem) => {
-                const cleaned = cleanItem(rawItem as Record<string, unknown>);
-                return applyProjection(cleaned, options?.projection) as T;
-              })
-            : [];
-          return results;
-        } catch (err) {
-          console.error(`[torso] find ${collectionName} error:`, err);
-          return [];
-        }
-      },
-    };
+    return new TorsoQuery<T>(this.name, params, options?.projection);
   }
 
   /**
@@ -468,5 +583,5 @@ if (process.env.NODE_ENV === "development") {
   torsoPromise = createTorsoClient();
 }
 
-export { TorsoDatabase, TorsoCollection };
+export { TorsoDatabase, TorsoCollection, TorsoQuery };
 export default torsoPromise;
