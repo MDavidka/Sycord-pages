@@ -34,7 +34,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    return NextResponse.json(project)
+    // ETag-style short cache so the same project edit screen does not
+    // re-download its payload on every tab focus / nav back. The dashboard
+    // explicitly invalidates by adding a fresh fetch on mutation.
+    const lastModified =
+      project.updatedAt || project.createdAt || Date.now().toString()
+    const etag = `W/"${id}-${typeof lastModified === "string"
+      ? lastModified
+      : new Date(lastModified).getTime()
+    }"`
+
+    if (request.headers.get("if-none-match") === etag) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: { ETag: etag },
+      })
+    }
+
+    return NextResponse.json(project, {
+      headers: {
+        ETag: etag,
+        "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
+      },
+    })
   } catch (error) {
     console.error("Error fetching project:", error)
     return NextResponse.json({ message: "Error fetching project" }, { status: 500 })

@@ -21,8 +21,37 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // So it depends on how `id` was passed. In URL it's string.
   // So likely stored as string.
 
-  const products = await db.collection("products").find({ projectId: id }).toArray()
-  return NextResponse.json(products)
+  // Projection drops internal Mongo fields and any large blobs that don't
+  // need to ship to the edit screen. The dashboard mostly renders name,
+  // price, image, and stock.
+  const products = await db.collection("products")
+    .find(
+      { projectId: id },
+      {
+        projection: {
+          _id: 1,
+          projectId: 1,
+          name: 1,
+          description: 1,
+          price: 1,
+          currency: 1,
+          image: 1,
+          stock: 1,
+          category: 1,
+          tags: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    )
+    .limit(500)
+    .toArray()
+
+  return NextResponse.json(products, {
+    headers: {
+      "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+    },
+  })
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

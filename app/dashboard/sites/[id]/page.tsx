@@ -824,13 +824,21 @@ export default function SiteSettingsPage() {
   useEffect(() => {
     if (!id) return
 
+    // Use AbortController so a quick nav away on mobile cancels the
+    // in-flight requests instead of keeping the request cycle alive.
+    const controller = new AbortController()
+
     const fetchAllData = async () => {
       console.log(`[v0] Settings page: Starting data fetch for project ${id}`)
       try {
-        const fetchProject = fetch(`/api/projects/${id}`)
-          .then((r) => r.json())
+        const fetchProject = fetch(`/api/projects/${id}`, { signal: controller.signal })
+          .then(async (r) => {
+            if (r.status === 304) return null
+            return r.json()
+          })
           .then((data) => {
             console.log("[v0] Project data fetched:", data ? "Success" : "Empty")
+            if (!data) return
             if (data.message) throw new Error(data.message)
             setProject(data)
             if (data.deploymentRuntime) setDeploymentRuntime(data.deploymentRuntime)
@@ -856,11 +864,12 @@ export default function SiteSettingsPage() {
             setProjectLoading(false)
           })
           .catch((err) => {
+            if (err?.name === "AbortError") return
             console.error("[v0] Settings page: Error fetching project:", err)
             setProjectLoading(false)
           })
 
-        const fetchSettings = fetch(`/api/projects/${id}/settings`)
+        const fetchSettings = fetch(`/api/projects/${id}/settings`, { signal: controller.signal })
           .then((r) => r.json())
           .then((data) => {
             console.log("[v0] Settings data fetched")
@@ -868,11 +877,12 @@ export default function SiteSettingsPage() {
             setSettingsLoading(false)
           })
           .catch((err) => {
+            if (err?.name === "AbortError") return
             console.error("[v0] Settings page: Error fetching settings:", err)
             setSettingsLoading(false)
           })
 
-        const fetchProducts = fetch(`/api/projects/${id}/products`)
+        const fetchProducts = fetch(`/api/projects/${id}/products`, { signal: controller.signal })
           .then((r) => r.json())
           .then((data) => {
             console.log("[v0] Products data fetched")
@@ -880,21 +890,26 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
           .catch((err) => {
+            if (err?.name === "AbortError") return
             console.error("[v0] Settings page: Error fetching products:", err)
             setProductsLoading(false)
           })
 
         await Promise.all([fetchProject, fetchSettings, fetchProducts])
         console.log("[v0] All data fetches completed")
-        fetchLogs()
+        if (!controller.signal.aborted) fetchLogs()
       } catch (error) {
+        if ((error as any)?.name === "AbortError") return
         console.error("[v0] Error in fetchAllData:", error)
       } finally {
-        setIsInitialLoading(false)
+        if (!controller.signal.aborted) setIsInitialLoading(false)
       }
     }
 
     fetchAllData()
+
+    // Cancel any in-flight fetches when the component unmounts or id changes.
+    return () => controller.abort()
   }, [id])
 
   // Fetch subscription info

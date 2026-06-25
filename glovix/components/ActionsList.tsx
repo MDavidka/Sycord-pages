@@ -25,21 +25,16 @@ const VERBS: Record<string, [string, string]> = {
     readMultipleFiles: ['Reading', 'Read'],
     deleteFile:        ['Deleting', 'Deleted'],
     renameFile:        ['Renaming', 'Renamed'],
-    runCommand:        ['Running', 'Ran'],
-    searchWeb:         ['Searching', 'Searched'],
     searchInFiles:     ['Searching', 'Searched'],
-    extractPage:       ['Extracting', 'Extracted'],
     typeCheck:         ['Checking types', 'Type checked'],
     lintCheck:         ['Linting', 'Linted'],
     listFiles:         ['Listing files', 'Listed files'],
-    inspectNetwork:    ['Inspecting', 'Inspected'],
-    checkDependencies: ['Checking deps', 'Checked deps'],
     drawDiagram:       ['Drawing diagram', 'Drew diagram'],
     batchCreateFiles:  ['Creating files', 'Created files'],
     getErrors:         ['Checking errors', 'Checked errors'],
 };
 
-const TERMINAL_TOOLS = new Set(['runCommand', 'typeCheck', 'lintCheck', 'getErrors', 'checkDependencies']);
+const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors']);
 const FILE_TOOLS = new Set(['createFile', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
 
 interface DeduplicatedAction {

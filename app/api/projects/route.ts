@@ -284,7 +284,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
@@ -294,17 +294,74 @@ export async function GET() {
   const db = client.db()
 
   try {
-    const userDoc = await db.collection("users").findOne({ id: session.user.id })
-    const projects = (userDoc?.projects || []).map((project: any) => {
-      const deployedUrl = project.cloudflareUrl || project.deploymentRuntime?.url || project.deployment?.domain || null
+    // Use projection so we don't pull the full user document (which may include
+    // sessions, settings, preferences, and other unrelated fields). Also only
+    // project the fields the dashboard actually needs per project so we avoid
+    // shipping large blobs (pages, history, AI logs) to the client.
+    const userDoc = await db.collection("users").findOne(
+      { id: session.user.id },
+      {
+        projection: {
+          projects: 1,
+          _id: 0,
+        },
+      },
+    )
+
+    const rawProjects = (userDoc?.projects as any[]) || []
+
+    // Sort newest-first (most recent project on top of dashboard) — fast in-memory sort.
+    rawProjects.sort((a, b) => {
+      const ta = new Date(a?.createdAt || 0).getTime()
+      const tb = new Date(b?.createdAt || 0).getTime()
+      return tb - ta
+    })
+
+    // Trim each project to the dashboard-friendly shape. Avoid returning large
+    // nested fields like `pages`, `chatHistory`, `buildLogs`, etc.
+    const projects = rawProjects.map((project: any) => {
+      const deployedUrl =
+        project.cloudflareUrl ||
+        project.deploymentRuntime?.url ||
+        project.deployment?.domain ||
+        null
       return {
-        ...project,
-        cloudflareUrl: deployedUrl || project.cloudflareUrl || null,
+        _id: project._id,
+        id: project.id,
+        businessName: project.businessName,
+        businessDescription: project.businessDescription,
+        subdomain: project.subdomain,
         domain: project.domain || deployedUrl || null,
+        cloudflareUrl: deployedUrl || project.cloudflareUrl || null,
+        style: project.style,
+        status: project.status,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        applicationId: project.applicationId,
+        projectId: project.projectId,
+        previewImage: project.previewImage,
+        profileImage: project.profileImage,
+        deploymentRuntime: project.deploymentRuntime
+          ? {
+              status: project.deploymentRuntime.status,
+              url: project.deploymentRuntime.url,
+              lastDeployedAt: project.deploymentRuntime.lastDeployedAt,
+            }
+          : undefined,
+        deployment: project.deployment
+          ? { domain: project.deployment.domain }
+          : undefined,
       }
     })
 
-    return NextResponse.json(projects)
+    // Allow short-lived browser caching + CDN caching. The dashboard will
+    // refetch after mutations anyway, so a 30s window keeps load fast on
+    // back/forward navigation without making data feel stale.
+    return NextResponse.json(projects, {
+      headers: {
+        "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+      },
+    })
   } catch (error: any) {
     console.error("Error fetching projects:", error)
     return NextResponse.json({ message: "Failed to fetch projects" }, { status: 500 })

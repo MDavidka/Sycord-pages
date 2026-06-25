@@ -100,7 +100,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       })
     }
 
-    return NextResponse.json(settings)
+    return NextResponse.json(settings, {
+      headers: {
+        "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+      },
+    })
   } catch (error: any) {
     console.error("[v0] GET settings error:", error)
     return NextResponse.json({ message: "Failed to fetch settings" }, { status: 500 })

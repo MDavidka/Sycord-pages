@@ -82,16 +82,12 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
             case 'deleteFile': return parsed.path || '';
             case 'renameFile': return parsed.oldPath ? `${parsed.oldPath} → ${parsed.newPath}` : '';
-            case 'runCommand': return decodeHtml(parsed.command || '');
-            case 'searchWeb': return decodeHtml(parsed.query || '');
             case 'searchInFiles': return decodeHtml(parsed.query || '');
-            case 'extractPage': return parsed.url || '';
             case 'typeCheck': return 'Workspace';
             case 'lintCheck': return parsed.path || 'src/';
             case 'listFiles': return 'Workspace';
             case 'getErrors': return 'Workspace';
             case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
-            case 'checkDependencies': return 'package.json';
             case 'deploy': return 'sycord.site';
             default: return '';
         }
@@ -109,14 +105,10 @@ const getActionDisplayName = (toolName: string, args: string): string => {
                 const oldP = extract('oldPath');
                 const newP = extract('newPath');
                 return oldP ? `${oldP} → ${newP}` : oldP;
-            case 'runCommand': return extract('command');
-            case 'searchWeb':
             case 'searchInFiles':
                 return extract('query');
-            case 'extractPage': return extract('url');
             case 'batchCreateFiles': return 'Multiple files';
             case 'getErrors': return 'Workspace';
-            case 'checkDependencies': return 'package.json';
             case 'deploy': return 'sycord.site';
             default: return '';
         }
