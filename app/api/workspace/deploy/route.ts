@@ -183,6 +183,13 @@ export async function POST(req: Request): Promise<Response> {
     source,
     title: "Sycord AI deploy",
     description: `Deployment for ${dokployAppName}`,
+    domain: {
+      host: `${dokployAppName}.${domain}`,
+      port: 3000,
+      path: "/",
+      https: true,
+      certificateType: "letsencrypt",
+    },
   })
 
   const finalUrl = `https://${dokployAppName}.${domain}`

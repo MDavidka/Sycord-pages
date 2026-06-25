@@ -32,7 +32,7 @@ export const CodeEditor = memo(function CodeEditor() {
             inherit: true,
             rules: [],
             colors: {
-                'editor.background': '#141414',
+                'editor.background': '#18191B',
                 'editor.lineHighlightBackground': '#1a1a1a',
                 'editorLineNumber.foreground': '#444444',
                 'editorLineNumber.activeForeground': '#888888',
@@ -65,14 +65,14 @@ export const CodeEditor = memo(function CodeEditor() {
 
     if (!selectedFile) {
         return (
-            <div className={`h-full flex items-center justify-center ${isDark ? 'bg-[#141414] text-[#525252]' : 'bg-white text-gray-400'}`}>
+            <div className={`h-full flex items-center justify-center ${isDark ? 'bg-[#18191B] text-[#525252]' : 'bg-white text-gray-400'}`}>
                 <p>Select a file to edit</p>
             </div>
         );
     }
 
     return (
-        <div className={`h-full w-full relative ${isDark ? 'bg-[#141414]' : 'bg-white'}`}>
+        <div className={`h-full w-full relative ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             <Editor
                 height="100%"
                 language={getLanguage(selectedFile)}

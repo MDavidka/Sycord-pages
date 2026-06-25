@@ -9,7 +9,7 @@ import { useEffect } from "react"
 // a client island living inside the Next.js app.
 const GlovixApp = dynamic(() => import("@/glovix/App"), {
   ssr: false,
-  loading: () => <div className="h-full w-full bg-[#141414]" />,
+  loading: () => <div className="h-full w-full bg-[#18191B]" />,
 })
 
 interface GlovixBuilderProps {

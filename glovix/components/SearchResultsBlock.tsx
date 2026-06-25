@@ -1,5 +1,7 @@
 'use client'
 import { ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface SearchResult {
     title: string;
@@ -26,31 +28,31 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
     const { query, answer, results = [], images = [] } = data;
 
     return (
-        <div className={`my-4 rounded-xl border overflow-hidden ${isDark ? 'bg-[#1a1a1a] border-[#2a2a2a]' : 'bg-gray-50 border-gray-200'}`}>
-            {/* Header */}
-            <div className={`px-4 py-3 border-b flex items-center gap-2 ${isDark ? 'border-[#2a2a2a]' : 'border-gray-200'}`}>
-                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Web Search Results
-                </span>
+        <div className={cn(
+            "my-4 rounded-xl border overflow-hidden",
+            isDark ? 'bg-card border-border' : 'bg-gray-50 border-gray-200'
+        )}>
+            <div className={cn(
+                "px-4 py-3 border-b flex items-center gap-2",
+                isDark ? 'border-border' : 'border-gray-200'
+            )}>
+                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                <span className="text-sm font-medium text-foreground/80">Web Search Results</span>
                 {query && (
-                    <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                        "{query}"
-                    </span>
+                    <span className="text-xs text-muted-foreground">"{query}"</span>
                 )}
             </div>
 
             <div className="p-4 space-y-4">
-                {/* Answer Summary */}
                 {answer && (
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-[#141414]' : 'bg-white'}`}>
-                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {answer}
-                        </p>
-                    </div>
+                    <Card className={cn(
+                        "p-3 rounded-lg border-0",
+                        isDark ? 'bg-secondary' : 'bg-white'
+                    )}>
+                        <p className="text-sm text-foreground/80">{answer}</p>
+                    </Card>
                 )}
 
-                {/* Search Results */}
                 {results.length > 0 && (
                     <div className="space-y-2">
                         {results.map((result, idx) => (
@@ -59,24 +61,17 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
                                 href={result.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={`block p-3 rounded-lg transition-colors ${
-                                    isDark 
-                                        ? 'bg-[#141414] hover:bg-[#1f1f1f]' 
-                                        : 'bg-white hover:bg-gray-50'
-                                }`}
+                                className={cn(
+                                    "block p-3 rounded-lg transition-colors",
+                                    isDark ? 'bg-secondary hover:bg-accent' : 'bg-white hover:bg-gray-50'
+                                )}
                             >
                                 <div className="flex items-start gap-2">
-                                    <ExternalLink className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
+                                    <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
                                     <div className="flex-1 min-w-0">
-                                        <h4 className={`text-sm font-medium mb-1 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                                            {result.title}
-                                        </h4>
-                                        <p className={`text-xs line-clamp-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                            {result.content}
-                                        </p>
-                                        <p className={`text-xs mt-1 truncate ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-                                            {result.url}
-                                        </p>
+                                        <h4 className="text-sm font-medium mb-1 text-blue-400">{result.title}</h4>
+                                        <p className="text-xs line-clamp-2 text-muted-foreground">{result.content}</p>
+                                        <p className="text-xs mt-1 truncate text-muted-foreground/50">{result.url}</p>
                                     </div>
                                 </div>
                             </a>
@@ -84,14 +79,11 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
                     </div>
                 )}
 
-                {/* Images */}
                 {images.length > 0 && (
                     <div>
                         <div className="flex items-center gap-2 mb-2">
-                            <ImageIcon className={`w-4 h-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} />
-                            <span className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                Related Images
-                            </span>
+                            <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-xs font-medium text-muted-foreground">Related Images</span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                             {images.slice(0, 6).map((img, idx) => (
@@ -100,9 +92,10 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
                                     href={img.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className={`relative aspect-video rounded-lg overflow-hidden group ${
-                                        isDark ? 'bg-[#141414]' : 'bg-gray-100'
-                                    }`}
+                                    className={cn(
+                                        "relative aspect-video rounded-lg overflow-hidden group",
+                                        isDark ? 'bg-secondary' : 'bg-gray-100'
+                                    )}
                                 >
                                     <img
                                         src={img.url}
@@ -112,9 +105,7 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
                                     />
                                     {img.description && (
                                         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                                            <p className="text-xs text-white line-clamp-1">
-                                                {img.description}
-                                            </p>
+                                            <p className="text-xs text-white line-clamp-1">{img.description}</p>
                                         </div>
                                     )}
                                 </a>

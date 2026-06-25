@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo, memo, useCallback } from 'react';
 import { ChevronDown, Check, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export interface StreamingAction {
     id: string;
@@ -165,7 +166,7 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
             {showOutput && isExpandable && (
                 <div>
                     {hasFileDetails && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'bg-[#0d0d0d] border border-[#1a1a1a]' : 'bg-gray-50 border border-gray-200'} py-1.5 px-3`}>
+                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'bg-background border border-border' : 'bg-gray-50 border border-gray-200'} py-1.5 px-3`}>
                             {allFileDetails.map((file, i) => (
                                 <div key={i} className={`flex items-center gap-2 py-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                                     <span className="opacity-40 text-[10px]">{'›'}</span>
@@ -175,7 +176,7 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                         </div>
                     )}
                     {hasTerminalOutput && action.result && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] font-mono leading-relaxed max-h-[200px] overflow-y-auto scrollbar-hide ${isDark ? 'bg-[#0d0d0d] text-zinc-400 border border-[#1a1a1a]' : 'bg-gray-900 text-gray-300 border border-gray-700'} p-3`}>
+                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] font-mono leading-relaxed max-h-[200px] overflow-y-auto scrollbar-hide ${isDark ? 'bg-background text-muted-foreground border border-border' : 'bg-gray-900 text-gray-300 border border-gray-700'} p-3`}>
                             <pre className="whitespace-pre-wrap break-words">{cleanResultForDisplay(action.result).slice(0, 2000)}</pre>
                         </div>
                     )}
@@ -200,7 +201,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     const show = !collapsed;
 
     return (
-        <div className={`my-2 rounded-xl border overflow-hidden ${isDark ? 'bg-[#161616] border-[#232323]' : 'bg-gray-50 border-gray-200'}`}>
+        <div className={`my-2 rounded-xl border overflow-hidden ${isDark ? 'bg-card border-border' : 'bg-gray-50 border-gray-200'}`}>
             <button
                 onClick={() => setCollapsed(c => !c)}
                 className={`w-full flex items-center gap-2 px-3.5 py-2.5 text-[13px] ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-black/[0.02]'} cursor-pointer ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-colors`}
@@ -241,7 +242,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
             </button>
 
             {show && (
-                <div className={`px-3.5 pb-2.5 pt-0.5 space-y-0.5 border-t ${isDark ? 'border-[#232323]' : 'border-gray-200'}`}>
+                <div className={`px-3.5 pb-2.5 pt-0.5 space-y-0.5 border-t ${isDark ? 'border-border' : 'border-gray-200'}`}>
                     {deduplicated.map(({ action, count, groupedActions }) => (
                         <ActionRow key={action.id} action={action} count={count} isDark={isDark} groupedActions={groupedActions} />
                     ))}

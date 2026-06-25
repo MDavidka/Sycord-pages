@@ -983,6 +983,17 @@ export type EnsureAndDeployInput = {
   buildType?: "dockerfile" | "heroku_buildpacks" | "paketo_buildpacks" | "nixpacks" | "static" | "railpack"
   /** Docker build context path (defaults to "/"). */
   dockerContextPath?: string
+  /**
+   * Domain configuration to create/ensure before deploying.
+   * When provided, a domain is created (if one doesn't already exist) for the application.
+   */
+  domain?: {
+    host: string
+    port?: number
+    path?: string
+    https?: boolean
+    certificateType?: string
+  }
 }
 
 /**
@@ -1218,6 +1229,32 @@ export async function ensureAndDeployApplication(
 
     if (!sourceResult.ok) {
       return done(false, sourceResult.error || "Failed to attach git source to the application", null)
+    }
+  }
+
+  // 2c. Create/ensure a domain for the application.
+  if (input.domain) {
+    const existingDomains = await domain.byApplicationId(state.applicationId)
+    steps.push(toStep("domain.byApplicationId", existingDomains))
+    const hasExistingDomain =
+      existingDomains.ok &&
+      Array.isArray(existingDomains.data) &&
+      existingDomains.data.some((d: any) => d.host === input.domain?.host)
+
+    if (!hasExistingDomain) {
+      const domainResult = await domain.create({
+        host: input.domain.host,
+        port: input.domain.port ?? 3000,
+        path: input.domain.path ?? "/",
+        https: input.domain.https ?? true,
+        certificateType: input.domain.certificateType ?? "letsencrypt",
+        applicationId: state.applicationId,
+        domainType: "application",
+      })
+      steps.push(toStep("domain.create", domainResult))
+      if (!domainResult.ok) {
+        return done(false, domainResult.error || "Failed to create domain for the application", null)
+      }
     }
   }
 
