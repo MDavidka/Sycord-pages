@@ -169,7 +169,7 @@ export function HomePage() {
     };
 
     return (
-        <div className={`min-h-screen w-screen flex relative ${isDark ? 'bg-[#0a0a0a]' : 'bg-white'}`}>
+        <div className={`min-h-screen w-screen flex relative ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             {/* Background Gradient */}
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute inset-0"

@@ -32,13 +32,13 @@ export function Terminal() {
     }, []);
 
     const darkTheme = {
-        background: '#0a0a0a',
+        background: '#18191B',
         foreground: '#d4d4d4',
         cursor: '#528bff',
-        cursorAccent: '#0a0a0a',
+        cursorAccent: '#18191B',
         selectionBackground: '#264f78',
         selectionForeground: '#ffffff',
-        black: '#0a0a0a',
+        black: '#18191B',
         brightBlack: '#5a5a5a',
         red: '#f44747',
         brightRed: '#f97583',
@@ -221,7 +221,7 @@ export function Terminal() {
     return (
         <div
             className="h-full w-full overflow-hidden"
-            style={{ backgroundColor: isDark ? '#0a0a0a' : '#ffffff' }}
+            style={{ backgroundColor: isDark ? '#18191B' : '#ffffff' }}
         >
             <div
                 ref={terminalRef}

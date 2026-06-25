@@ -126,7 +126,7 @@ export function Sidebar({ onClose }: SidebarProps) {
                                 <div className={`px-2.5 py-1.5 text-[10px] ${isDark ? 'text-[#444]' : 'text-gray-400'}`}>No projects yet</div>
                             ) : (
                                 chats.map((chat) => (
-                                    <div key={chat.id} onClick={() => handleSelectChat(chat.id)} className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${currentChatId === chat.id ? (isDark ? 'bg-[#1a1a1a] text-white' : 'bg-gray-200 text-gray-900') : (isDark ? 'text-[#888] hover:text-[#ccc] hover:bg-[#151515]' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100')}`}>
+                                    <div key={chat.id} onClick={() => handleSelectChat(chat.id)} className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${currentChatId === chat.id ? (isDark ? 'bg-[#1a1a1a] text-white' : 'bg-gray-200 text-gray-900') : (isDark ? 'text-[#888] hover:text-[#ccc] hover:bg-[#18191B]' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100')}`}>
                                         <span className="flex-1 truncate text-xs">{chat.title}</span>
                                         <button onClick={(e) => handleDeleteChat(e, chat.id)} className="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all">
                                             <Trash2 className={`w-3 h-3 hover:text-red-400 ${isDark ? 'text-[#444]' : 'text-gray-300'}`} />

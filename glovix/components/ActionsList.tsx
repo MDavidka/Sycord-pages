@@ -165,7 +165,7 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
             {showOutput && isExpandable && (
                 <div>
                     {hasFileDetails && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'bg-[#0d0d0d] border border-[#1a1a1a]' : 'bg-gray-50 border border-gray-200'} py-1.5 px-3`}>
+                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'bg-[#18191B] border border-[#1a1a1a]' : 'bg-gray-50 border border-gray-200'} py-1.5 px-3`}>
                             {allFileDetails.map((file, i) => (
                                 <div key={i} className={`flex items-center gap-2 py-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                                     <span className="opacity-40 text-[10px]">{'›'}</span>
@@ -175,7 +175,7 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                         </div>
                     )}
                     {hasTerminalOutput && action.result && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] font-mono leading-relaxed max-h-[200px] overflow-y-auto scrollbar-hide ${isDark ? 'bg-[#0d0d0d] text-zinc-400 border border-[#1a1a1a]' : 'bg-gray-900 text-gray-300 border border-gray-700'} p-3`}>
+                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] font-mono leading-relaxed max-h-[200px] overflow-y-auto scrollbar-hide ${isDark ? 'bg-[#18191B] text-zinc-400 border border-[#1a1a1a]' : 'bg-gray-900 text-gray-300 border border-gray-700'} p-3`}>
                             <pre className="whitespace-pre-wrap break-words">{cleanResultForDisplay(action.result).slice(0, 2000)}</pre>
                         </div>
                     )}

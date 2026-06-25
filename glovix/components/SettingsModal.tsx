@@ -41,7 +41,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 className={`w-full max-w-5xl h-[85vh] overflow-hidden rounded-xl flex ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'
                     }`}
             >
-                <div className={`w-56 shrink-0 p-4 ${isDark ? 'bg-[#141414]' : 'bg-gray-50'}`}>
+                <div className={`w-56 shrink-0 p-4 ${isDark ? 'bg-[#18191B]' : 'bg-gray-50'}`}>
                     <p className={`text-xs font-medium px-3 mb-3 ${isDark ? 'text-[#666]' : 'text-gray-400'}`}>
                         Settings
                     </p>
@@ -141,7 +141,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                                                 }}
                                                 placeholder="200000"
                                                 className={`w-full pl-10 pr-4 py-2.5 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${isDark
-                                                    ? 'bg-[#141414] border border-[#333] text-white placeholder-[#444] focus:border-blue-500'
+                                                    ? 'bg-[#18191B] border border-[#333] text-white placeholder-[#444] focus:border-blue-500'
                                                     : 'bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-500'
                                                     }`}
                                             />

@@ -43,7 +43,7 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
             <div className="p-4 space-y-4">
                 {/* Answer Summary */}
                 {answer && (
-                    <div className={`p-3 rounded-lg ${isDark ? 'bg-[#141414]' : 'bg-white'}`}>
+                    <div className={`p-3 rounded-lg ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
                         <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                             {answer}
                         </p>
@@ -61,7 +61,7 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
                                 rel="noopener noreferrer"
                                 className={`block p-3 rounded-lg transition-colors ${
                                     isDark 
-                                        ? 'bg-[#141414] hover:bg-[#1f1f1f]' 
+                                        ? 'bg-[#18191B] hover:bg-[#1f1f1f]' 
                                         : 'bg-white hover:bg-gray-50'
                                 }`}
                             >
@@ -101,7 +101,7 @@ export function SearchResultsBlock({ data, isDark }: SearchResultsBlockProps) {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={`relative aspect-video rounded-lg overflow-hidden group ${
-                                        isDark ? 'bg-[#141414]' : 'bg-gray-100'
+                                        isDark ? 'bg-[#18191B]' : 'bg-gray-100'
                                     }`}
                                 >
                                     <img

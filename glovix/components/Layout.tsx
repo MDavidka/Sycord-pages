@@ -381,7 +381,7 @@ export function Layout() {
             </div>{/* /Main panes */}
 
             {/* Mobile bottom tab switcher */}
-            <div className={`md:hidden flex-shrink-0 flex items-stretch border-t ${isDark ? 'bg-[#0f0f0f] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
+            <div className={`md:hidden flex-shrink-0 flex items-stretch border-t ${isDark ? 'bg-[#18191B] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
                 <button
                     onClick={() => setMobileTab('chat')}
                     className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${mobileTab === 'chat' ? (isDark ? 'text-white' : 'text-gray-900') : (isDark ? 'text-[#666]' : 'text-gray-400')}`}

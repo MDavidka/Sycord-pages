@@ -167,7 +167,7 @@ export function HomeChat() {
                     <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
                         <div className="flex items-center gap-2 relative">
                             {showModelMenu && (
-                                <div className={`absolute bottom-full left-0 mb-2 rounded-lg shadow-xl overflow-hidden z-10 min-w-[200px] ${isDark ? 'bg-[#171717] border border-[#262626]' : 'bg-white border border-gray-200'}`}>
+                                <div className={`absolute bottom-full left-0 mb-2 rounded-lg shadow-xl overflow-hidden z-10 min-w-[200px] ${isDark ? 'bg-[#18191B] border border-[#262626]' : 'bg-white border border-gray-200'}`}>
                                     <div className="p-1 space-y-0.5">
                                         <button
                                             type="button"

@@ -195,7 +195,7 @@ export function Workbench() {
     }, [terminalHeight]);
 
     return (
-        <div ref={containerRef} className={`flex-1 h-full flex flex-col overflow-hidden p-1.5 md:pt-2 md:pr-2 md:pb-2 md:pl-0 gap-1.5 ${isDark ? 'bg-[#141414]' : 'bg-gray-100'}`}>
+        <div ref={containerRef} className={`flex-1 h-full flex flex-col overflow-hidden p-1.5 md:pt-2 md:pr-2 md:pb-2 md:pl-0 gap-1.5 ${isDark ? 'bg-[#18191B]' : 'bg-gray-100'}`}>
             {/* Top bar */}
             <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-1">
@@ -236,7 +236,7 @@ export function Workbench() {
             </div>
 
             {/* Main content block - Files + Editor */}
-            <div className={`flex-1 flex overflow-hidden rounded-xl border relative ${isDark ? 'bg-[#141414] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
+            <div className={`flex-1 flex overflow-hidden rounded-xl border relative ${isDark ? 'bg-[#18191B] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
                 {activeTab === 'code' ? (
                     <>
                         {/* Mobile drawer backdrop */}
@@ -247,7 +247,7 @@ export function Workbench() {
                             />
                         )}
                         {/* Files sidebar (desktop column / mobile drawer) */}
-                        <div className={`${showFilesMobile ? 'flex absolute z-30 inset-y-0 left-0 w-3/4 max-w-[260px] shadow-2xl' : 'hidden'} md:relative md:flex md:w-56 md:max-w-none md:shadow-none flex-col overflow-hidden border-r ${isDark ? 'bg-[#141414] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
+                        <div className={`${showFilesMobile ? 'flex absolute z-30 inset-y-0 left-0 w-3/4 max-w-[260px] shadow-2xl' : 'hidden'} md:relative md:flex md:w-56 md:max-w-none md:shadow-none flex-col overflow-hidden border-r ${isDark ? 'bg-[#18191B] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}>
                             <div className={`h-9 flex items-center gap-3 px-3 border-b text-xs ${isDark ? 'border-[#1f1f1f] text-[#888]' : 'border-gray-200 text-gray-500'}`}>
                                 <span className={`font-medium ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}>Files</span>
                                 <span className="opacity-50">Search</span>
@@ -360,7 +360,7 @@ export function Workbench() {
 
             {/* Terminal panel */}
             <div
-                className={`flex flex-col rounded-xl border overflow-hidden transition-[height] duration-150 ${isDark ? 'bg-[#0a0a0a] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}
+                className={`flex flex-col rounded-xl border overflow-hidden transition-[height] duration-150 ${isDark ? 'bg-[#18191B] border-[#1f1f1f]' : 'bg-white border-gray-200'}`}
                 style={{ height: showTerminal ? `${terminalHeight}px` : '36px', minHeight: '36px' }}
             >
                 {/* Drag handle */}
@@ -437,7 +437,7 @@ export function Workbench() {
             {/* Fullscreen preview overlay */}
             {isFullscreen && previewUrl && (
                 <div className="fixed inset-0 z-50 flex flex-col bg-black">
-                    <div className={`h-10 flex items-center px-4 gap-3 flex-shrink-0 ${isDark ? 'bg-[#0a0a0a] border-b border-[#1f1f1f]' : 'bg-gray-900 border-b border-gray-700'}`}>
+                    <div className={`h-10 flex items-center px-4 gap-3 flex-shrink-0 ${isDark ? 'bg-[#18191B] border-b border-[#1f1f1f]' : 'bg-gray-900 border-b border-gray-700'}`}>
                         <button
                             onClick={() => navigateTo(urlPath)}
                             className="p-1.5 rounded-md text-[#666] hover:text-white hover:bg-[#1a1a1a] transition-colors"
