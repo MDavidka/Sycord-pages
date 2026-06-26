@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "You cannot invite yourself" }, { status: 400 })
   }
 
-  if (!ObjectId.isValid(projectId)) {
+  if (!projectId || !projectId.trim()) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   }
 
   const invite = {
-    _id: new ObjectId(),
+    _id: crypto.randomUUID(),
     projectId,
     projectName: project.businessName || "Unnamed project",
     inviterUserId: session.user.id,

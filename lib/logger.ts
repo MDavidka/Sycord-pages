@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import clientPromise from './mongodb';
+import clientPromise from './torso';
 
 // Vercel's Lambda filesystem is read-only except for /tmp, so attempting to
 // write `main/log/log.txt` under `process.cwd()` fails on every AI call with

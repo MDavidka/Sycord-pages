@@ -1,7 +1,7 @@
 import path from "node:path"
 import * as crypto from "node:crypto"
 import { NodeSSH } from "node-ssh"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 
 type SshConfig = {
   host: string

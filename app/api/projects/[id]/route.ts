@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const client = await clientPromise
   const db = client.db()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -28,13 +28,35 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    const project = user.projects.find((p: any) => p._id.toString() === id)
+    const project = user.projects.find((p: any) => p._id?.toString() === id || p._id === id)
 
     if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    return NextResponse.json(project)
+    // ETag-style short cache so the same project edit screen does not
+    // re-download its payload on every tab focus / nav back. The dashboard
+    // explicitly invalidates by adding a fresh fetch on mutation.
+    const lastModified =
+      project.updatedAt || project.createdAt || Date.now().toString()
+    const etag = `W/"${id}-${typeof lastModified === "string"
+      ? lastModified
+      : new Date(lastModified).getTime()
+    }"`
+
+    if (request.headers.get("if-none-match") === etag) {
+      return new NextResponse(null, {
+        status: 304,
+        headers: { ETag: etag },
+      })
+    }
+
+    return NextResponse.json(project, {
+      headers: {
+        ETag: etag,
+        "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
+      },
+    })
   } catch (error) {
     console.error("Error fetching project:", error)
     return NextResponse.json({ message: "Error fetching project" }, { status: 500 })
@@ -52,7 +74,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const db = client.db()
   const body = await request.json()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -69,7 +91,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const result = await db.collection("users").updateOne(
     {
         id: session.user.id,
-        "projects._id": new ObjectId(id)
+        "projects._id": id
     },
     { $set: updateFields }
   )
@@ -91,7 +113,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const client = await clientPromise
   const db = client.db()
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -101,7 +123,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         { id: session.user.id },
         {
             $pull: {
-                projects: { _id: new ObjectId(id) }
+                projects: { _id: id }
             } as any
         }
     )

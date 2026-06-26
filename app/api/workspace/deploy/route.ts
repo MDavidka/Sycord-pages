@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth/next"
-import { ObjectId } from "mongodb"
+
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import {
   prepareProjectDeployFiles,
   validateApiDeployFiles,
@@ -113,7 +113,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!hasDockerfile) {
     const dockerfile = generateDockerfile("nextjs", "22", "3000")
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": new ObjectId(projectId) },
+      { id: userId, "projects._id": projectId },
       {
         $push: {
           "projects.$.pages": {
@@ -196,7 +196,7 @@ export async function POST(req: Request): Promise<Response> {
 
   if (!result.success) {
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": new ObjectId(projectId) },
+      { id: userId, "projects._id": projectId },
       {
         $set: {
           "projects.$.deploymentMode": "dokploy",
@@ -215,7 +215,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   await db.collection("users").updateOne(
-    { id: userId, "projects._id": new ObjectId(projectId) },
+    { id: userId, "projects._id": projectId },
     {
       $set: {
         "projects.$.deploymentMode": "dokploy",

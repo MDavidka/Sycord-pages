@@ -1,4 +1,4 @@
-import { executeCommand, writeFile, readFile, renameFile, deleteFile, autoInstallDependencies, smartInstall } from './webcontainer';
+import { executeCommand, writeFile, readFile, renameFile, deleteFile } from './webcontainer';
 import { useStore } from '../store';
 import { parseToolArguments } from './utils';
 import { getHostProjectId, getProjectPagesMap, deleteProjectPage, isPageBackedFile } from './api';
@@ -161,85 +161,6 @@ async function persistFile(path: string, content: string): Promise<PageSyncResul
 /** True when running inside a Sycord project (server-side workspace available). */
 function isServerWorkspace(): boolean {
     return !!getHostProjectId();
-}
-
-/**
- * Run a command on the server-side execution sandbox and stream its stdout +
- * stderr into the terminal. Returns a clean summary for the AI.
- *
- * NOTE: Sycord is a Docker-based deployment platform. Commands here run in a
- * sandbox for diagnostics/validation ONLY. Actual deployment goes through
- * Dokploy Docker containers. Do NOT use this for building or installing
- * dependencies for deployment.
- */
-async function runCommandServerSide(
-    projectId: string,
-    command: string,
-    cwd: string | undefined,
-    ctx: ToolContext
-): Promise<string> {
-    // Dev servers / long-running watchers don't apply on the server sandbox —
-    // there is no live in-app preview. Direct the AI to deploy instead.
-    // Also block npm install/build since deployment is Docker-based.
-    if (/\b(run\s+)?(dev|start|serve|preview|watch)\b/.test(command)) {
-        return `[SYSTEM] ℹ️ "${command}" is a long-running dev server, which is not used in the Sycord workspace (there is no live in-app preview). Build the project with "npm run build" and use the deploy tool to publish it to sycord.site.`;
-    }
-
-    // Sycord is Docker-based - block npm install/build commands
-    if (/\bnpm\s+(install|ci|run\s+build|run\s+dev)\b/.test(command)) {
-        return `[SYSTEM] ℹ️ Sycord is a Docker-based deployment platform. Do NOT run "${command}" on the VPS. For deployment:
-1. Use save() to push your code to GitHub
-2. Use deploy() to build and deploy via Dokploy Docker containers
-3. Dokploy handles all npm dependency installation and builds inside Docker
-If you need to validate your code, use typeCheck() or lintCheck() instead.`;
-    }
-
-    ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
-    const writeToTerminal = createCleanTerminalWriter(ctx.addTerminalOutput);
-
-    try {
-        const res = await fetch(`/api/workspace/execute?projectId=${encodeURIComponent(projectId)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command, cwd: cwd || '/' }),
-        });
-
-        if (!res.ok || !res.body) {
-            const msg = await res.text().catch(() => '');
-            return `[SYSTEM] ❌ Command "${command}" could not run on the Sycord server sandbox (HTTP ${res.status}). ${msg}`.trim();
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let output = '';
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            output += chunk;
-            writeToTerminal(chunk);
-        }
-
-        // Surface any parsed errors into the Error Panel.
-        const parsed = parseErrorsFromOutput(output, command);
-        if (parsed.length > 0) {
-            useStore.getState().addParsedErrors(parsed);
-        }
-
-        const exitMatch = output.match(/\[sandbox\] exit code (\d+)/);
-        const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : 0;
-        const status = exitCode === 0 ? '✅' : '❌';
-
-        const MAX_OUTPUT_LENGTH = 3000;
-        let finalOutput = cleanTerminalOutput(output);
-        if (finalOutput.length > MAX_OUTPUT_LENGTH) {
-            finalOutput = finalOutput.slice(0, 500) + '\n...[truncated]...\n' + finalOutput.slice(-2500);
-        }
-
-        return `[SYSTEM] ${status} Command "${command}" ran on the Sycord server sandbox (exit code ${exitCode}).\nOutput:\n${finalOutput || '(no output)'}`;
-    } catch (e: any) {
-        return `Error running command "${command}" on the server sandbox: ${e.message}`;
-    }
 }
 
 /** Run structured TypeScript diagnostics on the server-side workspace. */
@@ -676,7 +597,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'searchInFiles',
-            description: 'Search for a text pattern across all project files. Returns matching lines with file paths and line numbers. Use this to find where something is defined or used.',
+            description: 'Search for a text pattern across project files. Returns matching lines with file paths and line numbers. Use this to find where something is defined or used.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -684,21 +605,6 @@ export const TOOL_DEFINITIONS = [
                     filePattern: { type: 'string', description: 'Optional glob pattern to filter files, e.g., "*.tsx" or "src/**/*.ts"' },
                 },
                 required: ['query'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'runCommand',
-            description: 'Run a shell command on the Sycord server-side execution sandbox. Use npm for installs and "npm run build" to build the Next.js app. Commands run server-side (not in the browser), so they never crash with serialization errors.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    command: { type: 'string', description: 'The command to run, e.g., npm install' },
-                    cwd: { type: 'string', description: 'Optional working directory relative to the project root. Defaults to "/".' },
-                },
-                required: ['command'],
             },
         },
     },
@@ -731,52 +637,6 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
-            name: 'searchWeb',
-            description: 'Search the web for information, documentation, or images. Returns summaries, source links, and related images.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    query: { type: 'string', description: 'The search query.' },
-                    includeDomains: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        description: 'Optional: Limit search to specific domains (e.g., ["github.com", "stackoverflow.com"])'
-                    },
-                },
-                required: ['query'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'inspectNetwork',
-            description: 'Debug network requests by fetching a URL and returning headers/status. Use this to check if local server endpoints are responsive.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    url: { type: 'string', description: 'The URL to inspect (e.g., http://localhost:3000)' },
-                    method: { type: 'string', description: 'HTTP method (GET, POST, etc.)', default: 'GET' },
-                },
-                required: ['url'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'checkDependencies',
-            description: 'Check package.json for outdated or conflicting dependencies using npm outdated.',
-            parameters: {
-                type: 'object',
-                properties: {},
-                required: [],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
             name: 'drawDiagram',
             description: 'Generate and display an architecture diagram using Mermaid syntax.',
             parameters: {
@@ -786,20 +646,6 @@ export const TOOL_DEFINITIONS = [
                     title: { type: 'string', description: 'Title of the diagram' },
                 },
                 required: ['mermaidCode'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'extractPage',
-            description: 'Extract the full content of a specific webpage as markdown. Use this to read documentation pages, articles, or any URL.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    url: { type: 'string', description: 'The URL to extract content from' },
-                },
-                required: ['url'],
             },
         },
     },
@@ -1517,166 +1363,6 @@ export async function handleSearchInFiles(args: { query: string; filePattern?: s
 }
 
 
-export async function handleRunCommand(
-    args: { command: string; cwd?: string },
-    ctx: ToolContext
-): Promise<string> {
-    const { command, cwd } = args;
-
-    if (!command || typeof command !== 'string' || command.trim().length === 0) {
-        return 'Error: Empty or invalid command.';
-    }
-
-    // Sanitize dangerous commands
-    const dangerous = ['rm -rf /', 'rm -rf ~', 'mkfs', 'dd if=', ':(){', 'fork bomb'];
-    if (dangerous.some(d => command.includes(d))) {
-        return `Error: Dangerous command blocked: "${command}"`;
-    }
-
-    // When embedded in a Sycord project, run on the server-side execution
-    // sandbox instead of the browser WebContainer. The server is a real Node.js
-    // environment, so backend commands and "&&" chaining are allowed there.
-    if (isServerWorkspace()) {
-        return runCommandServerSide(getHostProjectId()!, command, cwd, ctx);
-    }
-
-    // Block background process operators — WebContainer shell doesn't support them
-    if (command.includes(' & ') || command.includes(' && ') || command.endsWith(' &')) {
-        return `[SYSTEM] ❌ BLOCKED: Cannot use "&" or "&&" operators. WebContainer does not support background processes or command chaining.\n\nRun each command separately using runCommand. For example:\n- First: runCommand("npm install")\n- Then: runCommand("npm run build")`;
-    }
-
-    // Block backend server commands — they don't work in WebContainer
-    const backendPatterns = [
-        /^node\s+(server|app|index|backend|api)\.(js|ts|mjs)/i,
-        /^nodemon\s/i,
-        /^ts-node\s/i,
-        /^pm2\s/i,
-        /^python\s/i,
-        /^ruby\s/i,
-        /^java\s/i,
-        /^go\s+run/i,
-        /^docker\s/i,
-        /^docker-compose\s/i,
-    ];
-    if (backendPatterns.some(p => p.test(command.trim()))) {
-        return `[SYSTEM] ❌ BLOCKED: "${command}" cannot run here.\n\nThis is a Next.js app, not a standalone backend server. Do NOT add a custom Node server.\n\nFor server logic, use Next.js Route Handlers (app/api/*/route.ts). Then:\n- "npm install" to add dependencies\n- "npm run build" to build the deployable Next.js app\n- Use BaaS (Supabase/Firebase/Neon) or fetch() for real data`;
-    }
-
-    try {
-        const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [command];
-        const cmd = parts[0].replace(/"/g, '');
-        const cmdArgs = parts.slice(1).map(a => a.replace(/"/g, ''));
-
-        // Special handling for long-running commands like 'npm/pnpm run dev'
-        const isDevServer = (cmd === 'npm' || cmd === 'pnpm') && (
-            (cmdArgs.includes('run') && cmdArgs.includes('dev')) ||
-            cmdArgs.join(' ').includes('run dev') ||
-            cmdArgs.join(' ').includes('start')
-        );
-
-        // Warn about backend packages that won't work in WebContainer
-        if ((cmd === 'npm' || cmd === 'pnpm') && cmdArgs.includes('install')) {
-            // Pure server-side packages that cannot work in WebContainer
-            const backendPkgs = ['express', 'fastify', 'koa', 'hapi', 'nest', '@nestjs/core', 'pg', 'mysql', 'mysql2', 'mongoose', 'mongodb', 'prisma', '@prisma/client', 'sequelize', 'typeorm', 'redis', 'ioredis', 'socket.io', 'ws', 'sharp', 'bcrypt', 'morgan', 'body-parser', 'cookie-parser', 'express-session'];
-            // BaaS client SDKs that DO work (HTTP-based, no server needed):
-            // @supabase/supabase-js, firebase, @neondatabase/serverless,
-            // @firebase/*, bcryptjs, jsonwebtoken, passport, cors, helmet
-            const installingPkgs = cmdArgs.filter(a => !a.startsWith('-'));
-            const foundBackend = installingPkgs.filter(pkg => backendPkgs.some(bp => pkg.includes(bp)));
-            if (foundBackend.length > 0) {
-                return `[SYSTEM] ⚠️ WARNING: You are trying to install backend packages: ${foundBackend.join(', ')}\n\nThese will NOT work in WebContainer because there is no real server, no database, and no network sockets.\n\nWebContainer only supports client-side (browser) code. Use BaaS instead:\n- Supabase (@supabase/supabase-js) — auth, database, storage\n- Firebase (firebase) — auth, Firestore, storage\n- Neon (@neondatabase/serverless) — Postgres over HTTP\n- Appwrite (appwrite) — auth, database, storage\n\nIf you still need these packages for client-side use, re-run the command.`;
-            }
-        }
-
-        // Echo the command to terminal so user sees what's running
-        ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
-
-        // Create cleaned output writer for terminal
-        const writeToTerminal = createCleanTerminalWriter(ctx.addTerminalOutput);
-
-        if (isDevServer) {
-            // Auto-detect missing deps and smart install before starting dev server
-            try {
-                const currentFiles = useStore.getState().files;
-                if (Object.keys(currentFiles).length > 0) {
-                    await autoInstallDependencies(currentFiles, ctx.addTerminalOutput);
-                }
-                await smartInstall(ctx.addTerminalOutput);
-            } catch (e) {
-                console.error('[Tools] Auto-install before dev server failed:', e);
-            }
-
-            // Fire and forget — dev server runs in background, don't await
-            let devOutputBuffer = '';
-            executeCommand(cmd, cmdArgs, (output) => {
-                writeToTerminal(output);
-                devOutputBuffer += output;
-                const parsed = parseErrorsFromOutput(output, 'pnpm run dev');
-                if (parsed.length > 0) {
-                    useStore.getState().addParsedErrors(parsed);
-                }
-            }, -1);
-            return `[SYSTEM] Command "${command}" started in background. ✅ DEV SERVER IS NOW RUNNING! Your task is complete - do not run any more commands.`;
-        }
-
-        // Determine timeout based on command type
-        let timeout = 120000; // 2 min default
-        if ((cmd === 'npm' || cmd === 'pnpm') && cmdArgs.includes('install')) {
-            timeout = 180000; // 3 min for install
-        } else if (cmd === 'npx' && cmdArgs.includes('tsc')) {
-            timeout = 60000; // 1 min for type check
-        }
-
-        let outputBuffer = '';
-        const exitCode = await executeCommand(cmd, cmdArgs, (output) => {
-            outputBuffer += output;
-            writeToTerminal(output);
-        }, timeout);
-
-        // Clean and truncate output for AI (save tokens)
-        const MAX_OUTPUT_LENGTH = 3000;
-        let finalOutput = cleanTerminalOutput(outputBuffer);
-        if (finalOutput.length > MAX_OUTPUT_LENGTH) {
-            finalOutput = finalOutput.slice(0, 500) + '\n...[truncated]...\n' + finalOutput.slice(-2500);
-        }
-
-        // Timeout detection
-        if (exitCode === 124) {
-            return `[SYSTEM] ⏰ Command "${command}" TIMED OUT after ${timeout / 1000}s.\nPartial output:\n${finalOutput}\n\n⚠️ The command took too long. Try a simpler approach or break it into smaller steps.`;
-        }
-
-        // Parse npm/pnpm errors for clearer feedback
-        if (exitCode !== 0 && (cmd === 'npm' || cmd === 'pnpm')) {
-            const errors = parseNpmErrors(outputBuffer);
-            if (errors) {
-                return `[SYSTEM] ❌ Command "${command}" FAILED (exit code ${exitCode}).\n\n🔴 Parsed errors:\n${errors}\n\nFull output:\n${finalOutput}`;
-            }
-        }
-
-        // Parse TypeScript/build errors
-        if (exitCode !== 0) {
-            const tsErrors = parseBuildErrors(outputBuffer);
-            if (tsErrors) {
-                return `[SYSTEM] ❌ Command "${command}" FAILED (exit code ${exitCode}).\n\n🔴 Errors found:\n${tsErrors}\n\nFull output:\n${finalOutput}`;
-            }
-        }
-
-        const status = exitCode === 0 ? '✅' : '❌';
-
-        // Parse and store errors for the Error Panel
-        if (exitCode !== 0) {
-            const parsed = parseErrorsFromOutput(outputBuffer, command);
-            if (parsed.length > 0) {
-                useStore.getState().addParsedErrors(parsed);
-            }
-        }
-
-        return `[SYSTEM] ${status} Command "${command}" finished (exit code ${exitCode}).\nOutput:\n${finalOutput}`;
-    } catch (e: any) {
-        return `Error running command "${command}": ${e.message}`;
-    }
-}
-
 // Parse npm install/build errors into structured format
 function parseNpmErrors(output: string): string | null {
     const errors: string[] = [];
@@ -1780,111 +1466,6 @@ export async function handleLintCheck(args: { path?: string }, ctx: ToolContext)
         }
     } catch (e: any) {
         return `Error running lint: ${e.message}`;
-    }
-}
-
-export async function handleSearchWeb(args: { query: string; includeDomains?: string[] }): Promise<string> {
-    const { query, includeDomains } = args;
-    try {
-        const requestBody: any = {
-            api_key: process.env.NEXT_PUBLIC_TAVILY_API_KEY,
-            query,
-            include_answer: "basic",
-            search_depth: "advanced",
-            max_results: 5,
-            include_images: true,
-            include_image_descriptions: true,
-        };
-
-        if (includeDomains && includeDomains.length > 0) {
-            requestBody.include_domains = includeDomains;
-        }
-
-        const response = await fetch('https://api.tavily.com/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Tavily API Error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        let result = '';
-
-        if (data.answer) {
-            result += `${data.answer}\n\n`;
-        }
-
-        if (data.results && data.results.length > 0) {
-            result += `**Sources:** ${data.results.map((r: any) => r.title).join(', ')}\n\n`;
-        }
-
-        if (data.images && data.images.length > 0) {
-            result += `**Images:**\n\n`;
-            data.images.slice(0, 6).forEach((img: any, idx: number) => {
-                result += `![${img.description || `Image ${idx + 1}`}](${img.url})\n\n`;
-            });
-        }
-
-        return result;
-    } catch (e: any) {
-        return `Error: ${e.message}`;
-    }
-}
-
-export async function handleExtractPage(args: { url: string }): Promise<string> {
-    const { url } = args;
-    try {
-        const response = await fetch('https://api.tavily.com/extract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                api_key: process.env.NEXT_PUBLIC_TAVILY_API_KEY,
-                urls: [url],
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`Tavily Extract API Error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (data.results && data.results.length > 0) {
-            const result = data.results[0];
-            let formatted = `[SYSTEM] Extracted content from ${url}\n\n`;
-            formatted += `## ${result.title || 'Page Content'}\n\n`;
-            formatted += result.raw_content || result.content || 'No content extracted';
-            return formatted;
-        }
-
-        return `[SYSTEM] No content could be extracted from ${url}`;
-    } catch (e: any) {
-        return `Error extracting page: ${e.message}`;
-    }
-}
-
-export async function handleInspectNetwork(args: { url: string; method?: string }, ctx: ToolContext): Promise<string> {
-    const { url } = args;
-    try {
-        return await handleRunCommand({
-            command: `node -e "const h=require('${url.startsWith('https') ? 'https' : 'http'}'); h.get('${url}', r => { console.log('Status: '+r.statusCode); console.log(r.headers); r.resume() }).on('error', e=>console.log(e.message))"`
-        }, ctx);
-    } catch (e: any) {
-        return `Error inspecting network: ${e.message}`;
-    }
-}
-
-export async function handleCheckDependencies(ctx: ToolContext): Promise<string> {
-    try {
-        const outdated = await handleRunCommand({ command: 'npm outdated' }, ctx);
-        const pkg = await handleReadFile({ path: 'package.json' });
-        return `${pkg}\n\n[NPM OUTDATED REPORT]:\n${outdated}`;
-    } catch (e: any) {
-        return `Error checking dependencies: ${e.message}`;
     }
 }
 
@@ -2060,7 +1641,6 @@ async function _executeToolInternal(
     // Handle tools without arguments
     if (name === 'typeCheck') return handleTypeCheck(ctx);
     if (name === 'listFiles') return await handleListFiles();
-    if (name === 'checkDependencies') return handleCheckDependencies(ctx);
     if (name === 'getErrors') return handleGetErrors(ctx);
     if (name === 'save') return handleSave();
     if (name === 'deploy') return handleDeploy();
@@ -2096,23 +1676,11 @@ async function _executeToolInternal(
                 case 'renameFile':
                     result = await handleRenameFile(args);
                     break;
-                case 'runCommand':
-                    result = await handleRunCommand(args, ctx);
-                    break;
-                case 'searchWeb':
-                    result = await handleSearchWeb(args);
-                    break;
                 case 'searchInFiles':
                     result = await handleSearchInFiles(args);
                     break;
-                case 'inspectNetwork':
-                    result = await handleInspectNetwork(args, ctx);
-                    break;
                 case 'drawDiagram':
                     result = await handleDrawDiagram(args);
-                    break;
-                case 'extractPage':
-                    result = await handleExtractPage(args);
                     break;
                 case 'lintCheck':
                     result = await handleLintCheck(args, ctx);
@@ -2139,7 +1707,7 @@ async function _executeToolInternal(
                     result = await handleCreateDockerfile(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, runCommand, typeCheck, lintCheck, searchWeb, extractPage, inspectNetwork, checkDependencies, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, createDockerfile`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, createDockerfile`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

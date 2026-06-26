@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 const GITHUB_API_BASE = "https://api.github.com"
 
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     const db = client.db()
 
     // Verify project ownership (embedded in user)
-    const user = await db.collection("users").findOne({ id: session.user.id });
+    const user = await db.collection("users").findOne<{ projects?: any[] }>({ id: session.user.id });
     if (!user || !user.projects) {
         return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
@@ -175,7 +175,7 @@ export async function GET(request: Request) {
     const db = client.db()
 
     // Get user doc
-    const user = await db.collection("users").findOne({ id: session.user.id });
+    const user = await db.collection("users").findOne<{ projects?: any[]; github_tokens?: Record<string, any> }>({ id: session.user.id });
 
     if (!user) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });

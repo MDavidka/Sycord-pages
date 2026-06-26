@@ -15,9 +15,8 @@ import { promises as fs } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { getServerSession } from "next-auth/next"
-import { ObjectId } from "mongodb"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 
 /** Root directory under which every project's sandbox workspace lives. */
 export const WORKSPACE_BASE = path.join(os.tmpdir(), "sycord-workspace")
@@ -30,9 +29,9 @@ export async function requireUserId(): Promise<string | null> {
   return (session?.user as { id?: string } | undefined)?.id ?? null
 }
 
-/** A 24-char hex Mongo ObjectId string. */
+/** A non-empty string id used as project identifier in Torso. */
 export function isValidProjectId(projectId: string): boolean {
-  return /^[a-f0-9]{24}$/i.test(projectId) && ObjectId.isValid(projectId)
+  return Boolean(projectId && typeof projectId === "string" && projectId.trim().length > 0)
 }
 
 /** Load a single project (with its pages) owned by the given user. */
@@ -40,8 +39,8 @@ export async function loadProject(userId: string, projectId: string): Promise<an
   if (!isValidProjectId(projectId)) return null
   const client = await clientPromise
   const db = client.db()
-  const user = await db.collection("users").findOne(
-    { id: userId, "projects._id": new ObjectId(projectId) },
+  const user = await db.collection("users").findOne<{ projects?: any[] }>(
+    { id: userId, "projects._id": projectId },
     { projection: { "projects.$": 1 } },
   )
   return user?.projects?.[0] ?? null

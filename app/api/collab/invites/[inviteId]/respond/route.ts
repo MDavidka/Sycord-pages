@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function POST(
   request: Request,
@@ -14,7 +14,7 @@ export async function POST(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  if (!ObjectId.isValid(inviteId)) {
+  if (!inviteId || !inviteId.trim()) {
     return NextResponse.json({ message: "Invalid invite ID" }, { status: 400 })
   }
 
@@ -35,7 +35,7 @@ export async function POST(
 
   // Find the invite and verify it belongs to this user
   const invite = await db.collection("collaborationInvites").findOne({
-    _id: new ObjectId(inviteId),
+    _id: inviteId,
     inviteeEmail: session.user.email.toLowerCase(),
     status: "pending",
   })
@@ -46,7 +46,7 @@ export async function POST(
 
   if (action === "ignore") {
     await db.collection("collaborationInvites").updateOne(
-      { _id: new ObjectId(inviteId) },
+      { _id: inviteId },
       { $set: { status: "ignored", respondedAt: new Date() } }
     )
     return NextResponse.json({ message: "Invite ignored" })
@@ -85,7 +85,7 @@ export async function POST(
   if (alreadyCollaborating) {
     // Already added, just mark invite accepted
     await db.collection("collaborationInvites").updateOne(
-      { _id: new ObjectId(inviteId) },
+      { _id: inviteId },
       { $set: { status: "accepted", respondedAt: new Date() } }
     )
     return NextResponse.json({ message: "Already a collaborator" })
@@ -94,7 +94,7 @@ export async function POST(
   // Create a shared copy of the project for the invitee
   const sharedProject = {
     ...project,
-    _id: new ObjectId(), // new unique id in invitee's array
+    _id: crypto.randomUUID(), // new unique id in invitee's array
     isCollaborator: true,
     originalProjectId: invite.projectId,
     originalOwnerUserId: invite.inviterUserId,
@@ -108,7 +108,7 @@ export async function POST(
   )
 
   await db.collection("collaborationInvites").updateOne(
-    { _id: new ObjectId(inviteId) },
+    { _id: inviteId },
     { $set: { status: "accepted", respondedAt: new Date() } }
   )
 

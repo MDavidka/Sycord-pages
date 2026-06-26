@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
-import { ObjectId } from "mongodb"
+
 import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
 
 export async function POST(request: Request) {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   }
 
   // Fetch user doc to check limits and existing projects
-  const userDoc = await db.collection("users").findOne({ id: session.user.id })
+  const userDoc = await db.collection("users").findOne<{ projects?: any[] }>({ id: session.user.id })
   const userProjects = userDoc?.projects || []
 
   // @ts-ignore
@@ -200,19 +200,18 @@ export async function POST(request: Request) {
   let deploymentData: any = null
 
   if (body.subdomain) {
-    if (typeof body.subdomain !== 'string') {
-        // just ignore invalid subdomain type
-    } else {
-        sanitizedSubdomain = body.subdomain
+    if (typeof body.subdomain === 'string') {
+        const cleaned = body.subdomain
           .toLowerCase()
           .trim()
           .replace(/[^a-z0-9-]/g, "-")
           .replace(/^-+|-+$/g, "")
 
-        if (sanitizedSubdomain.length >= 3 && !containsCurseWords(sanitizedSubdomain)) {
+        if (cleaned.length >= 3 && !containsCurseWords(cleaned)) {
+            sanitizedSubdomain = cleaned
             deploymentData = {
-              subdomain: sanitizedSubdomain,
-              domain: `${sanitizedSubdomain}.pages.dev`,
+              subdomain: cleaned,
+              domain: `${cleaned}.pages.dev`,
               status: "active",
               createdAt: new Date(),
               updatedAt: new Date(),
@@ -225,7 +224,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const projectId = new ObjectId()
+  const projectId = crypto.randomUUID()
 
   const newProject = {
     _id: projectId,
@@ -247,18 +246,40 @@ export async function POST(request: Request) {
     ], // Initialize with idle page
     deployment: deploymentData, // Embed deployment info
     // Legacy fields for compatibility if needed, but we try to move away
-    deploymentId: deploymentData ? new ObjectId() : null,
+    deploymentId: deploymentData ? crypto.randomUUID() : null,
   }
 
   try {
-    await db.collection("users").updateOne(
+    const result = await db.collection("users").updateOne(
       { id: session.user.id },
       {
         $push: {
           projects: newProject
-        } as any // TypeScript might complain about pushing to 'projects' if schema not defined
+        } as any
       }
     )
+
+    if (!result.upsertedCount && !result.modifiedCount) {
+      // If user doc doesn't exist, create it first with the project
+      const userResult = await db.collection("users").updateOne(
+        { id: session.user.id },
+        {
+          $setOnInsert: {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            image: session.user.image,
+            projects: [newProject],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        },
+        { upsert: true }
+      )
+      if (!userResult.upsertedCount && !userResult.modifiedCount) {
+        throw new Error("Failed to create project: could not update user document")
+      }
+    }
 
     console.log("[Project Creation] Project created successfully embedded in user:", projectId.toString())
 
@@ -284,7 +305,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
@@ -294,17 +315,74 @@ export async function GET() {
   const db = client.db()
 
   try {
-    const userDoc = await db.collection("users").findOne({ id: session.user.id })
-    const projects = (userDoc?.projects || []).map((project: any) => {
-      const deployedUrl = project.cloudflareUrl || project.deploymentRuntime?.url || project.deployment?.domain || null
+    // Use projection so we don't pull the full user document (which may include
+    // sessions, settings, preferences, and other unrelated fields). Also only
+    // project the fields the dashboard actually needs per project so we avoid
+    // shipping large blobs (pages, history, AI logs) to the client.
+    const userDoc = await db.collection("users").findOne(
+      { id: session.user.id },
+      {
+        projection: {
+          projects: 1,
+          _id: 0,
+        },
+      },
+    )
+
+    const rawProjects = (userDoc?.projects as any[]) || []
+
+    // Sort newest-first (most recent project on top of dashboard) — fast in-memory sort.
+    rawProjects.sort((a, b) => {
+      const ta = new Date(a?.createdAt || 0).getTime()
+      const tb = new Date(b?.createdAt || 0).getTime()
+      return tb - ta
+    })
+
+    // Trim each project to the dashboard-friendly shape. Avoid returning large
+    // nested fields like `pages`, `chatHistory`, `buildLogs`, etc.
+    const projects = rawProjects.map((project: any) => {
+      const deployedUrl =
+        project.cloudflareUrl ||
+        project.deploymentRuntime?.url ||
+        project.deployment?.domain ||
+        null
       return {
-        ...project,
-        cloudflareUrl: deployedUrl || project.cloudflareUrl || null,
+        _id: project._id,
+        id: project.id,
+        businessName: project.businessName,
+        businessDescription: project.businessDescription,
+        subdomain: project.subdomain,
         domain: project.domain || deployedUrl || null,
+        cloudflareUrl: deployedUrl || project.cloudflareUrl || null,
+        style: project.style,
+        status: project.status,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        applicationId: project.applicationId,
+        projectId: project.projectId,
+        previewImage: project.previewImage,
+        profileImage: project.profileImage,
+        deploymentRuntime: project.deploymentRuntime
+          ? {
+              status: project.deploymentRuntime.status,
+              url: project.deploymentRuntime.url,
+              lastDeployedAt: project.deploymentRuntime.lastDeployedAt,
+            }
+          : undefined,
+        deployment: project.deployment
+          ? { domain: project.deployment.domain }
+          : undefined,
       }
     })
 
-    return NextResponse.json(projects)
+    // Allow short-lived browser caching + CDN caching. The dashboard will
+    // refetch after mutations anyway, so a 30s window keeps load fast on
+    // back/forward navigation without making data feel stale.
+    return NextResponse.json(projects, {
+      headers: {
+        "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+      },
+    })
   } catch (error: any) {
     console.error("Error fetching projects:", error)
     return NextResponse.json({ message: "Failed to fetch projects" }, { status: 500 })

@@ -6,10 +6,10 @@
 //   POST /api/workspace/github-save?projectId=...
 
 import { NextResponse } from "next/server"
-import { ObjectId } from "mongodb"
+
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import {
   getEnvGitHubCredentials,
   ensureRepo,
@@ -100,7 +100,7 @@ export async function POST(req: Request): Promise<Response> {
     await deployViaGitTree(owner, repo, files, token)
 
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": new ObjectId(projectId) },
+      { id: userId, "projects._id": projectId },
       {
         $set: {
           "projects.$.githubOwner": owner,

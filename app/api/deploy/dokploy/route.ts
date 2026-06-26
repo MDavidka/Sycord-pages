@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 import {
   application,
   docker,

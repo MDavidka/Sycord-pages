@@ -5,9 +5,20 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard } from "lucide-react"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2 } from "lucide-react"
 import { useState, useEffect, Suspense } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +62,8 @@ function DashboardContent() {
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
   const [pendingInvites, setPendingInvites] = useState<CollabInvite[]>([])
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Check for auto-open modal query param and errors
   useEffect(() => {
@@ -162,16 +175,50 @@ function DashboardContent() {
       .join("")
       .toUpperCase() || "U"
 
-  const handleDeleteProject = async (projectId: string) => {
-    // The actual API call is handled inside WebsitePreviewCard for now,
-    // or we can move it here.
-    // Given the component structure, WebsitePreviewCard handles the fetch,
-    // and calls this callback on success.
-    // So we just need to update the local state.
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return
 
-    setProjects((prevProjects: any) =>
-      prevProjects.filter((p: any) => p._id !== projectId)
-    )
+    setIsDeleting(true)
+    try {
+      // Call the delete API
+      const response = await fetch(`/api/projects/${projectToDelete.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || "Failed to delete project")
+      }
+
+      // Update local state to remove the deleted project
+      setProjects((prevProjects: any) =>
+        prevProjects.filter((p: any) => p._id !== projectToDelete.id)
+      )
+
+      // Also delete from Dokploy if there's an applicationId
+      const project = projects.find((p: any) => p._id === projectToDelete.id)
+      if (project?.applicationId) {
+        try {
+          await fetch("/api/deploy/dokploy", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              applicationId: project.applicationId,
+              projectId: project.projectId,
+            }),
+          })
+        } catch (err) {
+          console.error("Error deleting from Dokploy:", err)
+        }
+      }
+
+      setProjectToDelete(null)
+    } catch (error) {
+      console.error("Error deleting project:", error)
+      alert(error instanceof Error ? error.message : "Failed to delete project")
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   // Blocked user screen
@@ -394,10 +441,20 @@ function DashboardContent() {
                           createdAt={project.createdAt}
                           style={project.style || "default"}
                           fallbackHtml={fallbackHtml}
-                          onDelete={() => handleDeleteProject(project._id)}
+                          onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
                         />
                       ) : (
-                        <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors">
+                        <div className="w-full h-64 sm:h-80 md:h-96 bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setProjectToDelete({ id: project._id, name: project.businessName })
+                            }}
+                            className="absolute top-3 right-3 h-8 w-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100"
+                            aria-label="Delete project"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                           <div className="h-16 w-16 rounded-full bg-background/50 flex items-center justify-center mb-4 shadow-sm border border-border/50">
                             <LayoutTemplate className="h-8 w-8 text-muted-foreground/50" />
                           </div>
@@ -447,6 +504,31 @@ function DashboardContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{projectToDelete?.name}" and all its data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteProject()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete Project"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

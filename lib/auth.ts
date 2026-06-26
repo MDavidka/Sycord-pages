@@ -2,7 +2,7 @@ import GoogleProvider from "next-auth/providers/google"
 import CredentialsProvider from "next-auth/providers/credentials"
 import type { AuthOptions } from "next-auth"
 import { headers } from "next/headers"
-import clientPromise from "./mongodb"
+import clientPromise from "./torso"
 
 // Log detailed warnings for debugging
 if (!process.env.GOOGLE_CLIENT_ID) {
@@ -82,8 +82,15 @@ export const authOptions: AuthOptions = {
   callbacks: {
     async jwt({ token, account, profile, user }) {
       // console.log("[v0-DEBUG] JWT Callback Triggered")
-      const client = await clientPromise
-      const db = client.db()
+      let client;
+      let db;
+      try {
+        client = await clientPromise;
+        db = client.db();
+      } catch (err) {
+        console.error("[v0] Torso not available, skipping user DB operations:", err);
+        return token;
+      }
 
       if (account && (profile || user)) {
         // Initial Sign In
@@ -91,32 +98,32 @@ export const authOptions: AuthOptions = {
           (profile as any)?.sub ||
           (profile as any)?.user?.uid ||
           (profile as any)?.id ||
-          (user as any)?.id
+          (user as any)?.id;
         if (profileId) {
-          token.id = profileId
+          token.id = profileId;
         }
 
-        token.picture = (profile as any)?.picture || (user as any)?.image
-        token.email = (profile as any)?.email || (profile as any)?.user?.email || (user as any)?.email
-        token.name = (profile as any)?.name || (profile as any)?.user?.name || (profile as any)?.user?.username || (user as any)?.name
-        token.isPremium = false
+        token.picture = (profile as any)?.picture || (user as any)?.image;
+        token.email = (profile as any)?.email || (profile as any)?.user?.email || (user as any)?.email;
+        token.name = (profile as any)?.name || (profile as any)?.user?.name || (profile as any)?.user?.username || (user as any)?.name;
+        token.isPremium = false;
 
         // Initialize sessionVersion if not present
         token.sessionVersion = Date.now();
 
-        // ALWAYS save/update user in MongoDB on login
+        // ALWAYS save/update user in Torso on login
         try {
-          const existingUser = await db.collection("users").findOne({ id: token.id })
-          const now = new Date()
-          const joinDate = existingUser?.user?.join_date || existingUser?.createdAt || now
+          const existingUser = await db.collection("users").findOne<{ user?: { join_date?: string }; createdAt?: string; git_conection?: unknown; infromations?: unknown }>({ id: token.id as string });
+          const now = new Date();
+          const joinDate = existingUser?.user?.join_date || existingUser?.createdAt || now.toISOString();
 
-          const updateData: any = {
+          const updateData: Record<string, unknown> = {
             id: token.id,
             email: token.email,
             name: token.name,
             image: token.picture,
-            updatedAt: now,
-            sessionVersion: token.sessionVersion, // Set initial session version
+            updatedAt: now.toISOString(),
+            sessionVersion: token.sessionVersion,
             user: {
               name: token.name,
               email: token.email,
@@ -125,39 +132,41 @@ export const authOptions: AuthOptions = {
             },
             git_conection: existingUser?.git_conection || {},
             infromations: existingUser?.infromations || {},
-          }
+          };
 
           await db.collection("users").updateOne(
-            { id: token.id },
+            { id: token.id as string },
             {
               $set: updateData,
               $setOnInsert: {
-                createdAt: now,
+                createdAt: now.toISOString(),
               },
             },
             { upsert: true },
-          )
+          );
         } catch (error) {
-          console.error("[v0-ERROR] Failed to store/fetch user in MongoDB:", error)
+          console.error("[v0-ERROR] Failed to store/fetch user in Torso:", error);
+          // Don't block login — continue with token from OAuth provider
         }
       } else {
         // Subsequent requests (check session version)
         if (token.id) {
-            try {
-                const user = await db.collection("users").findOne({ id: token.id });
-                if (user && user.sessionVersion) {
-                    if (token.sessionVersion && (token.sessionVersion as number) < user.sessionVersion) {
-                        // Token is older than server session version - invalidate
-                        return null as any; // This will trigger a sign out / error
-                    }
-                }
-            } catch (error) {
-                console.error("Error validating session version:", error);
+          try {
+            const dbUser = await db.collection("users").findOne<{ sessionVersion?: number }>({ id: token.id as string });
+            if (dbUser && dbUser.sessionVersion) {
+              if (token.sessionVersion && (token.sessionVersion as number) < dbUser.sessionVersion) {
+                // Token is older than server session version - invalidate
+                return null;
+              }
             }
+          } catch (error) {
+            console.error("[v0] Error validating session version:", error);
+            // Don't block — let the JWT stay valid if DB is unavailable
+          }
         }
       }
 
-      return token
+      return token;
     },
     async session({ session, token }) {
       if (token && session.user) {

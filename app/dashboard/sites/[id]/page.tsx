@@ -79,6 +79,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useSession, signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
@@ -612,6 +622,10 @@ export default function SiteSettingsPage() {
   const [inviteError, setInviteError] = useState<string | null>(null)
   const isValidInviteEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)
 
+  // Delete project state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   // Renamed to match the button name and be consistent
   const saving = isSaving
   const setSaving = setIsSaving
@@ -810,13 +824,21 @@ export default function SiteSettingsPage() {
   useEffect(() => {
     if (!id) return
 
+    // Use AbortController so a quick nav away on mobile cancels the
+    // in-flight requests instead of keeping the request cycle alive.
+    const controller = new AbortController()
+
     const fetchAllData = async () => {
       console.log(`[v0] Settings page: Starting data fetch for project ${id}`)
       try {
-        const fetchProject = fetch(`/api/projects/${id}`)
-          .then((r) => r.json())
+        const fetchProject = fetch(`/api/projects/${id}`, { signal: controller.signal })
+          .then(async (r) => {
+            if (r.status === 304) return null
+            return r.json()
+          })
           .then((data) => {
             console.log("[v0] Project data fetched:", data ? "Success" : "Empty")
+            if (!data) return
             if (data.message) throw new Error(data.message)
             setProject(data)
             if (data.deploymentRuntime) setDeploymentRuntime(data.deploymentRuntime)
@@ -842,11 +864,12 @@ export default function SiteSettingsPage() {
             setProjectLoading(false)
           })
           .catch((err) => {
+            if (err?.name === "AbortError") return
             console.error("[v0] Settings page: Error fetching project:", err)
             setProjectLoading(false)
           })
 
-        const fetchSettings = fetch(`/api/projects/${id}/settings`)
+        const fetchSettings = fetch(`/api/projects/${id}/settings`, { signal: controller.signal })
           .then((r) => r.json())
           .then((data) => {
             console.log("[v0] Settings data fetched")
@@ -854,11 +877,12 @@ export default function SiteSettingsPage() {
             setSettingsLoading(false)
           })
           .catch((err) => {
+            if (err?.name === "AbortError") return
             console.error("[v0] Settings page: Error fetching settings:", err)
             setSettingsLoading(false)
           })
 
-        const fetchProducts = fetch(`/api/projects/${id}/products`)
+        const fetchProducts = fetch(`/api/projects/${id}/products`, { signal: controller.signal })
           .then((r) => r.json())
           .then((data) => {
             console.log("[v0] Products data fetched")
@@ -866,21 +890,26 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
           .catch((err) => {
+            if (err?.name === "AbortError") return
             console.error("[v0] Settings page: Error fetching products:", err)
             setProductsLoading(false)
           })
 
         await Promise.all([fetchProject, fetchSettings, fetchProducts])
         console.log("[v0] All data fetches completed")
-        fetchLogs()
+        if (!controller.signal.aborted) fetchLogs()
       } catch (error) {
+        if ((error as any)?.name === "AbortError") return
         console.error("[v0] Error in fetchAllData:", error)
       } finally {
-        setIsInitialLoading(false)
+        if (!controller.signal.aborted) setIsInitialLoading(false)
       }
     }
 
     fetchAllData()
+
+    // Cancel any in-flight fetches when the component unmounts or id changes.
+    return () => controller.abort()
   }, [id])
 
   // Fetch subscription info
@@ -1005,6 +1034,47 @@ export default function SiteSettingsPage() {
       console.error("[v0] Save error:", error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!id) return
+    setIsDeleting(true)
+    try {
+      // Call the delete API
+      const response = await fetch(`/api/projects/${id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || "Failed to delete project")
+      }
+
+      // Also delete from Dokploy if there's an applicationId
+      if (project?.applicationId) {
+        try {
+          await fetch("/api/deploy/dokploy", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              applicationId: project.applicationId,
+              projectId: project.projectId,
+            }),
+          })
+        } catch (err) {
+          console.error("Error deleting from Dokploy:", err)
+        }
+      }
+
+      setIsDeleteDialogOpen(false)
+      // Redirect to dashboard after successful deletion
+      router.push("/dashboard")
+    } catch (error) {
+      console.error("Error deleting project:", error)
+      alert(error instanceof Error ? error.message : "Failed to delete project")
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -2773,6 +2843,23 @@ export default function SiteSettingsPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <Card className="bg-card/50 backdrop-blur-sm border-destructive/20">
+                  <CardHeader>
+                    <CardTitle className="text-destructive">Delete Project</CardTitle>
+                    <CardDescription>Permanently delete this project and all its data. This action cannot be undone.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      variant="destructive"
+                      onClick={() => setIsDeleteDialogOpen(true)}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Project
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -2832,6 +2919,30 @@ export default function SiteSettingsPage() {
         </main>
       </motion.div>
 
+      {/* Delete Project Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{project?.businessName}" and all its data, including any deployed instances. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteProject()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete Project"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

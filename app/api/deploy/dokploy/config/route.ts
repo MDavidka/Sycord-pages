@@ -9,10 +9,10 @@
 //   { "projectId": "665f...", "environmentId": "env_abc", "applicationId": "app_x" }
 
 import { NextResponse } from "next/server"
-import { ObjectId } from "mongodb"
+
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   const { projectId, environmentId, applicationId, appName } = body
-  if (!projectId || !ObjectId.isValid(projectId)) {
+  if (!projectId || !projectId.trim()) {
     return NextResponse.json({ success: false, error: "Valid projectId is required" }, { status: 400 })
   }
   if (!environmentId && !applicationId && !appName) {
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   const db = client.db()
   const result = await db
     .collection("users")
-    .updateOne({ id: userId, "projects._id": new ObjectId(projectId) }, { $set: set })
+    .updateOne({ id: userId, "projects._id": projectId }, { $set: set })
 
   if (result.matchedCount === 0) {
     return NextResponse.json({ success: false, error: "Project not found" }, { status: 404 })

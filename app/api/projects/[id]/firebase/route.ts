@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -11,7 +11,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // Verify ownership before update
   const owner = await db.collection("users").findOne(
-    { id: session.user.id, "projects._id": new ObjectId(id) },
+    { id: session.user.id, "projects._id": id },
     { projection: { _id: 1 } }
   )
   if (!owner) {
@@ -37,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const result = await db.collection("users").updateOne(
     {
       id: session.user.id,
-      "projects._id": new ObjectId(id),
+      "projects._id": id,
     },
     {
       $set: {
@@ -65,7 +65,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  if (!ObjectId.isValid(id)) {
+  if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 

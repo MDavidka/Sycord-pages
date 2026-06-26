@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params
 
-    if (!ObjectId.isValid(id)) {
+    if (!id) {
       return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
     }
 
@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const db = client.db()
 
     const user = await db.collection("users").findOne(
-      { id: session.user.id, "projects._id": new ObjectId(id) },
+      { id: session.user.id, "projects._id": id },
       { projection: { "projects.$": 1 } }
     )
 
@@ -47,7 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params
     const { name, content, usedFor } = await request.json()
 
-    if (!ObjectId.isValid(id)) {
+    if (!id) {
         return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
     }
 
@@ -82,7 +82,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             id: session.user.id,
             "projects": {
                 $elemMatch: {
-                    _id: new ObjectId(id),
+                    _id: id,
                     "pages.name": name
                 }
             }
@@ -96,7 +96,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
         {
             arrayFilters: [
-                { "proj._id": new ObjectId(id) },
+                { "proj._id": id },
                 { "page.name": name }
             ]
         }
@@ -107,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         // But first check if project exists
         const projectCheck = await db.collection("users").findOne({
              id: session.user.id,
-             "projects._id": new ObjectId(id)
+             "projects._id": id
         });
 
         if (!projectCheck) {
@@ -117,7 +117,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         await db.collection("users").updateOne(
             {
                 id: session.user.id,
-                "projects._id": new ObjectId(id)
+                "projects._id": id
             },
             {
                 $push: {
@@ -152,7 +152,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const pageName = searchParams.get("name")
     const deleteAll = searchParams.get("all") === "true"
 
-    if (!ObjectId.isValid(id)) {
+    if (!id) {
       return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
     }
 
@@ -164,7 +164,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         const result = await db.collection("users").updateOne(
             {
                 id: session.user.id,
-                "projects._id": new ObjectId(id)
+                "projects._id": id
             },
             {
                 $set: {
@@ -187,7 +187,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         const result = await db.collection("users").updateOne(
             {
                 id: session.user.id,
-                "projects._id": new ObjectId(id)
+                "projects._id": id
             },
             {
                 $pull: {

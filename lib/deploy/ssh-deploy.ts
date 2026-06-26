@@ -1,7 +1,7 @@
 import * as crypto from "node:crypto"
 import * as path from "node:path"
 import { NodeSSH } from "node-ssh"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 
 export type SshDeploymentMode = "ssh"
 

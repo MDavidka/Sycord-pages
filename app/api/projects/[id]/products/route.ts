@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import clientPromise from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/torso"
+
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -21,8 +21,37 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   // So it depends on how `id` was passed. In URL it's string.
   // So likely stored as string.
 
-  const products = await db.collection("products").find({ projectId: id }).toArray()
-  return NextResponse.json(products)
+  // Projection drops internal Mongo fields and any large blobs that don't
+  // need to ship to the edit screen. The dashboard mostly renders name,
+  // price, image, and stock.
+  const products = await db.collection("products")
+    .find(
+      { projectId: id },
+      {
+        projection: {
+          _id: 1,
+          projectId: 1,
+          name: 1,
+          description: 1,
+          price: 1,
+          currency: 1,
+          image: 1,
+          stock: 1,
+          category: 1,
+          tags: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    )
+    .limit(500)
+    .toArray()
+
+  return NextResponse.json(products, {
+    headers: {
+      "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+    },
+  })
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,7 +95,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { searchParams } = new URL(request.url)
   const productId = searchParams.get("productId")
 
-  if (!productId || !ObjectId.isValid(productId)) {
+  if (!productId || !productId.trim()) {
     return NextResponse.json({ message: "Invalid product ID" }, { status: 400 })
   }
 
@@ -78,7 +107,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   // I will leave it as is to avoid scope creep, just updating project verification where it existed.
 
   const result = await db.collection("products").deleteOne({
-    _id: new ObjectId(productId),
+    _id: productId,
   })
 
   if (result.deletedCount === 0) {

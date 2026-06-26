@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import clientPromise from "@/lib/mongodb"
+import clientPromise from "@/lib/torso"
 
 const COLLECTION = "business_reports"
 const DOC_FILTER = { docType: "business-activity-report" } as const
