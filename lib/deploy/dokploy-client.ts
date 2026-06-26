@@ -1149,6 +1149,20 @@ export async function ensureAndDeployApplication(
       }
     }
 
+    // 1a.1 Persist project env vars into the Dokploy environment itself so new
+    // applications inherit the same configuration surface before first deploy.
+    if (input.env && Object.keys(input.env).length > 0 && state.environmentId) {
+      const environmentResult = await environment.update({
+        environmentId: state.environmentId,
+        projectId: state.projectId || undefined,
+        env: toDokployEnvString(input.env),
+      })
+      steps.push(toStep("environment.update", environmentResult))
+      if (!environmentResult.ok) {
+        return done(false, environmentResult.error || "Failed to save environment variables to the Dokploy environment", null)
+      }
+    }
+
     // 1b. Create the application under the resolved environment.
     const createResult = await application.create({
       name: input.name,

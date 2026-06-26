@@ -107,6 +107,34 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ status: "error", message: "Project not found" }, { status: 404 })
   }
 
+  const envVars = Array.isArray(project.envVars) ? project.envVars : []
+  const presentEnvKeys = new Set(
+    envVars
+      .filter((envVar: any) => typeof envVar?.key === "string" && String(envVar?.value || "").trim())
+      .map((envVar: any) => envVar.key as string)
+  )
+  const presentIntegrationIds = new Set(
+    envVars
+      .filter((envVar: any) => typeof envVar?.integration === "string" && String(envVar?.value || "").trim())
+      .map((envVar: any) => envVar.integration as string)
+  )
+  const missingRequiredEnvKeys = (Array.isArray(project.requiredEnvKeys) ? project.requiredEnvKeys : [])
+    .filter((envKey: unknown): envKey is string => typeof envKey === "string" && !presentEnvKeys.has(envKey))
+  const missingRequiredIntegrationIds = (Array.isArray(project.requiredIntegrationIds) ? project.requiredIntegrationIds : [])
+    .filter((integrationId: unknown): integrationId is string => typeof integrationId === "string" && !presentIntegrationIds.has(integrationId))
+
+  if (missingRequiredEnvKeys.length > 0 || missingRequiredIntegrationIds.length > 0) {
+    return Response.json(
+      {
+        status: "error",
+        message: "Required integrations or environment variables are still missing.",
+        missingRequiredEnvKeys,
+        missingRequiredIntegrationIds,
+      },
+      { status: 409 }
+    )
+  }
+
   // Auto-generate Dockerfile if missing from project pages
   const pages = Array.isArray(project.pages) ? project.pages : []
   const hasDockerfile = pages.some((p: any) => p.name === "Dockerfile" || p.name === "/Dockerfile")

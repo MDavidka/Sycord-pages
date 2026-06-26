@@ -95,6 +95,10 @@ import { cn } from "@/lib/utils"
 import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
 import { PagesDeployPanel } from "@/components/pages-deploy-panel"
+import {
+  ProjectIntegrationsDialog,
+  type IntegrationRequestPayload,
+} from "@/components/project-integrations-dialog"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -705,6 +709,8 @@ export default function SiteSettingsPage() {
   const [connectedIntegrations, setConnectedIntegrations] = useState<Set<string>>(new Set())
   const [showIntegrationToken, setShowIntegrationToken] = useState(false)
   const [integrationSaveError, setIntegrationSaveError] = useState<string | null>(null)
+  const [integrationDialogOpen, setIntegrationDialogOpen] = useState(false)
+  const [integrationRequest, setIntegrationRequest] = useState<IntegrationRequestPayload | null>(null)
   const [domainSearch, setDomainSearch] = useState("")
   const [domainTldPrices, setDomainTldPrices] = useState<Array<{ tld: string; price: number; currency: string }>>([])
   const [domainChecks, setDomainChecks] = useState<Record<string, { available: boolean | null; purchaseUrl: string; loading: boolean }>>({})
@@ -937,6 +943,20 @@ export default function SiteSettingsPage() {
       })
       .catch((err) => { console.error("[Integrations] Failed to load connected integrations:", err) })
   }, [activeTab, project?._id])
+
+  useEffect(() => {
+    const handleIntegrationRequest = (event: Event) => {
+      const customEvent = event as CustomEvent<IntegrationRequestPayload>
+      setIntegrationRequest(customEvent.detail ?? null)
+      setActiveTab("integrations")
+      setIntegrationDialogOpen(true)
+    }
+
+    window.addEventListener("sycord:integration-request", handleIntegrationRequest as EventListener)
+    return () => {
+      window.removeEventListener("sycord:integration-request", handleIntegrationRequest as EventListener)
+    }
+  }, [])
 
   // Fetch real TLD prices when the domain tab is opened
   useEffect(() => {
@@ -1608,6 +1628,23 @@ export default function SiteSettingsPage() {
             </>
           )}
         </AnimatePresence>
+
+        {project?._id && (
+          <ProjectIntegrationsDialog
+            projectId={project._id}
+            open={integrationDialogOpen}
+            onOpenChange={setIntegrationDialogOpen}
+            request={integrationRequest}
+            onSaved={({ integrationIds }) => {
+              if (integrationIds.length > 0) {
+                setConnectedIntegrations((prev) => new Set([...prev, ...integrationIds]))
+              }
+              if (integrationIds.some((integrationId) => ["mongodb", "supabase", "firebase", "neon", "upstash"].includes(integrationId))) {
+                setDatabaseConnected(true)
+              }
+            }}
+          />
+        )}
 
 
         <main className={cn("flex-1 relative", activeTab === "ai" ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
