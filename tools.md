@@ -413,7 +413,7 @@ Lekéri a fájl tartalmát a gyorsítótárból (cache), ha az nem változott a 
 Kreatív asszisztens funkciók, amelyek segítenek egységes arculatot adni az oldalnak.
 
 ### generate_color_palette
-A megadott stílus vagy leírás alapján legenerál egy harmonikus, akadálymentes (accessible) színpalettát hex kódokkal.
+A megadott stílus vagy leírás alapján legenerál egy harmonikus, akadálymentes (accessible) színpalettát, OKLCH színtérben (Tailwind CSS v4 és shadcn/ui kompatibilis). A generált paletta automatikusan alkalmazza a 2026-os kognitív színpszichológiai elveket: lágy, tompa tónusok széles felületekre, erős kontraszt kizárólag a CTA elemekre.
 * **Paraméterek:**
     * `style` (string): A design stílusa (pl. "minimal dark SaaS").
 * **Példa hívás:**
@@ -424,7 +424,7 @@ A megadott stílus vagy leírás alapján legenerál egy harmonikus, akadálymen
     ```
 
 ### generate_design_system
-Létrehoz egy teljes design rendszert (betűméretek, térközök, kerekítések, árnyékok, gomb stílusok) a márka információi alapján.
+Létrehoz egy teljes design rendszert (betűméretek fluid clamp()-al, térközök, kerekítések, árnyékok, gomb stílusok, @container query minták, Bento Grid kompozíciós szabályok) a márka információi alapján. A generált rendszer Tailwind CSS v4 és shadcn/ui kompatibilis, OKLCH színteret és szemantikus design tokeneket használ.
 * **Paraméterek:**
     * `brand_info` (string): A márka küldetése, hangvétele, célközönsége.
 * **Példa hívás:**
