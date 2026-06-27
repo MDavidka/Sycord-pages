@@ -1783,7 +1783,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     target.style.height = 'auto';
                                     target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
                                 }}
-                                placeholder="Help you write code, debug, optimize performance and other development work, deliver production-ready code."
+                                placeholder="Help you write code, debug and ship production-ready work."
                                 className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
                                 style={{ height: 'auto', minHeight: '76px', maxHeight: '200px' }}
                                 onKeyDown={(e) => {
@@ -1802,9 +1802,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                         type="button"
                                         onClick={() => { setShowAttachMenu(!showAttachMenu); setShowModelMenu(false); }}
                                         aria-label="Attach files"
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                        className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
-                                        <Slash className="h-4 w-4" />
+                                        <Slash className="h-3.5 w-3.5" />
                                     </button>
 
                                     {showAttachMenu && (
@@ -1832,13 +1832,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                         type="button"
                                         onClick={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
                                         aria-label="Select model"
-                                        className={`flex h-10 items-center gap-1.5 rounded-xl px-3 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
+                                        className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
                                     >
-                                        <span className="text-[15px] font-semibold tracking-tight">
-                                            <span className="text-teal-400">Syra</span>
-                                            <span className={`ml-1 font-normal ${isDark ? 'text-[#c5c6c9]' : 'text-gray-700'}`}>nano</span>
-                                        </span>
-                                        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
+                                        <span className={`text-[13px] font-medium tracking-tight ${isDark ? 'text-[#c5c6c9]' : 'text-gray-700'}`}>syra-nano</span>
+                                        <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
                                     </button>
 
                                     {showModelMenu && (
@@ -1848,10 +1845,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                                 <div className="p-1.5">
                                                     <button type="button" onClick={() => setShowModelMenu(false)}
                                                         className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between ${isDark ? 'bg-[#26272a]' : 'bg-gray-50'}`}>
-                                                        <span className="text-[13px]">
-                                                            <span className="text-teal-400 font-semibold">Syra</span>
-                                                            <span className={`ml-1 ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>nano</span>
-                                                        </span>
+                                                        <span className={`text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>syra-nano</span>
                                                         <span className={`text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>Fast · Default</span>
                                                     </button>
                                                 </div>
@@ -1882,9 +1876,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-violet-300 text-violet-900 transition-all active:scale-95 hover:bg-violet-200"
+                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
                                         >
-                                            <div className="h-3 w-3 rounded-sm bg-violet-900" />
+                                            <div className="h-3 w-3 rounded-sm bg-black" />
                                         </button>
                                     ) : (
                                         <button
@@ -1892,8 +1886,8 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                             disabled={!input.trim() && selectedImages.length === 0}
                                             aria-label="Send"
                                             className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${input.trim() || selectedImages.length > 0
-                                                ? 'bg-violet-400 text-white hover:bg-violet-500'
-                                                : isDark ? 'bg-violet-500/25 text-violet-300/70' : 'bg-violet-200 text-violet-400'}`}
+                                                ? 'bg-white text-black hover:bg-gray-200'
+                                                : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'}`}
                                         >
                                             <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
                                         </button>
