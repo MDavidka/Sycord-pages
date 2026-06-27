@@ -2,6 +2,7 @@ import { executeCommand, writeFile, readFile, renameFile, deleteFile } from './w
 import { useStore } from '../store';
 import { parseToolArguments } from './utils';
 import { getHostProjectId, getProjectPagesMap, deleteProjectPage, isPageBackedFile } from './api';
+import { collectEnvKeysForIntegrations, getIntegrationById } from '../../lib/integrations';
 
 /**
  * Result of attempting to persist a file to the project's Pages (MongoDB).
@@ -274,6 +275,14 @@ export async function handleDeploy(): Promise<string> {
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
             const errMsg = data?.message || "HTTP " + res.status;
+            if (Array.isArray(data?.missingRequiredEnvKeys) || Array.isArray(data?.missingRequiredIntegrationIds)) {
+                const missingEnv = Array.isArray(data?.missingRequiredEnvKeys) ? data.missingRequiredEnvKeys : [];
+                const missingIntegrations = Array.isArray(data?.missingRequiredIntegrationIds) ? data.missingRequiredIntegrationIds : [];
+                return "[SYSTEM] ⏸ Deploy is blocked until required integrations/env values are loaded.\n" +
+                    (missingIntegrations.length ? "Missing integrations: " + missingIntegrations.join(", ") + "\n" : "") +
+                    (missingEnv.length ? "Missing env keys: " + missingEnv.join(", ") + "\n" : "") +
+                    "Call integration() or wait for the user to complete the integrations popup, then continue.";
+            }
             return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
         }
         return "[SYSTEM] ✅ Deployed successfully.\n\n" +
@@ -320,6 +329,118 @@ async function callDokployGet(params: Record<string, string>): Promise<string> {
     } catch (e: any) {
         return "Error calling Dokploy API (query): " + e.message;
     }
+}
+
+async function getProjectEnvStatus(projectId: string): Promise<{
+    envKeys: string[];
+    integrationIds: string[];
+}> {
+    try {
+        const res = await fetch(`/api/projects/${projectId}/env`);
+        const data = await res.json().catch(() => ({} as any));
+        const envVars = Array.isArray(data?.envVars) ? data.envVars : [];
+        return {
+            envKeys: envVars
+                .map((item: any) => (typeof item?.key === 'string' ? item.key : ''))
+                .filter(Boolean),
+            integrationIds: envVars
+                .map((item: any) => (typeof item?.integration === 'string' ? item.integration : ''))
+                .filter(Boolean),
+        };
+    } catch {
+        return { envKeys: [], integrationIds: [] };
+    }
+}
+
+function uniqueStrings(values: unknown[]): string[] {
+    const seen = new Set<string>();
+    const output: string[] = [];
+    for (const value of values) {
+        if (typeof value !== 'string') continue;
+        const trimmed = value.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        output.push(trimmed);
+    }
+    return output;
+}
+
+export async function handleIntegration(args: Record<string, unknown>): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ integration() is only available when building inside a Sycord project.';
+    }
+
+    const requestedIntegrationIds = uniqueStrings([
+        typeof args.integration === 'string' ? args.integration : '',
+        ...(Array.isArray(args.integrations) ? args.integrations : []),
+    ]);
+    const requestedEnvKeys = uniqueStrings([
+        ...(Array.isArray(args.envKeys) ? args.envKeys : []),
+        ...collectEnvKeysForIntegrations(requestedIntegrationIds),
+    ]);
+    const reason = typeof args.reason === 'string' ? args.reason.trim() : '';
+
+    if (requestedIntegrationIds.length === 0 && requestedEnvKeys.length === 0) {
+        return '[SYSTEM] ❌ integration() requires at least one integration id or env key.';
+    }
+
+    const envStatus = await getProjectEnvStatus(projectId);
+    const existingEnvKeys = new Set(envStatus.envKeys);
+    const existingIntegrationIds = new Set(envStatus.integrationIds);
+    const missingEnvKeys = requestedEnvKeys.filter((envKey) => !existingEnvKeys.has(envKey));
+    const missingIntegrationIds = requestedIntegrationIds.filter((integrationId) => !existingIntegrationIds.has(integrationId));
+
+    if (missingEnvKeys.length === 0 && missingIntegrationIds.length === 0) {
+        const readyNames = requestedIntegrationIds
+            .map((integrationId) => getIntegrationById(integrationId)?.name || integrationId)
+            .join(', ');
+        return `[SYSTEM] ✅ Required integration/environment values are already configured.${readyNames ? ` Ready: ${readyNames}.` : ''} You can continue.`;
+    }
+
+    try {
+        await fetch(`/api/projects/${projectId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                requiredEnvKeys: missingEnvKeys,
+                requiredIntegrationIds: missingIntegrationIds,
+                pendingIntegrationRequest: {
+                    integrations: missingIntegrationIds,
+                    envKeys: missingEnvKeys,
+                    reason: reason || null,
+                    requestedAt: new Date().toISOString(),
+                    source: 'ai-tool',
+                },
+            }),
+        });
+    } catch {
+        // The popup bridge below is the critical path; project metadata persistence
+        // is best-effort so deploy() can enforce missing envs later.
+    }
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+            new CustomEvent('sycord:integration-request', {
+                detail: {
+                    integrations: missingIntegrationIds,
+                    envKeys: missingEnvKeys,
+                    reason,
+                    source: 'ai-tool',
+                },
+            }),
+        );
+    }
+
+    const integrationNames = missingIntegrationIds
+        .map((integrationId) => getIntegrationById(integrationId)?.name || integrationId)
+        .join(', ');
+    return (
+        `[SYSTEM] ⏸ Integration setup required.\n` +
+        (integrationNames ? `Requested integrations: ${integrationNames}\n` : '') +
+        (missingEnvKeys.length > 0 ? `Missing env keys: ${missingEnvKeys.join(', ')}\n` : '') +
+        `I opened the integrations popup/tab for the user. Stop here and wait for the user to load the required environment values before continuing.`
+    );
 }
 
 /**
@@ -702,10 +823,35 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: "Deploy the project to sycord.site via Dokploy Docker containers. Performs three operations: (1) sets Application Build Type to Dockerfile, (2) creates domain <appName>.sycord.site with HTTPS (Let's Encrypt), (3) triggers deployment to build and serve the Docker container. Also auto-generates Dockerfile if missing, reuses existing user project, creates new application/service per deployment, configures Docker build type (NOT nixpacks/heroku), and attaches GitHub source. IMPORTANT: Always call save() BEFORE deploy(). Project ID is reused per user; Application ID is unique per deployment. Returns the live URL and all provisioned IDs on success.",
+            description: "Deploy the project to sycord.site via Dokploy Docker containers. Automatically syncs env vars from the project's Integrations tab into the Dokploy environment, configures Dockerfile build type, creates the public domain, and triggers deployment. If required env/integration values are missing, deployment pauses and tells you to use integration() first. IMPORTANT: Always call save() BEFORE deploy().",
             parameters: {
                 type: 'object',
                 properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'integration',
+            description: 'Open the integrations popup/tab and request required providers or environment keys. Use this when the project needs database, auth, email, payment, AI, or other secrets. After calling this tool, STOP and wait for the user to load the requested env values.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    integration: { type: 'string', description: 'Single integration id, e.g. "supabase", "resend", or "stripe".' },
+                    integrations: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional list of integration ids to request at once.',
+                    },
+                    envKeys: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Optional list of exact environment variable keys the project requires.',
+                    },
+                    reason: { type: 'string', description: 'Short explanation shown in the popup so the user knows why these keys are needed.' },
+                },
                 required: [],
             },
         },
@@ -782,22 +928,6 @@ export const TOOL_DEFINITIONS = [
                     appName: { type: 'string', description: 'The Dokploy appName (container name) to generate a domain for (required)' },
                 },
                 required: ['appName'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'createDockerfile',
-            description: 'Generate a Dockerfile for the project. Dokploy requires a Dockerfile to build and deploy. Creates a multi-stage Node.js Dockerfile optimized for the chosen framework. Call this BEFORE save() and deploy() if the project lacks a Dockerfile.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    framework: { type: 'string', description: 'Project framework: "nextjs", "react", "vite", or "node" (default: "nextjs")' },
-                    nodeVersion: { type: 'string', description: 'Node.js version to use (default: "22")' },
-                    port: { type: 'string', description: 'Port the app listens on (default: "3000")' },
-                },
-                required: [],
             },
         },
     },
@@ -1691,6 +1821,9 @@ async function _executeToolInternal(
                 case 'createDokployProject':
                     result = await handleCreateProject(args);
                     break;
+                case 'integration':
+                    result = await handleIntegration(args);
+                    break;
                 case 'createDokployEnvironment':
                     result = await handleCreateEnvironment(args);
                     break;
@@ -1703,11 +1836,8 @@ async function _executeToolInternal(
                 case 'generateDomain':
                     result = await handleGenerateDomain(args);
                     break;
-                case 'createDockerfile':
-                    result = await handleCreateDockerfile(args);
-                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, createDockerfile`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

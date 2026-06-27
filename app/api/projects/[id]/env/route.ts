@@ -90,6 +90,35 @@ export async function POST(
       }
     )
 
+    const projectDoc = await db.collection("users").findOne(
+      { id: session.user.id, "projects._id": projectId },
+      { projection: { "projects.$": 1 } }
+    )
+    const project = projectDoc?.projects?.[0]
+    const currentRequiredEnvKeys = Array.isArray(project?.requiredEnvKeys)
+      ? project.requiredEnvKeys.filter((envKey: unknown) => typeof envKey === "string")
+      : []
+    const currentRequiredIntegrationIds = Array.isArray(project?.requiredIntegrationIds)
+      ? project.requiredIntegrationIds.filter((integrationId: unknown) => typeof integrationId === "string")
+      : []
+
+    const nextRequiredEnvKeys = currentRequiredEnvKeys.filter((envKey: string) => envKey !== key)
+    const nextRequiredIntegrationIds =
+      typeof integration === "string" && integration
+        ? currentRequiredIntegrationIds.filter((integrationId: string) => integrationId !== integration)
+        : currentRequiredIntegrationIds
+
+    await db.collection("users").updateOne(
+      { id: session.user.id, "projects._id": projectId },
+      {
+        $set: {
+          "projects.$.requiredEnvKeys": nextRequiredEnvKeys,
+          "projects.$.requiredIntegrationIds": nextRequiredIntegrationIds,
+          "projects.$.updatedAt": new Date(),
+        },
+      }
+    )
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("[Env] POST error:", error)
