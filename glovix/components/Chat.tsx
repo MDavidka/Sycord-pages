@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Folder, LogIn } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
@@ -1770,86 +1770,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             </div>
                         )}
 
-                        {/* Controls row: attach (folder) + model selector */}
-                        <div className="flex items-center gap-2.5">
-                            {/* Attach (folder) */}
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowAttachMenu(!showAttachMenu); setShowModelMenu(false); }}
-                                    aria-label="Attach files"
-                                    className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:border-[#3a3b3e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-300'}`}
-                                >
-                                    <Folder className="h-5 w-5" />
-                                </button>
-
-                                {showAttachMenu && (
-                                    <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                                        <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[170px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                                            <div className="p-1.5">
-                                                <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
-                                                    className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
-                                                    <ImageIcon className="w-4 h-4" /> Image
-                                                </button>
-                                                <button type="button" onClick={() => { documentInputRef.current?.click(); setShowAttachMenu(false); }}
-                                                    className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
-                                                    <FileCode className="w-4 h-4" /> Document
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Model selector pill */}
-                            <div className="relative">
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
-                                    aria-label="Select model"
-                                    className={`flex h-12 items-center gap-2 rounded-2xl border px-4 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] hover:border-[#3a3b3e]' : 'bg-white border-gray-200 hover:border-gray-300'}`}
-                                >
-                                    <span className="text-[15px] font-semibold tracking-tight">
-                                        <span className="text-teal-300">Syra</span>
-                                        <span className={`ml-1 font-normal ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>nano</span>
-                                    </span>
-                                    <ChevronDown className={`h-4 w-4 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
-                                </button>
-
-                                {showModelMenu && (
-                                    <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setShowModelMenu(false)} />
-                                        <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[210px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                                            <div className="p-1.5">
-                                                <button type="button" onClick={() => setShowModelMenu(false)}
-                                                    className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between ${isDark ? 'bg-[#26272a]' : 'bg-gray-50'}`}>
-                                                    <span className="text-[13px]">
-                                                        <span className="text-teal-300 font-semibold">Syra</span>
-                                                        <span className={`ml-1 ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>nano</span>
-                                                    </span>
-                                                    <span className={`text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>Fast · Default</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Context usage */}
-                            <div className="ml-auto mr-1 hidden items-center sm:flex">
-                                <span className={`text-[11px] tabular-nums ${(tokenCount / (modelContextLimit * 0.8)) > 0.9
-                                    ? 'text-red-400'
-                                    : (tokenCount / (modelContextLimit * 0.8)) > 0.7
-                                        ? 'text-yellow-400'
-                                        : isDark ? 'text-[#5a5b5e]' : 'text-gray-400'}`}>
-                                    {Math.min(100, Math.round((tokenCount / (modelContextLimit * 0.8)) * 100))}% context
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Input pill */}
-                        <div className={`flex items-end gap-2 rounded-[26px] border pl-5 pr-2 py-2 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 focus-within:border-gray-300'}`}>
+                        {/* Unified composer card */}
+                        <div className={`rounded-[28px] border px-2 pt-1.5 pb-2 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                            {/* Text input */}
                             <textarea
                                 ref={textareaRef}
                                 value={input}
@@ -1860,9 +1783,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     target.style.height = 'auto';
                                     target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
                                 }}
-                                placeholder="help to write code…"
-                                className={`flex-1 bg-transparent text-[16px] py-2 focus:outline-none resize-none overflow-y-auto ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                style={{ height: 'auto', minHeight: '28px', maxHeight: '200px' }}
+                                placeholder="Help you write code, debug, optimize performance and other development work, deliver production-ready code."
+                                className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
+                                style={{ height: 'auto', minHeight: '76px', maxHeight: '200px' }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
@@ -1870,27 +1793,113 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     }
                                 }}
                             />
-                            {isLoading ? (
-                                <button
-                                    type="button"
-                                    onClick={handleStop}
-                                    aria-label="Stop"
-                                    className={`mb-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 ${isDark ? 'bg-white hover:bg-gray-200' : 'bg-black hover:bg-gray-800'}`}
-                                >
-                                    <div className={`h-3 w-3 rounded-sm ${isDark ? 'bg-black' : 'bg-white'}`} />
-                                </button>
-                            ) : (
-                                <button
-                                    type="submit"
-                                    disabled={!input.trim() && selectedImages.length === 0}
-                                    aria-label="Send"
-                                    className={`mb-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${input.trim() || selectedImages.length > 0
-                                        ? isDark ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'
-                                        : isDark ? 'bg-transparent text-[#5a5b5e]' : 'bg-transparent text-gray-300'}`}
-                                >
-                                    <LogIn className="h-5 w-5" />
-                                </button>
-                            )}
+
+                            {/* Toolbar */}
+                            <div className="flex items-center gap-2 px-1">
+                                {/* Slash / attach button */}
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowAttachMenu(!showAttachMenu); setShowModelMenu(false); }}
+                                        aria-label="Attach files"
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                    >
+                                        <Slash className="h-4 w-4" />
+                                    </button>
+
+                                    {showAttachMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
+                                            <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[170px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                                                <div className="p-1.5">
+                                                    <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
+                                                        className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
+                                                        <ImageIcon className="w-4 h-4" /> Image
+                                                    </button>
+                                                    <button type="button" onClick={() => { documentInputRef.current?.click(); setShowAttachMenu(false); }}
+                                                        className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
+                                                        <FileCode className="w-4 h-4" /> Document
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Model selector */}
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
+                                        aria-label="Select model"
+                                        className={`flex h-10 items-center gap-1.5 rounded-xl px-3 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
+                                    >
+                                        <span className="text-[15px] font-semibold tracking-tight">
+                                            <span className="text-teal-400">Syra</span>
+                                            <span className={`ml-1 font-normal ${isDark ? 'text-[#c5c6c9]' : 'text-gray-700'}`}>nano</span>
+                                        </span>
+                                        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
+                                    </button>
+
+                                    {showModelMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-10" onClick={() => setShowModelMenu(false)} />
+                                            <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[210px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                                                <div className="p-1.5">
+                                                    <button type="button" onClick={() => setShowModelMenu(false)}
+                                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between ${isDark ? 'bg-[#26272a]' : 'bg-gray-50'}`}>
+                                                        <span className="text-[13px]">
+                                                            <span className="text-teal-400 font-semibold">Syra</span>
+                                                            <span className={`ml-1 ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>nano</span>
+                                                        </span>
+                                                        <span className={`text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>Fast · Default</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Right cluster */}
+                                <div className="ml-auto flex items-center gap-1">
+                                    <button
+                                        type="button"
+                                        aria-label="Voice input"
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                    >
+                                        <Mic className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        aria-label="Voice mode"
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                    >
+                                        <AudioLines className="h-5 w-5" />
+                                    </button>
+
+                                    {isLoading ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleStop}
+                                            aria-label="Stop"
+                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-violet-300 text-violet-900 transition-all active:scale-95 hover:bg-violet-200"
+                                        >
+                                            <div className="h-3 w-3 rounded-sm bg-violet-900" />
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="submit"
+                                            disabled={!input.trim() && selectedImages.length === 0}
+                                            aria-label="Send"
+                                            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${input.trim() || selectedImages.length > 0
+                                                ? 'bg-violet-400 text-white hover:bg-violet-500'
+                                                : isDark ? 'bg-violet-500/25 text-violet-300/70' : 'bg-violet-200 text-violet-400'}`}
+                                        >
+                                            <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </form>
                 </div>
