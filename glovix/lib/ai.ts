@@ -14,6 +14,35 @@ export const MODEL_IDS: Record<ModelType, string> = {
     'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
 };
 
+export interface ModelChoice {
+    id: string
+    label: string
+    subtitle: string
+    modelType: ModelType
+    apiModel: string
+}
+
+export const MODEL_CHOICES: ModelChoice[] = [
+    {
+        id: 'nano',
+        label: 'syra-nano',
+        subtitle: 'Fast · Gemini Flash',
+        modelType: 'mimo-v2-flash',
+        apiModel: 'gemini-3.5-flash',
+    },
+    {
+        id: 'base',
+        label: 'syra-base',
+        subtitle: 'Powerful · DeepSeek V4',
+        modelType: 'deepseek-v4-pro',
+        apiModel: 'deepseek-v4-pro',
+    },
+];
+
+export function getModelChoice(modelType: ModelType): ModelChoice {
+    return MODEL_CHOICES.find(c => c.modelType === modelType) ?? MODEL_CHOICES[0]
+}
+
 export interface Message {
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string | null | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
