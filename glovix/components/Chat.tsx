@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, User, Folder, LogIn } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Folder, LogIn } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
@@ -1467,16 +1467,11 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             <Undo2 className="h-5 w-5" />
                         </button>
 
-                        {/* Centered title */}
-                        <h1 className={`absolute left-1/2 -translate-x-1/2 text-[22px] font-bold tracking-tight ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                            Syra
-                        </h1>
-
-                        {/* Profile avatar */}
+                        {/* Profile / brand logo */}
                         <button
                             type="button"
                             aria-label="Profile"
-                            className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-700'}`}
+                            className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
                         >
                             {profileImage && !profileImgError ? (
                                 <img
@@ -1487,7 +1482,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     className="h-full w-full object-cover"
                                 />
                             ) : (
-                                <User className="h-5 w-5" />
+                                <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
                             )}
                         </button>
                     </div>
