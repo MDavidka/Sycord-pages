@@ -6,7 +6,7 @@
  * When `projectId` is provided the builder is embedded inside the Sycord
  * dashboard and should save files directly to that project's pages.
  */
-export function getSystemPrompt(_model = 'mimo-v2-flash', projectId?: string | null) {
+export function getSystemPrompt(_model = 'deepseek-v4-pro', projectId?: string | null) {
   const projectContext = projectId
     ? `\n## IMPORTANT: You are building inside a Sycord project (ID: ${projectId}).
 

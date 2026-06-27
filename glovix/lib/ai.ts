@@ -2,14 +2,16 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
+    'deepseek-v4-pro': 'DeepSeek V4 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
+    'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
 };
 
 export interface Message {
