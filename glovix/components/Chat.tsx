@@ -1781,11 +1781,12 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     // Auto-resize
                                     const target = e.target as HTMLTextAreaElement;
                                     target.style.height = 'auto';
-                                    target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+                                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
+                                    target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                 }}
                                 placeholder="Help you write code, debug and ship production-ready work."
-                                className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                style={{ height: 'auto', minHeight: '76px', maxHeight: '200px' }}
+                                className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
+                                style={{ height: 'auto', minHeight: '76px' }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();

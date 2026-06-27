@@ -280,12 +280,13 @@ export function HomePage() {
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
                                 placeholder="What do you want to build?"
-                                className="w-full bg-transparent text-[13px] border-0 px-4 pt-4 pb-2 focus-visible:ring-0 resize-none"
-                                style={{ height: 'auto', minHeight: '44px', maxHeight: '150px' }}
+                                className="w-full bg-transparent text-[13px] border-0 px-4 pt-4 pb-2 focus-visible:ring-0 resize-none max-h-[100px] md:max-h-[150px]"
+                                style={{ height: 'auto', minHeight: '44px' }}
                                 onInput={(e) => {
                                     const target = e.target as HTMLTextAreaElement;
                                     target.style.height = 'auto';
-                                    target.style.height = `${Math.min(target.scrollHeight, 150)}px`;
+                                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 100 : 150;
+                                    target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                 }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
