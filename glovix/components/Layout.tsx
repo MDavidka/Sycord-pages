@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Home, Settings, Edit3, Moon, Sun, GitFork, Loader2, MessageSquare, Code2 } from 'lucide-react';
 import { Chat } from './Chat';
 import { Workbench } from './Workbench';
+import { ErrorBoundary } from './ErrorBoundary';
 import { SettingsModal } from './SettingsModal';
 import { StreamingText } from './StreamingText';
 import { useStore } from '../store';
@@ -345,7 +346,9 @@ export function Layout() {
                     "flex-1 flex flex-col overflow-hidden rounded-xl border",
                     isDark ? 'bg-background border-border' : 'bg-white border-gray-200'
                 )}>
-                    <Chat scrollRef={chatScrollRef} onScroll={handleChatScroll} />
+                    <ErrorBoundary>
+                      <Chat scrollRef={chatScrollRef} onScroll={handleChatScroll} />
+                    </ErrorBoundary>
                 </div>
             </div>
 
@@ -399,7 +402,9 @@ export function Layout() {
                 "flex-1 min-w-0 h-full",
                 mobileTab === 'workbench' ? 'block' : 'hidden md:block'
             )}>
-                <Workbench />
+                <ErrorBoundary>
+                  <Workbench />
+                </ErrorBoundary>
             </div>
 
             </div>

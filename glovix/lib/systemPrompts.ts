@@ -1,5 +1,5 @@
 // System prompts for different AI models
-// GLOVIX MEGA SYSTEM PROMPT v4.0 — Next.js edition
+// GLOVIX MEGA SYSTEM PROMPT v4.1 — Next.js edition — 2026 AI Design Standards
 
 /**
  * Return the system prompt for the Glovix AI builder.
@@ -314,6 +314,79 @@ Build interfaces that feel current, trustworthy, and fast. Think Vercel, Linear,
 - Design for scannability: short paragraphs, grouped cards, consistent labels, obvious empty/loading/error states
 - Support both dark and light themes unless the user requests a single fixed brand treatment
 - Use semantic HTML, visible focus states, alt text, keyboard navigability, and accessible forms
+
+### 🎯 2026 AI DESIGN STANDARDS (NON-NEGOTIABLE)
+
+These are the mandatory design rules for every generated website. They reflect 2026 minimalism, bold typography, purposeful motion, and personalization standards.
+
+#### 1. MINIMAL LAYOUT PRINCIPLE
+- **One idea per section**: Maximum 2 visual elements per viewport fold. Never overload a section with competing calls-to-action.
+- **Whitespace ratio**: Every section must have >30% whitespace. Crowded pages are rejected.
+- **Constraint**: "Generate one clear, singular visual idea per section. Use space as an active design element."
+- **Section rhythm**: Alternate between bold hero sections and quieter information sections to create a reading cadence.
+
+#### 2. BOLD TYPOGRAPHY SYSTEM
+- **Use variable fonts**: Prefer \`next/font\` with Inter, Geist, or system sans-serif stacks that support weight ranges.
+- **Strict typographic scale (px)**:
+  - \`h1\`: 48–64px, weight 700–800, tracking -0.02em
+  - \`h2\`: 28–36px, weight 600–700, tracking -0.01em
+  - \`h3\`: 20–24px, weight 600
+  - \`body\`: 16px minimum, line-height ≥ 1.6, weight 400
+  - \`caption/label\`: 12–14px, weight 500
+- **Readability rules**: Body text never below 14px. Line-height never below 1.5 for body. Contrast ratio ≥ 4.5:1 for all body text.
+- **Typography hierarchy**: Every page must have a clear h1 → h2 → h3 visual cascade. Never skip heading levels.
+
+#### 3. INTERACTIVE PRODUCT DEMOS
+- **"Try It" pattern**: For SaaS/product features, generate an interactive demo section with live preview.
+- **Modal-based demos**: Use dialog/drawer patterns that let users interact with a mini-version of the product before committing.
+- **Framer Motion**: Use subtle \`framer-motion\` transitions (no auto-playing videos, no excessive animations).
+
+#### 4. PURPOSEFUL MOTION
+- **Only add animations that explain functionality**: Each motion must serve a purpose — reveal hierarchy, indicate state change, or guide attention.
+- **Consistent timing**: All transitions use 200–400ms, ease-in-out easing curve.
+- **Staggered reveals**: Use staggered children animations for lists/grids (50–80ms per child).
+- **Avoid**: auto-playing carousels, background video, excessive parallax, infinite spin animations on non-functional elements.
+- **Prefers-reduced-motion**: Always respect the \`prefers-reduced-motion\` media query. Provide static fallbacks.
+
+#### 5. SMART PERSONALIZATION
+- **ICP (Ideal Customer Profile) injection**: When provided, inject targeted messaging based on industry, company size, and pain point.
+- **Dynamic CTAs**: Generate relevant calls-to-action based on the user's stated goal (e.g., "Book a Demo" for enterprise, "Start Free Trial" for SMB).
+- **Social proof placement**: Strategically position testimonials, logos, and metrics where they build maximum trust.
+- **Geo/localization awareness**: Support simple locale-aware formatting (dates, numbers, currency).
+
+#### 6. SMART CHAT INTEGRATION
+- **Chat widget in footer**: Generate a lightweight chat interface using Gemini API.
+- **Contextual responses**: Chat bot answers based on page content and site purpose.
+- **Non-intrusive**: Chat widget is collapsible and respects user preferences.
+
+#### 7. OUTPUT QUALITY CONSTRAINTS
+- **Zero dead code**: No unused imports, no dead CSS, no placeholder content.
+- **Performance budget**: Generated HTML < 100KB, CSS < 50KB, JS < 200KB (before gzip).
+- **Meta tag completeness**: Always include viewport, charset, Open Graph, Twitter Card, and favicon links.
+- **Semantic HTML**: Use \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<article>\`, \`<footer>\` — not all \`<div>\`s.
+- **Lazy loading**: Add \`loading="lazy"\` to all below-fold images. Add \`decoding="async"\` to non-critical images.
+
+#### 8. ACCESSIBILITY REQUIREMENTS (WCAG 2.1 AA)
+- **ARIA labels** on all interactive elements without visible text.
+- **Keyboard navigation**: All interactive elements reachable via Tab. Focus indicators visible.
+- **Color contrast**: All text/non-text content meets WCAG AA contrast ratios.
+- **Alt text**: Every \`<img>\` has meaningful \`alt\` text (or \`alt=""\` for decorative).
+- **Form labels**: Every input has an associated \`<label>\`.
+- **Skip links**: Include skip-to-content link as the first focusable element.
+
+#### 9. DESIGN TOKEN CONSTRAINT
+- **Lock to predefined scale**: Use the typography scale above. Never invent ad-hoc sizes.
+- **Color palette discipline**: Maximum 1 primary brand color + 1 accent + neutrals. No rainbow gradients.
+- **Spacing system**: Use Tailwind's default spacing scale (4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96).
+- **Border radius consistency**: Use the project's \`--radius\` token. Never mix rounded-none with rounded-3xl without purpose.
+
+#### 10. AI REFINEMENT PROMPTS (for regeneration)
+When asked to refine a design, apply these transformations:
+- "Remove visual clutter" → reduce elements per section, increase whitespace, simplify CTAs
+- "Enhance visual hierarchy" → strengthen h1/h2/h3 contrast, add section dividers, adjust spacing
+- "Add purposeful motion" → add entrance animations for key sections, hover states for cards
+- "Improve readability" → increase body font size, adjust line heights, improve contrast
+- "Make it more premium" → use subtle glass effects, add micro-interactions, increase whitespace, use restrained color palette
 
 **Accessibility and quality rules:**
 - Meet modern accessibility expectations: visible keyboard focus, semantic structure, and contrast that is readable

@@ -3,6 +3,7 @@ import './glovix.css';
 import { useEffect, useState } from 'react';
 import { MemoryRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { HomePage } from './components/HomePage';
 import { EmbeddedChat } from './components/EmbeddedChat';
 import { useStore } from './store';
@@ -146,7 +147,11 @@ function AppContent() {
     // "loading" splash here — the chat shell appears immediately and becomes
     // interactive as soon as the (auto-login) user is ready.
     if (embedded) {
-        return <EmbeddedChat />;
+        return (
+          <ErrorBoundary>
+            <EmbeddedChat />
+          </ErrorBoundary>
+        );
     }
 
     if (loading) {
@@ -164,12 +169,12 @@ function AppContent() {
 
     return (
         <>
-            <Routes>
-                <Route path="/" element={<HomePageRoute />} />
-                <Route path="/c/:chatId" element={<ChatPage />} />
+          <Routes>
+                <Route path="/" element={<ErrorBoundary><HomePageRoute /></ErrorBoundary>} />
+                <Route path="/c/:chatId" element={<ErrorBoundary><ChatPage /></ErrorBoundary>} />
                 {/* Fallback redirect */}
-                <Route path="*" element={<HomePageRoute />} />
-            </Routes>
+                <Route path="*" element={<ErrorBoundary><HomePageRoute /></ErrorBoundary>} />
+              </Routes>
         </>
     );
 }
