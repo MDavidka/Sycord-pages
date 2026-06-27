@@ -1462,7 +1462,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 items-center justify-center rounded-full px-8 transition-colors active:scale-95 ${isDark ? 'bg-white/10 text-white hover:bg-white/15' : 'bg-black/5 text-gray-900 hover:bg-black/10'}`}
+                            className={`flex h-11 items-center justify-center rounded-[28px] border px-6 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:bg-[#2a2b2e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
                         >
                             <Undo2 className="h-5 w-5" />
                         </button>
@@ -1528,9 +1528,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
                                             return (
-                                                <div key={`seg-${segIdx}`} className="flex justify-start">
-                                                    <div className={`text-[14px] leading-relaxed ${isDark ? 'text-[#e5e5e5] max-w-full' : 'text-gray-800 max-w-full'}`}>
-                                                        <div className={`prose prose-sm max-w-none ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
+                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                                                                 {textContent.replace(/^\[SYSTEM\] .*/gm, '')}
                                                             </ReactMarkdown>
@@ -1596,7 +1596,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                                 </div>
                                             )}
                                             {group.content && (
-                                                <div className={`prose prose-sm max-w-none ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                     {Array.isArray(group.content) ? (
                                                         <div className="space-y-2">
                                                             {group.content.map((part, i) => {
@@ -1781,11 +1781,12 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     // Auto-resize
                                     const target = e.target as HTMLTextAreaElement;
                                     target.style.height = 'auto';
-                                    target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+                                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
+                                    target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                 }}
                                 placeholder="Help you write code, debug and ship production-ready work."
-                                className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                style={{ height: 'auto', minHeight: '76px', maxHeight: '200px' }}
+                                className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
+                                style={{ height: 'auto', minHeight: '76px' }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();

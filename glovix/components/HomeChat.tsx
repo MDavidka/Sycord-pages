@@ -153,13 +153,14 @@ export function HomeChat() {
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Describe what you want to build..."
                         className={cn(
-                            "w-full bg-transparent text-sm border-0 rounded-xl pl-4 pr-4 pt-4 pb-14 focus-visible:ring-0 resize-none min-h-[120px] max-h-[200px]",
+                            "w-full bg-transparent text-sm border-0 rounded-xl pl-4 pr-4 pt-4 pb-14 focus-visible:ring-0 resize-none min-h-[120px] max-h-[120px] md:max-h-[200px]",
                             isDark ? 'text-foreground placeholder:text-muted-foreground/60' : 'text-gray-900 placeholder:text-gray-400'
                         )}
                         onInput={(e) => {
                             const target = e.target as HTMLTextAreaElement;
                             target.style.height = 'auto';
-                            target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+                            const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
+                            target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                         }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
