@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall } from '../lib/ai';
+import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES } from '../lib/projectTemplate';
@@ -115,12 +115,67 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     }
 };
 
+function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
+    selectedModel: ModelType
+    onSelect: (choice: ModelChoice) => void
+    showMenu: boolean
+    onToggleMenu: () => void
+    onCloseMenu: () => void
+    isDark: boolean
+}) {
+    const current = getModelChoice(selectedModel)
+
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                onClick={onToggleMenu}
+                aria-label="Select model"
+                className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
+            >
+                <span className={`text-[13px] font-medium tracking-tight ${isDark ? 'text-[#c5c6c9]' : 'text-gray-700'}`}>{current.label}</span>
+                <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
+            </button>
+
+            {showMenu && (
+                <>
+                    <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
+                    <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[210px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                        <div className="p-1.5">
+                            {MODEL_CHOICES.map((choice) => {
+                                const isActive = choice.modelType === selectedModel
+                                return (
+                                    <button
+                                        key={choice.id}
+                                        type="button"
+                                        onClick={() => onSelect(choice)}
+                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between transition-colors ${
+                                            isActive
+                                                ? isDark ? 'bg-[#26272a]' : 'bg-gray-50'
+                                                : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <span className={`text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>{choice.label}</span>
+                                        <span className={`text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>{choice.subtitle}</span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    )
+}
+
 export function Chat({ scrollRef, onScroll }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
     const setMessages = useStore(s => s.setMessages);
     const selectedModel = useStore(s => s.selectedModel);
+    const setSelectedModel = useStore(s => s.setSelectedModel);
+    const setAiModel = useStore(s => s.setAiModel);
     const addTerminalOutput = useStore(s => s.addTerminalOutput);
     const updateLastMessage = useStore(s => s.updateLastMessage);
     const user = useStore(s => s.user);
@@ -1828,32 +1883,18 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 </div>
 
                                 {/* Model selector */}
-                                <div className="relative">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
-                                        aria-label="Select model"
-                                        className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
-                                    >
-                                        <span className={`text-[13px] font-medium tracking-tight ${isDark ? 'text-[#c5c6c9]' : 'text-gray-700'}`}>syra-nano</span>
-                                        <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
-                                    </button>
-
-                                    {showModelMenu && (
-                                        <>
-                                            <div className="fixed inset-0 z-10" onClick={() => setShowModelMenu(false)} />
-                                            <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[210px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                                                <div className="p-1.5">
-                                                    <button type="button" onClick={() => setShowModelMenu(false)}
-                                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between ${isDark ? 'bg-[#26272a]' : 'bg-gray-50'}`}>
-                                                        <span className={`text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>syra-nano</span>
-                                                        <span className={`text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>Fast · Default</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
+                                <ModelSelector
+                                    selectedModel={selectedModel}
+                                    onSelect={(choice) => {
+                                        setSelectedModel(choice.modelType)
+                                        setAiModel(choice.apiModel)
+                                        setShowModelMenu(false)
+                                    }}
+                                    showMenu={showModelMenu}
+                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
+                                    onCloseMenu={() => setShowModelMenu(false)}
+                                    isDark={isDark}
+                                />
 
                                 {/* Right cluster */}
                                 <div className="ml-auto flex items-center gap-1">
