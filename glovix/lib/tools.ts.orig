@@ -1019,8 +1019,8 @@ function cleanTerminalOutput(raw: string): string {
         if (trimmed === 'Require stack:') {
             continue;
         }
-        if (trimmed.startsWith('- ./') && filtered.length > 0 && 
-            (filtered[filtered.length - 1].includes('Cannot find module') || 
+        if (trimmed.startsWith('- ./') && filtered.length > 0 &&
+            (filtered[filtered.length - 1].includes('Cannot find module') ||
              filtered[filtered.length - 1].includes('Require stack') ||
              filtered[filtered.length - 1].trim().startsWith('- ./'))) {
             continue;
@@ -1875,7 +1875,7 @@ async function _executeToolInternal(
                     result = await handleRunCommand(args, ctx);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, runCommand`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
