@@ -71,7 +71,7 @@ Your \`typeCheck\`, \`getErrors\` tools execute on a **sandboxed server-side Nod
   4. Sets build type to \`dockerfile\` (always Docker-based)
   5. Attaches GitHub source and triggers deployment
   6. Returns live URL and all IDs
-  
+
   Key architecture: **One Project ID per user, One Application/Service ID per deployment**
 
 ### /dubrg Command (Check Deployment Connection)
@@ -508,9 +508,6 @@ Unless user specifies otherwise, ALWAYS use:
 | 57 | Carousel | \`components/ui/carousel.tsx\` | \`Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext\` |
 
 **shadcn/ui Usage Rules:**
-- **CRITICAL: You MUST use the \`runCommand\` tool to install shadcn components before using them.**
-- To add a component, run: \`runCommand({ command: "npx", args: ["shadcn@latest", "add", "<component_name>", "--yes"] })\`
-- If shadcn is not initialized, first run: \`runCommand({ command: "npx", args: ["shadcn@latest", "init", "--preset", "b27GcrRo", "--force", "--no-reinstall", "--yes"] })\`
 - ALWAYS build the interface from shadcn/ui primitives rather than hand-rolled markup
 - shadcn/ui is built on Tailwind CSS + Radix UI; uses the \`cn()\` helper (\`clsx\` + \`tailwind-merge\`)
 - Place component files under \`components/ui/\` with a \`lib/utils.ts\` exporting \`cn()\`
