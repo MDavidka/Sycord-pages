@@ -2,16 +2,18 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-pro';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
     'deepseek-v4-pro': 'DeepSeek V4 Pro',
+    'gemini-3.1-pro': 'Gemini 3.1 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
     'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
+    'gemini-3.1-pro': 'gemini-3.1-pro',
 };
 
 export interface ModelChoice {
@@ -36,6 +38,13 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Powerful · DeepSeek V4',
         modelType: 'deepseek-v4-pro',
         apiModel: 'deepseek-v4-pro',
+    },
+    {
+        id: 'havy',
+        label: 'syra-havy',
+        subtitle: 'Advanced · Gemini 3.1 Pro',
+        modelType: 'gemini-3.1-pro',
+        apiModel: 'gemini-3.1-pro',
     },
 ];
 
