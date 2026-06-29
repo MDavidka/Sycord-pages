@@ -550,7 +550,18 @@ This installs all the shadcn primitives needed by the preset sections in one cal
 Every visual element on every page MUST be built 100% from **shadcn/ui components** composed together. Styling comes exclusively from:
 1. **shadcn component props** (\`variant\`, \`size\`, \`position\`, etc.)
 2. **CSS design-token variables** (\`--background\`, \`--primary\`, \`--muted\`, \`--border\`, etc.)
-3. **Tailwind LAYOUT utilities ONLY** (\`grid\`, \`flex\`, \`gap\`, \`p-\`, \`m-\`, \`w-\`, \`h-\`, \`max-w-\`, \`container\`, \`mx-auto\`)
+3. **Tailwind LAYOUT utilities** (\`grid\`, \`flex\`, \`gap\`, \`p-\`, \`m-\`, \`w-\`, \`h-\`, \`max-w-\`, \`container\`, \`mx-auto\`)
+4. **Platform Utilities & Themes** — You ARE encouraged to use \`.frosted-glass\`, \`.text-gradient\`, and the \`THEME_TOKENS\` from \`lib/design-tokens.ts\`.
+
+### 💎 PREMIUM DESIGN VS. AI SLOP (THE DIFFERENCE)
+
+| Slop (Amateur AI) | Premium (Syra Standard) |
+|---|---|
+| Random \`bg-gradient-to-r from-blue-500 to-purple-500\` | Subtle surfaces using \`bg-muted/50\` or \`THEME_TOKENS\` |
+| Massive \`shadow-2xl\` everywhere | Precise elevation with \`Card\` or \`.frosted-glass\` |
+| \`text-6xl font-black\` headings | \`text-4xl sm:text-5xl font-bold tracking-tight text-balance\` |
+| Uniform vertical spacing (\`py-10\` on every section) | Visual rhythm with alternating padding (\`py-24\` vs \`py-16\`) |
+| No hierarchy (everything is the same background) | Sectioning with alternating \`bg-background\` and \`bg-muted/50\` |
 
 ### ☠️ FORBIDDEN — THESE CREATE AI SLOP (NEVER USE)
 

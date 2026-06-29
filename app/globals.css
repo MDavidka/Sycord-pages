@@ -5,74 +5,74 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Dark theme enforced as default */
-  --background: #18191B;
+  /* Dark theme enforced as default with improved depth */
+  --background: #0d0e11;
   --foreground: oklch(0.985 0 0);
-  --card: #18191B;
+  --card: #16181d;
   --card-foreground: oklch(0.985 0 0);
-  --popover: #18191B;
+  --popover: #16181d;
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: #1a1c21;
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
+  --muted: #1a1c21;
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: #22252a;
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
+  --border: #27292d;
+  --input: #27292d;
   --ring: oklch(0.439 0 0);
-  --radius: 0.5rem;
+  --radius: 0.75rem;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #18191B;
+  --sidebar: #0d0e11;
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: #16181d;
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-border: #27292d;
   --sidebar-ring: oklch(0.439 0 0);
 }
 
 .dark {
-  --background: #18191B;
+  --background: #0d0e11;
   --foreground: oklch(0.985 0 0);
-  --card: #18191B;
+  --card: #16181d;
   --card-foreground: oklch(0.985 0 0);
-  --popover: #18191B;
+  --popover: #16181d;
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  --primary-foreground: oklch(0.1 0 0);
+  --secondary: #1a1c21;
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
+  --muted: #1a1c21;
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: #22252a;
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
+  --border: #27292d;
+  --input: #27292d;
   --ring: oklch(0.439 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: #18191B;
+  --sidebar: #0d0e11;
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: #16181d;
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-border: #27292d;
   --sidebar-ring: oklch(0.439 0 0);
 }
 
@@ -126,12 +126,12 @@
      fills the whole viewport, including the device "unsafe" areas (notch /
      status bar / home indicator) and the iOS overscroll/rubber-band region. */
   html {
-    background-color: #18191B;
+    background-color: #0d0e11;
     color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground;
-    background-color: #18191B;
+    background-color: #0d0e11;
     min-height: 100dvh;
     /* Avoid a white flash / mismatched color when content bounces past edges */
     overscroll-behavior: none;
@@ -143,7 +143,7 @@
    so content stays clear of the notch & home indicator while the background
    color still extends edge-to-edge underneath them. */
 .safe-area-bg {
-  background-color: #18191B;
+  background-color: #0d0e11;
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
@@ -169,10 +169,10 @@
 
 /* ── Site-preview dashboard tokens ── */
 :root {
-  --preview-bg:      #1a1a1c;
-  --preview-card:    #252527;
-  --preview-surface: #2e2e30;
-  --preview-border:  #2e2e30;
+  --preview-bg:      #0d0e11;
+  --preview-card:    #16181d;
+  --preview-surface: #1a1c21;
+  --preview-border:  #27292d;
   --preview-green:   #22a846;
   --preview-orange:  #e0441e;
 }
