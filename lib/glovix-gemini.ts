@@ -29,7 +29,7 @@ import {
   type Schema,
 } from "@google/genai"
 
-export const GEMINI_MODEL = process.env.GOOGLE_AIAGENT_MODEL || "gemini-3.5-flash"
+export const GEMINI_MODEL = process.env.GOOGLE_AIAGENT_MODEL || "gemini-2.5-flash"
 
 export type AiMode = "vertex" | "vertex-express" | "developer"
 
@@ -125,7 +125,7 @@ function isRetryable(err: any): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-export async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
   let lastErr: any
   for (let i = 0; i < attempts; i++) {
     try {
@@ -391,7 +391,9 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
 
         const config: GenerateContentConfig = {
           temperature: req.temperature ?? 0.7,
-          maxOutputTokens: Math.min(Math.max(req.maxOutputTokens ?? 8192, 1024), 32768),
+          // Allow up to 65 536 output tokens so Syra can generate complete,
+          // large files (multiple components, full pages) in a single turn.
+          maxOutputTokens: Math.min(Math.max(req.maxOutputTokens ?? 16384, 1024), 65536),
         }
         if (systemInstruction) config.systemInstruction = systemInstruction
         if (functionDeclarations) {
