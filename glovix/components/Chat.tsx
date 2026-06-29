@@ -229,7 +229,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // Set system prompt in store for reference
     useEffect(() => {
         if (user) {
-            const prompt = getSystemPrompt(selectedModel, getHostProjectId());
+            const prompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
             setSystemPrompt(prompt);
         }
     }, [user, selectedModel]);
@@ -672,7 +672,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             'package.json, next.config.mjs, tsconfig.json, tailwind.config.ts, postcss.config.mjs, app/layout.tsx, app/page.tsx, app/globals.css';
 
         // Build system prompt — always get fresh from getSystemPrompt
-        const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
+        const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
         const presetDescription = getPresetDescription(presetId);
         const promptContent = currentSystemPrompt
             ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList).replace('{{PRESET}}', presetDescription)
