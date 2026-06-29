@@ -6,7 +6,7 @@ import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
-import { BASE_PROJECT_FILES } from '../lib/projectTemplate';
+import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
 import { saveChatMessages, saveProject, createChat, getHostProjectId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
@@ -242,6 +242,19 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // Initialize base project when chat starts
     const projectInitializedRef = useRef<string | null>(null);
 
+    // Resolve preset ID: window.__glovixPreset > sessionStorage > default 'b27GcrRo'
+    const presetId = useMemo(() => {
+      if (typeof window !== 'undefined') {
+        const winPreset = (window as any).__glovixPreset
+        if (winPreset) return winPreset
+      }
+      try {
+        const stored = sessionStorage.getItem('glovix_preset')
+        if (stored) return stored
+      } catch { /* ignore */ }
+      return 'b27GcrRo'
+    }, [])
+
     const initializeBaseProject = async () => {
         if (!currentChatId || projectInitializedRef.current === currentChatId) return;
 
@@ -251,13 +264,16 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             projectInitializedRef.current = currentChatId;
 
             try {
+                // Include preset section components in the base project files
+                const projectFiles = getBaseProjectFiles(presetId);
+
                 // Mount base project files to WebContainer
-                await mountFiles(BASE_PROJECT_FILES);
+                await mountFiles(projectFiles);
 
                 // Update store with base files
-                state.setFiles(BASE_PROJECT_FILES);
+                state.setFiles(projectFiles);
 
-                console.log('Base React project initialized');
+                console.log('Base React project initialized with preset:', presetId);
             } catch (err) {
                 console.error('Failed to initialize base project:', err);
             }
@@ -654,9 +670,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
 
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
+        const presetDescription = getPresetDescription(presetId);
         const promptContent = currentSystemPrompt
-            ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList)
-            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.`;
+            ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList).replace('{{PRESET}}', presetDescription)
+            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}`;
 
         const SYSTEM_PROMPT: Message = {
             role: 'system',
