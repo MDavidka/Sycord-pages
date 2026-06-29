@@ -1037,8 +1037,22 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'listShadcnComponents',
+            description: `List every shadcn/ui component that is ALREADY installed in this project (files present under components/ui/).
+ALWAYS call this FIRST before writing any import statement like \`import { X } from '@/components/ui/x'\`.
+The returned list is the ground truth — if a component is NOT in the list, it is NOT installed and any import of it will cause a build error.
+After calling this:
+- If the component is in the list → import it safely.
+- If the component is NOT in the list → call addShadcnComponent({ component: "<name>" }) first, then import it.
+Never skip this check. Build failures from missing UI modules happen 100% of the time when this check is skipped.`,
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'addShadcnComponent',
-            description: 'Install shadcn/ui components using the official CLI. This is the ONLY way to add UI components — never write them manually. The CLI generates properly typed, accessible Radix UI components into components/ui/. Use this for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, alert-dialog, aspect-ratio, breadcrumb, calendar, carousel, chart, collapsible, command, context-menu, drawer, empty, field, hover-card, input-group, input-otp, item, kbd, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, skeleton, slider, sonner, spinner, toggle, toggle-group, tooltip, and any other shadcn component.',
+            description: 'Install shadcn/ui components using the official CLI. This is the ONLY way to add UI components — never write them manually. The CLI generates properly typed, accessible Radix UI components into components/ui/. PREREQUISITE: call listShadcnComponents() first to check if the component is already installed before calling this. Use this for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, alert-dialog, aspect-ratio, breadcrumb, calendar, carousel, chart, collapsible, command, context-menu, drawer, empty, field, hover-card, input-group, input-otp, item, kbd, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, skeleton, slider, sonner, spinner, toggle, toggle-group, tooltip, and any other shadcn component.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1885,6 +1899,55 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
 
 
 /**
+ * List every shadcn/ui component already installed in the project by scanning
+ * the store for files under components/ui/. This is the ground-truth check
+ * Syra must run before writing ANY @/components/ui/<x> import statement.
+ *
+ * If a component is not in this list it is not installed and importing it will
+ * cause a "Module not found" build error.
+ */
+export async function handleListShadcnComponents(): Promise<string> {
+    try {
+        // Sync from the Pages tab so the store reflects the real file system.
+        await syncStoreFromPages();
+        const files = useStore.getState().files;
+
+        // Collect all .tsx files under components/ui/ at any nesting depth.
+        const installed: string[] = Object.keys(files)
+            .filter(p => {
+                const norm = p.replace(/\\/g, '/').toLowerCase();
+                return (
+                    norm.includes('components/ui/') &&
+                    (norm.endsWith('.tsx') || norm.endsWith('.ts'))
+                );
+            })
+            .map(p => {
+                // Extract the bare component name: components/ui/button.tsx → button
+                const parts = p.replace(/\\/g, '/').split('/');
+                const filename = parts[parts.length - 1];
+                return filename.replace(/\.(tsx|ts)$/, '');
+            })
+            .sort();
+
+        if (installed.length === 0) {
+            return (
+                '[SYSTEM] No shadcn/ui components are installed yet (components/ui/ is empty or does not exist).\n' +
+                'Before importing any @/components/ui/<name>, call addShadcnComponent({ component: "<name>" }) first.'
+            );
+        }
+
+        return (
+            `[SYSTEM] Installed shadcn/ui components (${installed.length} total):\n` +
+            installed.map(c => `  - ${c}`).join('\n') +
+            '\n\nIMPORTANT: Only import components from this list. ' +
+            'If the component you need is missing, call addShadcnComponent({ component: "<name>" }) before writing the import.'
+        );
+    } catch (e: any) {
+        return `[SYSTEM] ❌ listShadcnComponents failed: ${e.message}`;
+    }
+}
+
+/**
  * Fetch live shadcn/ui component documentation from the Syra server-side
  * endpoint (/api/ai/shadcn-docs). This gives Syra accurate, up-to-date
  * component APIs without hallucination.
@@ -2033,11 +2096,14 @@ async function _executeToolInternal(
                 case 'addShadcnComponent':
                     result = await handleAddShadcnComponent(args);
                     break;
+                case 'listShadcnComponents':
+                    result = await handleListShadcnComponents();
+                    break;
                 case 'shadcnDocs':
                     result = await handleShadcnDocs(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, addShadcnComponent, shadcnDocs`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
