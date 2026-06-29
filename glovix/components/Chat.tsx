@@ -11,7 +11,10 @@ import { saveChatMessages, saveProject, createChat, getHostProjectId } from '../
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { MermaidBlock } from './MermaidBlock';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
+import { BuilderPipelineDocs } from '@/components/builder-pipeline-docs';
+import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
@@ -1467,6 +1470,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     };
 
     const [showModelMenu, setShowModelMenu] = useState(false);
+    const [showDeepMemory, setShowDeepMemory] = useState(false);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [debugLoading, setDebugLoading] = useState(false);
@@ -1506,6 +1510,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
 
     return (
         <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+            {showDeepMemory && <DeepMemoryModal onClose={() => setShowDeepMemory(false)} />}
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -1540,11 +1545,28 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                         </button>
 
                         {/* Profile / brand logo */}
-                        <button
-                            type="button"
-                            aria-label="Profile"
-                            className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                        >
+                        <div className="flex items-center gap-2">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        aria-label="Docs"
+                                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-[350px] p-0 overflow-hidden border-none" style={{ backgroundColor: 'transparent', boxShadow: 'none' }}>
+                                    <BuilderPipelineDocs isDark={isDark} />
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowDeepMemory(true)}
+                                aria-label="Profile"
+                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
+                            >
                             {profileImage && !profileImgError ? (
                                 <img
                                     src={profileImage}
@@ -1556,7 +1578,8 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             ) : (
                                 <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
                             )}
-                        </button>
+                            </button>
+                        </div>
                     </div>
                 </header>
             )}
