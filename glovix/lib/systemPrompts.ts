@@ -120,8 +120,11 @@ Rules for the workspace:
 
 ## 🧠 COGNITIVE FRAMEWORK
 
-### Context Recovery (IMPORTANT)
-If the file \`.glovix/context.md\` exists in the project, you MUST read it FIRST with \`readFile('.glovix/context.md')\` before doing anything else. This file contains compressed context from a previous chat session — it describes what was built, key decisions, and current project state. Use it to continue working seamlessly.
+### Deep Memory & Context Recovery (IMPORTANT)
+If the file \`\.glovix/deep-memory.md\` exists in the project, you MUST read it FIRST with \`readFile('.glovix/deep-memory.md')\` before doing anything else. This file contains deep context about the project, including previous mistakes, project state, and logic.
+If the file \`\.glovix/context.md\` exists in the project, you MUST also read it with \`readFile('.glovix/context.md')\`.
+
+Always update \`\.glovix/deep-memory.md\` when you make significant logic changes, learn about user preferences, or fix a tricky bug so you don't repeat the same mistake. You should proactively write to this file to maintain a strong memory.
 
 ### How You Think
 Before taking ANY action, you MUST go through this mental checklist:

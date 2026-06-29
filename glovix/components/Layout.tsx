@@ -1,11 +1,12 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Home, Settings, Edit3, Moon, Sun, GitFork, Loader2, MessageSquare, Code2 } from 'lucide-react';
+import { ChevronDown, Home, Settings, Edit3, Brain, Moon, Sun, GitFork, Loader2, MessageSquare, Code2 } from 'lucide-react';
 import { Chat } from './Chat';
 import { Workbench } from './Workbench';
 import { ErrorBoundary } from './ErrorBoundary';
 import { SettingsModal } from './SettingsModal';
+import { DeepMemoryModal } from './DeepMemoryModal';
 import { StreamingText } from './StreamingText';
 import { useStore } from '../store';
 import { updateChatTitle } from '../lib/api';
@@ -40,6 +41,7 @@ export function Layout() {
     const [showProjectMenu, setShowProjectMenu] = useState(false);
     const [mobileTab, setMobileTab] = useState<'chat' | 'workbench'>('chat');
     const [showSettings, setShowSettings] = useState(false);
+    const [showDeepMemory, setShowDeepMemory] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [isForking, setIsForking] = useState(false);
@@ -198,6 +200,7 @@ export function Layout() {
             isDark ? 'bg-background text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'
         )}>
             {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+            {showDeepMemory && <DeepMemoryModal onClose={() => setShowDeepMemory(false)} />}
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
 
@@ -305,7 +308,7 @@ export function Layout() {
                             <DropdownMenuSeparator />
                             {/* Quick Actions */}
                             <div className="px-2 pb-2 pt-1">
-                                <div className="grid grid-cols-4 gap-1">
+                                <div className="grid grid-cols-5 gap-1">
                                     <DropdownMenuItem
                                         onClick={() => { navigate('/'); setShowProjectMenu(false); }}
                                         className="flex flex-col items-center gap-1.5 p-3 h-auto rounded-xl cursor-pointer"
@@ -334,6 +337,13 @@ export function Layout() {
                                     >
                                         {isForking ? <Loader2 className="w-5 h-5 animate-spin" /> : <GitFork className="w-5 h-5" />}
                                         <span className="text-[10px] font-medium">Fork</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                        onClick={() => { setShowDeepMemory(true); setShowProjectMenu(false); }}
+                                        className="flex flex-col items-center gap-1.5 p-3 h-auto rounded-xl cursor-pointer"
+                                    >
+                                        <Brain className="w-5 h-5 text-blue-500" />
+                                        <span className="text-[10px] font-medium text-center">Deep Memory</span>
                                     </DropdownMenuItem>
                                 </div>
                             </div>
