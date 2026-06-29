@@ -2,6 +2,10 @@
 // This is auto-generated when a new chat is created. It is deployable with
 // `npm run build` (Next.js production build) — NOT a Vite SPA.
 
+import { getPreset } from './presets'
+
+export { getPreset }
+
 export const BASE_PROJECT_FILES: Record<string, { file: { contents: string } }> = {
   'package.json': {
     file: {
@@ -175,4 +179,53 @@ export function getProjectStructure(): string {
   }
 
   return tree.join('\n');
+}
+
+/**
+ * Get the full set of project files including a preset's section components.
+ * When a preset is requested (e.g. "b27GcrRo"), its section component files
+ * are included so the AI can import and compose them instead of writing raw HTML.
+ */
+export function getBaseProjectFiles(presetId?: string): Record<string, { file: { contents: string } }> {
+  const files = { ...BASE_PROJECT_FILES }
+
+  if (presetId) {
+    const preset = getPreset(presetId)
+    if (preset) {
+      for (const section of preset.sections) {
+        files[section.path] = { file: { contents: section.content } }
+      }
+    }
+  }
+
+  return files
+}
+
+/**
+ * Build a description of the preset's available section components.
+ * Used to inject into the system prompt so the AI knows what's available.
+ */
+export function getPresetDescription(presetId?: string): string {
+  if (!presetId) return ''
+
+  const preset = getPreset(presetId)
+  if (!preset) return ''
+
+  const lines: string[] = [
+    `\n## 🎨 ACTIVE PRESET: ${preset.name} (${preset.id})`,
+    preset.description,
+    '',
+    '### Available Section Components (ALREADY in your project — import and use them)',
+    '',
+  ]
+
+  for (const section of preset.sections) {
+    lines.push(`- **\`${section.name}\`** (\`${section.path}\`) — ${section.description}`)
+  }
+
+  lines.push('')
+  lines.push('### Required shadcn Components (install via addShadcnComponent)')
+  lines.push(preset.requiredShadcnComponents.map(c => `\`${c}\``).join(', '))
+
+  return lines.join('\n')
 }
