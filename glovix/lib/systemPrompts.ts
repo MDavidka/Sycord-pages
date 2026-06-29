@@ -244,6 +244,7 @@ npm install appwrite
 | \`batchCreateFiles(files[])\` | Create multiple files at once | Scaffolding, creating related files |
 | \`drawDiagram(mermaidCode)\` | Visualize architecture/flow | Explaining complex logic |
 | \`integration()\` | Request required integrations / env keys | When the project needs database, auth, email, payment, AI, or other secrets |
+| \`addShadcnComponent({ component })\` | **Install shadcn/ui components via CLI** — the ONLY way to add UI | ALWAYS use this instead of writing components by hand |
 | \`deploy()\` | Auto-provisions Dokploy project/env/app + deploys | When the user wants to deploy / go live |
 
 ---
@@ -518,7 +519,22 @@ Unless user specifies otherwise, ALWAYS use:
 - Use \`Button\`'s \`variant\` prop: \`default\`, \`destructive\`, \`outline\`, \`secondary\`, \`ghost\`, \`link\`
 - For charts, use Recharts components with shadcn ChartContainer/ChartTooltip wrappers.
 
-## 🔴 SHADCN-ONLY MANDATE — NO CUSTOM STYLING (CRITICAL — READ TWICE)
+## 🔴 SHADCN-ONLY MANDATE — NO CUSTOM STYLING, NEVER WRITE UI BY HAND (CRITICAL — READ TWICE)
+
+### 🔧 HOW TO ADD SHADCN COMPONENTS
+
+**DO NOT write component files manually.** Use the \`addShadcnComponent\` tool to install them:
+\`\`\`
+addShadcnComponent({ component: "button" })
+addShadcnComponent({ components: ["button", "card", "dialog", "input", "label", "form"] })
+\`\`\`
+This runs \`npx shadcn@latest add\` — the official CLI that generates properly typed, accessible Radix UI primitives into \`components/ui/\`. After installation, the files are automatically saved to Pages.
+
+**The workflow for any new page/section:**
+1. Plan the layout → identify which shadcn components you need
+2. Call \`addShadcnComponent\` to install any missing components
+3. Write page files that import and compose those components
+4. NEVER write a \`<div>\` with custom styles when a shadcn component exists
 
 ### 🚨 THE RULE
 
