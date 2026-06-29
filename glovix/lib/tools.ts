@@ -711,6 +711,44 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'saveKnowledge',
+            description: 'Save short-form logic or deep-think context to a separated knowledge block. Used to build a deep memory of the project. AI should use this when generating logic-heavy files.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    title: { type: 'string', description: 'A short, descriptive title for the knowledge block (acts as the filename without extension).' },
+                    content: { type: 'string', description: 'The knowledge content, logic, or deep-think notes.' }
+                },
+                required: ['title', 'content'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'listKnowledge',
+            description: 'List all separated knowledge blocks available in deep memory.',
+            parameters: { type: 'object', properties: {}, required: [] },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'callKnowledge',
+            description: 'Retrieve the content of a specific knowledge block to use its information to move forward.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    title: { type: 'string', description: 'The exact title of the knowledge block to retrieve.' }
+                },
+                required: ['title'],
+            },
+        },
+    },
+
+    {
+        type: 'function',
+        function: {
             name: 'createFile',
             description: 'Create or update a file in the file system. Use for new files or complete rewrites.',
             parameters: {
@@ -1993,6 +2031,51 @@ export async function handleShadcnDocs(args: Record<string, unknown>): Promise<s
     }
 }
 
+
+export async function handleSaveKnowledge(args: { title: string; content: string }): Promise<string> {
+    const { title, content } = args;
+    if (!title || !content) return 'Error: title and content are required.';
+    const path = `.glovix/knowledge/${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
+    try {
+        const pageSync = await persistFile(path, content);
+        if (pageSync.status === 'error') {
+            return `Error saving knowledge to Pages: ${pageSync.message}`;
+        }
+        return `[SYSTEM] Saved knowledge block: ${title}`;
+    } catch (e: any) {
+        return `Error saving knowledge: ${e.message}`;
+    }
+}
+
+export async function handleListKnowledge(): Promise<string> {
+    try {
+        await syncStoreFromPages();
+        const files = useStore.getState().files;
+        const blocks = Object.keys(files)
+            .filter(p => p.startsWith('.glovix/knowledge/') && p.endsWith('.md'))
+            .map(p => p.replace('.glovix/knowledge/', '').replace('.md', ''));
+
+        if (blocks.length === 0) {
+            return '[SYSTEM] No knowledge blocks found in deep memory.';
+        }
+        return `[SYSTEM] Available knowledge blocks:\n` + blocks.map(b => `- ${b}`).join('\n');
+    } catch (e: any) {
+        return `Error listing knowledge: ${e.message}`;
+    }
+}
+
+export async function handleCallKnowledge(args: { title: string }): Promise<string> {
+    const { title } = args;
+    if (!title) return 'Error: title is required.';
+    const path = `.glovix/knowledge/${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.md`;
+    try {
+        const content = await readFileResilient(path);
+        return `[SYSTEM] Knowledge block "${title}":\n\n${content}`;
+    } catch (e: any) {
+        return `Error reading knowledge block "${title}": ${e.message}`;
+    }
+}
+
 // ============================================================
 // MAIN TOOL EXECUTOR — with validation and error boundaries
 // ============================================================
@@ -2099,11 +2182,22 @@ async function _executeToolInternal(
                 case 'listShadcnComponents':
                     result = await handleListShadcnComponents();
                     break;
+
+                case 'saveKnowledge':
+                    result = await handleSaveKnowledge(args);
+                    break;
+                case 'listKnowledge':
+                    result = await handleListKnowledge();
+                    break;
+                case 'callKnowledge':
+                    result = await handleCallKnowledge(args);
+                    break;
+
                 case 'shadcnDocs':
                     result = await handleShadcnDocs(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
