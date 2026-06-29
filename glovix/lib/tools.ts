@@ -1053,6 +1053,32 @@ export const TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'shadcnDocs',
+            description: `Fetch live, accurate documentation for any shadcn/ui component from ui.shadcn.com.
+Use this BEFORE using or installing any shadcn/ui component to get its exact current API, props, composition patterns, and usage examples.
+This prevents hallucination and ensures the generated code matches the real component API.
+Always call this when:
+- You are about to use a shadcn/ui component for the first time in a session
+- You are unsure of a component's correct props, variants, or composition pattern
+- The user asks about a specific shadcn component's API
+- You need to know if a component exists and what it's called
+
+Available components: accordion, alert, alert-dialog, aspect-ratio, avatar, badge, breadcrumb, button, calendar, card, carousel, chart, checkbox, collapsible, combobox, command, context-menu, data-table, date-picker, dialog, drawer, dropdown-menu, form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, toggle, toggle-group, tooltip, typography.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    component: {
+                        type: 'string',
+                        description: 'The shadcn/ui component name to look up documentation for, e.g. "button", "dialog", "form", "data-table". Use the kebab-case name.',
+                    },
+                },
+                required: ['component'],
+            },
+        },
+    },
 ];
 
 // Tool execution context
@@ -1858,6 +1884,52 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
 }
 
 
+/**
+ * Fetch live shadcn/ui component documentation from the Syra server-side
+ * endpoint (/api/ai/shadcn-docs). This gives Syra accurate, up-to-date
+ * component APIs without hallucination.
+ */
+export async function handleShadcnDocs(args: Record<string, unknown>): Promise<string> {
+    const component = typeof args.component === 'string' ? args.component.trim().toLowerCase() : '';
+    if (!component) {
+        return '[SYSTEM] ❌ shadcnDocs requires a "component" field, e.g. shadcnDocs({ component: "button" })';
+    }
+
+    try {
+        const res = await fetch('/api/ai/shadcn-docs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ component }),
+            signal: AbortSignal.timeout(15000),
+        });
+
+        if (!res.ok) {
+            const text = await res.text().catch(() => `HTTP ${res.status}`);
+            return `[SYSTEM] ❌ shadcnDocs failed for "${component}": ${text}`;
+        }
+
+        const data = await res.json().catch(() => ({} as any));
+        const source = data.source === 'live' ? 'live docs from ui.shadcn.com' : 'cached reference';
+        const url = data.url || `https://ui.shadcn.com/docs/components/${component}`;
+
+        if (!data.docs) {
+            return `[SYSTEM] No documentation found for "${component}". See ${url}`;
+        }
+
+        return (
+            `[SYSTEM] shadcn/ui docs for "${data.component || component}" (${source}):\n` +
+            `Reference URL: ${url}\n\n` +
+            data.docs
+        );
+    } catch (e: any) {
+        // Graceful degradation — tell Syra to use its built-in knowledge
+        return (
+            `[SYSTEM] ⚠️ Could not fetch live docs for "${component}" (${e.message}). ` +
+            `Use your built-in shadcn/ui knowledge and check https://ui.shadcn.com/docs/components/${component} for reference.`
+        );
+    }
+}
+
 // ============================================================
 // MAIN TOOL EXECUTOR — with validation and error boundaries
 // ============================================================
@@ -1961,8 +2033,11 @@ async function _executeToolInternal(
                 case 'addShadcnComponent':
                     result = await handleAddShadcnComponent(args);
                     break;
+                case 'shadcnDocs':
+                    result = await handleShadcnDocs(args);
+                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, addShadcnComponent`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, addShadcnComponent, shadcnDocs`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

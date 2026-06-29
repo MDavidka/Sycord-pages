@@ -30,7 +30,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         label: 'syra-nano',
         subtitle: 'Fast · Gemini Flash',
         modelType: 'mimo-v2-flash',
-        apiModel: 'gemini-3.5-flash',
+        apiModel: 'gemini-2.5-flash',
     },
     {
         id: 'base',
@@ -42,9 +42,9 @@ export const MODEL_CHOICES: ModelChoice[] = [
     {
         id: 'havy',
         label: 'syra-havy',
-        subtitle: 'Advanced · Gemini 3.1 Pro',
+        subtitle: 'Advanced · Gemini 2.5 Pro',
         modelType: 'gemini-3.1-pro',
-        apiModel: 'gemini-3.1-pro',
+        apiModel: 'gemini-2.5-pro',
     },
 ];
 
@@ -245,18 +245,37 @@ async function _sendMessageInternal(
     // Use env model or fallback
     const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
 
-    // Model context limits (approximate)
+    // Model context limits (approximate input token windows)
     const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+        // Gemini 2.5 family — 1M context
+        'gemini-2.5-flash': 1000000,
+        'gemini-2.5-flash-preview': 1000000,
+        'gemini-2.5-pro': 1000000,
+        'gemini-2.5-pro-preview': 1000000,
+        // Gemini 3.x (legacy naming kept for compatibility)
+        'gemini-3.5-flash': 1000000,
+        'gemini-3.1-pro': 1000000,
+        'gemini-3.0-pro': 1000000,
+        // Gemini 2.0
+        'gemini-2.0-flash': 1000000,
+        'gemini-2.0-flash-lite': 1000000,
+        // DeepSeek
+        'deepseek-chat': 128000,
+        'deepseek-reasoner': 128000,
+        'deepseek-v4-pro': 128000,
+        'deepseek/deepseek-v4-pro': 128000,
+        // MiMo
         'mimo-v2-flash': 128000,
+        'xiaomi/mimo-v2-flash:free': 128000,
+        // OpenAI (for custom key users)
         'gpt-4o': 128000,
         'gpt-4-turbo': 128000,
         'gpt-4o-mini': 128000,
+        // Anthropic
         'claude-3-opus': 200000,
         'claude-3-sonnet': 200000,
         'claude-3.5-sonnet': 200000,
         'claude-4-sonnet': 200000,
-        'deepseek-chat': 128000,
-        'deepseek-reasoner': 128000,
     };
 
     // Sanitize messages before sending
@@ -273,12 +292,13 @@ async function _sendMessageInternal(
         return acc + 100;
     }, 0);
 
-    // Calculate max_tokens dynamically
+    // Calculate max_tokens dynamically — allow up to 32 768 output tokens so
+    // Syra can produce large, complete files without hitting the output cap.
     const contextLimit = MODEL_CONTEXT_LIMITS[actualModelId] || useStore.getState().modelContextLimit || 128000;
-    const safetyBuffer = 1000;
+    const safetyBuffer = 2000;
     const maxTokens = Math.min(
         Math.max(contextLimit - inputTokens - safetyBuffer, 4000),
-        16384
+        32768
     );
 
     console.log(`[AI] Model: ${actualModelId}, Input: ~${inputTokens} tokens, Max output: ${maxTokens}`);
