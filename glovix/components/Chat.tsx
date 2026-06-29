@@ -15,6 +15,7 @@ import { ImageViewer } from './ImageViewer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
+import { fetchDeepMemory, formatDeepMemoryForPrompt, type DeepMemoryProfile } from '../lib/deepMemory';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -190,6 +191,15 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
     const [profileImgError, setProfileImgError] = useState(false);
+    const [deepMemory, setDeepMemory] = useState<DeepMemoryProfile | null>(null);
+
+    // Load deep memory once when embedded in a Sycord project.
+    useEffect(() => {
+        if (!getHostProjectId()) return;
+        fetchDeepMemory().then((profile) => {
+            if (profile) setDeepMemory(profile);
+        });
+    }, []);
 
     // Local actions state
     const [actions, setActions] = useState<StreamingAction[]>([]);
@@ -242,7 +252,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // Initialize base project when chat starts
     const projectInitializedRef = useRef<string | null>(null);
 
-    // Resolve preset ID: window.__glovixPreset > sessionStorage > default 'b27GcrRo'
+    // Resolve preset ID: window.__glovixPreset > sessionStorage > default 'b0'
     const presetId = useMemo(() => {
       if (typeof window !== 'undefined') {
         const winPreset = (window as any).__glovixPreset
@@ -252,7 +262,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         const stored = sessionStorage.getItem('glovix_preset')
         if (stored) return stored
       } catch { /* ignore */ }
-      return 'b27GcrRo'
+      return 'b0'
     }, [])
 
     const initializeBaseProject = async () => {
@@ -671,9 +681,13 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId());
         const presetDescription = getPresetDescription(presetId);
+        const deepMemoryText = formatDeepMemoryForPrompt(deepMemory, 20);
         const promptContent = currentSystemPrompt
-            ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList).replace('{{PRESET}}', presetDescription)
-            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}`;
+            ? currentSystemPrompt
+                .replace('{{FILE_LIST}}', fileList)
+                .replace('{{PRESET}}', presetDescription)
+                .replace('{{DEEP_MEMORY}}', deepMemoryText)
+            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n${deepMemoryText}`;
 
         const SYSTEM_PROMPT: Message = {
             role: 'system',

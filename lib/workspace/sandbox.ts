@@ -114,6 +114,28 @@ export function isDangerousCommand(command: string): boolean {
 }
 
 /**
+ * Extract every local alias import (`@/...`) and bare module import from a
+ * TypeScript/JSX source string. Used to detect imports that may fail at build
+ * time because the target file or dependency is missing.
+ */
+export function extractImports(source: string): { local: string[]; modules: string[] } {
+  const local: string[] = []
+  const modules: string[] = []
+  // Match both single and double quotes, static paths only.
+  const importRegex = /import\s+(?:(?:[^'"]*?)\s+from\s+)?['"]([^'"]+)['"];?/g
+  let match: RegExpExecArray | null
+  while ((match = importRegex.exec(source)) !== null) {
+    const spec = match[1]
+    if (spec.startsWith("@/")) {
+      local.push(spec)
+    } else if (!spec.startsWith(".") && !spec.startsWith("/")) {
+      modules.push(spec)
+    }
+  }
+  return { local, modules }
+}
+
+/**
  * Validate that a project's files form a *buildable* Next.js app before we
  * attempt to deploy them. This catches AI output that is missing the pieces a
  * `npm run build` needs, surfacing a clear, actionable message instead of a
@@ -129,10 +151,10 @@ export function validateNextBuildable(files: WorkspaceFile[]): string[] {
 
   // 1. package.json must exist, be valid JSON, and expose a `build` script.
   const pkgFile = byName.get("package.json")
+  let pkg: any
   if (!pkgFile) {
     problems.push('Missing "package.json" — a Next.js project needs one with a "build" script.')
   } else {
-    let pkg: any
     try {
       pkg = JSON.parse(pkgFile.content)
     } catch {
@@ -156,6 +178,74 @@ export function validateNextBuildable(files: WorkspaceFile[]): string[] {
   if (!hasAppEntry && !hasPagesEntry) {
     problems.push(
       'No route entry found — add an App Router entry (e.g. "app/page.tsx" and "app/layout.tsx") or a "pages/" file.',
+    )
+  }
+
+  // 3. Dockerfile sanity: if a Dockerfile is present, ensure it is not empty
+  // and appears to be for a Node-based project.
+  const dockerfile = byName.get("Dockerfile")
+  if (dockerfile) {
+    const df = dockerfile.content.trim()
+    if (df.length === 0) {
+      problems.push('"Dockerfile" exists but is empty — it will break the Dokploy build.')
+    } else if (!/FROM node:/i.test(df)) {
+      problems.push('"Dockerfile" does not use a Node base image — the Next.js build will fail.')
+    }
+  }
+
+  // 4. Catch missing local imports and undeclared dependencies early.
+  const allDeps = new Set<string>([
+    ...(Object.keys(pkg?.dependencies ?? {})),
+    ...(Object.keys(pkg?.devDependencies ?? {})),
+  ])
+  const missingLocalImports = new Set<string>()
+  const missingModules = new Set<string>()
+
+  for (const file of files) {
+    if (!/\.(tsx|ts|jsx|js)$/.test(file.name)) continue
+    const { local, modules } = extractImports(file.content)
+
+    for (const spec of local) {
+      const target = spec.replace(/^@\//, "")
+      // The import may resolve to a .tsx, .ts, .jsx, .js file or a directory
+      // with an index file. We also accept CSS/scss imports.
+      const hasTarget =
+        byName.has(target) ||
+        byName.has(`${target}.tsx`) ||
+        byName.has(`${target}.ts`) ||
+        byName.has(`${target}.jsx`) ||
+        byName.has(`${target}.js`) ||
+        byName.has(`${target}/index.tsx`) ||
+        byName.has(`${target}/index.ts`) ||
+        byName.has(`${target}/index.jsx`) ||
+        byName.has(`${target}/index.js`) ||
+        /\.(css|scss|sass|less|styl)$/i.test(target)
+      if (!hasTarget) {
+        missingLocalImports.add(`${spec} (from ${file.name})`)
+      }
+    }
+
+    for (const spec of modules) {
+      // Scoped packages and subpath imports both resolve from the root package.
+      const packageName = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : spec.split("/")[0]
+      if (!packageName) continue
+      if (!allDeps.has(packageName)) {
+        missingModules.add(`${packageName} (imported in ${file.name})`)
+      }
+    }
+  }
+
+  if (missingLocalImports.size > 0) {
+    problems.push(
+      `Missing local import target(s): ${Array.from(missingLocalImports).join(", ")}. ` +
+        `Create the missing file or remove the import before deploying.`,
+    )
+  }
+
+  if (missingModules.size > 0) {
+    problems.push(
+      `Missing npm dependency(ies): ${Array.from(missingModules).join(", ")}. ` +
+        `Add them to package.json before deploying.`,
     )
   }
 

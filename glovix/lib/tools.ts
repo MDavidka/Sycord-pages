@@ -1,4 +1,5 @@
 import { executeCommand, writeFile, readFile, renameFile, deleteFile } from './webcontainer';
+import { recordDeepMemoryEntry, summarizeError } from './deepMemory';
 import { useStore } from '../store';
 import { parseToolArguments } from './utils';
 import { getHostProjectId, getProjectPagesMap, deleteProjectPage, isPageBackedFile } from './api';
@@ -219,10 +220,14 @@ export async function handleSave(): Promise<string> {
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || data?.status !== 'success' || !data?.url) {
             const errMsg = data?.message || "HTTP " + res.status;
+            const summary = summarizeError(errMsg);
+            recordDeepMemoryEntry({ kind: 'deployment-failure', title: summary.title, content: summary.content, projectId, tags: summary.tags });
             return "[SYSTEM] ❌ Save failed: " + errMsg;
         }
         return "[SYSTEM] ✅ Saved " + data.filesCount + " file(s) to GitHub: " + data.url + " (branch " + data.branch + "). You can now deploy().";
     } catch (e: any) {
+        const summary = summarizeError(e.message);
+        recordDeepMemoryEntry({ kind: 'deployment-failure', title: summary.title, content: summary.content, projectId, tags: summary.tags });
         return "Error saving project to GitHub: " + e.message;
     }
 }
@@ -283,6 +288,8 @@ export async function handleDeploy(): Promise<string> {
                     (missingEnv.length ? "Missing env keys: " + missingEnv.join(", ") + "\n" : "") +
                     "Call integration() or wait for the user to complete the integrations popup, then continue.";
             }
+            const summary = summarizeError(errMsg + "\n" + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2));
+            recordDeepMemoryEntry({ kind: 'deployment-failure', title: summary.title, content: summary.content, projectId, tags: summary.tags });
             return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
         }
         return "[SYSTEM] ✅ Deployed successfully.\n\n" +
@@ -292,6 +299,8 @@ export async function handleDeploy(): Promise<string> {
             "Application ID: " + (data.applicationId || "auto") + "\n" +
             "Created: project=" + (data.createdProject ? "yes" : "no") + ", env=" + (data.createdEnvironment ? "yes" : "no") + ", app=" + (data.created ? "yes" : "no");
     } catch (e: any) {
+        const summary = summarizeError(e.message);
+        recordDeepMemoryEntry({ kind: 'deployment-failure', title: summary.title, content: summary.content, projectId, tags: summary.tags });
         return "Error deploying project: " + e.message;
     }
 }
@@ -1709,7 +1718,13 @@ export async function handleTypeCheck(ctx: ToolContext): Promise<string> {
     // When embedded in a Sycord project, use the structured server-side
     // diagnostics endpoint instead of spawning tsc in the browser WebContainer.
     if (isServerWorkspace()) {
-        return typeCheckServerSide(getHostProjectId()!);
+        const result = await typeCheckServerSide(getHostProjectId()!);
+        if (result.includes('found') && result.includes('error')) {
+            const projectId = getHostProjectId();
+            const summary = summarizeError(result);
+            recordDeepMemoryEntry({ kind: 'build-failure', title: summary.title, content: summary.content, projectId: projectId || undefined, tags: summary.tags });
+        }
+        return result;
     }
     try {
         ctx.addTerminalOutput(`\r\n\x1b[38;5;243m$ npx tsc --noEmit --pretty\x1b[0m\r\n`);
@@ -1734,7 +1749,11 @@ export async function handleTypeCheck(ctx: ToolContext): Promise<string> {
                 useStore.getState().addParsedErrors(parsed);
             }
 
-            return `[SYSTEM] TypeScript check found ${errorCount} error(s):\n${cleanTerminalOutput(output).slice(0, 3000)}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them. Do NOT stop or report to the user until all errors are fixed.`;
+            const result = `[SYSTEM] TypeScript check found ${errorCount} error(s):\n${cleanTerminalOutput(output).slice(0, 3000)}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them. Do NOT stop or report to the user until all errors are fixed.`;
+            const projectId = getHostProjectId();
+            const summary = summarizeError(output);
+            recordDeepMemoryEntry({ kind: 'build-failure', title: summary.title, content: summary.content, projectId: projectId || undefined, tags: summary.tags });
+            return result;
         }
     } catch (e: any) {
         return `Error running TypeScript check: ${e.message}. Try running \`npm run build\` instead.`;
@@ -1853,7 +1872,13 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
     // In a Sycord project, get structured diagnostics from the server instead
     // of spawning tsc in the browser WebContainer.
     if (isServerWorkspace()) {
-        return typeCheckServerSide(getHostProjectId()!);
+        const result = await typeCheckServerSide(getHostProjectId()!);
+        if (result.includes('found') && result.includes('error')) {
+            const projectId = getHostProjectId();
+            const summary = summarizeError(result);
+            recordDeepMemoryEntry({ kind: 'build-failure', title: summary.title, content: summary.content, projectId: projectId || undefined, tags: summary.tags });
+        }
+        return result;
     }
 
     const results: string[] = [];
@@ -1894,7 +1919,13 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
     const suffix = hasErrors
         ? '\n\n⚠️ Fix all errors above. Use readFile on affected files, then editFile/createFile to fix.'
         : '';
-    return `[SYSTEM] Error Report:\n\n${results.join('\n\n')}${suffix}`;
+    const result = `[SYSTEM] Error Report:\n\n${results.join('\n\n')}${suffix}`;
+    if (hasErrors) {
+        const projectId = getHostProjectId();
+        const summary = summarizeError(result);
+        recordDeepMemoryEntry({ kind: 'build-failure', title: summary.title, content: summary.content, projectId: projectId || undefined, tags: summary.tags });
+    }
+    return result;
 }
 
 

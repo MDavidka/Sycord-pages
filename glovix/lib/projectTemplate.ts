@@ -183,7 +183,7 @@ export function getProjectStructure(): string {
 
 /**
  * Get the full set of project files including a preset's section components.
- * When a preset is requested (e.g. "b27GcrRo"), its section component files
+ * When a preset is requested (e.g. "b0"), its section component files
  * are included so the AI can import and compose them instead of writing raw HTML.
  */
 export function getBaseProjectFiles(presetId?: string): Record<string, { file: { contents: string } }> {

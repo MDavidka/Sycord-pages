@@ -22,7 +22,7 @@ interface GlovixBuilderProps {
   userImage?: string | null
   /** Called when the user taps the back button in the embedded mobile header. */
   onBack?: () => void
-  /** Shadcn preset ID (e.g. "b27GcrRo") that injects section components. */
+  /** Shadcn preset ID (e.g. "b0") that injects section components. */
   preset?: string
 }
 

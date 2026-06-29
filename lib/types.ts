@@ -59,3 +59,34 @@ export type DebugResponse = {
     VPS_ROOT_PSW_set: boolean
   }
 }
+
+export type DeepMemoryEntryKind =
+  | "build-failure"
+  | "deployment-failure"
+  | "import-error"
+  | "lesson"
+  | "project-state"
+  | "decision"
+  | "user-preference"
+  | "fix"
+
+export type DeepMemoryEntry = {
+  id: string
+  kind: DeepMemoryEntryKind
+  title: string
+  content: string
+  projectId?: string
+  projectName?: string
+  tags?: string[]
+  createdAt: string
+  updatedAt?: string
+}
+
+export type DeepMemoryProfile = {
+  summary: string
+  architectureNotes: string
+  recurringIssues: string[]
+  trustedPatterns: string[]
+  entries: DeepMemoryEntry[]
+  lastUpdatedAt: string
+}
