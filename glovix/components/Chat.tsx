@@ -283,15 +283,17 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
     };
 
-    // Load saved messages when opening an existing chat
+    // Load saved messages when opening an existing chat (standalone mode only).
+    // Embedded dashboard chats are loaded by EmbeddedChat per project.
     useEffect(() => {
+        if (getHostProjectId()) return;
+
         const loadChatMessages = async () => {
             if (currentChatId && user) {
                 try {
                     const { getChatMessages } = await import('../lib/api');
                     const data = await getChatMessages(currentChatId);
                     if (data.messages && data.messages.length > 0) {
-                        // Only load if we don't have messages already (to avoid overwriting during active chat)
                         if (messages.length === 0) {
                             setMessages(data.messages);
                         }
@@ -1332,7 +1334,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     const { useStore } = await import('../store');
                     const state = useStore.getState();
 
-                    await saveChatMessages(chatId, state.messages, { keepalive: true });
+                    await saveChatMessages(chatId, state.messages, {
+                        keepalive: true,
+                        projectId: getHostProjectId(),
+                    });
 
                     if (Object.keys(state.files).length > 0) {
                         await saveProject(chatId, user.uid, state.files);

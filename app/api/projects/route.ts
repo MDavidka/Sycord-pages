@@ -349,7 +349,7 @@ export async function GET(request: Request) {
         project.deployment?.domain ||
         null
       const chatSession =
-        chatSummaries.get(project._id) ||
+        chatSummaries.get(String(project._id)) ||
         (project.chatSession
           ? {
               id: project.chatSession.id,

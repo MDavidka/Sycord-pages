@@ -12,21 +12,36 @@ export function useAutoSave() {
     const messagesRef = useRef(messages);
     const filesRef = useRef(files);
     const currentChatIdRef = useRef(currentChatId);
+    const hostProjectIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         messagesRef.current = messages;
         filesRef.current = files;
         currentChatIdRef.current = currentChatId;
+        hostProjectIdRef.current = getHostProjectId();
     }, [messages, files, currentChatId]);
 
     const isSavingMessagesRef = useRef(false);
     const isSavingFilesRef = useRef(false);
 
-    const saveMessages = useCallback(async (chatId: string, msgs: any[], options?: { keepalive?: boolean }) => {
+    const saveMessages = useCallback(async (
+        chatId: string,
+        msgs: any[],
+        options?: { keepalive?: boolean; projectId?: string | null },
+    ) => {
         if (!chatId || msgs.length === 0 || isSavingMessagesRef.current) return;
+
+        const projectId = options?.projectId ?? hostProjectIdRef.current ?? getHostProjectId();
+        if (projectId) {
+            const expectedChatId = `project_${projectId}`;
+            if (chatId !== expectedChatId) {
+                return;
+            }
+        }
+
         try {
             isSavingMessagesRef.current = true;
-            await saveChatMessages(chatId, msgs, options);
+            await saveChatMessages(chatId, msgs, { ...options, projectId });
         } catch (err) {
             console.error('[AutoSave] Failed to save messages:', err);
         } finally {
@@ -34,8 +49,19 @@ export function useAutoSave() {
         }
     }, []);
 
-    const saveFiles = useCallback(async (chatId: string, userId: string, projectFiles: any) => {
+    const saveFiles = useCallback(async (
+        chatId: string,
+        userId: string,
+        projectFiles: any,
+        projectId?: string | null,
+    ) => {
         if (!chatId || !userId || Object.keys(projectFiles).length === 0 || isSavingFilesRef.current) return;
+
+        const resolvedProjectId = projectId ?? hostProjectIdRef.current ?? getHostProjectId();
+        if (resolvedProjectId && chatId !== `project_${resolvedProjectId}`) {
+            return;
+        }
+
         try {
             isSavingFilesRef.current = true;
             await saveProject(chatId, userId, projectFiles);
@@ -46,40 +72,50 @@ export function useAutoSave() {
         }
     }, []);
 
-    const flushPendingSaves = useCallback((options?: { keepalive?: boolean }) => {
-        const chatId = getEmbeddedChatId() || currentChatIdRef.current;
+    const flushPendingSaves = useCallback((options?: { keepalive?: boolean; projectId?: string | null }) => {
+        const projectId = options?.projectId ?? hostProjectIdRef.current ?? getHostProjectId();
+        if (!projectId) return;
+
+        const chatId = `project_${projectId}`;
         const activeUser = useStore.getState().user;
-        if (!chatId) return;
 
         if (messagesRef.current.length > 0) {
-            void saveMessages(chatId, messagesRef.current, options);
+            void saveMessages(chatId, messagesRef.current, { ...options, projectId });
         }
         if (activeUser && Object.keys(filesRef.current).length > 0) {
-            void saveFiles(chatId, activeUser.uid, filesRef.current);
+            void saveFiles(chatId, activeUser.uid, filesRef.current, projectId);
         }
     }, [saveMessages, saveFiles]);
 
     // Auto-save messages
     useEffect(() => {
-        const chatId = getEmbeddedChatId() || currentChatId;
+        const projectId = getHostProjectId();
+        const chatId = projectId ? `project_${projectId}` : (getEmbeddedChatId() || currentChatId);
         if (!chatId || messages.length === 0) return;
+
         const timer = setTimeout(() => {
-            saveMessages(chatId, messages);
+            if (getHostProjectId() !== projectId) return;
+            saveMessages(chatId, messages, { projectId });
         }, MESSAGES_DEBOUNCE);
+
         return () => clearTimeout(timer);
     }, [messages, currentChatId, saveMessages]);
 
     // Auto-save files
     useEffect(() => {
-        const chatId = getEmbeddedChatId() || currentChatId;
+        const projectId = getHostProjectId();
+        const chatId = projectId ? `project_${projectId}` : (getEmbeddedChatId() || currentChatId);
         if (!chatId || !user?.uid || Object.keys(files).length === 0) return;
+
         const timer = setTimeout(() => {
-            saveFiles(chatId, user.uid, files);
+            if (getHostProjectId() !== projectId) return;
+            saveFiles(chatId, user.uid, files, projectId);
         }, FILES_DEBOUNCE);
+
         return () => clearTimeout(timer);
     }, [files, currentChatId, user?.uid, saveFiles]);
 
-    // Save on unmount
+    // Save on unmount — only when the host project id is still known.
     useEffect(() => {
         return () => {
             flushPendingSaves({ keepalive: true });

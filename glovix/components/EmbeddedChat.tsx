@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
-import { getEmbeddedChatId, getHostProjectId, getChatMessages, getProject } from '../lib/api';
+import { getHostProjectId, getChatMessages, getProject, saveChatMessages } from '../lib/api';
 import { mountFiles, autoInstallDependencies } from '../lib/webcontainer';
 
 /**
@@ -20,34 +20,32 @@ export function EmbeddedChat() {
     const setMessages = useStore(s => s.setMessages);
     const setFiles = useStore(s => s.setFiles);
     const isDark = theme === 'dark';
-    const loadedProjectRef = useRef<string | null>(null);
 
     const projectId = getHostProjectId();
-    const chatId = getEmbeddedChatId();
+    const chatId = projectId ? `project_${projectId}` : null;
 
-    // Bind the deterministic chat id before paint so saves never use a random id.
     useLayoutEffect(() => {
-        if (chatId) {
-            setCurrentChatId(chatId);
-        }
+        if (!chatId) return;
+        setCurrentChatId(chatId);
     }, [chatId, setCurrentChatId]);
 
     useEffect(() => {
         if (!projectId || !chatId) return;
-        if (loadedProjectRef.current === projectId) return;
-        loadedProjectRef.current = projectId;
 
         let cancelled = false;
 
+        // Clear in-memory state from the previous project before loading this one.
+        setMessages([]);
+        setFiles({});
+
         (async () => {
             try {
-                const data = await getChatMessages(chatId);
+                const data = await getChatMessages(chatId, projectId);
                 if (cancelled) return;
-                if (Array.isArray(data?.messages) && data.messages.length > 0) {
-                    setMessages(data.messages);
-                }
+                setMessages(Array.isArray(data?.messages) ? data.messages : []);
             } catch (err) {
                 console.warn('[EmbeddedChat] Failed to restore messages:', err);
+                if (!cancelled) setMessages([]);
             }
 
             try {
@@ -73,6 +71,13 @@ export function EmbeddedChat() {
 
         return () => {
             cancelled = true;
+            const state = useStore.getState();
+            if (state.messages.length > 0) {
+                void saveChatMessages(chatId, state.messages, {
+                    keepalive: true,
+                    projectId,
+                });
+            }
         };
     }, [projectId, chatId, setMessages, setFiles]);
 

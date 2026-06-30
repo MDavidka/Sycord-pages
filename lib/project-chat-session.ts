@@ -12,8 +12,12 @@ export interface ProjectChatSession {
   updatedAt: string
 }
 
+export function normalizeProjectId(projectId: string) {
+  return String(projectId)
+}
+
 export function buildProjectChatSessionId(userId: string, projectId: string) {
-  return `${userId}:${projectId}`
+  return `${userId}:${normalizeProjectId(projectId)}`
 }
 
 export function buildChatSessionId(projectId: string) {
@@ -33,11 +37,19 @@ export function toChatSessionSummary(session: ProjectChatSession | null | undefi
 }
 
 export async function getOwnedProject(db: any, userId: string, projectId: string) {
+  const normalizedProjectId = normalizeProjectId(projectId)
   const user = await db.collection("users").findOne(
-    { id: userId, "projects._id": projectId },
-    { projection: { "projects.$": 1 } },
+    { id: userId },
+    { projection: { projects: 1 } },
   )
-  return user?.projects?.[0] ?? null
+  if (!user?.projects) return null
+  return (
+    user.projects.find(
+      (project: any) =>
+        normalizeProjectId(project?._id ?? "") === normalizedProjectId ||
+        normalizeProjectId(project?.id ?? "") === normalizedProjectId,
+    ) ?? null
+  )
 }
 
 export async function loadProjectChatSession(
@@ -45,9 +57,11 @@ export async function loadProjectChatSession(
   userId: string,
   projectId: string,
 ): Promise<ProjectChatSession | null> {
+  const normalizedProjectId = normalizeProjectId(projectId)
+
   const stored = await db.collection(PROJECT_CHAT_SESSIONS_COLLECTION).findOne({
     userId,
-    projectId,
+    projectId: normalizedProjectId,
   })
 
   if (stored) {
@@ -55,11 +69,8 @@ export async function loadProjectChatSession(
   }
 
   // Legacy fallback: session embedded on the project document.
-  const user = await db.collection("users").findOne(
-    { id: userId, "projects._id": projectId },
-    { projection: { "projects.$": 1 } },
-  )
-  const legacy = user?.projects?.[0]?.chatSession as Partial<ProjectChatSession> & {
+  const project = await getOwnedProject(db, userId, normalizedProjectId)
+  const legacy = project?.chatSession as Partial<ProjectChatSession> & {
     messages?: unknown[]
   } | undefined
 
@@ -69,10 +80,10 @@ export async function loadProjectChatSession(
 
   const now = new Date().toISOString()
   const migrated: ProjectChatSession = {
-    _id: buildProjectChatSessionId(userId, projectId),
+    _id: buildProjectChatSessionId(userId, normalizedProjectId),
     userId,
-    projectId,
-    id: legacy.id || buildChatSessionId(projectId),
+    projectId: normalizedProjectId,
+    id: legacy.id || buildChatSessionId(normalizedProjectId),
     title: legacy.title || "Syra Chat",
     messages: legacy.messages,
     model: legacy.model,
@@ -81,7 +92,7 @@ export async function loadProjectChatSession(
   }
 
   await db.collection(PROJECT_CHAT_SESSIONS_COLLECTION).updateOne(
-    { userId, projectId },
+    { userId, projectId: normalizedProjectId },
     { $set: migrated },
     { upsert: true },
   )
@@ -92,7 +103,10 @@ export async function loadProjectChatSession(
 export async function loadProjectChatSummariesForUser(db: any, userId: string) {
   const sessions = await db.collection(PROJECT_CHAT_SESSIONS_COLLECTION).find({ userId }).toArray()
   return new Map<string, ReturnType<typeof toChatSessionSummary>>(
-    (sessions as ProjectChatSession[]).map((session) => [session.projectId, toChatSessionSummary(session)]),
+    (sessions as ProjectChatSession[]).map((session) => [
+      normalizeProjectId(session.projectId),
+      toChatSessionSummary(session),
+    ]),
   )
 }
 
@@ -102,14 +116,15 @@ export async function saveProjectChatSession(
   projectId: string,
   payload: { messages?: unknown[]; title?: string; model?: string },
 ): Promise<ProjectChatSession> {
-  const existing = await loadProjectChatSession(db, userId, projectId)
+  const normalizedProjectId = normalizeProjectId(projectId)
+  const existing = await loadProjectChatSession(db, userId, normalizedProjectId)
   const now = new Date().toISOString()
 
   const chatSession: ProjectChatSession = {
-    _id: buildProjectChatSessionId(userId, projectId),
+    _id: buildProjectChatSessionId(userId, normalizedProjectId),
     userId,
-    projectId,
-    id: existing?.id ?? buildChatSessionId(projectId),
+    projectId: normalizedProjectId,
+    id: existing?.id ?? buildChatSessionId(normalizedProjectId),
     title:
       typeof payload.title === "string" && payload.title.trim()
         ? payload.title.trim()
@@ -121,7 +136,7 @@ export async function saveProjectChatSession(
   }
 
   await db.collection(PROJECT_CHAT_SESSIONS_COLLECTION).updateOne(
-    { userId, projectId },
+    { userId, projectId: normalizedProjectId },
     { $set: chatSession },
     { upsert: true },
   )
@@ -129,7 +144,7 @@ export async function saveProjectChatSession(
   // Best-effort lightweight summary on the project doc for older list views.
   try {
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
+      { id: userId, "projects._id": normalizedProjectId },
       {
         $set: {
           "projects.$.chatSession": {
@@ -151,11 +166,15 @@ export async function saveProjectChatSession(
 }
 
 export async function deleteProjectChatSession(db: any, userId: string, projectId: string) {
-  await db.collection(PROJECT_CHAT_SESSIONS_COLLECTION).deleteOne({ userId, projectId })
+  const normalizedProjectId = normalizeProjectId(projectId)
+  await db.collection(PROJECT_CHAT_SESSIONS_COLLECTION).deleteOne({
+    userId,
+    projectId: normalizedProjectId,
+  })
 
   try {
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
+      { id: userId, "projects._id": normalizedProjectId },
       {
         $set: {
           "projects.$.chatSession": null,

@@ -190,10 +190,9 @@ export const deleteChat = async (chatId: string): Promise<void> => {
 };
 
 // Messages
-export const getChatMessages = async (chatId: string) => {
-    const projectId = getHostProjectId();
-    const embeddedChatId = getEmbeddedChatId();
-    const resolvedChatId = embeddedChatId || chatId;
+export const getChatMessages = async (chatId: string, explicitProjectId?: string | null) => {
+    const projectId = explicitProjectId ?? getHostProjectId();
+    const resolvedChatId = projectId ? `project_${projectId}` : chatId;
 
     if (projectId) {
         let res: Response | null = null;
@@ -207,36 +206,16 @@ export const getChatMessages = async (chatId: string) => {
             try {
                 const data = await res.json();
                 const serverMessages = Array.isArray(data?.messages) ? data.messages : [];
-                if (serverMessages.length > 0) {
-                    localStore.cacheMessages(resolvedChatId, serverMessages);
-                    return { messages: serverMessages };
-                }
-
-                if (shouldUseLocalMessageCache()) {
-                    const allMessages = localStore.get('messages') || {};
-                    const localMessages =
-                        allMessages[resolvedChatId] ||
-                        allMessages[chatId] ||
-                        [];
-                    if (localMessages.length > 0) {
-                        fetchProjectChat(projectId, {
-                            method: 'PUT',
-                            body: JSON.stringify({ messages: sanitizeMessagesForSave(localMessages) }),
-                            keepalive: true,
-                        }).catch((err) => {
-                            console.warn('[GlovixAPI] Failed to migrate local chat to API:', err);
-                        });
-                        return { messages: localMessages };
-                    }
-                }
-
-                return { messages: [] };
+                localStore.cacheMessages(resolvedChatId, serverMessages);
+                return { messages: serverMessages };
             } catch (err) {
                 console.warn('[GlovixAPI] Failed to parse chat API response:', err);
             }
         } else if (res) {
             console.warn('[GlovixAPI] Chat API returned', res.status);
         }
+
+        return { messages: [] };
     }
 
     if (!shouldUseLocalMessageCache()) {
@@ -248,14 +227,31 @@ export const getChatMessages = async (chatId: string) => {
     return { messages: allMessages[resolvedChatId] || allMessages[chatId] || [] };
 };
 
-export const saveChatMessages = async (chatId: string, messages: any[], options?: { keepalive?: boolean }) => {
-    const projectId = getHostProjectId();
-    const embeddedChatId = getEmbeddedChatId();
-    const resolvedChatId = embeddedChatId || chatId;
+export type SaveChatMessagesOptions = {
+    keepalive?: boolean;
+    projectId?: string | null;
+};
+
+export const saveChatMessages = async (
+    chatId: string,
+    messages: any[],
+    options?: SaveChatMessagesOptions,
+) => {
+    const projectId = options?.projectId ?? getHostProjectId();
+    const resolvedChatId = projectId ? `project_${projectId}` : (getEmbeddedChatId() || chatId);
     const payload = sanitizeMessagesForSave(messages);
     let apiSaved = false;
 
     if (projectId) {
+        const expectedChatId = `project_${projectId}`;
+        if (chatId !== expectedChatId) {
+            console.warn('[GlovixAPI] Skipping chat save — chat id does not match project', {
+                chatId,
+                projectId,
+            });
+            return { success: false };
+        }
+
         try {
             const res = await fetchProjectChat(projectId, {
                 method: 'PUT',
