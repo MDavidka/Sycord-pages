@@ -9,6 +9,10 @@ import {
   getSycordDomain,
 } from "@/lib/deploy/runner-client"
 import {
+  buildDeployAutofixMessage,
+  waitForDeploymentCompletion,
+} from "@/lib/deploy/wait-for-deployment"
+import {
   ensureAndDeployApplication,
   isDokployConfigured,
   toDokployAppName,
@@ -86,7 +90,9 @@ export async function POST(req: Request): Promise<Response> {
     /* empty body is fine */
   }
 
-  const projectId = (new URL(req.url).searchParams.get("projectId") || body?.projectId || "").toString()
+  const { searchParams } = new URL(req.url)
+  const waitForBuild = searchParams.get("wait") !== "false"
+  const projectId = (searchParams.get("projectId") || body?.projectId || "").toString()
   if (!isValidProjectId(projectId)) {
     return Response.json({ status: "error", message: "Invalid project ID" }, { status: 400 })
   }
@@ -220,9 +226,7 @@ export async function POST(req: Request): Promise<Response> {
     },
   })
 
-  const finalUrl = `https://${dokployAppName}.${domain}`
-
-  if (!result.success) {
+  if (!result.success || !result.applicationId) {
     await db.collection("users").updateOne(
       { id: userId, "projects._id": projectId },
       {
@@ -240,6 +244,72 @@ export async function POST(req: Request): Promise<Response> {
       { status: "error", message: result.error || "Dokploy deployment failed", steps: result.steps },
       { status: 502 },
     )
+  }
+
+  const finalUrl = `https://${dokployAppName}.${domain}`
+
+  // Persist IDs immediately so the client can poll build status while we wait.
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": projectId },
+    {
+      $set: {
+        "projects.$.deploymentMode": "dokploy",
+        "projects.$.dokployProjectId": result.projectId,
+        "projects.$.dokployEnvironmentId": result.environmentId,
+        "projects.$.dokployApplicationId": result.applicationId,
+        "projects.$.dokployAppName": dokployAppName,
+        "projects.$.deploymentRuntime": {
+          mode: "dokploy",
+          domain: dokployAppName,
+          url: finalUrl,
+          projectId: result.projectId,
+          environmentId: result.environmentId,
+          applicationId: result.applicationId,
+          status: "building",
+          health: "pending",
+          lastDeployAt: new Date(),
+          lastDeployError: null,
+        },
+      },
+    },
+  )
+
+  // Wait for Dokploy build logs to confirm success before marking deployed.
+  let buildWait = null as Awaited<ReturnType<typeof waitForDeploymentCompletion>> | null
+  if (waitForBuild && result.applicationId) {
+    buildWait = await waitForDeploymentCompletion({
+      applicationId: result.applicationId,
+      deploymentId: result.deploymentId,
+      timeoutMs: 8 * 60_000,
+    })
+
+    if (buildWait.status !== "success") {
+      const errMsg = buildWait.error || buildWait.progressMessage || "Build did not complete successfully"
+      await db.collection("users").updateOne(
+        { id: userId, "projects._id": projectId },
+        {
+          $set: {
+            "projects.$.deploymentMode": "dokploy",
+            "projects.$.deploymentRuntime.status": "failed",
+            "projects.$.deploymentRuntime.lastDeployError": errMsg,
+            "projects.$.dokployApplicationId": result.applicationId,
+          },
+        },
+      )
+      return Response.json(
+        {
+          status: "error",
+          message: errMsg,
+          applicationId: result.applicationId,
+          deploymentId: buildWait.deploymentId,
+          buildStatus: buildWait.status,
+          logsTail: buildWait.logs.split("\n").slice(-40).join("\n"),
+          autofix: buildDeployAutofixMessage(buildWait.logs, errMsg),
+          steps: result.steps,
+        },
+        { status: 502 },
+      )
+    }
   }
 
   await db.collection("users").updateOne(
@@ -277,6 +347,8 @@ export async function POST(req: Request): Promise<Response> {
     projectId: result.projectId,
     environmentId: result.environmentId,
     applicationId: result.applicationId,
+    deploymentId: buildWait?.deploymentId ?? result.deploymentId,
+    buildComplete: buildWait?.matchedLine ?? null,
     created: result.created,
     createdProject: result.createdProject,
     createdEnvironment: result.createdEnvironment,

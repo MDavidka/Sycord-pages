@@ -1,14 +1,10 @@
-// GET /api/workspace/diagnostics  — typeCheck (Structured TypeScript Diagnostics)
-//
-// A dedicated TypeScript program parses the project's workspace files and
-// returns clean JSON instead of launching a heavy CLI compiler. The project's
-// saved files (pages) are materialized into a temp workspace and type-checked
-// with the TypeScript compiler API.
-//
-// Response: { "errors": [ { "file": "src/App.tsx", "line": 45, "message": "..." } ] }
-
 import path from "node:path"
 import { scanMissingShadcnImports } from "@/lib/shadcn-shared"
+import {
+  filterActionableDiagnostics,
+  formatDiagnosticsForAI,
+  isIgnoredDiagnostic,
+} from "@/lib/workspace/diagnostics-filter"
 import { loadProject, materializeWorkspace, projectFiles, requireUserId } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -16,29 +12,6 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
 type DiagnosticEntry = { file: string; line: number; message: string }
-
-// TS error codes that are pure "environment/resolution" noise when the sandbox
-// has no installed node_modules. TS2307 is still reported for @/components/ui/*
-// and @/lib/* because those indicate missing shadcn installs in the project.
-const IGNORED_TS_CODES = new Set<number>([
-  2307,
-  7016,
-  2792,
-  6142,
-  2305,
-])
-
-function shouldReportMissingModule(message: string): boolean {
-  const match = message.match(/Cannot find module '([^']+)'/)
-  if (!match) return false
-  const mod = match[1]
-  return mod.startsWith("@/components/ui/") || mod.startsWith("@/lib/") || mod.startsWith("@/hooks/")
-}
-
-function isIgnoredDiagnostic(code: number, message: string): boolean {
-  if (code === 2307 && shouldReportMissingModule(message)) return false
-  return IGNORED_TS_CODES.has(code)
-}
 
 export async function GET(req: Request): Promise<Response> {
   const userId = await requireUserId()
@@ -51,6 +24,7 @@ export async function GET(req: Request): Promise<Response> {
   if (!project) return Response.json({ message: "Project not found" }, { status: 404 })
 
   const files = projectFiles(project)
+  const projectFileNames = files.map((f) => f.name.replace(/\\/g, "/"))
   let root: string
   try {
     root = await materializeWorkspace(projectId, files)
@@ -58,7 +32,6 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ message: err?.message || "Failed to prepare workspace" }, { status: 400 })
   }
 
-  // Dynamically import the TypeScript compiler (server-only dependency).
   const tsModule = await import("typescript")
   const ts = (tsModule as any).default ?? tsModule
 
@@ -68,7 +41,7 @@ export async function GET(req: Request): Promise<Response> {
     .map((name) => path.join(root, name))
 
   if (fileNames.length === 0) {
-    return Response.json({ errors: [] as DiagnosticEntry[] })
+    return Response.json({ errors: [] as DiagnosticEntry[], rawCount: 0, filteredCount: 0 })
   }
 
   const options = {
@@ -85,19 +58,19 @@ export async function GET(req: Request): Promise<Response> {
     forceConsistentCasingInFileNames: true,
   }
 
-  let errors: DiagnosticEntry[]
+  let rawErrors: DiagnosticEntry[] = []
+  let errors: DiagnosticEntry[] = []
+
   try {
     const program = ts.createProgram(fileNames, options)
     const diagnostics = ts.getPreEmitDiagnostics(program)
 
-    errors = diagnostics
-      .filter(
-        (d: any) => {
-          if (!d.file || typeof d.start !== "number" || typeof d.code !== "number") return false
-          const message = ts.flattenDiagnosticMessageText(d.messageText, "\n")
-          return !isIgnoredDiagnostic(d.code, message)
-        },
-      )
+    rawErrors = diagnostics
+      .filter((d: any) => {
+        if (!d.file || typeof d.start !== "number" || typeof d.code !== "number") return false
+        const message = ts.flattenDiagnosticMessageText(d.messageText, "\n")
+        return !isIgnoredDiagnostic(d.code, message)
+      })
       .map((d: any): DiagnosticEntry => {
         const { line } = d.file.getLineAndCharacterOfPosition(d.start)
         return {
@@ -111,17 +84,16 @@ export async function GET(req: Request): Promise<Response> {
       files.map((f) => ({ name: f.name, content: f.content ?? "" })),
     )
 
-    const seen = new Set(errors.map((e) => `${e.file}:${e.line}:${e.message}`))
-    for (const err of importScan) {
-      const key = `${err.file}:${err.line}:${err.message}`
-      if (!seen.has(key)) {
-        errors.push(err)
-        seen.add(key)
-      }
-    }
+    const merged = [...rawErrors, ...importScan]
+    errors = filterActionableDiagnostics(merged, projectFileNames)
   } catch (err: any) {
     return Response.json({ message: err?.message || "Type check failed" }, { status: 500 })
   }
 
-  return Response.json({ errors })
+  return Response.json({
+    errors,
+    rawCount: rawErrors.length,
+    filteredCount: errors.length,
+    summary: formatDiagnosticsForAI(errors),
+  })
 }

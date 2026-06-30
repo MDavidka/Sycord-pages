@@ -179,9 +179,10 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
         }
         const data = await res.json();
         const errors: Array<{ file: string; line: number; message: string }> = Array.isArray(data?.errors) ? data.errors : [];
+        const summary = typeof data?.summary === 'string' ? data.summary : null;
 
         if (errors.length === 0) {
-            return '[SYSTEM] ✅ TypeScript check passed: No type errors found.';
+            return summary || '[SYSTEM] ✅ TypeScript check passed: No actionable errors in your project source.';
         }
 
         // Feed the Error Panel.
@@ -196,11 +197,13 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
             useStore.getState().addParsedErrors(parsed as any);
         } catch { /* error panel is best-effort */ }
 
+        if (summary) return summary;
+
         const lines = errors
-            .slice(0, 50)
+            .slice(0, 40)
             .map((e) => `  ${e.file}:${e.line} — ${e.message}`)
             .join('\n');
-        return `[SYSTEM] TypeScript check found ${errors.length} error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
+        return `[SYSTEM] TypeScript check found ${errors.length} actionable error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
     } catch (e: any) {
         return `Error running TypeScript check on the server: ${e.message}`;
     }
@@ -262,13 +265,40 @@ export async function handleSave(): Promise<string> {
  *
  * IMPORTANT: Always call save() BEFORE deploy() to push code to GitHub first.
  */
-export async function handleDeploy(): Promise<string> {
+export async function handleDeploy(ctx?: ToolContext): Promise<string> {
     const projectId = getHostProjectId();
     if (!projectId) {
         return '[SYSTEM] ❌ Deploy is only available when building inside a Sycord project.';
     }
+
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let applicationId: string | null = null;
+    let deploymentId: string | null = null;
+
+    const startProgressPolling = () => {
+        if (pollTimer) return;
+        pollTimer = setInterval(async () => {
+            try {
+                const qs = new URLSearchParams({ projectId });
+                if (applicationId) qs.set('applicationId', applicationId);
+                if (deploymentId) qs.set('deploymentId', deploymentId);
+                const st = await fetch(`/api/workspace/deploy/status?${qs.toString()}`);
+                if (!st.ok) return;
+                const data = await st.json().catch(() => ({} as any));
+                if (data.applicationId) applicationId = data.applicationId;
+                if (data.deploymentId) deploymentId = data.deploymentId;
+                if (data.progressMessage) {
+                    ctx?.onDeployProgress?.(data.progressMessage);
+                }
+            } catch { /* best-effort UI poll */ }
+        }, 3500);
+    };
+
     try {
-        const res = await fetch("/api/workspace/deploy?projectId=" + encodeURIComponent(projectId), {
+        ctx?.onDeployProgress?.('Starting deployment on Dokploy…');
+        startProgressPolling();
+
+        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}&wait=true`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -278,8 +308,11 @@ export async function handleDeploy(): Promise<string> {
             }),
         });
         const data = await res.json().catch(() => ({} as any));
+        applicationId = data?.applicationId ?? applicationId;
+        deploymentId = data?.deploymentId ?? deploymentId;
+
         if (!res.ok || data?.status !== 'success' || !data?.url) {
-            const errMsg = data?.message || "HTTP " + res.status;
+            const errMsg = data?.message || data?.autofix?.split('\n')[0] || `HTTP ${res.status}`;
             if (Array.isArray(data?.missingRequiredEnvKeys) || Array.isArray(data?.missingRequiredIntegrationIds)) {
                 const missingEnv = Array.isArray(data?.missingRequiredEnvKeys) ? data.missingRequiredEnvKeys : [];
                 const missingIntegrations = Array.isArray(data?.missingRequiredIntegrationIds) ? data.missingRequiredIntegrationIds : [];
@@ -288,16 +321,26 @@ export async function handleDeploy(): Promise<string> {
                     (missingEnv.length ? "Missing env keys: " + missingEnv.join(", ") + "\n" : "") +
                     "Call integration() or wait for the user to complete the integrations popup, then continue.";
             }
-            return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
+            if (typeof data?.autofix === 'string' && data.autofix.length > 0) {
+                return data.autofix;
+            }
+            const logsTail = data?.logsTail ? `\n\nBuild logs:\n${data.logsTail}` : '';
+            return `[SYSTEM] ❌ Deploy failed: ${errMsg}${logsTail}\n\nAUTO-FIX: read the logs, fix source files, typeCheck(), save(), deploy() again.`;
         }
-        return "[SYSTEM] ✅ Deployed successfully.\n\n" +
-            "Live URL: " + data.url + "\n" +
-            "Project ID: " + (data.projectId || "auto") + "\n" +
-            "Environment ID: " + (data.environmentId || "auto") + "\n" +
-            "Application ID: " + (data.applicationId || "auto") + "\n" +
-            "Created: project=" + (data.createdProject ? "yes" : "no") + ", env=" + (data.createdEnvironment ? "yes" : "no") + ", app=" + (data.created ? "yes" : "no");
+
+        ctx?.onDeployProgress?.(data.buildComplete || '✅ Deployment build completed');
+
+        return '[SYSTEM] ✅ Deployment build completed on Dokploy.\n\n' +
+            (data.buildComplete ? `Build log: ${data.buildComplete}\n` : '') +
+            'Live URL: ' + data.url + '\n' +
+            'Project ID: ' + (data.projectId || 'auto') + '\n' +
+            'Environment ID: ' + (data.environmentId || 'auto') + '\n' +
+            'Application ID: ' + (data.applicationId || 'auto') + '\n' +
+            'Created: project=' + (data.createdProject ? 'yes' : 'no') + ', env=' + (data.createdEnvironment ? 'yes' : 'no') + ', app=' + (data.created ? 'yes' : 'no');
     } catch (e: any) {
         return "Error deploying project: " + e.message;
+    } finally {
+        if (pollTimer) clearInterval(pollTimer);
     }
 }
 
@@ -1167,6 +1210,8 @@ Available components: accordion, alert, alert-dialog, aspect-ratio, avatar, badg
 export interface ToolContext {
     addTerminalOutput: (output: string) => void;
     setSelectedFile: (path: string) => void;
+    /** Live status while deploy() polls Dokploy build logs. */
+    onDeployProgress?: (message: string) => void;
 }
 
 // ============================================================
@@ -2158,7 +2203,7 @@ async function _executeToolInternal(
     if (name === 'listFiles') return await handleListFiles();
     if (name === 'getErrors') return handleGetErrors(ctx);
     if (name === 'save') return handleSave();
-    if (name === 'deploy') return handleDeploy();
+    if (name === 'deploy') return handleDeploy(ctx);
 
     // Parse arguments
     const argsList = parseToolArguments(argsString);

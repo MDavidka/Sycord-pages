@@ -528,7 +528,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // Tool execution context
     const toolContext: ToolContext = {
         addTerminalOutput,
-        setSelectedFile
+        setSelectedFile,
     };
 
     const handleToolCall = async (toolCall: ToolCall): Promise<string> => {
@@ -1083,6 +1083,15 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
 
                     let result = '';
                     try {
+                        if (toolCall.function.name === 'deploy') {
+                            toolContext.onDeployProgress = (message: string) => {
+                                if (actionId) {
+                                    updateAction(actionId, { result: message, status: 'running' });
+                                }
+                            };
+                        } else {
+                            toolContext.onDeployProgress = undefined;
+                        }
                         result = await handleToolCall(toolCall);
                     } catch (err: any) {
                         console.error('Tool execution error:', err);
@@ -1095,8 +1104,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                         const isToolError = (
                             result.startsWith('Error ') ||
                             result.startsWith('[SYSTEM] ❌') ||
-                            result.includes('crashed') ||
-                            result.includes('FAILED')
+                            result.includes('AUTO-FIX REQUIRED') ||
+                            (result.includes('crashed') && !result.includes('Deployment build completed')) ||
+                            (result.includes('FAILED') && !result.includes('[SYSTEM] ✅'))
                         ) && !result.includes('[SYSTEM] ✅') && !result.includes('TypeScript check found');
 
                         const newStatus = isToolError ? 'error' : 'done';

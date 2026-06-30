@@ -83,6 +83,15 @@ pre,
   }
 }
 
+@keyframes deployBar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+
 /* Minimalistic Animations */
 @keyframes fadeInUp {
   from {

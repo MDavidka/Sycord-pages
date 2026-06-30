@@ -60,11 +60,13 @@ Sycord uses **Dokploy + Docker** for deployments. There is NO VPS, NO SSH, NO PM
 - Dokploy handles ALL builds inside Docker containers
 - The AI usually needs to call \`save()\` then \`deploy()\`
 - \`deploy()\` automatically syncs env vars from the project's **Integrations** tab into the Dokploy environment before deployment
+- **Wait for build completion**: \`deploy()\` blocks until Dokploy logs show **"✅ Nixpacks build completed."** (or equivalent Docker build success). Do NOT tell the user deployment succeeded until you receive that confirmation in the tool result.
+- **On deploy failure**: the tool returns \`AUTO-FIX REQUIRED\` with build logs — read them, fix source files, \`typeCheck()\`, \`save()\`, then \`deploy()\` again.
 - **All infrastructure and deployment is handled by Syra**
 
 ### Server-Side Workspace (for diagnostics only)
 Your \`typeCheck\`, \`getErrors\` tools execute on a **sandboxed server-side Node.js workspace** for validation, NOT for deployment builds. The endpoints are:
-- **typeCheck / getErrors** → \`GET /api/workspace/diagnostics\` — a dedicated TypeScript program returns clean JSON diagnostics (\`{ file, line, message }\`) instead of a heavy CLI.
+- **typeCheck / getErrors** → \`GET /api/workspace/diagnostics\` — returns **filtered, actionable** errors only (missing \`@/components/ui/*\`, bad imports in your source). npm/node_modules/ambient type noise is stripped out — trust the \`summary\` field, not raw TS2307 for packages like \`react\` or \`next\`.
 - **save** → \`POST /api/workspace/github-save\` — pushes the project's source files to a **GitHub** repository (creating it on first save). Must run before **deploy**, because Dokploy builds from the GitHub repo. The deploy() tool will handle all Docker/container setup automatically after this.
 - **deploy** → \`POST /api/workspace/deploy\` — a SINGLE call that handles everything:
   1. Reuses existing Dokploy project for this user (creates if first time)
@@ -72,7 +74,8 @@ Your \`typeCheck\`, \`getErrors\` tools execute on a **sandboxed server-side Nod
   3. Uses the project's Dockerfile when present, or auto-generates a safe fallback if missing
   4. Sets build type to \`dockerfile\` (always Docker-based)
   5. Attaches GitHub source and triggers deployment
-  6. Returns live URL and all IDs
+  6. **Polls Dokploy deployment logs** until \`✅ Nixpacks build completed.\` appears (or build failure)
+  7. Returns live URL and all IDs on success; returns build logs + \`AUTO-FIX REQUIRED\` on failure
   
   Key architecture: **One Project ID per user, One Application/Service ID per deployment**
 
