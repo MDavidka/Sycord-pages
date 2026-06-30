@@ -3,6 +3,11 @@ import { useStore } from '../store';
 import { parseToolArguments } from './utils';
 import { getHostProjectId, getProjectPagesMap, deleteProjectPage, isPageBackedFile } from './api';
 import { collectEnvKeysForIntegrations, getIntegrationById } from '../../lib/integrations';
+import {
+    getMissingShadcnFoundationFiles,
+    SHADCN_FOUNDATION_DEPENDENCIES,
+} from './shadcn-init-files';
+import { scanMissingShadcnImports } from '../../lib/shadcn-shared';
 
 /**
  * Result of attempting to persist a file to the project's Pages (MongoDB).
@@ -604,103 +609,128 @@ export async function handleCreateDockerfile(args: Record<string, unknown>): Pro
 }
 
 /**
- * Add shadcn/ui components to the project by running the shadcn CLI.
- * This is the ONLY way to add UI components — never write them manually.
- *
- * Works in two environments:
- * 1. Server-side workspace (Syra embedded in Sycord dashboard) → runs via
- *    the workspace API which executes npx on the server.
- * 2. In-browser WebContainer fallback → runs npx inside the web container.
- *
- * After installation, the generated files under components/ui/ are read
- * back and persisted to Pages (MongoDB).
+ * Merge npm dependencies into the project's package.json (never runs npm install).
+ */
+async function mergePackageDependencies(newDeps: Record<string, string>): Promise<string[]> {
+    await syncStoreFromPages();
+    const files = useStore.getState().files;
+    const pkgPath = 'package.json';
+    let pkgRaw = files[pkgPath]?.file?.contents;
+
+    if (!pkgRaw) {
+        try {
+            pkgRaw = await readFileResilient(pkgPath);
+        } catch {
+            return [];
+        }
+    }
+
+    let pkg: { dependencies?: Record<string, string> };
+    try {
+        pkg = JSON.parse(pkgRaw);
+    } catch {
+        return ['⚠️ package.json is invalid JSON — could not merge npm dependencies'];
+    }
+
+    pkg.dependencies = pkg.dependencies || {};
+    const added: string[] = [];
+
+    for (const [name, version] of Object.entries(newDeps)) {
+        if (!pkg.dependencies[name]) {
+            pkg.dependencies[name] = version;
+            added.push(name);
+        }
+    }
+
+    if (added.length > 0) {
+        const updated = `${JSON.stringify(pkg, null, 2)}\n`;
+        await persistFile(pkgPath, updated);
+    }
+
+    return added;
+}
+
+/** Ensure lib/utils.ts, components.json, globals.css, and tailwind tokens exist. */
+async function ensureShadcnFoundationInProject(): Promise<string[]> {
+    await syncStoreFromPages();
+    const files = useStore.getState().files;
+    const missing = getMissingShadcnFoundationFiles(files);
+    const results: string[] = [];
+
+    for (const [path, content] of Object.entries(missing)) {
+        await persistFile(path, content);
+        results.push(`📦 shadcn foundation: ${path}`);
+    }
+
+    const addedDeps = await mergePackageDependencies(SHADCN_FOUNDATION_DEPENDENCIES);
+    if (addedDeps.length > 0) {
+        results.push(`📦 npm deps added: ${addedDeps.join(', ')}`);
+    }
+
+    return results;
+}
+
+/**
+ * Add shadcn/ui components by fetching official registry source (no CLI).
+ * Files are written to components/ui/ and persisted to Pages automatically.
  */
 export async function handleAddShadcnComponent(args: Record<string, unknown>): Promise<string> {
     const component = typeof args.component === 'string' ? args.component.trim() : '';
     const components = Array.isArray(args.components) ? args.components : [];
-    const items = [...(component ? [component] : []), ...components];
+    const items = [...(component ? [component] : []), ...components.map(String)];
 
     if (items.length === 0) {
         return '[SYSTEM] ❌ addShadcnComponent requires at least one component name. Example: addShadcnComponent({ component: "button" })';
     }
 
-    const projectId = getHostProjectId();
     const results: string[] = [];
 
-    for (const item of items) {
-        try {
-            // Run the shadcn CLI add command with --yes to skip prompts
-            const cmd = `npx shadcn@latest add ${item} -y --overwrite`;
-            let commandOutput = '';
-            
-            if (projectId) {
-                // Server-side: use the workspace API to execute the command
-                try {
-                    const res = await fetch(`/api/workspace/execute?projectId=${encodeURIComponent(projectId)}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ command: cmd }),
-                    });
-                    const data = await res.json().catch(() => ({} as any));
-                    commandOutput = data?.output || data?.message || `HTTP ${res.status}`;
-                } catch (e: any) {
-                    commandOutput = `Workspace execution failed: ${e.message}`;
-                }
-            } else {
-                // In-browser WebContainer: executeCommand
-                try {
-                    const { executeCommand } = await import('./webcontainer');
-                    let outputBuffer = '';
-                    await executeCommand('npx', ['shadcn@latest', 'add', item, '-y', '--overwrite'], (data) => {
-                        outputBuffer += data;
-                    }, 120000);
-                    commandOutput = outputBuffer;
-                } catch (e: any) {
-                    commandOutput = `WebContainer execution failed: ${e.message}`;
-                }
-            }
-
-            // After installation, read the resulting component file(s) and persist
-            const componentFile = `components/ui/${item}.tsx`;
-            try {
-                const content = await readFileResilient(componentFile, { skipPagesSync: true });
-                if (content) {
-                    const pageSync = await persistFile(componentFile, content);
-                    const saved = pageSync.status === 'saved' ? ' (saved to Pages)' : '';
-                    results.push(`✅ ${item} — installed and saved${saved}`);
-                } else {
-                    results.push(`⚠️ ${item} — CLI ran but could not read ${componentFile}`);
-                }
-            } catch {
-                // Component may need additional files — try common patterns
-                const altFiles = [
-                    `components/ui/${item}.tsx`,
-                    `src/components/ui/${item}.tsx`,
-                    `@/components/ui/${item}.tsx`,
-                ];
-                let found = false;
-                for (const alt of altFiles) {
-                    try {
-                        const content = await readFileResilient(alt, { skipPagesSync: true });
-                        if (content) {
-                            await persistFile(componentFile, content);
-                            results.push(`✅ ${item} — installed${projectId ? ' and saved to Pages' : ''}`);
-                            found = true;
-                            break;
-                        }
-                    } catch { continue; }
-                }
-                if (!found) {
-                    results.push(`✅ ${item} — installed via shadcn CLI (output: ${commandOutput.slice(-100)})`);
-                }
-            }
-        } catch (e: any) {
-            results.push(`❌ ${item} — ${e.message}`);
-        }
+    try {
+        const foundation = await ensureShadcnFoundationInProject();
+        results.push(...foundation);
+    } catch (e: any) {
+        results.push(`⚠️ shadcn foundation setup: ${e.message}`);
     }
 
-    if (results.length === 0) {
-        return '[SYSTEM] No shadcn components were installed.';
+    try {
+        const res = await fetch('/api/ai/shadcn-registry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ components: items }),
+            signal: AbortSignal.timeout(60000),
+        });
+
+        const data = await res.json().catch(() => ({} as any));
+
+        if (!res.ok) {
+            return `[SYSTEM] ❌ shadcn registry failed: ${data?.error || `HTTP ${res.status}`}`;
+        }
+
+        const registryFiles: Array<{ path: string; content: string }> = Array.isArray(data.files) ? data.files : [];
+        const npmDeps: Record<string, string> = data.dependencies && typeof data.dependencies === 'object' ? data.dependencies : {};
+
+        if (registryFiles.length === 0) {
+            return '[SYSTEM] ❌ Registry returned no files. Check component names with shadcnDocs() or listShadcnComponents().';
+        }
+
+        const addedDeps = await mergePackageDependencies(npmDeps);
+        if (addedDeps.length > 0) {
+            results.push(`📦 npm deps added: ${addedDeps.join(', ')}`);
+        }
+
+        let savedCount = 0;
+        for (const file of registryFiles) {
+            if (!file.path || file.content === undefined) continue;
+            await persistFile(file.path, file.content);
+            savedCount++;
+        }
+
+        const source = data.source === 'local' ? 'local Sycord fallback' : 'ui.shadcn.com registry';
+        const installed = Array.isArray(data.installed) ? data.installed.join(', ') : items.join(', ');
+        results.push(`✅ Installed ${savedCount} file(s) for [${installed}] from ${source}`);
+        results.push('Re-run listShadcnComponents() to verify before writing imports.');
+    } catch (e: any) {
+        results.push(`❌ Registry install failed: ${e.message}`);
     }
 
     return '[SYSTEM] Shadcn component installation:\n' + results.join('\n');
@@ -1090,7 +1120,7 @@ Never skip this check. Build failures from missing UI modules happen 100% of the
         type: 'function',
         function: {
             name: 'addShadcnComponent',
-            description: 'Install shadcn/ui components using the official CLI. This is the ONLY way to add UI components — never write them manually. The CLI generates properly typed, accessible Radix UI components into components/ui/. PREREQUISITE: call listShadcnComponents() first to check if the component is already installed before calling this. Use this for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, alert-dialog, aspect-ratio, breadcrumb, calendar, carousel, chart, collapsible, command, context-menu, drawer, empty, field, hover-card, input-group, input-otp, item, kbd, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, skeleton, slider, sonner, spinner, toggle, toggle-group, tooltip, and any other shadcn component.',
+            description: 'Install shadcn/ui components from the official ui.shadcn.com registry (NO CLI — files are copied into components/ui/ with correct Radix deps). This is the ONLY way to add UI primitives — never write component files manually. PREREQUISITE: call listShadcnComponents() first. Automatically sets up lib/utils.ts, components.json, CSS design tokens, and package.json deps. Use for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, and all other shadcn components.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1895,6 +1925,21 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
     }
 
     const results: string[] = [];
+
+    // 0. Missing shadcn import scan (client-side ground truth)
+    try {
+        await syncStoreFromPages();
+        const files = useStore.getState().files;
+        const scanFiles = Object.entries(files).map(([name, f]) => ({
+            name,
+            content: f.file.contents,
+        }));
+        const missingImports = scanMissingShadcnImports(scanFiles);
+        if (missingImports.length > 0) {
+            const lines = missingImports.slice(0, 15).map((e) => `  ${e.file}:${e.line} — ${e.message}`).join('\n');
+            results.push(`🔴 Missing shadcn/ui modules:\n${lines}`);
+        }
+    } catch { /* best-effort */ }
 
     // 1. TypeScript errors
     try {

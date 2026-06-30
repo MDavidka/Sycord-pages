@@ -8,6 +8,7 @@
 // Response: { "errors": [ { "file": "src/App.tsx", "line": 45, "message": "..." } ] }
 
 import path from "node:path"
+import { scanMissingShadcnImports } from "@/lib/shadcn-shared"
 import { loadProject, materializeWorkspace, projectFiles, requireUserId } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -17,15 +18,27 @@ export const maxDuration = 120
 type DiagnosticEntry = { file: string; line: number; message: string }
 
 // TS error codes that are pure "environment/resolution" noise when the sandbox
-// has no installed node_modules (missing modules / missing type declarations).
-// We drop these so the payload focuses on real type mistakes in the user's code.
+// has no installed node_modules. TS2307 is still reported for @/components/ui/*
+// and @/lib/* because those indicate missing shadcn installs in the project.
 const IGNORED_TS_CODES = new Set<number>([
-  2307, // Cannot find module '...'
-  7016, // Could not find a declaration file for module '...'
-  2792, // Cannot find module — did you mean to set 'moduleResolution'?
-  6142, // Module was resolved but '--jsx' is not set
-  2305, // Module has no exported member (often from un-typed deps)
+  2307,
+  7016,
+  2792,
+  6142,
+  2305,
 ])
+
+function shouldReportMissingModule(message: string): boolean {
+  const match = message.match(/Cannot find module '([^']+)'/)
+  if (!match) return false
+  const mod = match[1]
+  return mod.startsWith("@/components/ui/") || mod.startsWith("@/lib/") || mod.startsWith("@/hooks/")
+}
+
+function isIgnoredDiagnostic(code: number, message: string): boolean {
+  if (code === 2307 && shouldReportMissingModule(message)) return false
+  return IGNORED_TS_CODES.has(code)
+}
 
 export async function GET(req: Request): Promise<Response> {
   const userId = await requireUserId()
@@ -79,11 +92,11 @@ export async function GET(req: Request): Promise<Response> {
 
     errors = diagnostics
       .filter(
-        (d: any) =>
-          d.file &&
-          typeof d.start === "number" &&
-          typeof d.code === "number" &&
-          !IGNORED_TS_CODES.has(d.code),
+        (d: any) => {
+          if (!d.file || typeof d.start !== "number" || typeof d.code !== "number") return false
+          const message = ts.flattenDiagnosticMessageText(d.messageText, "\n")
+          return !isIgnoredDiagnostic(d.code, message)
+        },
       )
       .map((d: any): DiagnosticEntry => {
         const { line } = d.file.getLineAndCharacterOfPosition(d.start)
@@ -93,6 +106,19 @@ export async function GET(req: Request): Promise<Response> {
           message: ts.flattenDiagnosticMessageText(d.messageText, "\n"),
         }
       })
+
+    const importScan = scanMissingShadcnImports(
+      files.map((f) => ({ name: f.name, content: f.content ?? "" })),
+    )
+
+    const seen = new Set(errors.map((e) => `${e.file}:${e.line}:${e.message}`))
+    for (const err of importScan) {
+      const key = `${err.file}:${err.line}:${err.message}`
+      if (!seen.has(key)) {
+        errors.push(err)
+        seen.add(key)
+      }
+    }
   } catch (err: any) {
     return Response.json({ message: err?.message || "Type check failed" }, { status: 500 })
   }

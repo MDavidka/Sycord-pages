@@ -18,6 +18,7 @@ import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
+import { buildInjectedProjectContext } from '../lib/project-context';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -674,9 +675,13 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
         const presetDescription = getPresetDescription(presetId);
+        const projectContextBlock = buildInjectedProjectContext(currentFiles);
         const promptContent = currentSystemPrompt
-            ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList).replace('{{PRESET}}', presetDescription)
-            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}`;
+            ? currentSystemPrompt
+                .replace('{{FILE_LIST}}', fileList)
+                .replace('{{PRESET}}', presetDescription)
+                .replace('{{PROJECT_CONTEXT}}', projectContextBlock)
+            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n\n${projectContextBlock}`;
 
         const SYSTEM_PROMPT: Message = {
             role: 'system',

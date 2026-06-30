@@ -3,6 +3,9 @@
 // `npm run build` (Next.js production build) — NOT a Vite SPA.
 
 import { getPreset } from './presets'
+import {
+  getShadcnFoundationFiles,
+} from './shadcn-init-files'
 
 export { getPreset }
 
@@ -25,7 +28,10 @@ export const BASE_PROJECT_FILES: Record<string, { file: { contents: string } }> 
     "react-dom": "^18.3.1",
     "lucide-react": "^0.408.0",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.4.0"
+    "tailwind-merge": "^2.4.0",
+    "class-variance-authority": "^0.7.1",
+    "@radix-ui/react-slot": "^1.1.2",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^20.14.10",
@@ -87,21 +93,8 @@ export default nextConfig;`
   },
   'tailwind.config.ts': {
     file: {
-      contents: `import type { Config } from "tailwindcss";
-
-const config: Config = {
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-};
-
-export default config;`
-    }
+      contents: getShadcnFoundationFiles()['tailwind.config.ts'],
+    },
   },
   'postcss.config.mjs': {
     file: {
@@ -159,11 +152,19 @@ export default function RootLayout({
   },
   'app/globals.css': {
     file: {
-      contents: `@tailwind base;
-@tailwind components;
-@tailwind utilities;`
-    }
-  }
+      contents: getShadcnFoundationFiles()['app/globals.css'],
+    },
+  },
+  'lib/utils.ts': {
+    file: {
+      contents: getShadcnFoundationFiles()['lib/utils.ts'],
+    },
+  },
+  'components.json': {
+    file: {
+      contents: getShadcnFoundationFiles()['components.json'],
+    },
+  },
 };
 
 // Get file list as string for AI context
