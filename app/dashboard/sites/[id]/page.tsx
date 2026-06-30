@@ -1739,7 +1739,7 @@ export default function SiteSettingsPage() {
                           src={previewUrl}
                           title={`Preview of ${displayUrl}`}
                           className="absolute inset-0 w-[1440px] h-[900px] border-0 origin-top-left pointer-events-none select-none"
-                          sandbox="allow-same-origin allow-scripts allow-forms"
+                          sandbox="allow-scripts"
                           tabIndex={-1}
                           ref={(el) => {
                             if (el && el.parentElement) {
