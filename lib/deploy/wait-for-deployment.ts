@@ -233,10 +233,12 @@ export function buildDeployAutofixMessage(logs: string, error: string): string {
     `Error signal: ${error}\n\n` +
     `Recent build logs:\n${snippet}\n\n` +
     `AUTO-FIX REQUIRED — do NOT tell the user deployment succeeded:\n` +
-    `1. Read the log lines above and identify the root cause (missing file, bad import, package.json, Dockerfile, env var).\n` +
-    `2. Fix source files with readFile → editFile/createFile.\n` +
-    `3. Run typeCheck() to verify.\n` +
-    `4. Call save() then deploy() again.\n` +
-    `5. If env/integration keys are missing, call integration() and wait for the user.`
+    `Dokploy Docker build logs are GROUND TRUTH (more reliable than sandbox typeCheck()).\n` +
+    `1. Read the log lines above and identify the root cause (wrong props on a section, missing file, bad import, package.json, Dockerfile, env var).\n` +
+    `2. readFile() the failing component/page — confirm its real API before editing callers.\n` +
+    `3. Fix source files with readFile → editFile → readFile (verify persistence).\n` +
+    `4. Run typeCheck() for quick sanity (filtered summary only).\n` +
+    `5. Call save() then deploy() again.\n` +
+    `6. If env/integration keys are missing, call integration() and wait for the user.`
   )
 }

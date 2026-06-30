@@ -94,6 +94,6 @@ export async function GET(req: Request): Promise<Response> {
     errors,
     rawCount: rawErrors.length,
     filteredCount: errors.length,
-    summary: formatDiagnosticsForAI(errors),
+    summary: formatDiagnosticsForAI(errors, { rawCount: rawErrors.length }),
   })
 }

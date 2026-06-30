@@ -90,7 +90,10 @@ export function filterActionableDiagnostics(
   })
 }
 
-export function formatDiagnosticsForAI(errors: DiagnosticEntry[]): string {
+export function formatDiagnosticsForAI(
+  errors: DiagnosticEntry[],
+  opts?: { rawCount?: number },
+): string {
   if (errors.length === 0) {
     return "[SYSTEM] ✅ TypeScript check passed: No actionable errors in your project source."
   }
@@ -100,10 +103,17 @@ export function formatDiagnosticsForAI(errors: DiagnosticEntry[]): string {
     .map((e) => `  ${normalizePath(e.file)}:${e.line} — ${e.message}`)
     .join("\n")
 
+  const rawCount = opts?.rawCount ?? 0
+  const envWarning =
+    rawCount > errors.length * 3 || errors.length > 50
+      ? "\n\n⚠️ Many diagnostics were filtered as sandbox/environment noise. Do NOT chase hundreds of errors here — fix these actionable items, then save() → deploy() and trust Dokploy build logs if they conflict.\n"
+      : ""
+
   return (
     `[SYSTEM] Found ${errors.length} actionable error(s) in YOUR project files (environment/npm noise filtered out):\n` +
-    `${lines}\n\n` +
+    `${lines}${envWarning}\n` +
     "Fix these in your source files, then run typeCheck() again. " +
+    "If deploy() fails, prioritize Dokploy build log errors over typeCheck(). " +
     "Do NOT run npm install — add packages by editing package.json if needed."
   )
 }

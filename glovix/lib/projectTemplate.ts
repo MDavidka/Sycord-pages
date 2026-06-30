@@ -225,6 +225,7 @@ export function getPresetDescription(presetId?: string): string {
   }
 
   lines.push('')
+  lines.push('**Before using any section:** `readFile(path)` — confirm props vs self-contained (`lib/data.ts`). Default template uses props; your project may differ.')
   lines.push('### Required shadcn Components (install via addShadcnComponent)')
   lines.push(preset.requiredShadcnComponents.map(c => `\`${c}\``).join(', '))
 
