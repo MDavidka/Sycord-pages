@@ -41,9 +41,13 @@ export function useAutoSave() {
 
         try {
             isSavingMessagesRef.current = true;
-            await saveChatMessages(chatId, msgs, { ...options, projectId });
+            const result = await saveChatMessages(chatId, msgs, { ...options, projectId });
+            if (!result?.success) {
+                console.warn('[AutoSave] Chat messages were not persisted (API/local save returned false)');
+            }
         } catch (err) {
-            console.error('[AutoSave] Failed to save messages:', err);
+            // Should not throw after api hardening — log as warn, not error
+            console.warn('[AutoSave] Failed to save messages:', err);
         } finally {
             isSavingMessagesRef.current = false;
         }

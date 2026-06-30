@@ -26,8 +26,26 @@ const PROJECT_CHAT_FETCH_OPTIONS: RequestInit = {
 };
 
 function sanitizeMessagesForSave(messages: any[]) {
+    const replacer = (_key: string, value: unknown) => {
+        if (typeof value === 'string' && value.startsWith('data:') && value.length > 32_000) {
+            return '[large attachment omitted from save]';
+        }
+        if (
+            value &&
+            typeof value === 'object' &&
+            'image_url' in (value as object) &&
+            typeof (value as { image_url?: { url?: string } }).image_url?.url === 'string'
+        ) {
+            const url = (value as { image_url: { url: string } }).image_url.url;
+            if (url.startsWith('data:') && url.length > 32_000) {
+                return { ...(value as object), image_url: { url: '[large image omitted from save]' } };
+            }
+        }
+        return value;
+    };
+
     try {
-        return JSON.parse(JSON.stringify(messages));
+        return JSON.parse(JSON.stringify(messages, replacer));
     } catch (err) {
         console.warn('[GlovixAPI] Failed to sanitize messages:', err);
         return messages;
@@ -78,8 +96,8 @@ const localStore = {
             return false;
         }
     },
-    cacheMessages(chatId: string, messages: any[]) {
-        if (!shouldUseLocalMessageCache()) return true;
+    cacheMessages(chatId: string, messages: any[]): boolean {
+        if (!shouldUseLocalMessageCache()) return false;
         const allMessages = localStore.get('messages') || {};
         allMessages[chatId] = messages;
         return localStore.set('messages', allMessages);
@@ -206,7 +224,9 @@ export const getChatMessages = async (chatId: string, explicitProjectId?: string
             try {
                 const data = await res.json();
                 const serverMessages = Array.isArray(data?.messages) ? data.messages : [];
-                localStore.cacheMessages(resolvedChatId, serverMessages);
+                if (shouldUseLocalMessageCache()) {
+                    localStore.cacheMessages(resolvedChatId, serverMessages);
+                }
                 return { messages: serverMessages };
             } catch (err) {
                 console.warn('[GlovixAPI] Failed to parse chat API response:', err);
@@ -269,15 +289,23 @@ export const saveChatMessages = async (
         }
     }
 
-    const localCached =
-        localStore.cacheMessages(resolvedChatId, payload) ||
-        (resolvedChatId !== chatId && localStore.cacheMessages(chatId, payload));
+    const localCached = shouldUseLocalMessageCache()
+        ? localStore.cacheMessages(resolvedChatId, payload) ||
+          (resolvedChatId !== chatId && localStore.cacheMessages(chatId, payload))
+        : false;
 
-    if (projectId && !apiSaved && !localCached) {
-        throw new Error('Failed to persist chat messages');
+    if (projectId) {
+        if (!apiSaved) {
+            console.warn('[GlovixAPI] Chat API save did not succeed — messages kept in memory only until next successful save');
+        }
+        return { success: apiSaved };
     }
 
-    return { success: apiSaved || localCached };
+    if (!localCached) {
+        console.warn('[GlovixAPI] Chat messages could not be cached locally (storage quota may be full)');
+    }
+
+    return { success: localCached };
 };
 
 // Projects
