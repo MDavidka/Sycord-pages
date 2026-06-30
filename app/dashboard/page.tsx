@@ -196,15 +196,15 @@ function DashboardContent() {
       )
 
       // Also delete from Dokploy if there's an applicationId
-      const project = projects.find((p: any) => p._id === projectToDelete.id)
-      if (project?.applicationId) {
+      const project: any = projects.find((p: any) => p._id === projectToDelete.id)
+      if (project?.dokployApplicationId || project?.applicationId) {
         try {
           await fetch("/api/deploy/dokploy", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              applicationId: project.applicationId,
-              projectId: project.projectId,
+              applicationId: project.dokployApplicationId || project.applicationId,
+              projectId: project.dokployProjectId || project.projectId,
             }),
           })
         } catch (err) {

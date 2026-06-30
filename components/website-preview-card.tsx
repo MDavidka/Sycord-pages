@@ -180,7 +180,7 @@ export function WebsitePreviewCard({
                 setFrameError(true)
                 setFrameLoading(false)
               }}
-              sandbox="allow-same-origin allow-scripts allow-forms"
+              sandbox="allow-scripts"
               tabIndex={-1}
             />
           </div>

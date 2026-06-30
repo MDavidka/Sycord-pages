@@ -71,8 +71,19 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
             />
 
             <PipelineStep
+              icon={<Box className="h-4 w-4 text-emerald-400" />}
+              step="3. Deep Memory Context"
+              description={[
+                "AI reads .glovix/deep-memory.md (or fallbacks) for context on previous mistakes, logic, and project state.",
+                "AI maintains .glovix/glovix.md containing Plan, Details, Files, and Structure.",
+                "AI uses saveKnowledge to store logic in short form in deep-think to a separated knowledge block.",
+                "AI uses listKnowledge and callKnowledge to list and retrieve separated knowledge blocks to move forward."
+              ]}
+            />
+
+            <PipelineStep
               icon={<Box className="h-4 w-4 text-green-400" />}
-              step="3. Component Installation (shadcn CLI)"
+              step="4. Component Installation (shadcn CLI)"
               description={[
                 "AI calls addShadcnComponent({ components: [...] }) to install needed UI primitives via npx shadcn@latest add.",
                 "This runs the official shadcn CLI which generates properly typed, accessible Radix UI components into components/ui/.",
@@ -83,7 +94,7 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
 
             <PipelineStep
               icon={<FileCode className="h-4 w-4 text-blue-400" />}
-              step="4. File Generation"
+              step="5. File Generation"
               description={[
                 "AI creates files using batchCreateFiles() for speed (3-5x faster than sequential) or createFile() for individual files.",
                 "Files saved include: app/page.tsx (and sub-routes), app/layout.tsx, app/globals.css, components/*.tsx, lib/utils.ts.",
@@ -95,7 +106,7 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
 
             <PipelineStep
               icon={<Wrench className="h-4 w-4 text-amber-400" />}
-              step="5. Validation & Type Checking"
+              step="6. Validation & Type Checking"
               description={[
                 "After each batch of files, AI runs typeCheck() which calls /api/workspace/diagnostics on the server-side sandbox.",
                 "Returns structured TypeScript errors with file, line, and message. Errors feed into the Error Panel UI.",
@@ -106,7 +117,7 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
 
             <PipelineStep
               icon={<GitBranch className="h-4 w-4 text-orange-400" />}
-              step="6. Version Control (save)"
+              step="7. Version Control (save)"
               description={[
                 "When ready, AI calls save() → pushes all project files to a GitHub repository via /api/workspace/github-save.",
                 "Creates the repository on first save. Subsequent saves push to the same repo.",
@@ -116,7 +127,7 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
 
             <PipelineStep
               icon={<Server className="h-4 w-4 text-cyan-400" />}
-              step="7. Docker Deployment (deploy)"
+              step="8. Docker Deployment (deploy)"
               description={[
                 "AI calls deploy() → single API call that: creates/updates Dokploy application, sets Dockerfile build type, configures the public domain as <app>.sycord.site, attaches GitHub source, and triggers the Docker build.",
                 "Dokploy Docker containers handle all npm install / npm run build — the AI never runs build commands locally.",
@@ -127,7 +138,7 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
 
             <PipelineStep
               icon={<Code2 className="h-4 w-4 text-pink-400" />}
-              step="8. Codebase Documentation"
+              step="9. Codebase Documentation"
               description={[
                 "AI creates .glovix/codebase.md with a structured project overview: tech stack, file structure, component descriptions, routing table, and external dependencies.",
                 "This file is read by the next chat session for context continuity.",

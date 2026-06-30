@@ -70,6 +70,7 @@ import {
   TrendingDown,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
+import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -1410,11 +1411,11 @@ export default function SiteSettingsPage() {
           onExpandChange={setIsDesktopSidebarExpanded}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={setActiveTab as any}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
-          session={session}
+          session={session as any}
           subscription={subscription}
           planCredit={planCredit}
           userInitials={userInitials}
@@ -1430,11 +1431,11 @@ export default function SiteSettingsPage() {
           onClose={() => setIsSidebarOpen(false)}
           project={project}
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
+          setActiveTab={setActiveTab as any}
           navGroups={navGroups}
           getWebsiteIcon={getWebsiteIcon}
           databaseConnected={databaseConnected}
-          session={session}
+          session={session as any}
           subscription={subscription}
           planCredit={planCredit}
           userInitials={userInitials}
@@ -1738,7 +1739,7 @@ export default function SiteSettingsPage() {
                           src={previewUrl}
                           title={`Preview of ${displayUrl}`}
                           className="absolute inset-0 w-[1440px] h-[900px] border-0 origin-top-left pointer-events-none select-none"
-                          sandbox="allow-same-origin allow-scripts allow-forms"
+                          sandbox="allow-scripts"
                           tabIndex={-1}
                           ref={(el) => {
                             if (el && el.parentElement) {
@@ -2337,7 +2338,7 @@ export default function SiteSettingsPage() {
                                   <h4 className="font-medium truncate">{product.name}</h4>
                                   <p className="text-sm text-muted-foreground truncate">{product.category || 'Uncategorized'}</p>
                                   <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-sm font-semibold">{currencySymbols[settings?.currency || "USD"]}{product.price}</span>
+                                    <span className="text-sm font-semibold">{(currencySymbols as Record<string, string>)[settings?.currency || "USD"]}{product.price}</span>
                                     <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${product.inStock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                                       {product.inStock ? 'In Stock' : 'Out of Stock'}
                                     </span>
@@ -2411,7 +2412,7 @@ export default function SiteSettingsPage() {
                        <div className="flex items-center gap-2 pt-2">
                          <Switch
                            checked={newProduct.inStock}
-                           onCheckedChange={(c) => setNewProduct({...newProduct, inStock: c})}
+                           onCheckedChange={(c: boolean) => setNewProduct({...newProduct, inStock: c})}
                          />
                          <Label>In Stock</Label>
                        </div>
