@@ -7,7 +7,7 @@ import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type Mod
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
-import { saveChatMessages, saveProject, createChat, getHostProjectId } from '../lib/api';
+import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { MermaidBlock } from './MermaidBlock';
@@ -284,15 +284,17 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
     };
 
-    // Load saved messages when opening an existing chat
+    // Load saved messages when opening an existing chat (standalone mode only).
+    // Embedded dashboard chats are loaded by EmbeddedChat per project.
     useEffect(() => {
+        if (getHostProjectId()) return;
+
         const loadChatMessages = async () => {
             if (currentChatId && user) {
                 try {
                     const { getChatMessages } = await import('../lib/api');
                     const data = await getChatMessages(currentChatId);
                     if (data.messages && data.messages.length > 0) {
-                        // Only load if we don't have messages already (to avoid overwriting during active chat)
                         if (messages.length === 0) {
                             setMessages(data.messages);
                         }
@@ -1337,7 +1339,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     const { useStore } = await import('../store');
                     const state = useStore.getState();
 
-                    await saveChatMessages(chatId, state.messages);
+                    await saveChatMessages(chatId, state.messages, {
+                        keepalive: true,
+                        projectId: getHostProjectId(),
+                    });
 
                     if (Object.keys(state.files).length > 0) {
                         await saveProject(chatId, user.uid, state.files);
@@ -1374,7 +1379,11 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
 
         // Create chat if not exists
-        let chatId = currentChatId;
+        let chatId = currentChatId || getEmbeddedChatId();
+        if (chatId && chatId !== currentChatId) {
+            setCurrentChatId(chatId);
+        }
+
         if (!chatId && user) {
             try {
                 const title = input.slice(0, 50) + (input.length > 50 ? '...' : '');

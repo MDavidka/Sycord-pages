@@ -439,6 +439,7 @@ function DashboardContent() {
                           projectId={project._id}
                           businessName={project.businessName}
                           createdAt={project.createdAt}
+                          chatSession={project.chatSession}
                           style={project.style || "default"}
                           fallbackHtml={fallbackHtml}
                           onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}

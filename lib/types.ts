@@ -5,6 +5,15 @@ export interface GeneratedPage {
   usedFor?: string
 }
 
+export interface ProjectChatSessionSummary {
+  id: string
+  title: string
+  messageCount: number
+  createdAt?: string | Date
+  updatedAt?: string | Date
+  model?: string
+}
+
 export type DeploymentMode = "ssh"
 
 export type DeployFile = {
