@@ -78,10 +78,36 @@ export const createChat = async (userId: string, title: string): Promise<ChatHis
 };
 
 export const updateChatTitle = async (chatId: string, title: string): Promise<ChatHistory> => {
+    const projectId = getHostProjectId();
+    if (projectId) {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/chat`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title }),
+            });
+            if (!res.ok) {
+                console.warn('[GlovixAPI] Failed to save chat title to API:', res.status);
+            }
+        } catch (err) {
+            console.warn('[GlovixAPI] Failed to save chat title to API:', err);
+        }
+    }
+
     await new Promise(r => setTimeout(r, 50));
     const chats = localStore.get('chats') || [];
     const index = chats.findIndex((c: any) => c.id === chatId);
-    if (index === -1) throw new Error('Chat not found');
+    if (index === -1) {
+        const fallbackChat = {
+            id: chatId,
+            user_id: '',
+            title,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+        localStore.set('chats', [fallbackChat, ...chats]);
+        return fallbackChat;
+    }
     chats[index] = { ...chats[index], title, updated_at: new Date().toISOString() };
     localStore.set('chats', chats);
     return chats[index];
@@ -105,12 +131,64 @@ export const deleteChat = async (chatId: string): Promise<void> => {
 
 // Messages
 export const getChatMessages = async (chatId: string) => {
+    const projectId = getHostProjectId();
+    if (projectId) {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/chat`);
+            if (res.ok) {
+                const data = await res.json();
+                const serverMessages = Array.isArray(data?.messages) ? data.messages : [];
+                if (serverMessages.length > 0) {
+                    const allMessages = localStore.get('messages') || {};
+                    allMessages[chatId] = serverMessages;
+                    localStore.set('messages', allMessages);
+                    return { messages: serverMessages };
+                }
+
+                // Migrate browser-local history to the project session once.
+                const allMessages = localStore.get('messages') || {};
+                const localMessages = allMessages[chatId] || [];
+                if (localMessages.length > 0) {
+                    fetch(`/api/projects/${projectId}/chat`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messages: localMessages }),
+                    }).catch((err) => {
+                        console.warn('[GlovixAPI] Failed to migrate local chat to API:', err);
+                    });
+                    return { messages: localMessages };
+                }
+
+                return { messages: [] };
+            }
+            console.warn('[GlovixAPI] Failed to load chat from API:', res.status);
+        } catch (err) {
+            console.warn('[GlovixAPI] Failed to load chat from API, falling back to localStorage:', err);
+        }
+    }
+
     await new Promise(r => setTimeout(r, 50));
     const allMessages = localStore.get('messages') || {};
     return { messages: allMessages[chatId] || [] };
 };
 
 export const saveChatMessages = async (chatId: string, messages: any[]) => {
+    const projectId = getHostProjectId();
+    if (projectId) {
+        try {
+            const res = await fetch(`/api/projects/${projectId}/chat`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages }),
+            });
+            if (!res.ok) {
+                console.warn('[GlovixAPI] Failed to save chat to API:', res.status);
+            }
+        } catch (err) {
+            console.warn('[GlovixAPI] Failed to save chat to API:', err);
+        }
+    }
+
     const allMessages = localStore.get('messages') || {};
     allMessages[chatId] = messages;
     localStore.set('messages', allMessages);

@@ -11,8 +11,8 @@ import { mountFiles, autoInstallDependencies } from '../lib/webcontainer';
  * There is exactly ONE chat per project (keyed by the host project id), and the
  * UI is nothing but the chat — no splash screen, no top bar, no workbench, and
  * no mobile navigation. Files the AI writes are persisted to the project's
- * Pages (MongoDB) by the tools layer; here we only load any previously saved
- * messages and files so the conversation resumes seamlessly.
+ * Pages (MongoDB) by the tools layer; messages are persisted to the project's
+ * chat session in the database via /api/projects/[id]/chat.
  */
 export function EmbeddedChat() {
     const user = useStore(s => s.user);

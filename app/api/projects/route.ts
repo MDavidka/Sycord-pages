@@ -339,13 +339,24 @@ export async function GET(request: Request) {
     })
 
     // Trim each project to the dashboard-friendly shape. Avoid returning large
-    // nested fields like `pages`, `chatHistory`, `buildLogs`, etc.
+    // nested fields like `pages`, `buildLogs`, etc.
     const projects = rawProjects.map((project: any) => {
       const deployedUrl =
         project.cloudflareUrl ||
         project.deploymentRuntime?.url ||
         project.deployment?.domain ||
         null
+      const chatSession = project.chatSession
+        ? {
+            id: project.chatSession.id,
+            title: project.chatSession.title || "Syra Chat",
+            messageCount: Array.isArray(project.chatSession.messages)
+              ? project.chatSession.messages.length
+              : 0,
+            updatedAt: project.chatSession.updatedAt,
+            createdAt: project.chatSession.createdAt,
+          }
+        : null
       return {
         _id: project._id,
         id: project.id,
@@ -362,6 +373,7 @@ export async function GET(request: Request) {
         projectId: project.projectId,
         previewImage: project.previewImage,
         profileImage: project.profileImage,
+        chatSession,
         deploymentRuntime: project.deploymentRuntime
           ? {
               status: project.deploymentRuntime.status,

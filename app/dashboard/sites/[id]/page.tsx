@@ -100,6 +100,8 @@ import {
   ProjectIntegrationsDialog,
   type IntegrationRequestPayload,
 } from "@/components/project-integrations-dialog"
+import { ProjectSyraSessionCard } from "@/components/project-syra-session-card"
+import type { ProjectChatSessionSummary } from "@/lib/types"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -720,6 +722,7 @@ export default function SiteSettingsPage() {
 
   // Overview mini AI chat state
   const [overviewChatInput, setOverviewChatInput] = useState("")
+  const [chatSessionSummary, setChatSessionSummary] = useState<ProjectChatSessionSummary | null>(null)
 
   // Fetch real TLD prices from Cloudflare (via our API)
   const fetchTldPrices = async () => {
@@ -902,7 +905,17 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
 
-        await Promise.all([fetchProject, fetchSettings, fetchProducts])
+        const fetchChatSession = fetch(`/api/projects/${id}/chat?summary=true`, { signal: controller.signal })
+          .then((r) => r.json())
+          .then((data) => {
+            setChatSessionSummary(data?.session ?? null)
+          })
+          .catch((err) => {
+            if (err?.name === "AbortError") return
+            console.error("[v0] Settings page: Error fetching chat session:", err)
+          })
+
+        await Promise.all([fetchProject, fetchSettings, fetchProducts, fetchChatSession])
         console.log("[v0] All data fetches completed")
         if (!controller.signal.aborted) fetchLogs()
       } catch (error) {
@@ -918,6 +931,15 @@ export default function SiteSettingsPage() {
     // Cancel any in-flight fetches when the component unmounts or id changes.
     return () => controller.abort()
   }, [id])
+
+  useEffect(() => {
+    if (activeTab !== "overview" || !id) return
+
+    fetch(`/api/projects/${id}/chat?summary=true`)
+      .then((r) => r.json())
+      .then((data) => setChatSessionSummary(data?.session ?? null))
+      .catch(() => {})
+  }, [activeTab, id])
 
   // Fetch subscription info
   useEffect(() => {
@@ -2067,6 +2089,11 @@ export default function SiteSettingsPage() {
                       )}
                     </div>
                   </div>
+
+                  <ProjectSyraSessionCard
+                    session={chatSessionSummary}
+                    onOpenChat={() => setActiveTab("ai")}
+                  />
 
                   {/* ── ROW 3: Recent activity ── */}
                   <div className="space-y-1">
