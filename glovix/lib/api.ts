@@ -12,6 +12,35 @@ export function getHostProjectId(): string | null {
     return (window as any).__glovixProjectId ?? null;
 }
 
+/** Deterministic embedded chat id for the current host project. */
+export function getEmbeddedChatId(): string | null {
+    if (typeof window === 'undefined') return null;
+    const preset = (window as any).__glovixChatId as string | undefined;
+    if (preset) return preset;
+    const projectId = getHostProjectId();
+    return projectId ? `project_${projectId}` : null;
+}
+
+const PROJECT_CHAT_FETCH_OPTIONS: RequestInit = {
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+};
+
+function sanitizeMessagesForSave(messages: any[]) {
+    return JSON.parse(JSON.stringify(messages));
+}
+
+async function fetchProjectChat(projectId: string, init?: RequestInit) {
+    return fetch(`/api/projects/${projectId}/chat`, {
+        ...PROJECT_CHAT_FETCH_OPTIONS,
+        ...init,
+        headers: {
+            ...(PROJECT_CHAT_FETCH_OPTIONS.headers as Record<string, string>),
+            ...(init?.headers as Record<string, string> | undefined),
+        },
+    });
+}
+
 const localStore = {
     get: (key: string) => {
         try {
@@ -81,9 +110,8 @@ export const updateChatTitle = async (chatId: string, title: string): Promise<Ch
     const projectId = getHostProjectId();
     if (projectId) {
         try {
-            const res = await fetch(`/api/projects/${projectId}/chat`, {
+            const res = await fetchProjectChat(projectId, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title }),
             });
             if (!res.ok) {
@@ -132,27 +160,33 @@ export const deleteChat = async (chatId: string): Promise<void> => {
 // Messages
 export const getChatMessages = async (chatId: string) => {
     const projectId = getHostProjectId();
+    const embeddedChatId = getEmbeddedChatId();
+    const resolvedChatId = embeddedChatId || chatId;
+
     if (projectId) {
         try {
-            const res = await fetch(`/api/projects/${projectId}/chat`);
+            const res = await fetchProjectChat(projectId);
             if (res.ok) {
                 const data = await res.json();
                 const serverMessages = Array.isArray(data?.messages) ? data.messages : [];
                 if (serverMessages.length > 0) {
                     const allMessages = localStore.get('messages') || {};
-                    allMessages[chatId] = serverMessages;
+                    allMessages[resolvedChatId] = serverMessages;
                     localStore.set('messages', allMessages);
                     return { messages: serverMessages };
                 }
 
                 // Migrate browser-local history to the project session once.
                 const allMessages = localStore.get('messages') || {};
-                const localMessages = allMessages[chatId] || [];
+                const localMessages =
+                    allMessages[resolvedChatId] ||
+                    allMessages[chatId] ||
+                    [];
                 if (localMessages.length > 0) {
-                    fetch(`/api/projects/${projectId}/chat`, {
+                    fetchProjectChat(projectId, {
                         method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ messages: localMessages }),
+                        body: JSON.stringify({ messages: sanitizeMessagesForSave(localMessages) }),
+                        keepalive: true,
                     }).catch((err) => {
                         console.warn('[GlovixAPI] Failed to migrate local chat to API:', err);
                     });
@@ -169,20 +203,25 @@ export const getChatMessages = async (chatId: string) => {
 
     await new Promise(r => setTimeout(r, 50));
     const allMessages = localStore.get('messages') || {};
-    return { messages: allMessages[chatId] || [] };
+    return { messages: allMessages[resolvedChatId] || allMessages[chatId] || [] };
 };
 
-export const saveChatMessages = async (chatId: string, messages: any[]) => {
+export const saveChatMessages = async (chatId: string, messages: any[], options?: { keepalive?: boolean }) => {
     const projectId = getHostProjectId();
+    const embeddedChatId = getEmbeddedChatId();
+    const resolvedChatId = embeddedChatId || chatId;
+    const payload = sanitizeMessagesForSave(messages);
+
     if (projectId) {
         try {
-            const res = await fetch(`/api/projects/${projectId}/chat`, {
+            const res = await fetchProjectChat(projectId, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages }),
+                body: JSON.stringify({ messages: payload }),
+                keepalive: options?.keepalive ?? false,
             });
             if (!res.ok) {
-                console.warn('[GlovixAPI] Failed to save chat to API:', res.status);
+                const errorBody = await res.text().catch(() => '');
+                console.warn('[GlovixAPI] Failed to save chat to API:', res.status, errorBody);
             }
         } catch (err) {
             console.warn('[GlovixAPI] Failed to save chat to API:', err);
@@ -190,7 +229,10 @@ export const saveChatMessages = async (chatId: string, messages: any[]) => {
     }
 
     const allMessages = localStore.get('messages') || {};
-    allMessages[chatId] = messages;
+    allMessages[resolvedChatId] = payload;
+    if (resolvedChatId !== chatId) {
+        allMessages[chatId] = payload;
+    }
     localStore.set('messages', allMessages);
     return { success: true };
 };

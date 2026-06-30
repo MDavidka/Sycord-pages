@@ -2,39 +2,13 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
-
-export interface ProjectChatSession {
-  id: string
-  title: string
-  messages: unknown[]
-  model?: string
-  createdAt: Date | string
-  updatedAt: Date | string
-}
-
-function buildChatSessionId(projectId: string) {
-  return `project_${projectId}`
-}
-
-function toSummary(session: ProjectChatSession | null | undefined) {
-  if (!session) return null
-  return {
-    id: session.id,
-    title: session.title || "Syra Chat",
-    messageCount: Array.isArray(session.messages) ? session.messages.length : 0,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    model: session.model,
-  }
-}
-
-async function getOwnedProject(db: any, userId: string, projectId: string) {
-  const user = await db.collection("users").findOne(
-    { id: userId, "projects._id": projectId },
-    { projection: { "projects.$": 1 } },
-  )
-  return user?.projects?.[0] ?? null
-}
+import {
+  deleteProjectChatSession,
+  getOwnedProject,
+  loadProjectChatSession,
+  saveProjectChatSession,
+  toChatSessionSummary,
+} from "@/lib/project-chat-session"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -59,14 +33,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    const chatSession = project.chatSession as ProjectChatSession | undefined
+    const chatSession = await loadProjectChatSession(db, session.user.id, id)
 
     if (summaryOnly) {
-      return NextResponse.json({ session: toSummary(chatSession) })
+      return NextResponse.json({ session: toChatSessionSummary(chatSession) })
     }
 
     return NextResponse.json({
-      session: chatSession ?? null,
+      session: chatSession ? toChatSessionSummary(chatSession) : null,
       messages: chatSession?.messages ?? [],
       title: chatSession?.title ?? "Syra Chat",
       updatedAt: chatSession?.updatedAt ?? null,
@@ -105,35 +79,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    const existing = (project.chatSession as ProjectChatSession | undefined) ?? null
-    const now = new Date()
-    const chatSession: ProjectChatSession = {
-      id: existing?.id ?? buildChatSessionId(id),
-      title:
-        typeof title === "string" && title.trim()
-          ? title.trim()
-          : existing?.title ?? "Syra Chat",
-      messages: messages !== undefined ? messages : (existing?.messages ?? []),
-      model: typeof model === "string" ? model : existing?.model,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    }
+    const chatSession = await saveProjectChatSession(db, session.user.id, id, {
+      messages,
+      title,
+      model,
+    })
 
-    const result = await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": id },
-      {
-        $set: {
-          "projects.$.chatSession": chatSession,
-          "projects.$.updatedAt": now,
-        },
-      },
-    )
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ message: "Project not found" }, { status: 404 })
-    }
-
-    return NextResponse.json({ success: true, session: toSummary(chatSession), title: chatSession.title })
+    return NextResponse.json({
+      success: true,
+      session: toChatSessionSummary(chatSession),
+      title: chatSession.title,
+    })
   } catch (error: any) {
     console.error("Error saving project chat session:", error)
     return NextResponse.json({ message: error.message }, { status: 500 })
@@ -154,19 +110,13 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
 
     const client = await clientPromise
     const db = client.db()
-    const now = new Date()
+    const project = await getOwnedProject(db, session.user.id, id)
 
-    const result = await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": id },
-      {
-        $unset: { "projects.$.chatSession": "" },
-        $set: { "projects.$.updatedAt": now },
-      },
-    )
-
-    if (result.matchedCount === 0) {
+    if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
+
+    await deleteProjectChatSession(db, session.user.id, id)
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

@@ -5,6 +5,7 @@ import clientPromise from "@/lib/torso"
 import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
+import { loadProjectChatSummariesForUser } from "@/lib/project-chat-session"
 
 import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
 
@@ -330,6 +331,7 @@ export async function GET(request: Request) {
     )
 
     const rawProjects = (userDoc?.projects as any[]) || []
+    const chatSummaries = await loadProjectChatSummariesForUser(db, session.user.id)
 
     // Sort newest-first (most recent project on top of dashboard) — fast in-memory sort.
     rawProjects.sort((a, b) => {
@@ -346,17 +348,19 @@ export async function GET(request: Request) {
         project.deploymentRuntime?.url ||
         project.deployment?.domain ||
         null
-      const chatSession = project.chatSession
-        ? {
-            id: project.chatSession.id,
-            title: project.chatSession.title || "Syra Chat",
-            messageCount: Array.isArray(project.chatSession.messages)
-              ? project.chatSession.messages.length
-              : 0,
-            updatedAt: project.chatSession.updatedAt,
-            createdAt: project.chatSession.createdAt,
-          }
-        : null
+      const chatSession =
+        chatSummaries.get(project._id) ||
+        (project.chatSession
+          ? {
+              id: project.chatSession.id,
+              title: project.chatSession.title || "Syra Chat",
+              messageCount: Array.isArray(project.chatSession.messages)
+                ? project.chatSession.messages.length
+                : project.chatSession.messageCount ?? 0,
+              updatedAt: project.chatSession.updatedAt,
+              createdAt: project.chatSession.createdAt,
+            }
+          : null)
       return {
         _id: project._id,
         id: project.id,

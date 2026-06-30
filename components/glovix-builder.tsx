@@ -32,6 +32,7 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
   // effect, so a useEffect alone would be too late for embedded-mode detection).
   if (typeof window !== "undefined" && projectId) {
     ;(window as any).__glovixProjectId = projectId
+    ;(window as any).__glovixChatId = `project_${projectId}`
     ;(window as any).__glovixUserImage = userImage ?? undefined
     ;(window as any).__glovixOnBack = onBack
     if (preset) (window as any).__glovixPreset = preset
@@ -44,12 +45,14 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
   useEffect(() => {
     if (projectId) {
       ;(window as any).__glovixProjectId = projectId
+      ;(window as any).__glovixChatId = `project_${projectId}`
     }
     ;(window as any).__glovixUserImage = userImage ?? undefined
     ;(window as any).__glovixOnBack = onBack
     if (preset) (window as any).__glovixPreset = preset
     return () => {
       ;(window as any).__glovixProjectId = undefined
+      ;(window as any).__glovixChatId = undefined
       ;(window as any).__glovixUserImage = undefined
       ;(window as any).__glovixOnBack = undefined
       ;(window as any).__glovixPreset = undefined

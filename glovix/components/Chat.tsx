@@ -7,7 +7,7 @@ import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type Mod
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
-import { saveChatMessages, saveProject, createChat, getHostProjectId } from '../lib/api';
+import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { MermaidBlock } from './MermaidBlock';
@@ -1332,7 +1332,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     const { useStore } = await import('../store');
                     const state = useStore.getState();
 
-                    await saveChatMessages(chatId, state.messages);
+                    await saveChatMessages(chatId, state.messages, { keepalive: true });
 
                     if (Object.keys(state.files).length > 0) {
                         await saveProject(chatId, user.uid, state.files);
@@ -1369,7 +1369,11 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
 
         // Create chat if not exists
-        let chatId = currentChatId;
+        let chatId = currentChatId || getEmbeddedChatId();
+        if (chatId && chatId !== currentChatId) {
+            setCurrentChatId(chatId);
+        }
+
         if (!chatId && user) {
             try {
                 const title = input.slice(0, 50) + (input.length > 50 ? '...' : '');

@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
-import { getHostProjectId, getChatMessages, getProject } from '../lib/api';
+import { getEmbeddedChatId, getHostProjectId, getChatMessages, getProject } from '../lib/api';
 import { mountFiles, autoInstallDependencies } from '../lib/webcontainer';
 
 /**
@@ -15,57 +15,66 @@ import { mountFiles, autoInstallDependencies } from '../lib/webcontainer';
  * chat session in the database via /api/projects/[id]/chat.
  */
 export function EmbeddedChat() {
-    const user = useStore(s => s.user);
     const theme = useStore(s => s.theme);
     const setCurrentChatId = useStore(s => s.setCurrentChatId);
     const setMessages = useStore(s => s.setMessages);
     const setFiles = useStore(s => s.setFiles);
     const isDark = theme === 'dark';
-    const loadedRef = useRef(false);
+    const loadedProjectRef = useRef<string | null>(null);
+
+    const projectId = getHostProjectId();
+    const chatId = getEmbeddedChatId();
+
+    // Bind the deterministic chat id before paint so saves never use a random id.
+    useLayoutEffect(() => {
+        if (chatId) {
+            setCurrentChatId(chatId);
+        }
+    }, [chatId, setCurrentChatId]);
 
     useEffect(() => {
-        const projectId = getHostProjectId();
-        if (!projectId || !user || loadedRef.current) return;
-        loadedRef.current = true;
+        if (!projectId || !chatId) return;
+        if (loadedProjectRef.current === projectId) return;
+        loadedProjectRef.current = projectId;
 
-        // One deterministic chat per project.
-        const chatId = `project_${projectId}`;
-        setCurrentChatId(chatId);
+        let cancelled = false;
 
         (async () => {
-            // Restore previous conversation for this project, if any.
             try {
                 const data = await getChatMessages(chatId);
+                if (cancelled) return;
                 if (Array.isArray(data?.messages) && data.messages.length > 0) {
                     setMessages(data.messages);
                 }
-            } catch {
-                /* ignore — start fresh */
+            } catch (err) {
+                console.warn('[EmbeddedChat] Failed to restore messages:', err);
             }
 
-            // Restore previously saved files (from the project's Pages) and mount
-            // them so the in-browser preview / tooling has the latest state.
             try {
                 const project = await getProject(chatId);
-                if (project?.files) {
-                    const files = typeof project.files === 'string'
-                        ? JSON.parse(project.files)
-                        : project.files;
-                    if (files && Object.keys(files).length > 0) {
-                        setFiles(files);
-                        mountFiles(files)
-                            .then(() => {
-                                const addOutput = useStore.getState().addTerminalOutput;
-                                autoInstallDependencies(files, addOutput).catch(() => {});
-                            })
-                            .catch(() => {});
-                    }
+                if (cancelled || !project?.files) return;
+
+                const files = typeof project.files === 'string'
+                    ? JSON.parse(project.files)
+                    : project.files;
+                if (files && Object.keys(files).length > 0) {
+                    setFiles(files);
+                    mountFiles(files)
+                        .then(() => {
+                            const addOutput = useStore.getState().addTerminalOutput;
+                            autoInstallDependencies(files, addOutput).catch(() => {});
+                        })
+                        .catch(() => {});
                 }
-            } catch {
-                /* ignore — no saved files yet */
+            } catch (err) {
+                console.warn('[EmbeddedChat] Failed to restore project files:', err);
             }
         })();
-    }, [user, setCurrentChatId, setMessages, setFiles]);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [projectId, chatId, setMessages, setFiles]);
 
     return (
         <div className={`h-full w-full overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
