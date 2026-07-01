@@ -1,6 +1,6 @@
 import fs from "node:fs/promises"
 import path from "node:path"
-import { normalizeComponentName, scanMissingShadcnImports } from "@/lib/shadcn-shared"
+import { normalizeComponentName, normalizeShadcnImportPaths, scanMissingShadcnImports } from "@/lib/shadcn-shared"
 
 export { normalizeComponentName, scanMissingShadcnImports }
 
@@ -183,7 +183,8 @@ async function resolveComponentTree(component: string, state: ResolveState): Pro
 
   for (const file of loaded.item.files ?? []) {
     const projectPath = normalizeRegistryPath(file.path)
-    state.files.set(projectPath, file.content)
+    const normalized = normalizeShadcnImportPaths(file.content)
+    state.files.set(projectPath, normalized.content)
     if (projectPath.startsWith("components/ui/")) {
       const name = path.basename(projectPath).replace(/\.(tsx|ts)$/, "")
       if (!state.installed.includes(name)) state.installed.push(name)

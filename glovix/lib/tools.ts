@@ -7,7 +7,7 @@ import {
     getMissingShadcnFoundationFiles,
     SHADCN_FOUNDATION_DEPENDENCIES,
 } from './shadcn-init-files';
-import { scanMissingShadcnImports } from '../../lib/shadcn-shared';
+import { scanMissingShadcnImports, normalizeShadcnImportPaths, scanRegistryImportPaths } from '../../lib/shadcn-shared';
 
 /**
  * Result of attempting to persist a file to the project's Pages (MongoDB).
@@ -929,15 +929,21 @@ export async function handleAddShadcnComponent(args: Record<string, unknown>): P
         }
 
         let savedCount = 0;
+        let pathFixCount = 0;
         for (const file of registryFiles) {
             if (!file.path || file.content === undefined) continue;
-            await persistFile(file.path, file.content);
+            const { content, count } = normalizeShadcnImportPaths(file.content);
+            pathFixCount += count;
+            await persistFile(file.path, content);
             savedCount++;
         }
 
         const source = data.source === 'local' ? 'local Sycord fallback' : 'ui.shadcn.com registry';
         const installed = Array.isArray(data.installed) ? data.installed.join(', ') : items.join(', ');
         results.push(`✅ Installed ${savedCount} file(s) for [${installed}] from ${source}`);
+        if (pathFixCount > 0) {
+            results.push(`🔧 Rewrote ${pathFixCount} registry import path(s): @/registry/new-york/ui/* → @/components/ui/*`);
+        }
         results.push('Re-run listShadcnComponents() to verify before writing imports.');
     } catch (e: any) {
         results.push(`❌ Registry install failed: ${e.message}`);
@@ -2210,7 +2216,10 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
             name,
             content: f.file.contents,
         }));
-        const missingImports = scanMissingShadcnImports(scanFiles);
+        const missingImports = [
+            ...scanMissingShadcnImports(scanFiles),
+            ...scanRegistryImportPaths(scanFiles),
+        ];
         if (missingImports.length > 0) {
             const lines = missingImports.slice(0, 15).map((e) => `  ${e.file}:${e.line} — ${e.message}`).join('\n');
             results.push(`🔴 Missing shadcn/ui modules:\n${lines}`);

@@ -360,7 +360,8 @@ STEP 3 → addShadcnComponent({ component: "<name>" })
 2. **NEVER assume a component is installed** because you installed it in a previous conversation or because it is commonly used. Each session starts fresh; the store is the truth.
 3. **NEVER batch-create multiple files that share UI imports without installing first.** Install all required components once at the start, verify the list, then create files.
 4. **After every \`addShadcnComponent\` call, re-run \`listShadcnComponents()\`** to confirm the install succeeded before writing the import.
-5. **typeCheck() after import-touching edits** — fix **actionable** errors in the filtered summary; do not chase sandbox noise. Deploy logs override typeCheck when they conflict.
+5. **Registry path auto-fix**: Official shadcn registry JSON often contains \`@/registry/new-york/ui/button\` imports inside composite components (\`form\`, \`calendar\`, \`command\`, \`carousel\`, \`pagination\`, etc.). \`addShadcnComponent\` **automatically rewrites** these to \`@/components/ui/*\`. If you still see \`@/registry/\` in the project, run \`searchInFiles({ query: "@/registry/new-york" })\` and fix all matches in one batch.
+6. **typeCheck() after import-touching edits** — fix **actionable** errors in the filtered summary; do not chase sandbox noise. Deploy logs override typeCheck when they conflict.
 
 **Correct workflow example:**
 \`\`\`
@@ -370,6 +371,7 @@ listShadcnComponents()
   → separator NOT installed, badge NOT installed
 
 addShadcnComponent({ components: ["separator", "badge"] })
+// → internally rewrites @/registry/new-york/ui/* → @/components/ui/* in installed files
 listShadcnComponents()
   → installed: [badge, button, card, input, label, separator, sheet]  ✅
 

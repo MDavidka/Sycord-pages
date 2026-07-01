@@ -3,6 +3,7 @@
 // Body: { component?: string, components?: string[] }
 
 import { normalizeComponentName, resolveShadcnComponents } from "@/lib/shadcn-registry-server"
+import { normalizeShadcnImportPaths } from "@/lib/shadcn-shared"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -35,7 +36,8 @@ export async function POST(req: Request): Promise<Response> {
     for (const entry of resolved) {
       if (entry.source === "local") source = "local"
       for (const file of entry.files) {
-        filesMap.set(file.path, file.content)
+        const normalized = normalizeShadcnImportPaths(file.content)
+        filesMap.set(file.path, normalized.content)
       }
       Object.assign(dependencies, entry.dependencies)
       for (const name of entry.installed) installed.add(name)

@@ -1,5 +1,5 @@
 import path from "node:path"
-import { scanMissingShadcnImports } from "@/lib/shadcn-shared"
+import { scanMissingShadcnImports, scanRegistryImportPaths } from "@/lib/shadcn-shared"
 import {
   filterActionableDiagnostics,
   formatDiagnosticsForAI,
@@ -74,9 +74,10 @@ async function syteDiagnostics(project: any, projectId: string) {
   const exitCode = (tsc.data as any)?.exit_code ?? (tsc.data as any)?.exitCode ?? 1
   let rawErrors = parseTscOutput(output)
 
-  const importScan = scanMissingShadcnImports(
-    files.map((f) => ({ name: f.name, content: f.content ?? "" })),
-  )
+  const importScan = [
+    ...scanMissingShadcnImports(files.map((f) => ({ name: f.name, content: f.content ?? "" }))),
+    ...scanRegistryImportPaths(files.map((f) => ({ name: f.name, content: f.content ?? "" }))),
+  ]
   rawErrors = [...rawErrors, ...importScan]
   const errors = filterActionableDiagnostics(rawErrors, projectFileNames)
 
@@ -165,9 +166,10 @@ export async function GET(req: Request): Promise<Response> {
         }
       })
 
-    const importScan = scanMissingShadcnImports(
-      files.map((f) => ({ name: f.name, content: f.content ?? "" })),
-    )
+    const importScan = [
+      ...scanMissingShadcnImports(files.map((f) => ({ name: f.name, content: f.content ?? "" }))),
+      ...scanRegistryImportPaths(files.map((f) => ({ name: f.name, content: f.content ?? "" }))),
+    ]
 
     const merged = [...rawErrors, ...importScan]
     errors = filterActionableDiagnostics(merged, projectFileNames)
