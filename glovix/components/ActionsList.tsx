@@ -20,11 +20,13 @@ interface ActionsListProps {
 
 const VERBS: Record<string, [string, string]> = {
     createFile:        ['Creating', 'Created'],
+    write_file:        ['Patching', 'Patched'],
     editFile:          ['Editing', 'Edited'],
     readFile:          ['Reading', 'Read'],
     readMultipleFiles: ['Reading', 'Read'],
     deleteFile:        ['Deleting', 'Deleted'],
     renameFile:        ['Renaming', 'Renamed'],
+    grep:              ['Searching', 'Searched'],
     searchInFiles:     ['Searching', 'Searched'],
     typeCheck:         ['Checking types', 'Type checked'],
     createWorkspace:   ['Creating Syte workspace', 'Workspace ready'],
@@ -40,7 +42,7 @@ const VERBS: Record<string, [string, string]> = {
 
 const DEPLOY_TOOLS = new Set(['deploy']);
 const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors', 'executeCommand']);
-const FILE_TOOLS = new Set(['createFile', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
+const FILE_TOOLS = new Set(['createFile', 'write_file', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
 
 interface DeduplicatedAction {
     action: StreamingAction;
@@ -76,6 +78,7 @@ function getFileDetails(action: StreamingAction): string[] {
         const parsed = typeof action.args === 'string' ? JSON.parse(action.args) : action.args;
         switch (action.toolName) {
             case 'createFile':
+            case 'write_file':
             case 'editFile':
             case 'readFile':
             case 'deleteFile':

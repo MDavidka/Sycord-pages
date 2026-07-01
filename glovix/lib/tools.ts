@@ -1104,8 +1104,44 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'grep',
+            description: `Regex search across project files. Returns file paths, line numbers, and matching lines. USE THIS to find bad imports (e.g. pattern "@/registry/new-york"), missing symbols, or strings before fixing with write_file/editFile. Prefer grep over guessing file locations.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    pattern: { type: 'string', description: 'Regex pattern to search for, e.g. "@/registry/new-york" or "from \'@/components/ui/"' },
+                    filePattern: { type: 'string', description: 'Optional glob to filter paths, e.g. "*.tsx" or "components/**"' },
+                    caseSensitive: { type: 'boolean', description: 'Default false (case-insensitive). Set true for exact case matching.' },
+                },
+                required: ['pattern'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'write_file',
+            description: `Write or patch a file without rewriting the whole project. Saves to Pages (MongoDB).
+- Full file: write_file({ path, content }) — same as createFile for new/complete rewrites.
+- Surgical patch: write_file({ path, content, startLine, endLine }) — replace ONLY lines startLine–endLine (1-based, inclusive) with content. Use after grep() shows line numbers.
+- For find/replace by exact text, prefer editFile({ path, oldContent, newContent }) after readFile.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'File path, e.g. components/ui/form.tsx' },
+                    content: { type: 'string', description: 'New content — full file OR replacement lines for a line-range patch' },
+                    startLine: { type: 'number', description: '1-based start line for partial patch (from grep output)' },
+                    endLine: { type: 'number', description: '1-based end line for partial patch (inclusive)' },
+                },
+                required: ['path', 'content'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'searchInFiles',
-            description: 'Search for a text pattern across project files. Returns matching lines with file paths and line numbers. Use this to find where something is defined or used.',
+            description: 'Alias for grep({ pattern: query }). Prefer grep() for regex search with line numbers.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1959,48 +1995,117 @@ export async function handleListFiles(): Promise<string> {
     }
 }
 
-export async function handleSearchInFiles(args: { query: string; filePattern?: string }): Promise<string> {
+export async function handleGrep(args: {
+    pattern?: string;
+    query?: string;
+    filePattern?: string;
+    caseSensitive?: boolean;
+}): Promise<string> {
     try {
-        const { query, filePattern } = args;
-        // Refresh from the Pages tab (source of truth) when embedded.
+        const pattern = args.pattern ?? args.query;
+        if (!pattern) {
+            return 'Error: grep requires a `pattern` (regex string). Example: grep({ pattern: "@/registry/new-york" })';
+        }
+
+        const { filePattern, caseSensitive } = args;
         await syncStoreFromPages();
         const files = useStore.getState().files;
         const results: string[] = [];
         let totalMatches = 0;
 
-        const regex = new RegExp(query, 'gi');
+        let regex: RegExp;
+        try {
+            regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
+        } catch (e: any) {
+            return `Error: Invalid regex pattern "${pattern}": ${e.message}. Escape special chars or simplify the pattern.`;
+        }
 
         for (const [path, file] of Object.entries(files)) {
-            // Apply file pattern filter
             if (filePattern) {
-                const pattern = filePattern.replace(/\*/g, '.*').replace(/\?/g, '.');
-                if (!new RegExp(pattern).test(path)) continue;
+                const glob = filePattern.replace(/\*\*/g, '§§').replace(/\*/g, '[^/]*').replace(/§§/g, '.*').replace(/\?/g, '.');
+                if (!new RegExp(`^${glob}$`).test(path.replace(/\\/g, '/'))) continue;
             }
 
-            const content = file.file.contents;
+            const content = file.file?.contents ?? '';
             const lines = content.split('\n');
-
             const matchingLines: string[] = [];
+
             lines.forEach((line, idx) => {
+                regex.lastIndex = 0;
                 if (regex.test(line)) {
-                    matchingLines.push(`  ${idx + 1}: ${line.trim().substring(0, 120)}`);
+                    matchingLines.push(`  L${idx + 1}: ${line.trim().substring(0, 140)}`);
                     totalMatches++;
                 }
-                regex.lastIndex = 0; // Reset regex state
             });
 
             if (matchingLines.length > 0) {
-                results.push(`📄 ${path} (${matchingLines.length} matches):\n${matchingLines.slice(0, 10).join('\n')}${matchingLines.length > 10 ? `\n  ... and ${matchingLines.length - 10} more` : ''}`);
+                results.push(
+                    `📄 ${path} (${matchingLines.length} match${matchingLines.length === 1 ? '' : 'es'}):\n` +
+                    `${matchingLines.slice(0, 15).join('\n')}` +
+                    `${matchingLines.length > 15 ? `\n  ... and ${matchingLines.length - 15} more lines` : ''}`,
+                );
             }
         }
 
         if (results.length === 0) {
-            return `[SYSTEM] No matches found for "${query}"${filePattern ? ` in ${filePattern}` : ''}.`;
+            return `[SYSTEM] grep: no matches for /${pattern}/${caseSensitive ? '' : 'i'}${filePattern ? ` in ${filePattern}` : ''}.`;
         }
 
-        return `[SYSTEM] Found ${totalMatches} matches in ${results.length} files:\n\n${results.join('\n\n')}`;
+        return `[SYSTEM] grep: ${totalMatches} match${totalMatches === 1 ? '' : 'es'} in ${results.length} file${results.length === 1 ? '' : 's'} (pattern /${pattern}/):\n\n${results.join('\n\n')}\n\nTip: fix a single line with write_file({ path, content, startLine, endLine }) or batch-fix with editFile after readFile.`;
     } catch (e: any) {
-        return `Error searching: ${e.message}`;
+        return `Error in grep: ${e.message}`;
+    }
+}
+
+/** @deprecated Prefer grep({ pattern }) — kept for backward compatibility. */
+export async function handleSearchInFiles(args: { query: string; filePattern?: string }): Promise<string> {
+    return handleGrep({ pattern: args.query, filePattern: args.filePattern });
+}
+
+export async function handleWriteFile(
+    args: { path: string; content: string; startLine?: number; endLine?: number },
+    ctx: ToolContext,
+): Promise<string> {
+    const { path, content, startLine, endLine } = args;
+
+    if (!path || typeof path !== 'string') {
+        return 'Error: write_file requires a valid path';
+    }
+    if (content === undefined || content === null) {
+        return `Error: write_file requires content for ${path}`;
+    }
+
+    try {
+        ctx.setSelectedFile(path);
+
+        let newContent = content;
+        let patchNote = '';
+
+        if (startLine !== undefined || endLine !== undefined) {
+            const currentContent = await readFileResilient(path);
+            const lines = currentContent.split('\n');
+            const start = startLine ?? endLine ?? 1;
+            const end = endLine ?? startLine ?? start;
+
+            if (start < 1 || end < start || end > lines.length) {
+                return `Error: write_file line range ${start}-${end} is invalid (file has ${lines.length} lines). Run grep({ pattern: "..." }) to get correct line numbers, then readFile("${path}") to confirm.`;
+            }
+
+            const replacementLines = content.split('\n');
+            newContent = [...lines.slice(0, start - 1), ...replacementLines, ...lines.slice(end)].join('\n');
+            patchNote = ` (patched lines ${start}-${end})`;
+        } else {
+            patchNote = ` (${content.split('\n').length} lines)`;
+        }
+
+        const pageSync = await persistFile(path, newContent);
+        if (pageSync.status === 'error') {
+            return `Error saving file ${path} to Pages: ${pageSync.message}`;
+        }
+        const savedNote = pageSync.status === 'saved' ? ' (saved to Pages)' : '';
+        return `[SYSTEM] write_file: ${path}${patchNote}${savedNote}`;
+    } catch (e: any) {
+        return `Error in write_file ${path}: ${e.message}`;
     }
 }
 
@@ -2438,18 +2543,20 @@ async function _executeToolInternal(
     argsString: string,
     ctx: ToolContext
 ): Promise<string> {
+    const toolName = name === 'Grep' ? 'grep' : name === 'writeFile' ? 'write_file' : name;
+
     // Handle tools without arguments
-    if (name === 'createWorkspace') return handleCreateWorkspace();
-    if (name === 'typeCheck') return handleTypeCheck(ctx);
-    if (name === 'listFiles') return await handleListFiles();
-    if (name === 'getErrors') return handleGetErrors(ctx);
-    if (name === 'save') return handleSave();
-    if (name === 'deploy') return handleDeploy(ctx);
+    if (toolName === 'createWorkspace') return handleCreateWorkspace();
+    if (toolName === 'typeCheck') return handleTypeCheck(ctx);
+    if (toolName === 'listFiles') return await handleListFiles();
+    if (toolName === 'getErrors') return handleGetErrors(ctx);
+    if (toolName === 'save') return handleSave();
+    if (toolName === 'deploy') return handleDeploy(ctx);
 
     // Parse arguments
     const argsList = parseToolArguments(argsString);
     if (argsList.length === 0) {
-        return `Error: Invalid arguments for tool "${name}". Could not parse JSON.\nRaw input: ${argsString.substring(0, 300)}\n\n⚠️ Make sure your tool arguments are valid JSON.`;
+        return `Error: Invalid arguments for tool "${toolName}". Could not parse JSON.\nRaw input: ${argsString.substring(0, 300)}\n\n⚠️ Make sure your tool arguments are valid JSON.`;
     }
 
     const results: string[] = [];
@@ -2458,9 +2565,12 @@ async function _executeToolInternal(
         let result: string;
 
         try {
-            switch (name) {
+            switch (toolName) {
                 case 'createFile':
                     result = await handleCreateFile(args, ctx);
+                    break;
+                case 'write_file':
+                    result = await handleWriteFile(args, ctx);
                     break;
                 case 'editFile':
                     result = await handleEditFile(args);
@@ -2476,6 +2586,9 @@ async function _executeToolInternal(
                     break;
                 case 'renameFile':
                     result = await handleRenameFile(args);
+                    break;
+                case 'grep':
+                    result = await handleGrep(args);
                     break;
                 case 'searchInFiles':
                     result = await handleSearchInFiles(args);
@@ -2537,7 +2650,7 @@ async function _executeToolInternal(
                     result = await handleShadcnDocs(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createWorkspace, createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: createWorkspace, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

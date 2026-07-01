@@ -59,7 +59,7 @@ export function scanRegistryImportPaths(
           line: i + 1,
           message:
             `Invalid shadcn registry import path — use @/components/ui/* not @/registry/... ` +
-            `(run searchInFiles({ query: "@/registry/new-york" }) and fix, or re-run addShadcnComponent)`,
+            `(run grep({ pattern: "@/registry/new-york" }) and fix, or re-run addShadcnComponent)`,
         })
       }
     }

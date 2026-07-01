@@ -81,12 +81,14 @@ const getActionDisplayName = (toolName: string, args: string): string => {
         const parsed = JSON.parse(args);
         switch (toolName) {
             case 'createFile': return parsed.path || '';
+            case 'write_file': return parsed.path || '';
             case 'editFile': return parsed.path || '';
             case 'readFile': return parsed.path || '';
             case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
             case 'deleteFile': return parsed.path || '';
             case 'renameFile': return parsed.oldPath ? `${parsed.oldPath} → ${parsed.newPath}` : '';
-            case 'searchInFiles': return decodeHtml(parsed.query || '');
+            case 'grep':
+            case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
             case 'createWorkspace': return 'Syte API';
             case 'typeCheck': return 'Workspace';
             case 'executeCommand': return decodeHtml(parsed.command || 'shell');
@@ -100,6 +102,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     } catch {
         switch (toolName) {
             case 'createFile':
+            case 'write_file':
             case 'editFile':
             case 'readFile':
             case 'deleteFile':
@@ -111,8 +114,9 @@ const getActionDisplayName = (toolName: string, args: string): string => {
                 const oldP = extract('oldPath');
                 const newP = extract('newPath');
                 return oldP ? `${oldP} → ${newP}` : oldP;
+            case 'grep':
             case 'searchInFiles':
-                return extract('query');
+                return extract('pattern') || extract('query');
             case 'batchCreateFiles': return 'Multiple files';
             case 'getErrors': return 'Workspace';
             case 'deploy': return 'sycord.site';

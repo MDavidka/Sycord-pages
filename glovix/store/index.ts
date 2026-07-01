@@ -214,7 +214,7 @@ export const useStore = create<AppState>((set) => ({
     terminalOutput: [],
     previewUrl: null,
     parsedErrors: [],
-    selectedModel: 'mimo-v2-flash',
+    selectedModel: 'deepseek-v4-flash',
     isDeploying: false,
     theme: (localStorage.getItem('theme') as 'dark' | 'light') || 'dark',
     showTokenCounter: localStorage.getItem('showTokenCounter') === 'true',
@@ -368,7 +368,7 @@ export const useStore = create<AppState>((set) => ({
     aiProvider: localStorage.getItem('aiProvider') || 'glovix',
     aiApiKey: localStorage.getItem('aiApiKey') || '',
     aiBaseUrl: localStorage.getItem('aiBaseUrl') || 'https://api.openai.com/v1',
-    aiModel: localStorage.getItem('aiModel') || 'gpt-4o',
+    aiModel: localStorage.getItem('aiModel') || 'deepseek-v4-flash',
 
     // AI Provider Actions
     setAiProvider: (provider) => {

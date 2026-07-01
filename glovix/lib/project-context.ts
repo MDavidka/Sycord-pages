@@ -3,6 +3,8 @@
  * model starts each turn with ground-truth state instead of guessing.
  */
 
+import { scanMissingShadcnImports, scanRegistryImportPaths } from "../../lib/shadcn-shared"
+
 type ProjectFiles = Record<string, { file: { contents: string } }>
 
 const CONTEXT_FILES = [
@@ -11,8 +13,9 @@ const CONTEXT_FILES = [
   ".glovix/glovix.md",
 ] as const
 
-const MAX_CONTEXT_CHARS = 12000
+const MAX_CONTEXT_CHARS = 14000
 const MAX_FILE_CHARS = 4000
+const MAX_ISSUE_LINES = 12
 
 function listInstalledShadcnComponents(files: ProjectFiles): string[] {
   return Object.keys(files)
@@ -23,6 +26,13 @@ function listInstalledShadcnComponents(files: ProjectFiles): string[] {
     .map((p) => p.replace(/\\/g, "/").split("/").pop()?.replace(/\.(tsx|ts)$/, "") ?? "")
     .filter(Boolean)
     .sort()
+}
+
+function toScanFiles(files: ProjectFiles): Array<{ name: string; content: string }> {
+  return Object.entries(files).map(([name, file]) => ({
+    name,
+    content: file.file?.contents ?? "",
+  }))
 }
 
 /** Summarize how a section component should be used (props vs lib/data). */
@@ -67,9 +77,25 @@ function truncate(text: string, max = MAX_FILE_CHARS): string {
   return `${text.slice(0, max)}\n\n… [truncated ${text.length - max} chars]`
 }
 
+function formatDiagnosticLines(
+  issues: Array<{ file: string; line: number; message: string }>,
+  limit = MAX_ISSUE_LINES,
+): string[] {
+  return issues.slice(0, limit).map((i) => `- \`${i.file}:${i.line}\` — ${i.message}`)
+}
+
 /** Build markdown context block for the system prompt. */
 export function buildInjectedProjectContext(files: ProjectFiles): string {
   const sections: string[] = ["## 📌 AUTO-INJECTED PROJECT CONTEXT (ground truth — do not ignore)"]
+
+  const paths = Object.keys(files)
+  const sourcePaths = paths.filter((p) => /\.(tsx?|jsx?)$/.test(p))
+  sections.push(
+    "### Project snapshot",
+    `- ${paths.length} tracked files (${sourcePaths.length} source files)`,
+    `- Use \`grep({ pattern })\` to locate strings/imports before editing`,
+    `- Use \`write_file({ path, content, startLine, endLine })\` for line-range patches after grep`,
+  )
 
   const installed = listInstalledShadcnComponents(files)
   if (installed.length > 0) {
@@ -82,6 +108,29 @@ export function buildInjectedProjectContext(files: ProjectFiles): string {
     sections.push(
       "### Installed shadcn/ui components",
       "None yet. Call addShadcnComponent before writing any `@/components/ui/*` import.",
+    )
+  }
+
+  const scanFiles = toScanFiles(files)
+  const registryIssues = scanRegistryImportPaths(scanFiles)
+  if (registryIssues.length > 0) {
+    sections.push(
+      "### ⚠️ Bad shadcn registry import paths (MUST FIX)",
+      ...formatDiagnosticLines(registryIssues),
+      registryIssues.length > MAX_ISSUE_LINES
+        ? `… and ${registryIssues.length - MAX_ISSUE_LINES} more — run \`grep({ pattern: "@/registry/new-york" })\` and fix all matches`
+        : "Fix workflow: `grep({ pattern: \"@/registry/new-york\" })` → `write_file` or `editFile` per file → `typeCheck()`",
+    )
+  }
+
+  const missingUi = scanMissingShadcnImports(scanFiles)
+  if (missingUi.length > 0) {
+    sections.push(
+      "### ⚠️ Missing @/components/ui imports",
+      ...formatDiagnosticLines(missingUi),
+      missingUi.length > MAX_ISSUE_LINES
+        ? `… and ${missingUi.length - MAX_ISSUE_LINES} more — install with addShadcnComponent before importing`
+        : "Install each missing component with addShadcnComponent before writing imports.",
     )
   }
 

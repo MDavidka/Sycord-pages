@@ -2,16 +2,18 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
+    'deepseek-v4-flash': 'DeepSeek V4 Flash',
     'deepseek-v4-pro': 'DeepSeek V4 Pro',
     'gemini-3.1-pro': 'Gemini 3.1 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
+    'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
     'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
     'gemini-3.1-pro': 'gemini-3.1-pro',
 };
@@ -35,9 +37,9 @@ export const MODEL_CHOICES: ModelChoice[] = [
     {
         id: 'base',
         label: 'syra-base',
-        subtitle: 'Powerful · DeepSeek V4',
-        modelType: 'deepseek-v4-pro',
-        apiModel: 'deepseek-v4-pro',
+        subtitle: 'Balanced · DeepSeek V4 Flash',
+        modelType: 'deepseek-v4-flash',
+        apiModel: 'deepseek-v4-flash',
     },
     {
         id: 'havy',
@@ -289,6 +291,8 @@ async function _sendMessageInternal(
         // DeepSeek
         'deepseek-chat': 128000,
         'deepseek-reasoner': 128000,
+        'deepseek-v4-flash': 128000,
+        'deepseek/deepseek-v4-flash': 128000,
         'deepseek-v4-pro': 128000,
         'deepseek/deepseek-v4-pro': 128000,
         // MiMo
