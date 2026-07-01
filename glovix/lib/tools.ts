@@ -295,7 +295,7 @@ export async function handleDeploy(ctx?: ToolContext): Promise<string> {
     };
 
     try {
-        ctx?.onDeployProgress?.('Starting deployment on Dokploy…');
+        ctx?.onDeployProgress?.('Starting deployment on Coolify…');
         startProgressPolling();
 
         const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}&wait=true`, {
@@ -330,7 +330,7 @@ export async function handleDeploy(ctx?: ToolContext): Promise<string> {
 
         ctx?.onDeployProgress?.(data.buildComplete || '✅ Deployment build completed');
 
-        return '[SYSTEM] ✅ Deployment build completed on Dokploy.\n\n' +
+        return '[SYSTEM] ✅ Deployment build completed on Coolify.\n\n' +
             (data.buildComplete ? `Build log: ${data.buildComplete}\n` : '') +
             'Live URL: ' + data.url + '\n' +
             'Project ID: ' + (data.projectId || 'auto') + '\n' +
@@ -344,39 +344,67 @@ export async function handleDeploy(ctx?: ToolContext): Promise<string> {
     }
 }
 
-async function callDokployApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
+async function callCoolifyApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
     try {
-        const res = await fetch("/api/deploy/dokploy", {
+        const res = await fetch("/api/deploy/coolify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action, ...extra }),
         });
         const data = await res.json().catch(() => ({} as any));
-        if (!res.ok || !data?.success) {
+        if (!res.ok || data?.success === false) {
             const errMsg = data?.error || data?.message || "HTTP " + res.status;
-            return "[SYSTEM] ❌ Dokploy " + action + " failed: " + errMsg;
+            return "[SYSTEM] ❌ Coolify " + action + " failed: " + errMsg;
         }
         return JSON.stringify(data, null, 2);
     } catch (e: any) {
-        return "Error calling Dokploy API (" + action + "): " + e.message;
+        return "Error calling Coolify API (" + action + "): " + e.message;
     }
 }
 
-async function callDokployGet(params: Record<string, string>): Promise<string> {
+async function callCoolifyGet(params: Record<string, string>): Promise<string> {
     try {
         const qs = new URLSearchParams(params).toString();
-        const res = await fetch("/api/deploy/dokploy?" + qs, {
+        const res = await fetch("/api/deploy/coolify?" + qs, {
             headers: { Accept: "application/json" },
         });
         const data = await res.json().catch(() => ({} as any));
-        if (!res.ok || !data?.success) {
+        if (!res.ok || data?.success === false) {
             const errMsg = data?.error || data?.message || "HTTP " + res.status;
-            return "[SYSTEM] ❌ Dokploy query failed: " + errMsg;
+            return "[SYSTEM] ❌ Coolify query failed: " + errMsg;
         }
         return JSON.stringify(data, null, 2);
     } catch (e: any) {
-        return "Error calling Dokploy API (query): " + e.message;
+        return "Error calling Coolify API (query): " + e.message;
     }
+}
+
+async function callCoolifyMcp(body: Record<string, unknown>): Promise<string> {
+    try {
+        const res = await fetch("/api/ai/coolify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (typeof data?.summary === "string") return data.summary;
+        if (!res.ok || !data?.ok) {
+            return "[SYSTEM] ❌ Coolify MCP failed: " + (data?.error || "HTTP " + res.status);
+        }
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return "Error calling Coolify MCP: " + e.message;
+    }
+}
+
+/** @deprecated use callCoolifyApi */
+async function callDokployApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
+    return callCoolifyApi(action, extra);
+}
+
+/** @deprecated use callCoolifyGet */
+async function callDokployGet(params: Record<string, string>): Promise<string> {
+    return callCoolifyGet(params);
 }
 
 async function getProjectEnvStatus(projectId: string): Promise<{
@@ -492,63 +520,90 @@ export async function handleIntegration(args: Record<string, unknown>): Promise<
 }
 
 /**
- * Create a new Dokploy project.
+ * Create a new Coolify project.
  */
 export async function handleCreateProject(args: Record<string, unknown>): Promise<string> {
     const name = typeof args.name === "string" ? args.name.trim() : "";
     if (!name) return "[SYSTEM] ❌ Project name is required.";
-    return callDokployApi("createProject", { projectName: name, projectDescription: (args.description as string) || null });
+    return callCoolifyMcp({
+        action: "create_project",
+        name,
+        description: typeof args.description === "string" ? args.description : undefined,
+    });
 }
 
 /**
- * Create a new environment in a Dokploy project.
+ * Create environment — Coolify uses named environments on projects (no separate create API needed for deploy).
  */
 export async function handleCreateEnvironment(args: Record<string, unknown>): Promise<string> {
-    const name = typeof args.name === "string" ? args.name.trim() : "";
-    const projectId = typeof args.projectId === "string" ? args.projectId.trim() : "";
-    if (!name) return "[SYSTEM] ❌ Environment name is required.";
-    if (!projectId) return "[SYSTEM] ❌ projectId is required to create an environment.";
-    return callDokployApi("createEnvironment", { environmentName: name, environmentProjectId: projectId });
+    const name = typeof args.name === "string" ? args.name.trim() : "production";
+    return `[SYSTEM] ✅ Coolify uses environment names like "${name}" when creating applications. Pass environment_name on deploy — no separate environment UUID required.`;
 }
 
 /**
- * List Dokploy projects or containers.
+ * List Coolify projects, servers, applications, or deployments.
  */
 export async function handleListDokployResources(args: Record<string, unknown>): Promise<string> {
-    const resource = (typeof args.resource === "string" ? args.resource : "containers") as string;
-    const params: Record<string, string> = { resource };
-    if (args.projectId && typeof args.projectId === "string") params.projectId = args.projectId;
-    if (args.applicationId && typeof args.applicationId === "string") params.applicationId = args.applicationId;
-    if (args.appName && typeof args.appName === "string") params.appName = args.appName;
-    return callDokployGet(params);
+    const resource = (typeof args.resource === "string" ? args.resource : "applications") as string;
+    const map: Record<string, string> = {
+        projects: "projects",
+        servers: "servers",
+        applications: "applications",
+        containers: "applications",
+        deployments: "deployments",
+    };
+    const mapped = map[resource] || "applications";
+    return callCoolifyGet({ resource: mapped });
 }
 
 /**
- * Manage a Docker container (start, stop, restart, kill, remove).
+ * Manage a Coolify application (restart, start, stop).
  */
 export async function handleManageContainer(args: Record<string, unknown>): Promise<string> {
-    const containerId = typeof args.containerId === "string" ? args.containerId.trim() : "";
+    const applicationUuid = typeof args.containerId === "string" ? args.containerId.trim() : "";
     const operation = (typeof args.operation === "string" ? args.operation : "restart") as string;
-    if (!containerId) return "[SYSTEM] ❌ containerId is required.";
+    if (!applicationUuid) return "[SYSTEM] ❌ applicationUuid (containerId) is required.";
     const actionMap: Record<string, string> = {
-        restart: "restartContainer",
-        start: "startContainer",
-        stop: "stopContainer",
-        kill: "killContainer",
-        remove: "removeContainer",
+        restart: "restart",
+        start: "start",
+        stop: "stop",
+        deploy: "deploy",
     };
-    const action = actionMap[operation];
-    if (!action) return `[SYSTEM] ❌ Unknown container operation: "${operation}". Use restart, start, stop, kill, or remove.`;
-    return callDokployApi(action, { containerId });
+    const action = actionMap[operation] || "restart";
+    return callCoolifyApi(action, { applicationUuid, force: false });
 }
 
 /**
- * Generate a Traefik domain for a Dokploy application.
+ * Domains are set during deploy() on Coolify via the domains field.
  */
 export async function handleGenerateDomain(args: Record<string, unknown>): Promise<string> {
     const appName = typeof args.appName === "string" ? args.appName.trim() : "";
-    if (!appName) return "[SYSTEM] ❌ appName is required to generate a domain.";
-    return callDokployApi("generateDomain", { appName });
+    if (!appName) return "[SYSTEM] ❌ appName is required.";
+    return `[SYSTEM] ✅ Coolify domain for deploy: https://${appName}.sycord.site — set automatically when you call deploy().`;
+}
+
+export async function handleCoolifyMcp(args: Record<string, unknown>): Promise<string> {
+    const action = typeof args.action === "string" ? args.action.trim() : "";
+    if (!action) return "[SYSTEM] ❌ coolifyMcp requires action.";
+    return callCoolifyMcp({
+        action,
+        applicationUuid: typeof args.applicationUuid === "string" ? args.applicationUuid : undefined,
+        deploymentUuid: typeof args.deploymentUuid === "string" ? args.deploymentUuid : undefined,
+        uuid: typeof args.uuid === "string" ? args.uuid : undefined,
+        command: typeof args.command === "string" ? args.command : undefined,
+        force: Boolean(args.force),
+        name: typeof args.name === "string" ? args.name : undefined,
+        description: typeof args.description === "string" ? args.description : undefined,
+        envs: Array.isArray(args.envs) ? args.envs : undefined,
+    });
+}
+
+export async function handleCoolifyCommand(args: Record<string, unknown>): Promise<string> {
+    const applicationUuid = typeof args.applicationUuid === "string" ? args.applicationUuid : "";
+    const command = typeof args.command === "string" ? args.command.trim() : "";
+    if (!applicationUuid) return "[SYSTEM] ❌ applicationUuid is required.";
+    if (!command) return "[SYSTEM] ❌ command is required.";
+    return callCoolifyMcp({ action: "execute_command", applicationUuid, command });
 }
 
 /**
@@ -1025,7 +1080,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'save',
-            description: 'Save the project source files to GitHub (creates the repository on first save). Call this BEFORE deploy() — Dokploy deploys by building the GitHub repository. Use when the user asks to save, push to GitHub, or before publishing.',
+            description: 'Save the project source files to GitHub (creates the repository on first save). Call this BEFORE deploy() — Coolify deploys by building the GitHub repository.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1037,7 +1092,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: "Deploy the project to sycord.site via Dokploy Docker containers. Automatically syncs env vars from the project's Integrations tab into the Dokploy environment, configures Dockerfile build type, creates the public domain, and triggers deployment. If required env/integration values are missing, deployment pauses and tells you to use integration() first. IMPORTANT: Always call save() BEFORE deploy().",
+            description: "Deploy the project to sycord.site via Coolify (Docker/Nixpacks). Waits for build completion in logs. Syncs env vars from Integrations, attaches GitHub source, creates domain, triggers deployment. Call save() first. On failure use coolifyMcp/get_deployment logs for AUTO-FIX.",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1074,7 +1129,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'createDokployProject',
-            description: 'Create a new project in Dokploy. Use this when you need to set up a new project container before deploying.',
+            description: 'Create a new project in Coolify (legacy tool name). Prefer coolifyMcp({ action: "create_project", name }).',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1089,7 +1144,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'createDokployEnvironment',
-            description: 'Create a new environment inside a Dokploy project (e.g., "production", "staging").',
+            description: 'Coolify environments are named (e.g. production) — no separate env UUID needed. Use deploy() directly.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1104,7 +1159,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'listDokployResources',
-            description: 'List Dokploy projects, environments, containers, deployments, or domains. Use to inspect what is currently deployed.',
+            description: 'List Coolify projects, servers, applications, or deployments. resource: projects | servers | applications | deployments',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1120,7 +1175,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'manageContainer',
-            description: 'Manage a Dokploy Docker container: restart, start, stop, kill, or remove it.',
+            description: 'Manage a Coolify application by UUID: restart, start, stop, or deploy. Pass application UUID as containerId.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1135,13 +1190,49 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'generateDomain',
-            description: 'Generate a Traefik domain for a Dokploy application so it gets a public URL.',
+            description: 'Coolify sets the public domain automatically during deploy() as https://{appName}.sycord.site',
             parameters: {
                 type: 'object',
                 properties: {
-                    appName: { type: 'string', description: 'The Dokploy appName (container name) to generate a domain for (required)' },
+                    appName: { type: 'string', description: 'The deploy app name slug (required)' },
                 },
                 required: ['appName'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'coolifyMcp',
+            description: 'Coolify MCP/API bridge — list apps, get deployment logs, deploy, restart, sync envs. Auth: DEPLOYER_API_KEY. Actions: health, version, list_projects, create_project, list_servers, list_applications, get_application, deploy_application, restart_application, stop_application, start_application, list_deployments, get_deployment, get_application_logs, bulk_update_envs, execute_command.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: { type: 'string', description: 'Coolify MCP action name (required)' },
+                    applicationUuid: { type: 'string', description: 'Coolify application UUID' },
+                    deploymentUuid: { type: 'string', description: 'Coolify deployment UUID' },
+                    uuid: { type: 'string', description: 'Generic UUID for get operations' },
+                    command: { type: 'string', description: 'Shell command for execute_command' },
+                    force: { type: 'boolean', description: 'Force rebuild on deploy/restart' },
+                    name: { type: 'string', description: 'Project name for create_project' },
+                    description: { type: 'string', description: 'Project description for create_project' },
+                },
+                required: ['action'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'coolifyCommand',
+            description: 'Run a one-shot shell command on a Coolify application container via post-deployment hook + restart. Requires applicationUuid.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    applicationUuid: { type: 'string', description: 'Coolify application UUID (required)' },
+                    command: { type: 'string', description: 'Shell command to run (required)' },
+                },
+                required: ['applicationUuid', 'command'],
             },
         },
     },
@@ -2266,6 +2357,12 @@ async function _executeToolInternal(
                 case 'generateDomain':
                     result = await handleGenerateDomain(args);
                     break;
+                case 'coolifyMcp':
+                    result = await handleCoolifyMcp(args);
+                    break;
+                case 'coolifyCommand':
+                    result = await handleCoolifyCommand(args);
+                    break;
                 case 'addShadcnComponent':
                     result = await handleAddShadcnComponent(args);
                     break;
@@ -2287,7 +2384,7 @@ async function _executeToolInternal(
                     result = await handleShadcnDocs(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

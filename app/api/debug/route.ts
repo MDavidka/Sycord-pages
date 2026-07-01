@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { checkDokployHealth, isDokployConfigured } from "@/lib/deploy/dokploy-client"
+import { checkCoolifyHealth, isCoolifyConfigured } from "@/lib/deploy/coolify-client"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,28 +12,43 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!isDokployConfigured()) {
+  if (!isCoolifyConfigured()) {
     return NextResponse.json({
       timestamp: new Date().toISOString(),
+      coolify: {
+        configured: false,
+        reachable: false,
+        error: "DEPLOYER_API_KEY or DEPLOYER_API_URL is not set.",
+      },
+      // Legacy key for /dubrg UI
       dokploy: {
         configured: false,
         reachable: false,
-        error: "DOKPLOY_API_KEY is not set. Add it to your environment variables.",
+        error: "Deploy platform migrated to Coolify. Set DEPLOYER_API_KEY and DEPLOYER_API_URL.",
       },
     })
   }
 
-  const health = await checkDokployHealth()
+  const health = await checkCoolifyHealth()
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
+    coolify: {
+      configured: true,
+      reachable: health.reachable,
+      apiUrl: health.apiUrl,
+      version: health.version ?? null,
+      latencyMs: health.latencyMs ?? null,
+      error: health.error ?? null,
+    },
     dokploy: {
       configured: true,
       reachable: health.reachable,
       apiUrl: health.apiUrl,
-      projectsCount: health.projectsCount ?? 0,
+      version: health.version ?? null,
       latencyMs: health.latencyMs ?? null,
       error: health.error ?? null,
+      note: "Legacy alias — platform is Coolify",
     },
   })
 }

@@ -1,10 +1,10 @@
-// GET /api/workspace/deploy/status?projectId=&applicationId=&deploymentId=
-// Poll Dokploy build logs for Syra deploy() UI progress.
+// GET /api/workspace/deploy/status?projectId=&applicationUuid=&deploymentUuid=
+// Poll Coolify build logs for Syra deploy() UI progress.
 
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
-import { checkDeploymentStatus } from "@/lib/deploy/wait-for-deployment"
+import { checkCoolifyDeploymentStatus } from "@/lib/deploy/wait-for-coolify-deployment"
 import { isValidProjectId } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -20,8 +20,9 @@ export async function GET(req: Request): Promise<Response> {
 
   const { searchParams } = new URL(req.url)
   const projectId = (searchParams.get("projectId") || "").toString()
-  let applicationId = (searchParams.get("applicationId") || "").toString()
-  const deploymentId = searchParams.get("deploymentId")
+  let applicationUuid =
+    (searchParams.get("applicationUuid") || searchParams.get("applicationId") || "").toString()
+  const deploymentUuid = searchParams.get("deploymentUuid") || searchParams.get("deploymentId")
 
   if (!isValidProjectId(projectId)) {
     return Response.json({ message: "projectId is required" }, { status: 400 })
@@ -35,30 +36,38 @@ export async function GET(req: Request): Promise<Response> {
     return Response.json({ message: "Project not found" }, { status: 404 })
   }
 
-  if (!applicationId) {
-    applicationId = (project.dokployApplicationId as string | undefined) || ""
+  if (!applicationUuid) {
+    applicationUuid =
+      (project.coolifyApplicationUuid as string | undefined) ||
+      (project.dokployApplicationId as string | undefined) ||
+      ""
   }
 
-  if (!applicationId) {
+  if (!applicationUuid) {
     return Response.json({
       status: "building",
+      applicationUuid: null,
+      applicationId: null,
+      deploymentUuid: null,
       deploymentId: null,
-      progressMessage: "Waiting for Dokploy to start the deployment…",
+      progressMessage: "Waiting for Coolify to start the deployment…",
       matchedLine: null,
       error: null,
       logsTail: "",
     })
   }
 
-  const result = await checkDeploymentStatus({
-    applicationId,
-    deploymentId: deploymentId || null,
+  const result = await checkCoolifyDeploymentStatus({
+    applicationUuid,
+    deploymentUuid: deploymentUuid || null,
   })
 
   return Response.json({
     status: result.status,
-    applicationId,
-    deploymentId: result.deploymentId,
+    applicationUuid,
+    applicationId: applicationUuid,
+    deploymentUuid: result.deploymentUuid,
+    deploymentId: result.deploymentUuid,
     progressMessage: result.progressMessage,
     matchedLine: result.matchedLine,
     error: result.error,

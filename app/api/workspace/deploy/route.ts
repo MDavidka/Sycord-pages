@@ -9,14 +9,14 @@ import {
   getSycordDomain,
 } from "@/lib/deploy/runner-client"
 import {
-  buildDeployAutofixMessage,
-  waitForDeploymentCompletion,
-} from "@/lib/deploy/wait-for-deployment"
+  buildCoolifyAutofixMessage,
+  waitForCoolifyDeployment,
+} from "@/lib/deploy/wait-for-coolify-deployment"
 import {
-  ensureAndDeployApplication,
-  isDokployConfigured,
-  toDokployAppName,
-} from "@/lib/deploy/dokploy-client"
+  ensureAndDeployCoolifyApplication,
+  isCoolifyConfigured,
+  toDeployAppName,
+} from "@/lib/deploy/coolify-client"
 import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -97,9 +97,12 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ status: "error", message: "Invalid project ID" }, { status: 400 })
   }
 
-  if (!isDokployConfigured()) {
+  if (!isCoolifyConfigured()) {
     return Response.json(
-      { status: "error", message: "Dokploy is not configured. Set DOKPLOY_API_KEY and DOKPLOY_API_URL." },
+      {
+        status: "error",
+        message: "Coolify deployer is not configured. Set DEPLOYER_API_KEY and DEPLOYER_API_URL.",
+      },
       { status: 503 },
     )
   }
@@ -141,7 +144,6 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  // Auto-generate Dockerfile if missing from project pages
   const pages = Array.isArray(project.pages) ? project.pages : []
   const hasDockerfile = pages.some((p: any) => p.name === "Dockerfile" || p.name === "/Dockerfile")
   if (!hasDockerfile) {
@@ -176,7 +178,7 @@ export async function POST(req: Request): Promise<Response> {
   const containerName = slugifyContainerName(project, projectId)
   const domain = getSycordDomain()
 
-  const dokployAppName = toDokployAppName(
+  const deployAppName = toDeployAppName(
     project.businessName || project.name || containerName,
     projectId,
   )
@@ -198,73 +200,65 @@ export async function POST(req: Request): Promise<Response> {
     owner: ghOwner,
     repository: ghRepo,
     branch: (project.githubBranch as string | undefined) || "main",
-    buildPath: "/",
-    githubId: (project.dokployGithubId as string | undefined) || null,
     gitUrl: (project.githubUrl ? `${project.githubUrl}.git` : undefined) as string | undefined,
+    githubAppUuid: (project.coolifyGithubAppUuid as string | undefined) || null,
   }
 
-  const result = await ensureAndDeployApplication({
-    name: project.businessName || dokployAppName,
-    appName: dokployAppName,
-    projectName: toDokployAppName(project.businessName || dokployAppName, projectId),
-    existingApplicationId: project.dokployApplicationId || null,
-    existingProjectId: project.dokployProjectId || null,
-    existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
-    buildType: (body?.buildType as any) || "dockerfile",
-    dockerfile: (body?.dockerfile as string) || "Dockerfile",
-    dockerContextPath: (body?.dockerContextPath as string) || "/",
+  const result = await ensureAndDeployCoolifyApplication({
+    name: project.businessName || deployAppName,
+    appName: deployAppName,
+    existingApplicationUuid:
+      project.coolifyApplicationUuid || project.dokployApplicationId || null,
+    existingProjectUuid: project.coolifyProjectUuid || project.dokployProjectId || null,
+    serverUuid: project.coolifyServerUuid || null,
+    buildPack: "dockerfile",
     env: getProjectEnvVars(project),
     source,
-    title: "Sycord AI deploy",
-    description: `Deployment for ${dokployAppName}`,
+    description: `Deployment for ${deployAppName}`,
     domain: {
-      host: `${dokployAppName}.${domain}`,
+      host: `${deployAppName}.${domain}`,
       port: 3000,
-      path: "/",
       https: true,
-      certificateType: "letsencrypt",
     },
   })
 
-  if (!result.success || !result.applicationId) {
+  const finalUrl = `https://${deployAppName}.${domain}`
+
+  if (!result.success || !result.applicationUuid) {
     await db.collection("users").updateOne(
       { id: userId, "projects._id": projectId },
       {
         $set: {
-          "projects.$.deploymentMode": "dokploy",
+          "projects.$.deploymentMode": "coolify",
           "projects.$.deploymentRuntime.status": "failed",
           "projects.$.deploymentRuntime.lastDeployError": result.error,
-          ...(result.projectId ? { "projects.$.dokployProjectId": result.projectId } : {}),
-          ...(result.environmentId ? { "projects.$.dokployEnvironmentId": result.environmentId } : {}),
-          ...(result.applicationId ? { "projects.$.dokployApplicationId": result.applicationId } : {}),
+          ...(result.projectUuid ? { "projects.$.coolifyProjectUuid": result.projectUuid } : {}),
+          ...(result.applicationUuid ? { "projects.$.coolifyApplicationUuid": result.applicationUuid } : {}),
         },
       },
     )
     return Response.json(
-      { status: "error", message: result.error || "Dokploy deployment failed", steps: result.steps },
+      { status: "error", message: result.error || "Coolify deployment failed", steps: result.steps },
       { status: 502 },
     )
   }
 
-  const finalUrl = `https://${dokployAppName}.${domain}`
-
-  // Persist IDs immediately so the client can poll build status while we wait.
   await db.collection("users").updateOne(
     { id: userId, "projects._id": projectId },
     {
       $set: {
-        "projects.$.deploymentMode": "dokploy",
-        "projects.$.dokployProjectId": result.projectId,
-        "projects.$.dokployEnvironmentId": result.environmentId,
-        "projects.$.dokployApplicationId": result.applicationId,
-        "projects.$.dokployAppName": dokployAppName,
+        "projects.$.deploymentMode": "coolify",
+        "projects.$.coolifyProjectUuid": result.projectUuid,
+        "projects.$.coolifyServerUuid": result.serverUuid,
+        "projects.$.coolifyApplicationUuid": result.applicationUuid,
+        "projects.$.deployAppName": deployAppName,
         "projects.$.deploymentRuntime": {
-          mode: "dokploy",
-          domain: dokployAppName,
+          mode: "coolify",
+          domain: deployAppName,
           url: finalUrl,
-          projectId: result.projectId,
-          environmentId: result.environmentId,
-          applicationId: result.applicationId,
+          projectUuid: result.projectUuid,
+          serverUuid: result.serverUuid,
+          applicationUuid: result.applicationUuid,
           status: "building",
           health: "pending",
           lastDeployAt: new Date(),
@@ -274,12 +268,11 @@ export async function POST(req: Request): Promise<Response> {
     },
   )
 
-  // Wait for Dokploy build logs to confirm success before marking deployed.
-  let buildWait = null as Awaited<ReturnType<typeof waitForDeploymentCompletion>> | null
-  if (waitForBuild && result.applicationId) {
-    buildWait = await waitForDeploymentCompletion({
-      applicationId: result.applicationId,
-      deploymentId: result.deploymentId,
+  let buildWait = null as Awaited<ReturnType<typeof waitForCoolifyDeployment>> | null
+  if (waitForBuild && result.applicationUuid) {
+    buildWait = await waitForCoolifyDeployment({
+      applicationUuid: result.applicationUuid,
+      deploymentUuid: result.deploymentUuid,
       timeoutMs: 8 * 60_000,
     })
 
@@ -289,10 +282,8 @@ export async function POST(req: Request): Promise<Response> {
         { id: userId, "projects._id": projectId },
         {
           $set: {
-            "projects.$.deploymentMode": "dokploy",
             "projects.$.deploymentRuntime.status": "failed",
             "projects.$.deploymentRuntime.lastDeployError": errMsg,
-            "projects.$.dokployApplicationId": result.applicationId,
           },
         },
       )
@@ -300,11 +291,11 @@ export async function POST(req: Request): Promise<Response> {
         {
           status: "error",
           message: errMsg,
-          applicationId: result.applicationId,
-          deploymentId: buildWait.deploymentId,
+          applicationUuid: result.applicationUuid,
+          deploymentUuid: buildWait.deploymentUuid,
           buildStatus: buildWait.status,
           logsTail: buildWait.logs.split("\n").slice(-40).join("\n"),
-          autofix: buildDeployAutofixMessage(buildWait.logs, errMsg),
+          autofix: buildCoolifyAutofixMessage(buildWait.logs, errMsg),
           steps: result.steps,
         },
         { status: 502 },
@@ -316,19 +307,14 @@ export async function POST(req: Request): Promise<Response> {
     { id: userId, "projects._id": projectId },
     {
       $set: {
-        "projects.$.deploymentMode": "dokploy",
-        "projects.$.containerName": dokployAppName,
-        "projects.$.dokployProjectId": result.projectId,
-        "projects.$.dokployEnvironmentId": result.environmentId,
-        "projects.$.dokployApplicationId": result.applicationId,
-        "projects.$.dokployAppName": dokployAppName,
+        "projects.$.containerName": deployAppName,
         "projects.$.deploymentRuntime": {
-          mode: "dokploy",
-          domain: dokployAppName,
+          mode: "coolify",
+          domain: deployAppName,
           url: finalUrl,
-          projectId: result.projectId,
-          environmentId: result.environmentId,
-          applicationId: result.applicationId,
+          projectUuid: result.projectUuid,
+          serverUuid: result.serverUuid,
+          applicationUuid: result.applicationUuid,
           status: "deployed",
           health: "healthy",
           lastHealthCheckAt: new Date(),
@@ -343,15 +329,16 @@ export async function POST(req: Request): Promise<Response> {
   return Response.json({
     status: "success",
     url: finalUrl,
-    containerName: dokployAppName,
-    projectId: result.projectId,
-    environmentId: result.environmentId,
-    applicationId: result.applicationId,
-    deploymentId: buildWait?.deploymentId ?? result.deploymentId,
+    containerName: deployAppName,
+    projectUuid: result.projectUuid,
+    serverUuid: result.serverUuid,
+    applicationUuid: result.applicationUuid,
+    applicationId: result.applicationUuid,
+    deploymentUuid: buildWait?.deploymentUuid ?? result.deploymentUuid,
+    deploymentId: buildWait?.deploymentUuid ?? result.deploymentUuid,
     buildComplete: buildWait?.matchedLine ?? null,
-    created: result.created,
+    created: result.createdApplication,
     createdProject: result.createdProject,
-    createdEnvironment: result.createdEnvironment,
     steps: result.steps,
   })
 }

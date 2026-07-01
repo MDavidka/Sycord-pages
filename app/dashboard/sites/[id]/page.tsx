@@ -1097,7 +1097,7 @@ export default function SiteSettingsPage() {
       // Also delete from Dokploy if there's an applicationId
       if (project?.applicationId) {
         try {
-          await fetch("/api/deploy/dokploy", {
+          await fetch("/api/deploy/coolify", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
