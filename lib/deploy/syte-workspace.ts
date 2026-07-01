@@ -98,7 +98,12 @@ export async function createSyteWorkspaceForProject(
   })
 
   if (!created.ok) {
-    return created as SyteResult<SyteWorkspaceInfo>
+    return {
+      ...created,
+      error:
+        (created.error || "create_project failed") +
+        (created.endpoint ? ` [${created.endpoint}]` : ""),
+    } as SyteResult<SyteWorkspaceInfo>
   }
 
   const parsed = parseCreateProjectResponse(created.data)

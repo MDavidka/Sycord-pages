@@ -101,7 +101,11 @@ export async function POST(req: Request): Promise<Response> {
     const result = await createSyteWorkspaceForProject(db, userId, projectId, project)
     if (!result.ok || !result.data) {
       return NextResponse.json(
-        { ok: false, error: result.error || "create_project failed" },
+        {
+          ok: false,
+          error: result.error || "create_project failed",
+          endpoint: result.endpoint,
+        },
         { status: result.status || 502 },
       )
     }

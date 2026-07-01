@@ -17,7 +17,10 @@ export type SyteResult<T = unknown> = {
 export type SyteConfig = {
   apiKey: string
   baseUrl: string
-  apiBase: string
+  /** Workspace routes live at site root: /create_project, /execute_command */
+  workspaceBase: string
+  /** Docs/meta routes: /api/health, /api/tokens, /api/ai.json */
+  docsBase: string
 }
 
 export class SyteConfigError extends Error {
@@ -42,7 +45,9 @@ export function getSyteConfig(): SyteConfig {
   return {
     apiKey,
     baseUrl,
-    apiBase: `${baseUrl}/api`,
+    // ai.json lists paths as /api/create_project but production serves /create_project
+    workspaceBase: baseUrl,
+    docsBase: `${baseUrl}/api`,
   }
 }
 
@@ -62,9 +67,14 @@ export function useSyteWorkspace(): boolean {
   return isSyteConfigured() && isSytePlatform()
 }
 
-function buildUrl(apiBase: string, path: string, query?: Record<string, unknown>): string {
-  const clean = path.startsWith("/") ? path.slice(1) : path
-  const url = new URL(`${apiBase}/${clean}`)
+function normalizeSytePath(path: string): string {
+  // Docs use /api/create_project; reverse proxy mounts handlers at /create_project
+  return path.replace(/^\/+/, "").replace(/^api\//, "")
+}
+
+function buildUrl(base: string, path: string, query?: Record<string, unknown>): string {
+  const clean = normalizeSytePath(path)
+  const url = new URL(`${base.replace(/\/+$/, "")}/${clean}`)
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null) continue
@@ -84,9 +94,20 @@ async function parseBody(res: Response): Promise<unknown> {
   }
 }
 
-function extractError(status: number, body: unknown): string {
+function extractError(status: number, body: unknown, endpoint?: string): string {
+  if (status === 404 && endpoint?.includes("/api/")) {
+    return (
+      `Endpoint not found (404) at ${endpoint}. ` +
+      `Syte workspace routes are at the site root (e.g. ${endpoint.replace("/api/", "/")}), not under /api/. ` +
+      `See https://sycord.site/api/ai.json`
+    )
+  }
   if (body && typeof body === "object") {
     const obj = body as Record<string, any>
+    const detail = obj.detail
+    if (detail && typeof detail === "object") {
+      return detail.message || detail.error || JSON.stringify(detail).slice(0, 300)
+    }
     return (
       obj.error ||
       obj.message ||
@@ -97,26 +118,39 @@ function extractError(status: number, body: unknown): string {
   if (typeof body === "string" && body.trim()) {
     return body.trim().slice(0, 500)
   }
-  return `Request failed with status ${status}`
+  return endpoint
+    ? `Request failed with status ${status} (${endpoint})`
+    : `Request failed with status ${status}`
 }
 
 async function syteRequest<T = unknown>(
   method: string,
   path: string,
-  options?: { query?: Record<string, unknown>; body?: unknown },
+  options?: { query?: Record<string, unknown>; body?: unknown; base?: "workspace" | "docs" },
 ): Promise<SyteResult<T>> {
   const config = getSyteConfig()
-  const endpoint = buildUrl(config.apiBase, path, options?.query)
+  const base = options?.base === "docs" ? config.docsBase : config.workspaceBase
+  const endpoint = buildUrl(base, path, options?.query)
 
   try {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    }
+    if (options?.body !== undefined) {
+      headers["Content-Type"] = "application/json"
+    }
+    const normalizedPath = normalizeSytePath(path)
+    const isPublicDocs =
+      options?.base === "docs" &&
+      (normalizedPath === "health" || normalizedPath === "tokens")
+    if (!isPublicDocs) {
+      headers["X-API-Key"] = config.apiKey
+      headers.Authorization = `Bearer ${config.apiKey}`
+    }
+
     const res = await fetch(endpoint, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-API-Key": config.apiKey,
-        Authorization: `Bearer ${config.apiKey}`,
-      },
+      headers,
       body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
     })
 
@@ -126,7 +160,7 @@ async function syteRequest<T = unknown>(
         ok: false,
         status: res.status,
         data,
-        error: extractError(res.status, data),
+        error: extractError(res.status, data, endpoint),
         endpoint,
       }
     }
@@ -143,6 +177,14 @@ async function syteRequest<T = unknown>(
   }
 }
 
+async function syteWorkspaceRequest<T = unknown>(
+  method: string,
+  path: string,
+  options?: { query?: Record<string, unknown>; body?: unknown },
+): Promise<SyteResult<T>> {
+  return syteRequest<T>(method, path, { ...options, base: "workspace" })
+}
+
 /** Map a project page path to the Syte workspace path (files live under app/). */
 export function toSyteWorkspacePath(relPath: string): string {
   const normalized = relPath.replace(/^\/+/, "").replace(/\\/g, "/")
@@ -152,31 +194,31 @@ export function toSyteWorkspacePath(relPath: string): string {
 }
 
 export async function syteServerInfo() {
-  return syteRequest("GET", "server_info")
+  return syteWorkspaceRequest("GET", "server_info")
 }
 
 export async function syteWorkspaceGet(uuid: string) {
-  return syteRequest("GET", "workspace_get", { query: { uuid } })
+  return syteWorkspaceRequest("GET", "workspace_get", { query: { uuid } })
 }
 
 export async function syteListFiles(uuid: string, path = "") {
-  return syteRequest("GET", "list_files", { query: { uuid, path: path || undefined } })
+  return syteWorkspaceRequest("GET", "list_files", { query: { uuid, path: path || undefined } })
 }
 
 export async function syteReadFile(uuid: string, path: string) {
-  return syteRequest<{ ok?: boolean; content?: string }>("POST", "read_file", {
+  return syteWorkspaceRequest<{ ok?: boolean; content?: string }>("POST", "read_file", {
     body: { uuid, path: toSyteWorkspacePath(path) },
   })
 }
 
 export async function syteWriteFile(uuid: string, path: string, content: string) {
-  return syteRequest("POST", "write_file", {
+  return syteWorkspaceRequest("POST", "write_file", {
     body: { uuid, path: toSyteWorkspacePath(path), content },
   })
 }
 
 export async function syteDeleteFile(uuid: string, path: string) {
-  return syteRequest("POST", "delete_file", {
+  return syteWorkspaceRequest("POST", "delete_file", {
     body: { uuid, path: toSyteWorkspacePath(path) },
   })
 }
@@ -186,7 +228,7 @@ export async function syteExecuteCommand(
   command: string,
   options?: { cwd?: string; timeout?: number; env?: Record<string, string> },
 ) {
-  return syteRequest<{
+  return syteWorkspaceRequest<{
     ok?: boolean
     exit_code?: number
     output?: string
@@ -207,7 +249,7 @@ export async function syteExecuteCommands(
   commands: Array<{ command: string; cwd?: string; timeout?: number }>,
   stopOnFailure = true,
 ) {
-  return syteRequest("POST", "execute_commands", {
+  return syteWorkspaceRequest("POST", "execute_commands", {
     body: { uuid, commands, stop_on_failure: stopOnFailure },
   })
 }
@@ -223,7 +265,7 @@ export async function syteCreateProject(input: {
   env_vars?: Record<string, string>
   deploy?: boolean
 }) {
-  return syteRequest<{
+  return syteWorkspaceRequest<{
     ok?: boolean
     uuid?: string
     status?: string
@@ -237,21 +279,21 @@ export async function syteCreateProject(input: {
 }
 
 export async function syteIssueDeploy(uuid: string) {
-  return syteRequest("POST", "issue_deploy", { body: { uuid } })
+  return syteWorkspaceRequest("POST", "issue_deploy", { body: { uuid } })
 }
 
 export async function syteGetLogs(uuid: string, lines = 200) {
-  return syteRequest("GET", "get_logs", { query: { uuid, lines } })
+  return syteWorkspaceRequest("GET", "get_logs", { query: { uuid, lines } })
 }
 
 export async function syteSetEnv(uuid: string, envVars: Record<string, string>, merge = true) {
-  return syteRequest("POST", "set_env", {
+  return syteWorkspaceRequest("POST", "set_env", {
     body: { uuid, env_vars: envVars, merge },
   })
 }
 
 export async function syteSetDomain(uuid: string, domain: string) {
-  return syteRequest("POST", "set_domain", { body: { uuid, domain } })
+  return syteWorkspaceRequest("POST", "set_domain", { body: { uuid, domain } })
 }
 
 /** Sync project pages into the Syte workspace (write_file per file). */
@@ -309,28 +351,33 @@ export async function checkSyteHealth(): Promise<{
   error?: string
 }> {
   const hasKey = isSyteConfigured()
-  let apiUrl = process.env.DEPLOYER_API_URL || DEFAULT_SYTE_BASE
+  const config = hasKey ? getSyteConfig() : null
+  const apiUrl = config?.baseUrl || process.env.DEPLOYER_API_URL || DEFAULT_SYTE_BASE
+
   if (!hasKey) {
     return { reachable: false, apiUrl, hasKey, error: "DEPLOYER_API_KEY is not set" }
   }
 
   const start = Date.now()
-  const info = await syteServerInfo()
+  // /api/health is public; workspace routes are at site root (/create_project)
+  const health = await syteRequest<{ status?: string; version?: string }>("GET", "health", {
+    base: "docs",
+  })
   const latencyMs = Date.now() - start
 
-  if (!info.ok) {
+  if (!health.ok) {
     return {
       reachable: false,
       apiUrl,
       hasKey,
       latencyMs,
-      error: info.error || "Syte API unreachable",
+      error: health.error || "Syte API unreachable",
     }
   }
 
   const version =
-    typeof info.data === "object" && info.data
-      ? String((info.data as any).version || (info.data as any).api_version || "")
+    typeof health.data === "object" && health.data
+      ? String((health.data as any).version || "")
       : undefined
 
   return { reachable: true, apiUrl, hasKey, version: version || undefined, latencyMs }

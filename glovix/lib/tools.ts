@@ -231,8 +231,9 @@ export async function handleCreateWorkspace(): Promise<string> {
         const data = await res.json().catch(() => ({} as any));
 
         if (!res.ok || !data?.uuid) {
-            const err = data?.error || data?.message || `HTTP ${res.status}`;
-            return `[SYSTEM] ❌ createWorkspace failed: ${err}`;
+            const err = data?.error || data?.message || `HTTP ${res.status}`
+            const endpoint = data?.endpoint ? ` (${data.endpoint})` : ""
+            return `[SYSTEM] ❌ createWorkspace failed: ${err}${endpoint}`
         }
 
         const lines = [
