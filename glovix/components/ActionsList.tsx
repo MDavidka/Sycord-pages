@@ -27,6 +27,7 @@ const VERBS: Record<string, [string, string]> = {
     renameFile:        ['Renaming', 'Renamed'],
     searchInFiles:     ['Searching', 'Searched'],
     typeCheck:         ['Checking types', 'Type checked'],
+    executeCommand:    ['Running command', 'Command finished'],
     lintCheck:         ['Linting', 'Linted'],
     listFiles:         ['Listing files', 'Listed files'],
     drawDiagram:       ['Drawing diagram', 'Drew diagram'],
@@ -37,7 +38,7 @@ const VERBS: Record<string, [string, string]> = {
 };
 
 const DEPLOY_TOOLS = new Set(['deploy']);
-const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors']);
+const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors', 'executeCommand']);
 const FILE_TOOLS = new Set(['createFile', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
 
 interface DeduplicatedAction {

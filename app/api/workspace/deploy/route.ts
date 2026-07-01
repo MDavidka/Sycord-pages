@@ -17,7 +17,17 @@ import {
   isCoolifyConfigured,
   toDeployAppName,
 } from "@/lib/deploy/coolify-client"
-import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
+import {
+  ensureSyteWorkspace,
+  syteGetLogs,
+  syteIssueDeploy,
+  syteSetEnv,
+  syteSyncProjectFiles,
+  syteWorkspaceGet,
+  useSyteWorkspace,
+} from "@/lib/deploy/syte-client"
+import { getOwnedProject, getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
+import { isValidProjectId, projectFiles, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -97,11 +107,12 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ status: "error", message: "Invalid project ID" }, { status: 400 })
   }
 
-  if (!isCoolifyConfigured()) {
+  if (!isCoolifyConfigured() && !useSyteWorkspace()) {
     return Response.json(
       {
         status: "error",
-        message: "Coolify deployer is not configured. Set DEPLOYER_API_KEY and DEPLOYER_API_URL.",
+        message:
+          "Deployer is not configured. Set DEPLOYER_API_KEY and DEPLOYER_API_URL (https://sycord.site for Syte workspace).",
       },
       { status: 503 },
     )
@@ -109,12 +120,13 @@ export async function POST(req: Request): Promise<Response> {
 
   const client = await clientPromise
   const db = client.db()
-  const user = await db.collection("users").findOne({ id: userId })
-  const project = user?.projects?.find((p: any) => p._id.toString() === projectId)
+  const project = await getOwnedProject(db, userId, projectId)
 
   if (!project) {
     return Response.json({ status: "error", message: "Project not found" }, { status: 404 })
   }
+
+  const storedProjectId = getStoredProjectId(project)
 
   const envVars = Array.isArray(project.envVars) ? project.envVars : []
   const presentEnvKeys = new Set(
@@ -149,7 +161,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!hasDockerfile) {
     const dockerfile = generateDockerfile("nextjs", "22", "3000")
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
+      ownedProjectUpdateFilter(userId, storedProjectId),
       {
         $push: {
           "projects.$.pages": {
@@ -160,6 +172,7 @@ export async function POST(req: Request): Promise<Response> {
         } as any,
       },
     )
+    project.pages = [...(Array.isArray(project.pages) ? project.pages : []), { name: "Dockerfile", content: dockerfile }]
   }
 
   const files = prepareProjectDeployFiles(project)
@@ -173,6 +186,93 @@ export async function POST(req: Request): Promise<Response> {
   )
   if (buildProblems.length > 0) {
     return Response.json({ status: "error", message: buildProblems.join("; ") }, { status: 400 })
+  }
+
+  // ── Syte workspace deploy (sycord.site/api) ─────────────────────────────
+  if (useSyteWorkspace()) {
+    const workspaceName =
+      project.businessName || project.name || `project-${projectId.slice(0, 8)}`
+    const ensure = await ensureSyteWorkspace(projectId, workspaceName)
+    if (!ensure.ok) {
+      return Response.json(
+        { status: "error", message: ensure.error || "Failed to create Syte workspace" },
+        { status: 502 },
+      )
+    }
+
+    const uuid = ensure.data?.uuid || projectId
+    const sync = await syteSyncProjectFiles(uuid, projectFiles(project))
+    if (sync.errors.length > 0) {
+      return Response.json(
+        {
+          status: "error",
+          message: `Failed to sync files to workspace: ${sync.errors.slice(0, 3).join("; ")}`,
+        },
+        { status: 502 },
+      )
+    }
+
+    const env = getProjectEnvVars(project)
+    if (Object.keys(env).length > 0) {
+      await syteSetEnv(uuid, env, true)
+    }
+
+    const deployResult = await syteIssueDeploy(uuid)
+    if (!deployResult.ok) {
+      const logs = await syteGetLogs(uuid, 300)
+      const logsTail =
+        typeof logs.data === "string"
+          ? logs.data.slice(-4000)
+          : JSON.stringify(logs.data || {}).slice(-4000)
+      return Response.json(
+        {
+          status: "error",
+          message: deployResult.error || "Syte deploy failed",
+          logsTail,
+          autofix:
+            `[SYSTEM] ❌ Deploy failed on Syte workspace.\n\n` +
+            `Build/runtime logs (tail):\n${logsTail}\n\n` +
+            `AUTO-FIX: read logs, fix source files, executeCommand('npm run build'), deploy() again.`,
+        },
+        { status: 502 },
+      )
+    }
+
+    const ws = await syteWorkspaceGet(uuid)
+    const domain = getSycordDomain()
+    const deployAppName = toDeployAppName(
+      project.businessName || project.name || slugifyContainerName(project, projectId),
+      projectId,
+    )
+    const finalUrl =
+      (ws.data as any)?.url ||
+      (ws.data as any)?.domain ||
+      `https://${deployAppName}.${domain}`
+
+    await db.collection("users").updateOne(
+      ownedProjectUpdateFilter(userId, storedProjectId),
+      {
+        $set: {
+          "projects.$.deploymentMode": "syte",
+          "projects.$.syteWorkspaceUuid": uuid,
+          "projects.$.deploymentRuntime.status": "active",
+          "projects.$.deploymentRuntime.url": finalUrl,
+          "projects.$.deploymentRuntime.lastDeployedAt": new Date().toISOString(),
+          "projects.$.updatedAt": new Date(),
+        },
+      },
+    )
+
+    return Response.json({
+      status: "success",
+      url: typeof finalUrl === "string" && finalUrl.startsWith("http") ? finalUrl : `https://${finalUrl}`,
+      projectId: uuid,
+      applicationId: uuid,
+      deploymentId: uuid,
+      buildComplete: "✅ Syte workspace deploy issued.",
+      syncedFiles: sync.synced,
+      platform: "syte",
+    })
   }
 
   const containerName = slugifyContainerName(project, projectId)

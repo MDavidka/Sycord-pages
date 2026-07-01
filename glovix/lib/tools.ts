@@ -209,6 +209,57 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
     }
 }
 
+/** Run any shell command in the Syte workspace (https://sycord.site/api). */
+export async function handleExecuteCommand(
+    args: { command?: string; cwd?: string; timeout?: number },
+    ctx?: ToolContext,
+): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ executeCommand is only available when building inside a Sycord project.';
+    }
+
+    const command = typeof args.command === "string" ? args.command.trim() : "";
+    if (!command) {
+        return "[SYSTEM] ❌ executeCommand requires a command string.";
+    }
+
+    try {
+        ctx?.addTerminalOutput?.(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
+
+        const res = await fetch("/api/workspace/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                projectId,
+                command,
+                cwd: args.cwd || "app",
+                timeout: args.timeout || 300,
+            }),
+        });
+
+        const text = await res.text();
+        if (ctx?.addTerminalOutput) {
+            ctx.addTerminalOutput(text);
+        }
+
+        if (!res.ok) {
+            return `[SYSTEM] ❌ Command failed (HTTP ${res.status}):\n${text.slice(0, 4000)}`;
+        }
+
+        const exitMatch = text.match(/\[syte\] exit code (\d+)/) || text.match(/\[ssh-exec\] exit code (\d+)/);
+        const exitCode = exitMatch ? Number(exitMatch[1]) : 0;
+
+        if (exitCode === 0) {
+            return `[SYSTEM] ✅ Command succeeded:\n${text.slice(-3500)}`;
+        }
+
+        return `[SYSTEM] ❌ Command exited with code ${exitCode}:\n${text.slice(-4000)}\n\nFix the errors above, then retry.`;
+    } catch (e: any) {
+        return `Error running command: ${e.message}`;
+    }
+}
+
 /**
  * Save the project's source files to GitHub (creates the repo on first save).
  * This must run before deploy() so Dokploy has a git source to build from.
@@ -1002,11 +1053,27 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'typeCheck',
-            description: 'Run TypeScript type checking to find type errors in the project. Returns errors with file paths and line numbers.',
+            description: 'Run TypeScript type checking in the Syte workspace (syncs files, npm install, npx tsc --noEmit). Prefer this after editing files. Same as executeCommand("npx tsc --noEmit --pretty").',
             parameters: {
                 type: 'object',
                 properties: {},
                 required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'executeCommand',
+            description: 'Run ANY shell command in the live Syte workspace at sycord.site (npm install, npm run build, npx tsc, ls, mkdir, etc.). Files are synced from Pages first. cwd defaults to "app". Docs: https://sycord.site/api/',
+            parameters: {
+                type: 'object',
+                properties: {
+                    command: { type: 'string', description: 'Shell command to run, e.g. "npm install", "npm run build", "npx tsc --noEmit --pretty"' },
+                    cwd: { type: 'string', description: 'Working directory inside workspace (default: app)' },
+                    timeout: { type: 'number', description: 'Timeout in seconds (default 300, max 1800)' },
+                },
+                required: ['command'],
             },
         },
     },
@@ -2330,6 +2397,9 @@ async function _executeToolInternal(
                 case 'searchInFiles':
                     result = await handleSearchInFiles(args);
                     break;
+                case 'executeCommand':
+                    result = await handleExecuteCommand(args, ctx);
+                    break;
                 case 'drawDiagram':
                     result = await handleDrawDiagram(args);
                     break;
@@ -2384,7 +2454,7 @@ async function _executeToolInternal(
                     result = await handleShadcnDocs(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

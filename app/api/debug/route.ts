@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkCoolifyHealth, isCoolifyConfigured } from "@/lib/deploy/coolify-client"
+import { checkSyteHealth, isSyteConfigured, useSyteWorkspace } from "@/lib/deploy/syte-client"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,19 +13,52 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!isCoolifyConfigured()) {
+  if (useSyteWorkspace()) {
+    const health = await checkSyteHealth()
     return NextResponse.json({
       timestamp: new Date().toISOString(),
+      platform: "syte",
+      syte: {
+        configured: true,
+        reachable: health.reachable,
+        apiUrl: health.apiUrl,
+        version: health.version ?? null,
+        latencyMs: health.latencyMs ?? null,
+        error: health.error ?? null,
+        documentation: "https://sycord.site/api/",
+      },
+      coolify: {
+        configured: false,
+        reachable: false,
+        note: "Using Syte workspace API (DEPLOYER_API_URL=https://sycord.site)",
+      },
+      dokploy: {
+        configured: true,
+        reachable: health.reachable,
+        apiUrl: health.apiUrl,
+        note: "Legacy alias — platform is Syte workspace API",
+      },
+    })
+  }
+
+  if (!isCoolifyConfigured() && !isSyteConfigured()) {
+    return NextResponse.json({
+      timestamp: new Date().toISOString(),
+      syte: {
+        configured: false,
+        reachable: false,
+        error: "DEPLOYER_API_KEY or DEPLOYER_API_URL is not set.",
+        documentation: "https://sycord.site/api/",
+      },
       coolify: {
         configured: false,
         reachable: false,
         error: "DEPLOYER_API_KEY or DEPLOYER_API_URL is not set.",
       },
-      // Legacy key for /dubrg UI
       dokploy: {
         configured: false,
         reachable: false,
-        error: "Deploy platform migrated to Coolify. Set DEPLOYER_API_KEY and DEPLOYER_API_URL.",
+        error: "Set DEPLOYER_API_KEY (syte_ token) and DEPLOYER_API_URL=https://sycord.site",
       },
     })
   }
@@ -33,6 +67,7 @@ export async function GET() {
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
+    platform: "coolify",
     coolify: {
       configured: true,
       reachable: health.reachable,
