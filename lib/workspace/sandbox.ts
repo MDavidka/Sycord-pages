@@ -17,6 +17,7 @@ import path from "node:path"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { getOwnedProject } from "@/lib/project-id"
 
 /** Root directory under which every project's sandbox workspace lives. */
 export const WORKSPACE_BASE = path.join(os.tmpdir(), "sycord-workspace")
@@ -39,11 +40,7 @@ export async function loadProject(userId: string, projectId: string): Promise<an
   if (!isValidProjectId(projectId)) return null
   const client = await clientPromise
   const db = client.db()
-  const user = await db.collection("users").findOne<{ projects?: any[] }>(
-    { id: userId, "projects._id": projectId },
-    { projection: { "projects.$": 1 } },
-  )
-  return user?.projects?.[0] ?? null
+  return getOwnedProject(db, userId, projectId)
 }
 
 /** Convert a project's stored `pages` into a clean list of workspace files. */

@@ -1,3 +1,10 @@
+import {
+  getOwnedProject,
+  getStoredProjectId,
+  normalizeProjectId,
+  ownedProjectUpdateFilter,
+} from "@/lib/project-id"
+
 export const PROJECT_CHAT_SESSIONS_COLLECTION = "project_chat_sessions"
 
 export interface ProjectChatSession {
@@ -12,9 +19,7 @@ export interface ProjectChatSession {
   updatedAt: string
 }
 
-export function normalizeProjectId(projectId: string) {
-  return String(projectId)
-}
+export { normalizeProjectId, getOwnedProject } from "@/lib/project-id"
 
 export function buildProjectChatSessionId(userId: string, projectId: string) {
   return `${userId}:${normalizeProjectId(projectId)}`
@@ -34,22 +39,6 @@ export function toChatSessionSummary(session: ProjectChatSession | null | undefi
     updatedAt: session.updatedAt,
     model: session.model,
   }
-}
-
-export async function getOwnedProject(db: any, userId: string, projectId: string) {
-  const normalizedProjectId = normalizeProjectId(projectId)
-  const user = await db.collection("users").findOne(
-    { id: userId },
-    { projection: { projects: 1 } },
-  )
-  if (!user?.projects) return null
-  return (
-    user.projects.find(
-      (project: any) =>
-        normalizeProjectId(project?._id ?? "") === normalizedProjectId ||
-        normalizeProjectId(project?.id ?? "") === normalizedProjectId,
-    ) ?? null
-  )
 }
 
 export async function loadProjectChatSession(
@@ -143,21 +132,24 @@ export async function saveProjectChatSession(
 
   // Best-effort lightweight summary on the project doc for older list views.
   try {
-    await db.collection("users").updateOne(
-      { id: userId, "projects._id": normalizedProjectId },
-      {
-        $set: {
-          "projects.$.chatSession": {
-            id: chatSession.id,
-            title: chatSession.title,
-            messageCount: chatSession.messages.length,
-            updatedAt: chatSession.updatedAt,
-            createdAt: chatSession.createdAt,
+    const project = await getOwnedProject(db, userId, normalizedProjectId)
+    if (project) {
+      await db.collection("users").updateOne(
+        ownedProjectUpdateFilter(userId, getStoredProjectId(project)),
+        {
+          $set: {
+            "projects.$.chatSession": {
+              id: chatSession.id,
+              title: chatSession.title,
+              messageCount: chatSession.messages.length,
+              updatedAt: chatSession.updatedAt,
+              createdAt: chatSession.createdAt,
+            },
+            "projects.$.updatedAt": now,
           },
-          "projects.$.updatedAt": now,
         },
-      },
-    )
+      )
+    }
   } catch (err) {
     console.warn("[project-chat-session] Failed to update project summary:", err)
   }
@@ -173,15 +165,18 @@ export async function deleteProjectChatSession(db: any, userId: string, projectI
   })
 
   try {
-    await db.collection("users").updateOne(
-      { id: userId, "projects._id": normalizedProjectId },
-      {
-        $set: {
-          "projects.$.chatSession": null,
-          "projects.$.updatedAt": new Date().toISOString(),
+    const project = await getOwnedProject(db, userId, normalizedProjectId)
+    if (project) {
+      await db.collection("users").updateOne(
+        ownedProjectUpdateFilter(userId, getStoredProjectId(project)),
+        {
+          $set: {
+            "projects.$.chatSession": null,
+            "projects.$.updatedAt": new Date().toISOString(),
+          },
         },
-      },
-    )
+      )
+    }
   } catch (err) {
     console.warn("[project-chat-session] Failed to clear project summary:", err)
   }
