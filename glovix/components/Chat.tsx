@@ -87,6 +87,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'deleteFile': return parsed.path || '';
             case 'renameFile': return parsed.oldPath ? `${parsed.oldPath} → ${parsed.newPath}` : '';
             case 'searchInFiles': return decodeHtml(parsed.query || '');
+            case 'createWorkspace': return 'Syte API';
             case 'typeCheck': return 'Workspace';
             case 'executeCommand': return decodeHtml(parsed.command || 'shell');
             case 'lintCheck': return parsed.path || 'src/';

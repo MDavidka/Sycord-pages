@@ -18,7 +18,6 @@ import {
   toDeployAppName,
 } from "@/lib/deploy/coolify-client"
 import {
-  ensureSyteWorkspace,
   syteGetLogs,
   syteIssueDeploy,
   syteSetEnv,
@@ -26,6 +25,7 @@ import {
   syteWorkspaceGet,
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 import { getOwnedProject, getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
 import { isValidProjectId, projectFiles, validateNextBuildable } from "@/lib/workspace/sandbox"
 
@@ -190,18 +190,20 @@ export async function POST(req: Request): Promise<Response> {
 
   // ── Syte workspace deploy (sycord.site/api) ─────────────────────────────
   if (useSyteWorkspace()) {
-    const workspaceName =
-      project.businessName || project.name || `project-${projectId.slice(0, 8)}`
-    const ensure = await ensureSyteWorkspace(projectId, workspaceName)
-    if (!ensure.ok) {
+    const resolved = await requireSyteWorkspaceUuid(project)
+    if ("error" in resolved) {
       return Response.json(
-        { status: "error", message: ensure.error || "Failed to create Syte workspace" },
-        { status: 502 },
+        {
+          status: "error",
+          message: resolved.error,
+          needsCreate: true,
+        },
+        { status: 409 },
       )
     }
+    const workspaceUuid = resolved.uuid
 
-    const uuid = ensure.data?.uuid || projectId
-    const sync = await syteSyncProjectFiles(uuid, projectFiles(project))
+    const sync = await syteSyncProjectFiles(workspaceUuid, projectFiles(project))
     if (sync.errors.length > 0) {
       return Response.json(
         {
@@ -214,12 +216,12 @@ export async function POST(req: Request): Promise<Response> {
 
     const env = getProjectEnvVars(project)
     if (Object.keys(env).length > 0) {
-      await syteSetEnv(uuid, env, true)
+      await syteSetEnv(workspaceUuid, env, true)
     }
 
-    const deployResult = await syteIssueDeploy(uuid)
+    const deployResult = await syteIssueDeploy(workspaceUuid)
     if (!deployResult.ok) {
-      const logs = await syteGetLogs(uuid, 300)
+      const logs = await syteGetLogs(workspaceUuid, 300)
       const logsTail =
         typeof logs.data === "string"
           ? logs.data.slice(-4000)
@@ -238,7 +240,7 @@ export async function POST(req: Request): Promise<Response> {
       )
     }
 
-    const ws = await syteWorkspaceGet(uuid)
+    const ws = await syteWorkspaceGet(workspaceUuid)
     const domain = getSycordDomain()
     const deployAppName = toDeployAppName(
       project.businessName || project.name || slugifyContainerName(project, projectId),
@@ -254,7 +256,7 @@ export async function POST(req: Request): Promise<Response> {
       {
         $set: {
           "projects.$.deploymentMode": "syte",
-          "projects.$.syteWorkspaceUuid": uuid,
+          "projects.$.syteWorkspaceUuid": workspaceUuid,
           "projects.$.deploymentRuntime.status": "active",
           "projects.$.deploymentRuntime.url": finalUrl,
           "projects.$.deploymentRuntime.lastDeployedAt": new Date().toISOString(),
@@ -266,12 +268,13 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({
       status: "success",
       url: typeof finalUrl === "string" && finalUrl.startsWith("http") ? finalUrl : `https://${finalUrl}`,
-      projectId: uuid,
-      applicationId: uuid,
-      deploymentId: uuid,
+      projectId: workspaceUuid,
+      applicationId: workspaceUuid,
+      deploymentId: workspaceUuid,
       buildComplete: "✅ Syte workspace deploy issued.",
       syncedFiles: sync.synced,
       platform: "syte",
+      uuid: workspaceUuid,
     })
   }
 

@@ -216,16 +216,24 @@ export async function syteCreateProject(input: {
   name: string
   uuid?: string
   git_url?: string
+  git_provider?: string
   branch?: string
   start_command?: string
   domain?: string
   env_vars?: Record<string, string>
+  deploy?: boolean
 }) {
-  return syteRequest<{ ok?: boolean; uuid?: string; stream_url?: string; url?: string }>(
-    "POST",
-    "create_project",
-    { body: input },
-  )
+  return syteRequest<{
+    ok?: boolean
+    uuid?: string
+    status?: string
+    stream_url?: string
+    url?: string
+    execute_command?: { method?: string; path?: string; body?: Record<string, unknown> }
+    issue_deploy?: { method?: string; path?: string; body?: Record<string, unknown> }
+    next_steps?: string[]
+    paths?: Record<string, unknown>
+  }>("POST", "create_project", { body: input })
 }
 
 export async function syteIssueDeploy(uuid: string) {
@@ -267,7 +275,7 @@ export async function syteSyncProjectFiles(
   return { synced, errors }
 }
 
-/** Ensure a Syte workspace exists for this Sycord project id. */
+/** @deprecated Use createSyteWorkspaceForProject from syte-workspace.ts */
 export async function ensureSyteWorkspace(
   projectId: string,
   name: string,
@@ -279,8 +287,7 @@ export async function ensureSyteWorkspace(
 
   const created = await syteCreateProject({
     name: name || `project-${projectId.slice(0, 8)}`,
-    uuid: projectId,
-    start_command: "npm start",
+    deploy: false,
   })
 
   if (!created.ok) return created

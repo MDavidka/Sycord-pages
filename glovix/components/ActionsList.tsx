@@ -27,6 +27,7 @@ const VERBS: Record<string, [string, string]> = {
     renameFile:        ['Renaming', 'Renamed'],
     searchInFiles:     ['Searching', 'Searched'],
     typeCheck:         ['Checking types', 'Type checked'],
+    createWorkspace:   ['Creating Syte workspace', 'Workspace ready'],
     executeCommand:    ['Running command', 'Command finished'],
     lintCheck:         ['Linting', 'Linted'],
     listFiles:         ['Listing files', 'Listed files'],

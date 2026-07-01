@@ -6,12 +6,12 @@ import {
   isIgnoredDiagnostic,
 } from "@/lib/workspace/diagnostics-filter"
 import {
-  ensureSyteWorkspace,
   syteExecuteCommand,
   syteSetEnv,
   syteSyncProjectFiles,
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 import { getProjectEnvVars } from "@/lib/deploy/runner-client"
 import { loadProject, materializeWorkspace, projectFiles, requireUserId } from "@/lib/workspace/sandbox"
 
@@ -38,14 +38,19 @@ function parseTscOutput(output: string): DiagnosticEntry[] {
 }
 
 async function syteDiagnostics(project: any, projectId: string) {
-  const workspaceName =
-    project.businessName || project.name || `project-${projectId.slice(0, 8)}`
-  const ensure = await ensureSyteWorkspace(projectId, workspaceName)
-  if (!ensure.ok) {
-    return Response.json({ message: ensure.error || "Syte workspace unavailable" }, { status: 502 })
+  const resolved = await requireSyteWorkspaceUuid(project)
+  if ("error" in resolved) {
+    return Response.json(
+      {
+        message: resolved.error,
+        needsCreate: true,
+        hint: "Call createWorkspace() first — POST /api/create_project",
+      },
+      { status: 409 },
+    )
   }
 
-  const uuid = ensure.data?.uuid || projectId
+  const uuid = resolved.uuid
   const files = projectFiles(project)
   const projectFileNames = files.map((f) => f.name.replace(/\\/g, "/"))
 

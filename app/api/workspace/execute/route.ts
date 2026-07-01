@@ -5,12 +5,12 @@ import {
   requireUserId,
 } from "@/lib/workspace/sandbox"
 import {
-  ensureSyteWorkspace,
   syteExecuteCommand,
   syteSetEnv,
   syteSyncProjectFiles,
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 import { getProjectEnvVars } from "@/lib/deploy/runner-client"
 import { getContainer, sshExecuteCommand } from "@/lib/deploy/ssh-deploy"
 
@@ -50,14 +50,15 @@ export async function POST(req: Request): Promise<Response> {
   if (!project) return textResponse("Project not found", 404)
 
   if (useSyteWorkspace()) {
-    const workspaceName =
-      project.businessName || project.name || `project-${projectId.slice(0, 8)}`
-    const ensure = await ensureSyteWorkspace(projectId, workspaceName)
-    if (!ensure.ok) {
-      return textResponse(ensure.error || "Syte workspace unavailable", 502)
+    const resolved = await requireSyteWorkspaceUuid(project)
+    if ("error" in resolved) {
+      return textResponse(
+        `${resolved.error}\n\nCall createWorkspace() first (POST /api/create_project) to obtain a workspace UUID.`,
+        409,
+      )
     }
 
-    const uuid = ensure.data?.uuid || projectId
+    const uuid = resolved.uuid
     if (body?.sync !== false) {
       await syteSyncProjectFiles(uuid, projectFiles(project))
     }
@@ -82,7 +83,7 @@ export async function POST(req: Request): Promise<Response> {
     const output = String(data?.output || "")
     const exitCode = data?.exit_code ?? data?.exitCode ?? 1
     return textResponse(
-      `$ ${command}\n${output}${output.endsWith("\n") ? "" : "\n"}\n[syte] exit code ${exitCode}\n`,
+      `$ ${command}\n[workspace uuid: ${uuid}]\n${output}${output.endsWith("\n") ? "" : "\n"}\n[syte] exit code ${exitCode}\n`,
       exitCode === 0 ? 200 : 422,
     )
   }

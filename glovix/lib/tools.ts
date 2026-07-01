@@ -175,6 +175,9 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
         const res = await fetch(`/api/workspace/diagnostics?projectId=${encodeURIComponent(projectId)}`);
         if (!res.ok) {
             const msg = await res.text().catch(() => '');
+            if (res.status === 409 && msg.includes('createWorkspace')) {
+                return `[SYSTEM] ❌ No Syte workspace UUID yet. Call createWorkspace() FIRST (POST /api/create_project), then typeCheck().\n${msg}`.trim();
+            }
             return `[SYSTEM] ❌ Type check could not run on the Sycord server (HTTP ${res.status}). ${msg}`.trim();
         }
         const data = await res.json();
@@ -206,6 +209,60 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
         return `[SYSTEM] TypeScript check found ${errors.length} actionable error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
     } catch (e: any) {
         return `Error running TypeScript check on the server: ${e.message}`;
+    }
+}
+
+/**
+ * Step 1 — POST /api/create_project on Syte (https://sycord.site/api/).
+ * Returns the workspace UUID required for all execute_command calls.
+ */
+export async function handleCreateWorkspace(): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ createWorkspace is only available when building inside a Sycord project.';
+    }
+
+    try {
+        const res = await fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, action: 'create_project' }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+
+        if (!res.ok || !data?.uuid) {
+            const err = data?.error || data?.message || `HTTP ${res.status}`;
+            return `[SYSTEM] ❌ createWorkspace failed: ${err}`;
+        }
+
+        const lines = [
+            `[SYSTEM] ✅ Syte workspace ready.`,
+            `UUID: ${data.uuid} (use for all execute_command calls)`,
+            data.status === 'created' ? 'Status: newly created via POST /api/create_project' : 'Status: existing workspace reused',
+        ];
+
+        if (data.execute_command && typeof data.execute_command === 'object') {
+            const body = data.execute_command as Record<string, unknown>;
+            lines.push(`Suggested next command: ${JSON.stringify(body)}`);
+        }
+
+        if (Array.isArray(data.next_steps) && data.next_steps.length > 0) {
+            lines.push('Next steps:');
+            for (const step of data.next_steps.slice(0, 5)) {
+                lines.push(`  • ${step}`);
+            }
+        } else {
+            lines.push('Next steps:');
+            lines.push('  1. executeCommand({ command: "npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \\"@/*\\" --yes" }) OR write package.json via createFile');
+            lines.push('  2. executeCommand({ command: "npx shadcn@latest init -y" }) to install shadcn/ui');
+            lines.push('  3. executeCommand({ command: "npx shadcn@latest add button card input -y" }) for components');
+            lines.push('  4. batchCreateFiles / editFile for your pages');
+            lines.push('  5. executeCommand({ command: "npm install" }) → typeCheck() → deploy()');
+        }
+
+        return lines.join('\n');
+    } catch (e: any) {
+        return `Error creating Syte workspace: ${e.message}`;
     }
 }
 
@@ -244,6 +301,9 @@ export async function handleExecuteCommand(
         }
 
         if (!res.ok) {
+            if (res.status === 409) {
+                return `[SYSTEM] ❌ Cannot run command — no workspace UUID.\n${text.slice(0, 2000)}\n\nYou MUST call createWorkspace() first (POST /api/create_project).`;
+            }
             return `[SYSTEM] ❌ Command failed (HTTP ${res.status}):\n${text.slice(0, 4000)}`;
         }
 
@@ -1052,8 +1112,20 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'createWorkspace',
+            description: 'REQUIRED FIRST STEP — POST /api/create_project on Syte (https://sycord.site/api/). Creates an empty workspace and returns the UUID needed for executeCommand, typeCheck, write_file, and deploy. Call this before ANY other workspace command. Response includes execute_command.body pre-filled for npm install.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'typeCheck',
-            description: 'Run TypeScript type checking in the Syte workspace (syncs files, npm install, npx tsc --noEmit). Prefer this after editing files. Same as executeCommand("npx tsc --noEmit --pretty").',
+            description: 'Run TypeScript in the Syte workspace (requires createWorkspace first). Syncs files, npm install, npx tsc --noEmit. Same as executeCommand("npx tsc --noEmit --pretty").',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1065,7 +1137,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'executeCommand',
-            description: 'Run ANY shell command in the live Syte workspace at sycord.site (npm install, npm run build, npx tsc, ls, mkdir, etc.). Files are synced from Pages first. cwd defaults to "app". Docs: https://sycord.site/api/',
+            description: 'Run ANY shell command in the Syte workspace (requires createWorkspace UUID first). Examples: npm install, npx shadcn@latest init -y, npx shadcn@latest add button -y, npm run build, npx tsc --noEmit. Docs: https://sycord.site/api/',
             parameters: {
                 type: 'object',
                 properties: {
@@ -2357,6 +2429,7 @@ async function _executeToolInternal(
     ctx: ToolContext
 ): Promise<string> {
     // Handle tools without arguments
+    if (name === 'createWorkspace') return handleCreateWorkspace();
     if (name === 'typeCheck') return handleTypeCheck(ctx);
     if (name === 'listFiles') return await handleListFiles();
     if (name === 'getErrors') return handleGetErrors(ctx);
@@ -2454,7 +2527,7 @@ async function _executeToolInternal(
                     result = await handleShadcnDocs(args);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: createWorkspace, createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

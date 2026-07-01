@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
 import {
-  ensureSyteWorkspace,
   syteExecuteCommand,
   syteGetLogs,
   syteIssueDeploy,
@@ -13,8 +12,14 @@ import {
   syteSetEnv,
   syteSyncProjectFiles,
   syteWriteFile,
+  syteWorkspaceGet,
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
+import {
+  createSyteWorkspaceForProject,
+  getStoredSyteUuid,
+  requireSyteWorkspaceUuid,
+} from "@/lib/deploy/syte-workspace"
 import { getProjectEnvVars } from "@/lib/deploy/runner-client"
 import { isValidProjectId, projectFiles } from "@/lib/workspace/sandbox"
 
@@ -23,6 +28,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
 type SyteAction =
+  | "create_project"
   | "execute_command"
   | "read_file"
   | "write_file"
@@ -37,6 +43,18 @@ async function resolveProject(userId: string, projectId: string) {
   const db = client.db()
   const project = await getOwnedProject(db, userId, projectId)
   return { db, project }
+}
+
+function needsCreateResponse(message: string) {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: message,
+      needsCreate: true,
+      hint: "Call createWorkspace() first — POST /api/create_project returns the workspace uuid.",
+    },
+    { status: 409 },
+  )
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -74,25 +92,52 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: "Missing action" }, { status: 400 })
   }
 
-  const { project } = await resolveProject(userId, projectId)
+  const { db, project } = await resolveProject(userId, projectId)
   if (!project) {
     return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
   }
 
-  const workspaceName =
-    project.businessName || project.name || `project-${projectId.slice(0, 8)}`
+  if (action === "create_project") {
+    const result = await createSyteWorkspaceForProject(db, userId, projectId, project)
+    if (!result.ok || !result.data) {
+      return NextResponse.json(
+        { ok: false, error: result.error || "create_project failed" },
+        { status: result.status || 502 },
+      )
+    }
 
-  const ensure = await ensureSyteWorkspace(projectId, workspaceName)
-  if (!ensure.ok) {
-    return NextResponse.json(
-      { ok: false, error: ensure.error || "Failed to ensure Syte workspace" },
-      { status: 502 },
-    )
+    return NextResponse.json({
+      ok: true,
+      action: "create_project",
+      uuid: result.data.uuid,
+      status: result.data.status,
+      execute_command: result.data.executeCommandBody,
+      issue_deploy: result.data.issueDeployBody,
+      next_steps: result.data.nextSteps,
+      paths: result.data.paths,
+      message:
+        result.data.status === "created"
+          ? `[SYSTEM] ✅ Syte workspace created. UUID: ${result.data.uuid}. Use this uuid for all execute_command calls. Next: executeCommand with the returned execute_command body or "npx shadcn@latest init -y".`
+          : `[SYSTEM] ✅ Syte workspace already exists. UUID: ${result.data.uuid}.`,
+    })
   }
 
-  const uuid = ensure.data?.uuid || projectId
+  const resolved = await requireSyteWorkspaceUuid(project)
+  if ("error" in resolved) {
+    return needsCreateResponse(resolved.error)
+  }
+
+  const uuid = resolved.uuid
 
   switch (action) {
+    case "workspace_get": {
+      const info = await syteWorkspaceGet(uuid)
+      if (!info.ok) {
+        return NextResponse.json({ ok: false, error: info.error }, { status: info.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, workspace: info.data })
+    }
+
     case "sync_files": {
       const files = projectFiles(project)
       const sync = await syteSyncProjectFiles(uuid, files)
@@ -196,7 +241,7 @@ export async function POST(req: Request): Promise<Response> {
       }
 
       const logs = await syteGetLogs(uuid, 300)
-      const workspace = await import("@/lib/deploy/syte-client").then((m) => m.syteWorkspaceGet(uuid))
+      const workspace = await syteWorkspaceGet(uuid)
 
       const logText =
         typeof logs.data === "object" && logs.data
@@ -206,7 +251,7 @@ export async function POST(req: Request): Promise<Response> {
       const url =
         (workspace.data as any)?.url ||
         (workspace.data as any)?.domain ||
-        `https://${projectId.slice(0, 12)}.sycord.site`
+        `https://${uuid}.sycord.site`
 
       return NextResponse.json({
         ok: true,
@@ -250,13 +295,22 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
   }
 
-  const info = await import("@/lib/deploy/syte-client").then((m) =>
-    m.syteWorkspaceGet(projectId),
-  )
+  const uuid = getStoredSyteUuid(project)
+  if (!uuid) {
+    return NextResponse.json({
+      ok: false,
+      configured: useSyteWorkspace(),
+      needsCreate: true,
+      error: "No workspace UUID — call createWorkspace() first (POST /api/create_project).",
+    })
+  }
+
+  const info = await syteWorkspaceGet(uuid)
 
   return NextResponse.json({
     ok: info.ok,
     configured: useSyteWorkspace(),
+    uuid,
     workspace: info.data,
     error: info.error,
   })
