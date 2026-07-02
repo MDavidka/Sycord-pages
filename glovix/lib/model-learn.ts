@@ -60,6 +60,9 @@ export function buildDisplayLabel(toolName: string, argsString: string): string 
     if (toolName === "executeCommand" && args.command) return String(args.command)
     if (args.path) return String(args.path)
     if (args.command) return String(args.command)
+    if (Array.isArray(args.commands) && args.commands.length) {
+      return args.commands.length === 1 ? String(args.commands[0]) : `${args.commands.length} commands`
+    }
     if (args.pattern) return String(args.pattern)
     if (args.query) return String(args.query)
     if (args.action && toolName === "planning") return `planning:${args.action}`

@@ -88,115 +88,6 @@ export async function POST(request: Request) {
       // explicitly exclude fields that shouldn't be user-settable if any
   };
 
-  const IDLE_PAGE_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Website in Progress</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        html, body {
-            min-height: 100dvh;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-            background-color: #141414;
-        }
-        body {
-            font-family: 'Inter', sans-serif;
-            color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-        .logo-container {
-            position: absolute;
-            top: 20%;
-            left: 15%;
-        }
-        .logo {
-            width: 48px;
-            height: 24px;
-            background-color: rgba(255, 255, 255, 0.6);
-            border-radius: 4px;
-            clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 50%, 0 100%);
-        }
-        .content {
-            text-align: left;
-            max-width: 600px;
-            width: 100%;
-            padding: 2rem;
-            margin-left: -15%;
-        }
-        @media (max-width: 768px) {
-            .logo-container {
-                top: 20%;
-                left: 10%;
-            }
-            .content {
-                margin-left: 0;
-                padding-left: 10%;
-            }
-        }
-        h1 {
-            font-size: 2.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            letter-spacing: -0.025em;
-        }
-        p {
-            font-size: 1.125rem;
-            color: #a1a1aa;
-            margin-bottom: 3.5rem;
-        }
-        .return-btn {
-            background-color: rgba(255, 255, 255, 0.4);
-            color: #ffffff;
-            border: none;
-            border-radius: 9999px;
-            padding: 0.75rem 2.5rem;
-            font-size: 1.25rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .return-btn:hover {
-            background-color: rgba(255, 255, 255, 0.5);
-        }
-        .footer {
-            position: absolute;
-            bottom: 5%;
-            text-align: center;
-            width: 100%;
-            color: #a1a1aa;
-            font-size: 0.875rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="logo-container">
-        <div class="logo"></div>
-    </div>
-    <div class="content">
-        <h1>Here is your site</h1>
-        <p>set up your website stile on the dasboard</p>
-        <button class="return-btn" onclick="window.parent !== window ? window.parent.postMessage('returnToDashboard', '*') : window.location.href='/'">return</button>
-    </div>
-    <div class="footer">
-        privacy and policy &bull; terms of condition
-    </div>
-</body>
-</html>`;
-
   let sanitizedSubdomain: string | null = null
   let deploymentData: any = null
 
@@ -236,15 +127,7 @@ export async function POST(request: Request) {
     isPremium: isPremium,
     status: "active",
     createdAt: new Date(),
-    pages: [
-        {
-            name: "index.html",
-            content: IDLE_PAGE_HTML,
-            usedFor: "Idle deployment placeholder",
-            createdAt: new Date(),
-            updatedAt: new Date()
-        }
-    ], // Initialize with idle page
+    pages: [], // Next.js App Router — no legacy index.html placeholder
     deployment: deploymentData, // Embed deployment info
     // Legacy fields for compatibility if needed, but we try to move away
     deploymentId: deploymentData ? crypto.randomUUID() : null,

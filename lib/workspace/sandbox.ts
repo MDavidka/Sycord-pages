@@ -48,6 +48,11 @@ export function projectFiles(project: any): WorkspaceFile[] {
   const pages = Array.isArray(project?.pages) ? project.pages : []
   return pages
     .filter((p: any) => typeof p?.name === "string" && typeof p?.content === "string")
+    .filter((p: any) => {
+      const name = String(p.name).replace(/^\/+/, "")
+      // Legacy idle placeholder — not part of Next.js App Router projects
+      return name !== "index.html" && name !== "/index.html"
+    })
     .map((p: any) => ({ name: String(p.name).replace(/^\/+/, ""), content: p.content }))
 }
 

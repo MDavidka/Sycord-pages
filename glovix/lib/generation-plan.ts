@@ -1,5 +1,6 @@
 /**
- * Strict generation pipeline for Syra — planning() tool + PlanChecklist UI.
+ * Flexible generation pipeline for Syra — planning() tool + PlanChecklist UI.
+ * AI may define its own steps; default pipeline is suggested, not mandatory semantics.
  */
 
 export type PlanStepStatus = "pending" | "in_progress" | "completed" | "skipped"
@@ -16,7 +17,6 @@ export type GenerationPlanStep = {
   description: string
   strict: boolean
   status: PlanStepStatus
-  /** Exact commands or files the AI should run for this step */
   hints?: string[]
 }
 
@@ -27,108 +27,103 @@ export type GenerationPlan = {
   pages: PlannedPage[]
   shadcnComponents: string[]
   steps: GenerationPlanStep[]
+  notes?: string
   createdAt: number
   updatedAt: number
 }
 
-export const NEXT_STANDALONE_CONFIG_HINT = `// next.config.mjs (or next.config.js)
+export type CustomPlanStepInput = {
+  id?: string
+  title: string
+  description?: string
+  strict?: boolean
+}
+
+export const NEXT_STANDALONE_CONFIG_HINT = `// next.config.mjs
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
 };
-export default nextConfig;
-// CommonJS: module.exports = nextConfig;`
+export default nextConfig;`
 
-export const DEFAULT_PIPELINE_STEP_DEFS: Omit<GenerationPlanStep, "status" | "hints">[] = [
+export const SUGGESTED_PIPELINE: Omit<GenerationPlanStep, "status" | "hints">[] = [
   {
-    id: "init-nextjs",
-    title: "Initialize Next.js project",
+    id: "setup",
+    title: "Setup Next.js + deps",
     description:
-      "Scaffold App Router project in workspace app/ with TypeScript, Tailwind, ESLint, @/* alias, and output: 'standalone' in next.config.",
-    strict: true,
-  },
-  {
-    id: "init-shadcn",
-    title: "Initialize shadcn/ui",
-    description:
-      "Run npx shadcn@latest init -y in project root (use latest CLI — older shadcn versions may fail).",
-    strict: true,
-  },
-  {
-    id: "seed-ui-components",
-    title: "Seed base UI components",
-    description:
-      "Install required shadcn components via npx shadcn@latest add <name> -y (or addShadcnComponent). Match the planned UI needs.",
-    strict: true,
-  },
-  {
-    id: "inject-layout",
-    title: "Inject builder logic & layout",
-    description:
-      "Create app/layout.tsx, app/globals.css (--font-sans Inter), theme provider, navbar/footer, Sycord Design Contract compliance.",
+      "Project already has Next.js App Router in Pages (app/layout.tsx). Do NOT run create-next-app if those exist. Delete legacy index.html if present. npm install + ensure output: 'standalone'.",
     strict: false,
   },
   {
-    id: "create-pages",
-    title: "Create named pages",
-    description: "Build each planned route as app/<segment>/page.tsx with exact page names from the plan.",
-    strict: true,
+    id: "shadcn",
+    title: "Install shadcn/ui components",
+    description:
+      "Prefer addShadcnComponent({ components: [...] }) in 1–2 batches (8–12 components max per batch). CLI (npx shadcn@latest) is fallback only when foundation files are missing.",
+    strict: false,
+  },
+  {
+    id: "layout",
+    title: "Layout & shared UI",
+    description: "app/layout.tsx, globals.css, theme, navbar/footer per Sycord Design Contract.",
+    strict: false,
+  },
+  {
+    id: "pages",
+    title: "Build planned pages",
+    description: "Create each route under app/ from the page list below.",
+    strict: false,
   },
   {
     id: "validate",
-    title: "Validate compilation",
-    description: "Run typeCheck() and lintCheck() / npm run lint. Do NOT run npm run build — deploy() builds via issue_deploy.",
-    strict: true,
-  },
-  {
-    id: "deploy",
-    title: "Deploy to sycord.site",
-    description: "Call deploy() → POST issue_deploy { uuid } (git pull + rebuild + restart).",
+    title: "Validate",
+    description: "typeCheck() + lintCheck(). deploy() for production build — never npm run build.",
     strict: false,
   },
 ]
 
-function stepHints(
-  stepId: string,
-  pages: PlannedPage[],
-  shadcnComponents: string[],
-): string[] {
-  switch (stepId) {
-    case "init-nextjs":
-      return [
-        'createWorkspace()',
-        'executeCommand({ command: "npx create-next-app@latest . --typescript --tailwind --eslint --app --import-alias \\"@/*\\" --yes" })',
-        "write next.config with output: 'standalone'",
-        'executeCommand({ command: "npm install" })',
-      ]
-    case "init-shadcn":
-      return [
-        'executeCommand({ command: "npx shadcn@latest init -y" })',
-        "Prefer shadcn@latest CLI in project folder — deprecated registry-only flows may fail.",
-      ]
-    case "seed-ui-components": {
-      const list = shadcnComponents.length ? shadcnComponents.join(" ") : "button card input label separator badge"
-      return [
-        `executeCommand({ command: "npx shadcn@latest add ${list} -y" })`,
-        "OR addShadcnComponent({ components: [...] }) for Pages-backed installs",
-        "listShadcnComponents() to verify before importing",
-      ]
-    }
-    case "inject-layout":
-      return [
-        "app/layout.tsx with Inter (--font-sans), ThemeProvider, dark mode toggle",
-        "components/sections/* or shared navbar/footer",
-        "Hero gradient per Sycord Design Contract",
-      ]
-    case "create-pages":
-      return pages.map((p) => `app${p.route === "/" ? "" : p.route}/page.tsx — ${p.name}${p.sections?.length ? ` (${p.sections.join(", ")})` : ""}`)
-    case "validate":
-      return ["typeCheck()", 'lintCheck() or executeCommand({ command: "npm run lint" })']
-    case "deploy":
-      return ["deploy() — issue_deploy only, never npm run build"]
-    default:
-      return []
+function slugifyStepId(title: string, index: number): string {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return base || `step-${index + 1}`
+}
+
+function stepHints(stepId: string, pages: PlannedPage[], shadcnComponents: string[]): string[] {
+  const core = shadcnComponents.slice(0, 12)
+  const list = core.length ? core.join(" ") : "button card input label separator"
+
+  if (/setup|next|init/.test(stepId)) {
+    return [
+      "listFiles() — if app/layout.tsx exists, SKIP create-next-app",
+      "deleteFile('index.html') if present (legacy placeholder, breaks create-next-app)",
+      "write_file next.config.mjs with output: 'standalone' if missing",
+      'executeCommand({ commands: ["npm install"] })',
+    ]
   }
+  if (/shadcn|component|ui/.test(stepId)) {
+    return [
+      `addShadcnComponent({ components: [${core.slice(0, 6).map((c) => `"${c}"`).join(", ")}] })`,
+      "Install more only when a page needs them — not 40 at once",
+      'Fallback: executeCommand({ command: "npx shadcn@latest init -y" }) only if components.json missing',
+    ]
+  }
+  if (/layout|shell/.test(stepId)) {
+    return ["app/layout.tsx", "Inter --font-sans", "ThemeProvider + dark mode toggle"]
+  }
+  if (/page|route|build/.test(stepId)) {
+    return pages.map(
+      (p) => `app${p.route === "/" ? "" : p.route}/page.tsx — ${p.name}`,
+    )
+  }
+  if (/valid|check|lint|deploy/.test(stepId)) {
+    return [
+      "typeCheck()",
+      'executeCommand({ command: "npm run lint" }) or lintCheck()',
+      "deploy() when ready",
+    ]
+  }
+  return []
 }
 
 export function buildGenerationPlan(input: {
@@ -136,14 +131,26 @@ export function buildGenerationPlan(input: {
   appType?: string
   pages?: PlannedPage[]
   shadcnComponents?: string[]
+  steps?: CustomPlanStepInput[]
+  notes?: string
 }): GenerationPlan {
   const now = Date.now()
-  const pages = input.pages?.length
-    ? input.pages
-    : [{ route: "/", name: "Home" }]
-  const shadcnComponents = input.shadcnComponents ?? ["button", "card", "input", "label", "separator"]
+  const pages = input.pages?.length ? input.pages : [{ route: "/", name: "Home" }]
+  const shadcnComponents = (input.shadcnComponents ?? ["button", "card", "input", "label", "separator"]).slice(
+    0,
+    16,
+  )
 
-  const steps: GenerationPlanStep[] = DEFAULT_PIPELINE_STEP_DEFS.map((def, idx) => ({
+  const stepDefs: Omit<GenerationPlanStep, "status" | "hints">[] = input.steps?.length
+    ? input.steps.map((s, i) => ({
+        id: s.id?.trim() || slugifyStepId(s.title, i),
+        title: s.title,
+        description: s.description || "",
+        strict: s.strict ?? false,
+      }))
+    : SUGGESTED_PIPELINE
+
+  const steps: GenerationPlanStep[] = stepDefs.map((def, idx) => ({
     ...def,
     status: idx === 0 ? "in_progress" : "pending",
     hints: stepHints(def.id, pages, shadcnComponents),
@@ -156,6 +163,7 @@ export function buildGenerationPlan(input: {
     pages,
     shadcnComponents,
     steps,
+    notes: input.notes,
     createdAt: now,
     updatedAt: now,
   }
@@ -166,10 +174,7 @@ export function updatePlanStep(
   stepId: string,
   status: PlanStepStatus,
 ): GenerationPlan {
-  const steps = plan.steps.map((s) => {
-    if (s.id === stepId) return { ...s, status }
-    return s
-  })
+  const steps = plan.steps.map((s) => (s.id === stepId ? { ...s, status } : s))
 
   if (status === "completed" || status === "skipped") {
     const idx = steps.findIndex((s) => s.id === stepId)
@@ -193,9 +198,8 @@ export function updatePlanStep(
 }
 
 export function planProgress(plan: GenerationPlan): { completed: number; total: number; label: string } {
-  const strictSteps = plan.steps.filter((s) => s.strict)
-  const completed = strictSteps.filter((s) => s.status === "completed").length
-  const total = strictSteps.length
+  const total = plan.steps.length
+  const completed = plan.steps.filter((s) => s.status === "completed").length
   const current = plan.steps.find((s) => s.status === "in_progress")
   return {
     completed,
@@ -207,23 +211,30 @@ export function planProgress(plan: GenerationPlan): { completed: number; total: 
 export function formatPlanForAi(plan: GenerationPlan): string {
   const { completed, total } = planProgress(plan)
   const lines = [
-    `[SYSTEM] Generation plan "${plan.title}" (${completed}/${total} strict steps done)`,
+    `[SYSTEM] Plan "${plan.title}" (${completed}/${total} steps done)`,
     `App type: ${plan.appType}`,
-    "",
-    "Pages (exact routes to create):",
-    ...plan.pages.map((p) => `- ${p.route} → ${p.name}${p.sections?.length ? ` [${p.sections.join(", ")}]` : ""}`),
-    "",
-    "shadcn components to seed:",
-    plan.shadcnComponents.map((c) => `- ${c}`).join("\n") || "- (determine from UI)",
-    "",
-    "Pipeline (follow in order — do not skip strict steps):",
   ]
 
+  if (plan.notes?.trim()) {
+    lines.push("", "Notes:", plan.notes.trim())
+  }
+
+  lines.push(
+    "",
+    "Pages to build:",
+    ...plan.pages.map((p) => `- ${p.route} → ${p.name}${p.sections?.length ? ` [${p.sections.join(", ")}]` : ""}`),
+    "",
+    "shadcn to install (start with these — add more only when needed):",
+    plan.shadcnComponents.map((c) => `- ${c}`).join("\n") || "- button, card, input, label, separator",
+    "",
+    "Your steps (you defined these — adapt freely, mark completed only after success):",
+  )
+
   for (const step of plan.steps) {
-    const tag = step.strict ? "STRICT" : "optional"
+    const tag = step.strict ? "required" : "flexible"
     const icon =
       step.status === "completed" ? "✅" : step.status === "in_progress" ? "▶" : step.status === "skipped" ? "⏭" : "○"
-    lines.push(`${icon} [${tag}] ${step.title} — ${step.status}`)
+    lines.push(`${icon} [${tag}] ${step.title}${step.description ? ` — ${step.description}` : ""}`)
     if (step.hints?.length && step.status !== "completed") {
       lines.push(`   ${step.hints.slice(0, 4).join("\n   ")}`)
     }
@@ -231,10 +242,14 @@ export function formatPlanForAi(plan: GenerationPlan): string {
 
   lines.push(
     "",
-    "next.config MUST include output: 'standalone':",
-    NEXT_STANDALONE_CONFIG_HINT,
+    "IMPORTANT project rules:",
+    "- This is Next.js App Router — NO index.html (legacy placeholder). deleteFile('index.html') if it exists.",
+    "- If app/layout.tsx + app/page.tsx exist in Pages, extend them — do NOT run create-next-app.",
+    "- Mark planning updateStep completed ONLY after the step actually succeeded (check tool output).",
+    "- Prefer addShadcnComponent over npx shadcn CLI (CLI may fail on older Node in workspace).",
+    "- Chain setup: executeCommand({ commands: ['npm install', 'npm run lint'] })",
     "",
-    "Call planning({ action: 'updateStep', stepId, status: 'completed' }) after each step before moving on.",
+    NEXT_STANDALONE_CONFIG_HINT,
   )
 
   return lines.join("\n")

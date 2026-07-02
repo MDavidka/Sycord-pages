@@ -49,6 +49,7 @@ export const BASE_PROJECT_FILES: Record<string, { file: { contents: string } }> 
     file: {
       contents: `/** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   reactStrictMode: true,
 };
 

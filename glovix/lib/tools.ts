@@ -45,6 +45,9 @@ async function syncFileToProjectPages(path: string, content: string): Promise<Pa
     if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) {
         return { status: 'skipped' };
     }
+    if (path === 'index.html' || path === '/index.html') {
+        return { status: 'skipped' };
+    }
     try {
         const res = await fetch(`/api/projects/${projectId}/pages`, {
             method: 'POST',
@@ -262,12 +265,22 @@ export async function handleCreateWorkspace(): Promise<string> {
             }
         } else {
             lines.push('Next steps:');
-            lines.push('  0. planning({ action: "create", appType, pages: [...] }) — strict pipeline (if not done)');
-            lines.push('  1. planning updateStep init-nextjs → executeCommand create-next-app + next.config output standalone');
-            lines.push('  2. executeCommand({ command: "npx shadcn@latest init -y" })');
-            lines.push('  3. executeCommand({ command: "npx shadcn@latest add button card input -y" })');
-            lines.push('  4. create pages from plan → typeCheck() → lintCheck() → deploy()');
+            lines.push('  0. planning({ action: "create", pages, steps?, notes? }) — your own steps welcome');
+            lines.push('  1. listFiles() — if app/layout.tsx exists, SKIP create-next-app');
+            lines.push('  2. deleteFile("index.html") if present — legacy placeholder breaks scaffolding');
+            lines.push('  3. addShadcnComponent({ components: [...] }) — faster than CLI; batch 8–12 max');
+            lines.push('  4. executeCommand({ commands: ["npm install", "npm run lint"] })');
+            lines.push('  5. build pages → typeCheck() → deploy()');
         }
+
+        const removedIndex = await deleteLegacyIndexHtml(projectId);
+        if (removedIndex) {
+            lines.push('');
+            lines.push('🧹 Removed legacy index.html from Pages (not used in Next.js App Router).');
+        }
+
+        lines.push('');
+        lines.push('⚠️ Next.js App Router only — NO index.html. Never mark a plan step completed if the last command failed.');
 
         return lines.join('\n');
     } catch (e: any) {
@@ -281,6 +294,8 @@ export async function handlePlanning(args: {
     appType?: string;
     pages?: PlannedPage[];
     shadcnComponents?: string[];
+    steps?: Array<{ id?: string; title: string; description?: string; strict?: boolean }>;
+    notes?: string;
     stepId?: string;
     status?: PlanStepStatus;
 }): Promise<string> {
@@ -304,6 +319,8 @@ export async function handlePlanning(args: {
             appType: args.appType,
             pages: args.pages,
             shadcnComponents: args.shadcnComponents,
+            steps: args.steps,
+            notes: args.notes,
         });
         store.setGenerationPlan(plan);
         return formatPlanForAi(plan);
@@ -315,7 +332,8 @@ export async function handlePlanning(args: {
             return '[SYSTEM] ❌ No plan to update. Call planning({ action: "create", ... }) first.';
         }
         if (!args.stepId || !args.status) {
-            return '[SYSTEM] ❌ updateStep requires stepId and status.\nValid stepIds: init-nextjs, init-shadcn, seed-ui-components, inject-layout, create-pages, validate, deploy';
+            const validIds = plan.steps.map((s) => s.id).join(', ');
+            return `[SYSTEM] ❌ updateStep requires stepId and status.\nValid stepIds from your plan: ${validIds}`;
         }
         const validIds = plan.steps.map((s) => s.id);
         if (!validIds.includes(args.stepId)) {
@@ -329,9 +347,91 @@ export async function handlePlanning(args: {
     return '[SYSTEM] ❌ Unknown planning action. Use create | updateStep | get.';
 }
 
-/** Run any shell command in the Syte workspace (https://sycord.site/api). */
+/** Remove legacy idle index.html from Pages + preview store (blocks create-next-app). */
+async function deleteLegacyIndexHtml(projectId: string): Promise<boolean> {
+    let removed = false;
+    try {
+        if (await deleteProjectPage('index.html')) removed = true;
+    } catch {
+        /* ignore */
+    }
+    const state = useStore.getState();
+    if (state.files['index.html']) {
+        const newFiles = { ...state.files };
+        delete newFiles['index.html'];
+        state.setFiles(newFiles);
+        removed = true;
+    }
+    if (removed) {
+        try {
+            await fetch('/api/workspace/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId, command: 'rm -f index.html', cwd: 'app', timeout: 30 }),
+            });
+        } catch {
+            /* workspace may not exist yet */
+        }
+    }
+    return removed;
+}
+
+/** Run one shell command in the Syte workspace. */
+async function runSyteCommand(
+    projectId: string,
+    command: string,
+    cwd: string,
+    timeout: number,
+    ctx?: ToolContext,
+): Promise<{ ok: boolean; text: string }> {
+    ctx?.addTerminalOutput?.(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
+
+    const res = await fetch("/api/workspace/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, command, cwd, timeout }),
+    });
+
+    const text = await res.text();
+    ctx?.addTerminalOutput?.(text);
+
+    if (!res.ok) {
+        if (res.status === 409) {
+            return {
+                ok: false,
+                text: `[SYSTEM] ❌ Cannot run command — no workspace UUID.\n${text.slice(0, 2000)}\n\nYou MUST call createWorkspace() first.`,
+            };
+        }
+        return { ok: false, text: `[SYSTEM] ❌ Command failed (HTTP ${res.status}):\n${text.slice(0, 4000)}` };
+    }
+
+    const exitMatch = text.match(/\[syte\] exit code (\d+)/) || text.match(/\[ssh-exec\] exit code (\d+)/);
+    const exitCode = exitMatch ? Number(exitMatch[1]) : 0;
+
+    if (exitCode === 0) {
+        return { ok: true, text: `[SYSTEM] ✅ Command succeeded:\n${text.slice(-3500)}` };
+    }
+    return {
+        ok: false,
+        text: `[SYSTEM] ❌ Command exited with code ${exitCode}:\n${text.slice(-4000)}\n\nFix the errors above, then retry.`,
+    };
+}
+
+function rejectBuildCommand(command: string): string | null {
+    const normalized = command.replace(/\s+/g, " ").trim().toLowerCase();
+    if (
+        /\bnpm run build\b/.test(normalized) ||
+        normalized === "next build" ||
+        /\bnpx next build\b/.test(normalized)
+    ) {
+        return `[SYSTEM] ❌ Do NOT run \`npm run build\` or \`next build\` for deployment.\n\nUse typeCheck() + lintCheck(), then deploy() (issue_deploy).`;
+    }
+    return null;
+}
+
+/** Run shell command(s) in the Syte workspace (https://sycord.site/api). */
 export async function handleExecuteCommand(
-    args: { command?: string; cwd?: string; timeout?: number },
+    args: { command?: string; commands?: string[]; cwd?: string; timeout?: number },
     ctx?: ToolContext,
 ): Promise<string> {
     const projectId = getHostProjectId();
@@ -339,54 +439,48 @@ export async function handleExecuteCommand(
         return '[SYSTEM] ❌ executeCommand is only available when building inside a Sycord project.';
     }
 
-    const command = typeof args.command === "string" ? args.command.trim() : "";
-    if (!command) {
-        return "[SYSTEM] ❌ executeCommand requires a command string.";
+    const cwd = args.cwd || "app";
+    const timeout = args.timeout || 300;
+    const commands: string[] = Array.isArray(args.commands)
+        ? args.commands.map((c) => String(c).trim()).filter(Boolean)
+        : typeof args.command === "string" && args.command.trim()
+          ? [args.command.trim()]
+          : [];
+
+    if (commands.length === 0) {
+        return "[SYSTEM] ❌ executeCommand requires `command` (string) or `commands` (string array).";
     }
 
-    const normalized = command.replace(/\s+/g, " ").trim().toLowerCase();
-    if (
-        /\bnpm run build\b/.test(normalized) ||
-        normalized === "next build" ||
-        /\bnpx next build\b/.test(normalized)
-    ) {
-        return `[SYSTEM] ❌ Do NOT run \`npm run build\` or \`next build\` for deployment.\n\nProduction build runs automatically when you call deploy() → POST issue_deploy {"uuid":"..."} (git pull + rebuild + restart on Syte).\n\nUse typeCheck() and lintCheck() / executeCommand("npm run lint") to validate first, then deploy().`;
+    for (const cmd of commands) {
+        const blocked = rejectBuildCommand(cmd);
+        if (blocked) return blocked;
+    }
+
+    if (commands.some((c) => /create-next-app/i.test(c))) {
+        const removed = await deleteLegacyIndexHtml(projectId);
+        if (removed) {
+            ctx?.addTerminalOutput?.('\r\n\x1b[38;5;214m[auto] Removed legacy index.html before create-next-app\x1b[0m\r\n');
+        }
     }
 
     try {
-        ctx?.addTerminalOutput?.(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
-
-        const res = await fetch("/api/workspace/execute", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                projectId,
-                command,
-                cwd: args.cwd || "app",
-                timeout: args.timeout || 300,
-            }),
-        });
-
-        const text = await res.text();
-        if (ctx?.addTerminalOutput) {
-            ctx.addTerminalOutput(text);
+        if (commands.length === 1) {
+            const result = await runSyteCommand(projectId, commands[0], cwd, timeout, ctx);
+            return result.text;
         }
 
-        if (!res.ok) {
-            if (res.status === 409) {
-                return `[SYSTEM] ❌ Cannot run command — no workspace UUID.\n${text.slice(0, 2000)}\n\nYou MUST call createWorkspace() first (POST /api/create_project).`;
+        const parts: string[] = [`[SYSTEM] Running ${commands.length} commands sequentially:`];
+        for (let i = 0; i < commands.length; i++) {
+            const cmd = commands[i];
+            parts.push(`\n--- [${i + 1}/${commands.length}] $ ${cmd} ---`);
+            const result = await runSyteCommand(projectId, cmd, cwd, timeout, ctx);
+            parts.push(result.text);
+            if (!result.ok) {
+                parts.push(`\n⚠️ Stopped chain at command ${i + 1} due to failure. Fix and retry remaining commands.`);
+                break;
             }
-            return `[SYSTEM] ❌ Command failed (HTTP ${res.status}):\n${text.slice(0, 4000)}`;
         }
-
-        const exitMatch = text.match(/\[syte\] exit code (\d+)/) || text.match(/\[ssh-exec\] exit code (\d+)/);
-        const exitCode = exitMatch ? Number(exitMatch[1]) : 0;
-
-        if (exitCode === 0) {
-            return `[SYSTEM] ✅ Command succeeded:\n${text.slice(-3500)}`;
-        }
-
-        return `[SYSTEM] ❌ Command exited with code ${exitCode}:\n${text.slice(-4000)}\n\nFix the errors above, then retry.`;
+        return parts.join("\n");
     } catch (e: any) {
         return `Error running command: ${e.message}`;
     }
@@ -1029,43 +1123,33 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'planning',
-            description: `Create and track the strict generation pipeline. CALL FIRST on new projects before createWorkspace/createFile.
+            description: `Create a flexible build plan shown in the PlanChecklist UI. YOU define the steps — not forced to rigid pipeline IDs.
 
 Actions:
-- create: define appType, exact pages (route + name), shadcnComponents → builds 7-step pipeline UI
-- updateStep: mark step completed|in_progress|skipped (stepId from plan)
-- get: return current plan state
+- create: pages (required), optional title, appType, shadcnComponents (8–12 max), steps (your own titles), notes (free-form thinking)
+- updateStep: mark step completed|in_progress|skipped — ONLY after the step actually succeeded
+- get: current plan
 
-Strict steps (must complete): init-nextjs, init-shadcn, seed-ui-components, create-pages, validate
-Optional: inject-layout, deploy
-
-Pages must list EXACT routes e.g. [{ route: "/", name: "Home" }, { route: "/about", name: "About" }]`,
+Example custom steps:
+steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { title: "Build hosting pages" }, { title: "Validate" }]`,
             parameters: {
                 type: 'object',
                 properties: {
                     action: {
                         type: 'string',
                         enum: ['create', 'updateStep', 'get'],
-                        description: 'create = new plan; updateStep = advance pipeline; get = read current plan',
                     },
-                    title: { type: 'string', description: 'Plan title, e.g. "Acme landing site"' },
-                    appType: {
-                        type: 'string',
-                        description: 'e.g. landing, saas, ecommerce, portfolio',
-                    },
+                    title: { type: 'string' },
+                    appType: { type: 'string' },
+                    notes: { type: 'string', description: 'Free-form plan notes / thinking — shown in plan output' },
                     pages: {
                         type: 'array',
-                        description: 'Exact pages to build — required on create',
                         items: {
                             type: 'object',
                             properties: {
-                                route: { type: 'string', description: 'Route path e.g. /, /about, /pricing' },
-                                name: { type: 'string', description: 'Human name e.g. Home, About, Pricing' },
-                                sections: {
-                                    type: 'array',
-                                    items: { type: 'string' },
-                                    description: 'Section components for this page e.g. Hero, Features, CTA',
-                                },
+                                route: { type: 'string' },
+                                name: { type: 'string' },
+                                sections: { type: 'array', items: { type: 'string' } },
                             },
                             required: ['route', 'name'],
                         },
@@ -1073,23 +1157,32 @@ Pages must list EXACT routes e.g. [{ route: "/", name: "Home" }, { route: "/abou
                     shadcnComponents: {
                         type: 'array',
                         items: { type: 'string' },
-                        description: 'Base UI to seed in step 3 e.g. ["button","card","input","separator"]',
+                        description: 'Start with 8–12 components; add more when a page needs them',
                     },
-                    stepId: {
-                        type: 'string',
-                        description: 'Step id for updateStep: init-nextjs | init-shadcn | seed-ui-components | inject-layout | create-pages | validate | deploy',
+                    steps: {
+                        type: 'array',
+                        description: 'Your custom plan steps (optional — sensible defaults if omitted)',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'string' },
+                                title: { type: 'string' },
+                                description: { type: 'string' },
+                                strict: { type: 'boolean' },
+                            },
+                            required: ['title'],
+                        },
                     },
+                    stepId: { type: 'string', description: 'Step id from your plan for updateStep' },
                     status: {
                         type: 'string',
                         enum: ['pending', 'in_progress', 'completed', 'skipped'],
-                        description: 'New status for updateStep',
                     },
                 },
                 required: ['action'],
             },
         },
     },
-
     {
         type: 'function',
         function: {
@@ -1316,15 +1409,20 @@ Pages must list EXACT routes e.g. [{ route: "/", name: "Home" }, { route: "/abou
         type: 'function',
         function: {
             name: 'executeCommand',
-            description: 'Run shell commands in the Syte workspace (requires createWorkspace UUID first). Examples: npm install, npx shadcn@latest init -y, npm run lint, npx tsc --noEmit. Do NOT run npm run build — use deploy() (issue_deploy) for production build.',
+            description: 'Run one or many shell commands in the Syte workspace (requires createWorkspace UUID). Use `commands: [...]` to run multiple sequentially (stops on first failure). Do NOT include npm run build — use deploy() for production build.',
             parameters: {
                 type: 'object',
                 properties: {
-                    command: { type: 'string', description: 'Shell command, e.g. "npm install", "npm run lint", "npx tsc --noEmit --pretty". NOT "npm run build".' },
+                    command: { type: 'string', description: 'Single shell command (use this OR commands array)' },
+                    commands: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Multiple commands run in order, e.g. ["npm install", "npm run lint"]',
+                    },
                     cwd: { type: 'string', description: 'Working directory inside workspace (default: app)' },
                     timeout: { type: 'number', description: 'Timeout in seconds (default 300, max 1800)' },
                 },
-                required: ['command'],
+                required: [],
             },
         },
     },
