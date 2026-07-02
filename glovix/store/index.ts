@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { Message, ModelType } from '../lib/ai';
 import type { GenerationPlan } from '../lib/generation-plan';
+import type { ModelLearnEntry } from '../lib/model-learn';
+import { trimModelLearnLog } from '../lib/model-learn';
 import { User } from '../lib/auth';
 import { UserTokens, ChatHistory } from '../lib/api';
 
@@ -205,6 +207,13 @@ interface AppState {
     // Generation plan (planning() tool + PlanChecklist UI)
     generationPlan: GenerationPlan | null;
     setGenerationPlan: (plan: GenerationPlan | null) => void;
+
+    // Model-learn debug log
+    modelLearnLog: ModelLearnEntry[];
+    addModelLearnEntry: (entry: ModelLearnEntry) => void;
+    setModelLearnLog: (entries: ModelLearnEntry[]) => void;
+    showModelLearn: boolean;
+    setShowModelLearn: (show: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -409,4 +418,11 @@ export const useStore = create<AppState>((set) => ({
     // Generation plan
     generationPlan: null,
     setGenerationPlan: (generationPlan) => set({ generationPlan }),
+
+    modelLearnLog: [],
+    addModelLearnEntry: (entry) =>
+        set((state) => ({ modelLearnLog: trimModelLearnLog([...state.modelLearnLog, entry]) })),
+    setModelLearnLog: (modelLearnLog) => set({ modelLearnLog }),
+    showModelLearn: false,
+    setShowModelLearn: (showModelLearn) => set({ showModelLearn }),
 }));

@@ -11,6 +11,8 @@ import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbedde
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { PlanChecklist } from './PlanChecklist';
+import { ModelLearnPanel, ModelLearnStrip } from './ModelLearnPanel';
+import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
@@ -206,6 +208,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
     const generationPlan = useStore(s => s.generationPlan);
+    const modelLearnLog = useStore(s => s.modelLearnLog);
+    const addModelLearnEntry = useStore(s => s.addModelLearnEntry);
+    const showModelLearn = useStore(s => s.showModelLearn);
+    const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
 
     // Local actions state
@@ -544,9 +550,23 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         setSelectedFile,
     };
 
-    const handleToolCall = async (toolCall: ToolCall): Promise<string> => {
+    const handleToolCall = async (
+        toolCall: ToolCall,
+        meta?: { reason?: string; turnIndex?: number },
+    ): Promise<string> => {
         const { name, arguments: argsString } = toolCall.function;
         const result = await executeTool(name, argsString, toolContext);
+
+        addModelLearnEntry(
+            recordToolLearnEntry({
+                toolName: name,
+                argsString: argsString || '{}',
+                output: result,
+                reason: meta?.reason || '',
+                toolCallId: toolCall.id,
+                turnIndex: meta?.turnIndex,
+            }),
+        );
 
         // Auto-retry logic for editFile failures: read the file and provide content in error
         if (name === 'editFile' && result.includes('Error editing') && result.includes('Could not find')) {
@@ -691,11 +711,12 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
         const presetDescription = getPresetDescription(presetId);
         const projectContextBlock = buildInjectedProjectContext(currentFiles);
+        const modelLearnBlock = buildModelLearnContext(useStore.getState().modelLearnLog);
         const promptContent = currentSystemPrompt
             ? currentSystemPrompt
                 .replace('{{FILE_LIST}}', fileList)
                 .replace('{{PRESET}}', presetDescription)
-                .replace('{{PROJECT_CONTEXT}}', projectContextBlock)
+                .replace('{{PROJECT_CONTEXT}}', projectContextBlock + (modelLearnBlock ? `\n\n${modelLearnBlock}` : ''))
             : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n\n${projectContextBlock}`;
 
         const SYSTEM_PROMPT: Message = {
@@ -1105,7 +1126,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                         } else {
                             toolContext.onDeployProgress = undefined;
                         }
-                        result = await handleToolCall(toolCall);
+                        result = await handleToolCall(toolCall, {
+                            reason: assistantMessageContent.trim(),
+                            turnIndex: turns,
+                        });
                     } catch (err: any) {
                         console.error('Tool execution error:', err);
                         result = `Error executing tool ${toolCall.function.name}: ${err.message}.\n\n⚠️ Suggestion: Try a different approach or use readFile to check the current state.`;
@@ -1548,6 +1572,13 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     return (
         <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             {showDeepMemory && <DeepMemoryModal onClose={() => setShowDeepMemory(false)} />}
+            {showModelLearn && (
+                <ModelLearnPanel
+                    entries={modelLearnLog}
+                    isDark={isDark}
+                    onClose={() => setShowModelLearn(false)}
+                />
+            )}
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -1597,6 +1628,15 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     <BuilderPipelineDocs isDark={isDark} />
                                 </DropdownMenuContent>
                             </DropdownMenu>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowModelLearn(true)}
+                                aria-label="Model-learn debug"
+                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
+                            >
+                                ML
+                            </button>
 
                             <button
                                 type="button"
@@ -1677,9 +1717,21 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                             const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
 
                                             if (showLive) {
-                                                return <ActionsList key={`seg-${segIdx}`} actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />;
+                                                const liveIds = seg.toolCalls.map((tc) => tc.call.id);
+                                                return (
+                                                    <div key={`seg-${segIdx}`}>
+                                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                                        <ModelLearnStrip
+                                                            entries={modelLearnLog}
+                                                            isDark={isDark}
+                                                            filterToolCallIds={liveIds}
+                                                        />
+                                                    </div>
+                                                );
                                             }
+                                            const segToolIds = seg.toolCalls.map((tc) => tc.call.id);
                                             return (
+                                                <div key={`seg-${segIdx}`}>
                                                 <ActionsList
                                                     key={`seg-${segIdx}`}
                                                     actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
@@ -1692,6 +1744,12 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                                     }))}
                                                     isDark={isDark}
                                                 />
+                                                <ModelLearnStrip
+                                                    entries={modelLearnLog}
+                                                    isDark={isDark}
+                                                    filterToolCallIds={segToolIds}
+                                                />
+                                                </div>
                                             );
                                         }
                                         return null;
@@ -1902,10 +1960,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             </div>
                         )}
 
-                        <PlanChecklist plan={generationPlan} isDark={isDark} />
-
-                        {/* Unified composer card */}
+                        {/* Unified composer card — plan checklist embedded at top on small screens */}
                         <div className={`rounded-[28px] border px-2 pt-1.5 pb-2 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                            <PlanChecklist plan={generationPlan} isDark={isDark} embedded />
                             {/* Text input */}
                             <textarea
                                 ref={textareaRef}
@@ -1920,7 +1977,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 }}
                                 placeholder="Help you write code, debug and ship production-ready work."
                                 className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                style={{ height: 'auto', minHeight: '76px' }}
+                                style={{ height: 'auto', minHeight: generationPlan ? '44px' : '76px' }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();

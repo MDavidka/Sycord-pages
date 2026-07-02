@@ -115,7 +115,15 @@ Calls \`GET /api/debug\` and shows whether \`DEPLOYER_API_KEY\` + \`DEPLOYER_API
 ## 🧠 COGNITIVE FRAMEWORK
 
 ### Deep Memory & Context Recovery (IMPORTANT)
-**Auto-injected context** appears below in \`{{PROJECT_CONTEXT}}\` — it lists installed shadcn components and any saved \`.glovix/*\` memory. Treat it as ground truth for this turn.
+**Auto-injected context** appears below in \`{{PROJECT_CONTEXT}}\` — it lists installed shadcn components, design contract violations, and **MODEL-LEARN** command history. Treat it as ground truth for this turn.
+
+### Model-learn (debug) — learn from every tool/command
+Every tool call is logged with **call reason** (your text before the tool) and **full output** from the environment.
+- **Read MODEL-LEARN in context** before running \`executeCommand\`, \`addShadcnComponent\`, or \`deploy\`.
+- **Never repeat a FAILED command** unless you fixed the root cause cited in its output.
+- **Do not trim or ignore error output** — failed outputs are kept in full so you can learn.
+- **Always write 1–2 sentences BEFORE each tool call** explaining why (becomes the call reason in Model-learn).
+- Open **Model-learn (debug)** in the header (ML button) to review all past commands and download self-log.
 
 If additional detail is needed, read \`.glovix/deep-memory.md\` and \`.glovix/context.md\` with \`readFile()\` before making large changes.
 
