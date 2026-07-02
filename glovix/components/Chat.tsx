@@ -10,6 +10,7 @@ import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '.
 import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
+import { PlanChecklist } from './PlanChecklist';
 import { MermaidBlock } from './MermaidBlock';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
@@ -96,6 +97,10 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'listFiles': return 'Workspace';
             case 'getErrors': return 'Workspace';
             case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
+            case 'planning':
+                if (parsed.action === 'updateStep' && parsed.stepId) return String(parsed.stepId).replace(/-/g, ' ');
+                if (parsed.action === 'create') return parsed.title || parsed.appType || 'new plan';
+                return parsed.action || 'pipeline';
             case 'deploy': return 'sycord.site';
             default: return '';
         }
@@ -118,6 +123,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'searchInFiles':
                 return extract('pattern') || extract('query');
             case 'batchCreateFiles': return 'Multiple files';
+            case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
             case 'getErrors': return 'Workspace';
             case 'deploy': return 'sycord.site';
             default: return '';
@@ -199,6 +205,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     const setSystemPrompt = useStore(s => s.setSystemPrompt);
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
+    const generationPlan = useStore(s => s.generationPlan);
     const [profileImgError, setProfileImgError] = useState(false);
 
     // Local actions state
@@ -1894,6 +1901,8 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 </div>
                             </div>
                         )}
+
+                        <PlanChecklist plan={generationPlan} isDark={isDark} />
 
                         {/* Unified composer card */}
                         <div className={`rounded-[28px] border px-2 pt-1.5 pb-2 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>

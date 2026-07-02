@@ -8,6 +8,14 @@ import {
     SHADCN_FOUNDATION_DEPENDENCIES,
 } from './shadcn-init-files';
 import { scanMissingShadcnImports, normalizeShadcnImportPaths, scanRegistryImportPaths } from '../../lib/shadcn-shared';
+import {
+    buildGenerationPlan,
+    formatPlanForAi,
+    updatePlanStep,
+    type GenerationPlan,
+    type PlanStepStatus,
+    type PlannedPage,
+} from './generation-plan';
 
 /**
  * Result of attempting to persist a file to the project's Pages (MongoDB).
@@ -254,17 +262,71 @@ export async function handleCreateWorkspace(): Promise<string> {
             }
         } else {
             lines.push('Next steps:');
-            lines.push('  1. executeCommand({ command: "npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \\"@/*\\" --yes" }) OR write package.json via createFile');
-            lines.push('  2. executeCommand({ command: "npx shadcn@latest init -y" }) to install shadcn/ui');
-            lines.push('  3. executeCommand({ command: "npx shadcn@latest add button card input -y" }) for components');
-            lines.push('  4. batchCreateFiles / editFile for your pages');
-            lines.push('  5. executeCommand({ command: "npm install" }) → typeCheck() → deploy()');
+            lines.push('  0. planning({ action: "create", appType, pages: [...] }) — strict pipeline (if not done)');
+            lines.push('  1. planning updateStep init-nextjs → executeCommand create-next-app + next.config output standalone');
+            lines.push('  2. executeCommand({ command: "npx shadcn@latest init -y" })');
+            lines.push('  3. executeCommand({ command: "npx shadcn@latest add button card input -y" })');
+            lines.push('  4. create pages from plan → typeCheck() → lintCheck() → deploy()');
         }
 
         return lines.join('\n');
     } catch (e: any) {
         return `Error creating Syte workspace: ${e.message}`;
     }
+}
+
+export async function handlePlanning(args: {
+    action: 'create' | 'updateStep' | 'get';
+    title?: string;
+    appType?: string;
+    pages?: PlannedPage[];
+    shadcnComponents?: string[];
+    stepId?: string;
+    status?: PlanStepStatus;
+}): Promise<string> {
+    const store = useStore.getState();
+    const action = args.action || 'get';
+
+    if (action === 'get') {
+        const plan = store.generationPlan;
+        if (!plan) {
+            return '[SYSTEM] No generation plan yet. Call planning({ action: "create", appType, pages: [{ route, name }] }) first.';
+        }
+        return formatPlanForAi(plan);
+    }
+
+    if (action === 'create') {
+        if (!args.pages?.length) {
+            return '[SYSTEM] ❌ planning create requires pages array with exact routes.\nExample: planning({ action: "create", appType: "landing", pages: [{ route: "/", name: "Home" }, { route: "/about", name: "About" }], shadcnComponents: ["button","card","input"] })';
+        }
+        const plan = buildGenerationPlan({
+            title: args.title,
+            appType: args.appType,
+            pages: args.pages,
+            shadcnComponents: args.shadcnComponents,
+        });
+        store.setGenerationPlan(plan);
+        return formatPlanForAi(plan);
+    }
+
+    if (action === 'updateStep') {
+        const plan = store.generationPlan;
+        if (!plan) {
+            return '[SYSTEM] ❌ No plan to update. Call planning({ action: "create", ... }) first.';
+        }
+        if (!args.stepId || !args.status) {
+            return '[SYSTEM] ❌ updateStep requires stepId and status.\nValid stepIds: init-nextjs, init-shadcn, seed-ui-components, inject-layout, create-pages, validate, deploy';
+        }
+        const validIds = plan.steps.map((s) => s.id);
+        if (!validIds.includes(args.stepId)) {
+            return `[SYSTEM] ❌ Unknown stepId "${args.stepId}". Valid: ${validIds.join(', ')}`;
+        }
+        const updated = updatePlanStep(plan, args.stepId, args.status);
+        store.setGenerationPlan(updated);
+        return formatPlanForAi(updated);
+    }
+
+    return '[SYSTEM] ❌ Unknown planning action. Use create | updateStep | get.';
 }
 
 /** Run any shell command in the Syte workspace (https://sycord.site/api). */
@@ -963,6 +1025,71 @@ export async function handleAddShadcnComponent(args: Record<string, unknown>): P
 
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
+    {
+        type: 'function',
+        function: {
+            name: 'planning',
+            description: `Create and track the strict generation pipeline. CALL FIRST on new projects before createWorkspace/createFile.
+
+Actions:
+- create: define appType, exact pages (route + name), shadcnComponents → builds 7-step pipeline UI
+- updateStep: mark step completed|in_progress|skipped (stepId from plan)
+- get: return current plan state
+
+Strict steps (must complete): init-nextjs, init-shadcn, seed-ui-components, create-pages, validate
+Optional: inject-layout, deploy
+
+Pages must list EXACT routes e.g. [{ route: "/", name: "Home" }, { route: "/about", name: "About" }]`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['create', 'updateStep', 'get'],
+                        description: 'create = new plan; updateStep = advance pipeline; get = read current plan',
+                    },
+                    title: { type: 'string', description: 'Plan title, e.g. "Acme landing site"' },
+                    appType: {
+                        type: 'string',
+                        description: 'e.g. landing, saas, ecommerce, portfolio',
+                    },
+                    pages: {
+                        type: 'array',
+                        description: 'Exact pages to build — required on create',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                route: { type: 'string', description: 'Route path e.g. /, /about, /pricing' },
+                                name: { type: 'string', description: 'Human name e.g. Home, About, Pricing' },
+                                sections: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                    description: 'Section components for this page e.g. Hero, Features, CTA',
+                                },
+                            },
+                            required: ['route', 'name'],
+                        },
+                    },
+                    shadcnComponents: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Base UI to seed in step 3 e.g. ["button","card","input","separator"]',
+                    },
+                    stepId: {
+                        type: 'string',
+                        description: 'Step id for updateStep: init-nextjs | init-shadcn | seed-ui-components | inject-layout | create-pages | validate | deploy',
+                    },
+                    status: {
+                        type: 'string',
+                        enum: ['pending', 'in_progress', 'completed', 'skipped'],
+                        description: 'New status for updateStep',
+                    },
+                },
+                required: ['action'],
+            },
+        },
+    },
+
     {
         type: 'function',
         function: {
@@ -2564,6 +2691,10 @@ async function _executeToolInternal(
 
     // Parse arguments
     const argsList = parseToolArguments(argsString);
+    if (toolName === 'planning') {
+        if (argsList.length === 0) return handlePlanning({ action: 'get' });
+        return handlePlanning(argsList[0] as any);
+    }
     if (argsList.length === 0) {
         return `Error: Invalid arguments for tool "${toolName}". Could not parse JSON.\nRaw input: ${argsString.substring(0, 300)}\n\n⚠️ Make sure your tool arguments are valid JSON.`;
     }
@@ -2658,8 +2789,11 @@ async function _executeToolInternal(
                 case 'shadcnDocs':
                     result = await handleShadcnDocs(args);
                     break;
+                case 'planning':
+                    result = await handlePlanning(args as any);
+                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createWorkspace, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: planning, createWorkspace, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

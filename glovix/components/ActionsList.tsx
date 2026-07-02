@@ -27,6 +27,7 @@ const VERBS: Record<string, [string, string]> = {
     deleteFile:        ['Deleting', 'Deleted'],
     renameFile:        ['Renaming', 'Renamed'],
     grep:              ['Searching', 'Searched'],
+    planning:          ['Planning', 'Planned'],
     searchInFiles:     ['Searching', 'Searched'],
     typeCheck:         ['Checking types', 'Type checked'],
     createWorkspace:   ['Creating Syte workspace', 'Workspace ready'],

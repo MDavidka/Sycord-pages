@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Message, ModelType } from '../lib/ai';
+import type { GenerationPlan } from '../lib/generation-plan';
 import { User } from '../lib/auth';
 import { UserTokens, ChatHistory } from '../lib/api';
 
@@ -200,6 +201,10 @@ interface AppState {
     selectedElement: { tag: string; text: string; selector: string } | null;
     setElementPickerActive: (active: boolean) => void;
     setSelectedElement: (el: { tag: string; text: string; selector: string } | null) => void;
+
+    // Generation plan (planning() tool + PlanChecklist UI)
+    generationPlan: GenerationPlan | null;
+    setGenerationPlan: (plan: GenerationPlan | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -400,4 +405,8 @@ export const useStore = create<AppState>((set) => ({
     selectedElement: null,
     setElementPickerActive: (elementPickerActive) => set({ elementPickerActive }),
     setSelectedElement: (selectedElement) => set({ selectedElement }),
+
+    // Generation plan
+    generationPlan: null,
+    setGenerationPlan: (generationPlan) => set({ generationPlan }),
 }));
