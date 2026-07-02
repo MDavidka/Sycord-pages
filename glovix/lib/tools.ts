@@ -258,29 +258,10 @@ export async function handleCreateWorkspace(): Promise<string> {
             lines.push(`Suggested next command: ${JSON.stringify(body)}`);
         }
 
-        if (Array.isArray(data.next_steps) && data.next_steps.length > 0) {
-            lines.push('Next steps:');
-            for (const step of data.next_steps.slice(0, 5)) {
-                lines.push(`  • ${step}`);
-            }
-        } else {
-            lines.push('Next steps:');
-            lines.push('  0. planning({ action: "create", pages, steps?, notes? }) — your own steps welcome');
-            lines.push('  1. listFiles() — if app/layout.tsx exists, SKIP create-next-app');
-            lines.push('  2. deleteFile("index.html") if present — legacy placeholder breaks scaffolding');
-            lines.push('  3. addShadcnComponent({ components: [...] }) — faster than CLI; batch 8–12 max');
-            lines.push('  4. executeCommand({ commands: ["npm install", "npm run lint"] })');
-            lines.push('  5. build pages → typeCheck() → deploy()');
-        }
-
         const removedIndex = await deleteLegacyIndexHtml(projectId);
         if (removedIndex) {
-            lines.push('');
-            lines.push('🧹 Removed legacy index.html from Pages (not used in Next.js App Router).');
+            lines.push('Cleaned up legacy index.html (App Router uses app/page.tsx).');
         }
-
-        lines.push('');
-        lines.push('⚠️ Next.js App Router only — NO index.html. Never mark a plan step completed if the last command failed.');
 
         return lines.join('\n');
     } catch (e: any) {
@@ -1049,6 +1030,13 @@ async function ensureShadcnFoundationInProject(): Promise<string[]> {
  * Add shadcn/ui components by fetching official registry source (no CLI).
  * Files are written to components/ui/ and persisted to Pages automatically.
  */
+// Version-sensitive components whose components/ui/*.tsx often break the Docker
+// production build (dependency API drift). Only install when the site truly
+// needs them — every installed file is compiled on deploy.
+const FRAGILE_SHADCN = new Set([
+    'resizable', 'sidebar', 'chart', 'carousel', 'calendar', 'command', 'data-table', 'date-picker',
+]);
+
 export async function handleAddShadcnComponent(args: Record<string, unknown>): Promise<string> {
     const component = typeof args.component === 'string' ? args.component.trim() : '';
     const components = Array.isArray(args.components) ? args.components : [];
@@ -1059,6 +1047,11 @@ export async function handleAddShadcnComponent(args: Record<string, unknown>): P
     }
 
     const results: string[] = [];
+
+    const fragile = items.filter((c) => FRAGILE_SHADCN.has(String(c).toLowerCase()));
+    if (fragile.length > 0) {
+        results.push(`⚠️ Only keep ${fragile.join(', ')} if this site actually uses ${fragile.length > 1 ? 'them' : 'it'} — unused version-sensitive components can fail the Docker build.`);
+    }
 
     try {
         const foundation = await ensureShadcnFoundationInProject();

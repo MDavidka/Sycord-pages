@@ -11,7 +11,7 @@ import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbedde
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { PlanChecklist } from './PlanChecklist';
-import { ModelLearnPanel, ModelLearnStrip } from './ModelLearnPanel';
+import { ModelLearnPanel } from './ModelLearnPanel';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
@@ -63,6 +63,25 @@ interface ChatProps {
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
+// Claude-Code-style short path: filename only, but keep the parent folder for
+// Next.js route files (page.tsx/layout.tsx/…) so many "page.tsx" rows stay
+// distinguishable. e.g. "app/pricing/page.tsx" → "pricing/page.tsx", but
+// "components/ui/button.tsx" → "button.tsx".
+const NEXT_ROUTE_FILES = new Set([
+    'page.tsx', 'page.ts', 'layout.tsx', 'layout.ts', 'route.ts', 'route.tsx',
+    'loading.tsx', 'error.tsx', 'not-found.tsx', 'template.tsx', 'default.tsx',
+    'globals.css', 'index.tsx', 'index.ts',
+]);
+const shortFilePath = (path: string): string => {
+    if (!path) return '';
+    const parts = path.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
+    const base = parts[parts.length - 1] || path;
+    if (NEXT_ROUTE_FILES.has(base) && parts.length > 1) {
+        return `${parts[parts.length - 2]}/${base}`;
+    }
+    return base;
+};
+
 const getActionDisplayName = (toolName: string, args: string): string => {
     if (!toolName) return 'Preparing...';
 
@@ -83,13 +102,13 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     try {
         const parsed = JSON.parse(args);
         switch (toolName) {
-            case 'createFile': return parsed.path || '';
-            case 'write_file': return parsed.path || '';
-            case 'editFile': return parsed.path || '';
-            case 'readFile': return parsed.path || '';
+            case 'createFile': return shortFilePath(parsed.path || '');
+            case 'write_file': return shortFilePath(parsed.path || '');
+            case 'editFile': return shortFilePath(parsed.path || '');
+            case 'readFile': return shortFilePath(parsed.path || '');
             case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
-            case 'deleteFile': return parsed.path || '';
-            case 'renameFile': return parsed.oldPath ? `${parsed.oldPath} → ${parsed.newPath}` : '';
+            case 'deleteFile': return shortFilePath(parsed.path || '');
+            case 'renameFile': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
             case 'grep':
             case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
             case 'createWorkspace': return 'Syte API';
@@ -113,6 +132,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'editFile':
             case 'readFile':
             case 'deleteFile':
+                return shortFilePath(extract('path'));
             case 'lintCheck':
                 return extract('path');
             case 'readMultipleFiles':
@@ -1717,19 +1737,12 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                             const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
 
                                             if (showLive) {
-                                                const liveIds = seg.toolCalls.map((tc) => tc.call.id);
                                                 return (
                                                     <div key={`seg-${segIdx}`}>
                                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                                        <ModelLearnStrip
-                                                            entries={modelLearnLog}
-                                                            isDark={isDark}
-                                                            filterToolCallIds={liveIds}
-                                                        />
                                                     </div>
                                                 );
                                             }
-                                            const segToolIds = seg.toolCalls.map((tc) => tc.call.id);
                                             return (
                                                 <div key={`seg-${segIdx}`}>
                                                 <ActionsList
@@ -1743,11 +1756,6 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                                         args: tc.call.function.arguments || ''
                                                     }))}
                                                     isDark={isDark}
-                                                />
-                                                <ModelLearnStrip
-                                                    entries={modelLearnLog}
-                                                    isDark={isDark}
-                                                    filterToolCallIds={segToolIds}
                                                 />
                                                 </div>
                                             );

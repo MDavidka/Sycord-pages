@@ -48,35 +48,28 @@ export default nextConfig;`
 
 export const SUGGESTED_PIPELINE: Omit<GenerationPlanStep, "status" | "hints">[] = [
   {
-    id: "setup",
-    title: "Setup Next.js + deps",
+    id: "foundation",
+    title: "Layout, theme & shared UI",
     description:
-      "Project already has Next.js App Router in Pages (app/layout.tsx). Do NOT run create-next-app if those exist. Delete legacy index.html if present. npm install + ensure output: 'standalone'.",
-    strict: false,
-  },
-  {
-    id: "shadcn",
-    title: "Install shadcn/ui components",
-    description:
-      "Prefer addShadcnComponent({ components: [...] }) in 1–2 batches (8–12 components max per batch). CLI (npx shadcn@latest) is fallback only when foundation files are missing.",
-    strict: false,
-  },
-  {
-    id: "layout",
-    title: "Layout & shared UI",
-    description: "app/layout.tsx, globals.css, theme, navbar/footer per Sycord Design Contract.",
+      "Extend the existing Next.js App Router project (app/layout.tsx already exists — don't scaffold). Set up globals.css, theme + dark-mode toggle, navbar and footer.",
     strict: false,
   },
   {
     id: "pages",
-    title: "Build planned pages",
-    description: "Create each route under app/ from the page list below.",
+    title: "Build the pages",
+    description: "Create each route as app/<segment>/page.tsx, composing shadcn components. Install parts as you need them.",
     strict: false,
   },
   {
-    id: "validate",
-    title: "Validate",
-    description: "typeCheck() + lintCheck(). deploy() for production build — never npm run build.",
+    id: "polish",
+    title: "Content & polish",
+    description: "Real copy, images, responsive check at 375px and 1280px, design-contract pass.",
+    strict: false,
+  },
+  {
+    id: "ship",
+    title: "Verify & deploy",
+    description: "typeCheck() + lintCheck(), fix issues, then deploy() (Syte builds the Docker image — never npm run build).",
     strict: false,
   },
 ]
@@ -90,38 +83,29 @@ function slugifyStepId(title: string, index: number): string {
 }
 
 function stepHints(stepId: string, pages: PlannedPage[], shadcnComponents: string[]): string[] {
-  const core = shadcnComponents.slice(0, 12)
-  const list = core.length ? core.join(" ") : "button card input label separator"
+  const core = shadcnComponents.slice(0, 6)
 
-  if (/setup|next|init/.test(stepId)) {
+  if (/found|setup|layout|theme|shell|next|init/.test(stepId)) {
     return [
-      "listFiles() — if app/layout.tsx exists, SKIP create-next-app",
-      "deleteFile('index.html') if present (legacy placeholder, breaks create-next-app)",
-      "write_file next.config.mjs with output: 'standalone' if missing",
-      'executeCommand({ commands: ["npm install"] })',
+      "listFiles() first — extend app/layout.tsx, don't scaffold",
+      "Inter via --font-sans, ThemeProvider + dark-mode toggle",
+      `addShadcnComponent({ components: [${core.map((c) => `"${c}"`).join(", ")}] })`,
     ]
   }
   if (/shadcn|component|ui/.test(stepId)) {
     return [
-      `addShadcnComponent({ components: [${core.slice(0, 6).map((c) => `"${c}"`).join(", ")}] })`,
-      "Install more only when a page needs them — not 40 at once",
-      'Fallback: executeCommand({ command: "npx shadcn@latest init -y" }) only if components.json missing',
+      `addShadcnComponent({ components: [${core.map((c) => `"${c}"`).join(", ")}] })`,
+      "Install what you import, when you import it — not in bulk",
     ]
-  }
-  if (/layout|shell/.test(stepId)) {
-    return ["app/layout.tsx", "Inter --font-sans", "ThemeProvider + dark mode toggle"]
   }
   if (/page|route|build/.test(stepId)) {
-    return pages.map(
-      (p) => `app${p.route === "/" ? "" : p.route}/page.tsx — ${p.name}`,
-    )
+    return pages.map((p) => `app${p.route === "/" ? "" : p.route}/page.tsx — ${p.name}`)
   }
-  if (/valid|check|lint|deploy/.test(stepId)) {
-    return [
-      "typeCheck()",
-      'executeCommand({ command: "npm run lint" }) or lintCheck()',
-      "deploy() when ready",
-    ]
+  if (/polish|content|design|review/.test(stepId)) {
+    return ["Real copy + images", "Responsive at 375px and 1280px", "grep for @/registry/ and design-contract violations"]
+  }
+  if (/valid|check|lint|deploy|ship/.test(stepId)) {
+    return ["typeCheck() then lintCheck()", "Fix reported errors", "deploy() — Syte builds the Docker image"]
   }
   return []
 }
@@ -242,14 +226,7 @@ export function formatPlanForAi(plan: GenerationPlan): string {
 
   lines.push(
     "",
-    "IMPORTANT project rules:",
-    "- This is Next.js App Router — NO index.html (legacy placeholder). deleteFile('index.html') if it exists.",
-    "- If app/layout.tsx + app/page.tsx exist in Pages, extend them — do NOT run create-next-app.",
-    "- Mark planning updateStep completed ONLY after the step actually succeeded (check tool output).",
-    "- Prefer addShadcnComponent over npx shadcn CLI (CLI may fail on older Node in workspace).",
-    "- Chain setup: executeCommand({ commands: ['npm install', 'npm run lint'] })",
-    "",
-    NEXT_STANDALONE_CONFIG_HINT,
+    "Reminders: extend the existing App Router project (no create-next-app, no index.html). Install shadcn parts as you import them. Mark a step completed only after it truly succeeded. Deploy via deploy() — never npm run build.",
   )
 
   return lines.join("\n")

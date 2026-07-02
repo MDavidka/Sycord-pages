@@ -395,6 +395,14 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
           // large files (multiple components, full pages) in a single turn.
           maxOutputTokens: Math.min(Math.max(req.maxOutputTokens ?? 16384, 1024), 65536),
         }
+
+        // Surface the model's reasoning so Syra can "think out loud" (streamed
+        // to the client as `delta.reasoning`). Gemini 2.5+/3.x support thinking;
+        // includeThoughts is a no-op / safely ignored on models that don't.
+        const supportsThinking = /gemini-(2\.5|3)/.test(client.model)
+        if (supportsThinking) {
+          config.thinkingConfig = { includeThoughts: true }
+        }
         if (systemInstruction) config.systemInstruction = systemInstruction
         if (functionDeclarations) {
           config.tools = [{ functionDeclarations }]
@@ -436,7 +444,13 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
               pendingSig = rawSig
             }
 
-            // Plain assistant text (skip internal "thought" summary parts).
+            // Thought summaries → stream as reasoning so the UI can show Syra
+            // thinking (Chat.tsx reads delta.reasoning / reasoning_content).
+            if (typeof part.text === "string" && part.text.length > 0 && part.thought) {
+              send({ ...base, choices: [{ index: 0, delta: { reasoning: part.text }, finish_reason: null }] })
+            }
+
+            // Plain assistant text (the visible response).
             if (typeof part.text === "string" && part.text.length > 0 && !part.thought) {
               send({ ...base, choices: [{ index: 0, delta: { content: part.text }, finish_reason: null }] })
             }
