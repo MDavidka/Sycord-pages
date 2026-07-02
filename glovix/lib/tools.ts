@@ -282,6 +282,15 @@ export async function handleExecuteCommand(
         return "[SYSTEM] ❌ executeCommand requires a command string.";
     }
 
+    const normalized = command.replace(/\s+/g, " ").trim().toLowerCase();
+    if (
+        /\bnpm run build\b/.test(normalized) ||
+        normalized === "next build" ||
+        /\bnpx next build\b/.test(normalized)
+    ) {
+        return `[SYSTEM] ❌ Do NOT run \`npm run build\` or \`next build\` for deployment.\n\nProduction build runs automatically when you call deploy() → POST issue_deploy {"uuid":"..."} (git pull + rebuild + restart on Syte).\n\nUse typeCheck() and lintCheck() / executeCommand("npm run lint") to validate first, then deploy().`;
+    }
+
     try {
         ctx?.addTerminalOutput?.(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
 
@@ -407,7 +416,7 @@ export async function handleDeploy(ctx?: ToolContext): Promise<string> {
     };
 
     try {
-        ctx?.onDeployProgress?.('Starting deployment on Coolify…');
+        ctx?.onDeployProgress?.('Issuing deploy (issue_deploy) on Syte…');
         startProgressPolling();
 
         const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}&wait=true`, {
@@ -442,7 +451,7 @@ export async function handleDeploy(ctx?: ToolContext): Promise<string> {
 
         ctx?.onDeployProgress?.(data.buildComplete || '✅ Deployment build completed');
 
-        return '[SYSTEM] ✅ Deployment build completed on Coolify.\n\n' +
+        return '[SYSTEM] ✅ Deployment issued on Syte (issue_deploy: git pull + rebuild + restart).\n\n' +
             (data.buildComplete ? `Build log: ${data.buildComplete}\n` : '') +
             'Live URL: ' + data.url + '\n' +
             'Project ID: ' + (data.projectId || 'auto') + '\n' +
@@ -1180,11 +1189,11 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'executeCommand',
-            description: 'Run ANY shell command in the Syte workspace (requires createWorkspace UUID first). Examples: npm install, npx shadcn@latest init -y, npx shadcn@latest add button -y, npm run build, npx tsc --noEmit. Docs: https://sycord.site/api/',
+            description: 'Run shell commands in the Syte workspace (requires createWorkspace UUID first). Examples: npm install, npx shadcn@latest init -y, npm run lint, npx tsc --noEmit. Do NOT run npm run build — use deploy() (issue_deploy) for production build.',
             parameters: {
                 type: 'object',
                 properties: {
-                    command: { type: 'string', description: 'Shell command to run, e.g. "npm install", "npm run build", "npx tsc --noEmit --pretty"' },
+                    command: { type: 'string', description: 'Shell command, e.g. "npm install", "npm run lint", "npx tsc --noEmit --pretty". NOT "npm run build".' },
                     cwd: { type: 'string', description: 'Working directory inside workspace (default: app)' },
                     timeout: { type: 'number', description: 'Timeout in seconds (default 300, max 1800)' },
                 },
@@ -1274,7 +1283,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: "Deploy the project to sycord.site via Coolify (Docker/Nixpacks). Waits for build completion in logs. Syncs env vars from Integrations, attaches GitHub source, creates domain, triggers deployment. Call save() first. On failure use coolifyMcp/get_deployment logs for AUTO-FIX.",
+            description: 'Deploy to sycord.site via Syte POST issue_deploy {"uuid":"..."} — syncs Pages, git pull + rebuild + restart. Requires createWorkspace() UUID first. Run typeCheck() + lintCheck() before deploy. Do NOT run npm run build manually. On failure read logs and fix, then redeploy.',
             parameters: {
                 type: 'object',
                 properties: {},

@@ -234,7 +234,7 @@ export async function POST(req: Request): Promise<Response> {
           autofix:
             `[SYSTEM] ❌ Deploy failed on Syte workspace.\n\n` +
             `Build/runtime logs (tail):\n${logsTail}\n\n` +
-            `AUTO-FIX: read logs, fix source files, executeCommand('npm run build'), deploy() again.`,
+            `AUTO-FIX: read logs, fix source files, typeCheck(), lintCheck(), deploy() again.`,
         },
         { status: 502 },
       )
@@ -271,7 +271,7 @@ export async function POST(req: Request): Promise<Response> {
       projectId: workspaceUuid,
       applicationId: workspaceUuid,
       deploymentId: workspaceUuid,
-      buildComplete: "✅ Syte workspace deploy issued.",
+      buildComplete: "✅ Syte issue_deploy issued (git pull + rebuild + restart).",
       syncedFiles: sync.synced,
       platform: "syte",
       uuid: workspaceUuid,

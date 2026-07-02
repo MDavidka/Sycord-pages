@@ -4,6 +4,7 @@
  */
 
 import { scanMissingShadcnImports, scanRegistryImportPaths } from "../../lib/shadcn-shared"
+import { scanDesignContractViolations } from "../../lib/design-contract-lint"
 
 type ProjectFiles = Record<string, { file: { contents: string } }>
 
@@ -131,6 +132,19 @@ export function buildInjectedProjectContext(files: ProjectFiles): string {
       missingUi.length > MAX_ISSUE_LINES
         ? `… and ${missingUi.length - MAX_ISSUE_LINES} more — install with addShadcnComponent before importing`
         : "Install each missing component with addShadcnComponent before writing imports.",
+    )
+  }
+
+  const designIssues = scanDesignContractViolations(scanFiles)
+  if (designIssues.length > 0) {
+    sections.push(
+      "### ⚠️ Sycord Design Contract violations",
+      ...designIssues.slice(0, MAX_ISSUE_LINES).map(
+        (i) => `- \`${i.file}:${i.line}\` [${i.rule}] — ${i.message}`,
+      ),
+      designIssues.length > MAX_ISSUE_LINES
+        ? `… and ${designIssues.length - MAX_ISSUE_LINES} more — fix before deploy()`
+        : "Fix these before deploy() — see Sycord Design Contract in system prompt.",
     )
   }
 
