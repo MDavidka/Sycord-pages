@@ -1,6 +1,9 @@
-import { WebContainer, FileSystemTree, DirectoryNode } from '@webcontainer/api';
+import { WebContainer, FileSystemTree, DirectoryNode, PreviewMessageType } from '@webcontainer/api';
 
 import { useStore } from '../store';
+
+/** Must match Cross-Origin-Embedder-Policy on the embedding page (middleware + next.config). */
+const WEBCONTAINER_COEP: 'credentialless' | 'require-corp' = 'credentialless';
 
 declare global {
     interface Window {
@@ -26,6 +29,15 @@ function registerPreviewListener(instance: WebContainer) {
         cachedPreviewUrl = url;
         useStore.getState().setPreviewUrl(url);
     });
+    instance.on('preview-message', (message) => {
+        if (message.type === PreviewMessageType.ConsoleError) {
+            console.warn('[WebContainer preview] console.error:', ...message.args);
+        } else if (message.type === PreviewMessageType.UncaughtException) {
+            console.warn('[WebContainer preview] Uncaught exception:', message.message);
+        } else if (message.type === PreviewMessageType.UnhandledRejection) {
+            console.warn('[WebContainer preview] Unhandled rejection:', message.message);
+        }
+    });
 }
 
 export async function getWebContainer() {
@@ -40,7 +52,12 @@ export async function getWebContainer() {
     }
 
     if (!window._bootPromise) {
-        window._bootPromise = WebContainer.boot()
+        window._bootPromise = WebContainer.boot({
+            coep: WEBCONTAINER_COEP,
+            // Keep preview errors inside WebContainer; forwarding causes generic
+            // cross-origin "Script error." spam in parent/Eruda consoles.
+            forwardPreviewErrors: false,
+        })
             .then(async (instance) => {
                 window._webContainerInstance = instance;
                 webContainerInstance = instance;

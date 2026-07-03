@@ -1,8 +1,10 @@
 "use client"
 
+import { useEffect } from "react"
 import { useParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import GlovixBuilder from "@/components/glovix-builder"
+import { initErudaIfPresent } from "@/glovix/lib/init-eruda"
 
 /**
  * Isolated Syra shell — loaded in an iframe from the project dashboard.
@@ -12,6 +14,10 @@ import GlovixBuilder from "@/components/glovix-builder"
 export default function SyraEmbedPage() {
   const { id } = useParams() as { id: string }
   const { data: session } = useSession()
+
+  useEffect(() => {
+    initErudaIfPresent()
+  }, [])
 
   return (
     <div className="h-[100dvh] w-full overflow-hidden bg-[#18191B]">
