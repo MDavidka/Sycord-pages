@@ -324,6 +324,8 @@ export async function startSytePreview(
     error?: string
     needsCreate?: boolean
 }> {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
     try {
         const res = await fetch('/api/workspace/preview', {
             method: 'POST',
@@ -337,6 +339,36 @@ export async function startSytePreview(
             }),
         });
         const data = await res.json().catch(() => ({} as any));
+
+        if (res.ok && data.previewUrl) {
+            return {
+                ok: true,
+                previewUrl: data.previewUrl,
+                previewReady: data.previewReady,
+                domainIssued: data.domainIssued,
+            };
+        }
+
+        // Server may return ok without URL while preview boots — poll status briefly.
+        if (res.ok && !data.previewUrl) {
+            for (let i = 0; i < 30; i++) {
+                await sleep(2000);
+                const statusRes = await fetch(
+                    `/api/workspace/preview?projectId=${encodeURIComponent(projectId)}`,
+                    { credentials: 'same-origin' },
+                );
+                const status = await statusRes.json().catch(() => ({} as any));
+                if (status?.previewUrl) {
+                    return {
+                        ok: true,
+                        previewUrl: status.previewUrl,
+                        previewReady: status.previewReady,
+                        domainIssued: data.domainIssued,
+                    };
+                }
+            }
+        }
+
         if (!res.ok) {
             return {
                 ok: false,
@@ -345,11 +377,11 @@ export async function startSytePreview(
                 previewUrl: data?.previewUrl,
             };
         }
+
         return {
-            ok: true,
-            previewUrl: data.previewUrl,
-            previewReady: data.previewReady,
-            domainIssued: data.domainIssued,
+            ok: false,
+            error: data?.error || 'Syte preview started but no preview URL was returned',
+            previewUrl: data?.previewUrl,
         };
     } catch (err) {
         console.warn('[GlovixAPI] startSytePreview failed:', err);

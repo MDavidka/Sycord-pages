@@ -7,6 +7,7 @@ import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getPro
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
+import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePreviewUrl } from '../lib/previewEmbed';
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 type PreviewSource = 'live' | 'deployed' | 'syte' | null;
@@ -145,6 +146,14 @@ export function EmbeddedChat() {
             previewStartedRef.current = true;
             return { ok: true };
         }
+        // Use preview domain URL from partial/error responses when available
+        if (result.previewUrl && isSytePreviewUrl(result.previewUrl)) {
+            setPreviewUrl(result.previewUrl);
+            setPreviewSource('syte');
+            setPreviewStatus('ready');
+            previewStartedRef.current = true;
+            return { ok: true };
+        }
         const message = result.needsCreate
             ? 'Ask Syra to run createWorkspace() first, then open Preview again.'
             : (result.error || 'Syte preview failed to start');
@@ -237,7 +246,11 @@ export function EmbeddedChat() {
         }
 
         const usedFallback = await showDeployedFallback();
-        if (usedFallback) return;
+        if (usedFallback) {
+            // Deployed sites cannot embed in iframe — status ready for external-open UI
+            setPreviewStatus('ready');
+            return;
+        }
 
         setPreviewStatus('blocked');
         setPreviewError(
@@ -286,6 +299,16 @@ export function EmbeddedChat() {
         }
     };
 
+    const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
+        iframeRef.current = el;
+        if (!el || !previewUrl) return;
+        if (shouldUseCredentiallessIframe(previewUrl)) {
+            el.setAttribute('credentialless', '');
+        } else {
+            el.removeAttribute('credentialless');
+        }
+    }, [previewUrl]);
+
     const retryPreview = () => {
         previewStartedRef.current = false;
         setPreviewError('');
@@ -301,6 +324,43 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
+            const embedInline = shouldEmbedPreviewInIframe(previewUrl, previewSource);
+
+            if (!embedInline) {
+                const host = (() => {
+                    try { return new URL(previewUrl).hostname; } catch { return previewUrl; }
+                })();
+                return (
+                    <div className={`flex h-full flex-col items-center justify-center gap-4 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
+                        <ExternalLink className="h-8 w-8 text-blue-500" />
+                        <p className="text-sm font-medium">Open your site in the browser</p>
+                        <p className="text-xs opacity-80">
+                            {previewSource === 'deployed'
+                                ? 'Deployed sites block in-app preview for security. Syte live preview works inline — tap Retry below.'
+                                : 'This preview URL cannot be embedded here.'}
+                        </p>
+                        {previewError && previewSource === 'deployed' && (
+                            <p className="text-xs text-amber-500/90">{previewError}</p>
+                        )}
+                        <p className={`text-xs ${isDark ? 'text-[#c5c6c9]' : 'text-gray-600'}`}>{host}</p>
+                        <a
+                            href={previewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`rounded-lg px-4 py-2 text-sm font-medium ${isDark ? 'bg-white text-[#18191B] hover:bg-white/90' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                        >
+                            Open live site
+                        </a>
+                        <button
+                            onClick={retryPreview}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                        >
+                            Retry Syte live preview
+                        </button>
+                    </div>
+                );
+            }
+
             return (
                 <>
                     {previewSource === 'deployed' && (
@@ -314,11 +374,12 @@ export function EmbeddedChat() {
                         </div>
                     )}
                     <iframe
-                        ref={iframeRef}
+                        ref={applyIframeEmbedAttrs}
                         src={previewUrl}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                        referrerPolicy="no-referrer-when-downgrade"
                     />
                 </>
             );
