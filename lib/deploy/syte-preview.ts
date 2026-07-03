@@ -17,7 +17,7 @@ import {
   requireSyteWorkspaceUuid,
 } from "@/lib/deploy/syte-workspace"
 import { getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
-import { projectFiles } from "@/lib/workspace/sandbox"
+import { projectFiles, type WorkspaceFile } from "@/lib/workspace/sandbox"
 
 export type SytePreviewResult = {
   ok: boolean
@@ -70,6 +70,8 @@ export async function ensureSyteLivePreview(
     pollMs?: number
     maxWaitMs?: number
     domain?: string | null
+    /** In-memory files from the Syra client — preferred over MongoDB pages when set. */
+    clientFiles?: WorkspaceFile[] | null
   },
 ): Promise<SytePreviewResult> {
   const syncFiles = options?.syncFiles !== false
@@ -92,13 +94,28 @@ export async function ensureSyteLivePreview(
   }
 
   if (syncFiles) {
-    const files = projectFiles(project)
+    const clientFiles = Array.isArray(options?.clientFiles) ? options.clientFiles : []
+    const files = clientFiles.length > 0 ? clientFiles : projectFiles(project)
+    if (files.length === 0) {
+      return {
+        ok: false,
+        uuid,
+        error: "No project files to sync. Ask Syra to build your app, then open Preview again.",
+      }
+    }
     const sync = await syteSyncProjectFiles(uuid, files)
     if (sync.errors.length > 0) {
       return {
         ok: false,
         uuid,
         error: `File sync failed: ${sync.errors.slice(0, 2).join("; ")}`,
+      }
+    }
+    if (sync.synced === 0) {
+      return {
+        ok: false,
+        uuid,
+        error: "File sync wrote 0 files to Syte workspace.",
       }
     }
   }

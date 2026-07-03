@@ -129,22 +129,28 @@ export function EmbeddedChat() {
         };
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
 
-    const startSyteServerPreview = useCallback(async (): Promise<boolean> => {
-        if (!projectId) return false;
+    const startSyteServerPreview = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+        if (!projectId) return { ok: false, error: 'No project id' };
         setPreviewStatus('starting');
         setPreviewError('');
-        const result = await startSytePreview(projectId, { issueDomain: true });
+        const currentFiles = useStore.getState().files;
+        const result = await startSytePreview(projectId, {
+            issueDomain: true,
+            files: Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
+        });
         if (result.ok && result.previewUrl) {
             setPreviewUrl(result.previewUrl);
             setPreviewSource('syte');
             setPreviewStatus('ready');
             previewStartedRef.current = true;
-            return true;
+            return { ok: true };
         }
-        if (result.needsCreate) {
-            setPreviewError('Ask Syra to run createWorkspace() first, then open Preview again.');
-        }
-        return false;
+        const message = result.needsCreate
+            ? 'Ask Syra to run createWorkspace() first, then open Preview again.'
+            : (result.error || 'Syte preview failed to start');
+        setPreviewError(message);
+        previewStartedRef.current = false;
+        return { ok: false, error: message };
     }, [projectId, setPreviewUrl]);
 
     const startLivePreview = useCallback(async (currentFiles: Record<string, { file: { contents: string } }>) => {
@@ -212,13 +218,20 @@ export function EmbeddedChat() {
         }
 
         // Primary: Syte server preview (https://sycord.site/api/ — works on mobile)
+        let syteError = '';
         if (projectId) {
-            const syteOk = await startSyteServerPreview();
-            if (syteOk) return;
+            const syte = await startSyteServerPreview();
+            if (syte.ok) return;
+            syteError = syte.error || '';
         }
 
-        // Secondary: in-browser WebContainer when cross-origin isolated
-        if (window.crossOriginIsolated || window.location.pathname.includes('/syra')) {
+        // Secondary: in-browser WebContainer (desktop / isolated shells only)
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        const shouldTryWebContainer =
+            !isMobile &&
+            webContainerReady &&
+            (window.crossOriginIsolated || window.location.pathname.includes('/syra'));
+        if (shouldTryWebContainer) {
             await startLivePreview(currentFiles);
             return;
         }
@@ -228,9 +241,10 @@ export function EmbeddedChat() {
 
         setPreviewStatus('blocked');
         setPreviewError(
+            syteError ||
             'Could not start Syte preview. Ask Syra to run createWorkspace(), then setDomain() if needed, or deploy().'
         );
-    }, [projectId, startSyteServerPreview, startLivePreview, showDeployedFallback]);
+    }, [projectId, startSyteServerPreview, startLivePreview, showDeployedFallback, webContainerReady]);
 
     useEffect(() => {
         if (previewUrl) {

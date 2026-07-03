@@ -51,6 +51,47 @@ export function projectFiles(project: any): WorkspaceFile[] {
     .map((p: any) => ({ name: String(p.name).replace(/^\/+/, ""), content: p.content }))
 }
 
+/** Convert a Glovix in-memory files map into workspace files for Syte sync. */
+export function glovixFilesToWorkspaceFiles(
+  files: Record<string, { file?: { contents?: string } }> | null | undefined,
+): WorkspaceFile[] {
+  if (!files || typeof files !== "object") return []
+  return Object.entries(files)
+    .filter(([name]) => {
+      if (!name || name.startsWith(".glovix/") || name === "glovix-picker.js") return false
+      if (/^\.env(?:\.|$)/.test(name) || /\/\.env(?:\.|$)/.test(name)) return false
+      return true
+    })
+    .map(([name, entry]) => ({
+      name: name.replace(/^\/+/, ""),
+      content: typeof entry?.file?.contents === "string" ? entry.file.contents : "",
+    }))
+}
+
+/** Parse client POST body files (Glovix map or WorkspaceFile[]). */
+export function parseClientWorkspaceFiles(body: unknown): WorkspaceFile[] | null {
+  if (!body || typeof body !== "object") return null
+  const raw = (body as { files?: unknown }).files
+  if (!raw) return null
+
+  if (Array.isArray(raw)) {
+    const parsed = raw
+      .filter((f) => f && typeof f === "object" && typeof (f as any).name === "string")
+      .map((f) => ({
+        name: String((f as any).name).replace(/^\/+/, ""),
+        content: typeof (f as any).content === "string" ? (f as any).content : "",
+      }))
+    return parsed.length > 0 ? parsed : null
+  }
+
+  if (typeof raw === "object") {
+    const parsed = glovixFilesToWorkspaceFiles(raw as Record<string, { file?: { contents?: string } }>)
+    return parsed.length > 0 ? parsed : null
+  }
+
+  return null
+}
+
 /** Join `rel` under `root`, throwing if it would escape the root directory. */
 export function safeJoin(root: string, rel: string): string {
   const target = path.resolve(root, rel)

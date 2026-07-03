@@ -11,7 +11,7 @@ import {
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
 import { getStoredSyteUuid, requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
-import { isValidProjectId } from "@/lib/workspace/sandbox"
+import { isValidProjectId, parseClientWorkspaceFiles } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -67,10 +67,13 @@ export async function POST(req: Request): Promise<Response> {
     project.domain = body.domain.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "")
   }
 
+  const clientFiles = parseClientWorkspaceFiles(body)
+
   const result = await ensureSyteLivePreview(db, userId, projectId, project, {
     syncFiles: body?.syncFiles !== false,
     issueDomain: body?.issueDomain !== false,
     domain: typeof body?.domain === "string" ? body.domain : project?.domain,
+    clientFiles,
   })
 
   if (!result.ok) {

@@ -301,6 +301,8 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
     }
 
     try {
+        const state = useStore.getState();
+        const files = state.files;
         const res = await fetch('/api/workspace/preview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -308,6 +310,7 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
                 projectId,
                 domain: args?.domain,
                 issueDomain: true,
+                files: Object.keys(files).length > 0 ? files : undefined,
             }),
         });
         const data = await res.json().catch(() => ({} as any));

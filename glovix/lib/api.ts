@@ -311,7 +311,11 @@ export const saveChatMessages = async (
 /** Start Syte live preview (https://sycord.site/api/ start_preview). Issues domain if set on project. */
 export async function startSytePreview(
     projectId: string,
-    options?: { domain?: string; issueDomain?: boolean },
+    options?: {
+        domain?: string
+        issueDomain?: boolean
+        files?: Record<string, { file: { contents: string } }>
+    },
 ): Promise<{
     ok: boolean
     previewUrl?: string | null
@@ -329,6 +333,7 @@ export async function startSytePreview(
                 projectId,
                 domain: options?.domain,
                 issueDomain: options?.issueDomain,
+                files: options?.files,
             }),
         });
         const data = await res.json().catch(() => ({} as any));
