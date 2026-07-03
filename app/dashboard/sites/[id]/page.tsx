@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import GlovixBuilder from "@/components/glovix-builder"
 import { type GeneratedPage } from "@/lib/types"
 import {
   Trash2,
@@ -949,6 +948,18 @@ export default function SiteSettingsPage() {
         if (data.subscription) setSubscription(data.subscription)
       })
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
+  }, [])
+
+  // Syra iframe back button → return to project overview tab
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === "syra-navigate-back") {
+        setActiveTab("overview")
+      }
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
   }, [])
 
   // Fetch already-connected integrations when the integrations tab becomes active
@@ -2454,18 +2465,18 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: GLOVIX (AI BUILDER) */}
+            {/* TAB CONTENT: GLOVIX (AI BUILDER) — isolated iframe for WebContainer COOP/COEP */}
             {activeTab === "ai" && (
               <div className="h-full w-full flex flex-col">
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
-                    <div className="absolute inset-0 overflow-hidden">
-                      <GlovixBuilder
-                        projectId={id}
-                        userImage={session?.user?.image}
-                        onBack={() => setActiveTab("overview")}
-                      />
-                    </div>
+                    <iframe
+                      key={id}
+                      src={`/dashboard/sites/${id}/syra`}
+                      className="absolute inset-0 h-full w-full border-0 bg-[#18191B]"
+                      title="Syra AI Builder"
+                      allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                    />
                   ) : (
                     <div className="flex items-center justify-center h-full">
                       <AlertCircle className="h-6 w-6 text-destructive mr-2" />

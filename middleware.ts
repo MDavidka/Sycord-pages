@@ -12,7 +12,11 @@ const CROSS_ORIGIN_ISOLATION_HEADERS: Record<string, string> = {
 function needsCrossOriginIsolation(pathname: string): boolean {
   if (pathname === "/builder") return true
   if (pathname.startsWith("/builder/")) return true
-  return /^\/dashboard\/sites\/[^/]+$/.test(pathname)
+  // Isolated Syra iframe shell (WebContainer preview)
+  if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) return true
+  // Legacy: full dashboard page (kept for direct loads)
+  if (/^\/dashboard\/sites\/[^/]+$/.test(pathname)) return true
+  return false
 }
 
 function applyCrossOriginIsolation(response: NextResponse) {

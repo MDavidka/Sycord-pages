@@ -57,6 +57,7 @@ const nextConfig = {
     return [
       { source: "/builder", headers: crossOriginIsolation },
       { source: "/builder/:path*", headers: crossOriginIsolation },
+      { source: "/dashboard/sites/:id/syra", headers: crossOriginIsolation },
       { source: "/dashboard/sites/:id", headers: crossOriginIsolation },
     ]
   },

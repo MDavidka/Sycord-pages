@@ -135,7 +135,7 @@ export function EmbeddedChat() {
 
         if (!window.crossOriginIsolated) {
             setPreviewStatus('blocked');
-            setPreviewError('Live preview needs cross-origin isolation headers on this page. Hard-refresh the Syra tab — if this persists, the latest app version may not be deployed yet.');
+            setPreviewError('Live preview needs an isolated Syra frame. Hard-refresh the Syra tab — if this persists, the latest app version may not be deployed yet.');
             return;
         }
 
