@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { Message, ModelType } from '../lib/ai';
+import type { GenerationPlan } from '../lib/generation-plan';
+import type { ModelLearnEntry } from '../lib/model-learn';
+import { trimModelLearnLog } from '../lib/model-learn';
 import { User } from '../lib/auth';
 import { UserTokens, ChatHistory } from '../lib/api';
 
@@ -200,6 +203,17 @@ interface AppState {
     selectedElement: { tag: string; text: string; selector: string } | null;
     setElementPickerActive: (active: boolean) => void;
     setSelectedElement: (el: { tag: string; text: string; selector: string } | null) => void;
+
+    // Generation plan (planning() tool + PlanChecklist UI)
+    generationPlan: GenerationPlan | null;
+    setGenerationPlan: (plan: GenerationPlan | null) => void;
+
+    // Model-learn debug log
+    modelLearnLog: ModelLearnEntry[];
+    addModelLearnEntry: (entry: ModelLearnEntry) => void;
+    setModelLearnLog: (entries: ModelLearnEntry[]) => void;
+    showModelLearn: boolean;
+    setShowModelLearn: (show: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -214,7 +228,7 @@ export const useStore = create<AppState>((set) => ({
     terminalOutput: [],
     previewUrl: null,
     parsedErrors: [],
-    selectedModel: 'mimo-v2-flash',
+    selectedModel: 'deepseek-v4-flash',
     isDeploying: false,
     theme: (localStorage.getItem('theme') as 'dark' | 'light') || 'dark',
     showTokenCounter: localStorage.getItem('showTokenCounter') === 'true',
@@ -368,7 +382,7 @@ export const useStore = create<AppState>((set) => ({
     aiProvider: localStorage.getItem('aiProvider') || 'glovix',
     aiApiKey: localStorage.getItem('aiApiKey') || '',
     aiBaseUrl: localStorage.getItem('aiBaseUrl') || 'https://api.openai.com/v1',
-    aiModel: localStorage.getItem('aiModel') || 'gpt-4o',
+    aiModel: localStorage.getItem('aiModel') || 'deepseek-v4-flash',
 
     // AI Provider Actions
     setAiProvider: (provider) => {
@@ -400,4 +414,15 @@ export const useStore = create<AppState>((set) => ({
     selectedElement: null,
     setElementPickerActive: (elementPickerActive) => set({ elementPickerActive }),
     setSelectedElement: (selectedElement) => set({ selectedElement }),
+
+    // Generation plan
+    generationPlan: null,
+    setGenerationPlan: (generationPlan) => set({ generationPlan }),
+
+    modelLearnLog: [],
+    addModelLearnEntry: (entry) =>
+        set((state) => ({ modelLearnLog: trimModelLearnLog([...state.modelLearnLog, entry]) })),
+    setModelLearnLog: (modelLearnLog) => set({ modelLearnLog }),
+    showModelLearn: false,
+    setShowModelLearn: (showModelLearn) => set({ showModelLearn }),
 }));

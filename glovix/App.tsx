@@ -12,6 +12,7 @@ import { getChatMessages, getProject, getChat } from './lib/api';
 import { getHostProjectId } from './lib/api';
 import { useAutoSave } from './lib/autoSave';
 import { mountFiles, autoInstallDependencies } from './lib/webcontainer';
+import { initErudaIfPresent } from './lib/init-eruda';
 
 function HomePageRoute() {
     const { setCurrentChatId, setMessages, setFiles } = useStore();
@@ -131,6 +132,10 @@ function AppContent() {
     useEffect(() => {
         document.documentElement.classList.toggle('light', theme === 'light');
     }, [theme]);
+
+    useEffect(() => {
+        initErudaIfPresent();
+    }, []);
 
     useEffect(() => {
         const initAuth = async () => {

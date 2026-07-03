@@ -2,16 +2,18 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
+    'deepseek-v4-flash': 'DeepSeek V4 Flash',
     'deepseek-v4-pro': 'DeepSeek V4 Pro',
     'gemini-3.1-pro': 'Gemini 3.1 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
+    'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
     'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
     'gemini-3.1-pro': 'gemini-3.1-pro',
 };
@@ -35,9 +37,9 @@ export const MODEL_CHOICES: ModelChoice[] = [
     {
         id: 'base',
         label: 'syra-base',
-        subtitle: 'Powerful · DeepSeek V4',
-        modelType: 'deepseek-v4-pro',
-        apiModel: 'deepseek-v4-pro',
+        subtitle: 'Balanced · DeepSeek V4 Flash',
+        modelType: 'deepseek-v4-flash',
+        apiModel: 'deepseek-v4-flash',
     },
     {
         id: 'havy',
@@ -92,8 +94,9 @@ import { useStore } from '../store';
 // ============================================================
 
 const STREAM_TIMEOUT_MS = 60000;       // 60s max silence before considering stream dead
-const MAX_RETRIES = 2;                 // Retry failed API calls up to 2 times
-const RETRY_DELAY_MS = 2000;           // Wait 2s between retries
+const MAX_RETRIES = 4;                 // Retry failed API calls (429 rate limits need extra attempts)
+const RETRY_DELAY_MS = 2000;           // Base wait between retries
+const RETRY_429_DELAY_MS = 5000;       // Longer backoff for Vertex rate limits
 
 // ============================================================
 // HELPERS
@@ -105,6 +108,33 @@ function estimateTokens(text: string): number {
 
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(message: string): boolean {
+    const lower = message.toLowerCase();
+    return (
+        lower.includes('429') ||
+        lower.includes('resource_exhausted') ||
+        lower.includes('resource exhausted') ||
+        lower.includes('too many requests') ||
+        lower.includes('rate limit') ||
+        lower.includes('quota')
+    );
+}
+
+function isRetryableAiError(message: string): boolean {
+    const lower = message.toLowerCase();
+    return (
+        lower.includes('timeout') ||
+        lower.includes('network') ||
+        lower.includes('fetch') ||
+        lower.includes('500') ||
+        lower.includes('502') ||
+        lower.includes('503') ||
+        lower.includes('529') ||
+        lower.includes('stream stalled') ||
+        isRateLimitError(message)
+    );
 }
 
 // Sanitize messages before sending to API — remove invalid/broken messages
@@ -181,7 +211,10 @@ export async function sendMessage(
 
             if (attempt > 0) {
                 console.log(`[AI] Retry attempt ${attempt}/${MAX_RETRIES}...`);
-                await sleep(RETRY_DELAY_MS * attempt);
+                const delay = isRateLimitError(lastError?.message || '')
+                    ? RETRY_429_DELAY_MS * attempt
+                    : RETRY_DELAY_MS * attempt;
+                await sleep(delay);
             }
 
             return await _sendMessageInternal(messages, onChunk, signal, onToolCallStream);
@@ -195,19 +228,15 @@ export async function sendMessage(
             if (error.message?.includes('Missing API Key')) throw error;
             if (error.message?.includes('Aborted')) throw error;
 
-            // Retry on network/timeout/5xx errors
-            const isRetryable = (
-                error.message?.includes('timeout') ||
-                error.message?.includes('network') ||
-                error.message?.includes('fetch') ||
-                error.message?.includes('500') ||
-                error.message?.includes('502') ||
-                error.message?.includes('503') ||
-                error.message?.includes('529') ||
-                error.message?.includes('Stream stalled')
-            );
+            const isRetryable = isRetryableAiError(error.message || '');
 
             if (!isRetryable || attempt >= MAX_RETRIES) {
+                if (isRateLimitError(error.message || '')) {
+                    throw new Error(
+                        'AI rate limit reached (429 RESOURCE_EXHAUSTED). The request was retried automatically. ' +
+                        'Please wait a moment and try again, or switch to a different model in Settings.'
+                    );
+                }
                 throw error;
             }
 
@@ -262,6 +291,8 @@ async function _sendMessageInternal(
         // DeepSeek
         'deepseek-chat': 128000,
         'deepseek-reasoner': 128000,
+        'deepseek-v4-flash': 128000,
+        'deepseek/deepseek-v4-flash': 128000,
         'deepseek-v4-pro': 128000,
         'deepseek/deepseek-v4-pro': 128000,
         // MiMo
@@ -338,6 +369,9 @@ async function _sendMessageInternal(
         }
         const error = await response.text().catch(() => 'Unknown error');
         console.error(`[AI] API Error ${response.status}:`, error.substring(0, 300));
+        if (response.status === 429) {
+            throw new Error(`429 RESOURCE_EXHAUSTED: ${error.substring(0, 500)}`);
+        }
         throw new Error(`API Error: ${response.status} - ${error.substring(0, 500)}`);
     }
 

@@ -1,15 +1,18 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
-import { saveChatMessages, saveProject, createChat, getHostProjectId } from '../lib/api';
+import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
+import { PlanChecklist } from './PlanChecklist';
+import { ModelLearnPanel } from './ModelLearnPanel';
+import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
@@ -18,6 +21,7 @@ import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
+import { buildInjectedProjectContext } from '../lib/project-context';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -57,7 +61,29 @@ interface MessageGroup {
 interface ChatProps {
     scrollRef?: RefObject<HTMLDivElement | null>;
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+    /** Embedded mobile: opens the live preview pane (swipe left). */
+    onOpenPreview?: () => void;
+    showPreviewButton?: boolean;
 }
+
+// Claude-Code-style short path: filename only, but keep the parent folder for
+// Next.js route files (page.tsx/layout.tsx/…) so many "page.tsx" rows stay
+// distinguishable. e.g. "app/pricing/page.tsx" → "pricing/page.tsx", but
+// "components/ui/button.tsx" → "button.tsx".
+const NEXT_ROUTE_FILES = new Set([
+    'page.tsx', 'page.ts', 'layout.tsx', 'layout.ts', 'route.ts', 'route.tsx',
+    'loading.tsx', 'error.tsx', 'not-found.tsx', 'template.tsx', 'default.tsx',
+    'globals.css', 'index.tsx', 'index.ts',
+]);
+const shortFilePath = (path: string): string => {
+    if (!path) return '';
+    const parts = path.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
+    const base = parts[parts.length - 1] || path;
+    if (NEXT_ROUTE_FILES.has(base) && parts.length > 1) {
+        return `${parts[parts.length - 2]}/${base}`;
+    }
+    return base;
+};
 
 const getActionDisplayName = (toolName: string, args: string): string => {
     if (!toolName) return 'Preparing...';
@@ -79,27 +105,39 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     try {
         const parsed = JSON.parse(args);
         switch (toolName) {
-            case 'createFile': return parsed.path || '';
-            case 'editFile': return parsed.path || '';
-            case 'readFile': return parsed.path || '';
+            case 'createFile': return shortFilePath(parsed.path || '');
+            case 'write_file': return shortFilePath(parsed.path || '');
+            case 'editFile': return shortFilePath(parsed.path || '');
+            case 'readFile': return shortFilePath(parsed.path || '');
             case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
-            case 'deleteFile': return parsed.path || '';
-            case 'renameFile': return parsed.oldPath ? `${parsed.oldPath} → ${parsed.newPath}` : '';
-            case 'searchInFiles': return decodeHtml(parsed.query || '');
+            case 'deleteFile': return shortFilePath(parsed.path || '');
+            case 'renameFile': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
+            case 'grep':
+            case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
+            case 'createWorkspace': return 'Syte API';
+            case 'setDomain': return decodeHtml(parsed.domain || '');
+            case 'startPreview': return 'sycord.site preview';
             case 'typeCheck': return 'Workspace';
+            case 'executeCommand': return decodeHtml(parsed.command || 'shell');
             case 'lintCheck': return parsed.path || 'src/';
             case 'listFiles': return 'Workspace';
             case 'getErrors': return 'Workspace';
             case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
+            case 'planning':
+                if (parsed.action === 'updateStep' && parsed.stepId) return String(parsed.stepId).replace(/-/g, ' ');
+                if (parsed.action === 'create') return parsed.title || parsed.appType || 'new plan';
+                return parsed.action || 'pipeline';
             case 'deploy': return 'sycord.site';
             default: return '';
         }
     } catch {
         switch (toolName) {
             case 'createFile':
+            case 'write_file':
             case 'editFile':
             case 'readFile':
             case 'deleteFile':
+                return shortFilePath(extract('path'));
             case 'lintCheck':
                 return extract('path');
             case 'readMultipleFiles':
@@ -108,10 +146,14 @@ const getActionDisplayName = (toolName: string, args: string): string => {
                 const oldP = extract('oldPath');
                 const newP = extract('newPath');
                 return oldP ? `${oldP} → ${newP}` : oldP;
+            case 'grep':
             case 'searchInFiles':
-                return extract('query');
+                return extract('pattern') || extract('query');
             case 'batchCreateFiles': return 'Multiple files';
+            case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
             case 'getErrors': return 'Workspace';
+            case 'setDomain': return extract('domain') || 'domain';
+            case 'startPreview': return 'preview';
             case 'deploy': return 'sycord.site';
             default: return '';
         }
@@ -171,7 +213,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     )
 }
 
-export function Chat({ scrollRef, onScroll }: ChatProps) {
+export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
@@ -192,6 +234,11 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     const setSystemPrompt = useStore(s => s.setSystemPrompt);
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
+    const generationPlan = useStore(s => s.generationPlan);
+    const modelLearnLog = useStore(s => s.modelLearnLog);
+    const addModelLearnEntry = useStore(s => s.addModelLearnEntry);
+    const showModelLearn = useStore(s => s.showModelLearn);
+    const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
 
     // Local actions state
@@ -283,15 +330,17 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
     };
 
-    // Load saved messages when opening an existing chat
+    // Load saved messages when opening an existing chat (standalone mode only).
+    // Embedded dashboard chats are loaded by EmbeddedChat per project.
     useEffect(() => {
+        if (getHostProjectId()) return;
+
         const loadChatMessages = async () => {
             if (currentChatId && user) {
                 try {
                     const { getChatMessages } = await import('../lib/api');
                     const data = await getChatMessages(currentChatId);
                     if (data.messages && data.messages.length > 0) {
-                        // Only load if we don't have messages already (to avoid overwriting during active chat)
                         if (messages.length === 0) {
                             setMessages(data.messages);
                         }
@@ -525,12 +574,26 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // Tool execution context
     const toolContext: ToolContext = {
         addTerminalOutput,
-        setSelectedFile
+        setSelectedFile,
     };
 
-    const handleToolCall = async (toolCall: ToolCall): Promise<string> => {
+    const handleToolCall = async (
+        toolCall: ToolCall,
+        meta?: { reason?: string; turnIndex?: number },
+    ): Promise<string> => {
         const { name, arguments: argsString } = toolCall.function;
         const result = await executeTool(name, argsString, toolContext);
+
+        addModelLearnEntry(
+            recordToolLearnEntry({
+                toolName: name,
+                argsString: argsString || '{}',
+                output: result,
+                reason: meta?.reason || '',
+                toolCallId: toolCall.id,
+                turnIndex: meta?.turnIndex,
+            }),
+        );
 
         // Auto-retry logic for editFile failures: read the file and provide content in error
         if (name === 'editFile' && result.includes('Error editing') && result.includes('Could not find')) {
@@ -674,9 +737,14 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
         const presetDescription = getPresetDescription(presetId);
+        const projectContextBlock = buildInjectedProjectContext(currentFiles);
+        const modelLearnBlock = buildModelLearnContext(useStore.getState().modelLearnLog);
         const promptContent = currentSystemPrompt
-            ? currentSystemPrompt.replace('{{FILE_LIST}}', fileList).replace('{{PRESET}}', presetDescription)
-            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}`;
+            ? currentSystemPrompt
+                .replace('{{FILE_LIST}}', fileList)
+                .replace('{{PRESET}}', presetDescription)
+                .replace('{{PROJECT_CONTEXT}}', projectContextBlock + (modelLearnBlock ? `\n\n${modelLearnBlock}` : ''))
+            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n\n${projectContextBlock}`;
 
         const SYSTEM_PROMPT: Message = {
             role: 'system',
@@ -1076,7 +1144,19 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
 
                     let result = '';
                     try {
-                        result = await handleToolCall(toolCall);
+                        if (toolCall.function.name === 'deploy') {
+                            toolContext.onDeployProgress = (message: string) => {
+                                if (actionId) {
+                                    updateAction(actionId, { result: message, status: 'running' });
+                                }
+                            };
+                        } else {
+                            toolContext.onDeployProgress = undefined;
+                        }
+                        result = await handleToolCall(toolCall, {
+                            reason: assistantMessageContent.trim(),
+                            turnIndex: turns,
+                        });
                     } catch (err: any) {
                         console.error('Tool execution error:', err);
                         result = `Error executing tool ${toolCall.function.name}: ${err.message}.\n\n⚠️ Suggestion: Try a different approach or use readFile to check the current state.`;
@@ -1088,8 +1168,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                         const isToolError = (
                             result.startsWith('Error ') ||
                             result.startsWith('[SYSTEM] ❌') ||
-                            result.includes('crashed') ||
-                            result.includes('FAILED')
+                            result.includes('AUTO-FIX REQUIRED') ||
+                            (result.includes('crashed') && !result.includes('Deployment build completed')) ||
+                            (result.includes('FAILED') && !result.includes('[SYSTEM] ✅'))
                         ) && !result.includes('[SYSTEM] ✅') && !result.includes('TypeScript check found');
 
                         const newStatus = isToolError ? 'error' : 'done';
@@ -1332,7 +1413,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                     const { useStore } = await import('../store');
                     const state = useStore.getState();
 
-                    await saveChatMessages(chatId, state.messages);
+                    await saveChatMessages(chatId, state.messages, {
+                        keepalive: true,
+                        projectId: getHostProjectId(),
+                    });
 
                     if (Object.keys(state.files).length > 0) {
                         await saveProject(chatId, user.uid, state.files);
@@ -1369,7 +1453,11 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
         }
 
         // Create chat if not exists
-        let chatId = currentChatId;
+        let chatId = currentChatId || getEmbeddedChatId();
+        if (chatId && chatId !== currentChatId) {
+            setCurrentChatId(chatId);
+        }
+
         if (!chatId && user) {
             try {
                 const title = input.slice(0, 50) + (input.length > 50 ? '...' : '');
@@ -1501,8 +1589,10 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     // safe-area aware spacing. The host injects the real Google avatar + a back
     // handler via window globals (see GlovixBuilder).
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
+    const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
     const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
-    const profileImage = hostUserImage || user?.photoURL;
+    // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
+    const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
     const handleBack = () => {
         const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
         if (typeof fn === 'function') fn();
@@ -1511,6 +1601,13 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
     return (
         <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             {showDeepMemory && <DeepMemoryModal onClose={() => setShowDeepMemory(false)} />}
+            {showModelLearn && (
+                <ModelLearnPanel
+                    entries={modelLearnLog}
+                    isDark={isDark}
+                    onClose={() => setShowModelLearn(false)}
+                />
+            )}
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -1544,8 +1641,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             <Undo2 className="h-5 w-5" />
                         </button>
 
-                        {/* Profile / brand logo */}
-                        <div className="flex items-center gap-2">
+                        {/* Profile cluster + preview entry (embedded mobile) */}
+                        <div className="flex flex-col items-end gap-1.5">
+                            <div className="flex items-center gap-2">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <button
@@ -1560,6 +1658,15 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                     <BuilderPipelineDocs isDark={isDark} />
                                 </DropdownMenuContent>
                             </DropdownMenu>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowModelLearn(true)}
+                                aria-label="Model-learn debug"
+                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
+                            >
+                                ML
+                            </button>
 
                             <button
                                 type="button"
@@ -1579,6 +1686,19 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
                             )}
                             </button>
+                            </div>
+
+                            {showPreviewButton && onOpenPreview && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenPreview}
+                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                                    title="Swipe left to preview"
+                                >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Preview
+                                </button>
+                            )}
                         </div>
                     </div>
                 </header>
@@ -1592,7 +1712,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             >
                 <div
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    style={embedded ? { paddingTop: showPreviewButton ? 'calc(env(safe-area-inset-top, 0px) + 6.5rem)' : 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
@@ -1640,9 +1760,14 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                             const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
 
                                             if (showLive) {
-                                                return <ActionsList key={`seg-${segIdx}`} actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />;
+                                                return (
+                                                    <div key={`seg-${segIdx}`}>
+                                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                                    </div>
+                                                );
                                             }
                                             return (
+                                                <div key={`seg-${segIdx}`}>
                                                 <ActionsList
                                                     key={`seg-${segIdx}`}
                                                     actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
@@ -1655,6 +1780,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                                     }))}
                                                     isDark={isDark}
                                                 />
+                                                </div>
                                             );
                                         }
                                         return null;
@@ -1865,8 +1991,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             </div>
                         )}
 
-                        {/* Unified composer card */}
+                        {/* Unified composer card — plan checklist embedded at top on small screens */}
                         <div className={`rounded-[28px] border px-2 pt-1.5 pb-2 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                            <PlanChecklist plan={generationPlan} isDark={isDark} embedded />
                             {/* Text input */}
                             <textarea
                                 ref={textareaRef}
@@ -1881,7 +2008,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 }}
                                 placeholder="Help you write code, debug and ship production-ready work."
                                 className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                style={{ height: 'auto', minHeight: '76px' }}
+                                style={{ height: 'auto', minHeight: generationPlan ? '44px' : '76px' }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();

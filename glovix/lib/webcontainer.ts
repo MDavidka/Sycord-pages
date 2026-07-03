@@ -1,6 +1,7 @@
-import { WebContainer, FileSystemTree, DirectoryNode } from '@webcontainer/api';
+import { WebContainer, FileSystemTree, DirectoryNode, PreviewMessageType } from '@webcontainer/api';
 
 import { useStore } from '../store';
+import { getPageCoepMode } from './coep';
 
 declare global {
     interface Window {
@@ -10,23 +11,55 @@ declare global {
 }
 
 let webContainerInstance: WebContainer | null = null;
+let cachedPreviewUrl: string | null = null;
+let previewListenerRegistered = false;
+
+/** Last URL emitted by WebContainer's server-ready event (survives store resets). */
+export function getCachedPreviewUrl(): string | null {
+    return cachedPreviewUrl;
+}
+
+function registerPreviewListener(instance: WebContainer) {
+    if (previewListenerRegistered) return;
+    previewListenerRegistered = true;
+    instance.on('server-ready', (port, url) => {
+        console.log('[WebContainer] Server ready on port', port, '→', url);
+        cachedPreviewUrl = url;
+        useStore.getState().setPreviewUrl(url);
+    });
+    instance.on('preview-message', (message) => {
+        if (message.type === PreviewMessageType.ConsoleError) {
+            console.warn('[WebContainer preview] console.error:', ...message.args);
+        } else if (message.type === PreviewMessageType.UncaughtException) {
+            console.warn('[WebContainer preview] Uncaught exception:', message.message);
+        } else if (message.type === PreviewMessageType.UnhandledRejection) {
+            console.warn('[WebContainer preview] Unhandled rejection:', message.message);
+        }
+    });
+}
 
 export async function getWebContainer() {
-    if (webContainerInstance) return webContainerInstance;
+    if (webContainerInstance) {
+        registerPreviewListener(webContainerInstance);
+        return webContainerInstance;
+    }
     if (window._webContainerInstance) {
         webContainerInstance = window._webContainerInstance;
+        registerPreviewListener(webContainerInstance);
         return webContainerInstance;
     }
 
     if (!window._bootPromise) {
-        window._bootPromise = WebContainer.boot()
+        window._bootPromise = WebContainer.boot({
+            coep: getPageCoepMode(),
+            // Keep preview errors inside WebContainer; forwarding causes generic
+            // cross-origin "Script error." spam in parent/Eruda consoles.
+            forwardPreviewErrors: false,
+        })
             .then(async (instance) => {
                 window._webContainerInstance = instance;
                 webContainerInstance = instance;
-                instance.on('server-ready', (port, url) => {
-                    console.log('[WebContainer] Server ready on port', port, '→', url);
-                    useStore.getState().setPreviewUrl(url);
-                });
+                registerPreviewListener(instance);
                 // Ensure .glovix system directory exists from the start
                 try { await instance.fs.mkdir('.glovix', { recursive: true }); } catch { /* ok */ }
                 return instance;
@@ -36,6 +69,7 @@ export async function getWebContainer() {
                 // Provide helpful error message for COOP/COEP issues
                 if (error?.message?.includes('SharedArrayBuffer') || error?.message?.includes('cross-origin')) {
                     console.error('[WebContainer] SharedArrayBuffer/COEP Error: Ensure server has proper COEP headers');
+                    cachedPreviewUrl = null;
                     useStore.getState().setPreviewUrl('');
                 }
                 throw error;

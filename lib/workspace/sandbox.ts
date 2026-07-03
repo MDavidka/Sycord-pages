@@ -17,6 +17,7 @@ import path from "node:path"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { getOwnedProject } from "@/lib/project-id"
 
 /** Root directory under which every project's sandbox workspace lives. */
 export const WORKSPACE_BASE = path.join(os.tmpdir(), "sycord-workspace")
@@ -39,11 +40,7 @@ export async function loadProject(userId: string, projectId: string): Promise<an
   if (!isValidProjectId(projectId)) return null
   const client = await clientPromise
   const db = client.db()
-  const user = await db.collection("users").findOne<{ projects?: any[] }>(
-    { id: userId, "projects._id": projectId },
-    { projection: { "projects.$": 1 } },
-  )
-  return user?.projects?.[0] ?? null
+  return getOwnedProject(db, userId, projectId)
 }
 
 /** Convert a project's stored `pages` into a clean list of workspace files. */
@@ -52,6 +49,47 @@ export function projectFiles(project: any): WorkspaceFile[] {
   return pages
     .filter((p: any) => typeof p?.name === "string" && typeof p?.content === "string")
     .map((p: any) => ({ name: String(p.name).replace(/^\/+/, ""), content: p.content }))
+}
+
+/** Convert a Glovix in-memory files map into workspace files for Syte sync. */
+export function glovixFilesToWorkspaceFiles(
+  files: Record<string, { file?: { contents?: string } }> | null | undefined,
+): WorkspaceFile[] {
+  if (!files || typeof files !== "object") return []
+  return Object.entries(files)
+    .filter(([name]) => {
+      if (!name || name.startsWith(".glovix/") || name === "glovix-picker.js") return false
+      if (/^\.env(?:\.|$)/.test(name) || /\/\.env(?:\.|$)/.test(name)) return false
+      return true
+    })
+    .map(([name, entry]) => ({
+      name: name.replace(/^\/+/, ""),
+      content: typeof entry?.file?.contents === "string" ? entry.file.contents : "",
+    }))
+}
+
+/** Parse client POST body files (Glovix map or WorkspaceFile[]). */
+export function parseClientWorkspaceFiles(body: unknown): WorkspaceFile[] | null {
+  if (!body || typeof body !== "object") return null
+  const raw = (body as { files?: unknown }).files
+  if (!raw) return null
+
+  if (Array.isArray(raw)) {
+    const parsed = raw
+      .filter((f) => f && typeof f === "object" && typeof (f as any).name === "string")
+      .map((f) => ({
+        name: String((f as any).name).replace(/^\/+/, ""),
+        content: typeof (f as any).content === "string" ? (f as any).content : "",
+      }))
+    return parsed.length > 0 ? parsed : null
+  }
+
+  if (typeof raw === "object") {
+    const parsed = glovixFilesToWorkspaceFiles(raw as Record<string, { file?: { contents?: string } }>)
+    return parsed.length > 0 ? parsed : null
+  }
+
+  return null
 }
 
 /** Join `rel` under `root`, throwing if it would escape the root directory. */
@@ -127,10 +165,13 @@ export function validateNextBuildable(files: WorkspaceFile[]): string[] {
   const byName = new Map(files.map((f) => [f.name.replace(/^\/+/, ""), f]))
   const names = Array.from(byName.keys())
 
+  let isVite = false
+  let isNext = false
+
   // 1. package.json must exist, be valid JSON, and expose a `build` script.
   const pkgFile = byName.get("package.json")
   if (!pkgFile) {
-    problems.push('Missing "package.json" — a Next.js project needs one with a "build" script.')
+    problems.push('Missing "package.json" — the project needs one with a "build" script.')
   } else {
     let pkg: any
     try {
@@ -141,22 +182,34 @@ export function validateNextBuildable(files: WorkspaceFile[]): string[] {
     if (pkg) {
       const buildScript = pkg?.scripts?.build
       if (typeof buildScript !== "string" || buildScript.trim().length === 0) {
-        problems.push('"package.json" has no "scripts.build" command (expected e.g. "next build").')
+        problems.push('"package.json" has no "scripts.build" command (expected e.g. "vite build" or "next build").')
       }
-      const hasNextDep = !!(pkg?.dependencies?.next || pkg?.devDependencies?.next)
-      if (!hasNextDep) {
-        problems.push('"next" is not listed in package.json dependencies — add it so the app can build.')
+      const deps = { ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) }
+      isVite = !!deps.vite
+      isNext = !!deps.next
+      if (!isVite && !isNext) {
+        problems.push('Neither "vite" nor "next" is listed in package.json — add the build tool so the app can build.')
       }
     }
   }
 
-  // 2. There must be at least one route entry the build can compile.
-  const hasAppEntry = names.some((n) => /^app\/(.*\/)?(page|layout)\.(tsx|ts|jsx|js)$/.test(n))
-  const hasPagesEntry = names.some((n) => /^pages\/.+\.(tsx|ts|jsx|js)$/.test(n))
-  if (!hasAppEntry && !hasPagesEntry) {
-    problems.push(
-      'No route entry found — add an App Router entry (e.g. "app/page.tsx" and "app/layout.tsx") or a "pages/" file.',
-    )
+  // 2. There must be an entry the build can compile.
+  if (isNext && !isVite) {
+    const hasAppEntry = names.some((n) => /^app\/(.*\/)?(page|layout)\.(tsx|ts|jsx|js)$/.test(n))
+    const hasPagesEntry = names.some((n) => /^pages\/.+\.(tsx|ts|jsx|js)$/.test(n))
+    if (!hasAppEntry && !hasPagesEntry) {
+      problems.push('No Next.js route entry found — add "app/page.tsx" and "app/layout.tsx" or a "pages/" file.')
+    }
+  } else {
+    // Vite SPA — needs an HTML entry and a JS/TS entry module.
+    const hasHtml = names.some((n) => /(^|\/)index\.html$/.test(n))
+    const hasEntry = names.some((n) => /^src\/main\.(tsx|ts|jsx|js)$/.test(n) || /^src\/index\.(tsx|ts|jsx|js)$/.test(n))
+    if (!hasHtml) {
+      problems.push('No "index.html" found — a Vite app needs an index.html entry.')
+    }
+    if (!hasEntry) {
+      problems.push('No entry module found — add "src/main.tsx" (or src/index.tsx).')
+    }
   }
 
   return problems

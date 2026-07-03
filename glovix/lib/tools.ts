@@ -3,6 +3,19 @@ import { useStore } from '../store';
 import { parseToolArguments } from './utils';
 import { getHostProjectId, getProjectPagesMap, deleteProjectPage, isPageBackedFile } from './api';
 import { collectEnvKeysForIntegrations, getIntegrationById } from '../../lib/integrations';
+import {
+    getMissingShadcnFoundationFiles,
+    SHADCN_FOUNDATION_DEPENDENCIES,
+} from './shadcn-init-files';
+import { scanMissingShadcnImports, normalizeShadcnImportPaths, scanRegistryImportPaths } from '../../lib/shadcn-shared';
+import {
+    buildGenerationPlan,
+    formatPlanForAi,
+    updatePlanStep,
+    type GenerationPlan,
+    type PlanStepStatus,
+    type PlannedPage,
+} from './generation-plan';
 
 /**
  * Result of attempting to persist a file to the project's Pages (MongoDB).
@@ -170,13 +183,17 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
         const res = await fetch(`/api/workspace/diagnostics?projectId=${encodeURIComponent(projectId)}`);
         if (!res.ok) {
             const msg = await res.text().catch(() => '');
+            if (res.status === 409 && msg.includes('createWorkspace')) {
+                return `[SYSTEM] ❌ No Syte workspace UUID yet. Call createWorkspace() FIRST (POST /api/create_project), then typeCheck().\n${msg}`.trim();
+            }
             return `[SYSTEM] ❌ Type check could not run on the Sycord server (HTTP ${res.status}). ${msg}`.trim();
         }
         const data = await res.json();
         const errors: Array<{ file: string; line: number; message: string }> = Array.isArray(data?.errors) ? data.errors : [];
+        const summary = typeof data?.summary === 'string' ? data.summary : null;
 
         if (errors.length === 0) {
-            return '[SYSTEM] ✅ TypeScript check passed: No type errors found.';
+            return summary || '[SYSTEM] ✅ TypeScript check passed: No actionable errors in your project source.';
         }
 
         // Feed the Error Panel.
@@ -191,13 +208,291 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
             useStore.getState().addParsedErrors(parsed as any);
         } catch { /* error panel is best-effort */ }
 
+        if (summary) return summary;
+
         const lines = errors
-            .slice(0, 50)
+            .slice(0, 40)
             .map((e) => `  ${e.file}:${e.line} — ${e.message}`)
             .join('\n');
-        return `[SYSTEM] TypeScript check found ${errors.length} error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
+        return `[SYSTEM] TypeScript check found ${errors.length} actionable error(s):\n${lines}\n\nYou MUST fix these errors now. Use readFile on the affected files, then editFile or createFile to fix them.`;
     } catch (e: any) {
         return `Error running TypeScript check on the server: ${e.message}`;
+    }
+}
+
+/**
+ * Step 1 — POST /api/create_project on Syte (https://sycord.site/api/).
+ * Returns the workspace UUID required for all execute_command calls.
+ */
+export async function handleCreateWorkspace(args?: { domain?: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ createWorkspace is only available when building inside a Sycord project.';
+    }
+
+    try {
+        const body: Record<string, unknown> = { projectId, action: 'create_project' };
+        if (args?.domain?.trim()) {
+            body.domain = args.domain.trim();
+        }
+
+        const res = await fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({} as any));
+
+        if (!res.ok || !data?.uuid) {
+            const err = data?.error || data?.message || `HTTP ${res.status}`
+            const endpoint = data?.endpoint ? ` (${data.endpoint})` : ""
+            return `[SYSTEM] ❌ createWorkspace failed: ${err}${endpoint}`
+        }
+
+        const lines = [
+            `[SYSTEM] ✅ Syte workspace ready.`,
+            `UUID: ${data.uuid} (use for all execute_command calls)`,
+            data.status === 'created' ? 'Status: newly created via POST /api/create_project' : 'Status: existing workspace reused',
+        ];
+
+        if (data.execute_command && typeof data.execute_command === 'object') {
+            const body = data.execute_command as Record<string, unknown>;
+            lines.push(`Suggested next command: ${JSON.stringify(body)}`);
+        }
+
+        return lines.join('\n');
+    } catch (e: any) {
+        return `Error creating Syte workspace: ${e.message}`;
+    }
+}
+
+/** POST /api/set_domain on Syte — binds production domain to workspace UUID. */
+export async function handleSetDomain(args: { domain: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ setDomain is only available inside a Sycord project.';
+    }
+    const domain = typeof args?.domain === 'string' ? args.domain.trim() : '';
+    if (!domain) {
+        return '[SYSTEM] ❌ setDomain requires { domain: "app.example.com" }.';
+    }
+
+    try {
+        const res = await fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, action: 'set_domain', domain }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.ok) {
+            return `[SYSTEM] ❌ setDomain failed: ${data?.error || `HTTP ${res.status}`}`;
+        }
+        return `[SYSTEM] ✅ Domain issued on Syte: ${domain}\nUUID: ${data.uuid}\nWhen the user opens Preview, this domain is applied automatically.`;
+    } catch (e: any) {
+        return `Error setting domain: ${e.message}`;
+    }
+}
+
+/** POST /api/start_preview on Syte — HMR dev preview on preview*.sycord.site */
+export async function handleStartPreview(args?: { domain?: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ startPreview is only available inside a Sycord project.';
+    }
+
+    try {
+        const state = useStore.getState();
+        const files = state.files;
+        const res = await fetch('/api/workspace/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                domain: args?.domain,
+                issueDomain: true,
+                files: Object.keys(files).length > 0 ? files : undefined,
+            }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.previewUrl) {
+            const err = data?.error || `HTTP ${res.status}`;
+            if (data?.needsCreate) {
+                return `[SYSTEM] ❌ startPreview failed: ${err}\nCall createWorkspace() first.`;
+            }
+            return `[SYSTEM] ❌ startPreview failed: ${err}`;
+        }
+        const lines = [
+            `[SYSTEM] ✅ Syte live preview started.`,
+            `Preview URL: ${data.previewUrl}`,
+            data.domainIssued ? 'Domain: issued via set_domain before preview.' : '',
+            data.previewReady ? 'Status: ready' : 'Status: starting (poll preview_status)',
+            'Tell the user to swipe to Preview — it loads automatically.',
+        ].filter(Boolean);
+        return lines.join('\n');
+    } catch (e: any) {
+        return `Error starting preview: ${e.message}`;
+    }
+}
+
+export async function handlePlanning(args: {
+    action: 'create' | 'updateStep' | 'get';
+    title?: string;
+    appType?: string;
+    pages?: PlannedPage[];
+    shadcnComponents?: string[];
+    steps?: Array<{ id?: string; title: string; description?: string; strict?: boolean }>;
+    notes?: string;
+    stepId?: string;
+    status?: PlanStepStatus;
+}): Promise<string> {
+    const store = useStore.getState();
+    const action = args.action || 'get';
+
+    if (action === 'get') {
+        const plan = store.generationPlan;
+        if (!plan) {
+            return '[SYSTEM] No generation plan yet. Call planning({ action: "create", appType, pages: [{ route, name }] }) first.';
+        }
+        return formatPlanForAi(plan);
+    }
+
+    if (action === 'create') {
+        if (!args.pages?.length) {
+            return '[SYSTEM] ❌ planning create requires pages array with exact routes.\nExample: planning({ action: "create", appType: "landing", pages: [{ route: "/", name: "Home" }, { route: "/about", name: "About" }], shadcnComponents: ["button","card","input"] })';
+        }
+        const plan = buildGenerationPlan({
+            title: args.title,
+            appType: args.appType,
+            pages: args.pages,
+            shadcnComponents: args.shadcnComponents,
+            steps: args.steps,
+            notes: args.notes,
+        });
+        store.setGenerationPlan(plan);
+        return formatPlanForAi(plan);
+    }
+
+    if (action === 'updateStep') {
+        const plan = store.generationPlan;
+        if (!plan) {
+            return '[SYSTEM] ❌ No plan to update. Call planning({ action: "create", ... }) first.';
+        }
+        if (!args.stepId || !args.status) {
+            const validIds = plan.steps.map((s) => s.id).join(', ');
+            return `[SYSTEM] ❌ updateStep requires stepId and status.\nValid stepIds from your plan: ${validIds}`;
+        }
+        const validIds = plan.steps.map((s) => s.id);
+        if (!validIds.includes(args.stepId)) {
+            return `[SYSTEM] ❌ Unknown stepId "${args.stepId}". Valid: ${validIds.join(', ')}`;
+        }
+        const updated = updatePlanStep(plan, args.stepId, args.status);
+        store.setGenerationPlan(updated);
+        return formatPlanForAi(updated);
+    }
+
+    return '[SYSTEM] ❌ Unknown planning action. Use create | updateStep | get.';
+}
+
+/** Run one shell command in the Syte workspace. */
+async function runSyteCommand(
+    projectId: string,
+    command: string,
+    cwd: string,
+    timeout: number,
+    ctx?: ToolContext,
+): Promise<{ ok: boolean; text: string }> {
+    ctx?.addTerminalOutput?.(`\r\n\x1b[38;5;243m$ ${command}\x1b[0m\r\n`);
+
+    const res = await fetch("/api/workspace/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, command, cwd, timeout }),
+    });
+
+    const text = await res.text();
+    ctx?.addTerminalOutput?.(text);
+
+    if (!res.ok) {
+        if (res.status === 409) {
+            return {
+                ok: false,
+                text: `[SYSTEM] ❌ Cannot run command — no workspace UUID.\n${text.slice(0, 2000)}\n\nYou MUST call createWorkspace() first.`,
+            };
+        }
+        return { ok: false, text: `[SYSTEM] ❌ Command failed (HTTP ${res.status}):\n${text.slice(0, 4000)}` };
+    }
+
+    const exitMatch = text.match(/\[syte\] exit code (\d+)/) || text.match(/\[ssh-exec\] exit code (\d+)/);
+    const exitCode = exitMatch ? Number(exitMatch[1]) : 0;
+
+    if (exitCode === 0) {
+        return { ok: true, text: `[SYSTEM] ✅ Command succeeded:\n${text.slice(-3500)}` };
+    }
+    return {
+        ok: false,
+        text: `[SYSTEM] ❌ Command exited with code ${exitCode}:\n${text.slice(-4000)}\n\nFix the errors above, then retry.`,
+    };
+}
+
+function rejectBuildCommand(command: string): string | null {
+    const normalized = command.replace(/\s+/g, " ").trim().toLowerCase();
+    if (
+        /\bnpm run build\b/.test(normalized) ||
+        normalized === "next build" ||
+        /\bnpx next build\b/.test(normalized)
+    ) {
+        return `[SYSTEM] ❌ Do NOT run \`npm run build\` or \`next build\` for deployment.\n\nUse typeCheck() + lintCheck(), then deploy() (issue_deploy).`;
+    }
+    return null;
+}
+
+/** Run shell command(s) in the Syte workspace (https://sycord.site/api). */
+export async function handleExecuteCommand(
+    args: { command?: string; commands?: string[]; cwd?: string; timeout?: number },
+    ctx?: ToolContext,
+): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ executeCommand is only available when building inside a Sycord project.';
+    }
+
+    const cwd = args.cwd || "app";
+    const timeout = args.timeout || 300;
+    const commands: string[] = Array.isArray(args.commands)
+        ? args.commands.map((c) => String(c).trim()).filter(Boolean)
+        : typeof args.command === "string" && args.command.trim()
+          ? [args.command.trim()]
+          : [];
+
+    if (commands.length === 0) {
+        return "[SYSTEM] ❌ executeCommand requires `command` (string) or `commands` (string array).";
+    }
+
+    for (const cmd of commands) {
+        const blocked = rejectBuildCommand(cmd);
+        if (blocked) return blocked;
+    }
+
+    try {
+        if (commands.length === 1) {
+            const result = await runSyteCommand(projectId, commands[0], cwd, timeout, ctx);
+            return result.text;
+        }
+
+        const parts: string[] = [`[SYSTEM] Running ${commands.length} commands sequentially:`];
+        for (let i = 0; i < commands.length; i++) {
+            const cmd = commands[i];
+            parts.push(`\n--- [${i + 1}/${commands.length}] $ ${cmd} ---`);
+            const result = await runSyteCommand(projectId, cmd, cwd, timeout, ctx);
+            parts.push(result.text);
+            if (!result.ok) {
+                parts.push(`\n⚠️ Stopped chain at command ${i + 1} due to failure. Fix and retry remaining commands.`);
+                break;
+            }
+        }
+        return parts.join("\n");
+    } catch (e: any) {
+        return `Error running command: ${e.message}`;
     }
 }
 
@@ -257,13 +552,40 @@ export async function handleSave(): Promise<string> {
  *
  * IMPORTANT: Always call save() BEFORE deploy() to push code to GitHub first.
  */
-export async function handleDeploy(): Promise<string> {
+export async function handleDeploy(ctx?: ToolContext): Promise<string> {
     const projectId = getHostProjectId();
     if (!projectId) {
         return '[SYSTEM] ❌ Deploy is only available when building inside a Sycord project.';
     }
+
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let applicationId: string | null = null;
+    let deploymentId: string | null = null;
+
+    const startProgressPolling = () => {
+        if (pollTimer) return;
+        pollTimer = setInterval(async () => {
+            try {
+                const qs = new URLSearchParams({ projectId });
+                if (applicationId) qs.set('applicationId', applicationId);
+                if (deploymentId) qs.set('deploymentId', deploymentId);
+                const st = await fetch(`/api/workspace/deploy/status?${qs.toString()}`);
+                if (!st.ok) return;
+                const data = await st.json().catch(() => ({} as any));
+                if (data.applicationId) applicationId = data.applicationId;
+                if (data.deploymentId) deploymentId = data.deploymentId;
+                if (data.progressMessage) {
+                    ctx?.onDeployProgress?.(data.progressMessage);
+                }
+            } catch { /* best-effort UI poll */ }
+        }, 3500);
+    };
+
     try {
-        const res = await fetch("/api/workspace/deploy?projectId=" + encodeURIComponent(projectId), {
+        ctx?.onDeployProgress?.('Issuing deploy (issue_deploy) on Syte…');
+        startProgressPolling();
+
+        const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}&wait=true`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -273,8 +595,11 @@ export async function handleDeploy(): Promise<string> {
             }),
         });
         const data = await res.json().catch(() => ({} as any));
+        applicationId = data?.applicationId ?? applicationId;
+        deploymentId = data?.deploymentId ?? deploymentId;
+
         if (!res.ok || data?.status !== 'success' || !data?.url) {
-            const errMsg = data?.message || "HTTP " + res.status;
+            const errMsg = data?.message || data?.autofix?.split('\n')[0] || `HTTP ${res.status}`;
             if (Array.isArray(data?.missingRequiredEnvKeys) || Array.isArray(data?.missingRequiredIntegrationIds)) {
                 const missingEnv = Array.isArray(data?.missingRequiredEnvKeys) ? data.missingRequiredEnvKeys : [];
                 const missingIntegrations = Array.isArray(data?.missingRequiredIntegrationIds) ? data.missingRequiredIntegrationIds : [];
@@ -283,52 +608,90 @@ export async function handleDeploy(): Promise<string> {
                     (missingEnv.length ? "Missing env keys: " + missingEnv.join(", ") + "\n" : "") +
                     "Call integration() or wait for the user to complete the integrations popup, then continue.";
             }
-            return "[SYSTEM] ❌ Deploy failed: " + errMsg + "\n\nDebug: " + JSON.stringify({ steps: data?.steps, error: data?.error }, null, 2);
+            if (typeof data?.autofix === 'string' && data.autofix.length > 0) {
+                return data.autofix;
+            }
+            const logsTail = data?.logsTail ? `\n\nBuild logs:\n${data.logsTail}` : '';
+            return `[SYSTEM] ❌ Deploy failed: ${errMsg}${logsTail}\n\nAUTO-FIX: read the logs, fix source files, typeCheck(), save(), deploy() again.`;
         }
-        return "[SYSTEM] ✅ Deployed successfully.\n\n" +
-            "Live URL: " + data.url + "\n" +
-            "Project ID: " + (data.projectId || "auto") + "\n" +
-            "Environment ID: " + (data.environmentId || "auto") + "\n" +
-            "Application ID: " + (data.applicationId || "auto") + "\n" +
-            "Created: project=" + (data.createdProject ? "yes" : "no") + ", env=" + (data.createdEnvironment ? "yes" : "no") + ", app=" + (data.created ? "yes" : "no");
+
+        ctx?.onDeployProgress?.(data.buildComplete || '✅ Deployment build completed');
+
+        return '[SYSTEM] ✅ Deployment issued on Syte (issue_deploy: git pull + rebuild + restart).\n\n' +
+            (data.buildComplete ? `Build log: ${data.buildComplete}\n` : '') +
+            'Live URL: ' + data.url + '\n' +
+            'Project ID: ' + (data.projectId || 'auto') + '\n' +
+            'Environment ID: ' + (data.environmentId || 'auto') + '\n' +
+            'Application ID: ' + (data.applicationId || 'auto') + '\n' +
+            'Created: project=' + (data.createdProject ? 'yes' : 'no') + ', env=' + (data.createdEnvironment ? 'yes' : 'no') + ', app=' + (data.created ? 'yes' : 'no');
     } catch (e: any) {
         return "Error deploying project: " + e.message;
+    } finally {
+        if (pollTimer) clearInterval(pollTimer);
     }
 }
 
-async function callDokployApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
+async function callCoolifyApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
     try {
-        const res = await fetch("/api/deploy/dokploy", {
+        const res = await fetch("/api/deploy/coolify", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action, ...extra }),
         });
         const data = await res.json().catch(() => ({} as any));
-        if (!res.ok || !data?.success) {
+        if (!res.ok || data?.success === false) {
             const errMsg = data?.error || data?.message || "HTTP " + res.status;
-            return "[SYSTEM] ❌ Dokploy " + action + " failed: " + errMsg;
+            return "[SYSTEM] ❌ Coolify " + action + " failed: " + errMsg;
         }
         return JSON.stringify(data, null, 2);
     } catch (e: any) {
-        return "Error calling Dokploy API (" + action + "): " + e.message;
+        return "Error calling Coolify API (" + action + "): " + e.message;
     }
 }
 
-async function callDokployGet(params: Record<string, string>): Promise<string> {
+async function callCoolifyGet(params: Record<string, string>): Promise<string> {
     try {
         const qs = new URLSearchParams(params).toString();
-        const res = await fetch("/api/deploy/dokploy?" + qs, {
+        const res = await fetch("/api/deploy/coolify?" + qs, {
             headers: { Accept: "application/json" },
         });
         const data = await res.json().catch(() => ({} as any));
-        if (!res.ok || !data?.success) {
+        if (!res.ok || data?.success === false) {
             const errMsg = data?.error || data?.message || "HTTP " + res.status;
-            return "[SYSTEM] ❌ Dokploy query failed: " + errMsg;
+            return "[SYSTEM] ❌ Coolify query failed: " + errMsg;
         }
         return JSON.stringify(data, null, 2);
     } catch (e: any) {
-        return "Error calling Dokploy API (query): " + e.message;
+        return "Error calling Coolify API (query): " + e.message;
     }
+}
+
+async function callCoolifyMcp(body: Record<string, unknown>): Promise<string> {
+    try {
+        const res = await fetch("/api/ai/coolify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (typeof data?.summary === "string") return data.summary;
+        if (!res.ok || !data?.ok) {
+            return "[SYSTEM] ❌ Coolify MCP failed: " + (data?.error || "HTTP " + res.status);
+        }
+        return JSON.stringify(data, null, 2);
+    } catch (e: any) {
+        return "Error calling Coolify MCP: " + e.message;
+    }
+}
+
+/** @deprecated use callCoolifyApi */
+async function callDokployApi(action: string, extra: Record<string, unknown> = {}): Promise<string> {
+    return callCoolifyApi(action, extra);
+}
+
+/** @deprecated use callCoolifyGet */
+async function callDokployGet(params: Record<string, string>): Promise<string> {
+    return callCoolifyGet(params);
 }
 
 async function getProjectEnvStatus(projectId: string): Promise<{
@@ -444,63 +807,90 @@ export async function handleIntegration(args: Record<string, unknown>): Promise<
 }
 
 /**
- * Create a new Dokploy project.
+ * Create a new Coolify project.
  */
 export async function handleCreateProject(args: Record<string, unknown>): Promise<string> {
     const name = typeof args.name === "string" ? args.name.trim() : "";
     if (!name) return "[SYSTEM] ❌ Project name is required.";
-    return callDokployApi("createProject", { projectName: name, projectDescription: (args.description as string) || null });
+    return callCoolifyMcp({
+        action: "create_project",
+        name,
+        description: typeof args.description === "string" ? args.description : undefined,
+    });
 }
 
 /**
- * Create a new environment in a Dokploy project.
+ * Create environment — Coolify uses named environments on projects (no separate create API needed for deploy).
  */
 export async function handleCreateEnvironment(args: Record<string, unknown>): Promise<string> {
-    const name = typeof args.name === "string" ? args.name.trim() : "";
-    const projectId = typeof args.projectId === "string" ? args.projectId.trim() : "";
-    if (!name) return "[SYSTEM] ❌ Environment name is required.";
-    if (!projectId) return "[SYSTEM] ❌ projectId is required to create an environment.";
-    return callDokployApi("createEnvironment", { environmentName: name, environmentProjectId: projectId });
+    const name = typeof args.name === "string" ? args.name.trim() : "production";
+    return `[SYSTEM] ✅ Coolify uses environment names like "${name}" when creating applications. Pass environment_name on deploy — no separate environment UUID required.`;
 }
 
 /**
- * List Dokploy projects or containers.
+ * List Coolify projects, servers, applications, or deployments.
  */
 export async function handleListDokployResources(args: Record<string, unknown>): Promise<string> {
-    const resource = (typeof args.resource === "string" ? args.resource : "containers") as string;
-    const params: Record<string, string> = { resource };
-    if (args.projectId && typeof args.projectId === "string") params.projectId = args.projectId;
-    if (args.applicationId && typeof args.applicationId === "string") params.applicationId = args.applicationId;
-    if (args.appName && typeof args.appName === "string") params.appName = args.appName;
-    return callDokployGet(params);
+    const resource = (typeof args.resource === "string" ? args.resource : "applications") as string;
+    const map: Record<string, string> = {
+        projects: "projects",
+        servers: "servers",
+        applications: "applications",
+        containers: "applications",
+        deployments: "deployments",
+    };
+    const mapped = map[resource] || "applications";
+    return callCoolifyGet({ resource: mapped });
 }
 
 /**
- * Manage a Docker container (start, stop, restart, kill, remove).
+ * Manage a Coolify application (restart, start, stop).
  */
 export async function handleManageContainer(args: Record<string, unknown>): Promise<string> {
-    const containerId = typeof args.containerId === "string" ? args.containerId.trim() : "";
+    const applicationUuid = typeof args.containerId === "string" ? args.containerId.trim() : "";
     const operation = (typeof args.operation === "string" ? args.operation : "restart") as string;
-    if (!containerId) return "[SYSTEM] ❌ containerId is required.";
+    if (!applicationUuid) return "[SYSTEM] ❌ applicationUuid (containerId) is required.";
     const actionMap: Record<string, string> = {
-        restart: "restartContainer",
-        start: "startContainer",
-        stop: "stopContainer",
-        kill: "killContainer",
-        remove: "removeContainer",
+        restart: "restart",
+        start: "start",
+        stop: "stop",
+        deploy: "deploy",
     };
-    const action = actionMap[operation];
-    if (!action) return `[SYSTEM] ❌ Unknown container operation: "${operation}". Use restart, start, stop, kill, or remove.`;
-    return callDokployApi(action, { containerId });
+    const action = actionMap[operation] || "restart";
+    return callCoolifyApi(action, { applicationUuid, force: false });
 }
 
 /**
- * Generate a Traefik domain for a Dokploy application.
+ * Domains are set during deploy() on Coolify via the domains field.
  */
 export async function handleGenerateDomain(args: Record<string, unknown>): Promise<string> {
     const appName = typeof args.appName === "string" ? args.appName.trim() : "";
-    if (!appName) return "[SYSTEM] ❌ appName is required to generate a domain.";
-    return callDokployApi("generateDomain", { appName });
+    if (!appName) return "[SYSTEM] ❌ appName is required.";
+    return `[SYSTEM] ✅ Coolify domain for deploy: https://${appName}.sycord.site — set automatically when you call deploy().`;
+}
+
+export async function handleCoolifyMcp(args: Record<string, unknown>): Promise<string> {
+    const action = typeof args.action === "string" ? args.action.trim() : "";
+    if (!action) return "[SYSTEM] ❌ coolifyMcp requires action.";
+    return callCoolifyMcp({
+        action,
+        applicationUuid: typeof args.applicationUuid === "string" ? args.applicationUuid : undefined,
+        deploymentUuid: typeof args.deploymentUuid === "string" ? args.deploymentUuid : undefined,
+        uuid: typeof args.uuid === "string" ? args.uuid : undefined,
+        command: typeof args.command === "string" ? args.command : undefined,
+        force: Boolean(args.force),
+        name: typeof args.name === "string" ? args.name : undefined,
+        description: typeof args.description === "string" ? args.description : undefined,
+        envs: Array.isArray(args.envs) ? args.envs : undefined,
+    });
+}
+
+export async function handleCoolifyCommand(args: Record<string, unknown>): Promise<string> {
+    const applicationUuid = typeof args.applicationUuid === "string" ? args.applicationUuid : "";
+    const command = typeof args.command === "string" ? args.command.trim() : "";
+    if (!applicationUuid) return "[SYSTEM] ❌ applicationUuid is required.";
+    if (!command) return "[SYSTEM] ❌ command is required.";
+    return callCoolifyMcp({ action: "execute_command", applicationUuid, command });
 }
 
 /**
@@ -604,103 +994,146 @@ export async function handleCreateDockerfile(args: Record<string, unknown>): Pro
 }
 
 /**
- * Add shadcn/ui components to the project by running the shadcn CLI.
- * This is the ONLY way to add UI components — never write them manually.
- *
- * Works in two environments:
- * 1. Server-side workspace (Syra embedded in Sycord dashboard) → runs via
- *    the workspace API which executes npx on the server.
- * 2. In-browser WebContainer fallback → runs npx inside the web container.
- *
- * After installation, the generated files under components/ui/ are read
- * back and persisted to Pages (MongoDB).
+ * Merge npm dependencies into the project's package.json (never runs npm install).
  */
+async function mergePackageDependencies(newDeps: Record<string, string>): Promise<string[]> {
+    await syncStoreFromPages();
+    const files = useStore.getState().files;
+    const pkgPath = 'package.json';
+    let pkgRaw = files[pkgPath]?.file?.contents;
+
+    if (!pkgRaw) {
+        try {
+            pkgRaw = await readFileResilient(pkgPath);
+        } catch {
+            return [];
+        }
+    }
+
+    let pkg: { dependencies?: Record<string, string> };
+    try {
+        pkg = JSON.parse(pkgRaw);
+    } catch {
+        return ['⚠️ package.json is invalid JSON — could not merge npm dependencies'];
+    }
+
+    pkg.dependencies = pkg.dependencies || {};
+    const added: string[] = [];
+
+    for (const [name, version] of Object.entries(newDeps)) {
+        if (!pkg.dependencies[name]) {
+            pkg.dependencies[name] = version;
+            added.push(name);
+        }
+    }
+
+    if (added.length > 0) {
+        const updated = `${JSON.stringify(pkg, null, 2)}\n`;
+        await persistFile(pkgPath, updated);
+    }
+
+    return added;
+}
+
+/** Ensure lib/utils.ts, components.json, globals.css, and tailwind tokens exist. */
+async function ensureShadcnFoundationInProject(): Promise<string[]> {
+    await syncStoreFromPages();
+    const files = useStore.getState().files;
+    const missing = getMissingShadcnFoundationFiles(files);
+    const results: string[] = [];
+
+    for (const [path, content] of Object.entries(missing)) {
+        await persistFile(path, content);
+        results.push(`📦 shadcn foundation: ${path}`);
+    }
+
+    const addedDeps = await mergePackageDependencies(SHADCN_FOUNDATION_DEPENDENCIES);
+    if (addedDeps.length > 0) {
+        results.push(`📦 npm deps added: ${addedDeps.join(', ')}`);
+    }
+
+    return results;
+}
+
+/**
+ * Add shadcn/ui components by fetching official registry source (no CLI).
+ * Files are written to components/ui/ and persisted to Pages automatically.
+ */
+// Version-sensitive components whose components/ui/*.tsx often break the Docker
+// production build (dependency API drift). Only install when the site truly
+// needs them — every installed file is compiled on deploy.
+const FRAGILE_SHADCN = new Set([
+    'resizable', 'sidebar', 'chart', 'carousel', 'calendar', 'command', 'data-table', 'date-picker',
+]);
+
 export async function handleAddShadcnComponent(args: Record<string, unknown>): Promise<string> {
     const component = typeof args.component === 'string' ? args.component.trim() : '';
     const components = Array.isArray(args.components) ? args.components : [];
-    const items = [...(component ? [component] : []), ...components];
+    const items = [...(component ? [component] : []), ...components.map(String)];
 
     if (items.length === 0) {
         return '[SYSTEM] ❌ addShadcnComponent requires at least one component name. Example: addShadcnComponent({ component: "button" })';
     }
 
-    const projectId = getHostProjectId();
     const results: string[] = [];
 
-    for (const item of items) {
-        try {
-            // Run the shadcn CLI add command with --yes to skip prompts
-            const cmd = `npx shadcn@latest add ${item} -y --overwrite`;
-            let commandOutput = '';
-            
-            if (projectId) {
-                // Server-side: use the workspace API to execute the command
-                try {
-                    const res = await fetch(`/api/workspace/execute?projectId=${encodeURIComponent(projectId)}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ command: cmd }),
-                    });
-                    const data = await res.json().catch(() => ({} as any));
-                    commandOutput = data?.output || data?.message || `HTTP ${res.status}`;
-                } catch (e: any) {
-                    commandOutput = `Workspace execution failed: ${e.message}`;
-                }
-            } else {
-                // In-browser WebContainer: executeCommand
-                try {
-                    const { executeCommand } = await import('./webcontainer');
-                    let outputBuffer = '';
-                    await executeCommand('npx', ['shadcn@latest', 'add', item, '-y', '--overwrite'], (data) => {
-                        outputBuffer += data;
-                    }, 120000);
-                    commandOutput = outputBuffer;
-                } catch (e: any) {
-                    commandOutput = `WebContainer execution failed: ${e.message}`;
-                }
-            }
-
-            // After installation, read the resulting component file(s) and persist
-            const componentFile = `components/ui/${item}.tsx`;
-            try {
-                const content = await readFileResilient(componentFile, { skipPagesSync: true });
-                if (content) {
-                    const pageSync = await persistFile(componentFile, content);
-                    const saved = pageSync.status === 'saved' ? ' (saved to Pages)' : '';
-                    results.push(`✅ ${item} — installed and saved${saved}`);
-                } else {
-                    results.push(`⚠️ ${item} — CLI ran but could not read ${componentFile}`);
-                }
-            } catch {
-                // Component may need additional files — try common patterns
-                const altFiles = [
-                    `components/ui/${item}.tsx`,
-                    `src/components/ui/${item}.tsx`,
-                    `@/components/ui/${item}.tsx`,
-                ];
-                let found = false;
-                for (const alt of altFiles) {
-                    try {
-                        const content = await readFileResilient(alt, { skipPagesSync: true });
-                        if (content) {
-                            await persistFile(componentFile, content);
-                            results.push(`✅ ${item} — installed${projectId ? ' and saved to Pages' : ''}`);
-                            found = true;
-                            break;
-                        }
-                    } catch { continue; }
-                }
-                if (!found) {
-                    results.push(`✅ ${item} — installed via shadcn CLI (output: ${commandOutput.slice(-100)})`);
-                }
-            }
-        } catch (e: any) {
-            results.push(`❌ ${item} — ${e.message}`);
-        }
+    const fragile = items.filter((c) => FRAGILE_SHADCN.has(String(c).toLowerCase()));
+    if (fragile.length > 0) {
+        results.push(`⚠️ Only keep ${fragile.join(', ')} if this site actually uses ${fragile.length > 1 ? 'them' : 'it'} — unused version-sensitive components can fail the Docker build.`);
     }
 
-    if (results.length === 0) {
-        return '[SYSTEM] No shadcn components were installed.';
+    try {
+        const foundation = await ensureShadcnFoundationInProject();
+        results.push(...foundation);
+    } catch (e: any) {
+        results.push(`⚠️ shadcn foundation setup: ${e.message}`);
+    }
+
+    try {
+        const res = await fetch('/api/ai/shadcn-registry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ components: items }),
+            signal: AbortSignal.timeout(60000),
+        });
+
+        const data = await res.json().catch(() => ({} as any));
+
+        if (!res.ok) {
+            return `[SYSTEM] ❌ shadcn registry failed: ${data?.error || `HTTP ${res.status}`}`;
+        }
+
+        const registryFiles: Array<{ path: string; content: string }> = Array.isArray(data.files) ? data.files : [];
+        const npmDeps: Record<string, string> = data.dependencies && typeof data.dependencies === 'object' ? data.dependencies : {};
+
+        if (registryFiles.length === 0) {
+            return '[SYSTEM] ❌ Registry returned no files. Check component names with shadcnDocs() or listShadcnComponents().';
+        }
+
+        const addedDeps = await mergePackageDependencies(npmDeps);
+        if (addedDeps.length > 0) {
+            results.push(`📦 npm deps added: ${addedDeps.join(', ')}`);
+        }
+
+        let savedCount = 0;
+        let pathFixCount = 0;
+        for (const file of registryFiles) {
+            if (!file.path || file.content === undefined) continue;
+            const { content, count } = normalizeShadcnImportPaths(file.content);
+            pathFixCount += count;
+            await persistFile(file.path, content);
+            savedCount++;
+        }
+
+        const source = data.source === 'local' ? 'local Sycord fallback' : 'ui.shadcn.com registry';
+        const installed = Array.isArray(data.installed) ? data.installed.join(', ') : items.join(', ');
+        results.push(`✅ Installed ${savedCount} file(s) for [${installed}] from ${source}`);
+        if (pathFixCount > 0) {
+            results.push(`🔧 Rewrote ${pathFixCount} registry import path(s): @/registry/new-york/ui/* → @/components/ui/*`);
+        }
+        results.push('Re-run listShadcnComponents() to verify before writing imports.');
+    } catch (e: any) {
+        results.push(`❌ Registry install failed: ${e.message}`);
     }
 
     return '[SYSTEM] Shadcn component installation:\n' + results.join('\n');
@@ -708,6 +1141,70 @@ export async function handleAddShadcnComponent(args: Record<string, unknown>): P
 
 // Tool definitions for AI
 export const TOOL_DEFINITIONS = [
+    {
+        type: 'function',
+        function: {
+            name: 'planning',
+            description: `Create a flexible build plan shown in the PlanChecklist UI. YOU define the steps — not forced to rigid pipeline IDs.
+
+Actions:
+- create: pages (required), optional title, appType, shadcnComponents (8–12 max), steps (your own titles), notes (free-form thinking)
+- updateStep: mark step completed|in_progress|skipped — ONLY after the step actually succeeded
+- get: current plan
+
+Example custom steps:
+steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { title: "Build hosting pages" }, { title: "Validate" }]`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['create', 'updateStep', 'get'],
+                    },
+                    title: { type: 'string' },
+                    appType: { type: 'string' },
+                    notes: { type: 'string', description: 'Free-form plan notes / thinking — shown in plan output' },
+                    pages: {
+                        type: 'array',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                route: { type: 'string' },
+                                name: { type: 'string' },
+                                sections: { type: 'array', items: { type: 'string' } },
+                            },
+                            required: ['route', 'name'],
+                        },
+                    },
+                    shadcnComponents: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Start with 8–12 components; add more when a page needs them',
+                    },
+                    steps: {
+                        type: 'array',
+                        description: 'Your custom plan steps (optional — sensible defaults if omitted)',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                id: { type: 'string' },
+                                title: { type: 'string' },
+                                description: { type: 'string' },
+                                strict: { type: 'boolean' },
+                            },
+                            required: ['title'],
+                        },
+                    },
+                    stepId: { type: 'string', description: 'Step id from your plan for updateStep' },
+                    status: {
+                        type: 'string',
+                        enum: ['pending', 'in_progress', 'completed', 'skipped'],
+                    },
+                },
+                required: ['action'],
+            },
+        },
+    },
     {
         type: 'function',
         function: {
@@ -858,8 +1355,44 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'grep',
+            description: `Regex search across project files. Returns file paths, line numbers, and matching lines. USE THIS to find bad imports (e.g. pattern "@/registry/new-york"), missing symbols, or strings before fixing with write_file/editFile. Prefer grep over guessing file locations.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    pattern: { type: 'string', description: 'Regex pattern to search for, e.g. "@/registry/new-york" or "from \'@/components/ui/"' },
+                    filePattern: { type: 'string', description: 'Optional glob to filter paths, e.g. "*.tsx" or "components/**"' },
+                    caseSensitive: { type: 'boolean', description: 'Default false (case-insensitive). Set true for exact case matching.' },
+                },
+                required: ['pattern'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'write_file',
+            description: `Write or patch a file without rewriting the whole project. Saves to Pages (MongoDB).
+- Full file: write_file({ path, content }) — same as createFile for new/complete rewrites.
+- Surgical patch: write_file({ path, content, startLine, endLine }) — replace ONLY lines startLine–endLine (1-based, inclusive) with content. Use after grep() shows line numbers.
+- For find/replace by exact text, prefer editFile({ path, oldContent, newContent }) after readFile.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'File path, e.g. components/ui/form.tsx' },
+                    content: { type: 'string', description: 'New content — full file OR replacement lines for a line-range patch' },
+                    startLine: { type: 'number', description: '1-based start line for partial patch (from grep output)' },
+                    endLine: { type: 'number', description: '1-based end line for partial patch (inclusive)' },
+                },
+                required: ['path', 'content'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'searchInFiles',
-            description: 'Search for a text pattern across project files. Returns matching lines with file paths and line numbers. Use this to find where something is defined or used.',
+            description: 'Alias for grep({ pattern: query }). Prefer grep() for regex search with line numbers.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -873,11 +1406,74 @@ export const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'createWorkspace',
+            description: 'REQUIRED FIRST STEP — POST /api/create_project on Syte (https://sycord.site/api/). Creates workspace UUID for executeCommand, preview, and deploy. Optional domain: pass { domain: "app.example.com" } to register it at creation.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    domain: { type: 'string', description: 'Optional production domain for POST /api/set_domain (e.g. app.example.com)' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'setDomain',
+            description: 'POST /api/set_domain on Syte — bind a custom domain to the workspace UUID. Call after createWorkspace(). Preview pane auto-issues domain when user opens it if domain is saved on the project.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    domain: { type: 'string', description: 'Domain hostname, e.g. "mysite.com" or "app.mysite.com"' },
+                },
+                required: ['domain'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'startPreview',
+            description: 'POST /api/start_preview on Syte — fast HTTPS dev preview (vite/next dev with HMR) on preview*.sycord.site. Syncs files, issues domain if set, returns preview_url. User can also swipe to Preview to trigger this automatically.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    domain: { type: 'string', description: 'Optional domain to set before starting preview' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'typeCheck',
-            description: 'Run TypeScript type checking to find type errors in the project. Returns errors with file paths and line numbers.',
+            description: 'Run TypeScript in the Syte workspace (requires createWorkspace first). Syncs files, npm install, npx tsc --noEmit. Same as executeCommand("npx tsc --noEmit --pretty").',
             parameters: {
                 type: 'object',
                 properties: {},
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'executeCommand',
+            description: 'Run one or many shell commands in the Syte workspace (requires createWorkspace UUID). Use `commands: [...]` to run multiple sequentially (stops on first failure). Do NOT include npm run build — use deploy() for production build.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    command: { type: 'string', description: 'Single shell command (use this OR commands array)' },
+                    commands: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Multiple commands run in order, e.g. ["npm install", "npm run lint"]',
+                    },
+                    cwd: { type: 'string', description: 'Working directory inside workspace (default: app)' },
+                    timeout: { type: 'number', description: 'Timeout in seconds (default 300, max 1800)' },
+                },
                 required: [],
             },
         },
@@ -952,7 +1548,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'save',
-            description: 'Save the project source files to GitHub (creates the repository on first save). Call this BEFORE deploy() — Dokploy deploys by building the GitHub repository. Use when the user asks to save, push to GitHub, or before publishing.',
+            description: 'Save the project source files to GitHub (creates the repository on first save). Call this BEFORE deploy() — Coolify deploys by building the GitHub repository.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -964,7 +1560,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'deploy',
-            description: "Deploy the project to sycord.site via Dokploy Docker containers. Automatically syncs env vars from the project's Integrations tab into the Dokploy environment, configures Dockerfile build type, creates the public domain, and triggers deployment. If required env/integration values are missing, deployment pauses and tells you to use integration() first. IMPORTANT: Always call save() BEFORE deploy().",
+            description: 'Deploy to sycord.site via Syte POST issue_deploy {"uuid":"..."} — syncs Pages, git pull + rebuild + restart. Requires createWorkspace() UUID first. Run typeCheck() + lintCheck() before deploy. Do NOT run npm run build manually. On failure read logs and fix, then redeploy.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1001,7 +1597,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'createDokployProject',
-            description: 'Create a new project in Dokploy. Use this when you need to set up a new project container before deploying.',
+            description: 'Create a new project in Coolify (legacy tool name). Prefer coolifyMcp({ action: "create_project", name }).',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1016,7 +1612,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'createDokployEnvironment',
-            description: 'Create a new environment inside a Dokploy project (e.g., "production", "staging").',
+            description: 'Coolify environments are named (e.g. production) — no separate env UUID needed. Use deploy() directly.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1031,7 +1627,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'listDokployResources',
-            description: 'List Dokploy projects, environments, containers, deployments, or domains. Use to inspect what is currently deployed.',
+            description: 'List Coolify projects, servers, applications, or deployments. resource: projects | servers | applications | deployments',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1047,7 +1643,7 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'manageContainer',
-            description: 'Manage a Dokploy Docker container: restart, start, stop, kill, or remove it.',
+            description: 'Manage a Coolify application by UUID: restart, start, stop, or deploy. Pass application UUID as containerId.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1062,13 +1658,49 @@ export const TOOL_DEFINITIONS = [
         type: 'function',
         function: {
             name: 'generateDomain',
-            description: 'Generate a Traefik domain for a Dokploy application so it gets a public URL.',
+            description: 'Coolify sets the public domain automatically during deploy() as https://{appName}.sycord.site',
             parameters: {
                 type: 'object',
                 properties: {
-                    appName: { type: 'string', description: 'The Dokploy appName (container name) to generate a domain for (required)' },
+                    appName: { type: 'string', description: 'The deploy app name slug (required)' },
                 },
                 required: ['appName'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'coolifyMcp',
+            description: 'Coolify MCP/API bridge — list apps, get deployment logs, deploy, restart, sync envs. Auth: DEPLOYER_API_KEY. Actions: health, version, list_projects, create_project, list_servers, list_applications, get_application, deploy_application, restart_application, stop_application, start_application, list_deployments, get_deployment, get_application_logs, bulk_update_envs, execute_command.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: { type: 'string', description: 'Coolify MCP action name (required)' },
+                    applicationUuid: { type: 'string', description: 'Coolify application UUID' },
+                    deploymentUuid: { type: 'string', description: 'Coolify deployment UUID' },
+                    uuid: { type: 'string', description: 'Generic UUID for get operations' },
+                    command: { type: 'string', description: 'Shell command for execute_command' },
+                    force: { type: 'boolean', description: 'Force rebuild on deploy/restart' },
+                    name: { type: 'string', description: 'Project name for create_project' },
+                    description: { type: 'string', description: 'Project description for create_project' },
+                },
+                required: ['action'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'coolifyCommand',
+            description: 'Run a one-shot shell command on a Coolify application container via post-deployment hook + restart. Requires applicationUuid.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    applicationUuid: { type: 'string', description: 'Coolify application UUID (required)' },
+                    command: { type: 'string', description: 'Shell command to run (required)' },
+                },
+                required: ['applicationUuid', 'command'],
             },
         },
     },
@@ -1090,7 +1722,7 @@ Never skip this check. Build failures from missing UI modules happen 100% of the
         type: 'function',
         function: {
             name: 'addShadcnComponent',
-            description: 'Install shadcn/ui components using the official CLI. This is the ONLY way to add UI components — never write them manually. The CLI generates properly typed, accessible Radix UI components into components/ui/. PREREQUISITE: call listShadcnComponents() first to check if the component is already installed before calling this. Use this for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, alert-dialog, aspect-ratio, breadcrumb, calendar, carousel, chart, collapsible, command, context-menu, drawer, empty, field, hover-card, input-group, input-otp, item, kbd, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, skeleton, slider, sonner, spinner, toggle, toggle-group, tooltip, and any other shadcn component.',
+            description: 'Install shadcn/ui components from the official ui.shadcn.com registry (NO CLI — files are copied into components/ui/ with correct Radix deps). This is the ONLY way to add UI primitives — never write component files manually. PREREQUISITE: call listShadcnComponents() first. Automatically sets up lib/utils.ts, components.json, CSS design tokens, and package.json deps. Use for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, and all other shadcn components.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1137,6 +1769,8 @@ Available components: accordion, alert, alert-dialog, aspect-ratio, avatar, badg
 export interface ToolContext {
     addTerminalOutput: (output: string) => void;
     setSelectedFile: (path: string) => void;
+    /** Live status while deploy() polls Dokploy build logs. */
+    onDeployProgress?: (message: string) => void;
 }
 
 // ============================================================
@@ -1647,48 +2281,117 @@ export async function handleListFiles(): Promise<string> {
     }
 }
 
-export async function handleSearchInFiles(args: { query: string; filePattern?: string }): Promise<string> {
+export async function handleGrep(args: {
+    pattern?: string;
+    query?: string;
+    filePattern?: string;
+    caseSensitive?: boolean;
+}): Promise<string> {
     try {
-        const { query, filePattern } = args;
-        // Refresh from the Pages tab (source of truth) when embedded.
+        const pattern = args.pattern ?? args.query;
+        if (!pattern) {
+            return 'Error: grep requires a `pattern` (regex string). Example: grep({ pattern: "@/registry/new-york" })';
+        }
+
+        const { filePattern, caseSensitive } = args;
         await syncStoreFromPages();
         const files = useStore.getState().files;
         const results: string[] = [];
         let totalMatches = 0;
 
-        const regex = new RegExp(query, 'gi');
+        let regex: RegExp;
+        try {
+            regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
+        } catch (e: any) {
+            return `Error: Invalid regex pattern "${pattern}": ${e.message}. Escape special chars or simplify the pattern.`;
+        }
 
         for (const [path, file] of Object.entries(files)) {
-            // Apply file pattern filter
             if (filePattern) {
-                const pattern = filePattern.replace(/\*/g, '.*').replace(/\?/g, '.');
-                if (!new RegExp(pattern).test(path)) continue;
+                const glob = filePattern.replace(/\*\*/g, '§§').replace(/\*/g, '[^/]*').replace(/§§/g, '.*').replace(/\?/g, '.');
+                if (!new RegExp(`^${glob}$`).test(path.replace(/\\/g, '/'))) continue;
             }
 
-            const content = file.file.contents;
+            const content = file.file?.contents ?? '';
             const lines = content.split('\n');
-
             const matchingLines: string[] = [];
+
             lines.forEach((line, idx) => {
+                regex.lastIndex = 0;
                 if (regex.test(line)) {
-                    matchingLines.push(`  ${idx + 1}: ${line.trim().substring(0, 120)}`);
+                    matchingLines.push(`  L${idx + 1}: ${line.trim().substring(0, 140)}`);
                     totalMatches++;
                 }
-                regex.lastIndex = 0; // Reset regex state
             });
 
             if (matchingLines.length > 0) {
-                results.push(`📄 ${path} (${matchingLines.length} matches):\n${matchingLines.slice(0, 10).join('\n')}${matchingLines.length > 10 ? `\n  ... and ${matchingLines.length - 10} more` : ''}`);
+                results.push(
+                    `📄 ${path} (${matchingLines.length} match${matchingLines.length === 1 ? '' : 'es'}):\n` +
+                    `${matchingLines.slice(0, 15).join('\n')}` +
+                    `${matchingLines.length > 15 ? `\n  ... and ${matchingLines.length - 15} more lines` : ''}`,
+                );
             }
         }
 
         if (results.length === 0) {
-            return `[SYSTEM] No matches found for "${query}"${filePattern ? ` in ${filePattern}` : ''}.`;
+            return `[SYSTEM] grep: no matches for /${pattern}/${caseSensitive ? '' : 'i'}${filePattern ? ` in ${filePattern}` : ''}.`;
         }
 
-        return `[SYSTEM] Found ${totalMatches} matches in ${results.length} files:\n\n${results.join('\n\n')}`;
+        return `[SYSTEM] grep: ${totalMatches} match${totalMatches === 1 ? '' : 'es'} in ${results.length} file${results.length === 1 ? '' : 's'} (pattern /${pattern}/):\n\n${results.join('\n\n')}\n\nTip: fix a single line with write_file({ path, content, startLine, endLine }) or batch-fix with editFile after readFile.`;
     } catch (e: any) {
-        return `Error searching: ${e.message}`;
+        return `Error in grep: ${e.message}`;
+    }
+}
+
+/** @deprecated Prefer grep({ pattern }) — kept for backward compatibility. */
+export async function handleSearchInFiles(args: { query: string; filePattern?: string }): Promise<string> {
+    return handleGrep({ pattern: args.query, filePattern: args.filePattern });
+}
+
+export async function handleWriteFile(
+    args: { path: string; content: string; startLine?: number; endLine?: number },
+    ctx: ToolContext,
+): Promise<string> {
+    const { path, content, startLine, endLine } = args;
+
+    if (!path || typeof path !== 'string') {
+        return 'Error: write_file requires a valid path';
+    }
+    if (content === undefined || content === null) {
+        return `Error: write_file requires content for ${path}`;
+    }
+
+    try {
+        ctx.setSelectedFile(path);
+
+        let newContent = content;
+        let patchNote = '';
+
+        if (startLine !== undefined || endLine !== undefined) {
+            const currentContent = await readFileResilient(path);
+            const lines = currentContent.split('\n');
+            const start = startLine ?? endLine ?? 1;
+            const end = endLine ?? startLine ?? start;
+
+            if (start < 1 || end < start || end > lines.length) {
+                return `Error: write_file line range ${start}-${end} is invalid (file has ${lines.length} lines). Run grep({ pattern: "..." }) to get correct line numbers, then readFile("${path}") to confirm.`;
+            }
+
+            const replacementLines = content.split('\n');
+            newContent = [...lines.slice(0, start - 1), ...replacementLines, ...lines.slice(end)].join('\n');
+            patchNote = ` (patched lines ${start}-${end})`;
+        } else {
+            patchNote = ` (${content.split('\n').length} lines)`;
+        }
+
+        const pageSync = await persistFile(path, newContent);
+        if (pageSync.status === 'error') {
+            return `Error saving file ${path} to Pages: ${pageSync.message}`;
+        }
+        const savedNote = pageSync.status === 'saved' ? ' (saved to Pages)' : '';
+        return `[SYSTEM] write_file: ${path}${patchNote}${savedNote}`;
+    } catch (e: any) {
+        return `Error in write_file ${path}: ${e.message}`;
     }
 }
 
@@ -1895,6 +2598,24 @@ export async function handleGetErrors(ctx: ToolContext): Promise<string> {
     }
 
     const results: string[] = [];
+
+    // 0. Missing shadcn import scan (client-side ground truth)
+    try {
+        await syncStoreFromPages();
+        const files = useStore.getState().files;
+        const scanFiles = Object.entries(files).map(([name, f]) => ({
+            name,
+            content: f.file.contents,
+        }));
+        const missingImports = [
+            ...scanMissingShadcnImports(scanFiles),
+            ...scanRegistryImportPaths(scanFiles),
+        ];
+        if (missingImports.length > 0) {
+            const lines = missingImports.slice(0, 15).map((e) => `  ${e.file}:${e.line} — ${e.message}`).join('\n');
+            results.push(`🔴 Missing shadcn/ui modules:\n${lines}`);
+        }
+    } catch { /* best-effort */ }
 
     // 1. TypeScript errors
     try {
@@ -2108,17 +2829,30 @@ async function _executeToolInternal(
     argsString: string,
     ctx: ToolContext
 ): Promise<string> {
-    // Handle tools without arguments
-    if (name === 'typeCheck') return handleTypeCheck(ctx);
-    if (name === 'listFiles') return await handleListFiles();
-    if (name === 'getErrors') return handleGetErrors(ctx);
-    if (name === 'save') return handleSave();
-    if (name === 'deploy') return handleDeploy();
+    const toolName = name === 'Grep' ? 'grep' : name === 'writeFile' ? 'write_file' : name;
 
-    // Parse arguments
     const argsList = parseToolArguments(argsString);
+
+    if (toolName === 'createWorkspace') {
+        if (argsList.length === 0) return handleCreateWorkspace();
+        return handleCreateWorkspace(argsList[0] as { domain?: string });
+    }
+    if (toolName === 'startPreview') {
+        if (argsList.length === 0) return handleStartPreview();
+        return handleStartPreview(argsList[0] as { domain?: string });
+    }
+    if (toolName === 'typeCheck') return handleTypeCheck(ctx);
+    if (toolName === 'listFiles') return await handleListFiles();
+    if (toolName === 'getErrors') return handleGetErrors(ctx);
+    if (toolName === 'save') return handleSave();
+    if (toolName === 'deploy') return handleDeploy(ctx);
+
+    if (toolName === 'planning') {
+        if (argsList.length === 0) return handlePlanning({ action: 'get' });
+        return handlePlanning(argsList[0] as any);
+    }
     if (argsList.length === 0) {
-        return `Error: Invalid arguments for tool "${name}". Could not parse JSON.\nRaw input: ${argsString.substring(0, 300)}\n\n⚠️ Make sure your tool arguments are valid JSON.`;
+        return `Error: Invalid arguments for tool "${toolName}". Could not parse JSON.\nRaw input: ${argsString.substring(0, 300)}\n\n⚠️ Make sure your tool arguments are valid JSON.`;
     }
 
     const results: string[] = [];
@@ -2127,9 +2861,15 @@ async function _executeToolInternal(
         let result: string;
 
         try {
-            switch (name) {
+            switch (toolName) {
+                case 'setDomain':
+                    result = await handleSetDomain(args as { domain: string });
+                    break;
                 case 'createFile':
                     result = await handleCreateFile(args, ctx);
+                    break;
+                case 'write_file':
+                    result = await handleWriteFile(args, ctx);
                     break;
                 case 'editFile':
                     result = await handleEditFile(args);
@@ -2146,8 +2886,14 @@ async function _executeToolInternal(
                 case 'renameFile':
                     result = await handleRenameFile(args);
                     break;
+                case 'grep':
+                    result = await handleGrep(args);
+                    break;
                 case 'searchInFiles':
                     result = await handleSearchInFiles(args);
+                    break;
+                case 'executeCommand':
+                    result = await handleExecuteCommand(args, ctx);
                     break;
                 case 'drawDiagram':
                     result = await handleDrawDiagram(args);
@@ -2176,6 +2922,12 @@ async function _executeToolInternal(
                 case 'generateDomain':
                     result = await handleGenerateDomain(args);
                     break;
+                case 'coolifyMcp':
+                    result = await handleCoolifyMcp(args);
+                    break;
+                case 'coolifyCommand':
+                    result = await handleCoolifyCommand(args);
+                    break;
                 case 'addShadcnComponent':
                     result = await handleAddShadcnComponent(args);
                     break;
@@ -2196,8 +2948,11 @@ async function _executeToolInternal(
                 case 'shadcnDocs':
                     result = await handleShadcnDocs(args);
                     break;
+                case 'planning':
+                    result = await handlePlanning(args as any);
+                    break;
                 default:
-                    result = `Unknown tool: "${name}". Available: createFile, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, searchInFiles, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: planning, createWorkspace, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

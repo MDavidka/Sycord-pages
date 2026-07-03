@@ -20,22 +20,30 @@ interface ActionsListProps {
 
 const VERBS: Record<string, [string, string]> = {
     createFile:        ['Creating', 'Created'],
+    write_file:        ['Patching', 'Patched'],
     editFile:          ['Editing', 'Edited'],
     readFile:          ['Reading', 'Read'],
     readMultipleFiles: ['Reading', 'Read'],
     deleteFile:        ['Deleting', 'Deleted'],
     renameFile:        ['Renaming', 'Renamed'],
+    grep:              ['Searching', 'Searched'],
+    planning:          ['Planning', 'Planned'],
     searchInFiles:     ['Searching', 'Searched'],
     typeCheck:         ['Checking types', 'Type checked'],
+    createWorkspace:   ['Creating Syte workspace', 'Workspace ready'],
+    executeCommand:    ['Running command', 'Command finished'],
     lintCheck:         ['Linting', 'Linted'],
     listFiles:         ['Listing files', 'Listed files'],
     drawDiagram:       ['Drawing diagram', 'Drew diagram'],
     batchCreateFiles:  ['Creating files', 'Created files'],
     getErrors:         ['Checking errors', 'Checked errors'],
+    deploy:            ['Deploying to sycord.site', 'Deployed to sycord.site'],
+    save:              ['Saving to GitHub', 'Saved to GitHub'],
 };
 
-const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors']);
-const FILE_TOOLS = new Set(['createFile', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
+const DEPLOY_TOOLS = new Set(['deploy']);
+const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors', 'executeCommand']);
+const FILE_TOOLS = new Set(['createFile', 'write_file', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
 
 interface DeduplicatedAction {
     action: StreamingAction;
@@ -71,6 +79,7 @@ function getFileDetails(action: StreamingAction): string[] {
         const parsed = typeof action.args === 'string' ? JSON.parse(action.args) : action.args;
         switch (action.toolName) {
             case 'createFile':
+            case 'write_file':
             case 'editFile':
             case 'readFile':
             case 'deleteFile':
@@ -129,6 +138,11 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                     <span className="text-red-400 flex-shrink-0">
                         <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                     </span>
+                ) : DEPLOY_TOOLS.has(action.toolName) && active ? (
+                    <span className="relative flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/50" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                    </span>
                 ) : (
                     <span className="w-3.5 flex-shrink-0" />
                 )}
@@ -136,7 +150,9 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                 <span
                     className={`text-[13px] truncate ${
                         active
-                            ? `text-shimmer ${isDark ? 'text-shimmer-dark' : 'text-shimmer-light'}`
+                            ? DEPLOY_TOOLS.has(action.toolName)
+                                ? `text-amber-400/90 ${isDark ? '' : ''}`
+                                : `text-shimmer ${isDark ? 'text-shimmer-dark' : 'text-shimmer-light'}`
                             : action.status === 'error'
                                 ? 'text-red-400/80'
                                 : isDark ? 'text-zinc-400' : 'text-gray-500'
@@ -158,6 +174,12 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                 )}
             </div>
 
+            {DEPLOY_TOOLS.has(action.toolName) && active && (
+                <div className={`mx-1 mb-1 h-1 overflow-hidden rounded-full ${isDark ? 'bg-amber-950/60' : 'bg-amber-100'}`}>
+                    <div className="h-full w-1/3 animate-[deployBar_1.4s_ease-in-out_infinite] rounded-full bg-amber-400" />
+                </div>
+            )}
+
             {showOutput && isExpandable && (
                 <div>
                     {hasFileDetails && (
@@ -173,6 +195,11 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                     {hasTerminalOutput && action.result && (
                         <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] font-mono leading-relaxed max-h-[200px] overflow-y-auto scrollbar-hide ${isDark ? 'bg-background text-muted-foreground border border-border' : 'bg-gray-900 text-gray-300 border border-gray-700'} p-3`}>
                             <pre className="whitespace-pre-wrap break-words">{cleanResultForDisplay(action.result).slice(0, 2000)}</pre>
+                        </div>
+                    )}
+                    {DEPLOY_TOOLS.has(action.toolName) && active && action.result && !hasTerminalOutput && (
+                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'text-amber-300/80 bg-amber-950/30 border border-amber-900/40' : 'text-amber-800 bg-amber-50 border border-amber-200'} p-2`}>
+                            {cleanResultForDisplay(action.result).slice(0, 500)}
                         </div>
                     )}
                 </div>

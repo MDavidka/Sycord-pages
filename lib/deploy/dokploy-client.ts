@@ -819,6 +819,29 @@ export const domain = {
   },
 }
 
+// ---------------------------------------------------------------------------
+// Deployment API — https://docs.dokploy.com/docs/api/deployment
+// ---------------------------------------------------------------------------
+
+export const deployment = {
+  /** GET /deployment.all?applicationId= */
+  all(applicationId: string) {
+    return dokployRequest({
+      method: "GET",
+      endpoint: "deployment.all",
+      query: { applicationId },
+    })
+  },
+
+  /** GET /deployment.readLogs?deploymentId=&tail= */
+  readLogs(deploymentId: string, tail = 200) {
+    return dokployRequest({
+      method: "GET",
+      endpoint: "deployment.readLogs",
+      query: { deploymentId, tail },
+    })
+  },
+}
 
 // ---------------------------------------------------------------------------
 // High-level orchestration: "make a container (if not yet made) and deploy".
@@ -847,6 +870,8 @@ export type EnsureDeployResult = {
   environmentId: string | null
   /** The Dokploy applicationId used or created. */
   applicationId: string | null
+  /** Latest deployment id from application.deploy (when available). */
+  deploymentId: string | null
   appName: string | null
   /** True when a brand-new project was created during this call. */
   createdProject: boolean
@@ -862,7 +887,7 @@ export type EnsureDeployResult = {
 }
 
 /** Unwraps the various tRPC-style envelopes Dokploy may return. */
-function unwrap(data: unknown): any {
+export function unwrap(data: unknown): any {
   if (!data || typeof data !== "object") return data
   // tRPC batch responses come as arrays: [{ result: { data: { json: { ... } } } }]
   if (Array.isArray(data) && data.length > 0) {
@@ -888,6 +913,21 @@ export function extractApplicationId(data: unknown): string | null {
   const core = unwrap(data)
   if (!core || typeof core !== "object") return null
   return core.applicationId || core.application?.applicationId || core.appId || core.id || core._id || null
+}
+
+/** Best-effort extraction of a deploymentId from deploy/readLogs responses. */
+export function extractDeploymentId(data: unknown): string | null {
+  const core = unwrap(data)
+  if (!core) return null
+  if (typeof core === "string") return core
+  if (typeof core !== "object") return null
+  const obj = core as Record<string, unknown>
+  return (
+    (typeof obj.deploymentId === "string" && obj.deploymentId) ||
+    (typeof obj.id === "string" && obj.id) ||
+    (typeof obj._id === "string" && obj._id) ||
+    null
+  )
 }
 
 /** Extract a projectId from a project.create / project.one response. */
@@ -1103,11 +1143,12 @@ export async function ensureAndDeployApplication(
     created: false,
   }
 
-  const done = (success: boolean, error: string | null, data: unknown): EnsureDeployResult => ({
+  const done = (success: boolean, error: string | null, data: unknown, deploymentId: string | null = null): EnsureDeployResult => ({
     success,
     projectId: state.projectId,
     environmentId: state.environmentId,
     applicationId: state.applicationId,
+    deploymentId,
     appName: input.appName || null,
     createdProject: state.createdProject,
     createdEnvironment: state.createdEnvironment,
@@ -1279,10 +1320,11 @@ export async function ensureAndDeployApplication(
   })
   steps.push(toStep("application.deploy", deployResult))
   if (!deployResult.ok) {
-    return done(false, deployResult.error || "Failed to start deployment", deployResult.data)
+    return done(false, deployResult.error || "Failed to start deployment", deployResult.data, null)
   }
 
-  return done(true, null, deployResult.data)
+  const deploymentId = extractDeploymentId(deployResult.data)
+  return done(true, null, deployResult.data, deploymentId)
 }
 
 // ---------------------------------------------------------------------------

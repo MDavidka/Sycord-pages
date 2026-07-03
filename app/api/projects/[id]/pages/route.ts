@@ -2,7 +2,11 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
-
+import {
+  getOwnedProject,
+  getStoredProjectId,
+  ownedProjectUpdateFilter,
+} from "@/lib/project-id"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -20,16 +24,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const client = await clientPromise
     const db = client.db()
 
-    const user = await db.collection("users").findOne(
-      { id: session.user.id, "projects._id": id },
-      { projection: { "projects.$": 1 } }
-    )
-
-    if (!user || !user.projects?.[0]) {
+    const project = await getOwnedProject(db, session.user.id, id)
+    if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    const pages = user.projects[0].pages ?? []
+    const pages = project.pages ?? []
     return NextResponse.json({ pages })
   } catch (error: any) {
     console.error("Error fetching pages:", error)
@@ -74,6 +74,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const client = await clientPromise
     const db = client.db()
 
+    const project = await getOwnedProject(db, session.user.id, id)
+    if (!project) {
+      return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
+
+    const storedProjectId = getStoredProjectId(project)
+
     // We need to upsert the page in the `projects.$.pages` array.
     // However, updating an element in an array of objects based on a sub-field is tricky with native Mongo operators if we want to "add or update".
     // 1. Try to update existing page
@@ -82,7 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             id: session.user.id,
             "projects": {
                 $elemMatch: {
-                    _id: id,
+                    _id: storedProjectId,
                     "pages.name": name
                 }
             }
@@ -96,7 +103,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
         {
             arrayFilters: [
-                { "proj._id": id },
+                { "proj._id": storedProjectId },
                 { "page.name": name }
             ]
         }
@@ -104,21 +111,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (updateResult.matchedCount === 0) {
         // Page did not exist, push it
-        // But first check if project exists
-        const projectCheck = await db.collection("users").findOne({
-             id: session.user.id,
-             "projects._id": id
-        });
-
-        if (!projectCheck) {
-            return NextResponse.json({ message: "Project not found" }, { status: 404 });
-        }
-
         await db.collection("users").updateOne(
-            {
-                id: session.user.id,
-                "projects._id": id
-            },
+            ownedProjectUpdateFilter(session.user.id, storedProjectId),
             {
                 $push: {
                     "projects.$.pages": {
@@ -159,13 +153,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const client = await clientPromise
     const db = client.db()
 
+    const project = await getOwnedProject(db, session.user.id, id)
+    if (!project) {
+      return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
+
+    const storedProjectId = getStoredProjectId(project)
+
     if (deleteAll) {
         // Clear all pages for the project
         const result = await db.collection("users").updateOne(
-            {
-                id: session.user.id,
-                "projects._id": id
-            },
+            ownedProjectUpdateFilter(session.user.id, storedProjectId),
             {
                 $set: {
                     "projects.$.pages": []
@@ -185,10 +183,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         }
 
         const result = await db.collection("users").updateOne(
-            {
-                id: session.user.id,
-                "projects._id": id
-            },
+            ownedProjectUpdateFilter(session.user.id, storedProjectId),
             {
                 $pull: {
                     "projects.$.pages": { name: pageName }

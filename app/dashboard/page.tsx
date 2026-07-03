@@ -199,7 +199,7 @@ function DashboardContent() {
       const project: any = projects.find((p: any) => p._id === projectToDelete.id)
       if (project?.dokployApplicationId || project?.applicationId) {
         try {
-          await fetch("/api/deploy/dokploy", {
+          await fetch("/api/deploy/coolify", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -439,6 +439,7 @@ function DashboardContent() {
                           projectId={project._id}
                           businessName={project.businessName}
                           createdAt={project.createdAt}
+                          chatSession={project.chatSession}
                           style={project.style || "default"}
                           fallbackHtml={fallbackHtml}
                           onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}

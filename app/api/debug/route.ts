@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
-import { checkDokployHealth, isDokployConfigured } from "@/lib/deploy/dokploy-client"
+import { checkCoolifyHealth, isCoolifyConfigured } from "@/lib/deploy/coolify-client"
+import { checkSyteHealth, isSyteConfigured, useSyteWorkspace } from "@/lib/deploy/syte-client"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,28 +13,77 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  if (!isDokployConfigured()) {
+  if (useSyteWorkspace()) {
+    const health = await checkSyteHealth()
     return NextResponse.json({
       timestamp: new Date().toISOString(),
-      dokploy: {
+      platform: "syte",
+      syte: {
+        configured: true,
+        reachable: health.reachable,
+        apiUrl: health.apiUrl,
+        version: health.version ?? null,
+        latencyMs: health.latencyMs ?? null,
+        error: health.error ?? null,
+        documentation: "https://sycord.site/api/",
+      },
+      coolify: {
         configured: false,
         reachable: false,
-        error: "DOKPLOY_API_KEY is not set. Add it to your environment variables.",
+        note: "Using Syte workspace API (DEPLOYER_API_URL=https://sycord.site)",
+      },
+      dokploy: {
+        configured: true,
+        reachable: health.reachable,
+        apiUrl: health.apiUrl,
+        note: "Legacy alias — platform is Syte workspace API",
       },
     })
   }
 
-  const health = await checkDokployHealth()
+  if (!isCoolifyConfigured() && !isSyteConfigured()) {
+    return NextResponse.json({
+      timestamp: new Date().toISOString(),
+      syte: {
+        configured: false,
+        reachable: false,
+        error: "DEPLOYER_API_KEY or DEPLOYER_API_URL is not set.",
+        documentation: "https://sycord.site/api/",
+      },
+      coolify: {
+        configured: false,
+        reachable: false,
+        error: "DEPLOYER_API_KEY or DEPLOYER_API_URL is not set.",
+      },
+      dokploy: {
+        configured: false,
+        reachable: false,
+        error: "Set DEPLOYER_API_KEY (syte_ token) and DEPLOYER_API_URL=https://sycord.site",
+      },
+    })
+  }
+
+  const health = await checkCoolifyHealth()
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
+    platform: "coolify",
+    coolify: {
+      configured: true,
+      reachable: health.reachable,
+      apiUrl: health.apiUrl,
+      version: health.version ?? null,
+      latencyMs: health.latencyMs ?? null,
+      error: health.error ?? null,
+    },
     dokploy: {
       configured: true,
       reachable: health.reachable,
       apiUrl: health.apiUrl,
-      projectsCount: health.projectsCount ?? 0,
+      version: health.version ?? null,
       latencyMs: health.latencyMs ?? null,
       error: health.error ?? null,
+      note: "Legacy alias — platform is Coolify",
     },
   })
 }

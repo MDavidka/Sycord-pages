@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import GlovixBuilder from "@/components/glovix-builder"
 import { type GeneratedPage } from "@/lib/types"
 import {
   Trash2,
@@ -100,6 +99,8 @@ import {
   ProjectIntegrationsDialog,
   type IntegrationRequestPayload,
 } from "@/components/project-integrations-dialog"
+import { ProjectSyraSessionCard } from "@/components/project-syra-session-card"
+import type { ProjectChatSessionSummary } from "@/lib/types"
 
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
@@ -612,6 +613,15 @@ export default function SiteSettingsPage() {
   }, [])
   const { data: session } = useSession()
 
+  const openSyra = React.useCallback(() => {
+    if (!id) return
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches) {
+      window.location.assign(`/dashboard/sites/${id}/syra`)
+      return
+    }
+    setActiveTab("ai")
+  }, [id])
+
   // Subscription / plan
   const [subscription, setSubscription] = useState<string>("Sycord")
 
@@ -720,6 +730,7 @@ export default function SiteSettingsPage() {
 
   // Overview mini AI chat state
   const [overviewChatInput, setOverviewChatInput] = useState("")
+  const [chatSessionSummary, setChatSessionSummary] = useState<ProjectChatSessionSummary | null>(null)
 
   // Fetch real TLD prices from Cloudflare (via our API)
   const fetchTldPrices = async () => {
@@ -902,7 +913,17 @@ export default function SiteSettingsPage() {
             setProductsLoading(false)
           })
 
-        await Promise.all([fetchProject, fetchSettings, fetchProducts])
+        const fetchChatSession = fetch(`/api/projects/${id}/chat?summary=true`, { signal: controller.signal })
+          .then((r) => r.json())
+          .then((data) => {
+            setChatSessionSummary(data?.session ?? null)
+          })
+          .catch((err) => {
+            if (err?.name === "AbortError") return
+            console.error("[v0] Settings page: Error fetching chat session:", err)
+          })
+
+        await Promise.all([fetchProject, fetchSettings, fetchProducts, fetchChatSession])
         console.log("[v0] All data fetches completed")
         if (!controller.signal.aborted) fetchLogs()
       } catch (error) {
@@ -919,6 +940,15 @@ export default function SiteSettingsPage() {
     return () => controller.abort()
   }, [id])
 
+  useEffect(() => {
+    if (activeTab !== "overview" || !id) return
+
+    fetch(`/api/projects/${id}/chat?summary=true`)
+      .then((r) => r.json())
+      .then((data) => setChatSessionSummary(data?.session ?? null))
+      .catch(() => {})
+  }, [activeTab, id])
+
   // Fetch subscription info
   useEffect(() => {
     fetch("/api/user/status")
@@ -928,6 +958,26 @@ export default function SiteSettingsPage() {
       })
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
   }, [])
+
+  // Syra iframe back button → return to project overview tab (desktop iframe only)
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === "syra-navigate-back") {
+        setActiveTab("overview")
+      }
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [])
+
+  // Mobile: Syra must load as a top-level page so COOP/COEP headers apply
+  useEffect(() => {
+    if (activeTab !== "ai" || !id) return
+    if (window.matchMedia("(max-width: 768px)").matches && !window.location.pathname.endsWith("/syra")) {
+      window.location.assign(`/dashboard/sites/${id}/syra`)
+    }
+  }, [activeTab, id])
 
   // Fetch already-connected integrations when the integrations tab becomes active
   useEffect(() => {
@@ -1075,7 +1125,7 @@ export default function SiteSettingsPage() {
       // Also delete from Dokploy if there's an applicationId
       if (project?.applicationId) {
         try {
-          await fetch("/api/deploy/dokploy", {
+          await fetch("/api/deploy/coolify", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1185,7 +1235,7 @@ export default function SiteSettingsPage() {
   }
 
   const startAutoFix = () => {
-    setActiveTab("ai")
+    openSyra()
   }
 
   const handleDeploy = async () => {
@@ -2068,6 +2118,11 @@ export default function SiteSettingsPage() {
                     </div>
                   </div>
 
+                  <ProjectSyraSessionCard
+                    session={chatSessionSummary}
+                    onOpenChat={openSyra}
+                  />
+
                   {/* ── ROW 3: Recent activity ── */}
                   <div className="space-y-1">
                     <div className="flex items-center justify-between mb-2">
@@ -2427,18 +2482,18 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: GLOVIX (AI BUILDER) */}
+            {/* TAB CONTENT: GLOVIX (AI BUILDER) — desktop iframe; mobile uses full-page /syra */}
             {activeTab === "ai" && (
-              <div className="h-full w-full flex flex-col">
+              <div className="hidden h-full w-full flex-col md:flex">
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
-                    <div className="absolute inset-0 overflow-hidden">
-                      <GlovixBuilder
-                        projectId={id}
-                        userImage={session?.user?.image}
-                        onBack={() => setActiveTab("overview")}
-                      />
-                    </div>
+                    <iframe
+                      key={id}
+                      src={`/dashboard/sites/${id}/syra`}
+                      className="absolute inset-0 h-full w-full border-0 bg-[#18191B]"
+                      title="Syra AI Builder"
+                      allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                    />
                   ) : (
                     <div className="flex items-center justify-center h-full">
                       <AlertCircle className="h-6 w-6 text-destructive mr-2" />
@@ -2491,7 +2546,7 @@ export default function SiteSettingsPage() {
                   }
                 }}
                 onDeploy={handleDeploy}
-                onGoToAI={() => setActiveTab("ai")}
+                onGoToAI={openSyra}
                 isDeploying={isDeploying}
                 deployProgress={deployProgress}
                 deployError={deployError}

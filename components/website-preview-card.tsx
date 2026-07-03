@@ -21,6 +21,10 @@ interface WebsitePreviewCardProps {
   projectId?: string
   businessName?: string
   createdAt?: string
+  chatSession?: {
+    title?: string
+    messageCount?: number
+  } | null
   onDelete?: (id: string) => void
   style?: string
 }
@@ -33,6 +37,7 @@ export function WebsitePreviewCard({
   projectId,
   businessName = "Website",
   createdAt = new Date().toISOString(),
+  chatSession,
   onDelete,
   style = "default",
 }: WebsitePreviewCardProps) {
@@ -270,6 +275,7 @@ export function WebsitePreviewCard({
       <div className="flex items-center justify-between px-4 pb-4 pt-0">
         <p className="text-[11px] text-zinc-600">
           {businessName} · {formattedDate}
+          {chatSession?.messageCount ? ` · Syra: ${chatSession.messageCount} msg` : ""}
         </p>
         <div
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"

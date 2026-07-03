@@ -17,7 +17,7 @@ export async function GET() {
   return NextResponse.json(
     {
       success: false,
-      error: "SSH-based deployment has been replaced by Dokploy. Use /api/deploy/dokploy to manage containers.",
+      error: "SSH-based deployment has been replaced by Coolify. Use /api/deploy/coolify or deploy() in Syra.",
     },
     { status: 410 },
   )

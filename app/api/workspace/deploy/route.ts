@@ -9,11 +9,25 @@ import {
   getSycordDomain,
 } from "@/lib/deploy/runner-client"
 import {
-  ensureAndDeployApplication,
-  isDokployConfigured,
-  toDokployAppName,
-} from "@/lib/deploy/dokploy-client"
-import { isValidProjectId, validateNextBuildable } from "@/lib/workspace/sandbox"
+  buildCoolifyAutofixMessage,
+  waitForCoolifyDeployment,
+} from "@/lib/deploy/wait-for-coolify-deployment"
+import {
+  ensureAndDeployCoolifyApplication,
+  isCoolifyConfigured,
+  toDeployAppName,
+} from "@/lib/deploy/coolify-client"
+import {
+  syteGetLogs,
+  syteIssueDeploy,
+  syteSetEnv,
+  syteSyncProjectFiles,
+  syteWorkspaceGet,
+  useSyteWorkspace,
+} from "@/lib/deploy/syte-client"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
+import { getOwnedProject, getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
+import { isValidProjectId, projectFiles, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,6 +36,24 @@ export const maxDuration = 300
 function generateDockerfile(framework: string, nodeVersion: string, port: string): string {
   const npmInstall = "npm install --no-audit --no-fund --prefer-offline && npm cache clean --force"
   const npmCi = "(npm ci && npm cache clean --force) || (" + npmInstall + ")"
+  if (framework === "vite" || framework === "react" || framework === "spa") {
+    // Vite SPA — build static assets and serve them.
+    return "# syntax=docker/dockerfile:1\n" +
+"FROM node:" + nodeVersion + "-alpine AS build\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS run\n" +
+"WORKDIR /app\n" +
+"RUN npm install -g serve\n" +
+"COPY --from=build /app/dist ./dist\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"CMD [\"sh\", \"-c\", \"serve -s dist -l ${PORT:-" + port + "}\"]\n"
+  }
   if (framework === "nextjs" || framework === "next") {
     return "# syntax=docker/dockerfile:1\n" +
 "FROM node:" + nodeVersion + "-alpine AS deps\n" +
@@ -86,26 +118,33 @@ export async function POST(req: Request): Promise<Response> {
     /* empty body is fine */
   }
 
-  const projectId = (new URL(req.url).searchParams.get("projectId") || body?.projectId || "").toString()
+  const { searchParams } = new URL(req.url)
+  const waitForBuild = searchParams.get("wait") !== "false"
+  const projectId = (searchParams.get("projectId") || body?.projectId || "").toString()
   if (!isValidProjectId(projectId)) {
     return Response.json({ status: "error", message: "Invalid project ID" }, { status: 400 })
   }
 
-  if (!isDokployConfigured()) {
+  if (!isCoolifyConfigured() && !useSyteWorkspace()) {
     return Response.json(
-      { status: "error", message: "Dokploy is not configured. Set DOKPLOY_API_KEY and DOKPLOY_API_URL." },
+      {
+        status: "error",
+        message:
+          "Deployer is not configured. Set DEPLOYER_API_KEY and DEPLOYER_API_URL (https://sycord.site for Syte workspace).",
+      },
       { status: 503 },
     )
   }
 
   const client = await clientPromise
   const db = client.db()
-  const user = await db.collection("users").findOne({ id: userId })
-  const project = user?.projects?.find((p: any) => p._id.toString() === projectId)
+  const project = await getOwnedProject(db, userId, projectId)
 
   if (!project) {
     return Response.json({ status: "error", message: "Project not found" }, { status: 404 })
   }
+
+  const storedProjectId = getStoredProjectId(project)
 
   const envVars = Array.isArray(project.envVars) ? project.envVars : []
   const presentEnvKeys = new Set(
@@ -135,13 +174,12 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
-  // Auto-generate Dockerfile if missing from project pages
   const pages = Array.isArray(project.pages) ? project.pages : []
   const hasDockerfile = pages.some((p: any) => p.name === "Dockerfile" || p.name === "/Dockerfile")
   if (!hasDockerfile) {
-    const dockerfile = generateDockerfile("nextjs", "22", "3000")
+    const dockerfile = generateDockerfile("vite", "20", "3000")
     await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
+      ownedProjectUpdateFilter(userId, storedProjectId),
       {
         $push: {
           "projects.$.pages": {
@@ -152,6 +190,7 @@ export async function POST(req: Request): Promise<Response> {
         } as any,
       },
     )
+    project.pages = [...(Array.isArray(project.pages) ? project.pages : []), { name: "Dockerfile", content: dockerfile }]
   }
 
   const files = prepareProjectDeployFiles(project)
@@ -167,10 +206,100 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ status: "error", message: buildProblems.join("; ") }, { status: 400 })
   }
 
+  // ── Syte workspace deploy (sycord.site/api) ─────────────────────────────
+  if (useSyteWorkspace()) {
+    const resolved = await requireSyteWorkspaceUuid(project)
+    if ("error" in resolved) {
+      return Response.json(
+        {
+          status: "error",
+          message: resolved.error,
+          needsCreate: true,
+        },
+        { status: 409 },
+      )
+    }
+    const workspaceUuid = resolved.uuid
+
+    const sync = await syteSyncProjectFiles(workspaceUuid, projectFiles(project))
+    if (sync.errors.length > 0) {
+      return Response.json(
+        {
+          status: "error",
+          message: `Failed to sync files to workspace: ${sync.errors.slice(0, 3).join("; ")}`,
+        },
+        { status: 502 },
+      )
+    }
+
+    const env = getProjectEnvVars(project)
+    if (Object.keys(env).length > 0) {
+      await syteSetEnv(workspaceUuid, env, true)
+    }
+
+    const deployResult = await syteIssueDeploy(workspaceUuid)
+    if (!deployResult.ok) {
+      const logs = await syteGetLogs(workspaceUuid, 300)
+      const logsTail =
+        typeof logs.data === "string"
+          ? logs.data.slice(-4000)
+          : JSON.stringify(logs.data || {}).slice(-4000)
+      return Response.json(
+        {
+          status: "error",
+          message: deployResult.error || "Syte deploy failed",
+          logsTail,
+          autofix:
+            `[SYSTEM] ❌ Deploy failed on Syte workspace.\n\n` +
+            `Build/runtime logs (tail):\n${logsTail}\n\n` +
+            `AUTO-FIX: read logs, fix source files, typeCheck(), lintCheck(), deploy() again.`,
+        },
+        { status: 502 },
+      )
+    }
+
+    const ws = await syteWorkspaceGet(workspaceUuid)
+    const domain = getSycordDomain()
+    const deployAppName = toDeployAppName(
+      project.businessName || project.name || slugifyContainerName(project, projectId),
+      projectId,
+    )
+    const finalUrl =
+      (ws.data as any)?.url ||
+      (ws.data as any)?.domain ||
+      `https://${deployAppName}.${domain}`
+
+    await db.collection("users").updateOne(
+      ownedProjectUpdateFilter(userId, storedProjectId),
+      {
+        $set: {
+          "projects.$.deploymentMode": "syte",
+          "projects.$.syteWorkspaceUuid": workspaceUuid,
+          "projects.$.deploymentRuntime.status": "active",
+          "projects.$.deploymentRuntime.url": finalUrl,
+          "projects.$.deploymentRuntime.lastDeployedAt": new Date().toISOString(),
+          "projects.$.updatedAt": new Date(),
+        },
+      },
+    )
+
+    return Response.json({
+      status: "success",
+      url: typeof finalUrl === "string" && finalUrl.startsWith("http") ? finalUrl : `https://${finalUrl}`,
+      projectId: workspaceUuid,
+      applicationId: workspaceUuid,
+      deploymentId: workspaceUuid,
+      buildComplete: "✅ Syte issue_deploy issued (git pull + rebuild + restart).",
+      syncedFiles: sync.synced,
+      platform: "syte",
+      uuid: workspaceUuid,
+    })
+  }
+
   const containerName = slugifyContainerName(project, projectId)
   const domain = getSycordDomain()
 
-  const dokployAppName = toDokployAppName(
+  const deployAppName = toDeployAppName(
     project.businessName || project.name || containerName,
     projectId,
   )
@@ -192,52 +321,45 @@ export async function POST(req: Request): Promise<Response> {
     owner: ghOwner,
     repository: ghRepo,
     branch: (project.githubBranch as string | undefined) || "main",
-    buildPath: "/",
-    githubId: (project.dokployGithubId as string | undefined) || null,
     gitUrl: (project.githubUrl ? `${project.githubUrl}.git` : undefined) as string | undefined,
+    githubAppUuid: (project.coolifyGithubAppUuid as string | undefined) || null,
   }
 
-  const result = await ensureAndDeployApplication({
-    name: project.businessName || dokployAppName,
-    appName: dokployAppName,
-    projectName: toDokployAppName(project.businessName || dokployAppName, projectId),
-    existingApplicationId: project.dokployApplicationId || null,
-    existingProjectId: project.dokployProjectId || null,
-    existingEnvironmentId: project.dokployEnvironmentId || body?.environmentId || null,
-    buildType: (body?.buildType as any) || "dockerfile",
-    dockerfile: (body?.dockerfile as string) || "Dockerfile",
-    dockerContextPath: (body?.dockerContextPath as string) || "/",
+  const result = await ensureAndDeployCoolifyApplication({
+    name: project.businessName || deployAppName,
+    appName: deployAppName,
+    existingApplicationUuid:
+      project.coolifyApplicationUuid || project.dokployApplicationId || null,
+    existingProjectUuid: project.coolifyProjectUuid || project.dokployProjectId || null,
+    serverUuid: project.coolifyServerUuid || null,
+    buildPack: "dockerfile",
     env: getProjectEnvVars(project),
     source,
-    title: "Sycord AI deploy",
-    description: `Deployment for ${dokployAppName}`,
+    description: `Deployment for ${deployAppName}`,
     domain: {
-      host: `${dokployAppName}.${domain}`,
+      host: `${deployAppName}.${domain}`,
       port: 3000,
-      path: "/",
       https: true,
-      certificateType: "letsencrypt",
     },
   })
 
-  const finalUrl = `https://${dokployAppName}.${domain}`
+  const finalUrl = `https://${deployAppName}.${domain}`
 
-  if (!result.success) {
+  if (!result.success || !result.applicationUuid) {
     await db.collection("users").updateOne(
       { id: userId, "projects._id": projectId },
       {
         $set: {
-          "projects.$.deploymentMode": "dokploy",
+          "projects.$.deploymentMode": "coolify",
           "projects.$.deploymentRuntime.status": "failed",
           "projects.$.deploymentRuntime.lastDeployError": result.error,
-          ...(result.projectId ? { "projects.$.dokployProjectId": result.projectId } : {}),
-          ...(result.environmentId ? { "projects.$.dokployEnvironmentId": result.environmentId } : {}),
-          ...(result.applicationId ? { "projects.$.dokployApplicationId": result.applicationId } : {}),
+          ...(result.projectUuid ? { "projects.$.coolifyProjectUuid": result.projectUuid } : {}),
+          ...(result.applicationUuid ? { "projects.$.coolifyApplicationUuid": result.applicationUuid } : {}),
         },
       },
     )
     return Response.json(
-      { status: "error", message: result.error || "Dokploy deployment failed", steps: result.steps },
+      { status: "error", message: result.error || "Coolify deployment failed", steps: result.steps },
       { status: 502 },
     )
   }
@@ -246,19 +368,74 @@ export async function POST(req: Request): Promise<Response> {
     { id: userId, "projects._id": projectId },
     {
       $set: {
-        "projects.$.deploymentMode": "dokploy",
-        "projects.$.containerName": dokployAppName,
-        "projects.$.dokployProjectId": result.projectId,
-        "projects.$.dokployEnvironmentId": result.environmentId,
-        "projects.$.dokployApplicationId": result.applicationId,
-        "projects.$.dokployAppName": dokployAppName,
+        "projects.$.deploymentMode": "coolify",
+        "projects.$.coolifyProjectUuid": result.projectUuid,
+        "projects.$.coolifyServerUuid": result.serverUuid,
+        "projects.$.coolifyApplicationUuid": result.applicationUuid,
+        "projects.$.deployAppName": deployAppName,
         "projects.$.deploymentRuntime": {
-          mode: "dokploy",
-          domain: dokployAppName,
+          mode: "coolify",
+          domain: deployAppName,
           url: finalUrl,
-          projectId: result.projectId,
-          environmentId: result.environmentId,
-          applicationId: result.applicationId,
+          projectUuid: result.projectUuid,
+          serverUuid: result.serverUuid,
+          applicationUuid: result.applicationUuid,
+          status: "building",
+          health: "pending",
+          lastDeployAt: new Date(),
+          lastDeployError: null,
+        },
+      },
+    },
+  )
+
+  let buildWait = null as Awaited<ReturnType<typeof waitForCoolifyDeployment>> | null
+  if (waitForBuild && result.applicationUuid) {
+    buildWait = await waitForCoolifyDeployment({
+      applicationUuid: result.applicationUuid,
+      deploymentUuid: result.deploymentUuid,
+      timeoutMs: 8 * 60_000,
+    })
+
+    if (buildWait.status !== "success") {
+      const errMsg = buildWait.error || buildWait.progressMessage || "Build did not complete successfully"
+      await db.collection("users").updateOne(
+        { id: userId, "projects._id": projectId },
+        {
+          $set: {
+            "projects.$.deploymentRuntime.status": "failed",
+            "projects.$.deploymentRuntime.lastDeployError": errMsg,
+          },
+        },
+      )
+      return Response.json(
+        {
+          status: "error",
+          message: errMsg,
+          applicationUuid: result.applicationUuid,
+          deploymentUuid: buildWait.deploymentUuid,
+          buildStatus: buildWait.status,
+          logsTail: buildWait.logs.split("\n").slice(-40).join("\n"),
+          autofix: buildCoolifyAutofixMessage(buildWait.logs, errMsg),
+          steps: result.steps,
+        },
+        { status: 502 },
+      )
+    }
+  }
+
+  await db.collection("users").updateOne(
+    { id: userId, "projects._id": projectId },
+    {
+      $set: {
+        "projects.$.containerName": deployAppName,
+        "projects.$.deploymentRuntime": {
+          mode: "coolify",
+          domain: deployAppName,
+          url: finalUrl,
+          projectUuid: result.projectUuid,
+          serverUuid: result.serverUuid,
+          applicationUuid: result.applicationUuid,
           status: "deployed",
           health: "healthy",
           lastHealthCheckAt: new Date(),
@@ -273,13 +450,16 @@ export async function POST(req: Request): Promise<Response> {
   return Response.json({
     status: "success",
     url: finalUrl,
-    containerName: dokployAppName,
-    projectId: result.projectId,
-    environmentId: result.environmentId,
-    applicationId: result.applicationId,
-    created: result.created,
+    containerName: deployAppName,
+    projectUuid: result.projectUuid,
+    serverUuid: result.serverUuid,
+    applicationUuid: result.applicationUuid,
+    applicationId: result.applicationUuid,
+    deploymentUuid: buildWait?.deploymentUuid ?? result.deploymentUuid,
+    deploymentId: buildWait?.deploymentUuid ?? result.deploymentUuid,
+    buildComplete: buildWait?.matchedLine ?? null,
+    created: result.createdApplication,
     createdProject: result.createdProject,
-    createdEnvironment: result.createdEnvironment,
     steps: result.steps,
   })
 }

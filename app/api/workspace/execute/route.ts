@@ -4,6 +4,14 @@ import {
   projectFiles,
   requireUserId,
 } from "@/lib/workspace/sandbox"
+import {
+  syteExecuteCommand,
+  syteSetEnv,
+  syteSyncProjectFiles,
+  useSyteWorkspace,
+} from "@/lib/deploy/syte-client"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
+import { getProjectEnvVars } from "@/lib/deploy/runner-client"
 import { getContainer, sshExecuteCommand } from "@/lib/deploy/ssh-deploy"
 
 export const runtime = "nodejs"
@@ -33,13 +41,52 @@ export async function POST(req: Request): Promise<Response> {
 
   const projectId = (searchParams.get("projectId") || body?.projectId || "").toString()
   const command = typeof body?.command === "string" ? body.command.trim() : ""
-  const cwd = typeof body?.cwd === "string" ? body.cwd : undefined
+  const cwd = typeof body?.cwd === "string" ? body.cwd : "app"
 
   if (!command) return textResponse("Missing 'command'", 400)
   if (isDangerousCommand(command)) return textResponse(`Dangerous command blocked: ${command}`, 400)
 
   const project = await loadProject(userId, projectId)
   if (!project) return textResponse("Project not found", 404)
+
+  if (useSyteWorkspace()) {
+    const resolved = await requireSyteWorkspaceUuid(project)
+    if ("error" in resolved) {
+      return textResponse(
+        `${resolved.error}\n\nCall createWorkspace() first (POST /api/create_project) to obtain a workspace UUID.`,
+        409,
+      )
+    }
+
+    const uuid = resolved.uuid
+    if (body?.sync !== false) {
+      await syteSyncProjectFiles(uuid, projectFiles(project))
+    }
+    const env = getProjectEnvVars(project)
+    if (Object.keys(env).length > 0) {
+      await syteSetEnv(uuid, env, true)
+    }
+
+    const result = await syteExecuteCommand(uuid, command, {
+      cwd,
+      timeout: Math.min(
+        typeof body?.timeout === "number" ? body.timeout : 300,
+        COMMAND_TIMEOUT_MS / 1000,
+      ),
+    })
+
+    if (!result.ok) {
+      return textResponse(result.error || "Command failed", result.status || 502)
+    }
+
+    const data = result.data as any
+    const output = String(data?.output || "")
+    const exitCode = data?.exit_code ?? data?.exitCode ?? 1
+    return textResponse(
+      `$ ${command}\n[workspace uuid: ${uuid}]\n${output}${output.endsWith("\n") ? "" : "\n"}\n[syte] exit code ${exitCode}\n`,
+      exitCode === 0 ? 200 : 422,
+    )
+  }
 
   const container = await getContainer(projectId)
   if (!container) {
