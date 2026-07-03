@@ -38,7 +38,7 @@ function parseTscOutput(output: string): DiagnosticEntry[] {
 }
 
 async function syteDiagnostics(project: any, projectId: string) {
-  const resolved = await requireSyteWorkspaceUuid(project)
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
   if ("error" in resolved) {
     return Response.json(
       {

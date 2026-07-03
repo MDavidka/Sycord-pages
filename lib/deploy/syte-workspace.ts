@@ -1,8 +1,9 @@
 /**
- * Syte workspace lifecycle for Sycord projects.
+ * Syte workspace lifecycle for Sycord projects (Torso DB).
  *
- * Per https://sycord.site/api/ the AI must call POST /api/create_project first
- * to obtain a workspace UUID before execute_command, write_file, or issue_deploy.
+ * Per https://sycord.site/api/ the platform calls POST /api/create_project first
+ * to obtain a workspace UUID before execute_command, write_file, start_preview,
+ * or issue_deploy. Preview uses start_preview only — deploy is separate.
  */
 
 import {
@@ -10,6 +11,7 @@ import {
   getOwnedProject,
   ownedProjectUpdateFilter,
 } from "@/lib/project-id"
+import { toDeployAppName } from "@/lib/deploy/coolify-client"
 import {
   syteCreateProject,
   syteWorkspaceGet,
@@ -30,6 +32,15 @@ export function getStoredSyteUuid(project: { syteWorkspaceUuid?: unknown } | nul
   const uuid = project?.syteWorkspaceUuid
   if (typeof uuid === "string" && uuid.trim().length > 0) return uuid.trim()
   return null
+}
+
+/** Stable Syte workspace id aligned with production hostname (e.g. testervan-b474ea). */
+export function resolveCanonicalSyteUuid(project: any, projectId: string): string {
+  const name =
+    project?.businessName ||
+    project?.name ||
+    `sycord-${projectId.slice(0, 8)}`
+  return toDeployAppName(name, projectId)
 }
 
 function parseCreateProjectResponse(data: unknown): Omit<SyteWorkspaceInfo, "status"> | null {
@@ -53,7 +64,46 @@ function parseCreateProjectResponse(data: unknown): Omit<SyteWorkspaceInfo, "sta
   }
 }
 
-/** Load project doc from MongoDB. */
+function buildCreateProjectPayload(
+  project: any,
+  projectId: string,
+  options?: { domain?: string },
+): Parameters<typeof syteCreateProject>[0] {
+  const name =
+    project?.businessName ||
+    project?.name ||
+    `sycord-${projectId.slice(0, 8)}`
+
+  const domain =
+    options?.domain?.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") ||
+    (typeof project?.domain === "string"
+      ? project.domain.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "")
+      : "")
+
+  const githubUrl =
+    typeof project?.githubUrl === "string" && project.githubUrl.trim()
+      ? project.githubUrl.trim()
+      : ""
+  const gitUrl = githubUrl
+    ? githubUrl.endsWith(".git")
+      ? githubUrl
+      : `${githubUrl}.git`
+    : undefined
+
+  const branch =
+    (typeof project?.githubBranch === "string" && project.githubBranch.trim()) || "main"
+
+  return {
+    name,
+    uuid: resolveCanonicalSyteUuid(project, projectId),
+    deploy: false,
+    env_vars: getProjectEnvVars(project),
+    ...(domain ? { domain } : {}),
+    ...(gitUrl ? { git_url: gitUrl, branch } : {}),
+  }
+}
+
+/** Load project doc from Torso. */
 export async function loadOwnedProjectDoc(
   db: { collection: (name: string) => any },
   userId: string,
@@ -62,8 +112,28 @@ export async function loadOwnedProjectDoc(
   return getOwnedProject(db, userId, projectId)
 }
 
+async function findExistingSyteUuid(
+  project: any,
+  projectId: string,
+): Promise<string | null> {
+  const candidates = [
+    getStoredSyteUuid(project),
+    resolveCanonicalSyteUuid(project, projectId),
+  ].filter((value, index, list): value is string => {
+    if (!value) return false
+    return list.indexOf(value) === index
+  })
+
+  for (const candidate of candidates) {
+    const existing = await syteWorkspaceGet(candidate)
+    if (existing.ok) return candidate
+  }
+
+  return null
+}
+
 /**
- * POST /api/create_project — always the first workspace step.
+ * POST /api/create_project — ensures workspace exists on Syte using saved Torso details.
  * Persists the returned UUID on the Sycord project document.
  */
 export async function createSyteWorkspaceForProject(
@@ -73,35 +143,29 @@ export async function createSyteWorkspaceForProject(
   project: any,
   options?: { domain?: string },
 ): Promise<SyteResult<SyteWorkspaceInfo>> {
-  const stored = getStoredSyteUuid(project)
-  if (stored) {
-    const existing = await syteWorkspaceGet(stored)
-    if (existing.ok) {
-      return {
-        ok: true,
-        status: 200,
-        data: { uuid: stored, status: "existing" },
-        error: null,
-        endpoint: existing.endpoint,
-      }
+  const existingUuid = await findExistingSyteUuid(project, projectId)
+  if (existingUuid) {
+    if (getStoredSyteUuid(project) !== existingUuid) {
+      const storedProjectId = getStoredProjectId(project)
+      await db.collection("users").updateOne(ownedProjectUpdateFilter(userId, storedProjectId), {
+        $set: {
+          "projects.$.syteWorkspaceUuid": existingUuid,
+          "projects.$.deploymentMode": "syte",
+          "projects.$.updatedAt": new Date(),
+        },
+      })
+    }
+    return {
+      ok: true,
+      status: 200,
+      data: { uuid: existingUuid, status: "existing" },
+      error: null,
+      endpoint: "",
     }
   }
 
-  const name =
-    project?.businessName ||
-    project?.name ||
-    `sycord-${projectId.slice(0, 8)}`
-
-  const domain =
-    options?.domain?.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") ||
-    (typeof project?.domain === "string" ? project.domain.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") : "")
-
-  const created = await syteCreateProject({
-    name,
-    deploy: false,
-    env_vars: getProjectEnvVars(project),
-    ...(domain ? { domain } : {}),
-  })
+  const payload = buildCreateProjectPayload(project, projectId, options)
+  const created = await syteCreateProject(payload)
 
   if (!created.ok) {
     return {
@@ -129,8 +193,8 @@ export async function createSyteWorkspaceForProject(
     "projects.$.deploymentMode": "syte",
     "projects.$.updatedAt": new Date(),
   }
-  if (domain) {
-    $set["projects.$.domain"] = domain
+  if (payload.domain) {
+    $set["projects.$.domain"] = payload.domain
   }
   await db.collection("users").updateOne(
     ownedProjectUpdateFilter(userId, storedProjectId),
@@ -152,9 +216,23 @@ export async function createSyteWorkspaceForProject(
  */
 export async function requireSyteWorkspaceUuid(
   project: any,
+  projectId?: string,
 ): Promise<{ uuid: string } | { error: string; needsCreate: true }> {
-  const uuid = getStoredSyteUuid(project)
-  if (!uuid) {
+  const stored = getStoredSyteUuid(project)
+  if (stored) {
+    const existing = await syteWorkspaceGet(stored)
+    if (existing.ok) return { uuid: stored }
+  }
+
+  if (projectId) {
+    const canonical = resolveCanonicalSyteUuid(project, projectId)
+    if (canonical !== stored) {
+      const existing = await syteWorkspaceGet(canonical)
+      if (existing.ok) return { uuid: canonical }
+    }
+  }
+
+  if (!stored) {
     return {
       error:
         "No Syte workspace UUID yet. Call createWorkspace() first — it runs POST /api/create_project and returns the uuid required for execute_command.",
@@ -162,14 +240,9 @@ export async function requireSyteWorkspaceUuid(
     }
   }
 
-  const existing = await syteWorkspaceGet(uuid)
-  if (!existing.ok) {
-    return {
-      error:
-        `Syte workspace "${uuid}" not found (${existing.error || "404"}). Call createWorkspace() to create a new workspace.`,
-      needsCreate: true,
-    }
+  return {
+    error:
+      `Syte workspace "${stored}" not found (404). Call createWorkspace() to create a new workspace.`,
+    needsCreate: true,
   }
-
-  return { uuid }
 }

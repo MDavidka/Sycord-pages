@@ -208,7 +208,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // ── Syte workspace deploy (sycord.site/api) ─────────────────────────────
   if (useSyteWorkspace()) {
-    const resolved = await requireSyteWorkspaceUuid(project)
+    const resolved = await requireSyteWorkspaceUuid(project, projectId)
     if ("error" in resolved) {
       return Response.json(
         {

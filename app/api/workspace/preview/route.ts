@@ -170,7 +170,7 @@ export async function DELETE(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
   }
 
-  const resolved = await requireSyteWorkspaceUuid(project)
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
   if ("error" in resolved) {
     return NextResponse.json({ ok: false, error: resolved.error }, { status: 409 })
   }

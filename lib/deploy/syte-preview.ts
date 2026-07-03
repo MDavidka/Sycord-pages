@@ -205,8 +205,9 @@ export async function setSyteProjectDomain(
   userId: string,
   project: any,
   domain: string,
+  projectId?: string,
 ): Promise<{ ok: boolean; uuid?: string; error?: string }> {
-  const resolved = await requireSyteWorkspaceUuid(project)
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
   if ("error" in resolved) {
     return { ok: false, error: resolved.error }
   }
