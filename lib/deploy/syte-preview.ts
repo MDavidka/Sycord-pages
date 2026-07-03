@@ -13,7 +13,6 @@ import {
 } from "@/lib/deploy/syte-client"
 import {
   createSyteWorkspaceForProject,
-  getStoredSyteUuid,
   requireSyteWorkspaceUuid,
 } from "@/lib/deploy/syte-workspace"
 import { getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
@@ -79,19 +78,17 @@ export async function ensureSyteLivePreview(
   const pollMs = options?.pollMs ?? 1500
   const maxWaitMs = options?.maxWaitMs ?? 90_000
 
-  let uuid = getStoredSyteUuid(project)
-  if (!uuid) {
-    const created = await createSyteWorkspaceForProject(db, userId, projectId, project)
-    if (!created.ok || !created.data?.uuid) {
-      return { ok: false, error: created.error || "Failed to create Syte workspace" }
-    }
-    uuid = created.data.uuid
+  // Always ensure via createSyteWorkspaceForProject — validates existing UUID or recreates stale ones.
+  const ensured = await createSyteWorkspaceForProject(db, userId, projectId, project, {
+    domain:
+      typeof options?.domain === "string" && options.domain.trim()
+        ? options.domain
+        : undefined,
+  })
+  if (!ensured.ok || !ensured.data?.uuid) {
+    return { ok: false, error: ensured.error || "Failed to create Syte workspace" }
   }
-
-  const resolved = await requireSyteWorkspaceUuid({ ...project, syteWorkspaceUuid: uuid })
-  if ("error" in resolved) {
-    return { ok: false, error: resolved.error }
-  }
+  const uuid = ensured.data.uuid
 
   if (syncFiles) {
     const clientFiles = Array.isArray(options?.clientFiles) ? options.clientFiles : []
