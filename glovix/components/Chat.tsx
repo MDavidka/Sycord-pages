@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
@@ -61,6 +61,9 @@ interface MessageGroup {
 interface ChatProps {
     scrollRef?: RefObject<HTMLDivElement | null>;
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
+    /** Embedded mobile: opens the live preview pane (swipe left). */
+    onOpenPreview?: () => void;
+    showPreviewButton?: boolean;
 }
 
 // Claude-Code-style short path: filename only, but keep the parent folder for
@@ -206,7 +209,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     )
 }
 
-export function Chat({ scrollRef, onScroll }: ChatProps) {
+export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
@@ -1632,8 +1635,9 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                             <Undo2 className="h-5 w-5" />
                         </button>
 
-                        {/* Profile / brand logo */}
-                        <div className="flex items-center gap-2">
+                        {/* Profile cluster + preview entry (embedded mobile) */}
+                        <div className="flex flex-col items-end gap-1.5">
+                            <div className="flex items-center gap-2">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <button
@@ -1676,6 +1680,19 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
                                 <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
                             )}
                             </button>
+                            </div>
+
+                            {showPreviewButton && onOpenPreview && (
+                                <button
+                                    type="button"
+                                    onClick={onOpenPreview}
+                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                                    title="Swipe left to preview"
+                                >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Preview
+                                </button>
+                            )}
                         </div>
                     </div>
                 </header>
@@ -1689,7 +1706,7 @@ export function Chat({ scrollRef, onScroll }: ChatProps) {
             >
                 <div
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    style={embedded ? { paddingTop: showPreviewButton ? 'calc(env(safe-area-inset-top, 0px) + 6.5rem)' : 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">

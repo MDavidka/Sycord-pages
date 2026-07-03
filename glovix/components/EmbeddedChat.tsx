@@ -135,7 +135,7 @@ export function EmbeddedChat() {
 
         if (!window.crossOriginIsolated) {
             setPreviewStatus('blocked');
-            setPreviewError('Live preview needs cross-origin isolation. Reload this page from the Syra tab on your project dashboard.');
+            setPreviewError('Live preview needs cross-origin isolation headers on this page. Hard-refresh the Syra tab — if this persists, the latest app version may not be deployed yet.');
             return;
         }
 
@@ -309,7 +309,10 @@ export function EmbeddedChat() {
             >
                 {/* Pane 1 — chat (unchanged) */}
                 <div className="h-full w-full flex-shrink-0 snap-start overflow-hidden">
-                    <Chat />
+                    <Chat
+                        onOpenPreview={() => goToPane(1)}
+                        showPreviewButton={activePane === 0}
+                    />
                 </div>
 
                 {/* Pane 2 — live preview */}
@@ -348,18 +351,6 @@ export function EmbeddedChat() {
                     </div>
                 </div>
             </div>
-
-            {/* Floating "Preview" pill — only on the chat pane */}
-            {activePane === 0 && (
-                <button
-                    onClick={() => goToPane(1)}
-                    className={`absolute bottom-24 right-3 z-20 flex items-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-medium shadow-lg transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                    title="Swipe left to preview"
-                >
-                    <Eye className="h-4 w-4" />
-                    Preview
-                </button>
-            )}
 
             {/* Pager dots */}
             <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
