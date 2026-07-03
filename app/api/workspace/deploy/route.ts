@@ -36,6 +36,24 @@ export const maxDuration = 300
 function generateDockerfile(framework: string, nodeVersion: string, port: string): string {
   const npmInstall = "npm install --no-audit --no-fund --prefer-offline && npm cache clean --force"
   const npmCi = "(npm ci && npm cache clean --force) || (" + npmInstall + ")"
+  if (framework === "vite" || framework === "react" || framework === "spa") {
+    // Vite SPA — build static assets and serve them.
+    return "# syntax=docker/dockerfile:1\n" +
+"FROM node:" + nodeVersion + "-alpine AS build\n" +
+"WORKDIR /app\n" +
+"COPY package*.json ./\n" +
+"RUN " + npmCi + "\n" +
+"COPY . .\n" +
+"RUN npm run build\n" +
+"\n" +
+"FROM node:" + nodeVersion + "-alpine AS run\n" +
+"WORKDIR /app\n" +
+"RUN npm install -g serve\n" +
+"COPY --from=build /app/dist ./dist\n" +
+"EXPOSE " + port + "\n" +
+"ENV PORT=" + port + "\n" +
+"CMD [\"sh\", \"-c\", \"serve -s dist -l ${PORT:-" + port + "}\"]\n"
+  }
   if (framework === "nextjs" || framework === "next") {
     return "# syntax=docker/dockerfile:1\n" +
 "FROM node:" + nodeVersion + "-alpine AS deps\n" +
@@ -159,7 +177,7 @@ export async function POST(req: Request): Promise<Response> {
   const pages = Array.isArray(project.pages) ? project.pages : []
   const hasDockerfile = pages.some((p: any) => p.name === "Dockerfile" || p.name === "/Dockerfile")
   if (!hasDockerfile) {
-    const dockerfile = generateDockerfile("nextjs", "22", "3000")
+    const dockerfile = generateDockerfile("vite", "20", "3000")
     await db.collection("users").updateOne(
       ownedProjectUpdateFilter(userId, storedProjectId),
       {

@@ -48,11 +48,6 @@ export function projectFiles(project: any): WorkspaceFile[] {
   const pages = Array.isArray(project?.pages) ? project.pages : []
   return pages
     .filter((p: any) => typeof p?.name === "string" && typeof p?.content === "string")
-    .filter((p: any) => {
-      const name = String(p.name).replace(/^\/+/, "")
-      // Legacy idle placeholder — not part of Next.js App Router projects
-      return name !== "index.html" && name !== "/index.html"
-    })
     .map((p: any) => ({ name: String(p.name).replace(/^\/+/, ""), content: p.content }))
 }
 
@@ -129,10 +124,13 @@ export function validateNextBuildable(files: WorkspaceFile[]): string[] {
   const byName = new Map(files.map((f) => [f.name.replace(/^\/+/, ""), f]))
   const names = Array.from(byName.keys())
 
+  let isVite = false
+  let isNext = false
+
   // 1. package.json must exist, be valid JSON, and expose a `build` script.
   const pkgFile = byName.get("package.json")
   if (!pkgFile) {
-    problems.push('Missing "package.json" — a Next.js project needs one with a "build" script.')
+    problems.push('Missing "package.json" — the project needs one with a "build" script.')
   } else {
     let pkg: any
     try {
@@ -143,22 +141,34 @@ export function validateNextBuildable(files: WorkspaceFile[]): string[] {
     if (pkg) {
       const buildScript = pkg?.scripts?.build
       if (typeof buildScript !== "string" || buildScript.trim().length === 0) {
-        problems.push('"package.json" has no "scripts.build" command (expected e.g. "next build").')
+        problems.push('"package.json" has no "scripts.build" command (expected e.g. "vite build" or "next build").')
       }
-      const hasNextDep = !!(pkg?.dependencies?.next || pkg?.devDependencies?.next)
-      if (!hasNextDep) {
-        problems.push('"next" is not listed in package.json dependencies — add it so the app can build.')
+      const deps = { ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) }
+      isVite = !!deps.vite
+      isNext = !!deps.next
+      if (!isVite && !isNext) {
+        problems.push('Neither "vite" nor "next" is listed in package.json — add the build tool so the app can build.')
       }
     }
   }
 
-  // 2. There must be at least one route entry the build can compile.
-  const hasAppEntry = names.some((n) => /^app\/(.*\/)?(page|layout)\.(tsx|ts|jsx|js)$/.test(n))
-  const hasPagesEntry = names.some((n) => /^pages\/.+\.(tsx|ts|jsx|js)$/.test(n))
-  if (!hasAppEntry && !hasPagesEntry) {
-    problems.push(
-      'No route entry found — add an App Router entry (e.g. "app/page.tsx" and "app/layout.tsx") or a "pages/" file.',
-    )
+  // 2. There must be an entry the build can compile.
+  if (isNext && !isVite) {
+    const hasAppEntry = names.some((n) => /^app\/(.*\/)?(page|layout)\.(tsx|ts|jsx|js)$/.test(n))
+    const hasPagesEntry = names.some((n) => /^pages\/.+\.(tsx|ts|jsx|js)$/.test(n))
+    if (!hasAppEntry && !hasPagesEntry) {
+      problems.push('No Next.js route entry found — add "app/page.tsx" and "app/layout.tsx" or a "pages/" file.')
+    }
+  } else {
+    // Vite SPA — needs an HTML entry and a JS/TS entry module.
+    const hasHtml = names.some((n) => /(^|\/)index\.html$/.test(n))
+    const hasEntry = names.some((n) => /^src\/main\.(tsx|ts|jsx|js)$/.test(n) || /^src\/index\.(tsx|ts|jsx|js)$/.test(n))
+    if (!hasHtml) {
+      problems.push('No "index.html" found — a Vite app needs an index.html entry.')
+    }
+    if (!hasEntry) {
+      problems.push('No entry module found — add "src/main.tsx" (or src/index.tsx).')
+    }
   }
 
   return problems

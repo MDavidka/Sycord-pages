@@ -45,9 +45,6 @@ async function syncFileToProjectPages(path: string, content: string): Promise<Pa
     if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) {
         return { status: 'skipped' };
     }
-    if (path === 'index.html' || path === '/index.html') {
-        return { status: 'skipped' };
-    }
     try {
         const res = await fetch(`/api/projects/${projectId}/pages`, {
             method: 'POST',
@@ -258,11 +255,6 @@ export async function handleCreateWorkspace(): Promise<string> {
             lines.push(`Suggested next command: ${JSON.stringify(body)}`);
         }
 
-        const removedIndex = await deleteLegacyIndexHtml(projectId);
-        if (removedIndex) {
-            lines.push('Cleaned up legacy index.html (App Router uses app/page.tsx).');
-        }
-
         return lines.join('\n');
     } catch (e: any) {
         return `Error creating Syte workspace: ${e.message}`;
@@ -326,35 +318,6 @@ export async function handlePlanning(args: {
     }
 
     return '[SYSTEM] ❌ Unknown planning action. Use create | updateStep | get.';
-}
-
-/** Remove legacy idle index.html from Pages + preview store (blocks create-next-app). */
-async function deleteLegacyIndexHtml(projectId: string): Promise<boolean> {
-    let removed = false;
-    try {
-        if (await deleteProjectPage('index.html')) removed = true;
-    } catch {
-        /* ignore */
-    }
-    const state = useStore.getState();
-    if (state.files['index.html']) {
-        const newFiles = { ...state.files };
-        delete newFiles['index.html'];
-        state.setFiles(newFiles);
-        removed = true;
-    }
-    if (removed) {
-        try {
-            await fetch('/api/workspace/execute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId, command: 'rm -f index.html', cwd: 'app', timeout: 30 }),
-            });
-        } catch {
-            /* workspace may not exist yet */
-        }
-    }
-    return removed;
 }
 
 /** Run one shell command in the Syte workspace. */
@@ -435,13 +398,6 @@ export async function handleExecuteCommand(
     for (const cmd of commands) {
         const blocked = rejectBuildCommand(cmd);
         if (blocked) return blocked;
-    }
-
-    if (commands.some((c) => /create-next-app/i.test(c))) {
-        const removed = await deleteLegacyIndexHtml(projectId);
-        if (removed) {
-            ctx?.addTerminalOutput?.('\r\n\x1b[38;5;214m[auto] Removed legacy index.html before create-next-app\x1b[0m\r\n');
-        }
     }
 
     try {

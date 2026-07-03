@@ -306,8 +306,6 @@ export async function syteSyncProjectFiles(
 
   for (const file of files) {
     if (!file.name || /^\.env(?:\.|$)/.test(file.name)) continue
-    const norm = file.name.replace(/^\/+/, "")
-    if (norm === "index.html") continue
     const result = await syteWriteFile(uuid, file.name, file.content ?? "")
     if (result.ok) {
       synced++

@@ -127,7 +127,7 @@ export async function POST(request: Request) {
     isPremium: isPremium,
     status: "active",
     createdAt: new Date(),
-    pages: [], // Next.js App Router — no legacy index.html placeholder
+    pages: [], // Empty until the builder generates the Vite/React SPA files
     deployment: deploymentData, // Embed deployment info
     // Legacy fields for compatibility if needed, but we try to move away
     deploymentId: deploymentData ? crypto.randomUUID() : null,
