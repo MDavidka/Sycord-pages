@@ -71,6 +71,7 @@ export async function createSyteWorkspaceForProject(
   userId: string,
   projectId: string,
   project: any,
+  options?: { domain?: string },
 ): Promise<SyteResult<SyteWorkspaceInfo>> {
   const stored = getStoredSyteUuid(project)
   if (stored) {
@@ -91,10 +92,15 @@ export async function createSyteWorkspaceForProject(
     project?.name ||
     `sycord-${projectId.slice(0, 8)}`
 
+  const domain =
+    options?.domain?.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") ||
+    (typeof project?.domain === "string" ? project.domain.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "") : "")
+
   const created = await syteCreateProject({
     name,
     deploy: false,
     env_vars: getProjectEnvVars(project),
+    ...(domain ? { domain } : {}),
   })
 
   if (!created.ok) {
@@ -118,15 +124,17 @@ export async function createSyteWorkspaceForProject(
   }
 
   const storedProjectId = getStoredProjectId(project)
+  const $set: Record<string, unknown> = {
+    "projects.$.syteWorkspaceUuid": parsed.uuid,
+    "projects.$.deploymentMode": "syte",
+    "projects.$.updatedAt": new Date(),
+  }
+  if (domain) {
+    $set["projects.$.domain"] = domain
+  }
   await db.collection("users").updateOne(
     ownedProjectUpdateFilter(userId, storedProjectId),
-    {
-      $set: {
-        "projects.$.syteWorkspaceUuid": parsed.uuid,
-        "projects.$.deploymentMode": "syte",
-        "projects.$.updatedAt": new Date(),
-      },
-    },
+    { $set },
   )
 
   return {

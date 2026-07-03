@@ -44,9 +44,13 @@ A good loop:
 
 ## Live preview & deployment${embedded ? ` (project ${projectId})` : ''}
 
-- Every file you write is **saved to the project and mounted into the in-browser preview** (Vite dev server with hot reload). The preview updates as you write — the user can swipe to it on mobile. Saving always works; ignore any transient preview warning.
-- **Deployment goes through the Syte platform API (https://sycord.site/api/).** \`deploy()\` syncs your files to the Syte VPS and calls \`issue_deploy\`, which **builds your site in Docker** (\`npm run build\` → static \`dist/\`) and serves it on a live URL.
-- **Never run \`npm run build\` / \`vite build\` yourself** — the Syte deployer does the production build. Use \`executeCommand({ commands: [...] })\` only for things like \`npm install\` or \`npm run lint\`; it needs \`createWorkspace()\` first.
+- **Live preview uses the Syte API (https://sycord.site/api/)** — not the in-browser WebContainer on mobile. Flow:
+  1. \`createWorkspace()\` — POST \`/api/create_project\` → workspace UUID (optional \`domain\`)
+  2. \`setDomain({ domain })\` — POST \`/api/set_domain\` when the user has a custom domain
+  3. \`startPreview()\` — POST \`/api/start_preview\` → HTTPS preview URL (e.g. \`previewk-mysite.sycord.site\`) with HMR
+  4. When the user swipes to **Preview**, the app auto-syncs files, issues the domain if set, and starts preview.
+- **Deployment:** \`deploy()\` → \`issue_deploy\` (Docker build + production URL). Never run \`npm run build\` yourself.
+- \`executeCommand\` is for \`npm install\`, \`npm run lint\`, etc. only — requires \`createWorkspace()\` first.
 - Keep the project **deployable**: valid \`index.html\`, \`package.json\` with a \`build\` script, and every import resolvable.
 
 ---
@@ -73,7 +77,7 @@ Use \`lucide-react\` icons at natural size — never wrapped in a colored circle
 
 **Files** — \`createFile\` (new/rewrite), \`write_file\` ({ path, content } or + { startLine, endLine } to patch a range), \`editFile\` (exact find/replace — \`readFile\` first), \`batchCreateFiles\` (many at once), \`readFile\`/\`readMultipleFiles\`, \`listFiles\`, \`deleteFile\`, \`renameFile\`, \`grep\` (regex search with line numbers — use before editing).
 
-**Workspace / ship** — \`createWorkspace\` (before any Syte command), \`executeCommand({ command | commands })\` (e.g. \`npm install\`, \`npm run lint\` — never \`build\`), \`typeCheck\`, \`lintCheck\`, \`deploy\` (Syte \`issue_deploy\` → Docker build + release), \`save\` (optional GitHub backup).
+**Workspace / ship** — \`createWorkspace({ domain? })\` (Syte \`create_project\`), \`setDomain({ domain })\` (Syte \`set_domain\`), \`startPreview({ domain? })\` (Syte \`start_preview\` — HMR dev URL), \`executeCommand({ command | commands })\`, \`typeCheck\`, \`lintCheck\`, \`deploy\` (Syte \`issue_deploy\`), \`save\` (optional GitHub backup).
 
 **Other** — \`planning\`, \`integration\` (connect Supabase/Firebase/etc. when the user needs a backend), \`saveKnowledge\`/\`listKnowledge\`/\`callKnowledge\`, \`drawDiagram\`.
 

@@ -115,6 +115,8 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'grep':
             case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
             case 'createWorkspace': return 'Syte API';
+            case 'setDomain': return decodeHtml(parsed.domain || '');
+            case 'startPreview': return 'sycord.site preview';
             case 'typeCheck': return 'Workspace';
             case 'executeCommand': return decodeHtml(parsed.command || 'shell');
             case 'lintCheck': return parsed.path || 'src/';
@@ -150,6 +152,8 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'batchCreateFiles': return 'Multiple files';
             case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
             case 'getErrors': return 'Workspace';
+            case 'setDomain': return extract('domain') || 'domain';
+            case 'startPreview': return 'preview';
             case 'deploy': return 'sycord.site';
             default: return '';
         }

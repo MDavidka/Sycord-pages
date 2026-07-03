@@ -3,13 +3,13 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } fr
 import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle } from 'lucide-react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
-import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getProjectDeployedUrl } from '../lib/api';
+import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getProjectDeployedUrl, startSytePreview } from '../lib/api';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
-type PreviewSource = 'live' | 'deployed' | null;
+type PreviewSource = 'live' | 'deployed' | 'syte' | null;
 
 /**
  * Chat + live-preview experience used when Syra is embedded inside a Sycord
@@ -129,6 +129,24 @@ export function EmbeddedChat() {
         };
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
 
+    const startSyteServerPreview = useCallback(async (): Promise<boolean> => {
+        if (!projectId) return false;
+        setPreviewStatus('starting');
+        setPreviewError('');
+        const result = await startSytePreview(projectId, { issueDomain: true });
+        if (result.ok && result.previewUrl) {
+            setPreviewUrl(result.previewUrl);
+            setPreviewSource('syte');
+            setPreviewStatus('ready');
+            previewStartedRef.current = true;
+            return true;
+        }
+        if (result.needsCreate) {
+            setPreviewError('Ask Syra to run createWorkspace() first, then open Preview again.');
+        }
+        return false;
+    }, [projectId, setPreviewUrl]);
+
     const startLivePreview = useCallback(async (currentFiles: Record<string, { file: { contents: string } }>) => {
         const cached = getCachedPreviewUrl();
         if (cached) {
@@ -193,22 +211,26 @@ export function EmbeddedChat() {
             return;
         }
 
-        // Isolated Syra shell (/syra) or crossOriginIsolated → try in-browser dev server.
+        // Primary: Syte server preview (https://sycord.site/api/ — works on mobile)
+        if (projectId) {
+            const syteOk = await startSyteServerPreview();
+            if (syteOk) return;
+        }
+
+        // Secondary: in-browser WebContainer when cross-origin isolated
         if (window.crossOriginIsolated || window.location.pathname.includes('/syra')) {
             await startLivePreview(currentFiles);
             return;
         }
 
-        // Parent dashboard document is not isolated — show deployed site if available.
-        setPreviewStatus('starting');
         const usedFallback = await showDeployedFallback();
         if (usedFallback) return;
 
         setPreviewStatus('blocked');
         setPreviewError(
-            'Live dev preview needs the Syra page loaded directly. Close this tab, reopen Syra from your project, or ask Syra to deploy — then preview shows your live site here.'
+            'Could not start Syte preview. Ask Syra to run createWorkspace(), then setDomain() if needed, or deploy().'
         );
-    }, [startLivePreview, showDeployedFallback]);
+    }, [projectId, startSyteServerPreview, startLivePreview, showDeployedFallback]);
 
     useEffect(() => {
         if (previewUrl) {
@@ -259,7 +281,9 @@ export function EmbeddedChat() {
         void startPreview(true);
     };
 
-    const previewLabel = previewSource === 'deployed' ? 'Deployed site' : 'Live preview';
+    const previewLabel =
+        previewSource === 'syte' ? 'Syte live preview' :
+        previewSource === 'deployed' ? 'Deployed site' : 'Live preview';
 
     const renderPreviewBody = () => {
         if (previewUrl) {
@@ -270,10 +294,15 @@ export function EmbeddedChat() {
                             Showing your deployed site — redeploy after changes for the latest version.
                         </div>
                     )}
+                    {previewSource === 'syte' && (
+                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
+                            Syte live preview — edits hot-reload on the dev server.
+                        </div>
+                    )}
                     <iframe
                         ref={iframeRef}
                         src={previewUrl}
-                        className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' ? 'pt-8' : ''}`}
+                        className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
                     />

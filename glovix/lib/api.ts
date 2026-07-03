@@ -308,6 +308,50 @@ export const saveChatMessages = async (
     return { success: localCached };
 };
 
+/** Start Syte live preview (https://sycord.site/api/ start_preview). Issues domain if set on project. */
+export async function startSytePreview(
+    projectId: string,
+    options?: { domain?: string; issueDomain?: boolean },
+): Promise<{
+    ok: boolean
+    previewUrl?: string | null
+    previewReady?: boolean
+    domainIssued?: boolean
+    error?: string
+    needsCreate?: boolean
+}> {
+    try {
+        const res = await fetch('/api/workspace/preview', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                domain: options?.domain,
+                issueDomain: options?.issueDomain,
+            }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+            return {
+                ok: false,
+                error: data?.error || `HTTP ${res.status}`,
+                needsCreate: Boolean(data?.needsCreate),
+                previewUrl: data?.previewUrl,
+            };
+        }
+        return {
+            ok: true,
+            previewUrl: data.previewUrl,
+            previewReady: data.previewReady,
+            domainIssued: data.domainIssued,
+        };
+    } catch (err) {
+        console.warn('[GlovixAPI] startSytePreview failed:', err);
+        return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+    }
+}
+
 /** Returns the public deployed URL for a dashboard project, if any. */
 export async function getProjectDeployedUrl(projectId: string): Promise<string | null> {
     try {

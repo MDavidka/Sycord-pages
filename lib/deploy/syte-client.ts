@@ -296,6 +296,51 @@ export async function syteSetDomain(uuid: string, domain: string) {
   return syteWorkspaceRequest("POST", "set_domain", { body: { uuid, domain } })
 }
 
+export type SytePreviewFields = {
+  preview_url?: string
+  preview_domain?: string
+  preview_domain_url?: string
+  preview_direct_url?: string
+  preview_ready?: boolean
+  preview_running?: boolean
+  preview_port?: number
+  preview_stream_url?: string
+  url?: string
+  domain?: string
+}
+
+/** Pick the best HTTPS preview URL from a Syte preview_status / start_preview response. */
+export function pickSytePreviewUrl(data: SytePreviewFields | null | undefined): string | null {
+  if (!data || typeof data !== "object") return null
+  const candidates = [
+    data.preview_domain_url,
+    data.preview_url,
+    data.preview_direct_url,
+    data.url,
+  ]
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().startsWith("http")) return c.trim()
+  }
+  const host = data.preview_domain || data.domain
+  if (typeof host === "string" && host.trim()) {
+    const h = host.trim().replace(/^https?:\/\//, "")
+    return `https://${h}`
+  }
+  return null
+}
+
+export async function syteStartPreview(uuid: string) {
+  return syteWorkspaceRequest<SytePreviewFields>("POST", "start_preview", { body: { uuid } })
+}
+
+export async function syteStopPreview(uuid: string) {
+  return syteWorkspaceRequest("POST", "stop_preview", { body: { uuid } })
+}
+
+export async function sytePreviewStatus(uuid: string) {
+  return syteWorkspaceRequest<SytePreviewFields>("GET", "preview_status", { query: { uuid } })
+}
+
 /** Sync project pages into the Syte workspace (write_file per file). */
 export async function syteSyncProjectFiles(
   uuid: string,

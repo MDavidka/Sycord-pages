@@ -15,6 +15,7 @@ import {
   syteWorkspaceGet,
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
+import { ensureSyteLivePreview, setSyteProjectDomain } from "@/lib/deploy/syte-preview"
 import {
   createSyteWorkspaceForProject,
   getStoredSyteUuid,
@@ -37,6 +38,9 @@ type SyteAction =
   | "issue_deploy"
   | "get_logs"
   | "workspace_get"
+  | "set_domain"
+  | "start_preview"
+  | "preview_status"
 
 async function resolveProject(userId: string, projectId: string) {
   const client = await clientPromise
@@ -98,7 +102,14 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (action === "create_project") {
-    const result = await createSyteWorkspaceForProject(db, userId, projectId, project)
+    const domain =
+      typeof body.domain === "string" && body.domain.trim()
+        ? body.domain.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "")
+        : undefined
+
+    const result = await createSyteWorkspaceForProject(db, userId, projectId, project, {
+      domain,
+    })
     if (!result.ok || !result.data) {
       return NextResponse.json(
         {
@@ -274,6 +285,54 @@ export async function POST(req: Request): Promise<Response> {
         return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
       }
       return NextResponse.json({ ok: true, uuid, logs: result.data })
+    }
+
+    case "set_domain": {
+      const domain = typeof body.domain === "string" ? body.domain.trim() : ""
+      if (!domain) {
+        return NextResponse.json({ ok: false, error: "Missing domain" }, { status: 400 })
+      }
+      const result = await setSyteProjectDomain(db, userId, project, domain)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 502 })
+      }
+      return NextResponse.json({ ok: true, uuid: result.uuid, domain })
+    }
+
+    case "start_preview": {
+      const result = await ensureSyteLivePreview(db, userId, projectId, project, {
+        syncFiles: body.sync !== false,
+        issueDomain: body.issueDomain !== false,
+        domain: typeof body.domain === "string" ? body.domain : project?.domain,
+      })
+      if (!result.ok) {
+        return NextResponse.json(
+          { ok: false, error: result.error, uuid: result.uuid, previewUrl: result.previewUrl },
+          { status: 502 },
+        )
+      }
+      return NextResponse.json({
+        ok: true,
+        uuid: result.uuid,
+        previewUrl: result.previewUrl,
+        previewReady: result.previewReady,
+        domainIssued: result.domainIssued,
+        status: result.status,
+      })
+    }
+
+    case "preview_status": {
+      const { sytePreviewStatus, pickSytePreviewUrl } = await import("@/lib/deploy/syte-client")
+      const status = await sytePreviewStatus(uuid)
+      if (!status.ok) {
+        return NextResponse.json({ ok: false, error: status.error }, { status: status.status || 502 })
+      }
+      return NextResponse.json({
+        ok: true,
+        uuid,
+        previewUrl: pickSytePreviewUrl(status.data || undefined),
+        status: status.data,
+      })
     }
 
     default:

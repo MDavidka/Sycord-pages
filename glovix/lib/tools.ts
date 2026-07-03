@@ -224,17 +224,22 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
  * Step 1 — POST /api/create_project on Syte (https://sycord.site/api/).
  * Returns the workspace UUID required for all execute_command calls.
  */
-export async function handleCreateWorkspace(): Promise<string> {
+export async function handleCreateWorkspace(args?: { domain?: string }): Promise<string> {
     const projectId = getHostProjectId();
     if (!projectId) {
         return '[SYSTEM] ❌ createWorkspace is only available when building inside a Sycord project.';
     }
 
     try {
+        const body: Record<string, unknown> = { projectId, action: 'create_project' };
+        if (args?.domain?.trim()) {
+            body.domain = args.domain.trim();
+        }
+
         const res = await fetch('/api/workspace/syte', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectId, action: 'create_project' }),
+            body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({} as any));
 
@@ -258,6 +263,71 @@ export async function handleCreateWorkspace(): Promise<string> {
         return lines.join('\n');
     } catch (e: any) {
         return `Error creating Syte workspace: ${e.message}`;
+    }
+}
+
+/** POST /api/set_domain on Syte — binds production domain to workspace UUID. */
+export async function handleSetDomain(args: { domain: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ setDomain is only available inside a Sycord project.';
+    }
+    const domain = typeof args?.domain === 'string' ? args.domain.trim() : '';
+    if (!domain) {
+        return '[SYSTEM] ❌ setDomain requires { domain: "app.example.com" }.';
+    }
+
+    try {
+        const res = await fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, action: 'set_domain', domain }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.ok) {
+            return `[SYSTEM] ❌ setDomain failed: ${data?.error || `HTTP ${res.status}`}`;
+        }
+        return `[SYSTEM] ✅ Domain issued on Syte: ${domain}\nUUID: ${data.uuid}\nWhen the user opens Preview, this domain is applied automatically.`;
+    } catch (e: any) {
+        return `Error setting domain: ${e.message}`;
+    }
+}
+
+/** POST /api/start_preview on Syte — HMR dev preview on preview*.sycord.site */
+export async function handleStartPreview(args?: { domain?: string }): Promise<string> {
+    const projectId = getHostProjectId();
+    if (!projectId) {
+        return '[SYSTEM] ❌ startPreview is only available inside a Sycord project.';
+    }
+
+    try {
+        const res = await fetch('/api/workspace/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                domain: args?.domain,
+                issueDomain: true,
+            }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok || !data?.previewUrl) {
+            const err = data?.error || `HTTP ${res.status}`;
+            if (data?.needsCreate) {
+                return `[SYSTEM] ❌ startPreview failed: ${err}\nCall createWorkspace() first.`;
+            }
+            return `[SYSTEM] ❌ startPreview failed: ${err}`;
+        }
+        const lines = [
+            `[SYSTEM] ✅ Syte live preview started.`,
+            `Preview URL: ${data.previewUrl}`,
+            data.domainIssued ? 'Domain: issued via set_domain before preview.' : '',
+            data.previewReady ? 'Status: ready' : 'Status: starting (poll preview_status)',
+            'Tell the user to swipe to Preview — it loads automatically.',
+        ].filter(Boolean);
+        return lines.join('\n');
+    } catch (e: any) {
+        return `Error starting preview: ${e.message}`;
     }
 }
 
@@ -1334,10 +1404,40 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
         type: 'function',
         function: {
             name: 'createWorkspace',
-            description: 'REQUIRED FIRST STEP — POST /api/create_project on Syte (https://sycord.site/api/). Creates an empty workspace and returns the UUID needed for executeCommand, typeCheck, write_file, and deploy. Call this before ANY other workspace command. Response includes execute_command.body pre-filled for npm install.',
+            description: 'REQUIRED FIRST STEP — POST /api/create_project on Syte (https://sycord.site/api/). Creates workspace UUID for executeCommand, preview, and deploy. Optional domain: pass { domain: "app.example.com" } to register it at creation.',
             parameters: {
                 type: 'object',
-                properties: {},
+                properties: {
+                    domain: { type: 'string', description: 'Optional production domain for POST /api/set_domain (e.g. app.example.com)' },
+                },
+                required: [],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'setDomain',
+            description: 'POST /api/set_domain on Syte — bind a custom domain to the workspace UUID. Call after createWorkspace(). Preview pane auto-issues domain when user opens it if domain is saved on the project.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    domain: { type: 'string', description: 'Domain hostname, e.g. "mysite.com" or "app.mysite.com"' },
+                },
+                required: ['domain'],
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'startPreview',
+            description: 'POST /api/start_preview on Syte — fast HTTPS dev preview (vite/next dev with HMR) on preview*.sycord.site. Syncs files, issues domain if set, returns preview_url. User can also swipe to Preview to trigger this automatically.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    domain: { type: 'string', description: 'Optional domain to set before starting preview' },
+                },
                 required: [],
             },
         },
@@ -2728,16 +2828,22 @@ async function _executeToolInternal(
 ): Promise<string> {
     const toolName = name === 'Grep' ? 'grep' : name === 'writeFile' ? 'write_file' : name;
 
-    // Handle tools without arguments
-    if (toolName === 'createWorkspace') return handleCreateWorkspace();
+    const argsList = parseToolArguments(argsString);
+
+    if (toolName === 'createWorkspace') {
+        if (argsList.length === 0) return handleCreateWorkspace();
+        return handleCreateWorkspace(argsList[0] as { domain?: string });
+    }
+    if (toolName === 'startPreview') {
+        if (argsList.length === 0) return handleStartPreview();
+        return handleStartPreview(argsList[0] as { domain?: string });
+    }
     if (toolName === 'typeCheck') return handleTypeCheck(ctx);
     if (toolName === 'listFiles') return await handleListFiles();
     if (toolName === 'getErrors') return handleGetErrors(ctx);
     if (toolName === 'save') return handleSave();
     if (toolName === 'deploy') return handleDeploy(ctx);
 
-    // Parse arguments
-    const argsList = parseToolArguments(argsString);
     if (toolName === 'planning') {
         if (argsList.length === 0) return handlePlanning({ action: 'get' });
         return handlePlanning(argsList[0] as any);
@@ -2753,6 +2859,9 @@ async function _executeToolInternal(
 
         try {
             switch (toolName) {
+                case 'setDomain':
+                    result = await handleSetDomain(args as { domain: string });
+                    break;
                 case 'createFile':
                     result = await handleCreateFile(args, ctx);
                     break;
