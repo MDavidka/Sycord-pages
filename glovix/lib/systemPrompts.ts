@@ -44,13 +44,12 @@ A good loop:
 
 ## Live preview & deployment${embedded ? ` (project ${projectId})` : ''}
 
-- **Live preview uses the Syte API (https://sycord.site/api/)** — not the in-browser WebContainer on mobile. Flow:
-  1. \`createWorkspace()\` — POST \`/api/create_project\` → workspace UUID (optional \`domain\`)
-  2. \`setDomain({ domain })\` — POST \`/api/set_domain\` when the user has a custom domain
-  3. \`startPreview()\` — POST \`/api/start_preview\` → HTTPS preview URL (e.g. \`previewk-mysite.sycord.site\`) with HMR
-  4. When the user swipes to **Preview**, the app auto-syncs files, issues the domain if set, and starts preview.
-- **Deployment:** \`deploy()\` → \`issue_deploy\` (Docker build + production URL). Never run \`npm run build\` yourself.
-- \`executeCommand\` is for \`npm install\`, \`npm run lint\`, etc. only — requires \`createWorkspace()\` first.
+- **Live preview uses the Syte API (https://sycord.site/api/)** — not the in-browser WebContainer on mobile. The app reads saved project details from **Torso** (workspace UUID, domain, env, git) and calls Syte automatically:
+  1. \`createWorkspace()\` — POST \`/api/create_project\` with saved name/domain/git (optional; Preview auto-creates if missing)
+  2. \`startPreview()\` — POST \`/api/start_preview\` → HTTPS preview URL (e.g. \`previewk-mysite.sycord.site\`) with HMR
+  3. When the user swipes to **Preview**, the app syncs files, ensures the workspace, and starts preview — **no deploy required**.
+- **Deployment is separate:** \`deploy()\` → \`issue_deploy\` (Docker build + production URL). Only call when the user wants to ship to production. The Preview pane shows the deployed site when available and indicates when a **new deployment is available**.
+- \`executeCommand\` is for \`npm install\`, \`npm run lint\`, etc. only.
 - Keep the project **deployable**: valid \`index.html\`, \`package.json\` with a \`build\` script, and every import resolvable.
 
 ---

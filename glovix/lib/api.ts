@@ -389,23 +389,55 @@ export async function startSytePreview(
     }
 }
 
-/** Returns the public deployed URL for a dashboard project, if any. */
-export async function getProjectDeployedUrl(projectId: string): Promise<string | null> {
+/** Returns deploy URL and whether Torso has changes newer than the last deploy. */
+export async function getProjectDeployInfo(projectId: string): Promise<{
+    url: string | null
+    lastDeployedAt: string | null
+    updatedAt: string | null
+    pendingDeploy: boolean
+}> {
     try {
         const res = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            return { url: null, lastDeployedAt: null, updatedAt: null, pendingDeploy: false };
+        }
         const project = await res.json();
-        const url =
+        const rawUrl =
             project?.cloudflareUrl ||
             project?.deploymentRuntime?.url ||
             project?.domain ||
             null;
-        if (!url || typeof url !== 'string') return null;
-        return url.startsWith('http') ? url : `https://${url}`;
+        const url =
+            rawUrl && typeof rawUrl === 'string'
+                ? (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`)
+                : null;
+        const lastDeployedAt =
+            typeof project?.deploymentRuntime?.lastDeployedAt === 'string'
+                ? project.deploymentRuntime.lastDeployedAt
+                : null;
+        const updatedAtRaw = project?.updatedAt || project?.createdAt || null;
+        const updatedAt =
+            updatedAtRaw instanceof Date
+                ? updatedAtRaw.toISOString()
+                : typeof updatedAtRaw === 'string'
+                  ? updatedAtRaw
+                  : null;
+        const pendingDeploy = Boolean(
+            url &&
+            updatedAt &&
+            (!lastDeployedAt || new Date(updatedAt).getTime() > new Date(lastDeployedAt).getTime()),
+        );
+        return { url, lastDeployedAt, updatedAt, pendingDeploy };
     } catch (err) {
-        console.warn('[GlovixAPI] getProjectDeployedUrl failed:', err);
-        return null;
+        console.warn('[GlovixAPI] getProjectDeployInfo failed:', err);
+        return { url: null, lastDeployedAt: null, updatedAt: null, pendingDeploy: false };
     }
+}
+
+/** Returns the public deployed URL for a dashboard project, if any. */
+export async function getProjectDeployedUrl(projectId: string): Promise<string | null> {
+    const info = await getProjectDeployInfo(projectId);
+    return info.url;
 }
 
 // Projects

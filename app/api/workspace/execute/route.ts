@@ -50,7 +50,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!project) return textResponse("Project not found", 404)
 
   if (useSyteWorkspace()) {
-    const resolved = await requireSyteWorkspaceUuid(project)
+    const resolved = await requireSyteWorkspaceUuid(project, projectId)
     if ("error" in resolved) {
       return textResponse(
         `${resolved.error}\n\nCall createWorkspace() first (POST /api/create_project) to obtain a workspace UUID.`,

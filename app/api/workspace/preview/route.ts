@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
-import { ensureSyteLivePreview, setSyteProjectDomain } from "@/lib/deploy/syte-preview"
+import { ensureSyteLivePreview } from "@/lib/deploy/syte-preview"
 import {
   sytePreviewStatus,
   syteStopPreview,
@@ -22,6 +22,16 @@ async function loadProject(userId: string, projectId: string) {
   const db = client.db()
   const project = await getOwnedProject(db, userId, projectId)
   return { db, project }
+}
+
+function previewErrorNeedsCreate(error?: string): boolean {
+  if (!error) return false
+  const lower = error.toLowerCase()
+  return (
+    lower.includes("not found") ||
+    lower.includes("createworkspace") ||
+    lower.includes("no syte workspace")
+  )
 }
 
 /**
@@ -60,10 +70,6 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   if (typeof body?.domain === "string" && body.domain.trim()) {
-    const domainResult = await setSyteProjectDomain(db, userId, project, body.domain)
-    if (!domainResult.ok) {
-      return NextResponse.json({ ok: false, error: domainResult.error }, { status: 502 })
-    }
     project.domain = body.domain.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "")
   }
 
@@ -81,6 +87,7 @@ export async function POST(req: Request): Promise<Response> {
       {
         ok: false,
         error: result.error,
+        needsCreate: previewErrorNeedsCreate(result.error),
         uuid: result.uuid,
         previewUrl: result.previewUrl,
         domainIssued: result.domainIssued,
@@ -163,7 +170,7 @@ export async function DELETE(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
   }
 
-  const resolved = await requireSyteWorkspaceUuid(project)
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
   if ("error" in resolved) {
     return NextResponse.json({ ok: false, error: resolved.error }, { status: 409 })
   }

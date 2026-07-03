@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } fr
 import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle } from 'lucide-react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
-import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getProjectDeployedUrl, startSytePreview } from '../lib/api';
+import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getProjectDeployInfo, startSytePreview } from '../lib/api';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
@@ -38,6 +38,7 @@ export function EmbeddedChat() {
     const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
     const [previewError, setPreviewError] = useState('');
     const [previewSource, setPreviewSource] = useState<PreviewSource>(null);
+    const [pendingDeploy, setPendingDeploy] = useState(false);
 
     const fileCount = useMemo(() => Object.keys(files).length, [files]);
     const webContainerReady = typeof window !== 'undefined' && canBootWebContainer();
@@ -56,9 +57,10 @@ export function EmbeddedChat() {
 
     const showDeployedFallback = useCallback(async (): Promise<boolean> => {
         if (!projectId) return false;
-        const deployed = await getProjectDeployedUrl(projectId);
-        if (!deployed) return false;
-        setPreviewUrl(deployed);
+        const deployInfo = await getProjectDeployInfo(projectId);
+        setPendingDeploy(deployInfo.pendingDeploy);
+        if (!deployInfo.url) return false;
+        setPreviewUrl(deployInfo.url);
         setPreviewSource('deployed');
         setPreviewStatus('ready');
         previewStartedRef.current = true;
@@ -143,6 +145,7 @@ export function EmbeddedChat() {
             setPreviewUrl(result.previewUrl);
             setPreviewSource('syte');
             setPreviewStatus('ready');
+            setPendingDeploy(false);
             previewStartedRef.current = true;
             return { ok: true };
         }
@@ -336,7 +339,9 @@ export function EmbeddedChat() {
                         <p className="text-sm font-medium">Open your site in the browser</p>
                         <p className="text-xs opacity-80">
                             {previewSource === 'deployed'
-                                ? 'Deployed sites block in-app preview for security. Syte live preview works inline — tap Retry below.'
+                                ? pendingDeploy
+                                    ? 'New changes are not deployed yet. Syte live preview shows your latest edits inline — tap Retry below.'
+                                    : 'Deployed sites block in-app preview for security. Syte live preview works inline — tap Retry below.'
                                 : 'This preview URL cannot be embedded here.'}
                         </p>
                         {previewError && previewSource === 'deployed' && (
@@ -365,7 +370,9 @@ export function EmbeddedChat() {
                 <>
                     {previewSource === 'deployed' && (
                         <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
-                            Showing your deployed site — redeploy after changes for the latest version.
+                            {pendingDeploy
+                                ? 'New deployment available — deploy to update the live site, or use Syte live preview for latest edits.'
+                                : 'Showing your deployed site — redeploy after changes for the latest version.'}
                         </div>
                     )}
                     {previewSource === 'syte' && (

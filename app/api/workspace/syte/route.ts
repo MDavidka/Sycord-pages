@@ -137,7 +137,7 @@ export async function POST(req: Request): Promise<Response> {
     })
   }
 
-  const resolved = await requireSyteWorkspaceUuid(project)
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
   if ("error" in resolved) {
     return needsCreateResponse(resolved.error)
   }
@@ -292,7 +292,7 @@ export async function POST(req: Request): Promise<Response> {
       if (!domain) {
         return NextResponse.json({ ok: false, error: "Missing domain" }, { status: 400 })
       }
-      const result = await setSyteProjectDomain(db, userId, project, domain)
+      const result = await setSyteProjectDomain(db, userId, project, domain, projectId)
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: 502 })
       }

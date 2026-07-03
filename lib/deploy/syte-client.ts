@@ -17,7 +17,7 @@ export type SyteResult<T = unknown> = {
 export type SyteConfig = {
   apiKey: string
   baseUrl: string
-  /** Workspace routes live at site root: /create_project, /execute_command */
+  /** Workspace routes: /api/create_project, /api/start_preview, etc. */
   workspaceBase: string
   /** Docs/meta routes: /api/health, /api/tokens, /api/ai.json */
   docsBase: string
@@ -45,8 +45,7 @@ export function getSyteConfig(): SyteConfig {
   return {
     apiKey,
     baseUrl,
-    // ai.json lists paths as /api/create_project but production serves /create_project
-    workspaceBase: baseUrl,
+    workspaceBase: `${baseUrl}/api`,
     docsBase: `${baseUrl}/api`,
   }
 }
@@ -68,7 +67,7 @@ export function useSyteWorkspace(): boolean {
 }
 
 function normalizeSytePath(path: string): string {
-  // Docs use /api/create_project; reverse proxy mounts handlers at /create_project
+  // Paths are relative to workspaceBase (/api) — strip redundant api/ prefix if present.
   return path.replace(/^\/+/, "").replace(/^api\//, "")
 }
 
@@ -95,10 +94,10 @@ async function parseBody(res: Response): Promise<unknown> {
 }
 
 function extractError(status: number, body: unknown, endpoint?: string): string {
-  if (status === 404 && endpoint?.includes("/api/")) {
+  if (status === 404 && endpoint && !endpoint.includes("/api/")) {
     return (
       `Endpoint not found (404) at ${endpoint}. ` +
-      `Syte workspace routes are at the site root (e.g. ${endpoint.replace("/api/", "/")}), not under /api/. ` +
+      `Syte workspace routes live under /api/ (e.g. ${endpoint.replace(/\/([^/]+)$/, "/api/$1")}). ` +
       `See https://sycord.site/api/ai.json`
     )
   }
