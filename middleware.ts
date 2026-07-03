@@ -2,25 +2,34 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
-/** Routes where the in-browser WebContainer preview must be cross-origin isolated. */
-const CROSS_ORIGIN_ISOLATION_HEADERS: Record<string, string> = {
+/** Chromium — credentialless allows third-party assets in the builder shell. */
+const COEP_CREDENTIALLESS: Record<string, string> = {
   "Cross-Origin-Embedder-Policy": "credentialless",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "cross-origin",
 }
 
-function needsCrossOriginIsolation(pathname: string): boolean {
-  if (pathname === "/builder") return true
-  if (pathname.startsWith("/builder/")) return true
-  // Isolated Syra iframe shell (WebContainer preview)
-  if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) return true
-  // Legacy: full dashboard page (kept for direct loads)
-  if (/^\/dashboard\/sites\/[^/]+$/.test(pathname)) return true
-  return false
+/**
+ * Safari (incl. iOS) does not treat credentialless as cross-origin isolated.
+ * Syra uses require-corp so WebContainer can boot on mobile Safari.
+ */
+const COEP_REQUIRE_CORP: Record<string, string> = {
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Opener-Policy": "same-origin",
 }
 
-function applyCrossOriginIsolation(response: NextResponse) {
-  for (const [key, value] of Object.entries(CROSS_ORIGIN_ISOLATION_HEADERS)) {
+function isolationHeadersFor(pathname: string): Record<string, string> | null {
+  if (pathname === "/builder" || pathname.startsWith("/builder/")) {
+    return COEP_CREDENTIALLESS
+  }
+  if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) {
+    return COEP_REQUIRE_CORP
+  }
+  return null
+}
+
+function applyHeaders(response: NextResponse, headers: Record<string, string>) {
+  for (const [key, value] of Object.entries(headers)) {
     response.headers.set(key, value)
   }
   return response
@@ -28,38 +37,32 @@ function applyCrossOriginIsolation(response: NextResponse) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const needsIsolation = needsCrossOriginIsolation(pathname)
+  const isolation = isolationHeadersFor(pathname)
 
-  // Check for NextAuth token
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
   })
 
-  // Check for Vercel Manual Token
   const vercelToken = request.cookies.get("access_token")?.value
 
-  // Dashboard Protection
   if (pathname.startsWith("/dashboard")) {
-    // Allow if either token exists
     if (!token && !vercelToken) {
       const redirect = NextResponse.redirect(new URL("/login", request.url))
-      return needsIsolation ? applyCrossOriginIsolation(redirect) : redirect
+      return isolation ? applyHeaders(redirect, isolation) : redirect
     }
   }
 
-  // Login Page Redirection
   if (pathname === "/login") {
-    // Redirect if either token exists
     if (token || vercelToken) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
   }
 
   const response = NextResponse.next()
-  return needsIsolation ? applyCrossOriginIsolation(response) : response
+  return isolation ? applyHeaders(response, isolation) : response
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/builder", "/builder/:path*", "/((?!_next/static|_next/image|favicon.ico|logo.png).*)"],
+  matcher: ["/dashboard/:path*", "/login", "/builder", "/builder/:path*"],
 }

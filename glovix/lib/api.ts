@@ -308,6 +308,25 @@ export const saveChatMessages = async (
     return { success: localCached };
 };
 
+/** Returns the public deployed URL for a dashboard project, if any. */
+export async function getProjectDeployedUrl(projectId: string): Promise<string | null> {
+    try {
+        const res = await fetch(`/api/projects/${projectId}`, { credentials: 'same-origin' });
+        if (!res.ok) return null;
+        const project = await res.json();
+        const url =
+            project?.cloudflareUrl ||
+            project?.deploymentRuntime?.url ||
+            project?.domain ||
+            null;
+        if (!url || typeof url !== 'string') return null;
+        return url.startsWith('http') ? url : `https://${url}`;
+    } catch (err) {
+        console.warn('[GlovixAPI] getProjectDeployedUrl failed:', err);
+        return null;
+    }
+}
+
 // Projects
 export const getProject = async (chatId: string): Promise<Project | null> => {
     // When embedded in the dashboard, load files from the pages API so we

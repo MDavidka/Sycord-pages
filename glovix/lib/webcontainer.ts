@@ -1,9 +1,7 @@
 import { WebContainer, FileSystemTree, DirectoryNode, PreviewMessageType } from '@webcontainer/api';
 
 import { useStore } from '../store';
-
-/** Must match Cross-Origin-Embedder-Policy on the embedding page (middleware + next.config). */
-const WEBCONTAINER_COEP: 'credentialless' | 'require-corp' = 'credentialless';
+import { getPageCoepMode } from './coep';
 
 declare global {
     interface Window {
@@ -53,7 +51,7 @@ export async function getWebContainer() {
 
     if (!window._bootPromise) {
         window._bootPromise = WebContainer.boot({
-            coep: WEBCONTAINER_COEP,
+            coep: getPageCoepMode(),
             // Keep preview errors inside WebContainer; forwarding causes generic
             // cross-origin "Script error." spam in parent/Eruda consoles.
             forwardPreviewErrors: false,

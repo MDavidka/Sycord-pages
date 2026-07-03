@@ -613,6 +613,15 @@ export default function SiteSettingsPage() {
   }, [])
   const { data: session } = useSession()
 
+  const openSyra = React.useCallback(() => {
+    if (!id) return
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches) {
+      window.location.assign(`/dashboard/sites/${id}/syra`)
+      return
+    }
+    setActiveTab("ai")
+  }, [id])
+
   // Subscription / plan
   const [subscription, setSubscription] = useState<string>("Sycord")
 
@@ -950,7 +959,7 @@ export default function SiteSettingsPage() {
       .catch(() => { console.warn("[Sycord] Could not fetch user status from /api/user/status; defaulting to free Sycord plan credits.") })
   }, [])
 
-  // Syra iframe back button → return to project overview tab
+  // Syra iframe back button → return to project overview tab (desktop iframe only)
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
@@ -961,6 +970,14 @@ export default function SiteSettingsPage() {
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
   }, [])
+
+  // Mobile: Syra must load as a top-level page so COOP/COEP headers apply
+  useEffect(() => {
+    if (activeTab !== "ai" || !id) return
+    if (window.matchMedia("(max-width: 768px)").matches && !window.location.pathname.endsWith("/syra")) {
+      window.location.assign(`/dashboard/sites/${id}/syra`)
+    }
+  }, [activeTab, id])
 
   // Fetch already-connected integrations when the integrations tab becomes active
   useEffect(() => {
@@ -1218,7 +1235,7 @@ export default function SiteSettingsPage() {
   }
 
   const startAutoFix = () => {
-    setActiveTab("ai")
+    openSyra()
   }
 
   const handleDeploy = async () => {
@@ -2103,7 +2120,7 @@ export default function SiteSettingsPage() {
 
                   <ProjectSyraSessionCard
                     session={chatSessionSummary}
-                    onOpenChat={() => setActiveTab("ai")}
+                    onOpenChat={openSyra}
                   />
 
                   {/* ── ROW 3: Recent activity ── */}
@@ -2465,9 +2482,9 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: GLOVIX (AI BUILDER) — isolated iframe for WebContainer COOP/COEP */}
+            {/* TAB CONTENT: GLOVIX (AI BUILDER) — desktop iframe; mobile uses full-page /syra */}
             {activeTab === "ai" && (
-              <div className="h-full w-full flex flex-col">
+              <div className="hidden h-full w-full flex-col md:flex">
                 <div className="flex-1 bg-background overflow-hidden relative">
                   {id ? (
                     <iframe
@@ -2529,7 +2546,7 @@ export default function SiteSettingsPage() {
                   }
                 }}
                 onDeploy={handleDeploy}
-                onGoToAI={() => setActiveTab("ai")}
+                onGoToAI={openSyra}
                 isDeploying={isDeploying}
                 deployProgress={deployProgress}
                 deployError={deployError}

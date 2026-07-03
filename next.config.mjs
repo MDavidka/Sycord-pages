@@ -48,17 +48,21 @@ const nextConfig = {
     // document to be cross-origin isolated. These headers are intentionally
     // scoped to the builder routes only so the rest of the app (Firebase auth
     // popups, external embeds, etc.) is unaffected.
-    const crossOriginIsolation = [
+    const crossOriginCredentialless = [
       { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
       { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
       { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
     ]
 
+    const crossOriginRequireCorp = [
+      { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+    ]
+
     return [
-      { source: "/builder", headers: crossOriginIsolation },
-      { source: "/builder/:path*", headers: crossOriginIsolation },
-      { source: "/dashboard/sites/:id/syra", headers: crossOriginIsolation },
-      { source: "/dashboard/sites/:id", headers: crossOriginIsolation },
+      { source: "/builder", headers: crossOriginCredentialless },
+      { source: "/builder/:path*", headers: crossOriginCredentialless },
+      { source: "/dashboard/sites/:id/syra", headers: crossOriginRequireCorp },
     ]
   },
   images: {

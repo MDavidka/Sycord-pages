@@ -1585,8 +1585,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     // safe-area aware spacing. The host injects the real Google avatar + a back
     // handler via window globals (see GlovixBuilder).
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
+    const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
     const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
-    const profileImage = hostUserImage || user?.photoURL;
+    // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
+    const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
     const handleBack = () => {
         const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
         if (typeof fn === 'function') fn();
