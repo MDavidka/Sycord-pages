@@ -64,6 +64,8 @@ interface ChatProps {
     /** Embedded mobile: opens the live preview pane (swipe left). */
     onOpenPreview?: () => void;
     showPreviewButton?: boolean;
+    /** Called when the AI finishes streaming a complete response. */
+    onAiComplete?: () => void;
 }
 
 // Claude-Code-style short path: filename only, but keep the parent folder for
@@ -213,7 +215,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     )
 }
 
-export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false }: ChatProps) {
+export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
@@ -1401,9 +1403,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
             }
         } finally {
+            const wasAborted = !abortControllerRef.current || abortControllerRef.current.signal.aborted;
             setIsLoading(false);
             abortControllerRef.current = null;
             setCurrentThinking('');
+
+            // Notify parent that AI finished a complete response (not aborted)
+            if (!wasAborted && onAiComplete) {
+                onAiComplete();
+            }
 
             // Clear actions after a delay to allow smooth transition to completed state
             setTimeout(() => setActions([]), 500);

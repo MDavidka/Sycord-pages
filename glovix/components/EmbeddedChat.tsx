@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle, Rocket, Copy, Check, Globe, Zap } from 'lucide-react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
 import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getProjectDeployInfo, startSytePreview } from '../lib/api';
@@ -11,10 +11,17 @@ import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePrevie
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 type PreviewSource = 'live' | 'deployed' | 'syte' | null;
+type WorkspaceStatus = 'idle' | 'creating' | 'ready' | 'error';
+type DeployStatus = 'idle' | 'deploying' | 'success' | 'error';
 
 /**
  * Chat + live-preview experience used when Syra is embedded inside a Sycord
  * project. There is exactly ONE chat per project (keyed by host project id).
+ *
+ * Key behaviour:
+ * - Workspace is auto-created on mount (before AI starts)
+ * - Preview starts automatically when AI finishes (via onAiComplete)
+ * - Preview pane shows a URL bar + Deploy button
  */
 export function EmbeddedChat() {
     const theme = useStore(s => s.theme);
@@ -34,11 +41,23 @@ export function EmbeddedChat() {
     const previewStartedRef = useRef(false);
     const baseSeededRef = useRef(false);
     const previewTimeoutRef = useRef<number | null>(null);
+    const workspaceCreatedRef = useRef(false);
+
     const [activePane, setActivePane] = useState(0);
     const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
     const [previewError, setPreviewError] = useState('');
     const [previewSource, setPreviewSource] = useState<PreviewSource>(null);
     const [pendingDeploy, setPendingDeploy] = useState(false);
+
+    // Workspace auto-creation state
+    const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>('idle');
+
+    // Deploy state
+    const [deployStatus, setDeployStatus] = useState<DeployStatus>('idle');
+    const [deployMessage, setDeployMessage] = useState('');
+
+    // Clipboard copy state for preview URL
+    const [urlCopied, setUrlCopied] = useState(false);
 
     const fileCount = useMemo(() => Object.keys(files).length, [files]);
     const webContainerReady = typeof window !== 'undefined' && canBootWebContainer();
@@ -54,6 +73,44 @@ export function EmbeddedChat() {
         } catch { /* ignore */ }
         return 'b27GcrRo';
     }, []);
+
+    // ─── Auto-create Syte workspace on project open ────────────────────────────
+    useEffect(() => {
+        if (!projectId || workspaceCreatedRef.current) return;
+        workspaceCreatedRef.current = true;
+        setWorkspaceStatus('creating');
+
+        fetch('/api/workspace/syte', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, action: 'create_project' }),
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data?.uuid) {
+                    setWorkspaceStatus('ready');
+                } else {
+                    // Workspace may already exist (202) or need a retry — non-fatal
+                    setWorkspaceStatus(data?.ok === false ? 'error' : 'ready');
+                }
+            })
+            .catch(() => {
+                setWorkspaceStatus('error');
+            });
+    }, [projectId]);
+
+    // Retry preview once workspace becomes ready (if previous attempt failed)
+    useEffect(() => {
+        if (workspaceStatus !== 'ready') return;
+        if (previewStartedRef.current) return;
+        if (fileCount === 0) return;
+        // If we had a blocked/error state from a missing UUID, retry silently
+        if (previewStatus === 'blocked' || previewStatus === 'error') {
+            previewStartedRef.current = false;
+            setPreviewStatus('idle');
+            setPreviewError('');
+        }
+    }, [workspaceStatus, fileCount, previewStatus]);
 
     const showDeployedFallback = useCallback(async (): Promise<boolean> => {
         if (!projectId) return false;
@@ -158,7 +215,7 @@ export function EmbeddedChat() {
             return { ok: true };
         }
         const message = result.needsCreate
-            ? 'Ask Syra to run createWorkspace() first, then open Preview again.'
+            ? 'Workspace is being set up — retrying shortly.'
             : (result.error || 'Syte preview failed to start');
         setPreviewError(message);
         previewStartedRef.current = false;
@@ -250,7 +307,6 @@ export function EmbeddedChat() {
 
         const usedFallback = await showDeployedFallback();
         if (usedFallback) {
-            // Deployed sites cannot embed in iframe — status ready for external-open UI
             setPreviewStatus('ready');
             return;
         }
@@ -258,9 +314,21 @@ export function EmbeddedChat() {
         setPreviewStatus('blocked');
         setPreviewError(
             syteError ||
-            'Could not start Syte preview. Ask Syra to run createWorkspace(), then setDomain() if needed, or deploy().'
+            'Preview could not start. The workspace may still be initialising — tap Retry to try again.'
         );
     }, [projectId, startSyteServerPreview, startLivePreview, showDeployedFallback, webContainerReady]);
+
+    // Called by Chat when AI finishes a complete response
+    const handleAiComplete = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        const currentFiles = useStore.getState().files;
+        if (Object.keys(currentFiles).length === 0) return;
+        // Force a fresh preview start to sync the new files to Syte dev server
+        previewStartedRef.current = false;
+        setPreviewStatus('idle');
+        setPreviewError('');
+        void startPreview(true);
+    }, [startPreview]);
 
     useEffect(() => {
         if (previewUrl) {
@@ -321,18 +389,58 @@ export function EmbeddedChat() {
         void startPreview(true);
     };
 
+    const copyPreviewUrl = async () => {
+        if (!previewUrl) return;
+        try {
+            await navigator.clipboard.writeText(previewUrl);
+            setUrlCopied(true);
+            setTimeout(() => setUrlCopied(false), 2000);
+        } catch { /* ignore */ }
+    };
+
+    const deployToProduction = async () => {
+        if (!projectId || deployStatus === 'deploying') return;
+        setDeployStatus('deploying');
+        setDeployMessage('');
+        try {
+            const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}&wait=false`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId }),
+            });
+            const data = await res.json().catch(() => ({} as any));
+            if (res.ok) {
+                setDeployStatus('success');
+                setDeployMessage(data?.url || 'Deployment started — check the dashboard for progress.');
+                setPendingDeploy(false);
+            } else {
+                setDeployStatus('error');
+                setDeployMessage(data?.error || data?.message || `Deploy failed (HTTP ${res.status})`);
+            }
+        } catch (e: any) {
+            setDeployStatus('error');
+            setDeployMessage(e.message || 'Deploy request failed');
+        }
+        setTimeout(() => {
+            if (deployStatus !== 'idle') setDeployStatus('idle');
+        }, 8000);
+    };
+
     const previewLabel =
         previewSource === 'syte' ? 'Syte live preview' :
         previewSource === 'deployed' ? 'Deployed site' : 'Live preview';
+
+    // Compact preview URL display (hostname only)
+    const previewHost = (() => {
+        if (!previewUrl) return null;
+        try { return new URL(previewUrl).hostname; } catch { return previewUrl; }
+    })();
 
     const renderPreviewBody = () => {
         if (previewUrl) {
             const embedInline = shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
             if (!embedInline) {
-                const host = (() => {
-                    try { return new URL(previewUrl).hostname; } catch { return previewUrl; }
-                })();
                 return (
                     <div className={`flex h-full flex-col items-center justify-center gap-4 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
                         <ExternalLink className="h-8 w-8 text-blue-500" />
@@ -340,27 +448,26 @@ export function EmbeddedChat() {
                         <p className="text-xs opacity-80">
                             {previewSource === 'deployed'
                                 ? pendingDeploy
-                                    ? 'New changes are not deployed yet. Syte live preview shows your latest edits inline — tap Retry below.'
-                                    : 'Deployed sites block in-app preview for security. Syte live preview works inline — tap Retry below.'
+                                    ? 'New changes are not deployed yet. Tap Retry to load the Syte live preview.'
+                                    : 'Deployed sites block in-app preview for security. Tap Retry for the Syte live preview.'
                                 : 'This preview URL cannot be embedded here.'}
                         </p>
                         {previewError && previewSource === 'deployed' && (
                             <p className="text-xs text-amber-500/90">{previewError}</p>
                         )}
-                        <p className={`text-xs ${isDark ? 'text-[#c5c6c9]' : 'text-gray-600'}`}>{host}</p>
                         <a
                             href={previewUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`rounded-lg px-4 py-2 text-sm font-medium ${isDark ? 'bg-white text-[#18191B] hover:bg-white/90' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                            className={`rounded-lg px-4 py-2 text-sm font-medium ${isDark ? 'bg-white text-[#18191B] hover:bg-white/90' : 'bg-gray-900 text-white hover:bg-gray-800'} transition-colors`}
                         >
                             Open live site
                         </a>
                         <button
                             onClick={retryPreview}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'} transition-colors`}
                         >
-                            Retry Syte live preview
+                            Retry live preview
                         </button>
                     </div>
                 );
@@ -371,13 +478,14 @@ export function EmbeddedChat() {
                     {previewSource === 'deployed' && (
                         <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
                             {pendingDeploy
-                                ? 'New deployment available — deploy to update the live site, or use Syte live preview for latest edits.'
-                                : 'Showing your deployed site — redeploy after changes for the latest version.'}
+                                ? 'New deployment available — deploy to update the live site.'
+                                : 'Showing deployed site — deploy after changes to update.'}
                         </div>
                     )}
                     {previewSource === 'syte' && (
-                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
-                            Syte live preview — edits hot-reload on the dev server.
+                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex items-center justify-center gap-1.5 ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
+                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                            Syte live preview — edits hot-reload automatically
                         </div>
                     )}
                     <iframe
@@ -396,8 +504,8 @@ export function EmbeddedChat() {
             return (
                 <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
                     <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
-                    <p className="text-sm">Starting preview…</p>
-                    <p className="text-xs opacity-70">Booting dev server or loading your deployed site.</p>
+                    <p className="text-sm font-medium">Starting preview…</p>
+                    <p className="text-xs opacity-70">Syncing files and booting the dev server.</p>
                 </div>
             );
         }
@@ -406,11 +514,11 @@ export function EmbeddedChat() {
             return (
                 <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
                     <AlertTriangle className="h-7 w-7 text-amber-500" />
-                    <p className="text-sm">{previewStatus === 'blocked' ? 'Preview unavailable' : 'Preview failed to start'}</p>
-                    <p className="text-xs opacity-80">{previewError}</p>
+                    <p className="text-sm font-medium">{previewStatus === 'blocked' ? 'Preview unavailable' : 'Preview failed'}</p>
+                    <p className="text-xs opacity-80 max-w-xs">{previewError}</p>
                     <button
                         onClick={retryPreview}
-                        className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                        className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
                     >
                         Retry preview
                     </button>
@@ -420,18 +528,122 @@ export function EmbeddedChat() {
 
         return (
             <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
-                <Eye className="h-7 w-7 opacity-50" />
-                <p className="text-sm">No preview yet</p>
-                <p className="text-xs opacity-70">Ask Syra to build something — the live site appears here.</p>
-                <button
-                    onClick={() => void startPreview(true)}
-                    className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                >
-                    Start preview
-                </button>
+                <Eye className="h-7 w-7 opacity-40" />
+                <p className="text-sm font-medium">No preview yet</p>
+                <p className="text-xs opacity-70 max-w-xs">
+                    {workspaceStatus === 'creating'
+                        ? 'Setting up workspace…'
+                        : 'Build something with Syra — the live site appears here automatically.'}
+                </p>
+                {fileCount > 0 && workspaceStatus === 'ready' && (
+                    <button
+                        onClick={() => void startPreview(true)}
+                        className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                    >
+                        Start preview
+                    </button>
+                )}
             </div>
         );
     };
+
+    // Preview pane header
+    const renderPreviewHeader = () => (
+        <div className={`flex h-11 flex-shrink-0 items-center gap-1.5 border-b px-2 ${isDark ? 'border-[#2a2b2e] bg-[#1a1b1e]' : 'border-gray-200 bg-white'}`}>
+            {/* Back to chat */}
+            <button
+                onClick={() => goToPane(0)}
+                className={`flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[13px] flex-shrink-0 transition-colors ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
+            >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Chat</span>
+            </button>
+
+            {/* Preview URL bar (when available) */}
+            {previewHost ? (
+                <button
+                    onClick={copyPreviewUrl}
+                    title={previewUrl || ''}
+                    className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-colors ${isDark ? 'bg-[#2a2b2e] text-[#c5c6c9] hover:bg-[#333436]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                    <Globe className="h-3 w-3 flex-shrink-0 text-green-500" />
+                    <span className="truncate font-mono">{previewHost}</span>
+                    {urlCopied
+                        ? <Check className="h-3 w-3 flex-shrink-0 text-green-500" />
+                        : <Copy className="h-3 w-3 flex-shrink-0 opacity-50" />
+                    }
+                </button>
+            ) : (
+                <div className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${isDark ? 'bg-[#2a2b2e] text-[#666]' : 'bg-gray-100 text-gray-400'}`}>
+                    {workspaceStatus === 'creating' ? (
+                        <>
+                            <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
+                            <span className="truncate">Setting up workspace…</span>
+                        </>
+                    ) : previewStatus === 'starting' ? (
+                        <>
+                            <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-blue-400" />
+                            <span className="truncate">Starting preview…</span>
+                        </>
+                    ) : (
+                        <>
+                            <Globe className="h-3 w-3 flex-shrink-0 opacity-40" />
+                            <span className="truncate">Preview URL</span>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex flex-shrink-0 items-center gap-0.5">
+                {/* Reload */}
+                <button
+                    onClick={reloadPreview}
+                    disabled={!previewUrl}
+                    title="Reload preview"
+                    className={`rounded-md p-1.5 disabled:opacity-30 transition-colors ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
+                >
+                    <RotateCw className="h-3.5 w-3.5" />
+                </button>
+
+                {/* Open in new tab */}
+                <a
+                    href={previewUrl || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open in new tab"
+                    className={`rounded-md p-1.5 transition-colors ${!previewUrl ? 'pointer-events-none opacity-30' : ''} ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
+                >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+
+                {/* Deploy to production */}
+                <button
+                    onClick={deployToProduction}
+                    disabled={deployStatus === 'deploying' || !projectId}
+                    title={deployStatus === 'success' ? (deployMessage || 'Deployed!') : deployStatus === 'error' ? deployMessage : 'Deploy to production'}
+                    className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium disabled:opacity-50 transition-colors ml-0.5 ${
+                        deployStatus === 'success'
+                            ? isDark ? 'bg-green-600/20 text-green-400' : 'bg-green-100 text-green-700'
+                            : deployStatus === 'error'
+                            ? isDark ? 'bg-red-600/20 text-red-400' : 'bg-red-100 text-red-700'
+                            : isDark ? 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30' : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                >
+                    {deployStatus === 'deploying' ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : deployStatus === 'success' ? (
+                        <Check className="h-3 w-3" />
+                    ) : (
+                        <Rocket className="h-3 w-3" />
+                    )}
+                    <span className="hidden sm:inline">
+                        {deployStatus === 'deploying' ? 'Deploying…' : deployStatus === 'success' ? 'Deployed' : deployStatus === 'error' ? 'Failed' : 'Deploy'}
+                    </span>
+                </button>
+            </div>
+        </div>
+    );
 
     return (
         <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
@@ -441,49 +653,25 @@ export function EmbeddedChat() {
                 className="flex h-full w-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide"
                 style={{ scrollBehavior: 'smooth' }}
             >
+                {/* Chat pane */}
                 <div className="h-full w-full flex-shrink-0 snap-start overflow-hidden">
                     <Chat
                         onOpenPreview={() => goToPane(1)}
                         showPreviewButton={activePane === 0}
+                        onAiComplete={handleAiComplete}
                     />
                 </div>
 
+                {/* Preview pane */}
                 <div className="h-full w-full flex-shrink-0 snap-start flex flex-col overflow-hidden">
-                    <div className={`flex h-11 flex-shrink-0 items-center gap-2 border-b px-3 ${isDark ? 'border-[#2a2b2e]' : 'border-gray-200'}`}>
-                        <button
-                            onClick={() => goToPane(0)}
-                            className={`flex items-center gap-1 rounded-md px-2 py-1 text-[13px] ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                            Chat
-                        </button>
-                        <span className={`ml-1 text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-900'}`}>Preview</span>
-                        <div className="ml-auto flex items-center gap-1">
-                            <button
-                                onClick={reloadPreview}
-                                disabled={!previewUrl}
-                                title="Reload"
-                                className={`rounded-md p-1.5 disabled:opacity-40 ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
-                            >
-                                <RotateCw className="h-3.5 w-3.5" />
-                            </button>
-                            <a
-                                href={previewUrl || undefined}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Open in new tab"
-                                className={`rounded-md p-1.5 ${!previewUrl ? 'pointer-events-none opacity-40' : ''} ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
-                            >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                            </a>
-                        </div>
-                    </div>
+                    {renderPreviewHeader()}
                     <div className="relative min-h-0 flex-1 bg-white">
                         {renderPreviewBody()}
                     </div>
                 </div>
             </div>
 
+            {/* Pane indicators */}
             <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
                 {[0, 1].map((i) => (
                     <span
@@ -496,6 +684,14 @@ export function EmbeddedChat() {
                     />
                 ))}
             </div>
+
+            {/* Deploy status toast */}
+            {deployStatus === 'error' && deployMessage && (
+                <div className="pointer-events-none absolute bottom-8 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium bg-red-600 text-white shadow-lg">
+                    <Zap className="mr-1 inline h-3 w-3" />
+                    {deployMessage.length > 60 ? deployMessage.slice(0, 60) + '…' : deployMessage}
+                </div>
+            )}
         </div>
     );
 }
