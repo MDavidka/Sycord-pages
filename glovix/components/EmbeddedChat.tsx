@@ -1,10 +1,13 @@
 'use client'
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
-import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle } from 'lucide-react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
 import { getHostProjectId, getChatMessages, getProject, saveChatMessages } from '../lib/api';
-import { mountFiles, autoInstallDependencies, smartInstall, executeCommand } from '../lib/webcontainer';
+import { getBaseProjectFiles } from '../lib/projectTemplate';
+import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
+
+type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 
 /**
  * Chat + live-preview experience used when Syra is embedded inside a Sycord
@@ -20,7 +23,9 @@ export function EmbeddedChat() {
     const setCurrentChatId = useStore(s => s.setCurrentChatId);
     const setMessages = useStore(s => s.setMessages);
     const setFiles = useStore(s => s.setFiles);
+    const files = useStore(s => s.files);
     const previewUrl = useStore(s => s.previewUrl);
+    const setPreviewUrl = useStore(s => s.setPreviewUrl);
     const isDark = theme === 'dark';
 
     const projectId = getHostProjectId();
@@ -29,13 +34,40 @@ export function EmbeddedChat() {
     const scrollerRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const previewStartedRef = useRef(false);
+    const baseSeededRef = useRef(false);
+    const previewTimeoutRef = useRef<number | null>(null);
     const [activePane, setActivePane] = useState(0); // 0 = chat, 1 = preview
-    const [previewStatus, setPreviewStatus] = useState<'idle' | 'starting' | 'ready'>('idle');
+    const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
+    const [previewError, setPreviewError] = useState('');
+
+    const fileCount = useMemo(() => Object.keys(files).length, [files]);
+    const canUseWebContainer = typeof window !== 'undefined' && window.crossOriginIsolated;
+
+    const presetId = useMemo(() => {
+        if (typeof window !== 'undefined') {
+            const winPreset = (window as any).__glovixPreset;
+            if (winPreset) return winPreset;
+        }
+        try {
+            const stored = sessionStorage.getItem('glovix_preset');
+            if (stored) return stored;
+        } catch { /* ignore */ }
+        return 'b27GcrRo';
+    }, []);
 
     useLayoutEffect(() => {
         if (!chatId) return;
         setCurrentChatId(chatId);
     }, [chatId, setCurrentChatId]);
+
+    // Boot WebContainer early so the server-ready listener is registered before
+    // we spawn the dev server.
+    useEffect(() => {
+        if (!canUseWebContainer) return;
+        void getWebContainer().catch(() => {});
+        const cached = getCachedPreviewUrl();
+        if (cached) setPreviewUrl(cached);
+    }, [canUseWebContainer, setPreviewUrl]);
 
     useEffect(() => {
         if (!projectId || !chatId) return;
@@ -58,14 +90,24 @@ export function EmbeddedChat() {
 
             try {
                 const project = await getProject(chatId);
-                if (cancelled || !project?.files) return;
+                if (cancelled) return;
 
-                const files = typeof project.files === 'string'
-                    ? JSON.parse(project.files)
-                    : project.files;
-                if (files && Object.keys(files).length > 0) {
-                    setFiles(files);
-                    mountFiles(files).catch(() => {});
+                if (project?.files && Object.keys(project.files).length > 0) {
+                    setFiles(project.files);
+                    if (canUseWebContainer) {
+                        mountFiles(project.files).catch(() => {});
+                    }
+                    return;
+                }
+
+                // No saved pages yet — seed the Vite baseline so preview can boot.
+                if (!baseSeededRef.current) {
+                    baseSeededRef.current = true;
+                    const baseFiles = getBaseProjectFiles(presetId);
+                    setFiles(baseFiles);
+                    if (canUseWebContainer) {
+                        mountFiles(baseFiles).catch(() => {});
+                    }
                 }
             } catch (err) {
                 console.warn('[EmbeddedChat] Failed to restore project files:', err);
@@ -82,34 +124,93 @@ export function EmbeddedChat() {
                 });
             }
         };
-    }, [projectId, chatId, setMessages, setFiles]);
+    }, [projectId, chatId, setMessages, setFiles, canUseWebContainer, presetId]);
 
     // Boot the in-browser dev server once the project has files so the preview
-    // pane shows the live site. Runs at most once per mount.
-    const startPreview = useCallback(async () => {
-        if (previewStartedRef.current) return;
-        if (typeof window === 'undefined' || !(window as any).crossOriginIsolated) return;
-        const files = useStore.getState().files;
-        if (Object.keys(files).length === 0) return;
+    // pane shows the live site. Runs at most once per mount unless retried.
+    const startPreview = useCallback(async (force = false) => {
+        if (previewStartedRef.current && !force) return;
+
+        if (typeof window === 'undefined') return;
+
+        if (!window.crossOriginIsolated) {
+            setPreviewStatus('blocked');
+            setPreviewError('Live preview needs cross-origin isolation. Reload this page from the Syra tab on your project dashboard.');
+            return;
+        }
+
+        const currentFiles = useStore.getState().files;
+        if (Object.keys(currentFiles).length === 0) {
+            setPreviewStatus('idle');
+            setPreviewError('');
+            return;
+        }
+
+        const cached = getCachedPreviewUrl();
+        if (cached) {
+            setPreviewUrl(cached);
+            setPreviewStatus('ready');
+            previewStartedRef.current = true;
+            return;
+        }
 
         previewStartedRef.current = true;
         setPreviewStatus('starting');
+        setPreviewError('');
+
         const addOutput = useStore.getState().addTerminalOutput;
+        if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
+        previewTimeoutRef.current = window.setTimeout(() => {
+            if (!getCachedPreviewUrl() && !useStore.getState().previewUrl) {
+                previewStartedRef.current = false;
+                setPreviewStatus('error');
+                setPreviewError('Preview timed out. Check that package.json has a "dev" script and index.html exists, then try again.');
+            }
+        }, 90_000);
+
         try {
-            await mountFiles(files);
-            await autoInstallDependencies(files, addOutput);
-            await smartInstall(addOutput);
-            executeCommand('npm', ['run', 'dev'], () => {}, -1).catch(() => {});
+            await getWebContainer();
+            await mountFiles(currentFiles);
+            await autoInstallDependencies(currentFiles, addOutput);
+
+            let installed = await smartInstall(addOutput);
+            if (!installed) {
+                addOutput('$ npm install (fallback)\n');
+                const exitCode = await executeCommand('npm', ['install'], addOutput, 180_000);
+                installed = exitCode === 0;
+            }
+
+            if (!installed) {
+                throw new Error('Failed to install dependencies');
+            }
+
+            addOutput('$ npm run dev\n');
+            executeCommand('npm', ['run', 'dev'], addOutput, -1).catch(() => {});
         } catch (err) {
             console.warn('[EmbeddedChat] preview start failed:', err);
             previewStartedRef.current = false;
-            setPreviewStatus('idle');
+            setPreviewStatus('error');
+            setPreviewError(err instanceof Error ? err.message : 'Failed to start preview');
+            if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
         }
-    }, []);
+    }, [setPreviewUrl]);
 
     useEffect(() => {
-        if (previewUrl) setPreviewStatus('ready');
+        if (previewUrl) {
+            if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
+            setPreviewStatus('ready');
+        }
     }, [previewUrl]);
+
+    useEffect(() => () => {
+        if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
+    }, []);
+
+    // Auto-start preview in the background when project files are available.
+    useEffect(() => {
+        if (fileCount === 0 || previewUrl || previewStatus !== 'idle') return;
+        void startPreview();
+    }, [fileCount, previewUrl, previewStatus, startPreview]);
 
     const goToPane = useCallback((i: number) => {
         const el = scrollerRef.current;
@@ -133,6 +234,69 @@ export function EmbeddedChat() {
         if (iframeRef.current && previewUrl) {
             iframeRef.current.src = previewUrl;
         }
+    };
+
+    const retryPreview = () => {
+        previewStartedRef.current = false;
+        setPreviewError('');
+        setPreviewStatus('idle');
+        void startPreview(true);
+    };
+
+    const renderPreviewBody = () => {
+        if (previewUrl) {
+            return (
+                <iframe
+                    ref={iframeRef}
+                    src={previewUrl}
+                    className="absolute inset-0 h-full w-full border-none bg-white"
+                    title="Live preview"
+                    allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                />
+            );
+        }
+
+        if (previewStatus === 'starting') {
+            return (
+                <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
+                    <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
+                    <p className="text-sm">Starting live preview…</p>
+                    <p className="text-xs opacity-70">Installing dependencies and booting the dev server.</p>
+                </div>
+            );
+        }
+
+        if (previewStatus === 'blocked' || previewStatus === 'error') {
+            return (
+                <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
+                    <AlertTriangle className="h-7 w-7 text-amber-500" />
+                    <p className="text-sm">{previewStatus === 'blocked' ? 'Preview unavailable' : 'Preview failed to start'}</p>
+                    <p className="text-xs opacity-80">{previewError || 'Something went wrong while booting the dev server.'}</p>
+                    {previewStatus === 'error' && (
+                        <button
+                            onClick={retryPreview}
+                            className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                        >
+                            Retry preview
+                        </button>
+                    )}
+                </div>
+            );
+        }
+
+        return (
+            <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
+                <Eye className="h-7 w-7 opacity-50" />
+                <p className="text-sm">No preview yet</p>
+                <p className="text-xs opacity-70">Ask Syra to build something — the live site appears here.</p>
+                <button
+                    onClick={() => void startPreview(true)}
+                    className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
+                >
+                    Start preview
+                </button>
+            </div>
+        );
     };
 
     return (
@@ -179,38 +343,8 @@ export function EmbeddedChat() {
                             </a>
                         </div>
                     </div>
-                    <div className="relative flex-1 bg-white">
-                        {previewUrl ? (
-                            <iframe
-                                ref={iframeRef}
-                                src={previewUrl}
-                                className="absolute inset-0 h-full w-full border-none bg-white"
-                                title="Live preview"
-                                allow="cross-origin-isolated; clipboard-read; clipboard-write"
-                            />
-                        ) : (
-                            <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
-                                {previewStatus === 'starting' ? (
-                                    <>
-                                        <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
-                                        <p className="text-sm">Starting live preview…</p>
-                                        <p className="text-xs opacity-70">Installing dependencies and booting the dev server.</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Eye className="h-7 w-7 opacity-50" />
-                                        <p className="text-sm">No preview yet</p>
-                                        <p className="text-xs opacity-70">Ask Syra to build something — the live site appears here.</p>
-                                        <button
-                                            onClick={() => void startPreview()}
-                                            className={`mt-1 rounded-lg px-3 py-1.5 text-xs font-medium ${isDark ? 'bg-white/10 text-[#e5e5e5] hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                                        >
-                                            Start preview
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        )}
+                    <div className="relative min-h-0 flex-1 bg-white">
+                        {renderPreviewBody()}
                     </div>
                 </div>
             </div>
