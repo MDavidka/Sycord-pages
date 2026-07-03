@@ -309,23 +309,54 @@ export type SytePreviewFields = {
   domain?: string
 }
 
-/** Pick the best HTTPS preview URL from a Syte preview_status / start_preview response. */
+/** True when URL is a raw host:port preview (not the HTTPS preview domain). */
+function isDirectPreviewUrl(url: string): boolean {
+  try {
+    const u = new URL(url.trim())
+    if (u.protocol === "http:" && /^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) return true
+    return u.hostname === "localhost" || u.hostname === "127.0.0.1"
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Pick the HTTPS preview domain URL from Syte start_preview / preview_status.
+ * Prefers preview_domain_url (e.g. https://previewk-mysite.sycord.site) and never
+ * uses preview_direct_url (http://IP:port) when a preview domain is available.
+ */
 export function pickSytePreviewUrl(data: SytePreviewFields | null | undefined): string | null {
   if (!data || typeof data !== "object") return null
-  const candidates = [
-    data.preview_domain_url,
-    data.preview_url,
-    data.preview_direct_url,
-    data.url,
-  ]
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim().startsWith("http")) return c.trim()
+
+  const domainUrl =
+    typeof data.preview_domain_url === "string" ? data.preview_domain_url.trim() : ""
+  if (domainUrl.startsWith("http")) return domainUrl
+
+  const previewDomain =
+    typeof data.preview_domain === "string" ? data.preview_domain.trim() : ""
+  if (previewDomain) {
+    return `https://${previewDomain.replace(/^https?:\/\//, "")}`
   }
-  const host = data.preview_domain || data.domain
-  if (typeof host === "string" && host.trim()) {
-    const h = host.trim().replace(/^https?:\/\//, "")
-    return `https://${h}`
+
+  const previewUrl = typeof data.preview_url === "string" ? data.preview_url.trim() : ""
+  const directUrl =
+    typeof data.preview_direct_url === "string" ? data.preview_direct_url.trim() : ""
+
+  // preview_url is the domain URL when GUI zone is set; skip when it equals direct IP
+  if (previewUrl.startsWith("http") && previewUrl !== directUrl && !isDirectPreviewUrl(previewUrl)) {
+    return previewUrl
   }
+
+  // Last resort only when Syte did not issue a preview domain (no wildcard GUI zone)
+  if (directUrl.startsWith("http")) return directUrl
+  if (previewUrl.startsWith("http")) return previewUrl
+
+  const host = typeof data.domain === "string" ? data.domain.trim() : ""
+  if (host) return `https://${host.replace(/^https?:\/\//, "")}`
+
+  const genericUrl = typeof data.url === "string" ? data.url.trim() : ""
+  if (genericUrl.startsWith("http") && !isDirectPreviewUrl(genericUrl)) return genericUrl
+
   return null
 }
 
