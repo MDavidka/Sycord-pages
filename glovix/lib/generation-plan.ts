@@ -39,37 +39,30 @@ export type CustomPlanStepInput = {
   strict?: boolean
 }
 
-export const NEXT_STANDALONE_CONFIG_HINT = `// next.config.mjs
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'standalone',
-};
-export default nextConfig;`
-
 export const SUGGESTED_PIPELINE: Omit<GenerationPlanStep, "status" | "hints">[] = [
   {
     id: "foundation",
-    title: "Layout, theme & shared UI",
+    title: "Layout, routing & theme",
     description:
-      "Extend the existing Next.js App Router project (app/layout.tsx already exists — don't scaffold). Set up globals.css, theme + dark-mode toggle, navbar and footer.",
+      "src/App.tsx with react-router-dom routes + shared layout (Navbar/Footer). Tailwind base, dark-mode toggle, reusable components in src/components/.",
     strict: false,
   },
   {
     id: "pages",
     title: "Build the pages",
-    description: "Create each route as app/<segment>/page.tsx, composing shadcn components. Install parts as you need them.",
+    description: "Create each route as its own file under src/pages/, composing your Tailwind components.",
     strict: false,
   },
   {
     id: "polish",
     title: "Content & polish",
-    description: "Real copy, images, responsive check at 375px and 1280px, design-contract pass.",
+    description: "Real copy, images, responsive check at 375px and 1280px, lucide icons.",
     strict: false,
   },
   {
     id: "ship",
     title: "Verify & deploy",
-    description: "typeCheck() + lintCheck(), fix issues, then deploy() (Syte builds the Docker image — never npm run build).",
+    description: "typeCheck() + lintCheck(), fix issues, then deploy() (Syte Docker-builds & serves — never npm run build).",
     strict: false,
   },
 ]
@@ -82,30 +75,29 @@ function slugifyStepId(title: string, index: number): string {
   return base || `step-${index + 1}`
 }
 
-function stepHints(stepId: string, pages: PlannedPage[], shadcnComponents: string[]): string[] {
-  const core = shadcnComponents.slice(0, 6)
+function routeToPageFile(route: string): string {
+  if (route === "/" || route === "") return "src/pages/Home.tsx"
+  const seg = route.replace(/^\/+|\/+$/g, "").split("/")[0]
+  const name = seg.charAt(0).toUpperCase() + seg.slice(1)
+  return `src/pages/${name}.tsx`
+}
 
-  if (/found|setup|layout|theme|shell|next|init/.test(stepId)) {
+function stepHints(stepId: string, pages: PlannedPage[]): string[] {
+  if (/found|setup|layout|theme|shell|routing|init/.test(stepId)) {
     return [
-      "listFiles() first — extend app/layout.tsx, don't scaffold",
-      "Inter via --font-sans, ThemeProvider + dark-mode toggle",
-      `addShadcnComponent({ components: [${core.map((c) => `"${c}"`).join(", ")}] })`,
-    ]
-  }
-  if (/shadcn|component|ui/.test(stepId)) {
-    return [
-      `addShadcnComponent({ components: [${core.map((c) => `"${c}"`).join(", ")}] })`,
-      "Install what you import, when you import it — not in bulk",
+      "src/App.tsx: react-router-dom routes + shared layout (Navbar/Footer)",
+      "src/index.css: Tailwind base; dark mode via class strategy + toggle",
+      "Build small reusable components in src/components/",
     ]
   }
   if (/page|route|build/.test(stepId)) {
-    return pages.map((p) => `app${p.route === "/" ? "" : p.route}/page.tsx — ${p.name}`)
+    return pages.map((p) => `${routeToPageFile(p.route)} — ${p.name}`)
   }
   if (/polish|content|design|review/.test(stepId)) {
-    return ["Real copy + images", "Responsive at 375px and 1280px", "grep for @/registry/ and design-contract violations"]
+    return ["Real copy + images (Unsplash/Pexels)", "Responsive at 375px and 1280px", "lucide-react icons, no colored circles"]
   }
   if (/valid|check|lint|deploy|ship/.test(stepId)) {
-    return ["typeCheck() then lintCheck()", "Fix reported errors", "deploy() — Syte builds the Docker image"]
+    return ["typeCheck() then lintCheck()", "Fix reported errors", "deploy() — Syte Docker-builds & serves the SPA"]
   }
   return []
 }
@@ -120,10 +112,8 @@ export function buildGenerationPlan(input: {
 }): GenerationPlan {
   const now = Date.now()
   const pages = input.pages?.length ? input.pages : [{ route: "/", name: "Home" }]
-  const shadcnComponents = (input.shadcnComponents ?? ["button", "card", "input", "label", "separator"]).slice(
-    0,
-    16,
-  )
+  // Kept for type/UI compatibility; the Vite baseline doesn't use shadcn.
+  const shadcnComponents = (input.shadcnComponents ?? []).slice(0, 16)
 
   const stepDefs: Omit<GenerationPlanStep, "status" | "hints">[] = input.steps?.length
     ? input.steps.map((s, i) => ({
@@ -137,7 +127,7 @@ export function buildGenerationPlan(input: {
   const steps: GenerationPlanStep[] = stepDefs.map((def, idx) => ({
     ...def,
     status: idx === 0 ? "in_progress" : "pending",
-    hints: stepHints(def.id, pages, shadcnComponents),
+    hints: stepHints(def.id, pages),
   }))
 
   return {
@@ -205,11 +195,8 @@ export function formatPlanForAi(plan: GenerationPlan): string {
 
   lines.push(
     "",
-    "Pages to build:",
+    "Pages to build (one route per file under src/pages/, wired in src/App.tsx with react-router-dom):",
     ...plan.pages.map((p) => `- ${p.route} → ${p.name}${p.sections?.length ? ` [${p.sections.join(", ")}]` : ""}`),
-    "",
-    "shadcn to install (start with these — add more only when needed):",
-    plan.shadcnComponents.map((c) => `- ${c}`).join("\n") || "- button, card, input, label, separator",
     "",
     "Your steps (you defined these — adapt freely, mark completed only after success):",
   )
@@ -226,7 +213,7 @@ export function formatPlanForAi(plan: GenerationPlan): string {
 
   lines.push(
     "",
-    "Reminders: extend the existing App Router project (no create-next-app, no index.html). Install shadcn parts as you import them. Mark a step completed only after it truly succeeded. Deploy via deploy() — never npm run build.",
+    "Reminders: Vite + React SPA (no shadcn, no Next.js). Build reusable Tailwind components. Mark a step completed only after it truly succeeded. Deploy via deploy() — never run npm run build yourself (Syte Docker-builds it).",
   )
 
   return lines.join("\n")
