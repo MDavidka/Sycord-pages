@@ -6,6 +6,8 @@ import { getClientIP } from "@/lib/get-client-ip"
 import { containsCurseWords } from "@/lib/curse-word-filter"
 import { generateWebpageId } from "@/lib/generate-webpage-id"
 import { loadProjectChatSummariesForUser } from "@/lib/project-chat-session"
+import { syteProjectConnect, isSyteConfigured } from "@/lib/deploy/syte-client"
+import { resolveCanonicalSyteUuid } from "@/lib/deploy/syte-workspace"
 
 import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
 
@@ -172,6 +174,44 @@ export async function POST(request: Request) {
     ensureContainer(newProject, projectIdStr)
       .then((container) => bootstrapContainer(container))
       .catch((err) => console.error("[Project Creation] Container setup failed:", err?.message))
+
+    // Create Syte workspace in background — fire-and-forget so project creation
+    // is never blocked by Syte latency. UUID is saved to the project doc once ready.
+    if (isSyteConfigured()) {
+      ;(async () => {
+        try {
+          const canonicalUuid = resolveCanonicalSyteUuid(newProject, projectIdStr)
+          const result = await syteProjectConnect({
+            name: safeBody.businessName,
+            stack: "nextjs",
+            uuid: canonicalUuid,
+          })
+          if (result.ok && result.data?.uuid) {
+            const uuid = result.data.uuid
+            const domain = result.data.project?.domain ?? null
+            const url = result.data.project?.url ?? null
+            await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": projectIdStr },
+              {
+                $set: {
+                  "projects.$.syteWorkspaceUuid": uuid,
+                  "projects.$.syteDomain": domain,
+                  "projects.$.syteUrl": url,
+                  "projects.$.deployStatus": "created",
+                  "projects.$.deploymentMode": "syte",
+                  "projects.$.updatedAt": new Date(),
+                },
+              },
+            )
+            console.log(`[Project Creation] Syte workspace created: ${uuid} (${domain})`)
+          } else {
+            console.warn(`[Project Creation] Syte project_connect failed: ${result.error}`)
+          }
+        } catch (err: any) {
+          console.error("[Project Creation] Syte project_connect error:", err?.message)
+        }
+      })()
+    }
 
     // Return the new project. We cast _id to string for JSON serialization compatibility if needed,
     // but Next.js usually handles ObjectId in JSON response or we should stringify it.

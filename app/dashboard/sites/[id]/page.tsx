@@ -102,6 +102,192 @@ import {
 import { ProjectSyraSessionCard } from "@/components/project-syra-session-card"
 import type { ProjectChatSessionSummary } from "@/lib/types"
 
+// ─── Deployment Settings Card ─────────────────────────────────────────────────
+// Shown in the Settings tab. Displays the Syte workspace UUID, domain, live URL,
+// deploy status, and a Deploy to Production button.
+function DeploymentSettingsCard({ projectId, project }: { projectId: string; project: any }) {
+  const uuid: string | null = project?.syteWorkspaceUuid ?? null
+  const initialDomain: string | null = project?.syteDomain ?? null
+  const initialUrl: string | null = project?.syteUrl ?? null
+  const initialStatus: string | null = project?.deployStatus ?? null
+
+  const [deploying, setDeploying] = useState(false)
+  const [pollStatus, setPollStatus] = useState<string | null>(initialStatus)
+  const [liveUrl, setLiveUrl] = useState<string | null>(initialUrl)
+  const [syteDomain, setSyteDomain] = useState<string | null>(initialDomain)
+  const [deployError, setDeployError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const copyUuid = async () => {
+    if (!uuid) return
+    try {
+      await navigator.clipboard.writeText(uuid)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* ignore */ }
+  }
+
+  const handleDeploy = async () => {
+    if (!projectId || deploying) return
+    setDeploying(true)
+    setDeployError(null)
+    try {
+      const res = await fetch("/api/workspace/sycord", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "issue_deployment", projectId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) {
+        setDeployError(data.error || `Deploy failed (${res.status})`)
+        setDeploying(false)
+        return
+      }
+      setPollStatus("deploying")
+      // Poll container_get until running
+      let attempts = 0
+      const poll = async () => {
+        attempts++
+        try {
+          const pr = await fetch(
+            `/api/workspace/sycord?action=container_get&projectId=${encodeURIComponent(projectId)}`,
+          )
+          const pd = await pr.json()
+          if (pd.running) {
+            setPollStatus("running")
+            setLiveUrl(pd.url ?? liveUrl)
+            setSyteDomain(pd.domain ?? syteDomain)
+            setDeploying(false)
+            return
+          }
+          if (pd.status && pd.status !== "deploying") {
+            setPollStatus(pd.status)
+          }
+        } catch { /* ignore */ }
+        if (attempts < 60) {
+          setTimeout(poll, 5000)
+        } else {
+          setDeployError("Deploy timed out — check the Syte dashboard for logs.")
+          setDeploying(false)
+        }
+      }
+      setTimeout(poll, 5000)
+    } catch (e: any) {
+      setDeployError(e.message || "Network error")
+      setDeploying(false)
+    }
+  }
+
+  const statusColor =
+    pollStatus === "running"
+      ? "text-green-500"
+      : pollStatus === "deploying"
+      ? "text-yellow-500"
+      : pollStatus === "created"
+      ? "text-blue-400"
+      : "text-muted-foreground"
+
+  const statusLabel =
+    pollStatus === "running"
+      ? "Live"
+      : pollStatus === "deploying"
+      ? "Deploying…"
+      : pollStatus === "created"
+      ? "Ready to deploy"
+      : pollStatus ?? "—"
+
+  return (
+    <Card className="bg-card/50 backdrop-blur-sm border-white/10">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Rocket className="h-4 w-4" />
+          Deployment
+        </CardTitle>
+        <CardDescription>
+          Syte workspace UUID, domain, and one-click production deploy.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* UUID */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Workspace UUID</Label>
+          {uuid ? (
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded-md bg-black/30 border border-white/10 px-3 py-1.5 text-xs font-mono text-foreground truncate">
+                {uuid}
+              </code>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 shrink-0"
+                onClick={copyUuid}
+                title="Copy UUID"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              Workspace is being created — it will appear here shortly.
+            </p>
+          )}
+        </div>
+
+        {/* Domain / URL */}
+        {(syteDomain || liveUrl) && (
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Site URL</Label>
+            <a
+              href={liveUrl ?? `https://${syteDomain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-primary hover:underline truncate"
+            >
+              <Globe className="h-3.5 w-3.5 shrink-0" />
+              {syteDomain ?? liveUrl}
+              <ExternalLink className="h-3 w-3 shrink-0 opacity-60" />
+            </a>
+          </div>
+        )}
+
+        {/* Status */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Status</span>
+          <span className={`text-xs font-medium flex items-center gap-1.5 ${statusColor}`}>
+            {pollStatus === "deploying" && <Loader2 className="h-3 w-3 animate-spin" />}
+            {pollStatus === "running" && <span className="inline-block h-2 w-2 rounded-full bg-green-500" />}
+            {statusLabel}
+          </span>
+        </div>
+
+        {/* Deploy error */}
+        {deployError && (
+          <p className="text-xs text-destructive">{deployError}</p>
+        )}
+
+        {/* Deploy button */}
+        <Button
+          onClick={handleDeploy}
+          disabled={deploying || !uuid}
+          className="w-full"
+        >
+          {deploying ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Deploying…
+            </>
+          ) : (
+            <>
+              <Rocket className="h-4 w-4 mr-2" />
+              Deploy to Production
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 const headerComponents = {
   simple: { name: "Simple", description: "A clean, minimalist header" },
   centered: { name: "Centered", description: "Logo and navigation centered" },
@@ -2936,6 +3122,8 @@ export default function SiteSettingsPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <DeploymentSettingsCard projectId={id} project={project} />
 
                 <Card className="bg-card/50 backdrop-blur-sm border-destructive/20">
                   <CardHeader>

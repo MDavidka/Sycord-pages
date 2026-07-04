@@ -403,15 +403,15 @@ export function EmbeddedChat() {
         setDeployStatus('deploying');
         setDeployMessage('');
         try {
-            const res = await fetch(`/api/workspace/deploy?projectId=${encodeURIComponent(projectId)}&wait=false`, {
+            const res = await fetch('/api/workspace/sycord', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectId }),
+                body: JSON.stringify({ action: 'issue_deployment', projectId }),
             });
             const data = await res.json().catch(() => ({} as any));
-            if (res.ok) {
+            if (res.ok && data.ok) {
                 setDeployStatus('success');
-                setDeployMessage(data?.url || 'Deployment started — check the dashboard for progress.');
+                setDeployMessage(data?.message || 'Deployment started — check Settings for live URL.');
                 setPendingDeploy(false);
             } else {
                 setDeployStatus('error');

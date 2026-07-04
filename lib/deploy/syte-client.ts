@@ -457,3 +457,165 @@ export async function checkSyteHealth(): Promise<{
 
   return { reachable: true, apiUrl, hasKey, version: version || undefined, latencyMs }
 }
+
+// ─── Sycord Deployer API (/sycord/api/) ───────────────────────────────────────
+// New integration endpoint described at https://sycord.site/sycord/api/
+// All functions use the /sycord/api/ path prefix (distinct from the workspace /api/ prefix).
+
+/** Response shape from POST /sycord/api/project_connect */
+export type SycordProjectConnectResponse = {
+  ok: boolean
+  uuid: string
+  message?: string
+  project?: {
+    uuid?: string
+    name?: string
+    domain?: string
+    url?: string
+    stack?: string
+    status?: string
+    port?: number
+    workspace_path?: string
+    app_path?: string
+    created_at?: string
+  }
+  persist?: {
+    save_uuid?: boolean
+    uuid?: string
+    instruction?: string
+  }
+  next_steps?: Record<string, string>
+}
+
+/** Response shape from GET /sycord/api/container_get */
+export type SycordContainerGetResponse = {
+  ok: boolean
+  uuid?: string
+  container_name?: string
+  exists?: boolean
+  running?: boolean
+  state?: string
+  image?: string
+  url?: string
+  domain?: string
+  host_port?: number
+  status?: string
+}
+
+/** Response shape from POST /sycord/api/issue_deployment */
+export type SycordIssueDeploymentResponse = {
+  ok: boolean
+  uuid?: string
+  message?: string
+  stream_url?: string
+  status?: string
+}
+
+function buildSycordUrl(base: string, path: string, query?: Record<string, unknown>): string {
+  // Build URL under the /sycord/api/ path
+  const baseClean = base.replace(/\/+$/, "").replace(/\/sycord\/api\/?$/, "")
+  const pathClean = path.replace(/^\/+/, "").replace(/^sycord\/api\//, "")
+  const url = new URL(`${baseClean}/sycord/api/${pathClean}`)
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null) continue
+      url.searchParams.set(key, String(value))
+    }
+  }
+  return url.toString()
+}
+
+async function syteSycordRequest<T = unknown>(
+  method: string,
+  path: string,
+  options?: { query?: Record<string, unknown>; body?: unknown },
+): Promise<SyteResult<T>> {
+  const config = getSyteConfig()
+  const endpoint = buildSycordUrl(config.baseUrl, path, options?.query)
+
+  try {
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "X-API-Key": config.apiKey,
+      Authorization: `Bearer ${config.apiKey}`,
+    }
+    if (options?.body !== undefined) {
+      headers["Content-Type"] = "application/json"
+    }
+
+    const res = await fetch(endpoint, {
+      method,
+      headers,
+      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+    })
+
+    const data = (await parseBody(res)) as T | null
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        data,
+        error: extractError(res.status, data, endpoint),
+        endpoint,
+      }
+    }
+
+    return { ok: true, status: res.status, data, error: null, endpoint }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error reaching Sycord Deployer API",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * Step 1 — Create a project on Syte and get the UUID.
+ * POST /sycord/api/project_connect
+ * Save the returned uuid as syteWorkspaceUuid in your database.
+ */
+export async function syteProjectConnect(input: {
+  name: string
+  stack?: "nextjs" | "python" | "javascript" | "html5"
+  uuid?: string
+  env_vars?: Record<string, string>
+}): Promise<SyteResult<SycordProjectConnectResponse>> {
+  return syteSycordRequest<SycordProjectConnectResponse>("POST", "project_connect", {
+    body: {
+      name: input.name,
+      stack: input.stack ?? "nextjs",
+      ...(input.uuid ? { uuid: input.uuid } : {}),
+      ...(input.env_vars ? { env_vars: input.env_vars } : {}),
+    },
+  })
+}
+
+/**
+ * Step 3 — Trigger a Docker build and deploy.
+ * POST /sycord/api/issue_deployment
+ */
+export async function syteIssueDeployment(uuid: string): Promise<SyteResult<SycordIssueDeploymentResponse>> {
+  return syteSycordRequest<SycordIssueDeploymentResponse>("POST", "issue_deployment", { body: { uuid } })
+}
+
+/**
+ * Step 4 — Poll container status until running === true.
+ * GET /sycord/api/container_get?uuid=
+ */
+export async function syteContainerGet(uuid: string): Promise<SyteResult<SycordContainerGetResponse>> {
+  return syteSycordRequest<SycordContainerGetResponse>("GET", "container_get", { query: { uuid } })
+}
+
+/**
+ * Step 5 (optional) — Set a custom domain.
+ * POST /sycord/api/domain
+ */
+export async function syteSycordDomain(
+  uuid: string,
+  domain: string,
+): Promise<SyteResult<{ ok: boolean; project?: { domain?: string; url?: string } }>> {
+  return syteSycordRequest("POST", "domain", { body: { uuid, domain } })
+}

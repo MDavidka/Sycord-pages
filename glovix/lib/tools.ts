@@ -1521,18 +1521,6 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install HeroUI" }, { title: "Bui
     {
         type: 'function',
         function: {
-            name: 'deploy',
-            description: 'Deploy to sycord.site via Syte POST issue_deploy {"uuid":"..."} — syncs Pages, docker build + restart. Run typeCheck() + lintCheck() before deploy. Do NOT run npm run build manually. On failure read logs and fix, then redeploy.',
-            parameters: {
-                type: 'object',
-                properties: {},
-                required: [],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
             name: 'integration',
             description: 'Open the integrations popup/tab and request required providers or environment keys. Use this when the project needs database, auth, email, payment, AI, or other secrets. After calling this tool, STOP and wait for the user to load the requested env values.',
             parameters: {
@@ -2815,7 +2803,7 @@ async function _executeToolInternal(
     if (toolName === 'listFiles') return await handleListFiles();
     if (toolName === 'getErrors') return handleGetErrors(ctx);
     if (toolName === 'save') return handleSave();
-    if (toolName === 'deploy') return handleDeploy(ctx);
+    if (toolName === 'deploy') return '[SYSTEM] ℹ️ Deployment is now handled by the platform — the user can click "Deploy to Production" in the Preview pane or on the Settings page. The AI no longer triggers deployments.';
 
     if (toolName === 'planning') {
         if (argsList.length === 0) return handlePlanning({ action: 'get' });
@@ -2926,7 +2914,7 @@ async function _executeToolInternal(
                     result = await handlePlanning(args as any);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: planning, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, getErrors, save, deploy, startPreview, setDomain, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, heroUiDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: planning, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, getErrors, save, startPreview, setDomain, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, heroUiDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
