@@ -199,7 +199,7 @@ export function EmbeddedChat() {
         setPreviewError('');
         const currentFiles = useStore.getState().files;
         const result = await startSytePreview(projectId, {
-            issueDomain: true,
+            issueDomain: false,  // Don't call set_domain before preview — that's for production only
             files: Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
         });
         if (result.ok && result.previewUrl) {

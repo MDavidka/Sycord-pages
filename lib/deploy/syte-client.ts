@@ -321,16 +321,23 @@ function isDirectPreviewUrl(url: string): boolean {
 
 /**
  * Pick the HTTPS preview domain URL from Syte start_preview / preview_status.
- * Prefers preview_domain_url (e.g. https://previewk-mysite.sycord.site) and never
- * uses preview_direct_url (http://IP:port) when a preview domain is available.
+ * Priority:
+ *   1. preview_domain_url — always the dev-server subdomain HTTPS URL
+ *   2. preview_domain    — construct HTTPS URL from the subdomain hostname
+ *   3. preview_url       — only when it looks like a preview subdomain (starts with "preview")
+ *                          Rejected when it is the base/production domain (e.g. sycord.site)
+ *                          because set_domain before start_preview may overwrite this field
+ *   4. preview_direct_url — last resort (HTTP; may trigger mixed-content warnings)
  */
 export function pickSytePreviewUrl(data: SytePreviewFields | null | undefined): string | null {
   if (!data || typeof data !== "object") return null
 
+  // 1. preview_domain_url — most reliable: always the dev-server subdomain URL
   const domainUrl =
     typeof data.preview_domain_url === "string" ? data.preview_domain_url.trim() : ""
   if (domainUrl.startsWith("http")) return domainUrl
 
+  // 2. preview_domain — hostname of the dev-server subdomain
   const previewDomain =
     typeof data.preview_domain === "string" ? data.preview_domain.trim() : ""
   if (previewDomain) {
@@ -341,12 +348,24 @@ export function pickSytePreviewUrl(data: SytePreviewFields | null | undefined): 
   const directUrl =
     typeof data.preview_direct_url === "string" ? data.preview_direct_url.trim() : ""
 
-  // preview_url is the domain URL when GUI zone is set; skip when it equals direct IP
+  // 3. preview_url — only if it looks like a preview subdomain.
+  //    When set_domain is called before start_preview (e.g. with a base domain like
+  //    sycord.site), Syte may update preview_url to the production domain. Reject it
+  //    if it does not start with "preview" in the hostname.
   if (previewUrl.startsWith("http") && previewUrl !== directUrl && !isDirectPreviewUrl(previewUrl)) {
-    return previewUrl
+    try {
+      const hostname = new URL(previewUrl).hostname.toLowerCase()
+      if (hostname.startsWith("preview")) {
+        return previewUrl
+      }
+      // Looks like a production/base domain — skip and fall through to direct URL
+    } catch {
+      // Invalid URL — skip
+    }
   }
 
-  // Last resort only when Syte did not issue a preview domain (no wildcard GUI zone)
+  // 4. Last resort: direct URL (http://IP:port) — may cause mixed-content warnings
+  //    on HTTPS pages but is better than showing nothing.
   if (directUrl.startsWith("http")) return directUrl
   if (previewUrl.startsWith("http")) return previewUrl
 

@@ -329,7 +329,7 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
             body: JSON.stringify({
                 projectId,
                 domain: args?.domain,
-                issueDomain: true,
+                issueDomain: false,  // set_domain is for production; don't call it before preview
                 files: Object.keys(files).length > 0 ? files : undefined,
             }),
         });
