@@ -452,6 +452,44 @@ export function EmbeddedChat() {
             const embedInline = shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
             if (!embedInline) {
+                // Syte HMR preview — different origin from the app (sycord.com vs sycord.site).
+                // X-Frame-Options: SAMEORIGIN from the Caddy reverse proxy blocks iframe embedding.
+                // Show a clean "live" panel so the user can open it in a full browser tab.
+                if (previewSource === 'syte') {
+                    const host = (() => {
+                        try { return new URL(previewUrl).hostname; } catch { return previewUrl; }
+                    })();
+                    return (
+                        <div className={`flex h-full flex-col items-center justify-center gap-5 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-gray-50 text-gray-900'}`}>
+                            <div className="flex items-center gap-2">
+                                <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse" />
+                                <span className="text-sm font-semibold">Preview is live</span>
+                            </div>
+                            <p className={`text-xs max-w-[260px] leading-relaxed ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
+                                Your site is running with HMR. Open it in a new tab — every file Syra writes updates the page instantly.
+                            </p>
+                            <code className={`w-full max-w-xs truncate rounded-lg px-3 py-2 text-xs font-mono ${isDark ? 'bg-[#2a2b2e] text-[#c5c6c9]' : 'bg-gray-200 text-gray-700'}`}>
+                                {host}
+                            </code>
+                            <a
+                                href={previewUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow"
+                            >
+                                <ExternalLink className="h-4 w-4" />
+                                Open Preview
+                            </a>
+                            <button
+                                onClick={retryPreview}
+                                className={`text-xs ${isDark ? 'text-[#555] hover:text-[#999]' : 'text-gray-400 hover:text-gray-600'} transition-colors`}
+                            >
+                                Restart preview
+                            </button>
+                        </div>
+                    );
+                }
+
                 return (
                     <div className={`flex h-full flex-col items-center justify-center gap-4 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
                         <ExternalLink className="h-8 w-8 text-blue-500" />

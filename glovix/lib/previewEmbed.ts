@@ -20,12 +20,15 @@ export function isSytePreviewUrl(url: string): boolean {
 
 /**
  * Production / deployed URLs almost always block iframe embedding (X-Frame-Options).
- * Show an open-in-browser card instead of a blank iframe.
+ * Syte preview URLs (preview*.sycord.site) are on a different origin than the Sycord
+ * app (sycord.com), so SAMEORIGIN headers from the Caddy reverse proxy silently blank
+ * the iframe. Show an open-in-browser card for both instead of a blank iframe.
  */
 export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deployed' | 'syte' | null): boolean {
     if (!url) return false;
-    if (source === 'deployed') return false;
-    if (source === 'syte' || isSytePreviewUrl(url)) return true;
+    // Deployed sites and Syte HMR previews cannot be embedded cross-origin.
+    if (source === 'deployed' || source === 'syte') return false;
+    if (isSytePreviewUrl(url)) return false;
     if (source === 'live') {
         // WebContainer dev server — same shell origin or blob; embed when possible.
         return !isCrossOriginPreviewUrl(url) || url.startsWith('blob:');
