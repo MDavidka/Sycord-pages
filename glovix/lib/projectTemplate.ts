@@ -51,6 +51,11 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // Allow the preview to be embedded in the Sycord dashboard iframe.
+    headers: {
+      'X-Frame-Options': 'ALLOWALL',
+      'Content-Security-Policy': "frame-ancestors *;",
+    },
   },
 })`
     }

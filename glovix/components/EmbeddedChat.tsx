@@ -330,11 +330,14 @@ export function EmbeddedChat() {
         const currentFiles = useStore.getState().files;
         if (Object.keys(currentFiles).length === 0) return;
         if (previewStartedRef.current && previewUrl) {
-            // Dev server is live — file uploads keep it updated via HMR.
-            // No restart needed; reload the iframe so the latest compiled output shows.
+            // Dev server is live. Give Vite ~2.5 s to recompile the new files,
+            // then reload the proxy iframe so the updated site appears.
             setTimeout(() => {
                 if (iframeRef.current && previewUrl) {
-                    iframeRef.current.src = previewUrl;
+                    const src = (previewSource === 'syte' || isSytePreviewUrl(previewUrl))
+                        ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
+                        : previewUrl;
+                    iframeRef.current.src = src;
                 }
             }, 2500);
             return;
@@ -381,9 +384,11 @@ export function EmbeddedChat() {
     }, [activePane, startPreview]);
 
     const reloadPreview = () => {
-        if (iframeRef.current && previewUrl) {
-            iframeRef.current.src = previewUrl;
-        }
+        if (!iframeRef.current || !previewUrl) return;
+        const src = (previewSource === 'syte' || isSytePreviewUrl(previewUrl))
+            ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
+            : previewUrl;
+        iframeRef.current.src = src;
     };
 
     const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
@@ -454,7 +459,16 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
-            const embedInline = shouldEmbedPreviewInIframe(previewUrl, previewSource);
+            // Syte preview subdomains send X-Frame-Options: SAMEORIGIN which the browser
+            // enforces for any cross-origin parent (sycord.com ≠ preview*.sycord.com/site).
+            // Route through our server-side proxy that strips the header and injects
+            // <base href> so assets still load directly from the Syte dev server.
+            const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
+            const frameUrl = isSyte
+                ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
+                : previewUrl;
+
+            const embedInline = isSyte ? true : shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
             if (!embedInline) {
                 return (
@@ -506,7 +520,7 @@ export function EmbeddedChat() {
                     )}
                     <iframe
                         ref={applyIframeEmbedAttrs}
-                        src={previewUrl}
+                        src={frameUrl}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
