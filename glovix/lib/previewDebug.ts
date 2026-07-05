@@ -1,4 +1,4 @@
-import { getPageCoepMode } from '../coep';
+import { getPageCoepMode } from './coep';
 import { isSytePreviewUrl, shouldUseCredentiallessIframe } from './previewEmbed';
 
 const DEBUG_PREFIX = '[PreviewDebug]';
