@@ -378,6 +378,65 @@ export function pickSytePreviewUrl(data: SytePreviewFields | null | undefined): 
   return null
 }
 
+export type SytePreviewUrlSource =
+  | "preview_domain_url"
+  | "preview_domain"
+  | "preview_url"
+  | "preview_direct_url"
+  | "domain"
+  | "url"
+  | "none"
+
+/** Same priority as pickSytePreviewUrl, but returns which field was used. */
+export function describeSytePreviewUrlSource(
+  data: SytePreviewFields | null | undefined,
+): { url: string | null; source: SytePreviewUrlSource } {
+  if (!data || typeof data !== "object") return { url: null, source: "none" }
+
+  const domainUrl =
+    typeof data.preview_domain_url === "string" ? data.preview_domain_url.trim() : ""
+  if (domainUrl.startsWith("http")) return { url: domainUrl, source: "preview_domain_url" }
+
+  const previewDomain =
+    typeof data.preview_domain === "string" ? data.preview_domain.trim() : ""
+  if (previewDomain) {
+    return {
+      url: `https://${previewDomain.replace(/^https?:\/\//, "")}`,
+      source: "preview_domain",
+    }
+  }
+
+  const previewUrl = typeof data.preview_url === "string" ? data.preview_url.trim() : ""
+  const directUrl =
+    typeof data.preview_direct_url === "string" ? data.preview_direct_url.trim() : ""
+
+  if (previewUrl.startsWith("http") && previewUrl !== directUrl && !isDirectPreviewUrl(previewUrl)) {
+    try {
+      const hostname = new URL(previewUrl).hostname.toLowerCase()
+      if (hostname.startsWith("preview")) {
+        return { url: previewUrl, source: "preview_url" }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (directUrl.startsWith("http")) return { url: directUrl, source: "preview_direct_url" }
+  if (previewUrl.startsWith("http")) return { url: previewUrl, source: "preview_url" }
+
+  const host = typeof data.domain === "string" ? data.domain.trim() : ""
+  if (host) {
+    return { url: `https://${host.replace(/^https?:\/\//, "")}`, source: "domain" }
+  }
+
+  const genericUrl = typeof data.url === "string" ? data.url.trim() : ""
+  if (genericUrl.startsWith("http") && !isDirectPreviewUrl(genericUrl)) {
+    return { url: genericUrl, source: "url" }
+  }
+
+  return { url: null, source: "none" }
+}
+
 export async function syteStartPreview(uuid: string) {
   return syteWorkspaceRequest<SytePreviewFields>("POST", "start_preview", { body: { uuid } })
 }

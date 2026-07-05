@@ -20,6 +20,7 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
 const ALLOWED_HOSTS = [".sycord.site", ".sycord.com"]
+const DEBUG_PREFIX = "[PreviewDebug]"
 
 function isAllowedPreviewUrl(raw: string): boolean {
   try {
@@ -30,27 +31,46 @@ function isAllowedPreviewUrl(raw: string): boolean {
   }
 }
 
+function logPreviewFrame(phase: string, data: Record<string, unknown>) {
+  console.warn(DEBUG_PREFIX, { scope: "preview-frame", phase, ...data })
+}
+
 export async function GET(req: Request): Promise<Response> {
   const session = await getServerSession(authOptions)
   if (!(session?.user as any)?.id) {
+    logPreviewFrame("unauthorized", {})
     return new Response("Unauthorized", { status: 401 })
   }
 
   const { searchParams } = new URL(req.url)
   const rawUrl = searchParams.get("url")
-  if (!rawUrl) return new Response("Missing url param", { status: 400 })
+  if (!rawUrl) {
+    logPreviewFrame("missing_url", {})
+    return new Response("Missing url param", { status: 400 })
+  }
 
   let previewUrl: string
   try {
     previewUrl = decodeURIComponent(rawUrl)
   } catch {
+    logPreviewFrame("bad_url_encoding", { rawUrl: rawUrl.slice(0, 200) })
     return new Response("Bad url encoding", { status: 400 })
   }
 
   if (!isAllowedPreviewUrl(previewUrl)) {
+    let hostname = "unknown"
+    try {
+      hostname = new URL(previewUrl).hostname
+    } catch {
+      /* ignore */
+    }
+    logPreviewFrame("url_not_allowed", { previewUrl, hostname })
     return new Response("URL not allowed", { status: 403 })
   }
 
+  logPreviewFrame("request", { previewUrl })
+
+  const fetchStarted = Date.now()
   let res: Response
   try {
     res = await fetch(previewUrl, {
@@ -61,22 +81,39 @@ export async function GET(req: Request): Promise<Response> {
       signal: AbortSignal.timeout(12000),
     })
   } catch (err: any) {
+    logPreviewFrame("upstream_unreachable", {
+      previewUrl,
+      error: err?.message || String(err),
+      elapsedMs: Date.now() - fetchStarted,
+    })
     return new Response(`Preview server unreachable: ${err.message}`, {
       status: 502,
       headers: { "Content-Type": "text/plain" },
     })
   }
 
+  const upstreamStatus = res.status
+  const contentType = res.headers.get("content-type") ?? ""
+  const elapsedMs = Date.now() - fetchStarted
+  let strippedXFrameOptions = false
+  let strippedFrameAncestors = false
+
   // Forward most headers but strip the embedding blockers
   const outHeaders = new Headers()
   res.headers.forEach((value, key) => {
     const k = key.toLowerCase()
-    if (k === "x-frame-options") return
+    if (k === "x-frame-options") {
+      strippedXFrameOptions = true
+      return
+    }
     if (k === "content-security-policy") {
+      const directives = value.split(";").map((d) => d.trim())
+      const hadFrameAncestors = directives.some((d) =>
+        d.toLowerCase().startsWith("frame-ancestors"),
+      )
+      if (hadFrameAncestors) strippedFrameAncestors = true
       // Remove frame-ancestors directive only; keep the rest
-      const cleaned = value
-        .split(";")
-        .map((d) => d.trim())
+      const cleaned = directives
         .filter((d) => !d.toLowerCase().startsWith("frame-ancestors"))
         .join("; ")
       if (cleaned) outHeaders.set(key, cleaned)
@@ -91,13 +128,21 @@ export async function GET(req: Request): Promise<Response> {
   outHeaders.set("X-Frame-Options", "ALLOWALL")
   outHeaders.set("Content-Type", "text/html; charset=utf-8")
 
-  const contentType = res.headers.get("content-type") ?? ""
   if (!contentType.includes("text/html")) {
+    logPreviewFrame("non_html_passthrough", {
+      previewUrl,
+      upstreamStatus,
+      contentType,
+      elapsedMs,
+      strippedXFrameOptions,
+      strippedFrameAncestors,
+    })
     // Non-HTML response (e.g. redirect target) — stream through unchanged
     return new Response(res.body, { status: res.status, headers: outHeaders })
   }
 
   let html = await res.text()
+  const htmlBytes = Buffer.byteLength(html, "utf8")
 
   // Inject <base href> at the top of <head> so all relative asset URLs
   // (scripts, CSS, ES module imports) resolve to the Syte preview server.
@@ -113,7 +158,31 @@ export async function GET(req: Request): Promise<Response> {
   } else if (html.includes("<html")) {
     html = html.replace(/<html[^>]*>/, (m) => `${m}<head>${baseTag}</head>`)
   } else {
-    html = baseTag + "\n" + html
+    html = html.replace(/^/, `${baseTag}\n`)
+  }
+
+  if (htmlBytes < 200) {
+    logPreviewFrame("tiny_html_body", {
+      previewUrl,
+      upstreamStatus,
+      contentType,
+      htmlBytes,
+      elapsedMs,
+      injectedBaseHref: baseHref,
+      strippedXFrameOptions,
+      strippedFrameAncestors,
+    })
+  } else {
+    logPreviewFrame("success", {
+      previewUrl,
+      upstreamStatus,
+      contentType,
+      htmlBytes,
+      elapsedMs,
+      injectedBaseHref: baseHref,
+      strippedXFrameOptions,
+      strippedFrameAncestors,
+    })
   }
 
   return new Response(html, { status: res.status, headers: outHeaders })
