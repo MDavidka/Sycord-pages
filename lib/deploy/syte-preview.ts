@@ -9,6 +9,7 @@ import {
   syteSetDomain,
   syteStartPreview,
   syteSyncProjectFiles,
+  syteExecuteCommand,
   type SytePreviewFields,
 } from "@/lib/deploy/syte-client"
 import {
@@ -114,6 +115,20 @@ export async function ensureSyteLivePreview(
         uuid,
         error: "File sync wrote 0 files to Syte workspace.",
       }
+    }
+
+    // Run npm install after syncing files so the dev server can resolve
+    // all dependencies (Vite + React + HeroUI etc.) before start_preview.
+    // Per Syte docs: "Run npm install via execute_command before first preview."
+    // We pass --no-audit --no-fund --prefer-offline to keep it fast.
+    const install = await syteExecuteCommand(
+      uuid,
+      "npm install --no-audit --no-fund --prefer-offline",
+      { cwd: "app", timeout: 300 },
+    )
+    if (!install.ok) {
+      // Warn but continue — some deps may already be cached from the scaffold
+      console.warn(`[syte-preview] npm install warning for ${uuid}: ${install.error}`)
     }
   }
 

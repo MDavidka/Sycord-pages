@@ -15,7 +15,7 @@ import { isValidProjectId, parseClientWorkspaceFiles } from "@/lib/workspace/san
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 120
+export const maxDuration = 180
 
 async function loadProject(userId: string, projectId: string) {
   const client = await clientPromise
