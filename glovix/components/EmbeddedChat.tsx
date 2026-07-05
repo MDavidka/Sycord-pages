@@ -9,13 +9,16 @@ import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
 import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePreviewUrl } from '../lib/previewEmbed';
 import {
+    analyzeProxyProbeResponse,
     buildPreviewFrameUrl,
     describeBlankIframe,
     diagnoseIframeDocument,
     getPreviewEmbedContext,
     logPreviewDebug,
     logPreviewWarn,
+    shouldShowBlankHint,
     type PreviewSource as DebugPreviewSource,
+    type ProxyProbeResult,
 } from '../lib/previewDebug';
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
@@ -53,6 +56,7 @@ export function EmbeddedChat() {
     const workspaceCreatedRef = useRef(false);
     const blankWatchdogRef = useRef<number | null>(null);
     const probedFrameUrlRef = useRef<string | null>(null);
+    const proxyProbeResultRef = useRef<ProxyProbeResult | null>(null);
     const previewReadyRef = useRef<boolean | undefined>(undefined);
 
     const [activePane, setActivePane] = useState(0);
@@ -229,49 +233,59 @@ export function EmbeddedChat() {
         setPreviewDebugHint('');
     }, []);
 
-    const probePreviewFrame = useCallback(async (frameUrl: string, previewUrlValue: string, source: PreviewSource) => {
-        if (!frameUrl.startsWith('/api/workspace/preview-frame')) return;
-        if (probedFrameUrlRef.current === frameUrl) return;
+    const probePreviewFrame = useCallback(async (
+        frameUrl: string,
+        previewUrlValue: string,
+        source: PreviewSource,
+        force = false,
+    ): Promise<ProxyProbeResult | null> => {
+        if (!frameUrl.startsWith('/api/workspace/preview-frame')) return null;
+        if (!force && probedFrameUrlRef.current === frameUrl && proxyProbeResultRef.current) {
+            return proxyProbeResultRef.current;
+        }
         probedFrameUrlRef.current = frameUrl;
 
         try {
             const res = await fetch(frameUrl, { credentials: 'same-origin' });
             const contentType = res.headers.get('content-type') ?? '';
-            let bodyPreview = '';
-            if (!res.ok || contentType.includes('text/plain')) {
-                bodyPreview = (await res.text()).slice(0, 200);
-            }
+            const bodyText = await res.text();
+            const probe = analyzeProxyProbeResponse(res.status, contentType, bodyText);
+            proxyProbeResultRef.current = probe;
+
             const payload = {
                 frameUrl,
                 previewUrl: previewUrlValue,
                 previewSource: source,
-                status: res.status,
-                contentType,
-                bodyPreview: bodyPreview || undefined,
+                ...probe,
             };
-            if (!res.ok || bodyPreview) {
+            if (!probe.ok || probe.proxyErrorText) {
                 logPreviewWarn('proxy_probe', payload);
             } else {
                 logPreviewDebug('proxy_probe', payload);
             }
+            return probe;
         } catch (err) {
             logPreviewWarn('proxy_probe_failed', {
                 frameUrl,
                 previewUrl: previewUrlValue,
                 error: err instanceof Error ? err.message : String(err),
             });
+            return null;
         }
     }, []);
 
     const inspectPreviewIframe = useCallback((
         phase: 'iframe_load' | 'blank_watchdog',
         iframe: HTMLIFrameElement,
+        proxyProbe?: ProxyProbeResult | null,
     ) => {
         const currentPreviewUrl = useStore.getState().previewUrl;
         if (!currentPreviewUrl) return;
 
         const source = previewSource;
         const embedContext = getPreviewEmbedContext(currentPreviewUrl, source as DebugPreviewSource);
+        const credentiallessApplied = iframe.hasAttribute('credentialless');
+        const probe = proxyProbe ?? proxyProbeResultRef.current;
         let doc: Document | null = null;
         try {
             doc = iframe.contentDocument;
@@ -279,21 +293,24 @@ export function EmbeddedChat() {
             doc = null;
         }
 
-        const diagnosis = diagnoseIframeDocument(doc, embedContext);
-        const credentiallessApplied = iframe.hasAttribute('credentialless');
+        const diagnosis = diagnoseIframeDocument(doc, embedContext, {
+            credentiallessApplied,
+            proxyProbe: probe,
+        });
         const payload = {
             phase,
             iframeSrc: iframe.src,
             previewReady: previewReadyRef.current,
             credentiallessApplied,
             coepPath: embedContext.credentiallessNeeded,
+            documentAccessible: diagnosis.documentAccessible,
             ...embedContext,
             ...diagnosis,
         };
 
-        if (diagnosis.looksBlank || diagnosis.proxyErrorText) {
+        if (shouldShowBlankHint(diagnosis)) {
             const hint = describeBlankIframe(diagnosis, embedContext);
-            setPreviewDebugHint(hint);
+            setPreviewDebugHint(hint || '');
             logPreviewWarn('blank_iframe', payload);
         } else {
             setPreviewDebugHint('');
@@ -303,7 +320,17 @@ export function EmbeddedChat() {
 
     const handlePreviewIframeLoad = useCallback((event: React.SyntheticEvent<HTMLIFrameElement>) => {
         const iframe = event.currentTarget;
-        inspectPreviewIframe('iframe_load', iframe);
+        const currentPreviewUrl = useStore.getState().previewUrl;
+        const embedContext = currentPreviewUrl
+            ? getPreviewEmbedContext(currentPreviewUrl, previewSource as DebugPreviewSource)
+            : null;
+
+        void (async () => {
+            const probe = embedContext
+                ? await probePreviewFrame(embedContext.frameUrl, currentPreviewUrl!, previewSource, true)
+                : null;
+            inspectPreviewIframe('iframe_load', iframe, probe);
+        })();
 
         if (blankWatchdogRef.current) {
             window.clearTimeout(blankWatchdogRef.current);
@@ -311,23 +338,15 @@ export function EmbeddedChat() {
 
         blankWatchdogRef.current = window.setTimeout(() => {
             blankWatchdogRef.current = null;
-            const doc = iframe.contentDocument;
-            const currentPreviewUrl = useStore.getState().previewUrl;
-            if (!currentPreviewUrl) return;
-            const embedContext = getPreviewEmbedContext(currentPreviewUrl, previewSource as DebugPreviewSource);
-            const diagnosis = diagnoseIframeDocument(doc, embedContext);
-            if (!diagnosis.looksBlank && !diagnosis.proxyErrorText) return;
-
-            logPreviewWarn('blank_after_grace_period', {
-                phase: 'blank_watchdog',
-                iframeSrc: iframe.src,
-                previewReady: previewReadyRef.current,
-                ...embedContext,
-                ...diagnosis,
-            });
-            setPreviewDebugHint(describeBlankIframe(diagnosis, embedContext));
+            const url = useStore.getState().previewUrl;
+            if (!url) return;
+            const ctx = getPreviewEmbedContext(url, previewSource as DebugPreviewSource);
+            void (async () => {
+                const probe = await probePreviewFrame(ctx.frameUrl, url, previewSource, true);
+                inspectPreviewIframe('blank_watchdog', iframe, probe);
+            })();
         }, 3000);
-    }, [inspectPreviewIframe, previewSource]);
+    }, [inspectPreviewIframe, previewSource, probePreviewFrame]);
 
     const startSyteServerPreview = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
         if (!projectId) return { ok: false, error: 'No project id' };
@@ -494,6 +513,7 @@ export function EmbeddedChat() {
     useEffect(() => {
         if (!previewUrl) {
             probedFrameUrlRef.current = null;
+            proxyProbeResultRef.current = null;
             setPreviewDebugHint('');
             return;
         }
@@ -539,6 +559,7 @@ export function EmbeddedChat() {
     const reloadPreview = () => {
         if (!iframeRef.current || !previewUrl) return;
         probedFrameUrlRef.current = null;
+        proxyProbeResultRef.current = null;
         const src = buildPreviewFrameUrl(previewUrl, previewSource);
         logPreviewDebug('iframe_reload', {
             trigger: 'manual_reload',

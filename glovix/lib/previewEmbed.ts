@@ -8,11 +8,12 @@ export function isCrossOriginPreviewUrl(url: string): boolean {
     }
 }
 
-/** Syte HMR preview host (preview*.sycord.site). */
+/** Syte HMR preview host (preview*.sycord.site or preview*.sycord.com). */
 export function isSytePreviewUrl(url: string): boolean {
     try {
         const host = new URL(url).hostname.toLowerCase();
-        return host.endsWith('.sycord.site') && host.startsWith('preview');
+        if (!host.startsWith('preview')) return false;
+        return host.endsWith('.sycord.site') || host.endsWith('.sycord.com');
     } catch {
         return false;
     }

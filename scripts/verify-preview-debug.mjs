@@ -95,6 +95,46 @@ function describeSytePreviewUrlSource(data) {
   return { url: null, source: "none" };
 }
 
+function diagnoseWithoutDocument(credentiallessApplied, usesSameOriginProxy, proxyProbe, crossOriginIsolated) {
+  if (proxyProbe?.proxyErrorText) {
+    return { looksBlank: true, reason: "proxy_error" };
+  }
+  if (credentiallessApplied && usesSameOriginProxy) {
+    if (proxyProbe?.ok && crossOriginIsolated) {
+      return { looksBlank: false, reason: "credentialless_opaque_coep" };
+    }
+    return { looksBlank: false, reason: "credentialless_opaque" };
+  }
+  return { looksBlank: true, reason: "no_document_access" };
+}
+
+const opaqueCases = [
+  {
+    name: "credentialless_coep_proxy_ok",
+    result: diagnoseWithoutDocument(true, true, { ok: true }, true),
+    expectReason: "credentialless_opaque_coep",
+    expectBlank: false,
+  },
+  {
+    name: "credentialless_proxy_ok",
+    result: diagnoseWithoutDocument(true, true, { ok: true }, false),
+    expectReason: "credentialless_opaque",
+    expectBlank: false,
+  },
+  {
+    name: "credentialless_proxy_error",
+    result: diagnoseWithoutDocument(true, true, { proxyErrorText: "Unauthorized" }, true),
+    expectReason: "proxy_error",
+    expectBlank: true,
+  },
+];
+
+for (const c of opaqueCases) {
+  const pass = c.result.reason === c.expectReason && c.result.looksBlank === c.expectBlank;
+  console.log(`${pass ? "PASS" : "FAIL"} ${c.name}: reason=${c.result.reason}, blank=${c.result.looksBlank}`);
+  if (!pass) failed += 1;
+}
+
 const urlCase = describeSytePreviewUrlSource({
   preview_domain_url: "https://preview-abc.sycord.com",
 });

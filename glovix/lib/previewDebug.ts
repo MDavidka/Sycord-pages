@@ -16,6 +16,20 @@ export type PreviewEmbedContext = {
     isSyte: boolean;
 };
 
+export type ProxyProbeResult = {
+    ok: boolean;
+    status: number;
+    contentType: string;
+    bodyPreview?: string;
+    htmlBytes?: number;
+    proxyErrorText?: string | null;
+};
+
+export type IframeInspectOptions = {
+    credentiallessApplied?: boolean;
+    proxyProbe?: ProxyProbeResult | null;
+};
+
 export type IframeDocumentDiagnosis = {
     bodyTextLength: number;
     bodyHtmlLength: number;
@@ -25,6 +39,7 @@ export type IframeDocumentDiagnosis = {
     looksBlank: boolean;
     proxyErrorText: string | null;
     reason: string | null;
+    documentAccessible: boolean;
 };
 
 const PROXY_ERROR_PATTERNS = [
@@ -89,7 +104,7 @@ export function getPreviewEmbedContext(
     };
 }
 
-function detectProxyErrorText(bodyText: string): string | null {
+export function detectProxyErrorText(bodyText: string): string | null {
     const trimmed = bodyText.trim();
     if (!trimmed) return null;
     for (const pattern of PROXY_ERROR_PATTERNS) {
@@ -98,6 +113,26 @@ function detectProxyErrorText(bodyText: string): string | null {
         }
     }
     return null;
+}
+
+export function analyzeProxyProbeResponse(
+    status: number,
+    contentType: string,
+    bodyText: string,
+): ProxyProbeResult {
+    const proxyErrorText = detectProxyErrorText(bodyText);
+    const isHtml = contentType.includes('text/html');
+    const htmlBytes = isHtml ? bodyText.length : undefined;
+    const ok = status >= 200 && status < 300 && !proxyErrorText && (!isHtml || bodyText.length >= 200);
+
+    return {
+        ok,
+        status,
+        contentType,
+        bodyPreview: bodyText.slice(0, 200) || undefined,
+        htmlBytes,
+        proxyErrorText,
+    };
 }
 
 function inferBlankReason(
@@ -119,22 +154,105 @@ function inferBlankReason(
     return 'blank_document';
 }
 
-export function diagnoseIframeDocument(
-    doc: Document | null,
+function diagnoseWithoutDocument(
     embedContext?: PreviewEmbedContext,
+    options?: IframeInspectOptions,
 ): IframeDocumentDiagnosis {
-    if (!doc) {
-        const base = {
+    const credentiallessApplied = options?.credentiallessApplied ?? false;
+    const proxyProbe = options?.proxyProbe;
+    const usesSameOriginProxy = embedContext?.frameUrl.startsWith('/api/workspace/preview-frame') ?? false;
+
+    if (proxyProbe?.proxyErrorText) {
+        return {
             bodyTextLength: 0,
             bodyHtmlLength: 0,
             title: '',
             hasRoot: false,
             rootChildCount: 0,
             looksBlank: true,
-            proxyErrorText: null as string | null,
-            reason: 'no_document_access',
+            proxyErrorText: proxyProbe.proxyErrorText,
+            reason: 'proxy_error',
+            documentAccessible: false,
         };
-        return base;
+    }
+
+    if (proxyProbe && !proxyProbe.ok && proxyProbe.status >= 400) {
+        return {
+            bodyTextLength: 0,
+            bodyHtmlLength: 0,
+            title: '',
+            hasRoot: false,
+            rootChildCount: 0,
+            looksBlank: true,
+            proxyErrorText: proxyProbe.bodyPreview || `Preview proxy HTTP ${proxyProbe.status}`,
+            reason: 'proxy_error',
+            documentAccessible: false,
+        };
+    }
+
+    // credentialless iframes intentionally hide contentDocument from the parent,
+    // even when src is same-origin (/api/workspace/preview-frame).
+    if (credentiallessApplied && usesSameOriginProxy) {
+        if (proxyProbe?.ok && embedContext?.crossOriginIsolated) {
+            return {
+                bodyTextLength: 0,
+                bodyHtmlLength: proxyProbe.htmlBytes ?? 0,
+                title: '',
+                hasRoot: false,
+                rootChildCount: 0,
+                looksBlank: false,
+                proxyErrorText: null,
+                reason: 'credentialless_opaque_coep',
+                documentAccessible: false,
+            };
+        }
+        return {
+            bodyTextLength: 0,
+            bodyHtmlLength: proxyProbe?.htmlBytes ?? 0,
+            title: '',
+            hasRoot: false,
+            rootChildCount: 0,
+            looksBlank: false,
+            proxyErrorText: null,
+            reason: 'credentialless_opaque',
+            documentAccessible: false,
+        };
+    }
+
+    if (embedContext && !usesSameOriginProxy && embedContext.frameUrl !== embedContext.previewUrl) {
+        return {
+            bodyTextLength: 0,
+            bodyHtmlLength: 0,
+            title: '',
+            hasRoot: false,
+            rootChildCount: 0,
+            looksBlank: true,
+            proxyErrorText: null,
+            reason: 'cross_origin_embed',
+            documentAccessible: false,
+        };
+    }
+
+    return {
+        bodyTextLength: 0,
+        bodyHtmlLength: 0,
+        title: '',
+        hasRoot: false,
+        rootChildCount: 0,
+        looksBlank: true,
+        proxyErrorText: null,
+        reason: 'no_document_access',
+        documentAccessible: false,
+    };
+}
+
+export function diagnoseIframeDocument(
+    doc: Document | null,
+    embedContext?: PreviewEmbedContext,
+    options?: IframeInspectOptions,
+): IframeDocumentDiagnosis {
+    if (!doc) {
+        return diagnoseWithoutDocument(embedContext, options);
     }
 
     const body = doc.body;
@@ -154,6 +272,7 @@ export function diagnoseIframeDocument(
             : bodyText.length < 20 && (root?.childElementCount ?? 0) === 0 && bodyHtml.length < 200,
         proxyErrorText,
         reason: null,
+        documentAccessible: true,
     };
 
     diagnosis.reason = inferBlankReason(diagnosis, embedContext);
@@ -163,21 +282,35 @@ export function diagnoseIframeDocument(
 export function describeBlankIframe(
     diagnosis: IframeDocumentDiagnosis,
     embedContext?: PreviewEmbedContext,
-): string {
+): string | null {
     switch (diagnosis.reason) {
         case 'proxy_error':
             return diagnosis.proxyErrorText || 'Preview proxy returned an error.';
         case 'coep_asset_block_suspected':
-            return 'Preview loaded but assets may be blocked by COEP (cross-origin isolation).';
+            return 'Preview loaded but assets may be blocked by COEP (cross-origin isolation). Try Open in new tab.';
         case 'vite_shell_empty_root':
             return 'Preview HTML loaded but the app root is empty — dev server may still be compiling.';
+        case 'credentialless_opaque':
+            return null;
+        case 'credentialless_opaque_coep':
+            return 'Preview proxy returned HTML. If the frame is still white, scripts may be blocked by COEP — try Open in new tab.';
+        case 'cross_origin_embed':
+            return 'Preview is embedded cross-origin; in-app inspection is unavailable.';
         case 'no_document_access':
-            return 'Cannot read iframe document (cross-origin or blocked embed).';
+            return 'Cannot inspect iframe contents yet — waiting for preview HTML.';
         case 'html_without_visible_text':
             return 'Preview HTML loaded with no visible content.';
         case 'blank_document':
             return 'Preview iframe is blank — dev server may not be ready yet.';
         default:
-            return 'Preview iframe appears blank.';
+            return diagnosis.looksBlank ? 'Preview iframe appears blank.' : null;
     }
+}
+
+export function shouldShowBlankHint(
+    diagnosis: IframeDocumentDiagnosis,
+): boolean {
+    if (!diagnosis.looksBlank && !diagnosis.proxyErrorText) return false;
+    const hint = describeBlankIframe(diagnosis);
+    return Boolean(hint);
 }
