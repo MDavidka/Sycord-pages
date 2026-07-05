@@ -127,6 +127,9 @@ export async function GET(req: Request): Promise<Response> {
   // Allow framing from any origin (we're now the proxy)
   outHeaders.set("X-Frame-Options", "ALLOWALL")
   outHeaders.set("Content-Type", "text/html; charset=utf-8")
+  outHeaders.set("Cache-Control", "private, no-store, no-cache, must-revalidate")
+  outHeaders.delete("etag")
+  outHeaders.delete("last-modified")
 
   if (!contentType.includes("text/html")) {
     logPreviewFrame("non_html_passthrough", {
@@ -185,5 +188,5 @@ export async function GET(req: Request): Promise<Response> {
     })
   }
 
-  return new Response(html, { status: res.status, headers: outHeaders })
+  return new Response(html, { status: 200, headers: outHeaders })
 }

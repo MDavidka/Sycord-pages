@@ -1,3 +1,4 @@
+import { getPageCoepMode } from '../coep';
 import { isSytePreviewUrl, shouldUseCredentiallessIframe } from './previewEmbed';
 
 const DEBUG_PREFIX = '[PreviewDebug]';
@@ -14,6 +15,7 @@ export type PreviewEmbedContext = {
     credentiallessNeeded: boolean;
     isMobile: boolean;
     isSyte: boolean;
+    coepMode: string;
 };
 
 export type ProxyProbeResult = {
@@ -101,6 +103,7 @@ export function getPreviewEmbedContext(
         credentiallessNeeded: shouldUseCredentiallessIframe(previewUrl),
         isMobile,
         isSyte,
+        coepMode: typeof window !== 'undefined' ? getPageCoepMode() : 'unknown',
     };
 }
 

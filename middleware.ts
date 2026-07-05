@@ -1,29 +1,20 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
+import {
+  COEP_CREDENTIALLESS,
+  syraIsolationHeaders,
+} from "@/lib/coep-headers"
 
-/** Chromium — credentialless allows third-party assets in the builder shell. */
-const COEP_CREDENTIALLESS: Record<string, string> = {
-  "Cross-Origin-Embedder-Policy": "credentialless",
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "cross-origin",
-}
-
-/**
- * Safari (incl. iOS) does not treat credentialless as cross-origin isolated.
- * Syra uses require-corp so WebContainer can boot on mobile Safari.
- */
-const COEP_REQUIRE_CORP: Record<string, string> = {
-  "Cross-Origin-Embedder-Policy": "require-corp",
-  "Cross-Origin-Opener-Policy": "same-origin",
-}
-
-function isolationHeadersFor(pathname: string): Record<string, string> | null {
+function isolationHeadersFor(
+  pathname: string,
+  userAgent: string,
+): Record<string, string> | null {
   if (pathname === "/builder" || pathname.startsWith("/builder/")) {
     return COEP_CREDENTIALLESS
   }
   if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) {
-    return COEP_REQUIRE_CORP
+    return syraIsolationHeaders(userAgent)
   }
   return null
 }
@@ -35,9 +26,18 @@ function applyHeaders(response: NextResponse, headers: Record<string, string>) {
   return response
 }
 
+function stripSyraIsolationHeaders(response: NextResponse) {
+  response.headers.delete("Cross-Origin-Embedder-Policy")
+  response.headers.delete("Cross-Origin-Opener-Policy")
+  response.headers.delete("Cross-Origin-Resource-Policy")
+  return response
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
-  const isolation = isolationHeadersFor(pathname)
+  const userAgent = request.headers.get("user-agent") || ""
+  const isolation = isolationHeadersFor(pathname, userAgent)
+  const isSyraPath = /^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)
 
   const token = await getToken({
     req: request,
@@ -49,7 +49,9 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/dashboard")) {
     if (!token && !vercelToken) {
       const redirect = NextResponse.redirect(new URL("/login", request.url))
-      return isolation ? applyHeaders(redirect, isolation) : redirect
+      if (isolation) return applyHeaders(redirect, isolation)
+      if (isSyraPath) return stripSyraIsolationHeaders(redirect)
+      return redirect
     }
   }
 
@@ -60,7 +62,12 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next()
-  return isolation ? applyHeaders(response, isolation) : response
+  if (isSyraPath) {
+    response.headers.set("Vary", "User-Agent")
+  }
+  if (isolation) return applyHeaders(response, isolation)
+  if (isSyraPath) return stripSyraIsolationHeaders(response)
+  return response
 }
 
 export const config = {

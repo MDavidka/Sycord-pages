@@ -35,12 +35,14 @@ export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deploy
 }
 
 /**
- * /syra uses COEP require-corp. Cross-origin iframes need credentialless or CORP
- * headers on the child — otherwise the iframe stays white while top-level navigation works.
+ * /syra uses COEP require-corp on desktop Chromium. Cross-origin iframes need
+ * credentialless or CORP headers on the child — otherwise the iframe stays white.
+ * iOS/Safari skips COEP so Syte preview assets can load with CORS only.
  */
 export function shouldUseCredentiallessIframe(url: string): boolean {
     if (typeof window === 'undefined' || !url) return false;
     if (!isCrossOriginPreviewUrl(url)) return false;
     if (!window.location.pathname.includes('/syra')) return false;
+    if (!window.crossOriginIsolated) return false;
     return true;
 }

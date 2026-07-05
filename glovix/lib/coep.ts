@@ -1,14 +1,23 @@
+import { isIOSUserAgent, isSafariUserAgent, shouldSkipSyraCoep } from '@/lib/coep-headers';
+
 /** Safari (incl. iOS) does not enable cross-origin isolation with COEP credentialless. */
 export function isSafariBrowser(): boolean {
     if (typeof navigator === 'undefined') return false;
-    const ua = navigator.userAgent;
-    return /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|EdgiOS/i.test(ua);
+    return isSafariUserAgent(navigator.userAgent);
 }
 
-/** COEP mode for the current page — must match middleware / next.config headers. */
-export function getPageCoepMode(): 'credentialless' | 'require-corp' {
+export function isIOSBrowser(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    return isIOSUserAgent(navigator.userAgent);
+}
+
+/** COEP mode for the current page — must match middleware headers. */
+export function getPageCoepMode(): 'credentialless' | 'require-corp' | 'none' {
     if (typeof window === 'undefined') return 'credentialless';
-    if (window.location.pathname.includes('/syra')) return 'require-corp';
+    if (window.location.pathname.includes('/syra')) {
+        if (shouldSkipSyraCoep(navigator.userAgent)) return 'none';
+        return 'require-corp';
+    }
     if (isSafariBrowser()) return 'require-corp';
     return 'credentialless';
 }
@@ -16,6 +25,9 @@ export function getPageCoepMode(): 'credentialless' | 'require-corp' {
 export function canBootWebContainer(): boolean {
     if (typeof window === 'undefined') return false;
     if (window.crossOriginIsolated) return true;
-    // Safari uses require-corp on /syra — still attempt boot; isolation may lag one tick.
+    // iOS/Safari Syra skips COEP — WebContainer is desktop-only fallback anyway.
+    if (window.location.pathname.includes('/syra') && shouldSkipSyraCoep(navigator.userAgent)) {
+        return false;
+    }
     return window.location.pathname.includes('/syra');
 }
