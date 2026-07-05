@@ -330,15 +330,13 @@ export function EmbeddedChat() {
         const currentFiles = useStore.getState().files;
         if (Object.keys(currentFiles).length === 0) return;
         if (previewStartedRef.current && previewUrl) {
-            // Preview is live. All files have been uploaded to Syte during generation.
-            // Give Vite ~3 s to recompile, then reload the proxy iframe so the
-            // user sees the updated site without needing to manually refresh.
+            // Dev server is live — file uploads keep it updated via HMR.
+            // No restart needed; reload the iframe so the latest compiled output shows.
             setTimeout(() => {
                 if (iframeRef.current && previewUrl) {
-                    const proxy = `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`;
-                    iframeRef.current.src = proxy;
+                    iframeRef.current.src = previewUrl;
                 }
-            }, 3000);
+            }, 2500);
             return;
         }
         // Preview not yet live — do a full sync + start
@@ -383,12 +381,9 @@ export function EmbeddedChat() {
     }, [activePane, startPreview]);
 
     const reloadPreview = () => {
-        if (!iframeRef.current || !previewUrl) return;
-        // For Syte previews always go through the proxy so there's no X-Frame-Options issue
-        const src = previewSource === 'syte'
-            ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-            : previewUrl;
-        iframeRef.current.src = src;
+        if (iframeRef.current && previewUrl) {
+            iframeRef.current.src = previewUrl;
+        }
     };
 
     const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
@@ -459,54 +454,9 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
-            // For Syte preview: route through the server-side proxy that strips
-            // X-Frame-Options so the iframe can embed cross-origin content.
-            const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
-            const frameUrl = isSyte
-                ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-                : previewUrl;
-
-            const embedInline = isSyte ? true : shouldEmbedPreviewInIframe(previewUrl, previewSource);
+            const embedInline = shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
             if (!embedInline) {
-                // Syte HMR preview — different origin from the app (sycord.com vs sycord.site).
-                // X-Frame-Options: SAMEORIGIN from the Caddy reverse proxy blocks iframe embedding.
-                // Show a clean "live" panel so the user can open it in a full browser tab.
-                if (previewSource === 'syte') {
-                    const host = (() => {
-                        try { return new URL(previewUrl).hostname; } catch { return previewUrl; }
-                    })();
-                    return (
-                        <div className={`flex h-full flex-col items-center justify-center gap-5 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-gray-50 text-gray-900'}`}>
-                            <div className="flex items-center gap-2">
-                                <span className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse" />
-                                <span className="text-sm font-semibold">Preview is live</span>
-                            </div>
-                            <p className={`text-xs max-w-[260px] leading-relaxed ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
-                                Your site is running with HMR. Open it in a new tab — every file Syra writes updates the page instantly.
-                            </p>
-                            <code className={`w-full max-w-xs truncate rounded-lg px-3 py-2 text-xs font-mono ${isDark ? 'bg-[#2a2b2e] text-[#c5c6c9]' : 'bg-gray-200 text-gray-700'}`}>
-                                {host}
-                            </code>
-                            <a
-                                href={previewUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow"
-                            >
-                                <ExternalLink className="h-4 w-4" />
-                                Open Preview
-                            </a>
-                            <button
-                                onClick={retryPreview}
-                                className={`text-xs ${isDark ? 'text-[#555] hover:text-[#999]' : 'text-gray-400 hover:text-gray-600'} transition-colors`}
-                            >
-                                Restart preview
-                            </button>
-                        </div>
-                    );
-                }
-
                 return (
                     <div className={`flex h-full flex-col items-center justify-center gap-4 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
                         <ExternalLink className="h-8 w-8 text-blue-500" />
@@ -556,7 +506,7 @@ export function EmbeddedChat() {
                     )}
                     <iframe
                         ref={applyIframeEmbedAttrs}
-                        src={frameUrl}
+                        src={previewUrl}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
