@@ -99,18 +99,22 @@ export function EmbeddedChat() {
             });
     }, [projectId]);
 
-    // Retry preview once workspace becomes ready (if previous attempt failed)
+    // When workspace becomes ready, kick off preview immediately if files exist.
+    // This starts the dev server early so HMR is live before AI finishes writing.
     useEffect(() => {
         if (workspaceStatus !== 'ready') return;
-        if (previewStartedRef.current) return;
-        if (fileCount === 0) return;
-        // If we had a blocked/error state from a missing UUID, retry silently
+        // Reset blocked/error state from a missing UUID so auto-retry fires
         if (previewStatus === 'blocked' || previewStatus === 'error') {
             previewStartedRef.current = false;
             setPreviewStatus('idle');
             setPreviewError('');
         }
-    }, [workspaceStatus, fileCount, previewStatus]);
+        // Start preview now if there are already files (e.g. returning to a project)
+        if (fileCount > 0 && !previewStartedRef.current && previewStatus === 'idle') {
+            void startPreview();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [workspaceStatus]);
 
     const showDeployedFallback = useCallback(async (): Promise<boolean> => {
         if (!projectId) return false;
@@ -318,17 +322,24 @@ export function EmbeddedChat() {
         );
     }, [projectId, startSyteServerPreview, startLivePreview, showDeployedFallback, webContainerReady]);
 
-    // Called by Chat when AI finishes a complete response
+    // Called by Chat when AI finishes a complete response.
+    // If preview is already running (HMR handles live updates via per-file uploads),
+    // we skip the force-restart. Only re-sync + restart when preview isn't live yet.
     const handleAiComplete = useCallback(() => {
         if (typeof window === 'undefined') return;
         const currentFiles = useStore.getState().files;
         if (Object.keys(currentFiles).length === 0) return;
-        // Force a fresh preview start to sync the new files to Syte dev server
+        if (previewStartedRef.current && previewUrl) {
+            // Dev server is already live — HMR has been handling each file write.
+            // No need to restart; just update the pane indicator.
+            return;
+        }
+        // Preview not yet live — do a full sync + start
         previewStartedRef.current = false;
         setPreviewStatus('idle');
         setPreviewError('');
         void startPreview(true);
-    }, [startPreview]);
+    }, [startPreview, previewUrl]);
 
     useEffect(() => {
         if (previewUrl) {
@@ -485,7 +496,7 @@ export function EmbeddedChat() {
                     {previewSource === 'syte' && (
                         <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex items-center justify-center gap-1.5 ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
                             <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Syte live preview — edits hot-reload automatically
+                            Live preview — files upload instantly, HMR updates in real time
                         </div>
                     )}
                     <iframe

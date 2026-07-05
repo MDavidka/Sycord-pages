@@ -151,6 +151,7 @@ async function readFileResilient(path: string, opts?: { skipPagesSync?: boolean 
  *   1. the in-memory store (drives the UI + preview mount), always
  *   2. the project's Pages (MongoDB) — the durable source of truth
  *   3. the WebContainer FS — best-effort live preview only
+ *   4. the Syte workspace — fire-and-forget, triggers HMR in the running dev server
  * Returns the Pages persistence result so callers can surface real failures.
  */
 async function persistFile(path: string, content: string): Promise<PageSyncResult> {
@@ -160,7 +161,26 @@ async function persistFile(path: string, content: string): Promise<PageSyncResul
 
     const pageSync = await syncFileToProjectPages(path, content);
     await tryWriteToWebContainer(path, content);
+    // Fire-and-forget: upload to Syte workspace so the running dev server
+    // picks up the change via HMR and the preview updates instantly.
+    syncFileToSyteWorkspace(path, content);
     return pageSync;
+}
+
+/**
+ * Upload a single file to the Syte workspace for instant HMR preview.
+ * Runs in the background — never blocks the AI's file-operation loop.
+ */
+function syncFileToSyteWorkspace(path: string, content: string): void {
+    const projectId = getHostProjectId();
+    if (!projectId) return;
+    // Skip system / env files — same rules as syncFileToProjectPages
+    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) return;
+    fetch('/api/workspace/file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, path, content }),
+    }).catch(() => { /* non-fatal — full sync on next preview start */ });
 }
 
 // ============================================================

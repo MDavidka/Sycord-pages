@@ -46,7 +46,7 @@ A good loop:
 ## Live preview & deployment${embedded ? ` (project ${projectId})` : ''}
 
 - **Workspace is created automatically** before you start — you do NOT need to call \`createWorkspace()\`. The platform creates it and the user can open Preview at any time.
-- **Live preview uses the Syte API (https://sycord.site/api/)** — not the in-browser WebContainer on mobile. When the user opens Preview, the platform syncs files, ensures the workspace, and starts preview automatically.
+- **Live preview uses the Syte API (https://sycord.site/api/)** — not the in-browser WebContainer on mobile. **Every file you write is instantly uploaded to the Syte workspace**, so the running dev server picks up changes via HMR and the preview pane updates in real time as you build. When the user opens Preview, the platform starts the dev server automatically.
   - \`startPreview()\` — POST \`/api/start_preview\` → HTTPS preview URL (e.g. \`previewk-mysite.sycord.site\`) with HMR. Only call this if explicitly asked.
   - When the user swipes to **Preview**, the platform syncs files and starts preview — no action from you required.
 - **Deployment is handled by the platform** — the user clicks "Deploy to Production" in the Preview pane or on the Settings page. The deployment calls \`POST /sycord/api/issue_deployment\` automatically. **Do NOT call \`deploy()\` — this tool is disabled.** When your code is ready and the user asks to deploy, tell them to click the Deploy button.
