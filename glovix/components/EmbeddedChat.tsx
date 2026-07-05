@@ -330,8 +330,15 @@ export function EmbeddedChat() {
         const currentFiles = useStore.getState().files;
         if (Object.keys(currentFiles).length === 0) return;
         if (previewStartedRef.current && previewUrl) {
-            // Dev server is already live — HMR has been handling each file write.
-            // No need to restart; just update the pane indicator.
+            // Preview is live. All files have been uploaded to Syte during generation.
+            // Give Vite ~3 s to recompile, then reload the proxy iframe so the
+            // user sees the updated site without needing to manually refresh.
+            setTimeout(() => {
+                if (iframeRef.current && previewUrl) {
+                    const proxy = `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`;
+                    iframeRef.current.src = proxy;
+                }
+            }, 3000);
             return;
         }
         // Preview not yet live — do a full sync + start
@@ -376,9 +383,12 @@ export function EmbeddedChat() {
     }, [activePane, startPreview]);
 
     const reloadPreview = () => {
-        if (iframeRef.current && previewUrl) {
-            iframeRef.current.src = previewUrl;
-        }
+        if (!iframeRef.current || !previewUrl) return;
+        // For Syte previews always go through the proxy so there's no X-Frame-Options issue
+        const src = previewSource === 'syte'
+            ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
+            : previewUrl;
+        iframeRef.current.src = src;
     };
 
     const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
@@ -449,7 +459,14 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
-            const embedInline = shouldEmbedPreviewInIframe(previewUrl, previewSource);
+            // For Syte preview: route through the server-side proxy that strips
+            // X-Frame-Options so the iframe can embed cross-origin content.
+            const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
+            const frameUrl = isSyte
+                ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
+                : previewUrl;
+
+            const embedInline = isSyte ? true : shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
             if (!embedInline) {
                 // Syte HMR preview — different origin from the app (sycord.com vs sycord.site).
@@ -534,12 +551,12 @@ export function EmbeddedChat() {
                     {previewSource === 'syte' && (
                         <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex items-center justify-center gap-1.5 ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
                             <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Live preview — files upload instantly, HMR updates in real time
+                            Live preview — updates on every file save
                         </div>
                     )}
                     <iframe
                         ref={applyIframeEmbedAttrs}
-                        src={previewUrl}
+                        src={frameUrl}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
