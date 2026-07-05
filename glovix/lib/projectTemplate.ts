@@ -1,9 +1,8 @@
-// Base Vite + React + TypeScript + Tailwind project template (no shadcn).
+// Base Vite + React + TypeScript + Tailwind + HeroUI project template.
 //
-// This is the clean generation baseline (aligned with GlovixTech): the AI builds
-// a client-side React SPA that previews live in the in-browser WebContainer
-// (`npm run dev`) and deploys to the Syte VPS (https://sycord.site/api/) which
-// builds it in Docker (`npm run build` → static `dist/`) and serves it.
+// The AI builds a client-side React SPA that previews live via the Syte API
+// (https://sycord.site/api/) and deploys via `issue_deploy` (Docker build).
+// HeroUI v3 (@heroui/react) is the component library — no shadcn/ui.
 
 export const BASE_PROJECT_FILES: Record<string, { file: { contents: string } }> = {
   'package.json': {
@@ -23,9 +22,11 @@ export const BASE_PROJECT_FILES: Record<string, { file: { contents: string } }> 
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
+    "@heroui/react": "^2.6.0",
     "lucide-react": "^0.408.0",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.4.0"
+    "tailwind-merge": "^2.4.0",
+    "framer-motion": "^11.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
@@ -50,6 +51,11 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // Allow the preview to be embedded in the Sycord dashboard iframe.
+    headers: {
+      'X-Frame-Options': 'ALLOWALL',
+      'Content-Security-Policy': "frame-ancestors *;",
+    },
   },
 })`
     }
@@ -79,14 +85,20 @@ export default defineConfig({
   },
   'tailwind.config.js': {
     file: {
-      contents: `/** @type {import('tailwindcss').Config} */
+      contents: `import { heroui } from "@heroui/react";
+
+/** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+    "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+  ],
   darkMode: 'class',
   theme: {
     extend: {},
   },
-  plugins: [],
+  plugins: [heroui()],
 }`
     }
   },
@@ -120,12 +132,15 @@ export default {
     file: {
       contents: `import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { HeroUIProvider } from '@heroui/react'
 import App from './App'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <HeroUIProvider>
+      <App />
+    </HeroUIProvider>
   </React.StrictMode>,
 )`
     }
@@ -209,8 +224,7 @@ export function getProjectStructure(): string {
 }
 
 /**
- * Base project files for a new chat/project. Preset arg kept for signature
- * compatibility but no longer injects shadcn presets (Vite + plain React now).
+ * Base project files for a new chat/project. Returns a Vite + React + HeroUI template.
  */
 export function getBaseProjectFiles(_presetId?: string): Record<string, { file: { contents: string } }> {
   return { ...BASE_PROJECT_FILES }

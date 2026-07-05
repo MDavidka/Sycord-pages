@@ -143,6 +143,22 @@ export async function createSyteWorkspaceForProject(
   project: any,
   options?: { domain?: string },
 ): Promise<SyteResult<SyteWorkspaceInfo>> {
+  // Fast path: if a UUID is already stored (saved by syteProjectConnect at project creation),
+  // trust it directly. The new /sycord/api/project_connect API and the old /api/workspace_get
+  // live in different namespaces on the Syte server, so calling workspace_get on a
+  // project_connect UUID always returns 404 and incorrectly falls through to re-create.
+  const storedUuid = getStoredSyteUuid(project)
+  if (storedUuid) {
+    return {
+      ok: true,
+      status: 200,
+      data: { uuid: storedUuid, status: "existing" },
+      error: null,
+      endpoint: "",
+    }
+  }
+
+  // No stored UUID — try the legacy find-or-create path.
   const existingUuid = await findExistingSyteUuid(project, projectId)
   if (existingUuid) {
     if (getStoredSyteUuid(project) !== existingUuid) {
@@ -218,31 +234,24 @@ export async function requireSyteWorkspaceUuid(
   project: any,
   projectId?: string,
 ): Promise<{ uuid: string } | { error: string; needsCreate: true }> {
+  // Trust a stored UUID directly — it was saved by our own code (syteProjectConnect).
+  // Do not call syteWorkspaceGet: workspaces created via the new /sycord/api/ live in
+  // a different namespace than the old /api/workspace_get, causing spurious 404s.
   const stored = getStoredSyteUuid(project)
   if (stored) {
-    const existing = await syteWorkspaceGet(stored)
-    if (existing.ok) return { uuid: stored }
+    return { uuid: stored }
   }
 
+  // Try the canonical UUID via the legacy workspace_get as a fallback.
   if (projectId) {
     const canonical = resolveCanonicalSyteUuid(project, projectId)
-    if (canonical !== stored) {
-      const existing = await syteWorkspaceGet(canonical)
-      if (existing.ok) return { uuid: canonical }
-    }
-  }
-
-  if (!stored) {
-    return {
-      error:
-        "No Syte workspace UUID yet. Call createWorkspace() first — it runs POST /api/create_project and returns the uuid required for execute_command.",
-      needsCreate: true,
-    }
+    const existing = await syteWorkspaceGet(canonical)
+    if (existing.ok) return { uuid: canonical }
   }
 
   return {
     error:
-      `Syte workspace "${stored}" not found (404). Call createWorkspace() to create a new workspace.`,
+      "No Syte workspace UUID yet. Open Preview — the platform creates the workspace automatically.",
     needsCreate: true,
   }
 }

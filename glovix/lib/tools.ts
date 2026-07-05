@@ -151,6 +151,7 @@ async function readFileResilient(path: string, opts?: { skipPagesSync?: boolean 
  *   1. the in-memory store (drives the UI + preview mount), always
  *   2. the project's Pages (MongoDB) — the durable source of truth
  *   3. the WebContainer FS — best-effort live preview only
+ *   4. the Syte workspace — fire-and-forget, triggers HMR in the running dev server
  * Returns the Pages persistence result so callers can surface real failures.
  */
 async function persistFile(path: string, content: string): Promise<PageSyncResult> {
@@ -160,7 +161,26 @@ async function persistFile(path: string, content: string): Promise<PageSyncResul
 
     const pageSync = await syncFileToProjectPages(path, content);
     await tryWriteToWebContainer(path, content);
+    // Fire-and-forget: upload to Syte workspace so the running dev server
+    // picks up the change via HMR and the preview updates instantly.
+    syncFileToSyteWorkspace(path, content);
     return pageSync;
+}
+
+/**
+ * Upload a single file to the Syte workspace for instant HMR preview.
+ * Runs in the background — never blocks the AI's file-operation loop.
+ */
+function syncFileToSyteWorkspace(path: string, content: string): void {
+    const projectId = getHostProjectId();
+    if (!projectId) return;
+    // Skip system / env files — same rules as syncFileToProjectPages
+    if (path.startsWith('.glovix/') || path === 'glovix-picker.js' || /^\.env(?:\.|$)/.test(path)) return;
+    fetch('/api/workspace/file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, path, content }),
+    }).catch(() => { /* non-fatal — full sync on next preview start */ });
 }
 
 // ============================================================
@@ -183,8 +203,8 @@ async function typeCheckServerSide(projectId: string): Promise<string> {
         const res = await fetch(`/api/workspace/diagnostics?projectId=${encodeURIComponent(projectId)}`);
         if (!res.ok) {
             const msg = await res.text().catch(() => '');
-            if (res.status === 409 && msg.includes('createWorkspace')) {
-                return `[SYSTEM] ❌ No Syte workspace UUID yet. Call createWorkspace() FIRST (POST /api/create_project), then typeCheck().\n${msg}`.trim();
+            if (res.status === 409) {
+                return `[SYSTEM] ❌ No Syte workspace UUID yet. The workspace is created automatically when you open Preview — try opening Preview first, then typeCheck().\n${msg}`.trim();
             }
             return `[SYSTEM] ❌ Type check could not run on the Sycord server (HTTP ${res.status}). ${msg}`.trim();
         }
@@ -309,7 +329,7 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
             body: JSON.stringify({
                 projectId,
                 domain: args?.domain,
-                issueDomain: true,
+                issueDomain: false,  // set_domain is for production; don't call it before preview
                 files: Object.keys(files).length > 0 ? files : undefined,
             }),
         });
@@ -317,7 +337,7 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
         if (!res.ok || !data?.previewUrl) {
             const err = data?.error || `HTTP ${res.status}`;
             if (data?.needsCreate) {
-                return `[SYSTEM] ❌ startPreview failed: ${err}\nCall createWorkspace() first.`;
+                return `[SYSTEM] ❌ startPreview failed: workspace not found (${err}). The platform auto-creates the workspace — try again in a moment or ask the user to open Preview.`;
             }
             return `[SYSTEM] ❌ startPreview failed: ${err}`;
         }
@@ -339,7 +359,8 @@ export async function handlePlanning(args: {
     title?: string;
     appType?: string;
     pages?: PlannedPage[];
-    shadcnComponents?: string[];
+    heroUiComponents?: string[];
+    shadcnComponents?: string[]; // legacy alias
     steps?: Array<{ id?: string; title: string; description?: string; strict?: boolean }>;
     notes?: string;
     stepId?: string;
@@ -358,13 +379,13 @@ export async function handlePlanning(args: {
 
     if (action === 'create') {
         if (!args.pages?.length) {
-            return '[SYSTEM] ❌ planning create requires pages array with exact routes.\nExample: planning({ action: "create", appType: "landing", pages: [{ route: "/", name: "Home" }, { route: "/about", name: "About" }], shadcnComponents: ["button","card","input"] })';
+            return '[SYSTEM] ❌ planning create requires pages array with exact routes.\nExample: planning({ action: "create", appType: "landing", pages: [{ route: "/", name: "Home" }, { route: "/about", name: "About" }], heroUiComponents: ["button","card","input"] })';
         }
         const plan = buildGenerationPlan({
             title: args.title,
             appType: args.appType,
             pages: args.pages,
-            shadcnComponents: args.shadcnComponents,
+            shadcnComponents: args.heroUiComponents ?? args.shadcnComponents,
             steps: args.steps,
             notes: args.notes,
         });
@@ -416,7 +437,7 @@ async function runSyteCommand(
         if (res.status === 409) {
             return {
                 ok: false,
-                text: `[SYSTEM] ❌ Cannot run command — no workspace UUID.\n${text.slice(0, 2000)}\n\nYou MUST call createWorkspace() first.`,
+                text: `[SYSTEM] ❌ Cannot run command — no workspace UUID yet. The workspace is created automatically when Preview is opened. Open Preview first, then retry.\n${text.slice(0, 2000)}`,
             };
         }
         return { ok: false, text: `[SYSTEM] ❌ Command failed (HTTP ${res.status}):\n${text.slice(0, 4000)}` };
@@ -1148,12 +1169,12 @@ export const TOOL_DEFINITIONS = [
             description: `Create a flexible build plan shown in the PlanChecklist UI. YOU define the steps — not forced to rigid pipeline IDs.
 
 Actions:
-- create: pages (required), optional title, appType, shadcnComponents (8–12 max), steps (your own titles), notes (free-form thinking)
+- create: pages (required), optional title, appType, heroUiComponents (list of HeroUI components to use), steps (your own titles), notes (free-form thinking)
 - updateStep: mark step completed|in_progress|skipped — ONLY after the step actually succeeded
 - get: current plan
 
 Example custom steps:
-steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { title: "Build hosting pages" }, { title: "Validate" }]`,
+steps: [{ title: "Scaffold & deps" }, { title: "Install HeroUI" }, { title: "Build landing page" }, { title: "Wire routing" }, { title: "Validate" }]`,
             parameters: {
                 type: 'object',
                 properties: {
@@ -1176,10 +1197,10 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
                             required: ['route', 'name'],
                         },
                     },
-                    shadcnComponents: {
+                    heroUiComponents: {
                         type: 'array',
                         items: { type: 'string' },
-                        description: 'Start with 8–12 components; add more when a page needs them',
+                        description: 'HeroUI components to use (e.g. ["button","card","input","modal","table"])',
                     },
                     steps: {
                         type: 'array',
@@ -1406,22 +1427,8 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
     {
         type: 'function',
         function: {
-            name: 'createWorkspace',
-            description: 'REQUIRED FIRST STEP — POST /api/create_project on Syte (https://sycord.site/api/). Creates workspace UUID for executeCommand, preview, and deploy. Optional domain: pass { domain: "app.example.com" } to register it at creation.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    domain: { type: 'string', description: 'Optional production domain for POST /api/set_domain (e.g. app.example.com)' },
-                },
-                required: [],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
             name: 'setDomain',
-            description: 'POST /api/set_domain on Syte — bind a custom domain to the workspace UUID. Call after createWorkspace(). Preview pane auto-issues domain when user opens it if domain is saved on the project.',
+            description: 'POST /api/set_domain on Syte — bind a custom domain to the workspace UUID. Preview pane auto-issues domain when user opens it if domain is saved on the project.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1449,7 +1456,7 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
         type: 'function',
         function: {
             name: 'typeCheck',
-            description: 'Run TypeScript in the Syte workspace (requires createWorkspace first). Syncs files, npm install, npx tsc --noEmit. Same as executeCommand("npx tsc --noEmit --pretty").',
+            description: 'Run TypeScript in the Syte workspace. Syncs files, npm install, npx tsc --noEmit. Same as executeCommand("npx tsc --noEmit --pretty").',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1461,7 +1468,7 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
         type: 'function',
         function: {
             name: 'executeCommand',
-            description: 'Run one or many shell commands in the Syte workspace (requires createWorkspace UUID). Use `commands: [...]` to run multiple sequentially (stops on first failure). Do NOT include npm run build — use deploy() for production build.',
+            description: 'Run one or many shell commands in the Syte workspace. Use `commands: [...]` to run multiple sequentially (stops on first failure). Do NOT include npm run build — use deploy() for production build.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1510,31 +1517,6 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
     {
         type: 'function',
         function: {
-            name: 'batchCreateFiles',
-            description: 'Create multiple files at once. Much faster than calling createFile multiple times. Use when scaffolding a project or creating several related files.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    files: {
-                        type: 'array',
-                        items: {
-                            type: 'object',
-                            properties: {
-                                path: { type: 'string', description: 'File path' },
-                                content: { type: 'string', description: 'File content' },
-                            },
-                            required: ['path', 'content'],
-                        },
-                        description: 'Array of files to create, each with path and content'
-                    },
-                },
-                required: ['files'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
             name: 'getErrors',
             description: 'Get a summary of all current errors in the project: TypeScript errors, build errors, and runtime errors from the terminal. Use this to quickly understand what is broken.',
             parameters: {
@@ -1549,18 +1531,6 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
         function: {
             name: 'save',
             description: 'Save the project source files to GitHub (creates the repository on first save). Call this BEFORE deploy() — Coolify deploys by building the GitHub repository.',
-            parameters: {
-                type: 'object',
-                properties: {},
-                required: [],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'deploy',
-            description: 'Deploy to sycord.site via Syte POST issue_deploy {"uuid":"..."} — syncs Pages, git pull + rebuild + restart. Requires createWorkspace() UUID first. Run typeCheck() + lintCheck() before deploy. Do NOT run npm run build manually. On failure read logs and fix, then redeploy.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1707,56 +1677,24 @@ steps: [{ title: "Scaffold & deps" }, { title: "Install UI primitives" }, { titl
     {
         type: 'function',
         function: {
-            name: 'listShadcnComponents',
-            description: `List every shadcn/ui component that is ALREADY installed in this project (files present under components/ui/).
-ALWAYS call this FIRST before writing any import statement like \`import { X } from '@/components/ui/x'\`.
-The returned list is the ground truth — if a component is NOT in the list, it is NOT installed and any import of it will cause a build error.
-After calling this:
-- If the component is in the list → import it safely.
-- If the component is NOT in the list → call addShadcnComponent({ component: "<name>" }) first, then import it.
-Never skip this check. Build failures from missing UI modules happen 100% of the time when this check is skipped.`,
-            parameters: { type: 'object', properties: {}, required: [] },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'addShadcnComponent',
-            description: 'Install shadcn/ui components from the official ui.shadcn.com registry (NO CLI — files are copied into components/ui/ with correct Radix deps). This is the ONLY way to add UI primitives — never write component files manually. PREREQUISITE: call listShadcnComponents() first. Automatically sets up lib/utils.ts, components.json, CSS design tokens, and package.json deps. Use for: button, card, dialog, sheet, dropdown-menu, table, tabs, form, input, select, checkbox, switch, badge, avatar, separator, accordion, alert, and all other shadcn components.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    component: { type: 'string', description: 'Single component name, e.g., "button" or "card"' },
-                    components: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        description: 'Optional list of component names to install at once, e.g., ["button", "card", "dialog"]'
-                    },
-                },
-                required: [],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'shadcnDocs',
-            description: `Fetch live, accurate documentation for any shadcn/ui component from ui.shadcn.com.
-Use this BEFORE using or installing any shadcn/ui component to get its exact current API, props, composition patterns, and usage examples.
+            name: 'heroUiDocs',
+            description: `Fetch live, accurate documentation for any HeroUI v3 React component from heroui.com.
+Call this BEFORE using any HeroUI component to get its exact current API, props, variants, and usage examples.
 This prevents hallucination and ensures the generated code matches the real component API.
 Always call this when:
-- You are about to use a shadcn/ui component for the first time in a session
+- You are about to use a HeroUI component for the first time in a session
 - You are unsure of a component's correct props, variants, or composition pattern
-- The user asks about a specific shadcn component's API
 - You need to know if a component exists and what it's called
 
-Available components: accordion, alert, alert-dialog, aspect-ratio, avatar, badge, breadcrumb, button, calendar, card, carousel, chart, checkbox, collapsible, combobox, command, context-menu, data-table, date-picker, dialog, drawer, dropdown-menu, form, hover-card, input, input-otp, label, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, textarea, toggle, toggle-group, tooltip, typography.`,
+Available components: accordion, alert, autocomplete, avatar, badge, breadcrumbs, button, calendar, card, checkbox, checkbox-group, chip, circular-progress, code, date-input, date-picker, date-range-picker, divider, drawer, dropdown, image, input, input-otp, kbd, link, listbox, modal, navbar, number-input, pagination, popover, progress, radio-group, range-calendar, scroll-shadow, select, skeleton, slider, snippet, spacer, spinner, switch, table, tabs, textarea, time-input, tooltip, user.
+
+All components are imported from "@heroui/react". No CLI install required — just add @heroui/react to package.json dependencies.`,
             parameters: {
                 type: 'object',
                 properties: {
                     component: {
                         type: 'string',
-                        description: 'The shadcn/ui component name to look up documentation for, e.g. "button", "dialog", "form", "data-table". Use the kebab-case name.',
+                        description: 'The HeroUI component name to look up, e.g. "button", "modal", "input". Use kebab-case.',
                     },
                 },
                 required: ['component'],
@@ -2752,6 +2690,47 @@ export async function handleShadcnDocs(args: Record<string, unknown>): Promise<s
     }
 }
 
+export async function handleHeroUiDocs(args: Record<string, unknown>): Promise<string> {
+    const component = typeof args.component === 'string' ? args.component.trim().toLowerCase() : '';
+    if (!component) {
+        return '[SYSTEM] ❌ heroUiDocs requires a "component" field, e.g. heroUiDocs({ component: "button" })';
+    }
+
+    try {
+        const res = await fetch('/api/ai/heroui-docs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ component }),
+            signal: AbortSignal.timeout(15000),
+        });
+
+        if (!res.ok) {
+            const text = await res.text().catch(() => `HTTP ${res.status}`);
+            return `[SYSTEM] ❌ heroUiDocs failed for "${component}": ${text}`;
+        }
+
+        const data = await res.json().catch(() => ({} as any));
+        const source = data.source === 'live' ? 'live docs from heroui.com' : 'cached reference';
+        const url = data.url || `https://heroui.com/docs/react/components/${component}`;
+
+        if (!data.docs) {
+            return `[SYSTEM] No documentation found for HeroUI "${component}". See ${url}`;
+        }
+
+        return (
+            `[SYSTEM] HeroUI docs for "${data.component || component}" (${source}):\n` +
+            `Reference URL: ${url}\n\n` +
+            data.docs
+        );
+    } catch (e: any) {
+        return (
+            `[SYSTEM] ⚠️ Could not fetch live HeroUI docs for "${component}" (${e.message}). ` +
+            `Use your built-in knowledge and check https://heroui.com/docs/react/components/${component} for reference. ` +
+            `All HeroUI components are imported from "@heroui/react".`
+        );
+    }
+}
+
 
 export async function handleSaveKnowledge(args: { title: string; content: string }): Promise<string> {
     const { title, content } = args;
@@ -2834,8 +2813,7 @@ async function _executeToolInternal(
     const argsList = parseToolArguments(argsString);
 
     if (toolName === 'createWorkspace') {
-        if (argsList.length === 0) return handleCreateWorkspace();
-        return handleCreateWorkspace(argsList[0] as { domain?: string });
+        return '[SYSTEM] ℹ️ createWorkspace is no longer needed — the platform creates the workspace automatically before AI starts. Open Preview to confirm the workspace is ready.';
     }
     if (toolName === 'startPreview') {
         if (argsList.length === 0) return handleStartPreview();
@@ -2845,7 +2823,7 @@ async function _executeToolInternal(
     if (toolName === 'listFiles') return await handleListFiles();
     if (toolName === 'getErrors') return handleGetErrors(ctx);
     if (toolName === 'save') return handleSave();
-    if (toolName === 'deploy') return handleDeploy(ctx);
+    if (toolName === 'deploy') return '[SYSTEM] ℹ️ Deployment is now handled by the platform — the user can click "Deploy to Production" in the Preview pane or on the Settings page. The AI no longer triggers deployments.';
 
     if (toolName === 'planning') {
         if (argsList.length === 0) return handlePlanning({ action: 'get' });
@@ -2902,7 +2880,8 @@ async function _executeToolInternal(
                     result = await handleLintCheck(args, ctx);
                     break;
                 case 'batchCreateFiles':
-                    result = await handleBatchCreateFiles(args, ctx);
+                    // batchCreateFiles is disabled — use createFile/write_file for targeted edits
+                    result = '[SYSTEM] ℹ️ batchCreateFiles is disabled. Use createFile() or write_file() for each file individually — this ensures better quality and targeted edits.';
                     break;
                 case 'createDokployProject':
                     result = await handleCreateProject(args);
@@ -2929,10 +2908,10 @@ async function _executeToolInternal(
                     result = await handleCoolifyCommand(args);
                     break;
                 case 'addShadcnComponent':
-                    result = await handleAddShadcnComponent(args);
+                    result = '[SYSTEM] ℹ️ shadcn/ui is no longer used. Use HeroUI (@heroui/react) instead — import components directly from "@heroui/react". Call heroUiDocs({ component: "<name>" }) to look up the API.';
                     break;
                 case 'listShadcnComponents':
-                    result = await handleListShadcnComponents();
+                    result = '[SYSTEM] ℹ️ shadcn/ui is no longer used. Use HeroUI (@heroui/react) — all components are imported from "@heroui/react". Call heroUiDocs({ component: "<name>" }) to look up any component.';
                     break;
 
                 case 'saveKnowledge':
@@ -2946,13 +2925,16 @@ async function _executeToolInternal(
                     break;
 
                 case 'shadcnDocs':
-                    result = await handleShadcnDocs(args);
+                    result = '[SYSTEM] ℹ️ shadcnDocs is replaced by heroUiDocs. Call heroUiDocs({ component: "<name>" }) to look up HeroUI component documentation.';
+                    break;
+                case 'heroUiDocs':
+                    result = await handleHeroUiDocs(args);
                     break;
                 case 'planning':
                     result = await handlePlanning(args as any);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: planning, createWorkspace, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, batchCreateFiles, getErrors, save, deploy, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, listShadcnComponents, addShadcnComponent, shadcnDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: planning, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, getErrors, save, startPreview, setDomain, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, heroUiDocs, saveKnowledge, listKnowledge, callKnowledge`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;
