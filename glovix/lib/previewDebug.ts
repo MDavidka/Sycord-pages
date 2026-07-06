@@ -126,7 +126,14 @@ export function analyzeProxyProbeResponse(
     const proxyErrorText = detectProxyErrorText(bodyText);
     const isHtml = contentType.includes('text/html');
     const htmlBytes = isHtml ? bodyText.length : undefined;
-    const ok = status >= 200 && status < 300 && !proxyErrorText && (!isHtml || bodyText.length >= 200);
+    const isStartingPage = isHtml && bodyText.includes('Dev server starting');
+    const upstreamFailed = status >= 502;
+    const ok =
+        status >= 200 &&
+        status < 300 &&
+        !proxyErrorText &&
+        !isStartingPage &&
+        (!isHtml || bodyText.length >= 200);
 
     return {
         ok,
@@ -134,7 +141,7 @@ export function analyzeProxyProbeResponse(
         contentType,
         bodyPreview: bodyText.slice(0, 200) || undefined,
         htmlBytes,
-        proxyErrorText,
+        proxyErrorText: proxyErrorText || (upstreamFailed ? bodyText.slice(0, 200) || `Preview proxy HTTP ${status}` : null),
     };
 }
 
@@ -249,11 +256,57 @@ function diagnoseWithoutDocument(
     };
 }
 
+function diagnosisFromProxyProbe(
+    proxyProbe: ProxyProbeResult,
+): IframeDocumentDiagnosis | null {
+    if (proxyProbe.ok) return null;
+
+    const isStarting =
+        proxyProbe.status === 503 ||
+        (proxyProbe.bodyPreview?.includes('Dev server starting') ?? false);
+
+    if (isStarting) {
+        return {
+            bodyTextLength: 0,
+            bodyHtmlLength: proxyProbe.htmlBytes ?? 0,
+            title: '',
+            hasRoot: false,
+            rootChildCount: 0,
+            looksBlank: true,
+            proxyErrorText: null,
+            reason: 'dev_server_starting',
+            documentAccessible: false,
+        };
+    }
+
+    if (proxyProbe.proxyErrorText || proxyProbe.status >= 400) {
+        return {
+            bodyTextLength: 0,
+            bodyHtmlLength: 0,
+            title: '',
+            hasRoot: false,
+            rootChildCount: 0,
+            looksBlank: true,
+            proxyErrorText: proxyProbe.proxyErrorText || `Preview proxy HTTP ${proxyProbe.status}`,
+            reason: 'proxy_error',
+            documentAccessible: false,
+        };
+    }
+
+    return null;
+}
+
 export function diagnoseIframeDocument(
     doc: Document | null,
     embedContext?: PreviewEmbedContext,
     options?: IframeInspectOptions,
 ): IframeDocumentDiagnosis {
+    const proxyProbe = options?.proxyProbe;
+    if (proxyProbe) {
+        const fromProbe = diagnosisFromProxyProbe(proxyProbe);
+        if (fromProbe) return fromProbe;
+    }
+
     if (!doc) {
         return diagnoseWithoutDocument(embedContext, options);
     }
@@ -263,6 +316,7 @@ export function diagnoseIframeDocument(
     const bodyHtml = body?.innerHTML?.trim() ?? '';
     const root = doc.querySelector('#root');
     const proxyErrorText = detectProxyErrorText(bodyText || bodyHtml);
+    const isStartingPage = bodyText.includes('Dev server starting') || bodyHtml.includes('Dev server starting');
 
     const diagnosis: IframeDocumentDiagnosis = {
         bodyTextLength: bodyText.length,
@@ -270,13 +324,18 @@ export function diagnoseIframeDocument(
         title: doc.title || '',
         hasRoot: Boolean(root),
         rootChildCount: root?.childElementCount ?? 0,
-        looksBlank: proxyErrorText
+        looksBlank: isStartingPage || proxyErrorText
             ? true
             : bodyText.length < 20 && (root?.childElementCount ?? 0) === 0 && bodyHtml.length < 200,
         proxyErrorText,
         reason: null,
         documentAccessible: true,
     };
+
+    if (isStartingPage) {
+        diagnosis.reason = 'dev_server_starting';
+        return diagnosis;
+    }
 
     diagnosis.reason = inferBlankReason(diagnosis, embedContext);
     return diagnosis;
@@ -289,6 +348,8 @@ export function describeBlankIframe(
     switch (diagnosis.reason) {
         case 'proxy_error':
             return diagnosis.proxyErrorText || 'Preview proxy returned an error.';
+        case 'dev_server_starting':
+            return 'Dev server is starting — preview will reload automatically.';
         case 'coep_asset_block_suspected':
             return 'Preview loaded but assets may be blocked by COEP (cross-origin isolation). Try Open in new tab.';
         case 'vite_shell_empty_root':

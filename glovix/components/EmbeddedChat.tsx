@@ -58,6 +58,7 @@ export function EmbeddedChat() {
     const probedFrameUrlRef = useRef<string | null>(null);
     const proxyProbeResultRef = useRef<ProxyProbeResult | null>(null);
     const previewReadyRef = useRef<boolean | undefined>(undefined);
+    const previewRetryRef = useRef<number | null>(null);
 
     const [activePane, setActivePane] = useState(0);
     const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
@@ -233,6 +234,18 @@ export function EmbeddedChat() {
         setPreviewDebugHint('');
     }, []);
 
+    const schedulePreviewReload = useCallback((delayMs = 4000) => {
+        if (previewRetryRef.current) window.clearTimeout(previewRetryRef.current);
+        previewRetryRef.current = window.setTimeout(() => {
+            previewRetryRef.current = null;
+            probedFrameUrlRef.current = null;
+            proxyProbeResultRef.current = null;
+            reloadPreviewRef.current();
+        }, delayMs);
+    }, []);
+
+    const reloadPreviewRef = useRef<() => void>(() => {});
+
     const probePreviewFrame = useCallback(async (
         frameUrl: string,
         previewUrlValue: string,
@@ -312,11 +325,19 @@ export function EmbeddedChat() {
             const hint = describeBlankIframe(diagnosis, embedContext);
             setPreviewDebugHint(hint || '');
             logPreviewWarn('blank_iframe', payload);
+            if (diagnosis.reason === 'dev_server_starting' || diagnosis.reason === 'proxy_error') {
+                schedulePreviewReload(diagnosis.reason === 'dev_server_starting' ? 4000 : 6000);
+            }
         } else {
             setPreviewDebugHint('');
+            setPreviewStatus('ready');
             logPreviewDebug('iframe_loaded', payload);
+            if (previewRetryRef.current) {
+                window.clearTimeout(previewRetryRef.current);
+                previewRetryRef.current = null;
+            }
         }
-    }, [previewSource]);
+    }, [previewSource, schedulePreviewReload]);
 
     const handlePreviewIframeLoad = useCallback((event: React.SyntheticEvent<HTMLIFrameElement>) => {
         const iframe = event.currentTarget;
@@ -361,7 +382,7 @@ export function EmbeddedChat() {
             logPreviewAssignment(result.previewUrl, 'syte', result.previewReady);
             setPreviewUrl(result.previewUrl);
             setPreviewSource('syte');
-            setPreviewStatus('ready');
+            setPreviewStatus(result.previewReady === false ? 'starting' : 'ready');
             setPendingDeploy(false);
             previewStartedRef.current = true;
             return { ok: true };
@@ -371,7 +392,7 @@ export function EmbeddedChat() {
             logPreviewAssignment(result.previewUrl, 'syte', result.previewReady);
             setPreviewUrl(result.previewUrl);
             setPreviewSource('syte');
-            setPreviewStatus('ready');
+            setPreviewStatus(result.previewReady === false ? 'starting' : 'ready');
             previewStartedRef.current = true;
             return { ok: true };
         }
@@ -524,13 +545,26 @@ export function EmbeddedChat() {
     useEffect(() => {
         if (previewUrl) {
             if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
-            setPreviewStatus('ready');
+            if (previewReadyRef.current !== false) {
+                setPreviewStatus('ready');
+            }
         }
     }, [previewUrl]);
+
+    useEffect(() => {
+        if (previewStatus !== 'starting' || !previewUrl || !projectId) return;
+        const interval = window.setInterval(() => {
+            probedFrameUrlRef.current = null;
+            proxyProbeResultRef.current = null;
+            reloadPreviewRef.current();
+        }, 8000);
+        return () => window.clearInterval(interval);
+    }, [previewStatus, previewUrl, projectId]);
 
     useEffect(() => () => {
         if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
         if (blankWatchdogRef.current) window.clearTimeout(blankWatchdogRef.current);
+        if (previewRetryRef.current) window.clearTimeout(previewRetryRef.current);
     }, []);
 
     useEffect(() => {
@@ -569,6 +603,7 @@ export function EmbeddedChat() {
         });
         iframeRef.current.src = src;
     };
+    reloadPreviewRef.current = reloadPreview;
 
     const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
         iframeRef.current = el;
