@@ -127,6 +127,7 @@ export async function GET(req: Request): Promise<Response> {
   // Allow framing from any origin (we're now the proxy)
   outHeaders.set("X-Frame-Options", "ALLOWALL")
   outHeaders.set("Content-Type", "text/html; charset=utf-8")
+  outHeaders.set("Cross-Origin-Resource-Policy", "cross-origin")
   outHeaders.set("Cache-Control", "private, no-store, no-cache, must-revalidate")
   outHeaders.delete("etag")
   outHeaders.delete("last-modified")

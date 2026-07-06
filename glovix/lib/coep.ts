@@ -16,7 +16,7 @@ export function getPageCoepMode(): 'credentialless' | 'require-corp' | 'none' {
     if (typeof window === 'undefined') return 'credentialless';
     if (window.location.pathname.includes('/syra')) {
         if (shouldSkipSyraCoep(navigator.userAgent)) return 'none';
-        return 'require-corp';
+        return 'credentialless';
     }
     if (isSafariBrowser()) return 'require-corp';
     return 'credentialless';
