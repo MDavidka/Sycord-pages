@@ -35,14 +35,9 @@ export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deploy
 }
 
 /**
- * /syra uses COEP credentialless on desktop Chromium (same as /builder) so Syte
- * preview assets from preview*.sycord.com can load inside the proxied iframe.
- * iOS/Safari skips COEP entirely.
+ * Syte/Vite previews load the dev server URL directly in the iframe (same as opening
+ * the preview link). No credentialless attribute needed when /syra has no COEP.
  */
-export function shouldUseCredentiallessIframe(url: string): boolean {
-    if (typeof window === 'undefined' || !url) return false;
-    if (!isCrossOriginPreviewUrl(url)) return false;
-    if (!window.location.pathname.includes('/syra')) return false;
-    if (!window.crossOriginIsolated) return false;
-    return true;
+export function shouldUseCredentiallessIframe(_url: string): boolean {
+    return false;
 }

@@ -78,11 +78,28 @@ export function logPreviewWarn(phase: string, data?: Record<string, unknown>): v
     console.warn(DEBUG_PREFIX, { phase, ...(data ?? {}) });
 }
 
-export function buildPreviewFrameUrl(previewUrl: string, previewSource: PreviewSource): string {
+export function buildPreviewProxyUrl(previewUrl: string): string {
+    return `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`;
+}
+
+/**
+ * Syte/Vite previews embed the dev server directly. vite.config sets
+ * X-Frame-Options: ALLOWALL — proxying HTML through sycord.com + <base href>
+ * leaves an empty #root because Vite ES modules fail cross-origin in the iframe.
+ */
+export function buildPreviewIframeSrc(previewUrl: string, previewSource: PreviewSource): string {
     const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
-    return isSyte
-        ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-        : previewUrl;
+    if (isSyte) return previewUrl;
+    return previewUrl;
+}
+
+/** @deprecated Use buildPreviewIframeSrc — kept for proxy probes/fallback */
+export function buildPreviewFrameUrl(previewUrl: string, previewSource: PreviewSource): string {
+    return buildPreviewIframeSrc(previewUrl, previewSource);
+}
+
+export function usesPreviewProxy(frameUrl: string): boolean {
+    return frameUrl.startsWith('/api/workspace/preview-frame');
 }
 
 export function getPreviewEmbedContext(
@@ -90,7 +107,7 @@ export function getPreviewEmbedContext(
     previewSource: PreviewSource,
 ): PreviewEmbedContext {
     const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
-    const frameUrl = buildPreviewFrameUrl(previewUrl, previewSource);
+    const frameUrl = buildPreviewIframeSrc(previewUrl, previewSource);
     const isMobile =
         typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
 
@@ -200,8 +217,6 @@ function diagnoseWithoutDocument(
         };
     }
 
-    // credentialless iframes intentionally hide contentDocument from the parent,
-    // even when src is same-origin (/api/workspace/preview-frame).
     if (credentiallessApplied && usesSameOriginProxy) {
         if (proxyProbe?.ok && embedContext?.crossOriginIsolated) {
             return {
@@ -239,6 +254,20 @@ function diagnoseWithoutDocument(
             looksBlank: true,
             proxyErrorText: null,
             reason: 'cross_origin_embed',
+            documentAccessible: false,
+        };
+    }
+
+    if (embedContext?.isSyte && !usesSameOriginProxy) {
+        return {
+            bodyTextLength: 0,
+            bodyHtmlLength: 0,
+            title: '',
+            hasRoot: false,
+            rootChildCount: 0,
+            looksBlank: false,
+            proxyErrorText: null,
+            reason: 'direct_embed',
             documentAccessible: false,
         };
     }
@@ -360,6 +389,8 @@ export function describeBlankIframe(
             return 'Preview proxy returned HTML. If the frame is still white, scripts may be blocked by COEP — try Open in new tab.';
         case 'cross_origin_embed':
             return 'Preview is embedded cross-origin; in-app inspection is unavailable.';
+        case 'direct_embed':
+            return null;
         case 'no_document_access':
             return 'Cannot inspect iframe contents yet — waiting for preview HTML.';
         case 'html_without_visible_text':

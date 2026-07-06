@@ -10,13 +10,14 @@ import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getW
 import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePreviewUrl } from '../lib/previewEmbed';
 import {
     analyzeProxyProbeResponse,
-    buildPreviewFrameUrl,
+    buildPreviewIframeSrc,
     describeBlankIframe,
     diagnoseIframeDocument,
     getPreviewEmbedContext,
     logPreviewDebug,
     logPreviewWarn,
     shouldShowBlankHint,
+    usesPreviewProxy,
     type PreviewSource as DebugPreviewSource,
     type ProxyProbeResult,
 } from '../lib/previewDebug';
@@ -252,7 +253,7 @@ export function EmbeddedChat() {
         source: PreviewSource,
         force = false,
     ): Promise<ProxyProbeResult | null> => {
-        if (!frameUrl.startsWith('/api/workspace/preview-frame')) return null;
+        if (!usesPreviewProxy(frameUrl)) return null;
         if (!force && probedFrameUrlRef.current === frameUrl && proxyProbeResultRef.current) {
             return proxyProbeResultRef.current;
         }
@@ -512,7 +513,7 @@ export function EmbeddedChat() {
             // then reload the proxy iframe so the updated site appears.
             setTimeout(() => {
                 if (iframeRef.current && previewUrl) {
-                    const src = buildPreviewFrameUrl(previewUrl, previewSource);
+                    const src = buildPreviewIframeSrc(previewUrl, previewSource);
                     logPreviewDebug('iframe_reload', {
                         trigger: 'ai_complete',
                         frameUrl: src,
@@ -538,7 +539,7 @@ export function EmbeddedChat() {
             setPreviewDebugHint('');
             return;
         }
-        const frameUrl = buildPreviewFrameUrl(previewUrl, previewSource);
+        const frameUrl = buildPreviewIframeSrc(previewUrl, previewSource);
         void probePreviewFrame(frameUrl, previewUrl, previewSource);
     }, [previewUrl, previewSource, probePreviewFrame]);
 
@@ -594,7 +595,7 @@ export function EmbeddedChat() {
         if (!iframeRef.current || !previewUrl) return;
         probedFrameUrlRef.current = null;
         proxyProbeResultRef.current = null;
-        const src = buildPreviewFrameUrl(previewUrl, previewSource);
+        const src = buildPreviewIframeSrc(previewUrl, previewSource);
         logPreviewDebug('iframe_reload', {
             trigger: 'manual_reload',
             frameUrl: src,
@@ -682,14 +683,10 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
-            // Syte preview subdomains send X-Frame-Options: SAMEORIGIN which the browser
-            // enforces for any cross-origin parent (sycord.com ≠ preview*.sycord.com/site).
-            // Route through our server-side proxy that strips the header and injects
-            // <base href> so assets still load directly from the Syte dev server.
+            // Syte/Vite: embed preview*.sycord.com directly. vite.config sets
+            // X-Frame-Options: ALLOWALL. Proxying HTML via /preview-frame breaks Vite modules.
             const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
-            const frameUrl = isSyte
-                ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-                : previewUrl;
+            const frameUrl = buildPreviewIframeSrc(previewUrl, previewSource);
 
             const embedInline = isSyte ? true : shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
