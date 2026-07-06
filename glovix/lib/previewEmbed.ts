@@ -8,11 +8,12 @@ export function isCrossOriginPreviewUrl(url: string): boolean {
     }
 }
 
-/** Syte HMR preview host (preview*.sycord.site). */
+/** Syte HMR preview host (preview*.sycord.site or preview*.sycord.com). */
 export function isSytePreviewUrl(url: string): boolean {
     try {
         const host = new URL(url).hostname.toLowerCase();
-        return host.endsWith('.sycord.site') && host.startsWith('preview');
+        if (!host.startsWith('preview')) return false;
+        return host.endsWith('.sycord.site') || host.endsWith('.sycord.com');
     } catch {
         return false;
     }
@@ -34,12 +35,9 @@ export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deploy
 }
 
 /**
- * /syra uses COEP require-corp. Cross-origin iframes need credentialless or CORP
- * headers on the child — otherwise the iframe stays white while top-level navigation works.
+ * Syte/Vite previews load the dev server URL directly in the iframe (same as opening
+ * the preview link). No credentialless attribute needed when /syra has no COEP.
  */
-export function shouldUseCredentiallessIframe(url: string): boolean {
-    if (typeof window === 'undefined' || !url) return false;
-    if (!isCrossOriginPreviewUrl(url)) return false;
-    if (!window.location.pathname.includes('/syra')) return false;
-    return true;
+export function shouldUseCredentiallessIframe(_url: string): boolean {
+    return false;
 }
