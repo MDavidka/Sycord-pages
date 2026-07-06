@@ -13,9 +13,7 @@ function isolationHeadersFor(pathname: string): Record<string, string> | null {
   if (pathname === "/builder" || pathname.startsWith("/builder/")) {
     return COEP_CREDENTIALLESS
   }
-  // Use credentialless (not require-corp) so the WebContainer preview iframe
-  // (previewg-*.sycord.com) is not blocked — Vite dev servers never send CORP.
-  // credentialless still gives cross-origin isolation for SharedArrayBuffer.
+  // /syra uses credentialless — must match coep.ts getPageCoepMode()
   if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) {
     return COEP_CREDENTIALLESS
   }
@@ -43,6 +41,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/dashboard")) {
     if (!token && !vercelToken) {
       const redirect = NextResponse.redirect(new URL("/login", request.url))
+      // Allow *.sycord.com to embed any sycord.com page in an iframe
+      redirect.headers.set(
+        "Content-Security-Policy",
+        "frame-ancestors 'self' https://*.sycord.com https://sycord.com"
+      )
       return isolation ? applyHeaders(redirect, isolation) : redirect
     }
   }
@@ -54,6 +57,13 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next()
+
+  // Allow *.sycord.com subdomains to embed sycord.com pages in iframes
+  response.headers.set(
+    "Content-Security-Policy",
+    "frame-ancestors 'self' https://*.sycord.com https://sycord.com"
+  )
+
   return isolation ? applyHeaders(response, isolation) : response
 }
 
