@@ -54,15 +54,10 @@ const nextConfig = {
       { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
     ]
 
-    const crossOriginRequireCorp = [
-      { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
-      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-    ]
-
     return [
       { source: "/builder", headers: crossOriginCredentialless },
       { source: "/builder/:path*", headers: crossOriginCredentialless },
-      { source: "/dashboard/sites/:id/syra", headers: crossOriginRequireCorp },
+      // /syra COEP is applied in middleware (UA-aware — omitted on iOS/Safari for Syte preview).
     ]
   },
   images: {

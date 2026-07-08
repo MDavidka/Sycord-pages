@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye, MessageSquare, Check } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
@@ -14,14 +14,13 @@ import { PlanChecklist } from './PlanChecklist';
 import { ModelLearnPanel } from './ModelLearnPanel';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
-import { BuilderPipelineDocs } from '@/components/builder-pipeline-docs';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
+import { SYRA_SKILLS, buildSkillsPrompt, loadActiveSkillIds, saveActiveSkillIds } from '../lib/syraSkills';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -61,8 +60,13 @@ interface MessageGroup {
 interface ChatProps {
     scrollRef?: RefObject<HTMLDivElement | null>;
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
-    /** Embedded mobile: opens the live preview pane (swipe left). */
+    /** Embedded: switch to preview pane */
     onOpenPreview?: () => void;
+    /** Embedded: switch to chat pane */
+    onOpenChat?: () => void;
+    /** Embedded: 0 = chat, 1 = preview */
+    activePane?: number;
+    /** @deprecated use activePane */
     showPreviewButton?: boolean;
     /** Called when the AI finishes streaming a complete response. */
     onAiComplete?: () => void;
@@ -215,7 +219,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     )
 }
 
-export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
+export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePane = 0, showPreviewButton = false, onAiComplete }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
@@ -242,6 +246,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const showModelLearn = useStore(s => s.showModelLearn);
     const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
+    const [activeSkillIds, setActiveSkillIds] = useState<string[]>(() => loadActiveSkillIds());
+    const [showSlashMenu, setShowSlashMenu] = useState(false);
+
+    const toggleSkill = (skillId: string) => {
+        const skill = SYRA_SKILLS.find((s) => s.id === skillId);
+        if (!skill?.comingSoon) {
+            setActiveSkillIds((prev) => {
+                const next = prev.includes(skillId)
+                    ? prev.filter((id) => id !== skillId)
+                    : [...prev, skillId];
+                saveActiveSkillIds(next);
+                return next;
+            });
+        }
+    };
 
     // Local actions state
     const [actions, setActions] = useState<StreamingAction[]>([]);
@@ -739,13 +758,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         // Build system prompt — always get fresh from getSystemPrompt
         const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
         const presetDescription = getPresetDescription(presetId);
-        const projectContextBlock = buildInjectedProjectContext(currentFiles);
         const modelLearnBlock = buildModelLearnContext(useStore.getState().modelLearnLog);
+        const skillsBlock = buildSkillsPrompt(activeSkillIds);
+        const projectContextBlock = buildInjectedProjectContext(currentFiles)
+            + (skillsBlock ? `\n\n${skillsBlock}` : '')
+            + (modelLearnBlock ? `\n\n${modelLearnBlock}` : '');
         const promptContent = currentSystemPrompt
             ? currentSystemPrompt
                 .replace('{{FILE_LIST}}', fileList)
                 .replace('{{PRESET}}', presetDescription)
-                .replace('{{PROJECT_CONTEXT}}', projectContextBlock + (modelLearnBlock ? `\n\n${modelLearnBlock}` : ''))
+                .replace('{{PROJECT_CONTEXT}}', projectContextBlock)
             : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n\n${projectContextBlock}`;
 
         const SYSTEM_PROMPT: Message = {
@@ -1567,7 +1589,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const [showModelMenu, setShowModelMenu] = useState(false);
     const [showDeepMemory, setShowDeepMemory] = useState(false);
-    const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [debugLoading, setDebugLoading] = useState(false);
 
@@ -1606,6 +1627,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (typeof fn === 'function') fn();
     };
 
+    const headerCircleBtn = (active = false) =>
+        `flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${
+            active
+                ? isDark
+                    ? 'border-white bg-white text-[#18191B]'
+                    : 'border-gray-900 bg-gray-900 text-white'
+                : isDark
+                    ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#9a9b9e] hover:text-white'
+                    : 'border-gray-200 bg-white text-gray-500 hover:text-gray-900'
+        }`;
+
+    const paneToggle = embedded && onOpenPreview && onOpenChat;
+
     return (
         <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             {showDeepMemory && <DeepMemoryModal onClose={() => setShowDeepMemory(false)} />}
@@ -1636,52 +1670,54 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     </div>
 
                     <div
-                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-3"
+                        className="pointer-events-auto relative grid grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 px-4 pb-3"
                         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
                     >
-                        {/* Back button */}
+                        {/* Back — left slot */}
                         <button
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 items-center justify-center rounded-[28px] border px-6 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:bg-[#2a2b2e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                            className={`${headerCircleBtn()} justify-self-start`}
                         >
                             <Undo2 className="h-5 w-5" />
                         </button>
 
-                        {/* Profile cluster + preview entry (embedded mobile) */}
-                        <div className="flex flex-col items-end gap-1.5">
-                            <div className="flex items-center gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        aria-label="Docs"
-                                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[350px] p-0 overflow-hidden border-none" style={{ backgroundColor: 'transparent', boxShadow: 'none' }}>
-                                    <BuilderPipelineDocs isDark={isDark} />
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowModelLearn(true)}
-                                aria-label="Model-learn debug"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
+                        {/* Center: chat / preview toggle (symmetrical pill) */}
+                        {paneToggle ? (
+                            <div
+                                className={`justify-self-center flex h-11 w-[5.5rem] items-center justify-center rounded-full border p-1 ${
+                                    isDark ? 'border-[#2a2b2e] bg-[#1c1d1f]/95' : 'border-gray-200 bg-white/95 shadow-sm'
+                                }`}
                             >
-                                ML
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={onOpenChat}
+                                    aria-label="Chat"
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${activePane === 0 ? (isDark ? 'bg-white text-[#18191B]' : 'bg-gray-900 text-white') : (isDark ? 'text-[#9a9b9e]' : 'text-gray-500')}`}
+                                >
+                                    <MessageSquare className="h-4 w-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onOpenPreview}
+                                    aria-label="Preview"
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${activePane === 1 ? (isDark ? 'bg-white text-[#18191B]' : 'bg-gray-900 text-white') : (isDark ? 'text-[#9a9b9e]' : 'text-gray-500')}`}
+                                >
+                                    <Eye className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div />
+                        )}
 
-                            <button
-                                type="button"
-                                onClick={() => setShowDeepMemory(true)}
-                                aria-label="Profile"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                            >
+                        {/* Profile — right slot (mirrors back button) */}
+                        <button
+                            type="button"
+                            onClick={() => setShowDeepMemory(true)}
+                            aria-label="Profile"
+                            className={`${headerCircleBtn()} justify-self-end overflow-hidden`}
+                        >
                             {profileImage && !profileImgError ? (
                                 <img
                                     src={profileImage}
@@ -1691,23 +1727,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     className="h-full w-full object-cover"
                                 />
                             ) : (
-                                <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
+                                <span className="text-[18px] font-extrabold leading-none tracking-tighter">M</span>
                             )}
-                            </button>
-                            </div>
-
-                            {showPreviewButton && onOpenPreview && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenPreview}
-                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                                    title="Swipe left to preview"
-                                >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Preview
-                                </button>
-                            )}
-                        </div>
+                        </button>
                     </div>
                 </header>
             )}
@@ -1720,7 +1742,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             >
                 <div
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: showPreviewButton ? 'calc(env(safe-area-inset-top, 0px) + 6.5rem)' : 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
@@ -2027,27 +2049,75 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                             {/* Toolbar */}
                             <div className="flex items-center gap-2 px-1">
-                                {/* Slash / attach button */}
+                                {/* Slash menu — skills + attach */}
                                 <div className="relative">
                                     <button
                                         type="button"
-                                        onClick={() => { setShowAttachMenu(!showAttachMenu); setShowModelMenu(false); }}
-                                        aria-label="Attach files"
+                                        onClick={() => { setShowSlashMenu(!showSlashMenu); setShowModelMenu(false); }}
+                                        aria-label="Slash commands"
                                         className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
                                         <Slash className="h-3.5 w-3.5" />
                                     </button>
 
-                                    {showAttachMenu && (
+                                    {showSlashMenu && (
                                         <>
-                                            <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                                            <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[170px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                                                <div className="p-1.5">
-                                                    <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
+                                            <div className="fixed inset-0 z-10" onClick={() => setShowSlashMenu(false)} />
+                                            <div className={`absolute bottom-full left-0 mb-2 z-20 w-[min(92vw,18rem)] max-h-[min(70vh,22rem)] overflow-y-auto rounded-xl ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                                                <div className={`px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                    Skills
+                                                </div>
+                                                <div className="px-1.5 pb-1">
+                                                    {SYRA_SKILLS.map((skill) => {
+                                                        const enabled = activeSkillIds.includes(skill.id);
+                                                        return (
+                                                            <button
+                                                                key={skill.id}
+                                                                type="button"
+                                                                disabled={skill.comingSoon}
+                                                                onClick={() => toggleSkill(skill.id)}
+                                                                className={`w-full text-left px-2.5 py-2 rounded-lg flex items-start gap-2.5 transition-colors ${
+                                                                    skill.comingSoon
+                                                                        ? isDark ? 'opacity-50 cursor-not-allowed' : 'opacity-60 cursor-not-allowed'
+                                                                        : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
+                                                                }`}
+                                                            >
+                                                                <span className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                                                                    skill.comingSoon
+                                                                        ? isDark ? 'border-[#3a3b3e]' : 'border-gray-300'
+                                                                        : enabled
+                                                                            ? isDark ? 'border-white bg-white text-[#18191B]' : 'border-gray-900 bg-gray-900 text-white'
+                                                                            : isDark ? 'border-[#3a3b3e]' : 'border-gray-300'
+                                                                }`}>
+                                                                    {enabled && !skill.comingSoon && <Check className="h-2.5 w-2.5" />}
+                                                                </span>
+                                                                <span className="min-w-0 flex-1">
+                                                                    <span className={`flex items-center gap-1.5 text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
+                                                                        {skill.label}
+                                                                        {skill.comingSoon && (
+                                                                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-100 text-gray-500'}`}>
+                                                                                Coming soon
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                    <span className={`block text-[11px] leading-snug mt-0.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>
+                                                                        {skill.description}
+                                                                    </span>
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className={`mx-3 my-1 border-t ${isDark ? 'border-[#2a2b2e]' : 'border-gray-200'}`} />
+                                                <div className={`px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                    Attach
+                                                </div>
+                                                <div className="p-1.5 pt-0">
+                                                    <button type="button" onClick={() => { fileInputRef.current?.click(); setShowSlashMenu(false); }}
                                                         className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
                                                         <ImageIcon className="w-4 h-4" /> Image
                                                     </button>
-                                                    <button type="button" onClick={() => { documentInputRef.current?.click(); setShowAttachMenu(false); }}
+                                                    <button type="button" onClick={() => { documentInputRef.current?.click(); setShowSlashMenu(false); }}
                                                         className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
                                                         <FileCode className="w-4 h-4" /> Document
                                                     </button>
@@ -2066,7 +2136,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         setShowModelMenu(false)
                                     }}
                                     showMenu={showModelMenu}
-                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
+                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
                                     onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}
                                 />
