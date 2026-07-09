@@ -437,6 +437,78 @@ export function describeSytePreviewUrlSource(
   return { url: null, source: "none" }
 }
 
+
+export type SyteAgentStatusFields = {
+  uuid?: string
+  agent_status?: string
+  agent_running?: boolean
+  agent_port?: number
+  agent_proxy_url?: string
+  agent_model_profile?: 'syra-nano' | 'syra-base' | 'syra-havy' | string
+  agent_backend?: {
+    bridge_api_base?: string
+  } | null
+  last_error?: string
+}
+
+export type SyteAgentLogsResponse = {
+  ok?: boolean
+  logs?: string
+  output?: string
+}
+
+export function getSyteInternalSecret(): string {
+  return (
+    process.env.SYRA_INTERNAL_SECRET ||
+    process.env.CONTINUE_SYTE_INTERNAL_SECRET ||
+    ''
+  ).trim()
+}
+
+export function buildSyteAgentProxyHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+  const secret = getSyteInternalSecret()
+  if (secret) {
+    headers['X-Syra-Internal-Secret'] = secret
+  }
+  if (process.env.DEPLOYER_API_KEY) {
+    headers['X-API-Key'] = process.env.DEPLOYER_API_KEY
+    headers.Authorization = `Bearer ${process.env.DEPLOYER_API_KEY}`
+  }
+  return headers
+}
+
+export async function syteAgentStatus(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('GET', 'agent_status', { query: { uuid } })
+}
+
+export async function syteAgentStart(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_start', { body: { uuid } })
+}
+
+export async function syteAgentStop(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_stop', { body: { uuid } })
+}
+
+export async function syteAgentRestart(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_restart', { body: { uuid } })
+}
+
+export async function syteAgentSettings(
+  uuid: string,
+  modelProfile: 'syra-nano' | 'syra-base' | 'syra-havy',
+) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_settings', {
+    body: { uuid, model_profile: modelProfile },
+  })
+}
+
+export async function syteAgentLogs(uuid: string, lines = 200) {
+  return syteWorkspaceRequest<SyteAgentLogsResponse>('GET', 'agent_logs', { query: { uuid, lines } })
+}
+
 export async function syteStartPreview(uuid: string) {
   return syteWorkspaceRequest<SytePreviewFields>("POST", "start_preview", { body: { uuid } })
 }

@@ -1,65 +1,71 @@
-import type { ContinueStateSnapshot } from './types';
+import type { ContinueStateSnapshot } from './types'
 
 export class ContinueAgentClient {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly headers: Record<string, string> = {},
+  ) {}
 
   private url(path: string): string {
-    return `${this.baseUrl.replace(/\/+$/, '')}${path}`;
+    return `${this.baseUrl.replace(/\/+$/, '')}${path}`
   }
 
   async getState(): Promise<ContinueStateSnapshot> {
-    const res = await fetch(this.url('/state'), { cache: 'no-store' });
+    const res = await fetch(this.url('/state'), {
+      cache: 'no-store',
+      headers: this.headers,
+    })
     if (!res.ok) {
-      throw new Error(`Continue agent state failed (${res.status})`);
+      throw new Error(`Continue agent state failed (${res.status})`)
     }
-    return res.json();
+    return res.json()
   }
 
   async sendMessage(message: string): Promise<void> {
     const res = await fetch(this.url('/message'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...this.headers },
       body: JSON.stringify({ message }),
-    });
+    })
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(`Continue agent message failed (${res.status}): ${body.slice(0, 200)}`);
+      const body = await res.text().catch(() => '')
+      throw new Error(`Continue agent message failed (${res.status}): ${body.slice(0, 200)}`)
     }
   }
 
   async approvePermission(requestId: string, approved: boolean): Promise<void> {
     const res = await fetch(this.url('/permission'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...this.headers },
       body: JSON.stringify({ requestId, approved }),
-    });
+    })
     if (!res.ok) {
-      throw new Error(`Continue permission failed (${res.status})`);
+      throw new Error(`Continue permission failed (${res.status})`)
     }
   }
 
   async pause(): Promise<void> {
-    await fetch(this.url('/pause'), { method: 'POST' });
+    await fetch(this.url('/pause'), { method: 'POST', headers: this.headers })
   }
 }
 
 export function extractAssistantText(state: ContinueStateSnapshot): string {
-  const history = state.session?.history ?? [];
+  const history = state.session?.history ?? []
   for (let i = history.length - 1; i >= 0; i--) {
-    const item = history[i];
-    if (item?.message?.role !== 'assistant') continue;
+    const item = history[i]
+    if (item?.message?.role !== 'assistant') continue
 
-    const content = item.message.content;
+    const content = item.message.content
     if (typeof content === 'string') {
-      if (content.trim()) return content;
-      continue;
+      if (content.trim()) return content
+      continue
     }
     if (Array.isArray(content)) {
       const text = content
         .map((part) => (typeof part === 'object' && part && 'text' in part ? String((part as { text?: string }).text ?? '') : ''))
-        .join('');
-      if (text.trim()) return text;
+        .join('')
+      if (text.trim()) return text
     }
   }
-  return '';
+  return ''
 }

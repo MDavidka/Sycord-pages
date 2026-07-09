@@ -1,7 +1,7 @@
 import type { ModelType } from '@/glovix/lib/ai'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { streamContinueAgentMessage } from '@/lib/continue-agent'
+import { getContinueAgentDebugLogs, streamContinueAgentMessage } from '@/lib/continue-agent'
 import { isValidProjectId } from '@/lib/workspace/sandbox'
 
 export const runtime = 'nodejs'
@@ -62,7 +62,19 @@ export async function POST(req: Request): Promise<Response> {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Agent failed'
         if ((err as { name?: string })?.name !== 'AbortError') {
-          controller.enqueue(encoder.encode(sse({ type: 'error', message: msg })))
+          let detail = msg
+          try {
+            const logs = await getContinueAgentDebugLogs(userId, projectId, 80)
+            if (logs && !/project not found/i.test(logs)) {
+              detail = `${msg}
+
+Syte agent logs:
+${logs.slice(0, 4000)}`
+            }
+          } catch {
+            // keep original error only
+          }
+          controller.enqueue(encoder.encode(sse({ type: 'error', message: detail })))
         }
       } finally {
         controller.close()
