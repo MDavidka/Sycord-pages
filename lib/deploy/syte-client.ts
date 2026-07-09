@@ -378,6 +378,405 @@ export function pickSytePreviewUrl(data: SytePreviewFields | null | undefined): 
   return null
 }
 
+export type SytePreviewUrlSource =
+  | "preview_domain_url"
+  | "preview_domain"
+  | "preview_url"
+  | "preview_direct_url"
+  | "domain"
+  | "url"
+  | "none"
+
+/** Same priority as pickSytePreviewUrl, but returns which field was used. */
+export function describeSytePreviewUrlSource(
+  data: SytePreviewFields | null | undefined,
+): { url: string | null; source: SytePreviewUrlSource } {
+  if (!data || typeof data !== "object") return { url: null, source: "none" }
+
+  const domainUrl =
+    typeof data.preview_domain_url === "string" ? data.preview_domain_url.trim() : ""
+  if (domainUrl.startsWith("http")) return { url: domainUrl, source: "preview_domain_url" }
+
+  const previewDomain =
+    typeof data.preview_domain === "string" ? data.preview_domain.trim() : ""
+  if (previewDomain) {
+    return {
+      url: `https://${previewDomain.replace(/^https?:\/\//, "")}`,
+      source: "preview_domain",
+    }
+  }
+
+  const previewUrl = typeof data.preview_url === "string" ? data.preview_url.trim() : ""
+  const directUrl =
+    typeof data.preview_direct_url === "string" ? data.preview_direct_url.trim() : ""
+
+  if (previewUrl.startsWith("http") && previewUrl !== directUrl && !isDirectPreviewUrl(previewUrl)) {
+    try {
+      const hostname = new URL(previewUrl).hostname.toLowerCase()
+      if (hostname.startsWith("preview")) {
+        return { url: previewUrl, source: "preview_url" }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (directUrl.startsWith("http")) return { url: directUrl, source: "preview_direct_url" }
+  if (previewUrl.startsWith("http")) return { url: previewUrl, source: "preview_url" }
+
+  const host = typeof data.domain === "string" ? data.domain.trim() : ""
+  if (host) {
+    return { url: `https://${host.replace(/^https?:\/\//, "")}`, source: "domain" }
+  }
+
+  const genericUrl = typeof data.url === "string" ? data.url.trim() : ""
+  if (genericUrl.startsWith("http") && !isDirectPreviewUrl(genericUrl)) {
+    return { url: genericUrl, source: "url" }
+  }
+
+  return { url: null, source: "none" }
+}
+
+
+export type SyteAgentStatusFields = {
+  uuid?: string
+  agent_status?: string
+  agent_running?: boolean
+  agent_port?: number
+  agent_proxy_url?: string
+  agent_model_profile?: 'syra-nano' | 'syra-base' | 'syra-havy' | string
+  agent_backend?: {
+    bridge_api_base?: string
+  } | null
+  last_error?: string
+}
+
+export type SyteAgentLogsResponse = {
+  ok?: boolean
+  logs?: string
+  output?: string
+}
+
+export type SyteAgentTestResponse = {
+  ok?: boolean
+  checks?: {
+    cli?: boolean
+    backend?: boolean
+    agent?: boolean
+    communicate?: boolean
+  }
+  reply?: string
+  error?: string
+}
+
+export type SyteAgentCommunicateResponse = {
+  ok?: boolean
+  reply?: string
+  model?: string
+  provider?: string
+  model_profile?: string
+  error?: string
+}
+
+export type SyteAgentChangeResponse = {
+  ok?: boolean
+  change_applied?: boolean
+  reply?: string
+  model?: string
+  provider?: string
+  model_profile?: string
+  model_name?: string
+  error?: string
+}
+
+export type SyteAgentActivityEventType =
+  | 'session_started'
+  | 'session_finished'
+  | 'processing'
+  | 'request_started'
+  | 'request_completed'
+  | 'request_failed'
+  | 'user_message'
+  | 'assistant_message'
+  | 'thinking'
+  | 'plan'
+  | 'asking_user'
+  | 'tool_call'
+  | 'tool_result'
+  | 'mcp_tool_call'
+  | 'skill_invoked'
+  | 'command_run'
+  | 'file_created'
+  | 'file_modified'
+  | 'file_deleted'
+  | 'file_read'
+  | 'agent_started'
+  | 'agent_stopped'
+  | 'agent_restarted'
+  | string
+
+export type SyteAgentActivityEvent = {
+  id?: number
+  event_type?: SyteAgentActivityEventType
+  role?: string
+  title?: string
+  detail?: string
+  source?: string
+  payload?: Record<string, unknown>
+  created_at?: string
+}
+
+export type SyteAgentActivityResponse = {
+  ok?: boolean
+  uuid?: string
+  since_id?: number
+  stream_url?: string
+  events?: SyteAgentActivityEvent[]
+}
+
+export type SyteAgentActivitySseMessage =
+  | { type: 'activity'; event: SyteAgentActivityEvent }
+  | { type: 'processing'; event?: SyteAgentActivityEvent }
+  | { type: 'ping'; since_id?: number }
+
+export function getSyteInternalSecret(): string {
+  return (
+    process.env.SYRA_INTERNAL_SECRET ||
+    process.env.CONTINUE_SYTE_INTERNAL_SECRET ||
+    ''
+  ).trim()
+}
+
+export function buildSyteAgentProxyHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  }
+  const secret = getSyteInternalSecret()
+  if (secret) {
+    headers['X-Syra-Internal-Secret'] = secret
+  }
+  if (process.env.DEPLOYER_API_KEY) {
+    headers['X-API-Key'] = process.env.DEPLOYER_API_KEY
+    headers.Authorization = `Bearer ${process.env.DEPLOYER_API_KEY}`
+  }
+  return headers
+}
+
+export function buildSyteAgentStreamHeaders(): Record<string, string> {
+  return {
+    ...buildSyteAgentProxyHeaders(),
+    Accept: 'text/event-stream',
+    'Cache-Control': 'no-cache',
+  }
+}
+
+export function getSyteAgentActivityStreamUrl(uuid: string, sinceId = 0): string {
+  const config = getSyteConfig()
+  const secret = getSyteInternalSecret()
+  if (secret) {
+    return buildUrl(`${config.baseUrl}/api/internal`, `projects/${uuid}/agent/activity/stream`, {
+      live: 1,
+      since_id: sinceId,
+    })
+  }
+  return buildUrl(`${config.baseUrl}/api`, `projects/${uuid}/agent/activity/stream`, {
+    live: 1,
+    since_id: sinceId,
+    api_key: config.apiKey,
+  })
+}
+
+export async function syteAgentStatus(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('GET', 'agent_status', { query: { uuid } })
+}
+
+export async function syteAgentStart(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_start', { body: { uuid } })
+}
+
+export async function syteAgentStop(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_stop', { body: { uuid } })
+}
+
+export async function syteAgentRestart(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_restart', { body: { uuid } })
+}
+
+export async function syteAgentSettings(
+  uuid: string,
+  modelProfile: 'syra-nano' | 'syra-base' | 'syra-havy',
+) {
+  return syteWorkspaceRequest<SyteAgentStatusFields>('POST', 'agent_settings', {
+    body: { uuid, model_profile: modelProfile },
+  })
+}
+
+export async function syteAgentLogs(uuid: string, lines = 200) {
+  return syteWorkspaceRequest<SyteAgentLogsResponse>('GET', 'agent_logs', { query: { uuid, lines } })
+}
+
+export async function syteAgentTest(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentTestResponse>('POST', 'agent_test', { body: { uuid } })
+}
+
+export async function syteAgentCommunicate(
+  uuid: string,
+  message: string,
+  modelProfile?: 'syra-nano' | 'syra-base' | 'syra-havy',
+) {
+  return syteWorkspaceRequest<SyteAgentCommunicateResponse>('POST', 'agent_communicate', {
+    body: {
+      uuid,
+      message,
+      ...(modelProfile ? { model_profile: modelProfile } : {}),
+    },
+  })
+}
+
+export async function syteAgentChange(
+  uuid: string,
+  message: string,
+  modelName?: 'syra-nano' | 'syra-base' | 'syra-havy' | string,
+) {
+  return syteWorkspaceRequest<SyteAgentChangeResponse>('POST', 'agent_change', {
+    body: {
+      uuid,
+      message,
+      ...(modelName ? { model_name: modelName } : {}),
+    },
+  })
+}
+
+export async function syteAgentActivity(uuid: string, sinceId = 0) {
+  return syteWorkspaceRequest<SyteAgentActivityResponse>('GET', 'agent_activity', {
+    query: { uuid, since_id: sinceId },
+  })
+}
+
+function buildSyteInternalHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  }
+  const secret = getSyteInternalSecret()
+  if (secret) {
+    headers['X-Syra-Internal-Secret'] = secret
+  }
+  if (process.env.DEPLOYER_API_KEY) {
+    headers['X-API-Key'] = process.env.DEPLOYER_API_KEY
+    headers.Authorization = `Bearer ${process.env.DEPLOYER_API_KEY}`
+  }
+  return headers
+}
+
+async function syteInternalRequest<T = unknown>(
+  method: string,
+  path: string,
+  options?: { query?: Record<string, unknown>; body?: unknown },
+): Promise<SyteResult<T>> {
+  const config = getSyteConfig()
+  const endpoint = buildUrl(`${config.baseUrl}/api/internal`, path, options?.query)
+  const secret = getSyteInternalSecret()
+  if (!secret) {
+    return {
+      ok: false,
+      status: 503,
+      data: null,
+      error:
+        'SYRA_INTERNAL_SECRET is not set. Configure the same value in Syte GUI → AI → Agent configuration.',
+      endpoint,
+    }
+  }
+
+  try {
+    const res = await fetch(endpoint, {
+      method,
+      headers: buildSyteInternalHeaders(),
+      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+    })
+
+    const data = (await parseBody(res)) as T | null
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        data,
+        error: extractError(res.status, data, endpoint),
+        endpoint,
+      }
+    }
+
+    return { ok: true, status: res.status, data, error: null, endpoint }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || 'Network error reaching Syte internal agent API',
+      endpoint,
+    }
+  }
+}
+
+export async function syteInternalAgentStatus(uuid: string) {
+  return syteInternalRequest<SyteAgentStatusFields>('GET', `projects/${uuid}/agent`)
+}
+
+export async function syteInternalAgentStart(uuid: string) {
+  return syteInternalRequest<SyteAgentStatusFields>('POST', `projects/${uuid}/agent/start`)
+}
+
+export async function syteInternalAgentStop(uuid: string) {
+  return syteInternalRequest<SyteAgentStatusFields>('POST', `projects/${uuid}/agent/stop`)
+}
+
+export async function syteInternalAgentRestart(uuid: string) {
+  return syteInternalRequest<SyteAgentStatusFields>('POST', `projects/${uuid}/agent/restart`)
+}
+
+export async function syteInternalAgentLogs(uuid: string, lines = 200) {
+  return syteInternalRequest<SyteAgentLogsResponse>('GET', `projects/${uuid}/agent/logs`, {
+    query: { lines },
+  })
+}
+
+export async function syteInternalAgentTest(uuid: string) {
+  return syteInternalRequest<SyteAgentTestResponse>('POST', `projects/${uuid}/agent/test`)
+}
+
+export async function syteInternalAgentCommunicate(
+  uuid: string,
+  message: string,
+  modelProfile?: 'syra-nano' | 'syra-base' | 'syra-havy',
+) {
+  return syteInternalRequest<SyteAgentCommunicateResponse>('POST', `projects/${uuid}/agent/communicate`, {
+    body: {
+      message,
+      ...(modelProfile ? { model_profile: modelProfile } : {}),
+    },
+  })
+}
+
+/** sycord.com code-change flow — preferred over raw proxy polling. */
+export async function syteInternalAgentChange(
+  uuid: string,
+  message: string,
+  modelName?: 'syra-nano' | 'syra-base' | 'syra-havy' | string,
+) {
+  return syteInternalRequest<SyteAgentChangeResponse>('POST', `projects/${uuid}/agent/change`, {
+    body: {
+      message,
+      ...(modelName ? { model_name: modelName } : {}),
+    },
+  })
+}
+
+export async function syteInternalAgentActivity(uuid: string, sinceId = 0) {
+  return syteInternalRequest<SyteAgentActivityResponse>('GET', `projects/${uuid}/agent/activity`, {
+    query: { since_id: sinceId },
+  })
+}
+
 export async function syteStartPreview(uuid: string) {
   return syteWorkspaceRequest<SytePreviewFields>("POST", "start_preview", { body: { uuid } })
 }

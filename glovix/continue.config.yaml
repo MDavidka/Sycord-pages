@@ -1,0 +1,24 @@
+name: Syra
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Syra Existing Backend
+    provider: openai
+    model: gemini-2.5-flash
+    apiBase: http://127.0.0.1:3000/api/continue/v1
+    apiKey: dummy
+    capabilities:
+      - tool_use
+      - image_input
+    roles:
+      - chat
+      - edit
+      - apply
+    requestOptions:
+      headers:
+        X-Syra-Agent-Key: local-syra-continue
+
+rules:
+  - Syra runs on the existing Gemini Vertex / DeepSeek backend through an OpenAI-compatible bridge.
+  - Build and edit Vite + React + TypeScript SPAs with accessible, production-ready UI.
