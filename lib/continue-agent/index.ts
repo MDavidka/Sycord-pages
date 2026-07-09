@@ -1,88 +1,90 @@
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
+import path from 'node:path'
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import type { ModelType } from '@/glovix/lib/ai'
 import {
   syteExecuteCommand,
   syteSyncProjectFiles,
   useSyteWorkspace,
-} from '@/lib/deploy/syte-client';
-import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace';
-import { loadProject, projectFiles } from '@/lib/workspace/sandbox';
-import { ensureLocalContinueAgent, getConfiguredAgentUrl } from './manager';
-import { runContinueAgentTurn } from './run-turn';
-import type { AgentStreamEvent } from './types';
+} from '@/lib/deploy/syte-client'
+import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace'
+import { loadProject, projectFiles } from '@/lib/workspace/sandbox'
+import { buildContinueConfig } from './config'
+import { ensureLocalContinueAgent, getConfiguredAgentUrl } from './manager'
+import { runContinueAgentTurn } from './run-turn'
+import type { AgentStreamEvent } from './types'
 
-export type { AgentStreamEvent, ContinueStateSnapshot } from './types';
-export { ContinueAgentClient } from './client';
+export type { AgentStreamEvent, ContinueStateSnapshot } from './types'
+export { ContinueAgentClient } from './client'
 
-const SYTE_AGENT_PORT = Number(process.env.CONTINUE_SYTE_PORT || '8791');
+const SYTE_AGENT_PORT = Number(process.env.CONTINUE_SYTE_PORT || '8791')
 
 async function writeProjectToTempDir(userId: string, projectId: string): Promise<string> {
-  const project = await loadProject(userId, projectId);
-  if (!project) throw new Error('Project not found');
+  const project = await loadProject(userId, projectId)
+  if (!project) throw new Error('Project not found')
 
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `syra-continue-${projectId}-`));
-  const files = projectFiles(project);
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `syra-continue-${projectId}-`))
+  const files = projectFiles(project)
   for (const [relPath, content] of Object.entries(files)) {
-    const fullPath = path.join(dir, relPath);
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.writeFile(fullPath, content, 'utf8');
+    const fullPath = path.join(dir, relPath)
+    await fs.mkdir(path.dirname(fullPath), { recursive: true })
+    await fs.writeFile(fullPath, content, 'utf8')
   }
-  return dir;
+  return dir
 }
 
-async function ensureSyteContinueAgent(userId: string, projectId: string, project: any): Promise<string> {
-  const resolved = await requireSyteWorkspaceUuid(project, projectId);
-  if ('error' in resolved) {
-    throw new Error(resolved.error);
-  }
+function shellEscapeSingleQuoted(value: string): string {
+  return value.replace(/'/g, `'\\''`)
+}
 
-  const uuid = resolved.uuid;
-  await syteSyncProjectFiles(uuid, projectFiles(project));
+async function ensureSyteContinueAgent(projectId: string, project: any, model: ModelType): Promise<string> {
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
+  if ('error' in resolved) throw new Error(resolved.error)
 
-  const apiKey = process.env.CONTINUE_API_KEY || '';
-  const config = process.env.CONTINUE_CONFIG || 'glovix/continue.config.yaml';
+  const uuid = resolved.uuid
+  await syteSyncProjectFiles(uuid, projectFiles(project))
+
+  const configText = buildContinueConfig({ model })
   const startScript = [
-    `cd app`,
+    'cd app',
+    `cat <<'EOF' > .syra-continue.generated.yaml\n${configText}\nEOF`,
     `if ! curl -sf http://127.0.0.1:${SYTE_AGENT_PORT}/state >/dev/null; then`,
-    `  export CONTINUE_API_KEY='${apiKey.replace(/'/g, `'\\''`)}'`,
-    `  nohup npx -y @continuedev/cli@latest serve --port ${SYTE_AGENT_PORT} --timeout 3600 --id ${projectId} --config ${config} --allow Write --allow Edit --allow Bash --allow Read >/tmp/cn-serve.log 2>&1 &`,
-    `  sleep 2`,
-    `fi`,
-  ].join(' && ');
+    `  nohup npx -y @continuedev/cli@latest serve --port ${SYTE_AGENT_PORT} --timeout 3600 --id ${projectId}-${model} --config .syra-continue.generated.yaml --allow Write --allow Edit --allow Bash --allow Read >/tmp/cn-serve.log 2>&1 &`,
+    '  sleep 2',
+    'fi',
+  ].join(' && ')
 
-  await syteExecuteCommand(uuid, startScript, { timeout: 90, cwd: '.' });
+  await syteExecuteCommand(uuid, startScript, { timeout: 90, cwd: '.' })
 
-  const configured = process.env.CONTINUE_SYTE_AGENT_URL?.trim();
+  const configured = process.env.CONTINUE_SYTE_AGENT_URL?.trim()
   if (configured) {
-    return configured.replace('{{uuid}}', uuid).replace('{{projectId}}', projectId);
+    return configured.replace('{{uuid}}', uuid).replace('{{projectId}}', projectId)
   }
 
-  throw new Error(
-    'Continue agent is not reachable on Syte. Set CONTINUE_SYTE_AGENT_URL (e.g. https://preview-{{uuid}}.sycord.com/agent) or CONTINUE_AGENT_URL.',
-  );
+  throw new Error('Continue agent is not reachable on Syte. Set CONTINUE_SYTE_AGENT_URL to the cn serve endpoint for the workspace VM.')
 }
 
-export async function resolveContinueAgentBaseUrl(userId: string, projectId: string): Promise<string> {
-  const configured = getConfiguredAgentUrl();
-  if (configured) return configured;
+export async function resolveContinueAgentBaseUrl(userId: string, projectId: string, model: ModelType): Promise<string> {
+  const configured = getConfiguredAgentUrl()
+  if (configured) return configured
 
   if (useSyteWorkspace()) {
-    const project = await loadProject(userId, projectId);
-    if (!project) throw new Error('Project not found');
-    return ensureSyteContinueAgent(userId, projectId, project);
+    const project = await loadProject(userId, projectId)
+    if (!project) throw new Error('Project not found')
+    return ensureSyteContinueAgent(projectId, project, model)
   }
 
-  const workDir = await writeProjectToTempDir(userId, projectId);
-  return ensureLocalContinueAgent(projectId, workDir);
+  const workDir = await writeProjectToTempDir(userId, projectId)
+  return ensureLocalContinueAgent(projectId, model, workDir)
 }
 
 export async function* streamContinueAgentMessage(
   userId: string,
   projectId: string,
+  model: ModelType,
   message: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentStreamEvent> {
-  const baseUrl = await resolveContinueAgentBaseUrl(userId, projectId);
-  yield* runContinueAgentTurn(baseUrl, message, signal);
+  const baseUrl = await resolveContinueAgentBaseUrl(userId, projectId, model)
+  yield* runContinueAgentTurn(baseUrl, message, signal)
 }

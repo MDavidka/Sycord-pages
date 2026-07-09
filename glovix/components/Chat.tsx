@@ -5,8 +5,8 @@ import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointe
 import { useStore } from '../store';
 import { Message, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType, type ToolCall } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
-import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
-import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
+import { getBaseProjectFiles } from '../lib/projectTemplate';
+import { createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { triggerAgentResponse } from '../lib/triggerAgentResponse';
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
@@ -627,6 +627,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                 userMessage,
                 chatId: chatId || undefined,
                 user,
+                model: selectedModel,
                 activeSkillIds,
                 abortSignal: abortControllerRef.current.signal,
                 onAiComplete,

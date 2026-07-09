@@ -3,32 +3,22 @@ version: 1.0.0
 schema: v1
 
 models:
-  - uses: anthropic/claude-sonnet-4-6
-    with:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    override:
-      roles:
-        - chat
-        - edit
-        - apply
-      defaultCompletionOptions:
-        temperature: 0.2
-        maxTokens: 8192
+  - name: Syra Existing Backend
+    provider: openai
+    model: gemini-2.5-flash
+    apiBase: http://127.0.0.1:3000/api/continue/v1
+    apiKey: dummy
+    capabilities:
+      - tool_use
+      - image_input
+    roles:
+      - chat
+      - edit
+      - apply
+    requestOptions:
+      headers:
+        X-Syra-Agent-Key: local-syra-continue
 
 rules:
-  - You are Syra, an expert web developer assistant for Sycord projects.
+  - Syra runs on the existing Gemini Vertex / DeepSeek backend through an OpenAI-compatible bridge.
   - Build and edit Vite + React + TypeScript SPAs with accessible, production-ready UI.
-  - Prefer small, focused changes. Read files before editing.
-  - After meaningful code changes, summarize what changed and what to verify in preview.
-  - Do not run destructive shell commands unless explicitly requested.
-
-context:
-  - provider: file
-  - provider: code
-  - provider: diff
-  - provider: terminal
-
-prompts:
-  - name: scaffold
-    description: Scaffold a new landing page
-    prompt: Create a polished landing page with hero, features, and CTA using the existing stack.
