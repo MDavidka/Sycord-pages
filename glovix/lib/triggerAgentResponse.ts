@@ -65,7 +65,9 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<voi
       },
     })
 
-    if (!assistantText.trim()) updateLastMessage('Done.')
+    if (!assistantText.trim()) {
+      updateLastMessage(statusLine || 'The agent finished without a visible response.');
+    }
     if (!abortSignal?.aborted) onAiComplete?.()
   } catch (err: unknown) {
     const msg =

@@ -47,15 +47,18 @@ export function extractAssistantText(state: ContinueStateSnapshot): string {
   const history = state.session?.history ?? [];
   for (let i = history.length - 1; i >= 0; i--) {
     const item = history[i];
-    if (item?.message?.role === 'assistant') {
-      const content = item.message.content;
-      if (typeof content === 'string') return content;
-      if (Array.isArray(content)) {
-        return content
-          .map((part) => (typeof part === 'object' && part && 'text' in part ? String((part as { text?: string }).text ?? '') : ''))
-          .join('');
-      }
-      return '';
+    if (item?.message?.role !== 'assistant') continue;
+
+    const content = item.message.content;
+    if (typeof content === 'string') {
+      if (content.trim()) return content;
+      continue;
+    }
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part) => (typeof part === 'object' && part && 'text' in part ? String((part as { text?: string }).text ?? '') : ''))
+        .join('');
+      if (text.trim()) return text;
     }
   }
   return '';
