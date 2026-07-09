@@ -35,6 +35,13 @@ export interface ContinueStateSnapshot {
 export type AgentStreamEvent =
   | { type: 'status'; status: string }
   | { type: 'delta'; text: string }
+  | {
+      type: 'activity'
+      eventType: string
+      title: string
+      detail: string
+      id?: number
+    }
   | { type: 'permission'; requestId: string; toolName: string }
   | { type: 'done' }
   | { type: 'error'; message: string };

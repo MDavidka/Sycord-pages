@@ -1,6 +1,7 @@
 import type { ModelType } from '@/glovix/lib/ai'
 import {
   buildSyteAgentProxyHeaders,
+  buildSyteAgentStreamHeaders,
   getSyteInternalSecret,
   syteAgentChange,
   syteAgentLogs,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/deploy/syte-client'
 import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace'
 import { loadProject } from '@/lib/workspace/sandbox'
+import { resolveActivitySinceId, streamSyteAgentActivity } from './activity-stream'
 import { runContinueAgentTurn } from './run-turn'
 import type { AgentStreamEvent } from './types'
 
@@ -41,12 +43,20 @@ function toSyteModelProfile(model: ModelType): 'syra-nano' | 'syra-base' | 'syra
 
 function extractChangeReply(data: SyteAgentChangeResponse | null | undefined): string {
   if (!data) return ''
-  const reply = typeof data.reply === 'string' ? data.reply.trim() : ''
-  return reply
+  return typeof data.reply === 'string' ? data.reply.trim() : ''
 }
 
-async function ensureRunningAgent(uuid: string, model: ModelType): Promise<ContinueAgentConnection> {
-  const headers = buildSyteAgentProxyHeaders()
+function triggerAgentChange(
+  uuid: string,
+  message: string,
+  modelName: 'syra-nano' | 'syra-base' | 'syra-havy',
+) {
+  return getSyteInternalSecret()
+    ? syteInternalAgentChange(uuid, message, modelName)
+    : syteAgentChange(uuid, message, modelName)
+}
+
+async function ensureAgentSession(uuid: string, model: ModelType): Promise<SyteAgentStatusFields> {
   let status = await syteAgentStatus(uuid)
   if (!status.ok) {
     throw new Error(status.error || `Syte agent status failed for ${uuid}`)
@@ -74,11 +84,16 @@ async function ensureRunningAgent(uuid: string, model: ModelType): Promise<Conti
     info = { ...info, ...((updated.data || {}) as SyteAgentStatusFields), agent_model_profile: desiredProfile }
   }
 
+  return info
+}
+
+async function ensureRunningAgent(uuid: string, model: ModelType): Promise<ContinueAgentConnection> {
+  const headers = buildSyteAgentProxyHeaders()
+  const info = await ensureAgentSession(uuid, model)
   const baseUrl = typeof info.agent_proxy_url === 'string' ? info.agent_proxy_url.trim() : ''
   if (!baseUrl) {
     throw new Error('Syte agent is running but agent_proxy_url is missing')
   }
-
   return { baseUrl, headers, uuid, status: info }
 }
 
@@ -118,11 +133,7 @@ async function* streamSyteAgentChange(
   yield { type: 'status', status: `agent:${modelName}` }
   yield { type: 'status', status: 'running' }
 
-  const useInternal = Boolean(getSyteInternalSecret())
-  const result = useInternal
-    ? await syteInternalAgentChange(uuid, message, modelName)
-    : await syteAgentChange(uuid, message, modelName)
-
+  const result = await triggerAgentChange(uuid, message, modelName)
   if (!result.ok) {
     throw new Error(result.error || 'Syte agent_change failed')
   }
@@ -139,6 +150,58 @@ async function* streamSyteAgentChange(
 
   yield { type: 'delta', text: reply }
   yield { type: 'done' }
+}
+
+async function* streamSyteAgentRealtime(
+  uuid: string,
+  model: ModelType,
+  message: string,
+  signal?: AbortSignal,
+): AsyncGenerator<AgentStreamEvent> {
+  const modelName = toSyteModelProfile(model)
+  const session = await ensureAgentSession(uuid, model)
+  const sinceId = await resolveActivitySinceId(uuid)
+  const streamHeaders = buildSyteAgentStreamHeaders()
+
+  yield { type: 'status', status: `agent:${session.agent_model_profile || modelName}` }
+  yield { type: 'status', status: 'running' }
+
+  const changePromise = triggerAgentChange(uuid, message, modelName)
+  let sawDone = false
+
+  try {
+    for await (const event of streamSyteAgentActivity(uuid, sinceId, streamHeaders, signal)) {
+      yield event
+      if (event.type === 'done') {
+        sawDone = true
+        changePromise.catch(() => {})
+        break
+      }
+      if (event.type === 'error') {
+        changePromise.catch(() => {})
+        return
+      }
+    }
+  } catch (streamErr) {
+    if ((streamErr as { name?: string })?.name === 'AbortError') {
+      changePromise.catch(() => {})
+      throw streamErr
+    }
+    const streamMsg = streamErr instanceof Error ? streamErr.message : String(streamErr)
+    yield { type: 'status', status: `activity-stream:${streamMsg.slice(0, 80)}` }
+  }
+
+  if (!sawDone) {
+    const result = await changePromise
+    if (!result.ok) {
+      throw new Error(result.error || 'Syte agent_change failed')
+    }
+    const reply = extractChangeReply((result.data || {}) as SyteAgentChangeResponse)
+    if (reply) {
+      yield { type: 'delta', text: reply }
+    }
+    yield { type: 'done' }
+  }
 }
 
 export async function* streamContinueAgentMessage(
@@ -160,6 +223,17 @@ export async function* streamContinueAgentMessage(
 
   const uuid = resolved.uuid
   const modelName = toSyteModelProfile(model)
+
+  try {
+    yield* streamSyteAgentRealtime(uuid, model, message, signal)
+    return
+  } catch (realtimeErr) {
+    const realtimeMsg = realtimeErr instanceof Error ? realtimeErr.message : String(realtimeErr)
+    if ((realtimeErr as { name?: string })?.name === 'AbortError') {
+      throw realtimeErr
+    }
+    yield { type: 'status', status: `retry:change (${realtimeMsg.slice(0, 100)})` }
+  }
 
   try {
     yield* streamSyteAgentChange(uuid, model, message)

@@ -489,6 +489,46 @@ export type SyteAgentChangeResponse = {
   error?: string
 }
 
+export type SyteAgentActivityEventType =
+  | 'user_message'
+  | 'assistant_message'
+  | 'thinking'
+  | 'tool_call'
+  | 'command_run'
+  | 'file_created'
+  | 'file_modified'
+  | 'file_deleted'
+  | 'request_started'
+  | 'request_completed'
+  | 'request_failed'
+  | 'agent_started'
+  | 'agent_stopped'
+  | string
+
+export type SyteAgentActivityEvent = {
+  id?: number
+  event_type?: SyteAgentActivityEventType
+  role?: string
+  title?: string
+  detail?: string
+  source?: string
+  payload?: Record<string, unknown>
+  created_at?: string
+}
+
+export type SyteAgentActivityResponse = {
+  ok?: boolean
+  uuid?: string
+  since_id?: number
+  stream_url?: string
+  events?: SyteAgentActivityEvent[]
+}
+
+export type SyteAgentActivitySseMessage =
+  | { type: 'activity'; event: SyteAgentActivityEvent }
+  | { type: 'processing'; event?: SyteAgentActivityEvent }
+  | { type: 'ping'; since_id?: number }
+
 export function getSyteInternalSecret(): string {
   return (
     process.env.SYRA_INTERNAL_SECRET ||
@@ -510,6 +550,30 @@ export function buildSyteAgentProxyHeaders(): Record<string, string> {
     headers.Authorization = `Bearer ${process.env.DEPLOYER_API_KEY}`
   }
   return headers
+}
+
+export function buildSyteAgentStreamHeaders(): Record<string, string> {
+  return {
+    ...buildSyteAgentProxyHeaders(),
+    Accept: 'text/event-stream',
+    'Cache-Control': 'no-cache',
+  }
+}
+
+export function getSyteAgentActivityStreamUrl(uuid: string, sinceId = 0): string {
+  const config = getSyteConfig()
+  const secret = getSyteInternalSecret()
+  if (secret) {
+    return buildUrl(`${config.baseUrl}/api/internal`, `projects/${uuid}/agent/activity/stream`, {
+      live: 1,
+      since_id: sinceId,
+    })
+  }
+  return buildUrl(`${config.baseUrl}/api`, `projects/${uuid}/agent/activity/stream`, {
+    live: 1,
+    since_id: sinceId,
+    api_key: config.apiKey,
+  })
 }
 
 export async function syteAgentStatus(uuid: string) {
@@ -570,6 +634,12 @@ export async function syteAgentChange(
       message,
       ...(modelName ? { model_name: modelName } : {}),
     },
+  })
+}
+
+export async function syteAgentActivity(uuid: string, sinceId = 0) {
+  return syteWorkspaceRequest<SyteAgentActivityResponse>('GET', 'agent_activity', {
+    query: { uuid, since_id: sinceId },
   })
 }
 
@@ -688,6 +758,12 @@ export async function syteInternalAgentChange(
       message,
       ...(modelName ? { model_name: modelName } : {}),
     },
+  })
+}
+
+export async function syteInternalAgentActivity(uuid: string, sinceId = 0) {
+  return syteInternalRequest<SyteAgentActivityResponse>('GET', `projects/${uuid}/agent/activity`, {
+    query: { since_id: sinceId },
   })
 }
 

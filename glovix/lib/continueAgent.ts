@@ -5,6 +5,13 @@ import { buildSkillsPrompt } from './syraSkills'
 export type AgentStreamEvent =
   | { type: 'status'; status: string }
   | { type: 'delta'; text: string }
+  | {
+      type: 'activity'
+      eventType: string
+      title: string
+      detail: string
+      id?: number
+    }
   | { type: 'permission'; requestId: string; toolName: string }
   | { type: 'error'; message: string }
   | { type: 'done' }

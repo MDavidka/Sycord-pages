@@ -1,10 +1,13 @@
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import {
+  getSyteAgentActivityStreamUrl,
   getSyteInternalSecret,
+  syteAgentActivity,
   syteAgentLogs,
   syteAgentStatus,
   syteAgentTest,
+  syteInternalAgentActivity,
   syteInternalAgentStatus,
   syteInternalAgentTest,
 } from '@/lib/deploy/syte-client'
@@ -42,10 +45,11 @@ export async function GET(req: Request): Promise<Response> {
   const uuid = resolved.uuid
   const hasInternalSecret = Boolean(getSyteInternalSecret())
 
-  const [status, internalStatus, logs] = await Promise.all([
+  const [status, internalStatus, logs, activity] = await Promise.all([
     syteAgentStatus(uuid),
     hasInternalSecret ? syteInternalAgentStatus(uuid) : Promise.resolve(null),
     syteAgentLogs(uuid, 120),
+    hasInternalSecret ? syteInternalAgentActivity(uuid, 0) : syteAgentActivity(uuid, 0),
   ])
 
   let testResult = null
@@ -68,6 +72,8 @@ export async function GET(req: Request): Promise<Response> {
           (logs.data as { logs?: string; output?: string }).output ||
           logs.data
         : logs.error,
+    activity: activity.ok ? activity.data : { error: activity.error },
+    activityStreamUrl: getSyteAgentActivityStreamUrl(uuid, activity.data?.since_id ?? 0),
     test: testResult
       ? {
           ok: testResult.ok,

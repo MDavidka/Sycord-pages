@@ -40,6 +40,12 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<voi
   let assistantText = ''
   let statusLine = ''
 
+  const formatMessage = () => {
+    if (assistantText && statusLine) return `${statusLine}\n\n${assistantText}`
+    if (assistantText) return assistantText
+    return statusLine
+  }
+
   try {
     await streamContinueAgent({
       projectId: getHostProjectId() || undefined,
@@ -50,15 +56,35 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<voi
       onEvent: (event) => {
         if (event.type === 'delta') {
           assistantText += event.text
-          updateLastMessage(statusLine ? `${statusLine}\n\n${assistantText}` : assistantText)
+          updateLastMessage(formatMessage())
         } else if (event.type === 'status') {
-          statusLine = event.status === 'running' ? `_Agent is working…_` : ''
-          if (assistantText || statusLine) {
-            updateLastMessage(statusLine && !assistantText ? statusLine : `${statusLine}\n\n${assistantText}`.trim())
+          if (event.status === 'running') {
+            statusLine = assistantText ? '' : '_Agent is working…_'
+          } else if (!event.status.startsWith('retry:') && !event.status.startsWith('agent:')) {
+            statusLine = `_${event.status}_`
+          }
+          if (formatMessage()) {
+            updateLastMessage(formatMessage())
+          }
+        } else if (event.type === 'activity') {
+          const line = event.detail || event.title
+          if (line) {
+            if (event.eventType === 'thinking' || event.eventType === 'request_started') {
+              statusLine = `_${line}_`
+            } else if (
+              event.eventType === 'file_modified' ||
+              event.eventType === 'file_created' ||
+              event.eventType === 'file_deleted' ||
+              event.eventType === 'command_run' ||
+              event.eventType === 'tool_call'
+            ) {
+              statusLine = `_${line}_`
+            }
+            updateLastMessage(formatMessage())
           }
         } else if (event.type === 'permission') {
           statusLine = `_Running ${event.toolName}…_`
-          updateLastMessage(assistantText ? `${statusLine}\n\n${assistantText}` : statusLine)
+          updateLastMessage(formatMessage())
         } else if (event.type === 'error') {
           throw new Error(event.message)
         }
