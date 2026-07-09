@@ -41,6 +41,7 @@ export type AgentStreamEvent =
       title: string
       detail: string
       id?: number
+      payload?: Record<string, unknown>
     }
   | { type: 'permission'; requestId: string; toolName: string }
   | { type: 'done' }

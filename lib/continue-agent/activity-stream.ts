@@ -73,28 +73,12 @@ async function* readSyteActivitySse(
   }
 }
 
-function activityStatusLine(event: SyteAgentActivityEvent): string | null {
+function eventDetail(event: SyteAgentActivityEvent): string {
   const detail = typeof event.detail === 'string' ? event.detail.trim() : ''
-  const title = typeof event.title === 'string' ? event.title.trim() : ''
-
-  switch (event.event_type) {
-    case 'thinking':
-      return detail || title || 'Thinking…'
-    case 'tool_call':
-      return detail ? `Tool: ${detail}` : title || 'Running tool…'
-    case 'command_run':
-      return detail ? `Ran \`${detail}\`` : title || 'Running command…'
-    case 'file_created':
-      return detail ? `Created \`${detail}\`` : title || 'Created file'
-    case 'file_modified':
-      return detail ? `Modified \`${detail}\`` : title || 'Modified file'
-    case 'file_deleted':
-      return detail ? `Deleted \`${detail}\`` : title || 'Deleted file'
-    case 'request_started':
-      return detail || title || 'Working…'
-    default:
-      return null
-  }
+  if (detail) return detail
+  const path =
+    event.payload && typeof event.payload.path === 'string' ? event.payload.path.trim() : ''
+  return path
 }
 
 function mapActivityToStreamEvents(
@@ -104,22 +88,20 @@ function mapActivityToStreamEvents(
   const out: AgentStreamEvent[] = []
   let nextAssistantText = assistantText
   let terminal: 'none' | 'completed' | 'failed' = 'none'
+  const eventType = String(event.event_type || 'activity')
+  const detail = eventDetail(event)
+  const title = String(event.title || '')
 
   out.push({
     type: 'activity',
-    eventType: String(event.event_type || 'activity'),
-    title: String(event.title || ''),
-    detail: String(event.detail || ''),
+    eventType,
+    title,
+    detail,
     id: typeof event.id === 'number' ? event.id : undefined,
+    payload: event.payload && typeof event.payload === 'object' ? event.payload : undefined,
   })
 
-  const status = activityStatusLine(event)
-  if (status) {
-    out.push({ type: 'status', status })
-  }
-
-  if (event.event_type === 'assistant_message') {
-    const detail = typeof event.detail === 'string' ? event.detail : ''
+  if (eventType === 'assistant_message') {
     if (detail.length > nextAssistantText.length) {
       out.push({ type: 'delta', text: detail.slice(nextAssistantText.length) })
       nextAssistantText = detail
@@ -129,8 +111,7 @@ function mapActivityToStreamEvents(
     }
   }
 
-  if (event.event_type === 'request_completed') {
-    const detail = typeof event.detail === 'string' ? event.detail.trim() : ''
+  if (eventType === 'request_completed') {
     if (detail && !nextAssistantText.includes(detail)) {
       const prefix = nextAssistantText ? '\n\n' : ''
       out.push({ type: 'delta', text: `${prefix}${detail}` })
@@ -139,13 +120,11 @@ function mapActivityToStreamEvents(
     terminal = 'completed'
   }
 
-  if (event.event_type === 'request_failed') {
+  if (eventType === 'request_failed') {
     terminal = 'failed'
     out.push({
       type: 'error',
-      message: typeof event.detail === 'string' && event.detail.trim()
-        ? event.detail.trim()
-        : 'Agent request failed',
+      message: detail || 'Agent request failed',
     })
   }
 
@@ -165,7 +144,13 @@ export async function* streamSyteAgentActivity(
     if (frame.type === 'ping') continue
 
     if (frame.type === 'processing') {
-      yield { type: 'status', status: 'running' }
+      const ev = frame.event
+      yield {
+        type: 'activity',
+        eventType: 'processing',
+        title: ev?.title || 'Working',
+        detail: ev?.detail || 'Agent is processing…',
+      }
       continue
     }
 

@@ -8,6 +8,8 @@ import { mountFiles } from '../lib/webcontainer';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { triggerAgentResponse } from '../lib/triggerAgentResponse';
+import { AgentActivityFeed } from './AgentActivityFeed';
+import type { AgentActivityItem } from '../lib/agentActivity';
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
@@ -49,6 +51,7 @@ interface MessageGroup {
     }[];
     // Ordered segments for assistant messages (text and tool blocks in sequence)
     segments?: AssistantSegment[];
+    agentActivities?: AgentActivityItem[];
 }
 
 interface ChatProps {
@@ -274,7 +277,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [messages, isLoading]);
 
     // Initialize base project when chat starts
     const projectInitializedRef = useRef<string | null>(null);
@@ -476,6 +479,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                     if (!currentGroup.thinkingDuration && (msg as any).thinkingDuration) {
                         currentGroup.thinkingDuration = (msg as any).thinkingDuration;
                     }
+                    if ((msg as any).agentActivities?.length) {
+                        currentGroup.agentActivities = (msg as any).agentActivities;
+                    }
                 } else {
                     if (currentGroup) groups.push(currentGroup);
 
@@ -489,6 +495,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                         content: msg.content,
                         thinking: (msg as any).thinking,
                         thinkingDuration: (msg as any).thinkingDuration,
+                        agentActivities: (msg as any).agentActivities,
                         segments
                     };
                 }
@@ -619,6 +626,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
         if (isLoading) return;
 
         setIsLoading(true);
+        setThinkingStartTime(Date.now());
         abortControllerRef.current = new AbortController();
         const chatId = chatIdOverride || currentChatId;
 
@@ -636,6 +644,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
             setIsLoading(false);
             abortControllerRef.current = null;
             setCurrentThinking('');
+            setThinkingStartTime(null);
         }
     };
 
@@ -927,6 +936,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                 />
                             )}
 
+                            {group.role === 'assistant' && (group.agentActivities?.length || (isLoading && idx === groupedMessages.length - 1)) && (
+                                <AgentActivityFeed
+                                    activities={group.agentActivities || []}
+                                    isLive={isLoading && idx === groupedMessages.length - 1}
+                                    isDark={isDark}
+                                />
+                            )}
+
                             {group.role === 'user' && group.attachments && group.attachments.length > 0 && (
                                 <div className="flex justify-end mb-1">
                                     <div className="flex flex-col gap-1.5">
@@ -996,11 +1013,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                         <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
                     )}
 
-                    {/* Typing indicator — shows when AI is loading but hasn't produced any visible content yet */}
+                    {/* Typing indicator — only when no activity feed is visible yet */}
                     {isLoading && !currentThinking && (
                         !groupedMessages.length ||
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
-                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content)
+                        (
+                            groupedMessages[groupedMessages.length - 1].role === 'assistant' &&
+                            !groupedMessages[groupedMessages.length - 1].content &&
+                            !(groupedMessages[groupedMessages.length - 1].agentActivities?.length)
+                        )
                     ) && (
                         <div className="flex justify-start animate-fade-in-up">
                             <div className={`flex items-center gap-1.5 px-4 py-3 rounded-2xl ${isDark ? 'text-[#888]' : 'text-gray-400'}`}>

@@ -490,19 +490,29 @@ export type SyteAgentChangeResponse = {
 }
 
 export type SyteAgentActivityEventType =
+  | 'session_started'
+  | 'session_finished'
+  | 'processing'
+  | 'request_started'
+  | 'request_completed'
+  | 'request_failed'
   | 'user_message'
   | 'assistant_message'
   | 'thinking'
+  | 'plan'
+  | 'asking_user'
   | 'tool_call'
+  | 'tool_result'
+  | 'mcp_tool_call'
+  | 'skill_invoked'
   | 'command_run'
   | 'file_created'
   | 'file_modified'
   | 'file_deleted'
-  | 'request_started'
-  | 'request_completed'
-  | 'request_failed'
+  | 'file_read'
   | 'agent_started'
   | 'agent_stopped'
+  | 'agent_restarted'
   | string
 
 export type SyteAgentActivityEvent = {
