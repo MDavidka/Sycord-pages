@@ -1,27 +1,24 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye, MessageSquare, Check } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
+import { Message, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType, type ToolCall } from '../lib/ai';
 import { mountFiles } from '../lib/webcontainer';
-import { executeTool, ToolContext } from '../lib/tools';
-import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
-import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
-import { generateAndSaveTitle } from '../lib/titleGenerator';
-import { ActionsList, StreamingAction } from './ActionsList';
-import { PlanChecklist } from './PlanChecklist';
-import { ModelLearnPanel } from './ModelLearnPanel';
-import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
+import { getBaseProjectFiles } from '../lib/projectTemplate';
+import { createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
+import { useSyraChat } from '../hooks/use-syra-chat';
+import { SyraAgentMarker } from './syra-agent-marker';
+import type { AgentActivityItem } from '../lib/agentActivity';
+import { SyraMessageBubble } from './syra-message';
+import { SyraAskUserCard } from './syra-ask-user-card';
 import { MermaidBlock } from './MermaidBlock';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
-import { BuilderPipelineDocs } from '@/components/builder-pipeline-docs';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
-import { buildInjectedProjectContext } from '../lib/project-context';
+import { SYRA_SKILLS, loadActiveSkillIds, saveActiveSkillIds } from '../lib/syraSkills';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -56,13 +53,19 @@ interface MessageGroup {
     }[];
     // Ordered segments for assistant messages (text and tool blocks in sequence)
     segments?: AssistantSegment[];
+    agentActivities?: AgentActivityItem[];
 }
 
 interface ChatProps {
     scrollRef?: RefObject<HTMLDivElement | null>;
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
-    /** Embedded mobile: opens the live preview pane (swipe left). */
+    /** Embedded: switch to preview pane */
     onOpenPreview?: () => void;
+    /** Embedded: switch to chat pane */
+    onOpenChat?: () => void;
+    /** Embedded: 0 = chat, 1 = preview */
+    activePane?: number;
+    /** @deprecated use activePane */
     showPreviewButton?: boolean;
     /** Called when the AI finishes streaming a complete response. */
     onAiComplete?: () => void;
@@ -215,7 +218,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     )
 }
 
-export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
+export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePane = 0, showPreviewButton = false, onAiComplete }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
@@ -236,44 +239,48 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const setSystemPrompt = useStore(s => s.setSystemPrompt);
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
-    const generationPlan = useStore(s => s.generationPlan);
-    const modelLearnLog = useStore(s => s.modelLearnLog);
-    const addModelLearnEntry = useStore(s => s.addModelLearnEntry);
-    const showModelLearn = useStore(s => s.showModelLearn);
-    const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
+    const [activeSkillIds, setActiveSkillIds] = useState<string[]>(() => loadActiveSkillIds());
+    const [showSlashMenu, setShowSlashMenu] = useState(false);
 
-    // Local actions state
-    const [actions, setActions] = useState<StreamingAction[]>([]);
-
-    // Action helpers
-    const addAction = (toolName: string, displayName: string) => {
-        const id = Math.random().toString(36).substring(7);
-        setActions(prev => [...prev, {
-            id,
-            toolName,
-            displayName,
-            status: 'pending'
-        }]);
-        return id;
-    };
-
-
-
-    const updateAction = (id: string, updates: Partial<StreamingAction>) => {
-        setActions(prev => prev.map(a =>
-            a.id === id ? { ...a, ...updates } : a
-        ));
+    const toggleSkill = (skillId: string) => {
+        const skill = SYRA_SKILLS.find((s) => s.id === skillId);
+        if (!skill?.comingSoon) {
+            setActiveSkillIds((prev) => {
+                const next = prev.includes(skillId)
+                    ? prev.filter((id) => id !== skillId)
+                    : [...prev, skillId];
+                saveActiveSkillIds(next);
+                return next;
+            });
+        }
     };
 
     const isDark = theme === 'dark';
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
     const [currentThinking, setCurrentThinking] = useState<string>('');
     const [thinkingDuration, setThinkingDuration] = useState<number>(0);
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const {
+        isStreaming,
+        agentBackground,
+        agentResuming,
+        workspaceReady,
+        pendingAskUser,
+        sendMessage,
+        cancel,
+        answerAskUser,
+    } = useSyraChat({
+        model: selectedModel,
+        activeSkillIds,
+        chatId: currentChatId,
+        user,
+        onAiComplete,
+    });
+
+    const isLoading = isStreaming;
 
     // Set system prompt in store for reference
     useEffect(() => {
@@ -289,7 +296,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [messages, isLoading]);
 
     // Initialize base project when chat starts
     const projectInitializedRef = useRef<string | null>(null);
@@ -485,23 +492,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         }
                     }
 
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        const newCalls = msg.tool_calls.map(tc => ({ call: tc }));
-                        const lastSeg = currentGroup.segments[currentGroup.segments.length - 1];
-                        if (lastSeg && lastSeg.type === 'tools') {
-                            lastSeg.toolCalls!.push(...newCalls);
-                        } else {
-                            currentGroup.segments.push({ type: 'tools', toolCalls: newCalls });
-                        }
-                        if (!currentGroup.toolCalls) currentGroup.toolCalls = [];
-                        currentGroup.toolCalls.push(...newCalls);
-                    }
-
                     if (!currentGroup.thinking && (msg as any).thinking) {
                         currentGroup.thinking = (msg as any).thinking;
                     }
                     if (!currentGroup.thinkingDuration && (msg as any).thinkingDuration) {
                         currentGroup.thinkingDuration = (msg as any).thinkingDuration;
+                    }
+                    if ((msg as any).agentActivities?.length) {
+                        currentGroup.agentActivities = (msg as any).agentActivities;
                     }
                 } else {
                     if (currentGroup) groups.push(currentGroup);
@@ -510,52 +508,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (msg.content) {
                         segments.push({ type: 'text', content: msg.content });
                     }
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        segments.push({ type: 'tools', toolCalls: msg.tool_calls.map(tc => ({ call: tc })) });
-                    }
 
                     currentGroup = {
                         role: 'assistant',
                         content: msg.content,
                         thinking: (msg as any).thinking,
                         thinkingDuration: (msg as any).thinkingDuration,
-                        toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
+                        agentActivities: (msg as any).agentActivities,
                         segments
                     };
-                }
-            } else if (msg.role === 'tool') {
-                if (currentGroup) {
-                    const output = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) || '';
-
-                    if (currentGroup.toolCalls) {
-                        const toolCallIndex = currentGroup.toolCalls.findIndex(tc => tc.call.id === msg.tool_call_id);
-                        if (toolCallIndex !== -1) {
-                            currentGroup.toolCalls[toolCallIndex].result = output;
-                        }
-                    }
-
-                    if (currentGroup.segments) {
-                        for (const seg of currentGroup.segments) {
-                            if (seg.type === 'tools' && seg.toolCalls) {
-                                const tc = seg.toolCalls.find(tc => tc.call.id === msg.tool_call_id);
-                                if (tc) {
-                                    tc.result = output;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (output.includes('```mermaid')) {
-                        if (currentGroup.segments) {
-                            const lastTextSeg = [...currentGroup.segments].reverse().find(s => s.type === 'text');
-                            if (lastTextSeg && typeof lastTextSeg.content === 'string') {
-                                lastTextSeg.content += '\n\n' + output;
-                            } else {
-                                currentGroup.segments.push({ type: 'text', content: output });
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -564,53 +525,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, [messages]);
 
     const handleStop = () => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-            setIsLoading(false);
-            setActions([]);
+        cancel();
+        setCurrentThinking('');
+    };
+
+    const triggerAIResponse = async (userMessage: Message, _chatIdOverride?: string) => {
+        if (isStreaming) return;
+        setThinkingStartTime(Date.now());
+        try {
+            await sendMessage(userMessage);
+        } finally {
             setCurrentThinking('');
+            setThinkingStartTime(null);
         }
-    };
-
-    // Tool execution context
-    const toolContext: ToolContext = {
-        addTerminalOutput,
-        setSelectedFile,
-    };
-
-    const handleToolCall = async (
-        toolCall: ToolCall,
-        meta?: { reason?: string; turnIndex?: number },
-    ): Promise<string> => {
-        const { name, arguments: argsString } = toolCall.function;
-        const result = await executeTool(name, argsString, toolContext);
-
-        addModelLearnEntry(
-            recordToolLearnEntry({
-                toolName: name,
-                argsString: argsString || '{}',
-                output: result,
-                reason: meta?.reason || '',
-                toolCallId: toolCall.id,
-                turnIndex: meta?.turnIndex,
-            }),
-        );
-
-        // Auto-retry logic for editFile failures: read the file and provide content in error
-        if (name === 'editFile' && result.includes('Error editing') && result.includes('Could not find')) {
-            try {
-                const args = JSON.parse(argsString);
-                if (args.path) {
-                    const fileContent = await executeTool('readFile', JSON.stringify({ path: args.path }), toolContext);
-                    return `${result}\n\n📄 Current file content for reference:\n${fileContent}`;
-                }
-            } catch {
-                // If we can't parse args, just return original error
-            }
-        }
-
-        return result;
     };
 
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -720,728 +647,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    // Core AI processing function
-    const triggerAIResponse = async (userMessage: Message, chatIdOverride?: string) => {
-        if (isLoading) return;
-
-        setIsLoading(true);
-        abortControllerRef.current = new AbortController();
-
-        const chatId = chatIdOverride || currentChatId;
-
-        const apiKey = process.env.NEXT_PUBLIC_CANOPYWAVE_API_KEY || '';
-
-        // Get current project files for context
-        const currentFiles = useStore.getState().files;
-        const fileList = Object.keys(currentFiles).filter(f => f !== 'glovix-picker.js').sort().join('\n') ||
-            'package.json, next.config.mjs, tsconfig.json, tailwind.config.ts, postcss.config.mjs, app/layout.tsx, app/page.tsx, app/globals.css';
-
-        // Build system prompt — always get fresh from getSystemPrompt
-        const currentSystemPrompt = getSystemPrompt(selectedModel, getHostProjectId() || undefined);
-        const presetDescription = getPresetDescription(presetId);
-        const projectContextBlock = buildInjectedProjectContext(currentFiles);
-        const modelLearnBlock = buildModelLearnContext(useStore.getState().modelLearnLog);
-        const promptContent = currentSystemPrompt
-            ? currentSystemPrompt
-                .replace('{{FILE_LIST}}', fileList)
-                .replace('{{PRESET}}', presetDescription)
-                .replace('{{PROJECT_CONTEXT}}', projectContextBlock + (modelLearnBlock ? `\n\n${modelLearnBlock}` : ''))
-            : `You are Syra, an AI web developer built by Sycord Technology. Project files: ${fileList}. Use tools to create/modify files saved to the project's Pages. You cannot run tests.\n${presetDescription}\n\n${projectContextBlock}`;
-
-        const SYSTEM_PROMPT: Message = {
-            role: 'system',
-            content: promptContent
-        };
-
-        // Use model context limit from settings (or default to 200k)
-        const modelContextLimit = useStore.getState().modelContextLimit || 200000;
-        const MAX_CONTEXT_TOKENS = Math.floor(modelContextLimit * 0.8); // Use 80% to leave room for response
-
-        const estimateTokens = (text: string) => Math.ceil(text.length / 4);
-
-        const getMessageTokens = (msg: any) => {
-            let tokens = 0;
-            if (typeof msg.content === 'string') {
-                tokens += estimateTokens(msg.content);
-            } else if (Array.isArray(msg.content)) {
-                tokens += msg.content.reduce((sum: number, part: any) => {
-                    if (part.type === 'text') return sum + estimateTokens(part.text);
-                    return sum + 1000; // Rough estimate for images
-                }, 0);
-            }
-            if (msg.tool_calls) {
-                tokens += msg.tool_calls.reduce((sum: number, tc: any) =>
-                    sum + estimateTokens(tc.function?.name || '') + estimateTokens(tc.function?.arguments || ''), 0);
-            }
-            return tokens;
-        };
-
-        // Get current messages from store (not from hook to ensure freshness)
-        const currentStoreMessages = useStore.getState().messages;
-
-        // Filter out truly invalid messages (but keep assistant placeholders and tool messages)
-        const validMessages = currentStoreMessages.filter((msg) => {
-            if (!msg.role) return false;
-            // System messages need content
-            if (msg.role === 'system') return !!msg.content;
-            // Tool messages need tool_call_id
-            if (msg.role === 'tool') return !!msg.tool_call_id;
-            // Assistant messages: keep if has content (even empty string) or tool_calls
-            if (msg.role === 'assistant') return msg.content !== undefined || (msg.tool_calls && msg.tool_calls.length > 0);
-            // User messages need non-empty content
-            if (msg.role === 'user') {
-                if (typeof msg.content === 'string') return msg.content.length > 0;
-                if (Array.isArray(msg.content)) return msg.content.length > 0;
-                return false;
-            }
-            return true;
-        });
-
-        let contextMessages = [...validMessages];
-
-        // Count tokens for system prompt
-        let totalTokens = estimateTokens(SYSTEM_PROMPT.content as string);
-
-        // Count all existing context messages
-        for (let i = 0; i < contextMessages.length; i++) {
-            totalTokens += getMessageTokens(contextMessages[i]);
-        }
-
-        // Add the new user message tokens
-        const userMessageTokens = getMessageTokens(userMessage);
-        totalTokens += userMessageTokens;
-
-        // If we're over limit, remove oldest messages until we fit
-        while (totalTokens > MAX_CONTEXT_TOKENS && contextMessages.length > 0) {
-            const removedMsg = contextMessages.shift();
-            if (removedMsg) {
-                totalTokens -= getMessageTokens(removedMsg);
-                console.log(`[Context] Removed old message, new total: ${totalTokens} tokens`);
-            }
-        }
-
-        // Update token count display
-        setTokenCount(totalTokens);
-
-        // Track total tokens used in this request for billing
-        let sessionTokensUsed = 0;
-
-        // Check if userMessage is already the last message in context (to avoid duplication)
-        const lastContextMsg = contextMessages[contextMessages.length - 1];
-        const isUserMsgAlreadyInContext = lastContextMsg?.role === 'user' &&
-            ((typeof lastContextMsg.content === 'string' && typeof userMessage.content === 'string' &&
-                lastContextMsg.content === userMessage.content) ||
-                (Array.isArray(lastContextMsg.content) && Array.isArray(userMessage.content)));
-
-        let currentMessages = isUserMsgAlreadyInContext
-            ? [...contextMessages]
-            : [...contextMessages, userMessage];
-
-        // Track files created in this session to detect loops
-        const filesCreatedThisSession = new Set<string>();
-        let sameFileCreatedCount = 0;
-        let consecutiveErrorCount = 0;
-        let editFileFailCount = 0;
-        const MAX_CONSECUTIVE_ERRORS = 5;
-        const MAX_EDIT_FAILS = 4;
-
-        try {
-            // Auto-generate title for new chats (first message only)
-            // Uses separate titleGenerator module — runs in background, never blocks
-            if (currentStoreMessages.length === 1 && user && chatId) {
-                const userContentStr = typeof userMessage.content === 'string'
-                    ? userMessage.content
-                    : (Array.isArray(userMessage.content) ? (userMessage.content.find(c => c.type === 'text') as { type: 'text', text: string } | undefined)?.text || '' : '');
-
-                if (userContentStr) {
-                    generateAndSaveTitle(userContentStr, chatId).catch(() => {});
-                }
-            }
-
-            let turns = 0;
-            const MAX_TURNS = 80;
-
-            // Track which tools we've already shown in the UI during this session
-            // Maps toolCallId -> actionId (our local UI id)
-            // Moved outside while loop so it persists across turns
-            const toolIdToActionId = new Map<string, string>();
-
-            while (turns < MAX_TURNS) {
-                if (abortControllerRef.current?.signal.aborted) break;
-
-                // Add placeholder for assistant response
-                addMessage({ role: 'assistant', content: '' });
-
-                let assistantMessageContent = '';
-                let toolCalls: ToolCall[] = [];
-
-                let thinkingContent = '';
-                setCurrentThinking('');
-                setThinkingDuration(0);
-
-                let thinkingStartTimeLocal: number | null = null;
-                let thinkingEndTime: number | null = null;
-                let lastThinkingUpdate: number | null = null;
-
-                // Log turn info (simplified)
-                console.log(`[Chat] Turn ${turns + 1}/${MAX_TURNS}, sending ${currentMessages.length} messages to AI`);
-
-
-                const usage = await sendMessage(
-                    [SYSTEM_PROMPT, ...currentMessages],
-                    selectedModel,
-                    apiKey,
-                    (content, tools, thinking) => {
-                        if (abortControllerRef.current?.signal.aborted) return;
-
-                        // Handle thinking from AI
-                        if (thinking) {
-                            // Start timing on first thinking chunk
-                            if (!thinkingStartTimeLocal) {
-                                thinkingStartTimeLocal = Date.now();
-                                setThinkingStartTime(thinkingStartTimeLocal);
-                            }
-
-                            // Track last update time
-                            lastThinkingUpdate = Date.now();
-
-                            // Clean thinking of artifacts
-                            let cleanThinking = thinking.replace(/<\|tool_calls_section_begin\|>[\s\S]*/g, '').trim();
-                            thinkingContent = cleanThinking;
-                            setCurrentThinking(cleanThinking);
-
-                            // Update message immediately with thinking so it renders in-place
-                            // This prevents the "jumping" issue by executing standard rendering logic
-                            updateLastMessage(assistantMessageContent, toolCalls.length > 0 ? toolCalls : undefined, cleanThinking, undefined);
-                        }
-
-                        if (content) {
-                            assistantMessageContent += content;
-
-                            // Clean content of artifacts
-                            assistantMessageContent = assistantMessageContent.replace(/<\|tool_calls_section_begin\|>[\s\S]*/g, '');
-
-                            // CHECK FOR THINKING TAGS (for models that output <think> inside content)
-                            const hasThinkStart = assistantMessageContent.includes('<think>');
-                            const hasThinkEnd = assistantMessageContent.includes('</think>');
-
-                            // If we just started a <think> block inside content, START the timer if not running
-                            if (hasThinkStart && !hasThinkEnd && !thinkingStartTimeLocal) {
-                                thinkingStartTimeLocal = Date.now();
-                                setThinkingStartTime(thinkingStartTimeLocal);
-                            }
-
-                            // If we hit the end of thinking, STOP the timer
-                            if (hasThinkEnd && thinkingStartTimeLocal && !thinkingEndTime) {
-                                thinkingEndTime = Date.now();
-                                const duration = Math.round((thinkingEndTime - thinkingStartTimeLocal) / 1000);
-                                setThinkingDuration(Math.max(1, duration));
-                                setThinkingStartTime(null); // Stop live timer logic
-                            }
-
-                            // If we have content but NO thinking tags and NO native thinking start, ensure timer is off
-                            // (This handles the case where we transition from native thinking to content)
-                            if (!hasThinkStart && thinkingStartTimeLocal && !thinkingEndTime && !thinking) {
-                                // We were thinking (natively), but now we got content. Stop timer.
-                                thinkingEndTime = lastThinkingUpdate || Date.now();
-                                const duration = Math.round((thinkingEndTime - thinkingStartTimeLocal) / 1000);
-                                setThinkingDuration(Math.max(1, duration));
-                                setThinkingStartTime(null);
-                            }
-
-                            // Parse thinking - model outputs thinking then </think> then actual response
-                            if (hasThinkEnd) {
-                                const parts = assistantMessageContent.split('</think>');
-                                const thinkingPart = parts[0].replace('<think>', '').trim();
-                                let responsePart = parts.slice(1).join('</think>').trim();
-
-                                // Clean tool_call tags from response
-                                responsePart = responsePart.replace(/<tool_call>/g, '').trim();
-
-                                if (thinkingPart) {
-                                    thinkingContent = thinkingPart;
-                                    setCurrentThinking(thinkingPart);
-                                    // Final duration available here
-                                    const confirmedDuration = thinkingEndTime
-                                        ? Math.round((thinkingEndTime - thinkingStartTimeLocal!) / 1000)
-                                        : (thinkingDuration || undefined);
-
-                                    updateLastMessage(responsePart, toolCalls.length > 0 ? toolCalls : undefined, thinkingContent, confirmedDuration);
-                                } else {
-                                    updateLastMessage(responsePart, toolCalls.length > 0 ? toolCalls : undefined, undefined, undefined);
-                                }
-                            }
-                            // Still in think block?
-                            else if (hasThinkStart) {
-                                const thinking = assistantMessageContent.replace('<think>', '').trim();
-                                thinkingContent = thinking;
-                                setCurrentThinking(thinking);
-
-                                // Show EMPTY content for message, but update thinking
-                                updateLastMessage('', toolCalls.length > 0 ? toolCalls : undefined, thinking, undefined);
-                            }
-                            // Normal content
-                            else {
-                                updateLastMessage(assistantMessageContent, toolCalls.length > 0 ? toolCalls : undefined, thinkingContent || undefined, thinkingDuration || undefined);
-                            }
-                        } else if (tools) {
-                            toolCalls = tools;
-                            // Ensure all tools are in the UI (some may have been added via streaming already)
-                            tools.forEach(tc => {
-                                if (!toolIdToActionId.has(tc.id)) {
-                                    const displayName = getActionDisplayName(tc.function.name, tc.function.arguments || '');
-                                    const id = addAction(tc.function.name, displayName);
-                                    toolIdToActionId.set(tc.id, id);
-                                    updateAction(id, { status: 'running' });
-                                }
-                            });
-
-                            updateLastMessage(assistantMessageContent, toolCalls, thinkingContent, thinkingEndTime ? Math.max(1, Math.round((thinkingEndTime - thinkingStartTimeLocal!) / 1000)) : undefined);
-                        }
-                    },
-                    abortControllerRef.current?.signal,
-                    (toolName, args, toolId) => {
-                        // STREAMING TOOLS CALLBACK - called for each chunk of a tool call
-                        if (!toolId) return;
-
-                        if (!toolIdToActionId.has(toolId)) {
-                            // New tool detected - add to UI immediately
-                            const displayName = getActionDisplayName(toolName, args);
-                            const id = addAction(toolName || 'Processing...', displayName);
-                            toolIdToActionId.set(toolId, id);
-                            updateAction(id, { status: 'running' });
-                        } else {
-                            // Update existing tool with new info
-                            const actionId = toolIdToActionId.get(toolId)!;
-                            const displayName = getActionDisplayName(toolName, args);
-                            updateAction(actionId, { displayName, toolName: toolName || undefined });
-                        }
-                    }
-                );
-
-                // Final update after stream finishes
-                if (thinkingContent) {
-                    // Ensure duration is set
-                    const finalDuration = thinkingDuration || (thinkingStartTimeLocal ? Math.max(1, Math.round((Date.now() - thinkingStartTimeLocal) / 1000)) : undefined);
-                    updateLastMessage(assistantMessageContent, toolCalls.length > 0 ? toolCalls : undefined, thinkingContent, finalDuration);
-                }
-
-                setThinkingStartTime(null);
-
-                if (abortControllerRef.current?.signal.aborted) break;
-
-                // Add tokens from this turn to session total
-                sessionTokensUsed += usage.total_tokens;
-
-                // Update UI token count
-                setTokenCount(sessionTokensUsed);
-
-                // Save tokens to DB immediately
-                // Token usage tracking (local only)
-                if (user?.uid && usage.total_tokens > 0) {
-                    console.log(`[Chat] Tokens: ${usage.prompt_tokens} in + ${usage.completion_tokens} out = ${usage.total_tokens}`);
-                }
-
-                // Clean content from think tags for display, but keep thinking for context
-                let cleanContent = assistantMessageContent;
-                if (cleanContent.includes('</think>')) {
-                    cleanContent = cleanContent.split('</think>').slice(1).join('</think>').trim();
-                }
-                cleanContent = cleanContent.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
-
-                // Clean tool_call tags that some models output incorrectly
-                cleanContent = cleanContent.replace(/<tool_call>/g, '').trim();
-
-                // If AI responded with tool_calls but no text on the first turn,
-                // add an auto-generated status message so the user sees something
-                if (!cleanContent && toolCalls.length > 0) {
-                    const toolNames = toolCalls.map(tc => tc.function.name);
-                    if (turns === 0) {
-                        // First turn — show a friendly starting message
-                        if (toolNames.includes('runCommand')) {
-                            cleanContent = '⚙️ Setting up the project...';
-                        } else if (toolNames.some(n => n === 'createFile' || n === 'batchCreateFiles')) {
-                            cleanContent = '🔨 Building the project...';
-                        } else if (toolNames.includes('readFile') || toolNames.includes('readMultipleFiles') || toolNames.includes('listFiles')) {
-                            cleanContent = '📖 Analyzing the project...';
-                        } else {
-                            cleanContent = '🚀 Working on it...';
-                        }
-                    }
-                    // Update the UI with this auto-text (even if empty — to ensure tool_calls render)
-                    updateLastMessage(cleanContent, toolCalls, thinkingContent || undefined, undefined);
-                }
-
-                const assistantMessage: Message = {
-                    role: 'assistant',
-                    content: cleanContent || null,
-                    tool_calls: toolCalls.length > 0 ? toolCalls : undefined
-                } as any;
-
-                // Store thinking - AI should see its own reasoning for continuity
-                if (thinkingContent) {
-                    (assistantMessage as any).thinking = thinkingContent;
-                }
-
-                // Store thinking separately (not sent to API but shown in UI)
-                if (thinkingContent) {
-                    (assistantMessage as any).thinking = thinkingContent;
-                }
-
-                // Message is already in store via updateLastMessage, just add to context
-                currentMessages.push(assistantMessage);
-
-                if (toolCalls.length === 0) {
-                    // No tool calls - AI is done or just responded with text
-                    console.log('[Chat] AI response (no tool calls):', cleanContent?.slice(0, 200));
-                    console.log('[Chat] Done - no tool calls received, ending loop');
-                    break;
-                }
-
-                // If AI responded with only empty content and no tool calls on a non-first turn,
-                // it might be confused. Log it.
-                if (!cleanContent && toolCalls.length > 0) {
-                    console.log(`[Chat] Turn ${turns + 1}: AI sent ${toolCalls.length} tool calls without text`);
-                }
-
-                console.log(`[Chat] Running ${toolCalls.length} tool(s)...`);
-                let devServerStarted = false;
-
-                for (let i = 0; i < toolCalls.length; i++) {
-                    const toolCall = toolCalls[i];
-                    if (abortControllerRef.current?.signal.aborted) break;
-
-                    // Ensure action exists for this tool call
-                    if (!toolIdToActionId.has(toolCall.id)) {
-                        const displayName = getActionDisplayName(toolCall.function.name, toolCall.function.arguments || '');
-                        const id = addAction(toolCall.function.name, displayName);
-                        toolIdToActionId.set(toolCall.id, id);
-                    }
-
-                    // Get action ID by tool call ID (reliable mapping)
-                    const actionId = toolIdToActionId.get(toolCall.id);
-
-                    // Set THIS action to 'running' and yield so React paints it
-                    if (actionId) {
-                        updateAction(actionId, { status: 'running' });
-                    }
-                    await new Promise(r => requestAnimationFrame(r));
-
-                    // Check for duplicate file creation (loop detection)
-                    if (toolCall.function.name === 'createFile') {
-                        try {
-                            const args = JSON.parse(toolCall.function.arguments || '{}');
-                            if (args.path && filesCreatedThisSession.has(args.path)) {
-                                sameFileCreatedCount++;
-                                console.log(`[Chat] Warning: ${args.path} already created this session (count: ${sameFileCreatedCount})`);
-                                if (sameFileCreatedCount >= 5) {
-                                    console.log('[Chat] Loop detected - same file created multiple times, breaking');
-                                    devServerStarted = true;
-                                    break;
-                                }
-                            }
-                            filesCreatedThisSession.add(args.path);
-                        } catch { }
-                    }
-
-                    let result = '';
-                    try {
-                        if (toolCall.function.name === 'deploy') {
-                            toolContext.onDeployProgress = (message: string) => {
-                                if (actionId) {
-                                    updateAction(actionId, { result: message, status: 'running' });
-                                }
-                            };
-                        } else {
-                            toolContext.onDeployProgress = undefined;
-                        }
-                        result = await handleToolCall(toolCall, {
-                            reason: assistantMessageContent.trim(),
-                            turnIndex: turns,
-                        });
-                    } catch (err: any) {
-                        console.error('Tool execution error:', err);
-                        result = `Error executing tool ${toolCall.function.name}: ${err.message}.\n\n⚠️ Suggestion: Try a different approach or use readFile to check the current state.`;
-                    }
-
-                    // Update action status to done or error
-                    if (actionId) {
-                        // Only mark as error if it's a real tool failure, not informational output
-                        const isToolError = (
-                            result.startsWith('Error ') ||
-                            result.startsWith('[SYSTEM] ❌') ||
-                            result.includes('AUTO-FIX REQUIRED') ||
-                            (result.includes('crashed') && !result.includes('Deployment build completed')) ||
-                            (result.includes('FAILED') && !result.includes('[SYSTEM] ✅'))
-                        ) && !result.includes('[SYSTEM] ✅') && !result.includes('TypeScript check found');
-
-                        const newStatus = isToolError ? 'error' : 'done';
-                        console.log(`[Actions] ${toolCall.function.name} (${actionId}) → ${newStatus}`);
-                        updateAction(actionId, {
-                            status: newStatus,
-                            result,
-                            args: toolCall.function.arguments || ''
-                        });
-
-                        // Track consecutive errors for loop detection
-                        if (isToolError) {
-                            consecutiveErrorCount++;
-                            if (toolCall.function.name === 'editFile') {
-                                editFileFailCount++;
-                            }
-                        } else {
-                            consecutiveErrorCount = 0; // Reset on success
-                        }
-                    } else {
-                        console.warn(`[Actions] No actionId found for toolCall ${toolCall.id}`);
-                    }
-
-                    const toolMessage: Message = {
-                        role: 'tool',
-                        tool_call_id: toolCall.id,
-                        name: toolCall.function.name,
-                        content: result
-                    };
-
-                    addMessage(toolMessage);
-                    currentMessages.push(toolMessage);
-
-                    // Check if dev server was started
-                    if (result.includes('DEV SERVER IS NOW RUNNING')) {
-                        devServerStarted = true;
-                    }
-                }
-
-                // If dev server started, let AI know but don't force-break
-                // AI should naturally stop after seeing the server is running
-                if (devServerStarted) {
-                    console.log('[Chat] Dev server started');
-
-                    // Inject a system hint so AI knows to wrap up
-                    const devServerHint: Message = {
-                        role: 'system',
-                        content: '✅ DEV SERVER IS NOW RUNNING. The preview is available. If there are no errors to fix, tell the user the project is ready and STOP calling tools.'
-                    };
-                    currentMessages.push(devServerHint);
-                    // Don't break — let AI do one more turn to provide a summary
-                }
-
-                // Loop detection: too many consecutive errors
-                if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
-                    console.log(`[Chat] Loop detected: ${consecutiveErrorCount} consecutive errors, injecting recovery hint`);
-                    const recoveryMessage: Message = {
-                        role: 'system',
-                        content: `⚠️ LOOP DETECTED: ${consecutiveErrorCount} consecutive tool errors. STOP and change your approach:\n1. Use getErrors() to see all current errors\n2. Use readFile() to check the actual file content\n3. If editFile keeps failing, use createFile to rewrite the entire file\n4. If npm install fails, check the package name with searchWeb\n5. Take a step back and think about what's actually wrong`
-                    };
-                    currentMessages.push(recoveryMessage);
-                    addMessage(recoveryMessage);
-                    consecutiveErrorCount = 0; // Reset to give AI another chance
-                }
-
-                // Loop detection: editFile keeps failing
-                if (editFileFailCount >= MAX_EDIT_FAILS) {
-                    console.log(`[Chat] editFile loop detected: ${editFileFailCount} failures, injecting hint`);
-                    const editHint: Message = {
-                        role: 'system',
-                        content: `⚠️ editFile has failed ${editFileFailCount} times. STOP using editFile for this file. Use createFile to rewrite the entire file instead. Call readFile first to see the current content, then createFile with the complete updated content.`
-                    };
-                    currentMessages.push(editHint);
-                    addMessage(editHint);
-                    editFileFailCount = 0;
-                }
-
-                turns++;
-            }
-
-            // Smart AI-powered context compression
-            const allMessages = useStore.getState().messages;
-
-            let totalTokens = estimateTokens(SYSTEM_PROMPT.content as string);
-            allMessages.forEach(msg => {
-                totalTokens += getMessageTokens(msg);
-            });
-
-            const modelContextLimit = useStore.getState().modelContextLimit || 200000;
-            const MAX_CONTEXT_TOKENS = Math.floor(modelContextLimit * 0.8);
-            const COMPRESSION_THRESHOLD = Math.floor(MAX_CONTEXT_TOKENS * 0.8); // 80% of limit
-
-            // Check if we need compression
-            if (totalTokens > COMPRESSION_THRESHOLD && allMessages.length > 10) {
-                console.log(`[Context] Tokens: ${totalTokens}/${MAX_CONTEXT_TOKENS}, triggering AI compression...`);
-
-                try {
-                    // How many messages to keep uncompressed (recent context)
-                    const KEEP_RECENT = 8;
-                    const messagesToCompress = allMessages.slice(0, -KEEP_RECENT);
-                    const recentMessages = allMessages.slice(-KEEP_RECENT);
-
-
-                    // Create a simple summary (AI summarization would require recursive call)
-                    const firstUserMsg = messagesToCompress.find(m => m.role === 'user');
-                    const summary = `Previous conversation: ${firstUserMsg ? (typeof firstUserMsg.content === 'string' ? firstUserMsg.content.substring(0, 100) : 'User started conversation') : 'Earlier messages'}... (${messagesToCompress.length} messages compressed to save context)`;
-
-                    // Create summary message
-                    const summaryMessage: Message = {
-                        role: 'system',
-                        content: `📝 ${summary}`
-                    };
-
-                    // Replace old messages with summary + keep recent
-                    const compressedContext = [summaryMessage, ...recentMessages];
-                    setMessages(compressedContext);
-
-                    // Recalculate tokens
-                    let newTotal = estimateTokens(SYSTEM_PROMPT.content as string);
-                    compressedContext.forEach(msg => {
-                        newTotal += getMessageTokens(msg);
-                    });
-
-                    setTokenCount(newTotal);
-
-                    // Show notification
-                    const compressionNotice: Message = {
-                        role: 'assistant',
-                        content: `🗜️ Context compressed by AI: ${messagesToCompress.length} old messages summarized. Freed ${totalTokens - newTotal} tokens. Current: ${newTotal.toLocaleString()}/${MAX_CONTEXT_TOKENS.toLocaleString()}`
-                    };
-                    addMessage(compressionNotice);
-
-                    console.log(`[Context] Compressed ${messagesToCompress.length} messages, saved ${totalTokens - newTotal} tokens`);
-                } catch (err) {
-                    console.error('[Context] AI compression failed, falling back to simple removal:', err);
-
-                    // Fallback: simple removal of oldest messages
-                    let compressedMessages = [...allMessages];
-                    let removedCount = 0;
-
-                    while (totalTokens > MAX_CONTEXT_TOKENS && compressedMessages.length > 5) {
-                        const removed = compressedMessages.shift();
-                        if (removed) {
-                            totalTokens -= getMessageTokens(removed);
-                            removedCount++;
-                        }
-                    }
-
-                    if (removedCount > 0) {
-                        setMessages(compressedMessages);
-                        setTokenCount(totalTokens);
-
-                        const fallbackNotice: Message = {
-                            role: 'assistant',
-                            content: `🗜️ Context compressed: ${removedCount} old messages removed. Current: ${totalTokens.toLocaleString()}/${MAX_CONTEXT_TOKENS.toLocaleString()}`
-                        };
-                        addMessage(fallbackNotice);
-                    }
-                }
-            } else {
-                // Just update the token count
-                setTokenCount(totalTokens);
-            }
-
-        } catch (error: any) {
-            if (abortControllerRef.current?.signal.aborted) {
-                // When stopped, check if last message has incomplete tool_calls
-                const state = useStore.getState();
-                const lastMsg = state.messages[state.messages.length - 1] as any;
-
-                if (lastMsg?.role === 'assistant' && lastMsg?.tool_calls?.length > 0) {
-                    // Add placeholder tool responses for incomplete tool calls
-                    for (const tc of lastMsg.tool_calls) {
-                        // Check if tool response already exists
-                        const hasResponse = state.messages.some(
-                            (m: any) => m.role === 'tool' && m.tool_call_id === tc.id
-                        );
-                        if (!hasResponse) {
-                            addMessage({
-                                role: 'tool',
-                                tool_call_id: tc.id,
-                                name: tc.function.name,
-                                content: '[Stopped by user]'
-                            });
-                        }
-                    }
-                }
-
-                // Update the empty placeholder instead of adding a new message
-                const stateAfter = useStore.getState();
-                const last = stateAfter.messages[stateAfter.messages.length - 1];
-                if (last?.role === 'assistant' && !last.content && !last.tool_calls?.length) {
-                    updateLastMessage('Stopped by user.');
-                } else {
-                    addMessage({ role: 'assistant', content: 'Stopped by user.' });
-                }
-            } else {
-                console.error('[Chat] Error:', error);
-                const errorMessage = error?.message || 'Failed to get response';
-
-                // Same check for errors
-                const state = useStore.getState();
-                const lastMsg = state.messages[state.messages.length - 1] as any;
-
-                if (lastMsg?.role === 'assistant' && lastMsg?.tool_calls?.length > 0) {
-                    for (const tc of lastMsg.tool_calls) {
-                        const hasResponse = state.messages.some(
-                            (m: any) => m.role === 'tool' && m.tool_call_id === tc.id
-                        );
-                        if (!hasResponse) {
-                            addMessage({
-                                role: 'tool',
-                                tool_call_id: tc.id,
-                                name: tc.function.name,
-                                content: `[Error: ${errorMessage}]`
-                            });
-                        }
-                    }
-                }
-
-                // Update empty placeholder instead of adding new message
-                const stateAfter = useStore.getState();
-                const last = stateAfter.messages[stateAfter.messages.length - 1];
-                if (last?.role === 'assistant' && !last.content && !last.tool_calls?.length) {
-                    updateLastMessage(`Error: ${errorMessage}`);
-                } else {
-                    addMessage({ role: 'assistant', content: `Error: ${errorMessage}` });
-                }
-            }
-        } finally {
-            const wasAborted = !abortControllerRef.current || abortControllerRef.current.signal.aborted;
-            setIsLoading(false);
-            abortControllerRef.current = null;
-            setCurrentThinking('');
-
-            // Notify parent that AI finished a complete response (not aborted)
-            if (!wasAborted && onAiComplete) {
-                onAiComplete();
-            }
-
-            // Clear actions after a delay to allow smooth transition to completed state
-            setTimeout(() => setActions([]), 500);
-
-            if (chatId && user) {
-                try {
-                    const { useStore } = await import('../store');
-                    const state = useStore.getState();
-
-                    await saveChatMessages(chatId, state.messages, {
-                        keepalive: true,
-                        projectId: getHostProjectId(),
-                    });
-
-                    if (Object.keys(state.files).length > 0) {
-                        await saveProject(chatId, user.uid, state.files);
-                    }
-
-
-                } catch {
-                    // Ignore save errors
-                }
-            }
-        }
-    };
-
     // Form submit handler
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isLoading) return;
+        if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isStreaming) return;
+        if (getHostProjectId() && workspaceReady !== true) return;
 
         // Handle /debug command - fetch VM connection debug info
         if (input.trim().startsWith("/debug")) {
@@ -1567,7 +777,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const [showModelMenu, setShowModelMenu] = useState(false);
     const [showDeepMemory, setShowDeepMemory] = useState(false);
-    const [showAttachMenu, setShowAttachMenu] = useState(false);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [debugLoading, setDebugLoading] = useState(false);
 
@@ -1606,16 +815,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (typeof fn === 'function') fn();
     };
 
+    const headerCircleBtn = (active = false) =>
+        `flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${
+            active
+                ? isDark
+                    ? 'border-white bg-white text-[#18191B]'
+                    : 'border-gray-900 bg-gray-900 text-white'
+                : isDark
+                    ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#9a9b9e] hover:text-white'
+                    : 'border-gray-200 bg-white text-gray-500 hover:text-gray-900'
+        }`;
+
+    const paneToggle = embedded && onOpenPreview && onOpenChat;
+
     return (
         <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
             {showDeepMemory && <DeepMemoryModal onClose={() => setShowDeepMemory(false)} />}
-            {showModelLearn && (
-                <ModelLearnPanel
-                    entries={modelLearnLog}
-                    isDark={isDark}
-                    onClose={() => setShowModelLearn(false)}
-                />
-            )}
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -1636,52 +851,54 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     </div>
 
                     <div
-                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-3"
+                        className="pointer-events-auto relative grid grid-cols-[2.75rem_1fr_2.75rem] items-center gap-3 px-4 pb-3"
                         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
                     >
-                        {/* Back button */}
+                        {/* Back — left slot */}
                         <button
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 items-center justify-center rounded-[28px] border px-6 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:bg-[#2a2b2e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                            className={`${headerCircleBtn()} justify-self-start`}
                         >
                             <Undo2 className="h-5 w-5" />
                         </button>
 
-                        {/* Profile cluster + preview entry (embedded mobile) */}
-                        <div className="flex flex-col items-end gap-1.5">
-                            <div className="flex items-center gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        aria-label="Docs"
-                                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[350px] p-0 overflow-hidden border-none" style={{ backgroundColor: 'transparent', boxShadow: 'none' }}>
-                                    <BuilderPipelineDocs isDark={isDark} />
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowModelLearn(true)}
-                                aria-label="Model-learn debug"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
+                        {/* Center: chat / preview toggle (symmetrical pill) */}
+                        {paneToggle ? (
+                            <div
+                                className={`justify-self-center flex h-11 w-[5.5rem] items-center justify-center rounded-full border p-1 ${
+                                    isDark ? 'border-[#2a2b2e] bg-[#1c1d1f]/95' : 'border-gray-200 bg-white/95 shadow-sm'
+                                }`}
                             >
-                                ML
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={onOpenChat}
+                                    aria-label="Chat"
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${activePane === 0 ? (isDark ? 'bg-white text-[#18191B]' : 'bg-gray-900 text-white') : (isDark ? 'text-[#9a9b9e]' : 'text-gray-500')}`}
+                                >
+                                    <MessageSquare className="h-4 w-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onOpenPreview}
+                                    aria-label="Preview"
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all ${activePane === 1 ? (isDark ? 'bg-white text-[#18191B]' : 'bg-gray-900 text-white') : (isDark ? 'text-[#9a9b9e]' : 'text-gray-500')}`}
+                                >
+                                    <Eye className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div />
+                        )}
 
-                            <button
-                                type="button"
-                                onClick={() => setShowDeepMemory(true)}
-                                aria-label="Profile"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                            >
+                        {/* Profile — right slot (mirrors back button) */}
+                        <button
+                            type="button"
+                            onClick={() => setShowDeepMemory(true)}
+                            aria-label="Profile"
+                            className={`${headerCircleBtn()} justify-self-end overflow-hidden`}
+                        >
                             {profileImage && !profileImgError ? (
                                 <img
                                     src={profileImage}
@@ -1691,23 +908,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     className="h-full w-full object-cover"
                                 />
                             ) : (
-                                <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
+                                <span className="text-[18px] font-extrabold leading-none tracking-tighter">M</span>
                             )}
-                            </button>
-                            </div>
-
-                            {showPreviewButton && onOpenPreview && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenPreview}
-                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                                    title="Swipe left to preview"
-                                >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Preview
-                                </button>
-                            )}
-                        </div>
+                        </button>
                     </div>
                 </header>
             )}
@@ -1720,16 +923,62 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             >
                 <div
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: showPreviewButton ? 'calc(env(safe-area-inset-top, 0px) + 6.5rem)' : 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
+                    {workspaceReady === null && getHostProjectId() && (
+                        <div
+                            className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
+                                isDark
+                                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                            }`}
+                        >
+                            Preparing workspace…
+                        </div>
+                    )}
+
+                    {workspaceReady === false && getHostProjectId() && (
+                        <div
+                            className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
+                                isDark
+                                    ? 'border-red-500/20 bg-red-500/10 text-red-200'
+                                    : 'border-red-200 bg-red-50 text-red-800'
+                            }`}
+                        >
+                            Workspace setup failed. Try again in a moment.
+                        </div>
+                    )}
+
+                    {(agentBackground || agentResuming) && (
+                        <div
+                            className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
+                                isDark
+                                    ? 'border-blue-500/20 bg-blue-500/10 text-blue-200'
+                                    : 'border-blue-200 bg-blue-50 text-blue-800'
+                            }`}
+                        >
+                            {agentResuming
+                                ? 'Loading agent activity from Syte…'
+                                : 'Agent is working in the background. You can leave Syra — progress syncs when you return.'}
+                        </div>
+                    )}
+
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && (
+                            {group.role === 'assistant' && group.thinking && isStreaming && idx === groupedMessages.length - 1 && (
                                 <ThinkingBlock
                                     thinking={group.thinking}
                                     isDark={isDark}
                                     thinkingTime={group.thinkingDuration || undefined}
                                     startTime={idx === groupedMessages.length - 1 && isLoading ? thinkingStartTime : undefined}
+                                />
+                            )}
+
+                            {group.role === 'assistant' && isStreaming && idx === groupedMessages.length - 1 && (
+                                <SyraAgentMarker
+                                    activities={group.agentActivities || []}
+                                    isLive
+                                    isDark={isDark}
                                 />
                             )}
 
@@ -1743,113 +992,84 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 </div>
                             )}
 
-                            {/* Render segments in order for assistant messages */}
-                            {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
-                                <>
-                                    {group.segments.map((seg, segIdx) => {
-                                        if (seg.type === 'text' && seg.content) {
-                                            const textContent = typeof seg.content === 'string' ? seg.content : '';
-                                            if (!textContent) return null;
-                                            return (
-                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                                                {textContent.replace(/^\[SYSTEM\] .*/gm, '')}
-                                                            </ReactMarkdown>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'tools' && seg.toolCalls && seg.toolCalls.length > 0) {
-                                            // If this is the last segment and we're live, show live actions
-                                            const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
-
-                                            if (showLive) {
-                                                return (
-                                                    <div key={`seg-${segIdx}`}>
-                                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                                    </div>
-                                                );
-                                            }
-                                            return (
-                                                <div key={`seg-${segIdx}`}>
-                                                <ActionsList
-                                                    key={`seg-${segIdx}`}
-                                                    actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                        id: `completed_${idx}_${segIdx}_${i}`,
-                                                        toolName: tc.call.function.name,
-                                                        displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                        status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                        result: tc.result,
-                                                        args: tc.call.function.arguments || ''
-                                                    }))}
-                                                    isDark={isDark}
-                                                />
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-                                    {/* Live actions if no segments have tools yet */}
-                                    {isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.segments.some(s => s.type === 'tools') && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                    )}
-                                </>
-                            ) : (
-                                <>
-                                    {/* Fallback: user messages or assistant without segments */}
-                                    <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        <div
-                                            className={`text-[14px] leading-relaxed ${group.role === 'user'
-                                                ? isDark ? 'bg-[#1f1f1f] text-[#e5e5e5] rounded-2xl px-4 py-2.5 max-w-[85%]' : 'bg-gray-100 text-gray-900 rounded-2xl px-4 py-2.5 max-w-[85%]'
-                                                : isDark ? 'text-[#e5e5e5] max-w-full' : 'text-gray-800 max-w-full'
-                                                }`}
-                                        >
-                                            {/* Picked element indicator */}
-                                            {group.role === 'user' && (group as any).pickedElement && (
-                                                <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                    <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="font-medium">
-                                                        {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                    </span>
-                                                    {(group as any).pickedElement.text && (
-                                                        <span className="truncate opacity-70">
-                                                            {(group as any).pickedElement.text.length > 30
-                                                                ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                : (group as any).pickedElement.text}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {group.content && (
-                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                    {Array.isArray(group.content) ? (
-                                                        <div className="space-y-2">
-                                                            {group.content.map((part, i) => {
-                                                                if (part.type === 'image_url') {
-                                                                    return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
-                                                                }
-                                                                return <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={markdownComponents}>{part.text.replace(/^\[SYSTEM\] .*/gm, '')}</ReactMarkdown>;
-                                                            })}
-                                                        </div>
-                                                    ) : (
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                                            {group.content.replace(/^\[SYSTEM\] .*/gm, '')}
-                                                        </ReactMarkdown>
-                                                    )}
-                                                </div>
+                            {/* Assistant / user message body */}
+                            <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div
+                                    className={`text-[14px] leading-relaxed ${group.role === 'user'
+                                        ? isDark ? 'bg-[#1f1f1f] text-[#e5e5e5] rounded-2xl px-4 py-2.5 max-w-[85%]' : 'bg-gray-100 text-gray-900 rounded-2xl px-4 py-2.5 max-w-[85%]'
+                                        : isDark ? 'text-[#e5e5e5] max-w-full' : 'text-gray-800 max-w-full'
+                                        }`}
+                                >
+                                    {group.role === 'user' && (group as any).pickedElement && (
+                                        <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
+                                            <MousePointer2 className="w-3 h-3 flex-shrink-0" />
+                                            <span className="font-medium">
+                                                {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
+                                            </span>
+                                            {(group as any).pickedElement.text && (
+                                                <span className="truncate opacity-70">
+                                                    {(group as any).pickedElement.text.length > 30
+                                                        ? (group as any).pickedElement.text.slice(0, 30) + '…'
+                                                        : (group as any).pickedElement.text}
+                                                </span>
                                             )}
                                         </div>
-                                    </div>
-                                    {/* Live actions for assistant without segments */}
-                                    {group.role === 'assistant' && isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
-                                </>
-                            )}
+                                    {(() => {
+                                        const textFromSegments = group.segments
+                                            ?.filter((s) => s.type === 'text' && s.content)
+                                            .map((s) => (typeof s.content === 'string' ? s.content : ''))
+                                            .join('\n\n');
+                                        const content = textFromSegments || group.content;
+                                        if (!content) return null;
+
+                                        const textContent = typeof content === 'string'
+                                            ? content
+                                            : Array.isArray(content)
+                                                ? content
+                                                    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                                                    .map((p) => p.text)
+                                                    .join('\n\n')
+                                                : '';
+
+                                        if (group.role === 'assistant') {
+                                            return (
+                                                <SyraMessageBubble
+                                                    message={{
+                                                        id: `msg-${idx}`,
+                                                        role: 'assistant',
+                                                        content: textContent,
+                                                        status: isStreaming && idx === groupedMessages.length - 1 ? 'streaming' : 'done',
+                                                        createdAt: Date.now(),
+                                                    }}
+                                                    isDark={isDark}
+                                                    markdownComponents={markdownComponents}
+                                                    showCursor={isStreaming && idx === groupedMessages.length - 1}
+                                                />
+                                            );
+                                        }
+
+                                        return (
+                                            <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                {Array.isArray(content) ? (
+                                                    <div className="space-y-2">
+                                                        {content.map((part, i) => {
+                                                            if (part.type === 'image_url') {
+                                                                return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
+                                                            }
+                                                            return <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={markdownComponents}>{part.text.replace(/^\[SYSTEM\] .*/gm, '')}</ReactMarkdown>;
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                                        {content.replace(/^\[SYSTEM\] .*/gm, '')}
+                                                    </ReactMarkdown>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
                         </div>
                     ))}
 
@@ -1858,24 +1078,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
                     )}
 
-                    {/* Live Actions - only show here if there's no assistant message group yet */}
-                    {isLoading && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
-                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                    )}
-
-                    {/* Typing indicator — shows when AI is loading but hasn't produced any visible content yet */}
-                    {isLoading && !currentThinking && actions.length === 0 && (
+                    {/* Typing indicator — only before first token while streaming */}
+                    {isLoading && !currentThinking && (
                         !groupedMessages.length ||
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
-                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content)
+                        (
+                            groupedMessages[groupedMessages.length - 1].role === 'assistant' &&
+                            !groupedMessages[groupedMessages.length - 1].content
+                        )
                     ) && (
-                        <div className="flex justify-start animate-fade-in-up">
-                            <div className={`flex items-center gap-1.5 px-4 py-3 rounded-2xl ${isDark ? 'text-[#888]' : 'text-gray-400'}`}>
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                        </div>
+                        <SyraAgentMarker isLive isDark={isDark} activities={[]} label="Thinking…" />
+                    )}
+
+                    {pendingAskUser && (
+                        <SyraAskUserCard
+                            question={pendingAskUser.question}
+                            isDark={isDark}
+                            disabled={isStreaming}
+                            onSubmit={answerAskUser}
+                        />
                     )}
 
                     <div ref={messagesEndRef} />
@@ -2001,8 +1222,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                         {/* Unified composer card — plan checklist embedded at top on small screens */}
                         <div className={`rounded-[28px] border px-2 pt-1.5 pb-2 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
-                            <PlanChecklist plan={generationPlan} isDark={isDark} embedded />
-                            {/* Text input */}
                             <textarea
                                 ref={textareaRef}
                                 value={input}
@@ -2014,9 +1233,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
                                     target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                 }}
-                                placeholder="Help you write code, debug and ship production-ready work."
+                                placeholder={workspaceReady === null && getHostProjectId() ? 'Preparing workspace…' : 'Help you write code, debug and ship production-ready work.'}
+                                disabled={isStreaming || (getHostProjectId() != null && workspaceReady !== true)}
                                 className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                style={{ height: 'auto', minHeight: generationPlan ? '44px' : '76px' }}
+                                style={{ height: 'auto', minHeight: '76px' }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
@@ -2027,27 +1247,75 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                             {/* Toolbar */}
                             <div className="flex items-center gap-2 px-1">
-                                {/* Slash / attach button */}
+                                {/* Slash menu — skills + attach */}
                                 <div className="relative">
                                     <button
                                         type="button"
-                                        onClick={() => { setShowAttachMenu(!showAttachMenu); setShowModelMenu(false); }}
-                                        aria-label="Attach files"
+                                        onClick={() => { setShowSlashMenu(!showSlashMenu); setShowModelMenu(false); }}
+                                        aria-label="Slash commands"
                                         className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
                                         <Slash className="h-3.5 w-3.5" />
                                     </button>
 
-                                    {showAttachMenu && (
+                                    {showSlashMenu && (
                                         <>
-                                            <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                                            <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[170px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                                                <div className="p-1.5">
-                                                    <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
+                                            <div className="fixed inset-0 z-10" onClick={() => setShowSlashMenu(false)} />
+                                            <div className={`absolute bottom-full left-0 mb-2 z-20 w-[min(92vw,18rem)] max-h-[min(70vh,22rem)] overflow-y-auto rounded-xl ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                                                <div className={`px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                    Skills
+                                                </div>
+                                                <div className="px-1.5 pb-1">
+                                                    {SYRA_SKILLS.map((skill) => {
+                                                        const enabled = activeSkillIds.includes(skill.id);
+                                                        return (
+                                                            <button
+                                                                key={skill.id}
+                                                                type="button"
+                                                                disabled={skill.comingSoon}
+                                                                onClick={() => toggleSkill(skill.id)}
+                                                                className={`w-full text-left px-2.5 py-2 rounded-lg flex items-start gap-2.5 transition-colors ${
+                                                                    skill.comingSoon
+                                                                        ? isDark ? 'opacity-50 cursor-not-allowed' : 'opacity-60 cursor-not-allowed'
+                                                                        : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
+                                                                }`}
+                                                            >
+                                                                <span className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                                                                    skill.comingSoon
+                                                                        ? isDark ? 'border-[#3a3b3e]' : 'border-gray-300'
+                                                                        : enabled
+                                                                            ? isDark ? 'border-white bg-white text-[#18191B]' : 'border-gray-900 bg-gray-900 text-white'
+                                                                            : isDark ? 'border-[#3a3b3e]' : 'border-gray-300'
+                                                                }`}>
+                                                                    {enabled && !skill.comingSoon && <Check className="h-2.5 w-2.5" />}
+                                                                </span>
+                                                                <span className="min-w-0 flex-1">
+                                                                    <span className={`flex items-center gap-1.5 text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
+                                                                        {skill.label}
+                                                                        {skill.comingSoon && (
+                                                                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-100 text-gray-500'}`}>
+                                                                                Coming soon
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                    <span className={`block text-[11px] leading-snug mt-0.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>
+                                                                        {skill.description}
+                                                                    </span>
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className={`mx-3 my-1 border-t ${isDark ? 'border-[#2a2b2e]' : 'border-gray-200'}`} />
+                                                <div className={`px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                    Attach
+                                                </div>
+                                                <div className="p-1.5 pt-0">
+                                                    <button type="button" onClick={() => { fileInputRef.current?.click(); setShowSlashMenu(false); }}
                                                         className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
                                                         <ImageIcon className="w-4 h-4" /> Image
                                                     </button>
-                                                    <button type="button" onClick={() => { documentInputRef.current?.click(); setShowAttachMenu(false); }}
+                                                    <button type="button" onClick={() => { documentInputRef.current?.click(); setShowSlashMenu(false); }}
                                                         className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
                                                         <FileCode className="w-4 h-4" /> Document
                                                     </button>
@@ -2066,7 +1334,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         setShowModelMenu(false)
                                     }}
                                     showMenu={showModelMenu}
-                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
+                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
                                     onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}
                                 />
@@ -2088,7 +1356,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <AudioLines className="h-5 w-5" />
                                     </button>
 
-                                    {isLoading ? (
+                                    {isStreaming ? (
                                         <button
                                             type="button"
                                             onClick={handleStop}

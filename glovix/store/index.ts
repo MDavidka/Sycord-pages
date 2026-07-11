@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { Message, ModelType } from '../lib/ai';
+import type { AgentActivityItem } from '../lib/agentActivity';
+
+export type UpdateLastMessagePatch = {
+    content?: string;
+    toolCalls?: Message['tool_calls'];
+    thinking?: string;
+    thinkingDuration?: number;
+    agentActivities?: AgentActivityItem[];
+};
 import type { GenerationPlan } from '../lib/generation-plan';
 import type { ModelLearnEntry } from '../lib/model-learn';
 import { trimModelLearnLog } from '../lib/model-learn';
@@ -151,7 +160,12 @@ interface AppState {
     setCurrentChatId: (id: string | null) => void;
     setMessages: (messages: Message[]) => void;
     addMessage: (message: Message) => void;
-    updateLastMessage: (content: string, toolCalls?: any[], thinking?: string, thinkingDuration?: number) => void;
+    updateLastMessage: (
+        contentOrPatch: string | UpdateLastMessagePatch,
+        toolCalls?: Message['tool_calls'],
+        thinking?: string,
+        thinkingDuration?: number,
+    ) => void;
     setTokenCount: (count: number) => void;
 
     // File actions
@@ -241,17 +255,32 @@ export const useStore = create<AppState>((set) => ({
     setCurrentChatId: (currentChatId) => set({ currentChatId }),
     setMessages: (messages) => set({ messages }),
     addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
-    updateLastMessage: (content, toolCalls, thinking, thinkingDuration) => set((state) => {
+    updateLastMessage: (contentOrPatch, toolCalls, thinking, thinkingDuration) => set((state) => {
         const messages = state.messages;
-        if (messages.length > 0) {
-            const lastMsg = messages[messages.length - 1] as any;
-            lastMsg.content = content;
+        if (messages.length === 0) return state;
+
+        const lastMsg = { ...messages[messages.length - 1] } as Message & {
+            agentActivities?: AgentActivityItem[];
+        };
+
+        if (typeof contentOrPatch === 'string') {
+            lastMsg.content = contentOrPatch;
             if (toolCalls) lastMsg.tool_calls = toolCalls;
             if (thinking) lastMsg.thinking = thinking;
             if (thinkingDuration !== undefined) lastMsg.thinkingDuration = thinkingDuration;
+        } else {
+            if (contentOrPatch.content !== undefined) lastMsg.content = contentOrPatch.content;
+            if (contentOrPatch.toolCalls) lastMsg.tool_calls = contentOrPatch.toolCalls;
+            if (contentOrPatch.thinking !== undefined) lastMsg.thinking = contentOrPatch.thinking;
+            if (contentOrPatch.thinkingDuration !== undefined) {
+                lastMsg.thinkingDuration = contentOrPatch.thinkingDuration;
+            }
+            if (contentOrPatch.agentActivities) {
+                lastMsg.agentActivities = contentOrPatch.agentActivities;
+            }
         }
-        // Return new array ref to trigger re-render
-        return { messages: [...messages] };
+
+        return { messages: [...messages.slice(0, -1), lastMsg] };
     }),
     setTokenCount: (tokenCount) => set({ tokenCount }),
 
