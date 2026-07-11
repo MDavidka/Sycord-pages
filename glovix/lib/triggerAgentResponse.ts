@@ -41,10 +41,11 @@ function messageText(msg: Message): string {
 function syncFromState(
   updateLastMessage: ReturnType<typeof useStore.getState>['updateLastMessage'],
   state: ReturnType<typeof createAgentMessageState>,
+  options?: { clearActivities?: boolean },
 ) {
   updateLastMessage({
     content: state.assistantText,
-    agentActivities: [...state.activities],
+    agentActivities: options?.clearActivities ? [] : [...state.activities],
     thinking: state.thinkingText || undefined,
     thinkingDuration: state.thinkingDuration,
   })
@@ -111,6 +112,11 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<'co
           syncFromState(updateLastMessage, state)
         },
         onComplete: () => {
+          state = finalizeAgentMessageState(state)
+          if (!state.assistantText.trim()) {
+            state.assistantText = 'The agent finished without a visible response.'
+          }
+          syncFromState(updateLastMessage, state, { clearActivities: true })
           if (!abortSignal?.aborted) onAiComplete?.()
         },
       })
@@ -121,7 +127,7 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<'co
     if (!state.assistantText.trim()) {
       state.assistantText = 'The agent finished without a visible response.'
     }
-    syncFromState(updateLastMessage, state)
+    syncFromState(updateLastMessage, state, { clearActivities: true })
     if (projectId) completeAgentSession(projectId)
     if (!abortSignal?.aborted) onAiComplete?.()
     return 'completed'
@@ -136,6 +142,8 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<'co
           syncFromState(updateLastMessage, state)
         },
         onComplete: () => {
+          state = finalizeAgentMessageState(state)
+          syncFromState(updateLastMessage, state, { clearActivities: true })
           onAiComplete?.()
         },
       })
@@ -156,7 +164,7 @@ export async function triggerAgentResponse(options: TriggerOptions): Promise<'co
         a.status === 'running' ? { ...a, status: 'error' as const } : a,
       ),
     }
-    syncFromState(updateLastMessage, state)
+    syncFromState(updateLastMessage, state, { clearActivities: true })
     if (projectId) completeAgentSession(projectId)
     return (err as { name?: string })?.name === 'AbortError' ? 'stopped' : 'completed'
   } finally {
@@ -204,7 +212,7 @@ export async function resumePendingAgentResponse(options: {
     },
     onComplete: () => {
       state = finalizeAgentMessageState(state)
-      syncFromState(updateLastMessage, state)
+      syncFromState(updateLastMessage, state, { clearActivities: true })
       options.onAiComplete?.()
     },
   })

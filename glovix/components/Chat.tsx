@@ -8,9 +8,8 @@ import { mountFiles } from '../lib/webcontainer';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { useSyraChat } from '../hooks/use-syra-chat';
-import { agentActivityToToolCall } from '../lib/agentActivity';
+import { SyraAgentMarker } from './syra-agent-marker';
 import type { AgentActivityItem } from '../lib/agentActivity';
-import { SyraToolCardList } from './syra-tool-card';
 import { SyraMessageBubble } from './syra-message';
 import { SyraAskUserCard } from './syra-ask-user-card';
 import { MermaidBlock } from './MermaidBlock';
@@ -966,7 +965,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
 
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && (
+                            {group.role === 'assistant' && group.thinking && isStreaming && idx === groupedMessages.length - 1 && (
                                 <ThinkingBlock
                                     thinking={group.thinking}
                                     isDark={isDark}
@@ -975,10 +974,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                 />
                             )}
 
-                            {group.role === 'assistant' && (group.agentActivities?.length || (isStreaming && idx === groupedMessages.length - 1)) && (
-                                <SyraToolCardList
-                                    tools={(group.agentActivities || []).map(agentActivityToToolCall)}
-                                    isLive={isStreaming && idx === groupedMessages.length - 1}
+                            {group.role === 'assistant' && isStreaming && idx === groupedMessages.length - 1 && (
+                                <SyraAgentMarker
+                                    activities={group.agentActivities || []}
+                                    isLive
                                     isDark={isDark}
                                 />
                             )}
@@ -1079,23 +1078,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                         <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
                     )}
 
-                    {/* Typing indicator — only when no activity feed is visible yet */}
+                    {/* Typing indicator — only before first token while streaming */}
                     {isLoading && !currentThinking && (
                         !groupedMessages.length ||
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
                         (
                             groupedMessages[groupedMessages.length - 1].role === 'assistant' &&
-                            !groupedMessages[groupedMessages.length - 1].content &&
-                            !(groupedMessages[groupedMessages.length - 1].agentActivities?.length)
+                            !groupedMessages[groupedMessages.length - 1].content
                         )
                     ) && (
-                        <div className="flex justify-start animate-fade-in-up">
-                            <div className={`flex items-center gap-1.5 px-4 py-3 rounded-2xl ${isDark ? 'text-[#888]' : 'text-gray-400'}`}>
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                        </div>
+                        <SyraAgentMarker isLive isDark={isDark} activities={[]} label="Thinking…" />
                     )}
 
                     {pendingAskUser && (
