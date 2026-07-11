@@ -7,11 +7,12 @@ import { Message, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelTyp
 import { mountFiles } from '../lib/webcontainer';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
-import { triggerAgentResponse, resumePendingAgentResponse } from '../lib/triggerAgentResponse';
-import { probeBackgroundAgent } from '../lib/resumeAgentActivity';
-import { loadAgentSession } from '../lib/agentSession';
-import { AgentActivityFeed } from './AgentActivityFeed';
+import { useSyraChat } from '../hooks/use-syra-chat';
+import { agentActivityToToolCall } from '../lib/agentActivity';
 import type { AgentActivityItem } from '../lib/agentActivity';
+import { SyraToolCardList } from './syra-tool-card';
+import { SyraMessageBubble } from './syra-message';
+import { SyraAskUserCard } from './syra-ask-user-card';
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
@@ -258,63 +259,29 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
 
     const isDark = theme === 'dark';
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [agentBackground, setAgentBackground] = useState(false);
-    const [agentResuming, setAgentResuming] = useState(false);
     const [currentThinking, setCurrentThinking] = useState<string>('');
     const [thinkingDuration, setThinkingDuration] = useState<number>(0);
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const abortControllerRef = useRef<AbortController | null>(null);
-    const resumeAbortRef = useRef<AbortController | null>(null);
-    const detachOnUnmountRef = useRef(false);
-    const agentResumeCheckedRef = useRef(false);
 
-    // Resume background agent work when Syra reopens
-    useEffect(() => {
-        const projectId = getHostProjectId();
-        if (!projectId || agentResumeCheckedRef.current) return;
-        agentResumeCheckedRef.current = true;
+    const {
+        isStreaming,
+        agentBackground,
+        agentResuming,
+        workspaceReady,
+        pendingAskUser,
+        sendMessage,
+        cancel,
+        answerAskUser,
+    } = useSyraChat({
+        model: selectedModel,
+        activeSkillIds,
+        chatId: currentChatId,
+        user,
+        onAiComplete,
+    });
 
-        const session = loadAgentSession(projectId);
-        void (async () => {
-            const probe = await probeBackgroundAgent(projectId);
-            if (!session?.pending && !probe.processing) return;
-
-            setAgentResuming(true);
-            setIsLoading(true);
-            resumeAbortRef.current = new AbortController();
-
-            const resumed = await resumePendingAgentResponse({
-                projectId,
-                chatId: currentChatId || undefined,
-                user,
-                signal: resumeAbortRef.current.signal,
-                onAiComplete,
-            });
-
-            setAgentResuming(false);
-            setAgentBackground(false);
-            setIsLoading(false);
-            if (!resumed) {
-                resumeAbortRef.current = null;
-            }
-        })();
-
-        return () => {
-            resumeAbortRef.current?.abort();
-            resumeAbortRef.current = null;
-        };
-    }, [currentChatId, user, onAiComplete]);
-
-    // Detach live stream on exit — agent keeps running on Syte VM
-    useEffect(() => {
-        return () => {
-            if (isLoading && detachOnUnmountRef.current) {
-                abortControllerRef.current?.abort();
-            }
-        };
-    }, [isLoading]);
+    const isLoading = isStreaming;
 
     // Set system prompt in store for reference
     useEffect(() => {
@@ -559,19 +526,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
     }, [messages]);
 
     const handleStop = () => {
-        detachOnUnmountRef.current = false;
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-        }
-        if (resumeAbortRef.current) {
-            resumeAbortRef.current.abort();
-            resumeAbortRef.current = null;
-        }
-        setIsLoading(false);
-        setAgentBackground(false);
-        setAgentResuming(false);
+        cancel();
         setCurrentThinking('');
+    };
+
+    const triggerAIResponse = async (userMessage: Message, _chatIdOverride?: string) => {
+        if (isStreaming) return;
+        setThinkingStartTime(Date.now());
+        try {
+            await sendMessage(userMessage);
+        } finally {
+            setCurrentThinking('');
+            setThinkingStartTime(null);
+        }
     };
 
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -681,51 +648,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    // Continue cloud agent (replaces legacy Glovix tool loop)
-    const triggerAIResponse = async (userMessage: Message, chatIdOverride?: string) => {
-        if (isLoading) return;
-
-        setIsLoading(true);
-        setAgentBackground(false);
-        setAgentResuming(false);
-        setThinkingStartTime(Date.now());
-        detachOnUnmountRef.current = true;
-        abortControllerRef.current = new AbortController();
-        const chatId = chatIdOverride || currentChatId;
-        let wentBackground = false;
-
-        try {
-            const result = await triggerAgentResponse({
-                userMessage,
-                chatId: chatId || undefined,
-                user,
-                model: selectedModel,
-                activeSkillIds,
-                abortSignal: abortControllerRef.current.signal,
-                detachOnAbort: true,
-                onBackground: () => {
-                    wentBackground = true;
-                    setAgentBackground(true);
-                },
-                onAiComplete,
-            });
-            if (result === 'detached') {
-                wentBackground = true;
-            }
-        } finally {
-            setIsLoading(false);
-            setAgentBackground(wentBackground);
-            abortControllerRef.current = null;
-            detachOnUnmountRef.current = false;
-            setCurrentThinking('');
-            setThinkingStartTime(null);
-        }
-    };
-
     // Form submit handler
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isLoading) return;
+        if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isStreaming) return;
+        if (getHostProjectId() && workspaceReady !== true) return;
 
         // Handle /debug command - fetch VM connection debug info
         if (input.trim().startsWith("/debug")) {
@@ -999,6 +926,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
+                    {workspaceReady === null && getHostProjectId() && (
+                        <div
+                            className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
+                                isDark
+                                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                                    : 'border-amber-200 bg-amber-50 text-amber-900'
+                            }`}
+                        >
+                            Preparing workspace…
+                        </div>
+                    )}
+
+                    {workspaceReady === false && getHostProjectId() && (
+                        <div
+                            className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
+                                isDark
+                                    ? 'border-red-500/20 bg-red-500/10 text-red-200'
+                                    : 'border-red-200 bg-red-50 text-red-800'
+                            }`}
+                        >
+                            Workspace setup failed. Try again in a moment.
+                        </div>
+                    )}
+
                     {(agentBackground || agentResuming) && (
                         <div
                             className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
@@ -1024,10 +975,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                 />
                             )}
 
-                            {group.role === 'assistant' && (group.agentActivities?.length || (isLoading && idx === groupedMessages.length - 1)) && (
-                                <AgentActivityFeed
-                                    activities={group.agentActivities || []}
-                                    isLive={isLoading && idx === groupedMessages.length - 1}
+                            {group.role === 'assistant' && (group.agentActivities?.length || (isStreaming && idx === groupedMessages.length - 1)) && (
+                                <SyraToolCardList
+                                    tools={(group.agentActivities || []).map(agentActivityToToolCall)}
+                                    isLive={isStreaming && idx === groupedMessages.length - 1}
                                     isDark={isDark}
                                 />
                             )}
@@ -1072,6 +1023,33 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                             .join('\n\n');
                                         const content = textFromSegments || group.content;
                                         if (!content) return null;
+
+                                        const textContent = typeof content === 'string'
+                                            ? content
+                                            : Array.isArray(content)
+                                                ? content
+                                                    .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                                                    .map((p) => p.text)
+                                                    .join('\n\n')
+                                                : '';
+
+                                        if (group.role === 'assistant') {
+                                            return (
+                                                <SyraMessageBubble
+                                                    message={{
+                                                        id: `msg-${idx}`,
+                                                        role: 'assistant',
+                                                        content: textContent,
+                                                        status: isStreaming && idx === groupedMessages.length - 1 ? 'streaming' : 'done',
+                                                        createdAt: Date.now(),
+                                                    }}
+                                                    isDark={isDark}
+                                                    markdownComponents={markdownComponents}
+                                                    showCursor={isStreaming && idx === groupedMessages.length - 1}
+                                                />
+                                            );
+                                        }
+
                                         return (
                                             <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                 {Array.isArray(content) ? (
@@ -1118,6 +1096,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                 <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
                             </div>
                         </div>
+                    )}
+
+                    {pendingAskUser && (
+                        <SyraAskUserCard
+                            question={pendingAskUser.question}
+                            isDark={isDark}
+                            disabled={isStreaming}
+                            onSubmit={answerAskUser}
+                        />
                     )}
 
                     <div ref={messagesEndRef} />
@@ -1254,7 +1241,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                     const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
                                     target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                 }}
-                                placeholder="Help you write code, debug and ship production-ready work."
+                                placeholder={workspaceReady === null && getHostProjectId() ? 'Preparing workspace…' : 'Help you write code, debug and ship production-ready work.'}
+                                disabled={isStreaming || (getHostProjectId() != null && workspaceReady !== true)}
                                 className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
                                 style={{ height: 'auto', minHeight: '76px' }}
                                 onKeyDown={(e) => {
@@ -1376,7 +1364,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                                         <AudioLines className="h-5 w-5" />
                                     </button>
 
-                                    {isLoading ? (
+                                    {isStreaming ? (
                                         <button
                                             type="button"
                                             onClick={handleStop}

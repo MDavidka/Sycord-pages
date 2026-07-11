@@ -1,3 +1,5 @@
+import type { SyraToolCallUI } from '../../types/syra'
+
 export type AgentActivityStatus = 'running' | 'done' | 'error'
 
 export interface AgentActivityItem {
@@ -49,6 +51,23 @@ export function defaultActivityStatus(eventType: string): AgentActivityStatus {
   if (TERMINAL_DONE.has(eventType)) return 'done'
   if (RUNNING_TYPES.has(eventType)) return 'running'
   return 'done'
+}
+
+export function agentActivityToToolCall(item: AgentActivityItem): SyraToolCallUI {
+  return {
+    id: item.key,
+    name: item.eventType,
+    detail: activityDisplayText(item),
+    status:
+      item.status === 'running'
+        ? 'running'
+        : item.status === 'error'
+          ? 'error'
+          : item.status === 'done'
+            ? 'done'
+            : 'pending',
+    payload: item.payload,
+  }
 }
 
 export function activityDisplayText(item: AgentActivityItem): string {
