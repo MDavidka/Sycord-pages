@@ -5,6 +5,7 @@
 
 import {
   pickSytePreviewUrl,
+  describeSytePreviewUrlSource,
   sytePreviewStatus,
   syteSetDomain,
   syteStartPreview,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/deploy/syte-workspace"
 import { getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
 import { projectFiles, type WorkspaceFile } from "@/lib/workspace/sandbox"
+import { waitForPreviewReachable } from "@/lib/deploy/preview-upstream"
 
 export type SytePreviewResult = {
   ok: boolean
@@ -32,6 +34,28 @@ export type SytePreviewResult = {
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+const DEBUG_PREFIX = "[PreviewDebug]"
+
+function logSytePreview(phase: string, data: Record<string, unknown>) {
+  console.warn(DEBUG_PREFIX, { scope: "syte-preview", phase, ...data })
+}
+
+function logPreviewUrlFromStatus(
+  uuid: string,
+  status: SytePreviewFields | null | undefined,
+  extra?: Record<string, unknown>,
+) {
+  const picked = describeSytePreviewUrlSource(status)
+  logSytePreview("preview_url_picked", {
+    uuid,
+    previewUrl: picked.url,
+    urlSource: picked.source,
+    previewReady: Boolean(status?.preview_ready),
+    previewRunning: Boolean(status?.preview_running),
+    ...extra,
+  })
 }
 
 function normalizeDomain(domain: string): string {
@@ -149,6 +173,10 @@ export async function ensureSyteLivePreview(
 
   const started = await syteStartPreview(uuid)
   if (!started.ok) {
+    logSytePreview("start_preview_failed", {
+      uuid,
+      error: started.error || "start_preview failed",
+    })
     return {
       ok: false,
       uuid,
@@ -160,19 +188,32 @@ export async function ensureSyteLivePreview(
 
   const startData = (started.data || {}) as SytePreviewFields
   let previewUrl = pickSytePreviewUrl(startData)
+  logPreviewUrlFromStatus(uuid, startData, { stage: "after_start_preview" })
   let previewReady = Boolean(startData.preview_ready)
   let previewRunning = Boolean(startData.preview_running)
   let lastStatus: SytePreviewFields | null = startData
 
   if (previewReady && previewUrl) {
-    return { ok: true, uuid, previewUrl, previewReady, previewRunning, domainIssued, status: lastStatus }
+    const reachable = await waitForPreviewReachable(previewUrl, { maxWaitMs: 15_000, pollMs: 2000 })
+    if (!reachable) {
+      logSytePreview("preview_ready_but_unreachable", { uuid, previewUrl })
+    }
+    logSytePreview("preview_ready", { uuid, previewUrl, previewReady, previewRunning, reachable })
+    return { ok: true, uuid, previewUrl, previewReady: reachable, previewRunning, domainIssued, status: lastStatus }
   }
+
+  logSytePreview("polling_for_ready", { uuid, previewUrl, previewReady, previewRunning, maxWaitMs })
 
   const deadline = Date.now() + maxWaitMs
   while (Date.now() < deadline) {
     await sleep(pollMs)
     const status = await sytePreviewStatus(uuid)
     if (!status.ok) {
+      logSytePreview("preview_status_failed", {
+        uuid,
+        error: status.error || "preview_status failed",
+        previewUrl,
+      })
       return {
         ok: false,
         uuid,
@@ -189,23 +230,47 @@ export async function ensureSyteLivePreview(
     previewUrl = pickSytePreviewUrl(lastStatus) || previewUrl
 
     if (previewReady && previewUrl) {
-      return { ok: true, uuid, previewUrl, previewReady, previewRunning, domainIssued, status: lastStatus }
+      const reachable = await waitForPreviewReachable(previewUrl, { maxWaitMs: 15_000, pollMs: 2000 })
+      if (!reachable) {
+        logSytePreview("preview_ready_but_unreachable", { uuid, previewUrl })
+      }
+      logSytePreview("preview_ready", { uuid, previewUrl, previewReady, previewRunning, reachable })
+      return { ok: true, uuid, previewUrl, previewReady: reachable, previewRunning, domainIssued, status: lastStatus }
     }
   }
 
   if (previewUrl) {
+    logPreviewUrlFromStatus(uuid, lastStatus, { stage: "poll_timeout_with_url" })
+    const reachable = await waitForPreviewReachable(previewUrl, { maxWaitMs: 30_000, pollMs: 2500 })
+    logSytePreview("preview_not_ready_yet", {
+      uuid,
+      previewUrl,
+      previewReady: reachable,
+      previewRunning,
+      reachable,
+      error: reachable
+        ? undefined
+        : "Preview started but dev server is not reachable yet — retry shortly",
+    })
     return {
       ok: true,
       uuid,
       previewUrl,
-      previewReady: false,
+      previewReady: reachable,
       previewRunning,
       domainIssued,
       status: lastStatus,
-      error: "Preview started but not marked ready yet — showing URL anyway",
+      error: reachable
+        ? "Preview started but not marked ready yet — showing URL anyway"
+        : "Preview started but dev server is not reachable yet — retry shortly",
     }
   }
 
+  logSytePreview("preview_timeout_no_url", {
+    uuid,
+    previewRunning,
+    error: "Preview timed out waiting for preview_ready",
+  })
   return {
     ok: false,
     uuid,

@@ -4,6 +4,12 @@ import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
 import {
+  syteAgentLogs,
+  syteAgentRestart,
+  syteAgentStart,
+  syteAgentStatus,
+  syteAgentStop,
+  syteAgentTest,
   syteExecuteCommand,
   syteGetLogs,
   syteIssueDeploy,
@@ -41,6 +47,12 @@ type SyteAction =
   | "set_domain"
   | "start_preview"
   | "preview_status"
+  | "agent_status"
+  | "agent_start"
+  | "agent_stop"
+  | "agent_restart"
+  | "agent_test"
+  | "agent_logs"
 
 async function resolveProject(userId: string, projectId: string) {
   const client = await clientPromise
@@ -333,6 +345,55 @@ export async function POST(req: Request): Promise<Response> {
         previewUrl: pickSytePreviewUrl(status.data || undefined),
         status: status.data,
       })
+    }
+
+    case "agent_status": {
+      const result = await syteAgentStatus(uuid)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, agent: result.data })
+    }
+
+    case "agent_start": {
+      const result = await syteAgentStart(uuid)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, agent: result.data })
+    }
+
+    case "agent_stop": {
+      const result = await syteAgentStop(uuid)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, agent: result.data })
+    }
+
+    case "agent_restart": {
+      const result = await syteAgentRestart(uuid)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, agent: result.data })
+    }
+
+    case "agent_test": {
+      const result = await syteAgentTest(uuid)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error, test: result.data }, { status: result.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, test: result.data })
+    }
+
+    case "agent_logs": {
+      const lines = typeof body.lines === "number" ? body.lines : 200
+      const result = await syteAgentLogs(uuid, lines)
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
+      }
+      return NextResponse.json({ ok: true, uuid, logs: result.data })
     }
 
     default:

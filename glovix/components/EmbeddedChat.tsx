@@ -8,6 +8,19 @@ import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
 import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePreviewUrl } from '../lib/previewEmbed';
+import {
+    analyzeProxyProbeResponse,
+    buildPreviewIframeSrc,
+    describeBlankIframe,
+    diagnoseIframeDocument,
+    getPreviewEmbedContext,
+    logPreviewDebug,
+    logPreviewWarn,
+    shouldShowBlankHint,
+    usesPreviewProxy,
+    type PreviewSource as DebugPreviewSource,
+    type ProxyProbeResult,
+} from '../lib/previewDebug';
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 type PreviewSource = 'live' | 'deployed' | 'syte' | null;
@@ -36,12 +49,16 @@ export function EmbeddedChat() {
     const projectId = getHostProjectId();
     const chatId = projectId ? `project_${projectId}` : null;
 
-    const scrollerRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const previewStartedRef = useRef(false);
     const baseSeededRef = useRef(false);
     const previewTimeoutRef = useRef<number | null>(null);
     const workspaceCreatedRef = useRef(false);
+    const blankWatchdogRef = useRef<number | null>(null);
+    const probedFrameUrlRef = useRef<string | null>(null);
+    const proxyProbeResultRef = useRef<ProxyProbeResult | null>(null);
+    const previewReadyRef = useRef<boolean | undefined>(undefined);
+    const previewRetryRef = useRef<number | null>(null);
 
     const [activePane, setActivePane] = useState(0);
     const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
@@ -58,6 +75,7 @@ export function EmbeddedChat() {
 
     // Clipboard copy state for preview URL
     const [urlCopied, setUrlCopied] = useState(false);
+    const [previewDebugHint, setPreviewDebugHint] = useState('');
 
     const fileCount = useMemo(() => Object.keys(files).length, [files]);
     const webContainerReady = typeof window !== 'undefined' && canBootWebContainer();
@@ -193,6 +211,164 @@ export function EmbeddedChat() {
         };
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
 
+    const logPreviewAssignment = useCallback((
+        previewUrlValue: string,
+        source: PreviewSource,
+        previewReady?: boolean,
+    ) => {
+        previewReadyRef.current = previewReady;
+        const embedContext = getPreviewEmbedContext(previewUrlValue, source as DebugPreviewSource);
+        logPreviewDebug('preview_url_assigned', {
+            previewUrl: previewUrlValue,
+            previewSource: source,
+            previewReady,
+            ...embedContext,
+        });
+        if (previewReady === false) {
+            logPreviewWarn('preview_not_ready_before_iframe', {
+                previewUrl: previewUrlValue,
+                previewSource: source,
+                ...embedContext,
+            });
+        }
+        setPreviewDebugHint('');
+    }, []);
+
+    const schedulePreviewReload = useCallback((delayMs = 4000) => {
+        if (previewRetryRef.current) window.clearTimeout(previewRetryRef.current);
+        previewRetryRef.current = window.setTimeout(() => {
+            previewRetryRef.current = null;
+            probedFrameUrlRef.current = null;
+            proxyProbeResultRef.current = null;
+            reloadPreviewRef.current();
+        }, delayMs);
+    }, []);
+
+    const reloadPreviewRef = useRef<() => void>(() => {});
+
+    const probePreviewFrame = useCallback(async (
+        frameUrl: string,
+        previewUrlValue: string,
+        source: PreviewSource,
+        force = false,
+    ): Promise<ProxyProbeResult | null> => {
+        if (!usesPreviewProxy(frameUrl)) return null;
+        if (!force && probedFrameUrlRef.current === frameUrl && proxyProbeResultRef.current) {
+            return proxyProbeResultRef.current;
+        }
+        probedFrameUrlRef.current = frameUrl;
+
+        try {
+            const res = await fetch(frameUrl, { credentials: 'same-origin' });
+            const contentType = res.headers.get('content-type') ?? '';
+            const bodyText = await res.text();
+            const probe = analyzeProxyProbeResponse(res.status, contentType, bodyText);
+            proxyProbeResultRef.current = probe;
+
+            const payload = {
+                frameUrl,
+                previewUrl: previewUrlValue,
+                previewSource: source,
+                ...probe,
+            };
+            if (!probe.ok || probe.proxyErrorText) {
+                logPreviewWarn('proxy_probe', payload);
+            } else {
+                logPreviewDebug('proxy_probe', payload);
+            }
+            return probe;
+        } catch (err) {
+            logPreviewWarn('proxy_probe_failed', {
+                frameUrl,
+                previewUrl: previewUrlValue,
+                error: err instanceof Error ? err.message : String(err),
+            });
+            return null;
+        }
+    }, []);
+
+    const inspectPreviewIframe = useCallback((
+        phase: 'iframe_load' | 'blank_watchdog',
+        iframe: HTMLIFrameElement,
+        proxyProbe?: ProxyProbeResult | null,
+    ) => {
+        const currentPreviewUrl = useStore.getState().previewUrl;
+        if (!currentPreviewUrl) return;
+
+        const source = previewSource;
+        const embedContext = getPreviewEmbedContext(currentPreviewUrl, source as DebugPreviewSource);
+        const credentiallessApplied = iframe.hasAttribute('credentialless');
+        const probe = proxyProbe ?? proxyProbeResultRef.current;
+        let doc: Document | null = null;
+        try {
+            doc = iframe.contentDocument;
+        } catch {
+            doc = null;
+        }
+
+        const diagnosis = diagnoseIframeDocument(doc, embedContext, {
+            credentiallessApplied,
+            proxyProbe: probe,
+        });
+        const payload = {
+            phase,
+            iframeSrc: iframe.src,
+            previewReady: previewReadyRef.current,
+            credentiallessApplied,
+            coepPath: embedContext.credentiallessNeeded,
+            documentAccessible: diagnosis.documentAccessible,
+            ...embedContext,
+            ...diagnosis,
+        };
+
+        if (shouldShowBlankHint(diagnosis)) {
+            const hint = describeBlankIframe(diagnosis, embedContext);
+            setPreviewDebugHint(hint || '');
+            logPreviewWarn('blank_iframe', payload);
+            if (diagnosis.reason === 'dev_server_starting' || diagnosis.reason === 'proxy_error') {
+                schedulePreviewReload(diagnosis.reason === 'dev_server_starting' ? 4000 : 6000);
+            }
+        } else {
+            setPreviewDebugHint('');
+            setPreviewStatus('ready');
+            logPreviewDebug('iframe_loaded', payload);
+            if (previewRetryRef.current) {
+                window.clearTimeout(previewRetryRef.current);
+                previewRetryRef.current = null;
+            }
+        }
+    }, [previewSource, schedulePreviewReload]);
+
+    const handlePreviewIframeLoad = useCallback((event: React.SyntheticEvent<HTMLIFrameElement>) => {
+        const iframe = event.currentTarget;
+        const currentPreviewUrl = useStore.getState().previewUrl;
+        const embedContext = currentPreviewUrl
+            ? getPreviewEmbedContext(currentPreviewUrl, previewSource as DebugPreviewSource)
+            : null;
+
+        void (async () => {
+            const probe = embedContext
+                ? await probePreviewFrame(embedContext.frameUrl, currentPreviewUrl!, previewSource, true)
+                : null;
+            inspectPreviewIframe('iframe_load', iframe, probe);
+        })();
+
+        if (blankWatchdogRef.current) {
+            window.clearTimeout(blankWatchdogRef.current);
+        }
+
+        blankWatchdogRef.current = window.setTimeout(() => {
+            blankWatchdogRef.current = null;
+            const url = useStore.getState().previewUrl;
+            if (!url) return;
+            const ctx = getPreviewEmbedContext(url, previewSource as DebugPreviewSource);
+            void (async () => {
+                const probe = await probePreviewFrame(ctx.frameUrl, url, previewSource, true);
+                inspectPreviewIframe('blank_watchdog', iframe, probe);
+            })();
+        }, 3000);
+    }, [inspectPreviewIframe, previewSource, probePreviewFrame]);
+
     const startSyteServerPreview = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
         if (!projectId) return { ok: false, error: 'No project id' };
         setPreviewStatus('starting');
@@ -203,18 +379,20 @@ export function EmbeddedChat() {
             files: Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
         });
         if (result.ok && result.previewUrl) {
+            logPreviewAssignment(result.previewUrl, 'syte', result.previewReady);
             setPreviewUrl(result.previewUrl);
             setPreviewSource('syte');
-            setPreviewStatus('ready');
+            setPreviewStatus(result.previewReady === false ? 'starting' : 'ready');
             setPendingDeploy(false);
             previewStartedRef.current = true;
             return { ok: true };
         }
         // Use preview domain URL from partial/error responses when available
         if (result.previewUrl && isSytePreviewUrl(result.previewUrl)) {
+            logPreviewAssignment(result.previewUrl, 'syte', result.previewReady);
             setPreviewUrl(result.previewUrl);
             setPreviewSource('syte');
-            setPreviewStatus('ready');
+            setPreviewStatus(result.previewReady === false ? 'starting' : 'ready');
             previewStartedRef.current = true;
             return { ok: true };
         }
@@ -224,7 +402,7 @@ export function EmbeddedChat() {
         setPreviewError(message);
         previewStartedRef.current = false;
         return { ok: false, error: message };
-    }, [projectId, setPreviewUrl]);
+    }, [projectId, setPreviewUrl, logPreviewAssignment]);
 
     const startLivePreview = useCallback(async (currentFiles: Record<string, { file: { contents: string } }>) => {
         const cached = getCachedPreviewUrl();
@@ -334,9 +512,13 @@ export function EmbeddedChat() {
             // then reload the proxy iframe so the updated site appears.
             setTimeout(() => {
                 if (iframeRef.current && previewUrl) {
-                    const src = (previewSource === 'syte' || isSytePreviewUrl(previewUrl))
-                        ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-                        : previewUrl;
+                    const src = buildPreviewIframeSrc(previewUrl, previewSource);
+                    logPreviewDebug('iframe_reload', {
+                        trigger: 'ai_complete',
+                        frameUrl: src,
+                        previewUrl,
+                        previewSource,
+                    });
                     iframeRef.current.src = src;
                 }
             }, 2500);
@@ -347,17 +529,42 @@ export function EmbeddedChat() {
         setPreviewStatus('idle');
         setPreviewError('');
         void startPreview(true);
-    }, [startPreview, previewUrl]);
+    }, [startPreview, previewUrl, previewSource]);
+
+    useEffect(() => {
+        if (!previewUrl) {
+            probedFrameUrlRef.current = null;
+            proxyProbeResultRef.current = null;
+            setPreviewDebugHint('');
+            return;
+        }
+        const frameUrl = buildPreviewIframeSrc(previewUrl, previewSource);
+        void probePreviewFrame(frameUrl, previewUrl, previewSource);
+    }, [previewUrl, previewSource, probePreviewFrame]);
 
     useEffect(() => {
         if (previewUrl) {
             if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
-            setPreviewStatus('ready');
+            if (previewReadyRef.current !== false) {
+                setPreviewStatus('ready');
+            }
         }
     }, [previewUrl]);
 
+    useEffect(() => {
+        if (previewStatus !== 'starting' || !previewUrl || !projectId) return;
+        const interval = window.setInterval(() => {
+            probedFrameUrlRef.current = null;
+            proxyProbeResultRef.current = null;
+            reloadPreviewRef.current();
+        }, 8000);
+        return () => window.clearInterval(interval);
+    }, [previewStatus, previewUrl, projectId]);
+
     useEffect(() => () => {
         if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
+        if (blankWatchdogRef.current) window.clearTimeout(blankWatchdogRef.current);
+        if (previewRetryRef.current) window.clearTimeout(previewRetryRef.current);
     }, []);
 
     useEffect(() => {
@@ -365,40 +572,50 @@ export function EmbeddedChat() {
         void startPreview();
     }, [fileCount, previewUrl, previewStatus, startPreview]);
 
+    // Kick off preview as soon as the shell mounts (background load while on chat).
+    useEffect(() => {
+        if (!projectId) return;
+        void startPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId]);
+
     const goToPane = useCallback((i: number) => {
-        const el = scrollerRef.current;
-        if (!el) return;
-        el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
         setActivePane(i);
         if (i === 1) void startPreview();
     }, [startPreview]);
 
-    const handleScroll = useCallback(() => {
-        const el = scrollerRef.current;
-        if (!el) return;
-        const pane = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
-        if (pane !== activePane) {
-            setActivePane(pane);
-            if (pane === 1) void startPreview();
-        }
-    }, [activePane, startPreview]);
-
     const reloadPreview = () => {
         if (!iframeRef.current || !previewUrl) return;
-        const src = (previewSource === 'syte' || isSytePreviewUrl(previewUrl))
-            ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-            : previewUrl;
+        probedFrameUrlRef.current = null;
+        proxyProbeResultRef.current = null;
+        const src = buildPreviewIframeSrc(previewUrl, previewSource);
+        logPreviewDebug('iframe_reload', {
+            trigger: 'manual_reload',
+            frameUrl: src,
+            previewUrl,
+            previewSource,
+        });
         iframeRef.current.src = src;
     };
+    reloadPreviewRef.current = reloadPreview;
 
     const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
         iframeRef.current = el;
         if (!el || !previewUrl) return;
-        if (shouldUseCredentiallessIframe(previewUrl)) {
+        const credentiallessNeeded = shouldUseCredentiallessIframe(previewUrl);
+        if (credentiallessNeeded) {
             el.setAttribute('credentialless', '');
         } else {
             el.removeAttribute('credentialless');
         }
+        logPreviewDebug('iframe_embed_attrs', {
+            previewUrl,
+            credentiallessNeeded,
+            credentiallessApplied: el.hasAttribute('credentialless'),
+            crossOriginIsolated: window.crossOriginIsolated,
+            coepPath: credentiallessNeeded,
+            pathname: window.location.pathname,
+        });
     }, [previewUrl]);
 
     const retryPreview = () => {
@@ -459,14 +676,10 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
-            // Syte preview subdomains send X-Frame-Options: SAMEORIGIN which the browser
-            // enforces for any cross-origin parent (sycord.com ≠ preview*.sycord.com/site).
-            // Route through our server-side proxy that strips the header and injects
-            // <base href> so assets still load directly from the Syte dev server.
+            // Syte/Vite: embed preview*.sycord.com directly. vite.config sets
+            // X-Frame-Options: ALLOWALL. Proxying HTML via /preview-frame breaks Vite modules.
             const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
-            const frameUrl = isSyte
-                ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-                : previewUrl;
+            const frameUrl = buildPreviewIframeSrc(previewUrl, previewSource);
 
             const embedInline = isSyte ? true : shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
@@ -513,14 +726,22 @@ export function EmbeddedChat() {
                         </div>
                     )}
                     {previewSource === 'syte' && (
-                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex items-center justify-center gap-1.5 ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
-                            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Live preview — updates on every file save
+                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex flex-col items-center justify-center gap-0.5 ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
+                            <div className="flex items-center justify-center gap-1.5">
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+                                Live preview — updates on every file save
+                            </div>
+                            {previewDebugHint && (
+                                <p className="text-[10px] text-amber-500/90 max-w-full truncate px-1" title={previewDebugHint}>
+                                    {previewDebugHint}
+                                </p>
+                            )}
                         </div>
                     )}
                     <iframe
                         ref={applyIframeEmbedAttrs}
                         src={frameUrl}
+                        onLoad={handlePreviewIframeLoad}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
@@ -677,47 +898,36 @@ export function EmbeddedChat() {
 
     return (
         <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
+            {/* Preview layer — always mounted so Vite keeps compiling in the background */}
             <div
-                ref={scrollerRef}
-                onScroll={handleScroll}
-                className="flex h-full w-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide"
-                style={{ scrollBehavior: 'smooth' }}
+                className={`absolute inset-0 flex flex-col transition-opacity duration-300 ${
+                    activePane === 1 ? 'z-20 opacity-100' : 'z-0 opacity-0 pointer-events-none'
+                }`}
+                aria-hidden={activePane !== 1}
             >
-                {/* Chat pane */}
-                <div className="h-full w-full flex-shrink-0 snap-start overflow-hidden">
-                    <Chat
-                        onOpenPreview={() => goToPane(1)}
-                        showPreviewButton={activePane === 0}
-                        onAiComplete={handleAiComplete}
-                    />
-                </div>
-
-                {/* Preview pane */}
-                <div className="h-full w-full flex-shrink-0 snap-start flex flex-col overflow-hidden">
-                    {renderPreviewHeader()}
-                    <div className="relative min-h-0 flex-1 bg-white">
-                        {renderPreviewBody()}
-                    </div>
+                {renderPreviewHeader()}
+                <div className="relative min-h-0 flex-1 bg-white">
+                    {renderPreviewBody()}
                 </div>
             </div>
 
-            {/* Pane indicators */}
-            <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
-                {[0, 1].map((i) => (
-                    <span
-                        key={i}
-                        className={`h-1.5 rounded-full transition-all ${
-                            activePane === i
-                                ? isDark ? 'w-4 bg-white/80' : 'w-4 bg-gray-900/80'
-                                : isDark ? 'w-1.5 bg-white/30' : 'w-1.5 bg-gray-900/25'
-                        }`}
-                    />
-                ))}
+            {/* Chat layer — slides over preview */}
+            <div
+                className={`absolute inset-0 z-30 transition-transform duration-300 ease-out ${
+                    activePane === 1 ? '-translate-x-full' : 'translate-x-0'
+                }`}
+            >
+                <Chat
+                    onOpenPreview={() => goToPane(1)}
+                    onOpenChat={() => goToPane(0)}
+                    activePane={activePane}
+                    onAiComplete={handleAiComplete}
+                />
             </div>
 
             {/* Deploy status toast */}
             {deployStatus === 'error' && deployMessage && (
-                <div className="pointer-events-none absolute bottom-8 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium bg-red-600 text-white shadow-lg">
+                <div className="pointer-events-none absolute bottom-8 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium bg-red-600 text-white shadow-lg">
                     <Zap className="mr-1 inline h-3 w-3" />
                     {deployMessage.length > 60 ? deployMessage.slice(0, 60) + '…' : deployMessage}
                 </div>
