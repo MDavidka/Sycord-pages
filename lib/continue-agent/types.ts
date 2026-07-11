@@ -35,6 +35,7 @@ export interface ContinueStateSnapshot {
 export type AgentStreamEvent =
   | { type: 'status'; status: string }
   | { type: 'delta'; text: string }
+  | { type: 'snapshot'; text: string }
   | {
       type: 'activity'
       eventType: string
@@ -43,6 +44,8 @@ export type AgentStreamEvent =
       id?: number
       payload?: Record<string, unknown>
     }
+  | { type: 'meta'; requestId?: string; sinceId: number }
+  | { type: 'detached'; sinceId: number }
   | { type: 'permission'; requestId: string; toolName: string }
   | { type: 'done' }
   | { type: 'error'; message: string };

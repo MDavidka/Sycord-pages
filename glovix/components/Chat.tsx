@@ -7,7 +7,9 @@ import { Message, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelTyp
 import { mountFiles } from '../lib/webcontainer';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
-import { triggerAgentResponse } from '../lib/triggerAgentResponse';
+import { triggerAgentResponse, resumePendingAgentResponse } from '../lib/triggerAgentResponse';
+import { probeBackgroundAgent } from '../lib/resumeAgentActivity';
+import { loadAgentSession } from '../lib/agentSession';
 import { AgentActivityFeed } from './AgentActivityFeed';
 import type { AgentActivityItem } from '../lib/agentActivity';
 import { MermaidBlock } from './MermaidBlock';
@@ -257,11 +259,62 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
     const isDark = theme === 'dark';
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [agentBackground, setAgentBackground] = useState(false);
+    const [agentResuming, setAgentResuming] = useState(false);
     const [currentThinking, setCurrentThinking] = useState<string>('');
     const [thinkingDuration, setThinkingDuration] = useState<number>(0);
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const resumeAbortRef = useRef<AbortController | null>(null);
+    const detachOnUnmountRef = useRef(false);
+    const agentResumeCheckedRef = useRef(false);
+
+    // Resume background agent work when Syra reopens
+    useEffect(() => {
+        const projectId = getHostProjectId();
+        if (!projectId || agentResumeCheckedRef.current) return;
+        agentResumeCheckedRef.current = true;
+
+        const session = loadAgentSession(projectId);
+        void (async () => {
+            const probe = await probeBackgroundAgent(projectId);
+            if (!session?.pending && !probe.processing) return;
+
+            setAgentResuming(true);
+            setIsLoading(true);
+            resumeAbortRef.current = new AbortController();
+
+            const resumed = await resumePendingAgentResponse({
+                projectId,
+                chatId: currentChatId || undefined,
+                user,
+                signal: resumeAbortRef.current.signal,
+                onAiComplete,
+            });
+
+            setAgentResuming(false);
+            setAgentBackground(false);
+            setIsLoading(false);
+            if (!resumed) {
+                resumeAbortRef.current = null;
+            }
+        })();
+
+        return () => {
+            resumeAbortRef.current?.abort();
+            resumeAbortRef.current = null;
+        };
+    }, [currentChatId, user, onAiComplete]);
+
+    // Detach live stream on exit — agent keeps running on Syte VM
+    useEffect(() => {
+        return () => {
+            if (isLoading && detachOnUnmountRef.current) {
+                abortControllerRef.current?.abort();
+            }
+        };
+    }, [isLoading]);
 
     // Set system prompt in store for reference
     useEffect(() => {
@@ -506,12 +559,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
     }, [messages]);
 
     const handleStop = () => {
+        detachOnUnmountRef.current = false;
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
-            setIsLoading(false);
-            setCurrentThinking('');
         }
+        if (resumeAbortRef.current) {
+            resumeAbortRef.current.abort();
+            resumeAbortRef.current = null;
+        }
+        setIsLoading(false);
+        setAgentBackground(false);
+        setAgentResuming(false);
+        setCurrentThinking('');
     };
 
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -626,23 +686,37 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
         if (isLoading) return;
 
         setIsLoading(true);
+        setAgentBackground(false);
+        setAgentResuming(false);
         setThinkingStartTime(Date.now());
+        detachOnUnmountRef.current = true;
         abortControllerRef.current = new AbortController();
         const chatId = chatIdOverride || currentChatId;
+        let wentBackground = false;
 
         try {
-            await triggerAgentResponse({
+            const result = await triggerAgentResponse({
                 userMessage,
                 chatId: chatId || undefined,
                 user,
                 model: selectedModel,
                 activeSkillIds,
                 abortSignal: abortControllerRef.current.signal,
+                detachOnAbort: true,
+                onBackground: () => {
+                    wentBackground = true;
+                    setAgentBackground(true);
+                },
                 onAiComplete,
             });
+            if (result === 'detached') {
+                wentBackground = true;
+            }
         } finally {
             setIsLoading(false);
+            setAgentBackground(wentBackground);
             abortControllerRef.current = null;
+            detachOnUnmountRef.current = false;
             setCurrentThinking('');
             setThinkingStartTime(null);
         }
@@ -925,6 +999,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
                     className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
+                    {(agentBackground || agentResuming) && (
+                        <div
+                            className={`rounded-2xl border px-4 py-3 text-[13px] leading-snug ${
+                                isDark
+                                    ? 'border-blue-500/20 bg-blue-500/10 text-blue-200'
+                                    : 'border-blue-200 bg-blue-50 text-blue-800'
+                            }`}
+                        >
+                            {agentResuming
+                                ? 'Loading agent activity from Syte…'
+                                : 'Agent is working in the background. You can leave Syra — progress syncs when you return.'}
+                        </div>
+                    )}
+
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
                             {group.role === 'assistant' && group.thinking && (

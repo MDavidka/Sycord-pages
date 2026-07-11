@@ -14,12 +14,14 @@ import {
 } from '@/lib/deploy/syte-client'
 import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace'
 import { loadProject } from '@/lib/workspace/sandbox'
-import { resolveActivitySinceId, streamSyteAgentActivity } from './activity-stream'
+import { mapSyteActivityBatch } from './activity-map'
+import { fetchAgentActivitySnapshot, resolveActivitySinceId, streamSyteAgentActivity } from './activity-stream'
 import { runContinueAgentTurn } from './run-turn'
 import type { AgentStreamEvent } from './types'
 
 export type { AgentStreamEvent, ContinueStateSnapshot } from './types'
 export { ContinueAgentClient } from './client'
+export { mapSyteActivityBatch, isAgentRequestInFlight } from './activity-map'
 
 export type ContinueAgentConnection = {
   baseUrl: string
@@ -41,12 +43,19 @@ function toSyteModelProfile(model: ModelType): 'syra-nano' | 'syra-base' | 'syra
   }
 }
 
+function isAsyncAccepted(data: SyteAgentChangeResponse | null | undefined): boolean {
+  if (!data) return false
+  if (data.status === 'accepted') return true
+  if (typeof data.request_id === 'string' && data.request_id.trim()) return true
+  return data.change_applied === null
+}
+
 function extractChangeReply(data: SyteAgentChangeResponse | null | undefined): string {
   if (!data) return ''
   return typeof data.reply === 'string' ? data.reply.trim() : ''
 }
 
-function triggerAgentChange(
+async function triggerAgentChangeAsync(
   uuid: string,
   message: string,
   modelName: 'syra-nano' | 'syra-base' | 'syra-havy',
@@ -124,6 +133,37 @@ export async function getContinueAgentDebugLogs(userId: string, projectId: strin
   return data.logs || data.output || JSON.stringify(data)
 }
 
+export async function getAgentActivityForProject(
+  userId: string,
+  projectId: string,
+  sinceId = 0,
+  assistantText = '',
+) {
+  const project = await loadProject(userId, projectId)
+  if (!project) throw new Error('Project not found')
+
+  const resolved = await requireSyteWorkspaceUuid(project, projectId)
+  if ('error' in resolved) throw new Error(resolved.error)
+
+  const snapshot = await fetchAgentActivitySnapshot(resolved.uuid, sinceId)
+  if (!snapshot.ok) {
+    throw new Error(snapshot.error || 'Failed to fetch agent activity')
+  }
+
+  const mapped = mapSyteActivityBatch(snapshot.events, assistantText)
+  const status = await syteAgentStatus(resolved.uuid)
+
+  return {
+    uuid: resolved.uuid,
+    sinceId: Math.max(snapshot.sinceId, mapped.sinceId),
+    processing: mapped.processing || (status.data as SyteAgentStatusFields | undefined)?.agent_status === 'running',
+    terminal: mapped.terminal,
+    assistantText: mapped.assistantText,
+    events: mapped.streamEvents,
+    agent: status.data,
+  }
+}
+
 async function* streamSyteAgentChange(
   uuid: string,
   model: ModelType,
@@ -133,12 +173,16 @@ async function* streamSyteAgentChange(
   yield { type: 'status', status: `agent:${modelName}` }
   yield { type: 'status', status: 'running' }
 
-  const result = await triggerAgentChange(uuid, message, modelName)
+  const result = await triggerAgentChangeAsync(uuid, message, modelName)
   if (!result.ok) {
     throw new Error(result.error || 'Syte agent_change failed')
   }
 
   const data = (result.data || {}) as SyteAgentChangeResponse
+  if (isAsyncAccepted(data)) {
+    throw new Error('Syte agent_change accepted async — use activity stream to follow progress')
+  }
+
   const reply = extractChangeReply(data)
   if (!reply) {
     throw new Error(
@@ -164,9 +208,28 @@ async function* streamSyteAgentRealtime(
   const streamHeaders = buildSyteAgentStreamHeaders()
 
   yield { type: 'status', status: `agent:${session.agent_model_profile || modelName}` }
-  yield { type: 'status', status: 'running' }
+  yield { type: 'meta', sinceId }
 
-  const changePromise = triggerAgentChange(uuid, message, modelName)
+  const changeResult = await triggerAgentChangeAsync(uuid, message, modelName)
+  if (!changeResult.ok) {
+    throw new Error(changeResult.error || 'Syte agent_change failed')
+  }
+
+  const changeData = (changeResult.data || {}) as SyteAgentChangeResponse
+  const requestId = typeof changeData.request_id === 'string' ? changeData.request_id : undefined
+
+  if (requestId || isAsyncAccepted(changeData)) {
+    yield { type: 'meta', requestId, sinceId }
+    yield { type: 'status', status: 'running' }
+  } else {
+    const reply = extractChangeReply(changeData)
+    if (reply) {
+      yield { type: 'delta', text: reply }
+      yield { type: 'done' }
+      return
+    }
+  }
+
   let sawDone = false
 
   try {
@@ -174,33 +237,40 @@ async function* streamSyteAgentRealtime(
       yield event
       if (event.type === 'done') {
         sawDone = true
-        changePromise.catch(() => {})
         break
       }
+      if (event.type === 'detached') {
+        return
+      }
       if (event.type === 'error') {
-        changePromise.catch(() => {})
         return
       }
     }
   } catch (streamErr) {
     if ((streamErr as { name?: string })?.name === 'AbortError') {
-      changePromise.catch(() => {})
-      throw streamErr
+      const snapshot = await fetchAgentActivitySnapshot(uuid, sinceId).catch(() => null)
+      yield {
+        type: 'detached',
+        sinceId: snapshot?.sinceId ?? sinceId,
+      }
+      return
     }
     const streamMsg = streamErr instanceof Error ? streamErr.message : String(streamErr)
     yield { type: 'status', status: `activity-stream:${streamMsg.slice(0, 80)}` }
   }
 
   if (!sawDone) {
-    const result = await changePromise
-    if (!result.ok) {
-      throw new Error(result.error || 'Syte agent_change failed')
+    const snapshot = await fetchAgentActivitySnapshot(uuid, sinceId)
+    const mapped = mapSyteActivityBatch(snapshot.events)
+    for (const event of mapped.streamEvents) {
+      yield event
     }
-    const reply = extractChangeReply((result.data || {}) as SyteAgentChangeResponse)
-    if (reply) {
-      yield { type: 'delta', text: reply }
+    if (mapped.terminal === 'failed') return
+    if (mapped.terminal === 'completed' || mapped.assistantText.trim()) {
+      yield { type: 'done' }
+      return
     }
-    yield { type: 'done' }
+    yield { type: 'detached', sinceId: snapshot.sinceId }
   }
 }
 

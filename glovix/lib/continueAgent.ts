@@ -5,6 +5,7 @@ import { buildSkillsPrompt } from './syraSkills'
 export type AgentStreamEvent =
   | { type: 'status'; status: string }
   | { type: 'delta'; text: string }
+  | { type: 'snapshot'; text: string }
   | {
       type: 'activity'
       eventType: string
@@ -13,6 +14,8 @@ export type AgentStreamEvent =
       id?: number
       payload?: Record<string, unknown>
     }
+  | { type: 'meta'; requestId?: string; sinceId: number }
+  | { type: 'detached'; sinceId: number }
   | { type: 'permission'; requestId: string; toolName: string }
   | { type: 'error'; message: string }
   | { type: 'done' }
@@ -24,7 +27,7 @@ export async function streamContinueAgent(options: {
   activeSkillIds?: string[]
   signal?: AbortSignal
   onEvent: (event: AgentStreamEvent) => void
-}): Promise<void> {
+}): Promise<'done' | 'detached' | 'error'> {
   const projectId = options.projectId || getHostProjectId()
   if (!projectId) throw new Error('No project context for Continue agent')
 
@@ -50,6 +53,7 @@ export async function streamContinueAgent(options: {
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let outcome: 'done' | 'detached' | 'error' = 'done'
 
   while (true) {
     const { done, value } = await reader.read()
@@ -63,8 +67,13 @@ export async function streamContinueAgent(options: {
       const line = part.trim()
       if (!line.startsWith('data:')) continue
       try {
-        options.onEvent(JSON.parse(line.slice(5).trim()) as AgentStreamEvent)
+        const event = JSON.parse(line.slice(5).trim()) as AgentStreamEvent
+        options.onEvent(event)
+        if (event.type === 'detached') outcome = 'detached'
+        if (event.type === 'error') outcome = 'error'
       } catch {}
     }
   }
+
+  return outcome
 }

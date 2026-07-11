@@ -1,28 +1,44 @@
 import {
-  getSyteAgentActivityStreamUrl,
   getSyteInternalSecret,
   syteAgentActivity,
   syteInternalAgentActivity,
   type SyteAgentActivityEvent,
   type SyteAgentActivitySseMessage,
 } from '@/lib/deploy/syte-client'
+import { mapSyteActivityEvent, maxEventId } from './activity-map'
 import type { AgentStreamEvent } from './types'
 
-function maxActivityId(events: SyteAgentActivityEvent[] | undefined): number {
-  if (!events?.length) return 0
-  return events.reduce((max, event) => Math.max(max, typeof event.id === 'number' ? event.id : 0), 0)
+export async function fetchAgentActivitySnapshot(
+  uuid: string,
+  sinceId = 0,
+): Promise<{
+  ok: boolean
+  events: SyteAgentActivityEvent[]
+  sinceId: number
+  error?: string
+}> {
+  const useInternal = Boolean(getSyteInternalSecret())
+  const result = useInternal
+    ? await syteInternalAgentActivity(uuid, sinceId)
+    : await syteAgentActivity(uuid, sinceId)
+
+  if (!result.ok) {
+    return { ok: false, events: [], sinceId, error: result.error || 'Activity fetch failed' }
+  }
+
+  const data = result.data
+  const events = Array.isArray(data?.events) ? data.events : []
+  const nextSince =
+    typeof data?.since_id === 'number'
+      ? data.since_id
+      : Math.max(sinceId, maxEventId(events))
+
+  return { ok: true, events, sinceId: nextSince }
 }
 
 export async function resolveActivitySinceId(uuid: string): Promise<number> {
-  const useInternal = Boolean(getSyteInternalSecret())
-  const snapshot = useInternal
-    ? await syteInternalAgentActivity(uuid, 0)
-    : await syteAgentActivity(uuid, 0)
-
-  if (!snapshot.ok) return 0
-  const data = snapshot.data
-  if (typeof data?.since_id === 'number') return data.since_id
-  return maxActivityId(data?.events)
+  const snapshot = await fetchAgentActivitySnapshot(uuid, 0)
+  return snapshot.sinceId
 }
 
 async function* readSyteActivitySse(
@@ -31,6 +47,7 @@ async function* readSyteActivitySse(
   headers: Record<string, string>,
   signal?: AbortSignal,
 ): AsyncGenerator<SyteAgentActivitySseMessage> {
+  const { getSyteAgentActivityStreamUrl } = await import('@/lib/deploy/syte-client')
   const url = getSyteAgentActivityStreamUrl(uuid, sinceId)
   const res = await fetch(url, { headers, signal })
   if (!res.ok) {
@@ -73,64 +90,6 @@ async function* readSyteActivitySse(
   }
 }
 
-function eventDetail(event: SyteAgentActivityEvent): string {
-  const detail = typeof event.detail === 'string' ? event.detail.trim() : ''
-  if (detail) return detail
-  const path =
-    event.payload && typeof event.payload.path === 'string' ? event.payload.path.trim() : ''
-  return path
-}
-
-function mapActivityToStreamEvents(
-  event: SyteAgentActivityEvent,
-  assistantText: string,
-): { events: AgentStreamEvent[]; assistantText: string; terminal: 'none' | 'completed' | 'failed' } {
-  const out: AgentStreamEvent[] = []
-  let nextAssistantText = assistantText
-  let terminal: 'none' | 'completed' | 'failed' = 'none'
-  const eventType = String(event.event_type || 'activity')
-  const detail = eventDetail(event)
-  const title = String(event.title || '')
-
-  out.push({
-    type: 'activity',
-    eventType,
-    title,
-    detail,
-    id: typeof event.id === 'number' ? event.id : undefined,
-    payload: event.payload && typeof event.payload === 'object' ? event.payload : undefined,
-  })
-
-  if (eventType === 'assistant_message') {
-    if (detail.length > nextAssistantText.length) {
-      out.push({ type: 'delta', text: detail.slice(nextAssistantText.length) })
-      nextAssistantText = detail
-    } else if (detail && detail !== nextAssistantText) {
-      out.push({ type: 'delta', text: detail })
-      nextAssistantText = detail
-    }
-  }
-
-  if (eventType === 'request_completed') {
-    if (detail && !nextAssistantText.includes(detail)) {
-      const prefix = nextAssistantText ? '\n\n' : ''
-      out.push({ type: 'delta', text: `${prefix}${detail}` })
-      nextAssistantText = nextAssistantText ? `${nextAssistantText}\n\n${detail}` : detail
-    }
-    terminal = 'completed'
-  }
-
-  if (eventType === 'request_failed') {
-    terminal = 'failed'
-    out.push({
-      type: 'error',
-      message: detail || 'Agent request failed',
-    })
-  }
-
-  return { events: out, assistantText: nextAssistantText, terminal }
-}
-
 export async function* streamSyteAgentActivity(
   uuid: string,
   sinceId: number,
@@ -139,9 +98,16 @@ export async function* streamSyteAgentActivity(
 ): AsyncGenerator<AgentStreamEvent> {
   let assistantText = ''
   let completed = false
+  let lastSinceId = sinceId
 
   for await (const frame of readSyteActivitySse(uuid, sinceId, headers, signal)) {
-    if (frame.type === 'ping') continue
+    if (frame.type === 'ping') {
+      if (typeof frame.since_id === 'number') {
+        lastSinceId = Math.max(lastSinceId, frame.since_id)
+        yield { type: 'meta', sinceId: lastSinceId }
+      }
+      continue
+    }
 
     if (frame.type === 'processing') {
       const ev = frame.event
@@ -156,8 +122,12 @@ export async function* streamSyteAgentActivity(
 
     if (frame.type !== 'activity' || !frame.event) continue
 
-    const mapped = mapActivityToStreamEvents(frame.event, assistantText)
+    const mapped = mapSyteActivityEvent(frame.event, assistantText)
     assistantText = mapped.assistantText
+    if (mapped.lastEventId) {
+      lastSinceId = Math.max(lastSinceId, mapped.lastEventId)
+      yield { type: 'meta', sinceId: lastSinceId }
+    }
 
     for (const event of mapped.events) {
       yield event
@@ -181,7 +151,8 @@ export async function* streamSyteAgentActivity(
   }
 
   if (!completed) {
-    throw new Error('Syte activity stream ended before the agent completed')
+    yield { type: 'detached', sinceId: lastSinceId }
+    return
   }
 
   yield { type: 'done' }

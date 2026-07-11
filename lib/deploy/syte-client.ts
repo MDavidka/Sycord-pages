@@ -480,7 +480,10 @@ export type SyteAgentCommunicateResponse = {
 
 export type SyteAgentChangeResponse = {
   ok?: boolean
-  change_applied?: boolean
+  request_id?: string
+  status?: string
+  stream_url?: string
+  change_applied?: boolean | null
   reply?: string
   model?: string
   provider?: string

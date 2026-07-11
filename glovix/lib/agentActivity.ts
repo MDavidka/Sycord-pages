@@ -98,6 +98,8 @@ export function activityDisplayText(item: AgentActivityItem): string {
 export function shouldRenderInFeed(eventType: string): boolean {
   return ![
     'ping',
+    'token_delta',
+    'message_snapshot',
     'user_message',
     'session_started',
     'session_finished',
