@@ -12,32 +12,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
+  buildTurnsFromEvents,
   extractDetail,
   parseTaggedFrame,
   toolKind,
   type SyraActivity,
   type SyraPhase,
+  type SyraTurn,
+  type SyteActivityEvent,
 } from "./syra-agent-events"
 import type { SyraModelProfile } from "./syra-model-profiles"
 
-export interface SyraTurn {
-  /** Client id until the runtime assigns a request_id, then that. */
-  id: string
-  requestId?: string
-  role: "user" | "assistant"
-  userMessage?: string
-  phase: SyraPhase
-  thinking: string
-  activities: SyraActivity[]
-  reply?: string
-  error?: string
-  createdAt: number
-}
+export type { SyraTurn } from "./syra-agent-events"
 
 export interface UseSyraAgentOptions {
   projectId: string
   uuid?: string
   autoWarm?: boolean
+  /**
+   * When true (a newly created project), skip history entirely and connect at
+   * the stream tip — a fresh start with nothing loaded. Defaults to false, so
+   * opening an existing project restores every older message.
+   */
+  freshStart?: boolean
 }
 
 export interface UseSyraAgentResult {
@@ -45,6 +42,8 @@ export interface UseSyraAgentResult {
   phase: SyraPhase
   isBusy: boolean
   connected: boolean
+  /** True while the full conversation history is being fetched on open. */
+  loadingHistory: boolean
   error: string | null
   submit: (message: string, modelProfile?: SyraModelProfile) => Promise<void>
   stop: () => void
@@ -57,11 +56,12 @@ function nextClientId() {
 }
 
 export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
-  const { projectId, uuid, autoWarm = true } = opts
+  const { projectId, uuid, autoWarm = true, freshStart = false } = opts
 
   const [turns, setTurns] = useState<SyraTurn[]>([])
   const [phase, setPhase] = useState<SyraPhase>("idle")
   const [connected, setConnected] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(!freshStart)
   const [error, setError] = useState<string | null>(null)
 
   const esRef = useRef<EventSource | null>(null)
@@ -321,8 +321,37 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
   // openStream when a [reconnect] frame arrives.
   reopenRef.current = openStream
 
+  /**
+   * Walk the durable activity snapshot from since_id=0, paginating by the last
+   * seen id, and return every persisted event. The runtime runs 24/7, so this
+   * recovers the whole conversation regardless of how long ago it happened.
+   */
+  const fetchAllEvents = useCallback(async (): Promise<SyteActivityEvent[]> => {
+    const all: SyteActivityEvent[] = []
+    let since = 0
+    const base = `/api/syra/${encodeURIComponent(projectId)}/activity`
+    for (let page = 0; page < 100; page++) {
+      const params = new URLSearchParams({ since_id: String(since) })
+      if (uuid) params.set("uuid", uuid)
+      const res = await fetch(`${base}?${params.toString()}`, { cache: "no-store" })
+      if (!res.ok) break
+      const data = await res.json().catch(() => null)
+      const events: SyteActivityEvent[] = Array.isArray(data?.events) ? data.events : []
+      if (events.length === 0) break
+      all.push(...events)
+      const maxId = events.reduce((m, e) => (e.id > m ? e.id : m), since)
+      if (maxId <= since) break // no forward progress → stop
+      since = maxId
+      if (closedRef.current) break
+    }
+    return all
+  }, [projectId, uuid])
+
   useEffect(() => {
     closedRef.current = false
+    lastIdRef.current = 0
+    setTurns([])
+    setLoadingHistory(!freshStart)
 
     // 1) Prewarm the runtime (non-blocking).
     if (autoWarm) {
@@ -335,8 +364,32 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
       })
     }
 
-    // 2) Open the durable activity stream.
-    openStream()
+    // 2) Restore history (existing project) or start fresh (new project), then
+    //    open the live stream resuming from the last id so there are no gaps and
+    //    no duplicate events between the replayed history and the live tail.
+    ;(async () => {
+      try {
+        const events = await fetchAllEvents()
+        if (closedRef.current) return
+        if (freshStart) {
+          // Fresh start: keep nothing on screen, but jump the resume point past
+          // any pre-existing events so the live stream won't replay them.
+          const tip = events.reduce((m, e) => (e.id > m ? e.id : m), 0)
+          lastIdRef.current = tip
+        } else if (events.length > 0) {
+          const { turns: history, lastId } = buildTurnsFromEvents(events)
+          if (closedRef.current) return
+          setTurns(history)
+          lastIdRef.current = lastId
+        }
+      } catch {
+        /* history is best-effort; fall through to the live stream */
+      } finally {
+        if (!closedRef.current) setLoadingHistory(false)
+      }
+      if (closedRef.current) return
+      openStream()
+    })()
 
     return () => {
       closedRef.current = true
@@ -350,7 +403,7 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, uuid, autoWarm])
+  }, [projectId, uuid, autoWarm, freshStart])
 
   // -----------------------------------------------------------------------
   // Public actions
@@ -430,5 +483,5 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
   const isBusy =
     phase === "starting" || phase === "thinking" || phase === "planning" || phase === "working"
 
-  return { turns, phase, isBusy, connected, error, submit, stop }
+  return { turns, phase, isBusy, connected, loadingHistory, error, submit, stop }
 }

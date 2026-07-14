@@ -7,15 +7,18 @@
 // durable turn (starting → thinking → tools/commands/files → reply), which the
 // activity feed renders live.
 
-import { useParams, useRouter } from "next/navigation"
+import { Suspense } from "react"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import SyraAgentChat from "@/glovix/components/syra/SyraAgentChat"
 // Shimmer keyframes + tool row styling live in the glovix stylesheet.
 import "@/glovix/glovix.css"
 
-export default function SyraAgentPage() {
+function SyraAgentShell() {
   const { id } = useParams() as { id: string }
   const router = useRouter()
+  // A newly created project opens with ?fresh=1 → fresh start, no history load.
+  const freshStart = useSearchParams().get("fresh") === "1"
 
   return (
     <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#18191B]">
@@ -31,8 +34,17 @@ export default function SyraAgentPage() {
         <span className="text-[14px] font-medium text-[#e5e5e5]">Syra</span>
       </header>
       <div className="min-h-0 flex-1">
-        <SyraAgentChat projectId={id} />
+        <SyraAgentChat projectId={id} freshStart={freshStart} />
       </div>
     </div>
+  )
+}
+
+export default function SyraAgentPage() {
+  // useSearchParams requires a Suspense boundary during prerendering.
+  return (
+    <Suspense fallback={<div className="h-[100dvh] w-full bg-[#18191B]" />}>
+      <SyraAgentShell />
+    </Suspense>
   )
 }

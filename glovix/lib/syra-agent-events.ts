@@ -93,6 +93,21 @@ export type SyraPhase =
   | "done"
   | "error"
 
+/** One conversation turn (user message + the agent's reasoning/activities/reply). */
+export interface SyraTurn {
+  /** Client id until the runtime assigns a request_id, then that. */
+  id: string
+  requestId?: string
+  role: "user" | "assistant"
+  userMessage?: string
+  phase: SyraPhase
+  thinking: string
+  activities: SyraActivity[]
+  reply?: string
+  error?: string
+  createdAt: number
+}
+
 /**
  * Map a runtime tool name to a coarse kind. The runtime may use a variety of
  * names (read_file, readFile, write_file, edit_file, run_command, grep, …) so we
@@ -156,4 +171,173 @@ export function extractDetail(kind: ActivityKind, args: any): string | undefined
     if (typeof candidate === "string") return candidate
   }
   return undefined
+}
+
+
+// ---------------------------------------------------------------------------
+// History reconstruction
+// ---------------------------------------------------------------------------
+
+/** Raw event shape returned by the activity snapshot (non-tagged JSON). */
+export interface SyteActivityEvent {
+  id: number
+  event_type: string
+  role?: string
+  title?: string
+  detail?: string
+  payload?: {
+    request_id?: string
+    tool?: string
+    arguments?: unknown
+    ok?: boolean
+    is_error?: boolean
+    reply?: string
+    error?: string
+    path?: string
+    text?: string
+  }
+  source?: string
+  created_at?: string
+}
+
+/** Map a workspace edit event_type to an activity kind. */
+function eventTypeKind(eventType: string): ActivityKind {
+  switch (eventType) {
+    case "file_created":
+      return "write"
+    case "file_modified":
+      return "edit"
+    case "file_deleted":
+      return "delete"
+    case "command_run":
+      return "command"
+    default:
+      return "generic"
+  }
+}
+
+let histSeq = 0
+
+/**
+ * Reduce a chronological list of persisted activity events into finished turns.
+ * Used to restore the full conversation when (re)opening a durable project.
+ * Every produced turn is terminal (done/error) since it is replayed history.
+ */
+export function buildTurnsFromEvents(events: SyteActivityEvent[]): {
+  turns: SyraTurn[]
+  lastId: number
+} {
+  const turns: SyraTurn[] = []
+  const byRequest = new Map<string, SyraTurn>()
+  let lastId = 0
+
+  const ensureTurn = (requestId: string | undefined, userMessage?: string): SyraTurn => {
+    let turn = requestId ? byRequest.get(requestId) : undefined
+    if (!turn) {
+      turn = {
+        id: `hist-${++histSeq}`,
+        requestId,
+        role: "user",
+        userMessage,
+        phase: "done",
+        thinking: "",
+        activities: [],
+        createdAt: Date.now(),
+      }
+      turns.push(turn)
+      if (requestId) byRequest.set(requestId, turn)
+    } else if (userMessage && !turn.userMessage) {
+      turn.userMessage = userMessage
+    }
+    return turn
+  }
+
+  const sorted = [...events].sort((a, b) => (a.id || 0) - (b.id || 0))
+
+  for (const ev of sorted) {
+    if (typeof ev.id === "number" && ev.id > lastId) lastId = ev.id
+    const rid = ev.payload?.request_id
+    const detail = ev.detail || ev.payload?.text || ev.payload?.reply
+
+    switch (ev.event_type) {
+      case "user_message":
+      case "request_started": {
+        ensureTurn(rid, detail)
+        break
+      }
+      case "processing": {
+        ensureTurn(rid)
+        break
+      }
+      case "thinking": {
+        const t = ensureTurn(rid)
+        t.thinking += ev.detail || ev.payload?.text || ""
+        break
+      }
+      case "tool_call_started": {
+        const t = ensureTurn(rid)
+        const tool = ev.payload?.tool || ev.title || "tool"
+        const kind = toolKind(tool)
+        t.activities.push({
+          id: String(ev.id),
+          kind,
+          tool,
+          status: "running",
+          detail: extractDetail(kind, ev.payload?.arguments),
+          requestId: rid,
+          createdAt: Date.now(),
+        })
+        break
+      }
+      case "tool_call_finished": {
+        const t = ensureTurn(rid)
+        const tool = ev.payload?.tool || ev.title || "tool"
+        const isError = ev.payload?.is_error === true || ev.payload?.ok === false
+        for (let i = t.activities.length - 1; i >= 0; i--) {
+          if (t.activities[i].tool === tool && t.activities[i].status === "running") {
+            t.activities[i] = { ...t.activities[i], status: isError ? "error" : "done" }
+            break
+          }
+        }
+        break
+      }
+      case "file_created":
+      case "file_modified":
+      case "file_deleted":
+      case "command_run": {
+        const t = ensureTurn(rid)
+        const kind = eventTypeKind(ev.event_type)
+        t.activities.push({
+          id: String(ev.id),
+          kind,
+          tool: ev.event_type,
+          status: "done",
+          // Commands never expose the executed command string.
+          detail: kind === "command" ? undefined : ev.payload?.path || ev.detail,
+          requestId: rid,
+          createdAt: Date.now(),
+        })
+        break
+      }
+      case "request_completed": {
+        const t = ensureTurn(rid)
+        t.reply = ev.payload?.reply || ev.detail || t.reply
+        t.phase = "done"
+        t.activities = t.activities.map((a) =>
+          a.status === "running" ? { ...a, status: "done" } : a,
+        )
+        break
+      }
+      case "request_failed": {
+        const t = ensureTurn(rid)
+        t.error = ev.payload?.error || ev.detail || "Request failed"
+        t.phase = "error"
+        break
+      }
+      default:
+        break
+    }
+  }
+
+  return { turns, lastId }
 }

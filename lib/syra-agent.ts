@@ -165,6 +165,28 @@ export function getAgentStatus(uuid: string): Promise<SyteResult> {
   return getJson(`/sycord/api/agent_status?uuid=${encodeURIComponent(uuid)}`)
 }
 
+export interface ActivitySnapshot {
+  ok?: boolean
+  uuid?: string
+  since_id?: number
+  stream_url?: string
+  events?: any[]
+}
+
+/**
+ * Cursor-like activity snapshot. Returns persisted events with id > sinceId.
+ * The runtime is durable and runs 24/7, so opening a project must walk this
+ * from since_id=0 to recover the full conversation history before going live.
+ */
+export function getActivitySnapshot(
+  uuid: string,
+  sinceId = 0,
+): Promise<SyteResult<ActivitySnapshot>> {
+  return getJson<ActivitySnapshot>(
+    `/sycord/api/agent_activity?uuid=${encodeURIComponent(uuid)}&since_id=${sinceId}`,
+  )
+}
+
 export interface AgentChangeResult {
   ok: boolean
   request_id?: string

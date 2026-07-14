@@ -24,6 +24,8 @@ interface SyraAgentChatProps {
   projectId?: string
   uuid?: string
   isDark?: boolean
+  /** Newly created project → fresh start, load no history. */
+  freshStart?: boolean
 }
 
 function SyraModelSelector({
@@ -96,14 +98,23 @@ function SyraModelSelector({
   )
 }
 
-export default function SyraAgentChat({ projectId: propProjectId, uuid, isDark = true }: SyraAgentChatProps) {
+export default function SyraAgentChat({
+  projectId: propProjectId,
+  uuid,
+  isDark = true,
+  freshStart = false,
+}: SyraAgentChatProps) {
   const projectId = useMemo(() => {
     if (propProjectId) return propProjectId
     if (typeof window !== 'undefined') return (window as any).__glovixProjectId || ''
     return ''
   }, [propProjectId])
 
-  const { turns, isBusy, error, submit, stop } = useSyraAgent({ projectId, uuid })
+  const { turns, isBusy, loadingHistory, error, submit, stop } = useSyraAgent({
+    projectId,
+    uuid,
+    freshStart,
+  })
 
   const [input, setInput] = useState('')
   const [profile, setProfile] = useState<SyraModelProfile>(DEFAULT_SYRA_PROFILE)
@@ -138,7 +149,18 @@ export default function SyraAgentChat({ projectId: propProjectId, uuid, isDark =
       {/* Feed / empty state */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-4 py-6">
-          {!hasTurns ? (
+          {loadingHistory && !hasTurns ? (
+            <div className="flex h-full min-h-[40vh] flex-col items-center justify-center">
+              <span
+                className={cn(
+                  'text-[14px] font-medium text-shimmer',
+                  isDark ? 'text-shimmer-dark' : 'text-shimmer-light',
+                )}
+              >
+                Restoring conversation
+              </span>
+            </div>
+          ) : !hasTurns ? (
             <div className="flex h-full min-h-[40vh] flex-col items-center justify-center text-center">
               <h1 className={cn('text-[22px] font-semibold', isDark ? 'text-[#e5e5e5]' : 'text-gray-900')}>
                 Syra
