@@ -1,14 +1,16 @@
-// GET /api/syra/[projectId]/stream[?since_id=&format=&types=&uuid=]
+// GET /api/syra/[projectId]/stream[?since_id=&format=marked&types=&uuid=]
 //
-// Same-origin proxy for Syte's durable agent activity SSE stream. The browser
-// opens this with an EventSource; we inject the Syte api key server-side (an
-// EventSource cannot set an Authorization header) and pipe the upstream stream
-// through verbatim.
+// Same-origin proxy for Syte's durable agent activity SSE stream:
+//   GET /api/projects/{uuid}/agent/activity/stream?live=1&since_id=0&format=marked
+//
+// The browser opens this with an EventSource; we inject the Syte api key
+// server-side (EventSource cannot set Authorization) and pipe the upstream
+// stream through verbatim. Default encoding is `marked` (`[sessionN]` +
+// `S…(d|g)-`) so the client only consumes the latest session.
 //
 // The upstream frames include `id:` lines, so the browser's native EventSource
 // resume works: on a transient disconnect it reconnects with the Last-Event-ID
-// header, which we forward upstream as since_id — recovering every missed event
-// with no gaps and no duplicates.
+// header, which we forward upstream as since_id.
 
 import {
   isSyteConfigured,
@@ -47,9 +49,12 @@ export async function GET(
   const lastEventId = req.headers.get("last-event-id")
   const sinceId = Number(sinceParam ?? lastEventId ?? 0) || 0
 
-  const format = (url.searchParams.get("format") || "tagged") as
+  // Prefer marked: [boot] / [sessionN] / S{N}{mmm}(d|g)- … so the client can
+  // stream only the latest session (older ones are already saved).
+  const format = (url.searchParams.get("format") || "marked") as
     | "sse"
     | "tagged"
+    | "marked"
     | "text"
     | "jsonl"
   const types = url.searchParams.get("types") || undefined

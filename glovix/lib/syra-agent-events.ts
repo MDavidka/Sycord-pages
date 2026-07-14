@@ -1,19 +1,21 @@
 // Client-side event model for the rebuilt Syra agent stream.
 //
-// The Syte activity stream is consumed in the compact "tagged" SSE encoding
-// (?format=tagged), where each `data:` frame carries one record shaped like
-// `[tag]<{...json...}>`. This module turns those raw frames into a small,
-// strongly-typed activity model the UI can render directly.
+// Preferred encoding is marked SSE (?format=marked) — see
+// https://sycord.site/api/#agent:
+//   [boot]
+//   [sessionN]          — each user message opens a session
+//   S{session}{msg:03d}(d|g)- [<kind>]text
+//   [ping] / [reconnect]
 //
-// Tagged vocabulary (see https://sycord.site/api/#agent):
+// The agent only streams the latest `[sessionN]`; older sessions that are
+// already saved are skipped (`session=last` on snapshots).
+//
+// Tagged vocabulary (?format=tagged) remains supported as a fallback:
 //   [session] [start] [processing] [think] [tool:start] [tool:result]
 //   [delta] [message] [done] [error] [status] [ping] [reconnect]
-//
-// Turn lifecycle (correlate by request_id):
-//   request_started → processing → thinking? → (tool_call_started/finished)* →
-//   request_completed | request_failed
 
 export type SyraEventTag =
+  | "boot"
   | "session"
   | "start"
   | "processing"
@@ -28,7 +30,7 @@ export type SyraEventTag =
   | "ping"
   | "reconnect"
 
-/** A raw record decoded from a single tagged frame. */
+/** A raw record decoded from a single tagged or marked frame. */
 export interface SyraTaggedRecord {
   tag: SyraEventTag | string
   data: Record<string, any>
@@ -50,6 +52,161 @@ export function parseTaggedFrame(payload: string): SyraTaggedRecord | null {
   } catch {
     return null
   }
+}
+
+const MARKED_SESSION_RE = /^\[session(\d+)\]$/i
+const MARKED_CONTROL_RE = /^\[(boot|ping|reconnect|error|status)\](?:<(.*)>)?$/i
+/** S{session}{msg:03d}(d|g)- optional <kind> then text */
+const MARKED_LINE_RE = /^S(\d+)(\d{3})\(([dg])\)-\s*(?:<(\w+)>)?(.*)$/i
+
+function parseOptionalJson(raw: string | undefined): Record<string, any> {
+  if (!raw) return {}
+  try {
+    const data = JSON.parse(raw)
+    return data && typeof data === "object" ? data : { value: data }
+  } catch {
+    return { text: raw }
+  }
+}
+
+/**
+ * Parse one EventSource `data:` payload in marked mode.
+ * Returns null for blank / unrecognised lines (ignored).
+ *
+ * Synthesises the same tag vocabulary the tagged path uses so the hook can
+ * keep a single `handleRecord` dispatcher.
+ */
+export function parseMarkedFrame(payload: string): SyraTaggedRecord | null {
+  if (!payload) return null
+  const trimmed = payload.trim()
+  if (!trimmed) return null
+
+  // Prefer tagged-style control frames when present (`[ping]<{…}>`).
+  const tagged = parseTaggedFrame(trimmed)
+  if (tagged) return tagged
+
+  if (trimmed === "[boot]") {
+    return { tag: "boot", data: {} }
+  }
+
+  const sessionMatch = MARKED_SESSION_RE.exec(trimmed)
+  if (sessionMatch) {
+    const session = Number(sessionMatch[1])
+    return {
+      tag: "session",
+      data: { session, text: `session${session}` },
+    }
+  }
+
+  const controlMatch = MARKED_CONTROL_RE.exec(trimmed)
+  if (controlMatch) {
+    const tag = controlMatch[1].toLowerCase()
+    return { tag, data: parseOptionalJson(controlMatch[2]) }
+  }
+
+  const lineMatch = MARKED_LINE_RE.exec(trimmed)
+  if (!lineMatch) return null
+
+  const session = Number(lineMatch[1])
+  const messageIndex = Number(lineMatch[2])
+  const going = lineMatch[3].toLowerCase() === "g"
+  const kind = (lineMatch[4] || "").toLowerCase()
+  const text = (lineMatch[5] || "").trim()
+  const markId = session * 1000 + messageIndex
+  const base = {
+    id: markId,
+    session,
+    message_index: messageIndex,
+    mark_status: going ? "going" : "done",
+    text,
+  }
+
+  // Explicit kind tags from the marked protocol.
+  if (kind === "user") {
+    return { tag: "start", data: { ...base, role: "user", request_id: `session-${session}` } }
+  }
+  if (kind === "plan") {
+    return { tag: "think", data: { ...base, request_id: `session-${session}` } }
+  }
+  if (kind === "message") {
+    return {
+      tag: going ? "delta" : "done",
+      data: { ...base, request_id: `session-${session}`, reply: text },
+    }
+  }
+  if (kind === "error") {
+    return {
+      tag: "error",
+      data: { ...base, request_id: `session-${session}`, error: text },
+    }
+  }
+  if (kind === "status") {
+    return { tag: "status", data: { ...base, request_id: `session-${session}` } }
+  }
+  if (kind === "tool") {
+    // `S…(g)-<tool>name {args}` / `S…(d)-<tool>name …`
+    const toolMatch = /^(\S+)\s*(.*)$/.exec(text)
+    const tool = toolMatch?.[1] || "tool"
+    const args = toolMatch?.[2] || ""
+    return {
+      tag: going ? "tool:start" : "tool:result",
+      data: {
+        ...base,
+        request_id: `session-${session}`,
+        tool,
+        title: tool,
+        text: args,
+        arguments: args,
+        phase: going ? "started" : "finished",
+        is_error: false,
+        ok: true,
+      },
+    }
+  }
+
+  // No kind tag — infer from text shape.
+  // Tools typically look like `read_file {…}` or bare tool names while going.
+  const inferredTool = /^([a-zA-Z_][\w.]*)\s*(\{[\s\S]*\})?\s*$/.exec(text)
+  if (inferredTool && (going || inferredTool[2])) {
+    const tool = inferredTool[1]
+    const args = inferredTool[2] || ""
+    return {
+      tag: going ? "tool:start" : "tool:result",
+      data: {
+        ...base,
+        request_id: `session-${session}`,
+        tool,
+        title: tool,
+        text: args,
+        arguments: args,
+        phase: going ? "started" : "finished",
+        is_error: false,
+        ok: true,
+      },
+    }
+  }
+
+  if (going) {
+    // In-progress free text → treat as planning/thinking.
+    return { tag: "think", data: { ...base, request_id: `session-${session}` } }
+  }
+
+  // Done free text — first line of a session is the user prompt, later lines
+  // are the assistant reply. The hook decides via message_index.
+  if (messageIndex <= 1) {
+    return { tag: "start", data: { ...base, role: "user", request_id: `session-${session}` } }
+  }
+  return {
+    tag: "done",
+    data: { ...base, request_id: `session-${session}`, reply: text },
+  }
+}
+
+/**
+ * Parse a stream frame, preferring marked then falling back to tagged.
+ */
+export function parseAgentStreamFrame(payload: string): SyraTaggedRecord | null {
+  return parseMarkedFrame(payload) || parseTaggedFrame(payload)
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +255,8 @@ export interface SyraTurn {
   /** Client id until the runtime assigns a request_id, then that. */
   id: string
   requestId?: string
+  /** Marked-stream session number (`[sessionN]`). */
+  session?: number
   role: "user" | "assistant"
   userMessage?: string
   phase: SyraPhase

@@ -1,20 +1,21 @@
-// useSyraAgent — the client half of the rebuilt Syra backend.
+// useSyraAgent — thin client over Syte's marked agent activity SSE stream.
+//
+// Docs: https://sycord.site/api/#agent
+//   GET /api/projects/{uuid}/agent/activity/stream?live=1&since_id=0&format=marked
 //
 // Responsibilities:
 //   1. Prewarm the per-project Syte runtime when the chat opens.
 //   2. Submit a change message (POST /api/syra/[id]/change → request_id).
-//   3. Consume the durable activity SSE stream via a same-origin EventSource,
-//      decoding the tagged frames into a per-turn model the UI renders.
-//   4. Correlate every frame by request_id and resume with since_id on reconnect.
-//
-// The heavy lifting (file edits, commands, preview reload) happens server-side
-// in the Syte cloud runtime; the browser is a thin, resumable stream consumer.
+//   3. Consume the durable activity SSE stream (marked encoding) and render
+//      only the latest `[sessionN]` — older sessions that are already saved are
+//      never re-fetched (snapshots use session=last).
+//   4. Resume with since_id / Last-Event-ID on reconnect.
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   buildTurnsFromEvents,
   extractDetail,
-  parseTaggedFrame,
+  parseAgentStreamFrame,
   toolKind,
   type SyraActivity,
   type SyraPhase,
@@ -30,9 +31,8 @@ export interface UseSyraAgentOptions {
   uuid?: string
   autoWarm?: boolean
   /**
-   * When true (a newly created project), skip history entirely and connect at
-   * the stream tip — a fresh start with nothing loaded. Defaults to false, so
-   * opening an existing project restores every older message.
+   * When true (a newly created project), skip even the latest-session snapshot
+   * and connect at the stream tip — a fresh start with nothing loaded.
    */
   freshStart?: boolean
 }
@@ -42,7 +42,7 @@ export interface UseSyraAgentResult {
   phase: SyraPhase
   isBusy: boolean
   connected: boolean
-  /** True while the full conversation history is being fetched on open. */
+  /** True while the latest `[sessionN]` snapshot is being fetched on open. */
   loadingHistory: boolean
   error: string | null
   submit: (message: string, modelProfile?: SyraModelProfile) => Promise<void>
@@ -67,16 +67,13 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
   const esRef = useRef<EventSource | null>(null)
   const lastIdRef = useRef<number>(0)
   const activeRequestRef = useRef<string | null>(null)
+  /** Highest `[sessionN]` we are willing to render — older sessions are ignored. */
+  const latestSessionRef = useRef<number>(0)
+  const activeSessionRef = useRef<number | null>(null)
   const closedRef = useRef(false)
-  // Points to the latest reopen() so handleRecord can trigger a resume on a
-  // [reconnect] frame without a declaration-order dependency.
   const reopenRef = useRef<() => void>(() => {})
 
   const streamBase = `/api/syra/${encodeURIComponent(projectId)}/stream`
-
-  // -----------------------------------------------------------------------
-  // Turn helpers
-  // -----------------------------------------------------------------------
 
   const patchTurn = useCallback(
     (predicate: (t: SyraTurn) => boolean, patch: (t: SyraTurn) => SyraTurn) => {
@@ -92,12 +89,13 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
     [],
   )
 
-  /** Locate the turn for a request_id, falling back to the latest pending turn. */
-  const bindTurn = useCallback((requestId: string, userMessage?: string) => {
+  /** Locate the turn for a request_id / session, falling back to the latest pending turn. */
+  const bindTurn = useCallback((requestId: string, userMessage?: string, session?: number) => {
     setTurns((prev) => {
-      // Already bound?
-      if (prev.some((t) => t.requestId === requestId)) return prev
-      // Bind to the most recent local turn awaiting a request_id.
+      if (prev.some((t) => t.requestId === requestId)) {
+        if (session == null) return prev
+        return prev.map((t) => (t.requestId === requestId ? { ...t, session: t.session ?? session } : t))
+      }
       const idx = [...prev]
         .reverse()
         .findIndex((t) => t.role === "user" && !t.requestId)
@@ -107,17 +105,18 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
         next[realIdx] = {
           ...next[realIdx],
           requestId,
+          session: session ?? next[realIdx].session,
           phase: "starting",
           userMessage: userMessage ?? next[realIdx].userMessage,
         }
         return next
       }
-      // No pending turn (e.g. resumed history) — create one.
       return [
         ...prev,
         {
           id: nextClientId(),
           requestId,
+          session,
           role: "user",
           userMessage,
           phase: "starting",
@@ -129,19 +128,50 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
     })
   }, [])
 
-  // -----------------------------------------------------------------------
-  // Frame handling
-  // -----------------------------------------------------------------------
-
   const handleRecord = useCallback(
     (tag: string, data: Record<string, any>) => {
       if (typeof data?.id === "number" && data.id > lastIdRef.current) {
         lastIdRef.current = data.id
       }
-      const requestId: string | undefined = data?.request_id
+
+      // Marked `[sessionN]` — adopt as latest; drop older sessions from the UI.
+      if (tag === "session" && typeof data?.session === "number") {
+        const session = data.session as number
+        if (session > latestSessionRef.current) {
+          latestSessionRef.current = session
+          // Drop any turns belonging to older `[sessionN]` blocks that may have
+          // been replayed before we discovered the true tip session.
+          setTurns((prev) =>
+            prev.filter((t) => t.session == null || t.session >= session || !t.requestId),
+          )
+        }
+        if (session >= latestSessionRef.current) {
+          activeSessionRef.current = session
+          bindTurn(`session-${session}`, undefined, session)
+          setPhase("starting")
+        }
+        return
+      }
+
+      if (tag === "boot") return
+
+      const sessionNum: number | undefined =
+        typeof data?.session === "number" ? data.session : undefined
+      if (
+        sessionNum != null &&
+        latestSessionRef.current > 0 &&
+        sessionNum < latestSessionRef.current
+      ) {
+        // Older saved session — skip; only stream the latest `[sessionN]`.
+        return
+      }
+
+      const requestId: string | undefined =
+        data?.request_id ||
+        (sessionNum != null ? `session-${sessionNum}` : undefined) ||
+        (activeSessionRef.current != null ? `session-${activeSessionRef.current}` : undefined)
 
       switch (tag) {
-        case "session":
         case "status":
           return
         case "ping":
@@ -150,7 +180,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
           }
           return
         case "reconnect":
-          // Server asked us to reopen from the given point (per-connection deadline).
           if (typeof data?.since_id === "number") lastIdRef.current = data.since_id
           reopenRef.current()
           return
@@ -158,7 +187,7 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
         case "start": {
           if (requestId) {
             activeRequestRef.current = requestId
-            bindTurn(requestId, data?.text)
+            bindTurn(requestId, data?.text, sessionNum)
           }
           setPhase("starting")
           return
@@ -201,7 +230,11 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
           }
           patchTurn(
             (t) => t.requestId === requestId || t.requestId === activeRequestRef.current,
-            (t) => ({ ...t, phase: kind === "plan" ? "planning" : "working", activities: [...t.activities, activity] }),
+            (t) => ({
+              ...t,
+              phase: kind === "plan" ? "planning" : "working",
+              activities: [...t.activities, activity],
+            }),
           )
           setPhase((p) => (p === "done" || p === "error" ? p : "working"))
           return
@@ -214,7 +247,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
             (t) => t.requestId === requestId || t.requestId === activeRequestRef.current,
             (t) => {
               const activities = [...t.activities]
-              // Match the last still-running activity with this tool name.
               for (let i = activities.length - 1; i >= 0; i--) {
                 if (activities[i].tool === tool && activities[i].status === "running") {
                   activities[i] = { ...activities[i], status: isError ? "error" : "done" }
@@ -229,7 +261,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
 
         case "delta":
         case "message": {
-          // Reserved token-streaming path — append if a provider ever emits it.
           const text: string = data?.text || ""
           if (!text) return
           patchTurn(
@@ -272,18 +303,11 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
           return
       }
     },
-    // reopen is defined below; it's stable via ref usage.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [bindTurn, patchTurn],
   )
 
-  // -----------------------------------------------------------------------
-  // EventSource lifecycle
-  // -----------------------------------------------------------------------
-
   const openStream = useCallback(() => {
     if (typeof window === "undefined" || closedRef.current) return
-    // Tear down any existing connection first.
     if (esRef.current) {
       try {
         esRef.current.close()
@@ -293,8 +317,12 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
       esRef.current = null
     }
 
-    const params = new URLSearchParams({ format: "tagged" })
-    if (lastIdRef.current > 0) params.set("since_id", String(lastIdRef.current))
+    // Always ask for marked encoding + an explicit since_id (incl. 0).
+    const params = new URLSearchParams({
+      format: "marked",
+      since_id: String(lastIdRef.current || 0),
+      live: "1",
+    })
     if (uuid) params.set("uuid", uuid)
 
     const es = new EventSource(`${streamBase}?${params.toString()}`)
@@ -305,55 +333,43 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
       setError(null)
     }
     es.onmessage = (evt) => {
-      const record = parseTaggedFrame(evt.data)
+      const record = parseAgentStreamFrame(evt.data)
       if (!record) return
       handleRecord(record.tag, record.data)
     }
     es.onerror = () => {
       setConnected(false)
-      // EventSource retries automatically and resends Last-Event-ID, so we let
-      // it recover on its own for transient errors.
+      // EventSource retries automatically and resends Last-Event-ID.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamBase, uuid, handleRecord])
 
-  // Keep the reopen ref fresh so handleRecord's closure triggers the latest
-  // openStream when a [reconnect] frame arrives.
   reopenRef.current = openStream
 
   /**
-   * Walk the durable activity snapshot from since_id=0, paginating by the last
-   * seen id, and return every persisted event. The runtime runs 24/7, so this
-   * recovers the whole conversation regardless of how long ago it happened.
+   * Fetch only the latest `[sessionN]` snapshot (`session=last`). Older saved
+   * sessions are intentionally not requested.
    */
-  const fetchAllEvents = useCallback(async (): Promise<SyteActivityEvent[]> => {
-    const all: SyteActivityEvent[] = []
-    let since = 0
+  const fetchLatestSessionEvents = useCallback(async (): Promise<SyteActivityEvent[]> => {
     const base = `/api/syra/${encodeURIComponent(projectId)}/activity`
-    for (let page = 0; page < 100; page++) {
-      const params = new URLSearchParams({ since_id: String(since) })
-      if (uuid) params.set("uuid", uuid)
-      const res = await fetch(`${base}?${params.toString()}`, { cache: "no-store" })
-      if (!res.ok) break
-      const data = await res.json().catch(() => null)
-      const events: SyteActivityEvent[] = Array.isArray(data?.events) ? data.events : []
-      if (events.length === 0) break
-      all.push(...events)
-      const maxId = events.reduce((m, e) => (e.id > m ? e.id : m), since)
-      if (maxId <= since) break // no forward progress → stop
-      since = maxId
-      if (closedRef.current) break
-    }
-    return all
+    const params = new URLSearchParams({
+      since_id: "0",
+      session: "last",
+    })
+    if (uuid) params.set("uuid", uuid)
+    const res = await fetch(`${base}?${params.toString()}`, { cache: "no-store" })
+    if (!res.ok) return []
+    const data = await res.json().catch(() => null)
+    return Array.isArray(data?.events) ? (data.events as SyteActivityEvent[]) : []
   }, [projectId, uuid])
 
   useEffect(() => {
     closedRef.current = false
     lastIdRef.current = 0
+    latestSessionRef.current = 0
+    activeSessionRef.current = null
     setTurns([])
     setLoadingHistory(!freshStart)
 
-    // 1) Prewarm the runtime (non-blocking).
     if (autoWarm) {
       fetch(`/api/syra/${encodeURIComponent(projectId)}/warm`, {
         method: "POST",
@@ -364,26 +380,48 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
       })
     }
 
-    // 2) Restore history (existing project) or start fresh (new project), then
-    //    open the live stream resuming from the last id so there are no gaps and
-    //    no duplicate events between the replayed history and the live tail.
     ;(async () => {
       try {
-        const events = await fetchAllEvents()
+        const events = await fetchLatestSessionEvents()
         if (closedRef.current) return
+
+        // Always advance the resume tip past whatever the latest session has,
+        // so the live stream does not re-emit already-saved frames.
+        const tip = events.reduce((m, e) => (e.id > m ? e.id : m), 0)
+        lastIdRef.current = tip
+
+        // Infer the latest session number from event payloads when present.
+        for (const ev of events) {
+          const s = (ev.payload as { session?: number } | undefined)?.session
+          if (typeof s === "number" && s > latestSessionRef.current) {
+            latestSessionRef.current = s
+          }
+        }
+
         if (freshStart) {
-          // Fresh start: keep nothing on screen, but jump the resume point past
-          // any pre-existing events so the live stream won't replay them.
-          const tip = events.reduce((m, e) => (e.id > m ? e.id : m), 0)
-          lastIdRef.current = tip
+          // Fresh start: render nothing; tip already jumped past the latest session.
         } else if (events.length > 0) {
-          const { turns: history, lastId } = buildTurnsFromEvents(events)
-          if (closedRef.current) return
-          setTurns(history)
-          lastIdRef.current = lastId
+          // Only hydrate when the latest session is still in flight — completed
+          // sessions are already saved and must not be re-pulled into the UI.
+          const hasTerminal = events.some(
+            (e) => e.event_type === "request_completed" || e.event_type === "request_failed",
+          )
+          if (!hasTerminal) {
+            const { turns: history, lastId } = buildTurnsFromEvents(events)
+            if (closedRef.current) return
+            const hydrated = history.map((t) =>
+              t.phase === "done" ? { ...t, phase: "working" as SyraPhase } : t,
+            )
+            setTurns(hydrated)
+            lastIdRef.current = Math.max(lastId, tip)
+            if (hydrated.length > 0) {
+              activeRequestRef.current = hydrated[hydrated.length - 1]?.requestId ?? null
+              setPhase("working")
+            }
+          }
         }
       } catch {
-        /* history is best-effort; fall through to the live stream */
+        /* latest-session snapshot is best-effort */
       } finally {
         if (!closedRef.current) setLoadingHistory(false)
       }
@@ -405,10 +443,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, uuid, autoWarm, freshStart])
 
-  // -----------------------------------------------------------------------
-  // Public actions
-  // -----------------------------------------------------------------------
-
   const submit = useCallback(
     async (message: string, modelProfile?: SyraModelProfile) => {
       const text = message.trim()
@@ -416,7 +450,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
       setError(null)
       setPhase("starting")
 
-      // Optimistic local turn — bound to the runtime once request_started arrives.
       const localId = nextClientId()
       setTurns((prev) => [
         ...prev,
@@ -452,7 +485,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
           setPhase("error")
           return
         }
-        // Bind the returned request_id so subsequent frames land on this turn.
         if (data.request_id) {
           patchTurn(
             (t) => t.id === localId && !t.requestId,
@@ -474,8 +506,6 @@ export function useSyraAgent(opts: UseSyraAgentOptions): UseSyraAgentResult {
   )
 
   const stop = useCallback(() => {
-    // The runtime turn is durable server-side; locally we just stop reflecting
-    // it as busy and detach from the active request.
     activeRequestRef.current = null
     setPhase((p) => (p === "done" || p === "error" ? p : "idle"))
   }, [])

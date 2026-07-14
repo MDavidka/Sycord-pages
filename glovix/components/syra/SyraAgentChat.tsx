@@ -157,7 +157,7 @@ export default function SyraAgentChat({
                   isDark ? 'text-shimmer-dark' : 'text-shimmer-light',
                 )}
               >
-                Restoring conversation
+                Connecting to agent
               </span>
             </div>
           ) : !hasTurns ? (

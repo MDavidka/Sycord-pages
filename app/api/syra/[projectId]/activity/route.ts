@@ -1,10 +1,9 @@
-// GET /api/syra/[projectId]/activity[?since_id=&uuid=]
+// GET /api/syra/[projectId]/activity[?since_id=&uuid=&session=last]
 //
-// Activity snapshot proxy. Because the Syte cloud runtime is durable and runs
-// 24/7, the browser must recover every older message on open — it walks this
-// endpoint from since_id=0 (paginating by the last seen id) to rebuild the full
-// conversation, then resumes the live SSE stream from the last id. Proxies to
-// Syte's GET /sycord/api/agent_activity.
+// Activity snapshot proxy. By default this only returns the latest
+// `[sessionN]` (`session=last`) — older completed sessions are already saved
+// client-side and must not be re-fetched. Proxies to Syte's
+// GET /sycord/api/agent_activity (https://sycord.site/api/#agent).
 
 import { NextResponse } from "next/server"
 import { getActivitySnapshot, isSyteConfigured, resolveUuid } from "@/lib/syra-agent"
@@ -32,7 +31,17 @@ export async function GET(
   }
 
   const sinceId = Number(url.searchParams.get("since_id") ?? 0) || 0
-  const result = await getActivitySnapshot(uuid, sinceId)
+  const sessionParam = url.searchParams.get("session")
+  // Default to last session only — never walk the full saved history.
+  let session: "last" | number | undefined = "last"
+  if (sessionParam === "all" || sessionParam === "*") {
+    session = undefined
+  } else if (sessionParam && sessionParam !== "last") {
+    const n = Number(sessionParam)
+    session = Number.isFinite(n) ? n : "last"
+  }
+
+  const result = await getActivitySnapshot(uuid, sinceId, { session })
   return NextResponse.json(result.data ?? { ok: result.ok, error: result.error }, {
     status: result.ok ? 200 : result.status,
   })

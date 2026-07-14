@@ -175,16 +175,24 @@ export interface ActivitySnapshot {
 
 /**
  * Cursor-like activity snapshot. Returns persisted events with id > sinceId.
- * The runtime is durable and runs 24/7, so opening a project must walk this
- * from since_id=0 to recover the full conversation history before going live.
+ *
+ * Pass `session: "last"` to load only the latest `[sessionN]` — older completed
+ * sessions are already saved client-side and must not be re-fetched
+ * (see https://sycord.site/api/#agent marked protocol / session=last).
  */
 export function getActivitySnapshot(
   uuid: string,
   sinceId = 0,
+  opts: { session?: "last" | number } = { session: "last" },
 ): Promise<SyteResult<ActivitySnapshot>> {
-  return getJson<ActivitySnapshot>(
-    `/sycord/api/agent_activity?uuid=${encodeURIComponent(uuid)}&since_id=${sinceId}`,
-  )
+  const params = new URLSearchParams({
+    uuid,
+    since_id: String(sinceId),
+  })
+  if (opts.session !== undefined) {
+    params.set("session", String(opts.session))
+  }
+  return getJson<ActivitySnapshot>(`/sycord/api/agent_activity?${params.toString()}`)
 }
 
 export interface AgentChangeResult {
@@ -214,10 +222,16 @@ export function sendAgentChange(
 // Activity stream proxy
 // ---------------------------------------------------------------------------
 
+export type ActivityStreamFormat = "sse" | "tagged" | "marked" | "text" | "jsonl"
+
 export interface ActivityStreamOptions {
+  /** Resume point — always forwarded (default 0). */
   sinceId?: number
-  /** sse | tagged | text | jsonl — defaults to tagged for the browser client. */
-  format?: "sse" | "tagged" | "text" | "jsonl"
+  /**
+   * Stream encoding. Default `marked` — `[boot]`, `[sessionN]`,
+   * `S{session}{msg}(d|g)- …` so the client can consume only the latest session.
+   */
+  format?: ActivityStreamFormat
   /** Comma-separated event_type allow-list (tagged/text/jsonl only). */
   types?: string
   signal?: AbortSignal
@@ -227,18 +241,23 @@ export interface ActivityStreamOptions {
  * Open the upstream durable activity SSE stream and return the raw Response so a
  * Next.js route can pipe it straight to the browser. The api key is injected
  * here (server-side) via the x-api-key header, which the browser EventSource
- * cannot do. On connect Syte replays persisted events with id > sinceId, then
- * stays open and forwards live events — so resuming with the last seen id
- * recovers every missed event with no gaps and no duplicates.
+ * cannot do.
+ *
+ * Endpoint: GET /api/projects/{uuid}/agent/activity/stream?live=1&since_id=…
+ * Default format is `marked` so receivers stream only the latest `[sessionN]`
+ * and skip older sessions that are already saved.
  */
 export async function openActivityStream(
   uuid: string,
   opts: ActivityStreamOptions = {},
 ): Promise<Response> {
   const { baseUrl, apiKey } = readSyteConfig()
-  const params = new URLSearchParams({ live: "1" })
-  params.set("format", opts.format || "tagged")
-  if (opts.sinceId && opts.sinceId > 0) params.set("since_id", String(opts.sinceId))
+  const sinceId = typeof opts.sinceId === "number" && opts.sinceId > 0 ? opts.sinceId : 0
+  const params = new URLSearchParams({
+    live: "1",
+    since_id: String(sinceId),
+    format: opts.format || "marked",
+  })
   if (opts.types) params.set("types", opts.types)
 
   const url = `${baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/activity/stream?${params.toString()}`
