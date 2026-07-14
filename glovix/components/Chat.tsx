@@ -735,9 +735,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         // Durable coding runs on the Syte cloud agent 24/7 — Next.js does not
         // generate tool-call loops via /api/ai/chat. Docs: https://sycord.site/api/#agent
         if (hostProjectId) {
-            const apiKeyUnused = ''; // kept so standalone path below stays unchanged structurally
-            void apiKeyUnused;
-
             try {
                 const userContentStr = typeof userMessage.content === 'string'
                     ? userMessage.content
