@@ -8,6 +8,7 @@ import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
 import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePreviewUrl } from '../lib/previewEmbed';
+import { warmSyraAgent } from '../lib/syra-agent';
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 type PreviewSource = 'live' | 'deployed' | 'syte' | null;
@@ -98,6 +99,16 @@ export function EmbeddedChat() {
                 setWorkspaceStatus('error');
             });
     }, [projectId]);
+
+    // Prewarm Syte VM agent so chat is instant and the runtime stays alive 24/7.
+    useEffect(() => {
+        if (!projectId || workspaceStatus !== 'ready') return;
+        void warmSyraAgent(projectId).then((result) => {
+            if (!result.ok) {
+                console.warn('[EmbeddedChat] Syra agent warm failed:', result.error);
+            }
+        });
+    }, [projectId, workspaceStatus]);
 
     // When workspace becomes ready, kick off preview immediately if files exist.
     // This starts the dev server early so HMR is live before AI finishes writing.

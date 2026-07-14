@@ -30,23 +30,23 @@ export const MODEL_CHOICES: ModelChoice[] = [
     {
         id: 'nano',
         label: 'syra-nano',
-        subtitle: 'Fast · Gemini Flash',
+        subtitle: 'Fast · VM agent',
         modelType: 'mimo-v2-flash',
-        apiModel: 'gemini-2.5-flash',
+        apiModel: 'syra-nano',
     },
     {
         id: 'base',
         label: 'syra-base',
-        subtitle: 'Balanced · DeepSeek V4 Flash',
+        subtitle: 'Balanced · VM agent',
         modelType: 'deepseek-v4-flash',
-        apiModel: 'deepseek-v4-flash',
+        apiModel: 'syra-base',
     },
     {
         id: 'havy',
         label: 'syra-havy',
-        subtitle: 'Advanced · Gemini 2.5 Pro',
+        subtitle: 'Advanced · VM agent',
         modelType: 'gemini-3.1-pro',
-        apiModel: 'gemini-2.5-pro',
+        apiModel: 'syra-havy',
     },
 ];
 

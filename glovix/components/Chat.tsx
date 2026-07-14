@@ -9,6 +9,7 @@ import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
 import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
+import { modelTypeToSyraProfile, runSyraAgentTurn, type SyraAgentEvent } from '../lib/syra-agent';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { PlanChecklist } from './PlanChecklist';
 import { ModelLearnPanel } from './ModelLearnPanel';
@@ -728,6 +729,225 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         abortControllerRef.current = new AbortController();
 
         const chatId = chatIdOverride || currentChatId;
+        const hostProjectId = getHostProjectId();
+
+        // ─── Syte VM agent path (embedded Syra) ─────────────────────────────────
+        // Durable coding runs on the Syte cloud agent 24/7 — Next.js does not
+        // generate tool-call loops via /api/ai/chat. Docs: https://sycord.site/api/#agent
+        if (hostProjectId) {
+            const apiKeyUnused = ''; // kept so standalone path below stays unchanged structurally
+            void apiKeyUnused;
+
+            try {
+                const userContentStr = typeof userMessage.content === 'string'
+                    ? userMessage.content
+                    : (Array.isArray(userMessage.content)
+                        ? (userMessage.content.find(c => c.type === 'text') as { type: 'text'; text: string } | undefined)?.text || ''
+                        : '');
+
+                if (currentChatId && user && chatId && useStore.getState().messages.length <= 1 && userContentStr) {
+                    generateAndSaveTitle(userContentStr, chatId).catch(() => {});
+                }
+
+                addMessage({ role: 'assistant', content: '' });
+                setCurrentThinking('');
+                setThinkingDuration(0);
+                setActions([]);
+
+                let assistantMessageContent = '';
+                let thinkingContent = '';
+                let thinkingStartTimeLocal: number | null = null;
+                const toolIdToActionId = new Map<string, string>();
+                const syntheticToolCalls: ToolCall[] = [];
+
+                const ensureThinkingTimer = () => {
+                    if (!thinkingStartTimeLocal) {
+                        thinkingStartTimeLocal = Date.now();
+                        setThinkingStartTime(thinkingStartTimeLocal);
+                    }
+                };
+
+                const stopThinkingTimer = () => {
+                    if (thinkingStartTimeLocal) {
+                        const duration = Math.max(1, Math.round((Date.now() - thinkingStartTimeLocal) / 1000));
+                        setThinkingDuration(duration);
+                        setThinkingStartTime(null);
+                        return duration;
+                    }
+                    return thinkingDuration || undefined;
+                };
+
+                const handleAgentEvent = (event: SyraAgentEvent) => {
+                    if (abortControllerRef.current?.signal.aborted) return;
+
+                    const type = event.event_type;
+                    const detail = event.detail || event.text || '';
+
+                    if (type === 'thinking' || type === 'processing') {
+                        ensureThinkingTimer();
+                        if (detail) {
+                            thinkingContent = detail;
+                            setCurrentThinking(detail);
+                            updateLastMessage(
+                                assistantMessageContent,
+                                syntheticToolCalls.length ? syntheticToolCalls : undefined,
+                                thinkingContent,
+                            );
+                        }
+                        return;
+                    }
+
+                    if (
+                        type === 'tool_call_started' ||
+                        type === 'tool_call' ||
+                        type === 'file_created' ||
+                        type === 'file_modified' ||
+                        type === 'file_deleted' ||
+                        type === 'file_read' ||
+                        type === 'file_search' ||
+                        type === 'command_run'
+                    ) {
+                        const toolName =
+                            event.tool ||
+                            (typeof event.payload?.tool === 'string' ? event.payload.tool : null) ||
+                            (typeof event.title === 'string' ? event.title : type);
+                        const toolKey = `${type}:${toolName}:${detail.slice(0, 80)}:${event.id ?? syntheticToolCalls.length}`;
+                        if (!toolIdToActionId.has(toolKey)) {
+                            const argsObj =
+                                event.payload?.arguments ??
+                                (detail ? { detail } : {});
+                            const argsStr = typeof argsObj === 'string' ? argsObj : JSON.stringify(argsObj);
+                            const displayName = getActionDisplayName(String(toolName), argsStr);
+                            const actionId = addAction(String(toolName), displayName);
+                            toolIdToActionId.set(toolKey, actionId);
+                            updateAction(actionId, { status: 'running' });
+
+                            const tc: ToolCall = {
+                                id: `agent_${event.id ?? toolIdToActionId.size}`,
+                                type: 'function',
+                                function: { name: String(toolName), arguments: argsStr },
+                            };
+                            syntheticToolCalls.push(tc);
+                            updateLastMessage(
+                                assistantMessageContent,
+                                syntheticToolCalls,
+                                thinkingContent || undefined,
+                            );
+                        }
+                        return;
+                    }
+
+                    if (type === 'tool_call_finished' || type === 'command_output') {
+                        const toolName =
+                            event.tool ||
+                            (typeof event.payload?.tool === 'string' ? event.payload.tool : null) ||
+                            event.title ||
+                            'tool';
+                        // Mark the most recent matching running action complete
+                        for (const [key, actionId] of toolIdToActionId) {
+                            if (key.includes(String(toolName))) {
+                                const ok = event.ok !== false && event.is_error !== true;
+                                updateAction(actionId, {
+                                    status: ok ? 'done' : 'error',
+                                    result: detail || (ok ? 'Done' : 'Failed'),
+                                });
+                                break;
+                            }
+                        }
+                        return;
+                    }
+
+                    if (type === 'token_delta') {
+                        const delta =
+                            (typeof event.payload?.delta === 'string' && event.payload.delta) ||
+                            detail;
+                        if (delta) {
+                            assistantMessageContent += delta;
+                            updateLastMessage(
+                                assistantMessageContent,
+                                syntheticToolCalls.length ? syntheticToolCalls : undefined,
+                                thinkingContent || undefined,
+                                thinkingStartTimeLocal ? stopThinkingTimer() : undefined,
+                            );
+                        }
+                        return;
+                    }
+
+                    if (type === 'assistant_message' || type === 'message_snapshot') {
+                        const snap = detail || (typeof event.payload?.reply === 'string' ? event.payload.reply : '');
+                        if (snap) {
+                            assistantMessageContent = snap;
+                            updateLastMessage(
+                                assistantMessageContent,
+                                syntheticToolCalls.length ? syntheticToolCalls : undefined,
+                                thinkingContent || undefined,
+                            );
+                        }
+                    }
+                };
+
+                const result = await runSyraAgentTurn({
+                    projectId: hostProjectId,
+                    message: userContentStr || '[empty message]',
+                    modelProfile: modelTypeToSyraProfile(selectedModel),
+                    signal: abortControllerRef.current.signal,
+                    onEvent: handleAgentEvent,
+                });
+
+                const duration = stopThinkingTimer();
+                assistantMessageContent = result.reply || assistantMessageContent || (result.failed ? 'Agent request failed.' : 'Done.');
+                updateLastMessage(
+                    result.failed ? `Error: ${assistantMessageContent}` : assistantMessageContent,
+                    syntheticToolCalls.length ? syntheticToolCalls : undefined,
+                    thinkingContent || undefined,
+                    duration,
+                );
+
+                // Mark any still-running actions finished
+                for (const actionId of toolIdToActionId.values()) {
+                    updateAction(actionId, { status: result.failed ? 'error' : 'done' });
+                }
+            } catch (error: any) {
+                if (error?.name !== 'AbortError') {
+                    const errorMessage = error?.message || 'VM agent request failed';
+                    const state = useStore.getState();
+                    const last = state.messages[state.messages.length - 1];
+                    if (last?.role === 'assistant' && !last.content && !last.tool_calls?.length) {
+                        updateLastMessage(`Error: ${errorMessage}`);
+                    } else {
+                        addMessage({ role: 'assistant', content: `Error: ${errorMessage}` });
+                    }
+                }
+            } finally {
+                const wasAborted = !abortControllerRef.current || abortControllerRef.current.signal.aborted;
+                setIsLoading(false);
+                abortControllerRef.current = null;
+                setCurrentThinking('');
+                setThinkingStartTime(null);
+
+                if (!wasAborted && onAiComplete) {
+                    onAiComplete();
+                }
+
+                setTimeout(() => setActions([]), 500);
+
+                if (chatId && user) {
+                    try {
+                        const state = useStore.getState();
+                        await saveChatMessages(chatId, state.messages, {
+                            keepalive: true,
+                            projectId: hostProjectId,
+                        });
+                        if (Object.keys(state.files).length > 0) {
+                            await saveProject(chatId, user.uid, state.files);
+                        }
+                    } catch {
+                        // Ignore save errors
+                    }
+                }
+            }
+            return;
+        }
 
         const apiKey = process.env.NEXT_PUBLIC_CANOPYWAVE_API_KEY || '';
 
