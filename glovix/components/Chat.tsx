@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
+import { getLatestAgentSession, streamProjectAgent, type ProjectAgentEvent } from '../lib/project-agent';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
@@ -64,8 +65,8 @@ interface ChatProps {
     /** Embedded mobile: opens the live preview pane (swipe left). */
     onOpenPreview?: () => void;
     showPreviewButton?: boolean;
-    /** Called when the AI finishes streaming a complete response. */
-    onAiComplete?: () => void;
+    /** Called when an AI response finishes, including which agent handled it. */
+    onAiComplete?: (source?: 'local' | 'remote') => void;
 }
 
 // Claude-Code-style short path: filename only, but keep the parent folder for
@@ -565,10 +566,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const handleStop = () => {
         if (abortControllerRef.current) {
+            // Keep loading state and controller ownership until the active request's
+            // finally block runs, preventing a new request from racing old cleanup.
             abortControllerRef.current.abort();
-            abortControllerRef.current = null;
-            setIsLoading(false);
-            setActions([]);
             setCurrentThinking('');
         }
     };
@@ -720,9 +720,191 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    const triggerProjectAgentResponse = async (
+        userMessage: Message,
+        projectId: string,
+        chatIdOverride?: string,
+    ) => {
+        if (isLoading) return;
+
+        setIsLoading(true);
+        setCurrentThinking('');
+        setThinkingDuration(0);
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const chatId = chatIdOverride || currentChatId;
+        const currentMessages = useStore.getState().messages;
+        const afterSession = getLatestAgentSession(currentMessages);
+        const actionByTool = new Map<string, string[]>();
+        let assistantContent = '';
+        let activeSession = afterSession;
+        let highestEventId = 0;
+        let errorText = '';
+        let completed = false;
+        let thinkingStartedAt: number | null = null;
+
+        addMessage({ role: 'assistant', content: '' });
+
+        const applyEvent = (event: ProjectAgentEvent) => {
+            if (controller.signal.aborted) return;
+            if (event.session) {
+                activeSession = event.sessionAuthoritative
+                    ? event.session
+                    : Math.max(activeSession, event.session);
+            }
+            if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
+
+            // Keep the durable cursor on the in-memory message as activity arrives.
+            // The finally block saves it even when the stream fails or is stopped.
+            if (activeSession > afterSession || highestEventId > 0) {
+                const state = useStore.getState();
+                const lastMessage = state.messages[state.messages.length - 1];
+                if (lastMessage?.role === 'assistant') {
+                    lastMessage.agentSession = activeSession;
+                    lastMessage.agentEventId = highestEventId;
+                    setMessages([...state.messages]);
+                }
+            }
+
+            switch (event.type) {
+                case 'processing':
+                    if (event.text) setCurrentThinking(event.text);
+                    break;
+                case 'thinking': {
+                    if (!thinkingStartedAt) {
+                        thinkingStartedAt = Date.now();
+                        setThinkingStartTime(thinkingStartedAt);
+                    }
+                    const thinking = event.text || '';
+                    setCurrentThinking(thinking);
+                    updateLastMessage(assistantContent, undefined, thinking);
+                    break;
+                }
+                case 'tool_started': {
+                    const tool = event.tool || event.title || 'Agent tool';
+                    const key = tool;
+                    const args = typeof event.arguments === 'string'
+                        ? event.arguments
+                        : JSON.stringify(event.arguments || {});
+                    const actionId = addAction(tool, getActionDisplayName(tool, args));
+                    const pendingActions = actionByTool.get(key) || [];
+                    pendingActions.push(actionId);
+                    actionByTool.set(key, pendingActions);
+                    updateAction(actionId, { status: 'running', args });
+                    break;
+                }
+                case 'tool_finished': {
+                    const tool = event.tool || event.title || 'Agent tool';
+                    const key = tool;
+                    const pendingActions = actionByTool.get(key) || [];
+                    let actionId = pendingActions.shift();
+                    if (pendingActions.length > 0) actionByTool.set(key, pendingActions);
+                    else actionByTool.delete(key);
+                    if (!actionId) {
+                        actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                    }
+                    updateAction(actionId, {
+                        status: event.ok === false ? 'error' : 'done',
+                        result: event.text,
+                    });
+                    break;
+                }
+                case 'delta':
+                    assistantContent += event.text || '';
+                    updateLastMessage(assistantContent);
+                    break;
+                case 'message':
+                    assistantContent = event.text || assistantContent;
+                    updateLastMessage(assistantContent);
+                    break;
+                case 'done':
+                    assistantContent = event.text || assistantContent || 'Done.';
+                    updateLastMessage(assistantContent);
+                    completed = true;
+                    break;
+                case 'error':
+                    errorText = event.text || 'The project agent request failed.';
+                    break;
+            }
+        };
+
+        try {
+            const result = await streamProjectAgent({
+                projectId,
+                message: userMessage,
+                modelProfile: getModelChoice(selectedModel).label,
+                afterSession,
+                signal: controller.signal,
+                onEvent: applyEvent,
+            });
+
+            activeSession = Math.max(activeSession, result.session);
+            highestEventId = Math.max(highestEventId, result.eventId);
+
+            if (controller.signal.aborted) {
+                updateLastMessage(assistantContent || 'Stopped listening. The project agent may continue working in the background.');
+                return;
+            }
+            if (errorText) throw new Error(errorText);
+            if (!completed) throw new Error('The project agent stopped before completing its response.');
+
+            if (thinkingStartedAt) {
+                const duration = Math.max(1, Math.round((Date.now() - thinkingStartedAt) / 1000));
+                setThinkingDuration(duration);
+                setThinkingStartTime(null);
+            }
+
+            const state = useStore.getState();
+            const lastMessage = state.messages[state.messages.length - 1];
+            if (lastMessage?.role === 'assistant') {
+                lastMessage.agentSession = activeSession;
+                lastMessage.agentEventId = highestEventId;
+                setMessages([...state.messages]);
+            }
+        } catch (error: any) {
+            if (controller.signal.aborted) {
+                updateLastMessage(assistantContent || 'Stopped listening. The project agent may continue working in the background.');
+            } else {
+                console.error('[ProjectAgent] Error:', error);
+                updateLastMessage(`Error: ${error?.message || 'Failed to stream the project agent response.'}`);
+            }
+        } finally {
+            const wasAborted = controller.signal.aborted;
+            setIsLoading(false);
+            abortControllerRef.current = null;
+            setCurrentThinking('');
+            setThinkingStartTime(null);
+            setTimeout(() => setActions([]), 500);
+
+            if (!wasAborted && completed && onAiComplete) {
+                onAiComplete('remote');
+            }
+
+            if (chatId && user) {
+                try {
+                    await saveChatMessages(chatId, useStore.getState().messages, {
+                        keepalive: true,
+                        projectId,
+                    });
+                } catch {
+                    // Ignore save errors; the durable agent session remains on Syte.
+                }
+            }
+        }
+    };
+
     // Core AI processing function
     const triggerAIResponse = async (userMessage: Message, chatIdOverride?: string) => {
         if (isLoading) return;
+
+        // Embedded project chats use Syte's durable per-project agent. Only the
+        // new user turn is submitted; previously saved chat is not resent.
+        const hostProjectId = getHostProjectId();
+        if (hostProjectId) {
+            await triggerProjectAgentResponse(userMessage, hostProjectId, chatIdOverride);
+            return;
+        }
 
         setIsLoading(true);
         abortControllerRef.current = new AbortController();

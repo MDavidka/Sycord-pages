@@ -314,6 +314,7 @@ export async function startSytePreview(
     options?: {
         domain?: string
         issueDomain?: boolean
+        syncFiles?: boolean
         files?: Record<string, { file: { contents: string } }>
     },
 ): Promise<{
@@ -335,6 +336,7 @@ export async function startSytePreview(
                 projectId,
                 domain: options?.domain,
                 issueDomain: options?.issueDomain,
+                syncFiles: options?.syncFiles,
                 files: options?.files,
             }),
         });

@@ -60,6 +60,10 @@ export interface Message {
     tool_calls?: ToolCall[];
     tool_call_id?: string;
     name?: string;
+    /** Durable Syte agent session that produced this saved assistant message. */
+    agentSession?: number;
+    /** Highest durable Syte activity event included in this response. */
+    agentEventId?: number;
 }
 
 export interface ToolCall {

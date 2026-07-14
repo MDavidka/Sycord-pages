@@ -193,14 +193,15 @@ export function EmbeddedChat() {
         };
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
 
-    const startSyteServerPreview = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    const startSyteServerPreview = useCallback(async (syncFiles = true): Promise<{ ok: boolean; error?: string }> => {
         if (!projectId) return { ok: false, error: 'No project id' };
         setPreviewStatus('starting');
         setPreviewError('');
         const currentFiles = useStore.getState().files;
         const result = await startSytePreview(projectId, {
             issueDomain: false,  // Don't call set_domain before preview — that's for production only
-            files: Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
+            syncFiles,
+            files: syncFiles && Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
         });
         if (result.ok && result.previewUrl) {
             setPreviewUrl(result.previewUrl);
@@ -279,12 +280,12 @@ export function EmbeddedChat() {
         }
     }, [setPreviewUrl, showDeployedFallback]);
 
-    const startPreview = useCallback(async (force = false) => {
+    const startPreview = useCallback(async (force = false, syncFiles = true) => {
         if (previewStartedRef.current && !force) return;
         if (typeof window === 'undefined') return;
 
         const currentFiles = useStore.getState().files;
-        if (Object.keys(currentFiles).length === 0) {
+        if (syncFiles && Object.keys(currentFiles).length === 0) {
             setPreviewStatus('idle');
             setPreviewError('');
             return;
@@ -293,7 +294,7 @@ export function EmbeddedChat() {
         // Primary: Syte server preview (https://sycord.site/api/ — works on mobile)
         let syteError = '';
         if (projectId) {
-            const syte = await startSyteServerPreview();
+            const syte = await startSyteServerPreview(syncFiles);
             if (syte.ok) return;
             syteError = syte.error || '';
         }
@@ -325,10 +326,10 @@ export function EmbeddedChat() {
     // Called by Chat when AI finishes a complete response.
     // If preview is already running (HMR handles live updates via per-file uploads),
     // we skip the force-restart. Only re-sync + restart when preview isn't live yet.
-    const handleAiComplete = useCallback(() => {
+    const handleAiComplete = useCallback((source: 'local' | 'remote' = 'local') => {
         if (typeof window === 'undefined') return;
         const currentFiles = useStore.getState().files;
-        if (Object.keys(currentFiles).length === 0) return;
+        if (source === 'local' && Object.keys(currentFiles).length === 0) return;
         if (previewStartedRef.current && previewUrl) {
             // Dev server is live. Give Vite ~2.5 s to recompile the new files,
             // then reload the proxy iframe so the updated site appears.
@@ -342,12 +343,13 @@ export function EmbeddedChat() {
             }, 2500);
             return;
         }
-        // Preview not yet live — do a full sync + start
+        // Preview not yet live. Remote agent edits are already in Syte, so do
+        // not upload the browser's older file snapshot over the changed workspace.
         previewStartedRef.current = false;
         setPreviewStatus('idle');
         setPreviewError('');
-        void startPreview(true);
-    }, [startPreview, previewUrl]);
+        void startPreview(true, source !== 'remote');
+    }, [startPreview, previewUrl, previewSource]);
 
     useEffect(() => {
         if (previewUrl) {
