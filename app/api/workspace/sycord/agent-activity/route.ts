@@ -1,11 +1,18 @@
-// Agent activity proxy — SSE stream + snapshot polling.
+// Agent activity proxy — SSE stream + snapshot polling + local DB persistence.
 //
-// GET /api/workspace/sycord/agent-activity?projectId=<id>&live=1   → SSE stream
-// GET /api/workspace/sycord/agent-activity?projectId=<id>&since_id=N → JSON snapshot
+// GET  /api/workspace/sycord/agent-activity?projectId=<id>&live=1      → SSE stream
+// GET  /api/workspace/sycord/agent-activity?projectId=<id>&since_id=N  → JSON snapshot (from Syte)
+// GET  /api/workspace/sycord/agent-activity?projectId=<id>&history=1   → locally stored events
+// POST /api/workspace/sycord/agent-activity                             → persist one event
 //
 // The browser never holds DEPLOYER_API_KEY. This route proxies:
 //   - Streaming: GET  https://sycord.site/api/projects/{uuid}/agent/activity/stream?live=1
 //   - Snapshot:  GET  https://sycord.site/sycord/api/agent_activity?uuid={uuid}&since_id=N
+//
+// Every event received by the browser is POSTed back here so it survives the user
+// leaving the page (persisted in the `agentActivity` collection). On return the
+// client loads `history=1` and catches up via the snapshot `since_id`, making the
+// agent feed continuous across sessions.
 //
 // Auth: NextAuth session required.
 
@@ -118,6 +125,36 @@ export async function GET(req: Request): Promise<Response> {
     })
   }
 
+  // ── History (locally stored events) ──────────────────────────────────────────
+  // Returns events we have persisted in MongoDB so the feed is continuous across
+  // page reloads / the user leaving and coming back.
+  if (searchParams.get("history") === "1") {
+    const stored = (await db
+      .collection("agentActivity")
+      .find({ userId, projectId })
+      .sort({ eventId: 1 })
+      .limit(limit)
+      .toArray()) as any[]
+
+    return NextResponse.json({
+      ok: true,
+      uuid,
+      source: "db",
+      events: stored.map((e) => ({
+        id: e.eventId,
+        project_id: e.project_id,
+        event_type: e.event_type,
+        role: e.role,
+        title: e.title,
+        detail: e.detail,
+        payload: e.payload,
+        source: e.source,
+        created_at: e.created_at,
+      })),
+      count: stored.length,
+    })
+  }
+
   // ── Snapshot (polling) ───────────────────────────────────────────────────────
   const result = await syteAgentActivity(uuid, { sinceId, limit, session: session_ || undefined })
   if (!result.ok) {
@@ -128,4 +165,62 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   return NextResponse.json({ ok: true, uuid, ...(result.data as object) })
+}
+
+// ─── POST ───────────────────────────────────────────────────────────────────
+// Body: { projectId: string; event: SyteAgentEvent }
+// Persists a single agent activity event so it survives the user leaving.
+// Deduplicated by (userId, projectId, eventId) so replays are idempotent.
+export async function POST(req: Request): Promise<Response> {
+  const session = await getServerSession(authOptions)
+  const userId = (session?.user as any)?.id
+  if (!userId) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
+
+  let body: any = {}
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
+  }
+
+  const { projectId, event } = body
+  if (!projectId) {
+    return NextResponse.json({ ok: false, error: "Missing 'projectId'" }, { status: 400 })
+  }
+  if (!event || typeof event !== "object" || typeof event.id !== "number") {
+    return NextResponse.json({ ok: false, error: "Missing or invalid 'event'" }, { status: 400 })
+  }
+
+  const client = await clientPromise
+  const db = client.db()
+  const project = await getOwnedProject(db, userId, projectId)
+  if (!project) {
+    return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
+  }
+
+  const eventId = Number(event.id)
+  await db.collection("agentActivity").updateOne(
+    { userId, projectId, eventId },
+    {
+      $set: {
+        userId,
+        projectId,
+        eventId,
+        project_id: event.project_id ?? projectId,
+        event_type: event.event_type ?? "message",
+        role: event.role ?? "agent",
+        title: event.title ?? "",
+        detail: event.detail ?? "",
+        payload: event.payload ?? {},
+        source: event.source ?? "agent",
+        created_at: event.created_at ?? new Date().toISOString(),
+        updatedAt: new Date(),
+      },
+    },
+    { upsert: true },
+  )
+
+  return NextResponse.json({ ok: true, eventId })
 }

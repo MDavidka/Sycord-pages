@@ -100,6 +100,7 @@ import {
   type IntegrationRequestPayload,
 } from "@/components/project-integrations-dialog"
 import { ProjectSyraSessionCard } from "@/components/project-syra-session-card"
+import { AgentActivityFeed } from "@/components/agent-activity-feed"
 import type { ProjectChatSessionSummary } from "@/lib/types"
 
 // ─── Deployment Settings Card ─────────────────────────────────────────────────
@@ -1892,14 +1893,6 @@ export default function SiteSettingsPage() {
               const recentChanges = generatedPages
                 .slice()
                 .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-              const visibleChanges = recentChanges.slice(0, 4)
-
-              const authorName =
-                (session?.user?.name as string | undefined) ||
-                (session?.user?.email as string | undefined)?.split("@")[0] ||
-                "you"
-              const authorInitial = authorName.charAt(0).toUpperCase()
-              const authorImage = (session?.user?.image as string | undefined) || undefined
 
               // Relative time formatter (e.g., "2h ago", "yesterday", "3d ago")
               const relTime = (ts?: number) => {
@@ -2309,69 +2302,8 @@ export default function SiteSettingsPage() {
                     onOpenChat={openSyra}
                   />
 
-                  {/* ── ROW 3: Recent activity ── */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <History className="h-4 w-4 text-zinc-500" />
-                        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-zinc-500">Recent activity</h3>
-                      </div>
-                      {recentChanges.length > 4 && (
-                        <button
-                          onClick={() => setActiveTab("pages")}
-                          className="text-[12px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
-                        >
-                          View all ({recentChanges.length})
-                        </button>
-                      )}
-                    </div>
-
-                    {visibleChanges.length > 0 ? (
-                      <ul className="space-y-1">
-                        {visibleChanges.map((page, idx) => (
-                          <li
-                            key={(page.name || "page") + idx}
-                            className="flex items-center gap-2.5 sm:gap-3 py-2 px-2 -mx-2 rounded-xl hover:bg-white/[0.025] transition-colors"
-                          >
-                            <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 border border-white/[0.08]">
-                              {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
-                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[12px] sm:text-[13px] font-bold">
-                                {authorInitial}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] sm:text-[15px] text-zinc-300 truncate">
-                                <span className="text-zinc-400">changes made by </span>
-                                <span className="font-semibold text-zinc-100">{authorName}</span>
-                              </p>
-                              {page.name && (
-                                <p className="text-[11px] sm:text-[12px] text-zinc-500 truncate mt-0.5">
-                                  <FileText className="inline h-3 w-3 mr-1 -mt-0.5" />
-                                  {page.name}
-                                </p>
-                              )}
-                            </div>
-                            {page.timestamp && (
-                              <span className="shrink-0 text-[11px] sm:text-[12px] text-zinc-500 flex items-center gap-1 tabular-nums">
-                                <Clock className="h-3 w-3" />
-                                {relTime(page.timestamp)}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="flex items-center gap-3 py-4 px-4 rounded-2xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                          style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
-                        >
-                          <History className="h-4 w-4 text-zinc-500" />
-                        </div>
-                        <p className="text-[14px] text-zinc-500">No changes yet — use Syra to build your site</p>
-                      </div>
-                    )}
-                  </div>
+                  {/* ── ROW 3: Agent activity (persisted + continuous) ── */}
+                  <AgentActivityFeed projectId={id} />
 
                 </div>
               )
