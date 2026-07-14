@@ -7,7 +7,7 @@ import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 800
+export const maxDuration = 300
 
 const MODEL_PROFILES = new Set(["syra-nano", "syra-base", "syra-havy"])
 
