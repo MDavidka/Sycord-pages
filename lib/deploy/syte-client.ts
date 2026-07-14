@@ -664,3 +664,73 @@ export async function syteAgentChange(
     },
   })
 }
+
+// ─── Agent activity (snapshot) ───────────────────────────────────────────────
+
+export type SyteAgentEvent = {
+  id: number
+  project_id: string
+  event_type: string
+  role: string
+  title: string
+  detail: string
+  payload: Record<string, unknown>
+  source: string
+  created_at: string
+}
+
+export type SyteAgentActivityResponse = {
+  ok: boolean
+  events: SyteAgentEvent[]
+  count: number
+}
+
+/**
+ * Fetch a snapshot of agent activity events from
+ * GET /sycord/api/agent_activity?uuid=&since_id=&limit=&session=
+ *
+ * For live streaming, use the SSE endpoint directly via the
+ * /api/workspace/sycord/agent-activity?projectId=<id>&live=1 proxy route.
+ */
+export async function syteAgentActivity(
+  uuid: string,
+  options?: { sinceId?: number; limit?: number; session?: string },
+): Promise<SyteResult<SyteAgentActivityResponse>> {
+  return syteSycordRequest<SyteAgentActivityResponse>("GET", "agent_activity", {
+    query: {
+      uuid,
+      since_id: options?.sinceId ?? 0,
+      limit: options?.limit ?? 200,
+      ...(options?.session ? { session: options.session } : {}),
+    },
+  })
+}
+
+export type SyteAgentStatusResponse = {
+  ok: boolean
+  agent_status?: string
+  agent_runtime?: string
+  agent_healthy?: boolean
+  agent_running?: boolean
+  agent_model?: Record<string, string>
+  agent_capabilities?: string[]
+  agent_conversation_id?: string
+  agent_last_error?: string
+  agent_backend?: {
+    ok: boolean
+    error?: string
+    url?: string
+    profile?: string
+    provider?: string
+  }
+}
+
+/**
+ * Get agent status for a project.
+ * GET /sycord/api/agent_status?uuid=
+ */
+export async function syteAgentStatus(
+  uuid: string,
+): Promise<SyteResult<SyteAgentStatusResponse>> {
+  return syteSycordRequest<SyteAgentStatusResponse>("GET", "agent_status", { query: { uuid } })
+}
