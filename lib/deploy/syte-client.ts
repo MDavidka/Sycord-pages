@@ -638,3 +638,187 @@ export async function syteSycordDomain(
 ): Promise<SyteResult<{ ok: boolean; project?: { domain?: string; url?: string } }>> {
   return syteSycordRequest("POST", "domain", { body: { uuid, domain } })
 }
+
+// ─── Syte cloud agent (VM agent) — durable 24/7 coding sessions ─────────────
+// Docs: https://sycord.site/api/#agent
+// Syra must NOT run LLM tool loops on the Next.js backend; it calls these APIs.
+
+export type SyteAgentModelProfile = "syra-nano" | "syra-base" | "syra-havy"
+
+export type SyteAgentStatusResponse = {
+  ok?: boolean
+  uuid?: string
+  agent_status?: string
+  agent_running?: boolean
+  agent_warming?: boolean
+  agent_healthy?: boolean
+  agent_port?: number
+  agent_proxy_url?: string
+  agent_model_profile?: string
+  agent_backend?: Record<string, unknown>
+  agent_last_error?: string | null
+  activity_stream_url?: string
+  stream_url?: string
+}
+
+export type SyteAgentChangeResponse = {
+  ok?: boolean
+  uuid?: string
+  request_id?: string
+  status?: string
+  stream_url?: string
+  change_applied?: unknown
+  reply?: string
+  model_profile?: string
+  message?: string
+}
+
+export type SyteAgentActivityEvent = {
+  id: number
+  event_type: string
+  role?: string
+  title?: string
+  detail?: string
+  source?: string
+  created_at?: string
+  payload?: Record<string, unknown>
+}
+
+export type SyteAgentActivityResponse = {
+  ok?: boolean
+  uuid?: string
+  since_id?: number
+  stream_url?: string
+  events?: SyteAgentActivityEvent[]
+}
+
+/** GET /api/agent_status — also available as GET /sycord/api/agent_status */
+export async function syteAgentStatus(uuid: string) {
+  const sycord = await syteSycordRequest<SyteAgentStatusResponse>("GET", "agent_status", {
+    query: { uuid },
+  })
+  if (sycord.ok) return sycord
+  return syteWorkspaceRequest<SyteAgentStatusResponse>("GET", "agent_status", {
+    query: { uuid },
+  })
+}
+
+/** POST /api/agent_warm — non-blocking prewarm; supervisor keeps runtime alive */
+export async function syteAgentWarm(uuid: string) {
+  return syteWorkspaceRequest<{
+    ok?: boolean
+    uuid?: string
+    status?: string
+    already_warming?: boolean
+  }>("POST", "agent_warm", { body: { uuid } })
+}
+
+/** POST /api/agent_start — blocking start until ready */
+export async function syteAgentStart(uuid: string) {
+  return syteWorkspaceRequest<SyteAgentStatusResponse>("POST", "agent_start", {
+    body: { uuid },
+  })
+}
+
+/** POST /api/agent_stop */
+export async function syteAgentStop(uuid: string) {
+  return syteWorkspaceRequest("POST", "agent_stop", { body: { uuid } })
+}
+
+/** POST /api/agent_settings — switch syra-nano | syra-base | syra-havy */
+export async function syteAgentSettings(uuid: string, modelProfile: SyteAgentModelProfile) {
+  return syteWorkspaceRequest("POST", "agent_settings", {
+    body: { uuid, model_profile: modelProfile },
+  })
+}
+
+/**
+ * POST /sycord/api/agent_change — async by default; returns request_id immediately.
+ * Prefer this over local /api/ai/chat generation.
+ */
+export async function syteAgentChange(input: {
+  uuid: string
+  message: string
+  model_profile?: SyteAgentModelProfile
+  wait?: boolean
+}) {
+  return syteSycordRequest<SyteAgentChangeResponse>("POST", "agent_change", {
+    body: {
+      uuid: input.uuid,
+      message: input.message,
+      ...(input.model_profile ? { model_profile: input.model_profile } : {}),
+      ...(input.wait !== undefined ? { wait: input.wait } : {}),
+    },
+  })
+}
+
+/** GET /sycord/api/agent_activity — snapshot poll with since_id */
+export async function syteAgentActivity(uuid: string, sinceId = 0) {
+  return syteSycordRequest<SyteAgentActivityResponse>("GET", "agent_activity", {
+    query: { uuid, since_id: sinceId },
+  })
+}
+
+/**
+ * Absolute SSE URL for agent activity.
+ * Pass apiKey in query for browser EventSource (cannot set Authorization).
+ * Prefer proxying via /api/workspace/agent/stream so the key stays server-side.
+ */
+export function buildSyteAgentActivityStreamUrl(
+  uuid: string,
+  options?: { sinceId?: number; live?: boolean; format?: "sse" | "tagged" | "text" | "jsonl"; apiKey?: string },
+): string {
+  const config = getSyteConfig()
+  const url = new URL(
+    `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/activity/stream`,
+  )
+  url.searchParams.set("live", options?.live === false ? "0" : "1")
+  url.searchParams.set("since_id", String(options?.sinceId ?? 0))
+  if (options?.format) url.searchParams.set("format", options.format)
+  if (options?.apiKey) url.searchParams.set("api_key", options.apiKey)
+  return url.toString()
+}
+
+/** Open a fetch Response to the Syte agent activity SSE (server-side only). */
+export async function syteOpenAgentActivityStream(
+  uuid: string,
+  options?: { sinceId?: number; live?: boolean; format?: "sse" | "tagged" | "text" | "jsonl"; signal?: AbortSignal },
+): Promise<{ ok: true; response: Response; endpoint: string } | { ok: false; error: string; status: number; endpoint: string }> {
+  const config = getSyteConfig()
+  const endpoint = buildSyteAgentActivityStreamUrl(uuid, {
+    sinceId: options?.sinceId,
+    live: options?.live,
+    format: options?.format ?? "sse",
+  })
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "text/event-stream",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      signal: options?.signal,
+    })
+
+    if (!response.ok) {
+      const body = await parseBody(response)
+      return {
+        ok: false,
+        status: response.status,
+        error: extractError(response.status, body, endpoint),
+        endpoint,
+      }
+    }
+
+    return { ok: true, response, endpoint }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      error: err?.message || "Network error opening agent activity stream",
+      endpoint,
+    }
+  }
+}

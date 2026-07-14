@@ -52,11 +52,11 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
           <CardContent className="pt-4 space-y-5">
             <PipelineStep
               icon={<Sparkles className="h-4 w-4 text-yellow-400" />}
-              step="1. Prompt & System Context"
+              step="1. Prompt & Syte VM agent"
               description={[
-                "User prompt is wrapped with the Syra system prompt (700+ lines) containing: engineering rules, Next.js App Router conventions, the full 57-component shadcn/ui catalog, mobile-first design philosophy, 2026 AI design standards, and the SHADCN-ONLY MANDATE that forbids custom CSS/Tailwind styling.",
-                "The AI's model name (syra-nano / syra-base / syra-havy) determines which LLM provider is used: Gemini Flash, DeepSeek V4 Pro, or Gemini 3.1 Pro.",
-                "All requests flow through /api/ai/chat — the server-side route that proxies to the correct provider.",
+                "User messages in embedded Syra are sent to the Syte VM agent (cloud agent) — not generated on the Next.js /api/ai/chat backend.",
+                "Model profiles syra-nano / syra-base / syra-havy are configured on Syte (GUI → AI). The durable agent runs 24/7 on the project workspace.",
+                "Flow: POST /api/workspace/agent (warm + change) → SSE /api/workspace/agent/stream → Syte activity events until request_completed.",
               ]}
             />
 
@@ -160,8 +160,8 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
                       items={['Zustand (single store, 403 lines)', 'Memoized selectors for performance', 'LocalStorage persistence for settings', 'React Context for auth provider']}
                     />
                     <TechCard
-                      title="AI Provider Routing"
-                      items={['/api/ai/chat detects model prefix', 'deepseek-* → api.deepseek.com', 'Default → Gemini Vertex AI', 'Both stream OpenAI-compatible SSE']}
+                      title="Syra VM agent"
+                      items={['Embedded Syra → /api/workspace/agent', 'Syte warm + agent_change (async)', 'Activity SSE stream (thinking/tools/done)', 'Durable 24/7 project runtime on Syte']}
                     />
                     <TechCard
                       title="File Persistence"
