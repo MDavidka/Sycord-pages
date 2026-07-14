@@ -638,3 +638,29 @@ export async function syteSycordDomain(
 ): Promise<SyteResult<{ ok: boolean; project?: { domain?: string; url?: string } }>> {
   return syteSycordRequest("POST", "domain", { body: { uuid, domain } })
 }
+
+
+// ─── Durable Syte agent API ──────────────────────────────────────────────────
+
+export type SyteAgentChangeResponse = {
+  ok?: boolean
+  request_id?: string
+  status?: string
+  stream_url?: string
+  change_applied?: boolean | null
+}
+
+/** Submit one durable project-agent turn. Its output is read from agent activity SSE. */
+export async function syteAgentChange(
+  uuid: string,
+  message: string,
+  modelProfile?: string,
+): Promise<SyteResult<SyteAgentChangeResponse>> {
+  return syteSycordRequest<SyteAgentChangeResponse>("POST", "agent_change", {
+    body: {
+      uuid,
+      message,
+      ...(modelProfile ? { model_profile: modelProfile } : {}),
+    },
+  })
+}
