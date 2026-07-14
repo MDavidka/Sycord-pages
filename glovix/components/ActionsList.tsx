@@ -1,7 +1,47 @@
 'use client'
 import { useState, useMemo, memo, useCallback } from 'react';
-import { ChevronDown, Check, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import {
+  ChevronDown,
+  Check,
+  X,
+  Loader2,
+  FileText,
+  TerminalSquare,
+  Sparkles,
+  Wrench,
+  Globe,
+  Search,
+  GitBranch,
+  ListTree,
+  Pencil,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
+
+const TOOL_ICONS: Record<string, LucideIcon> = {
+  createFile: Pencil,
+  write_file: Pencil,
+  editFile: Pencil,
+  batchCreateFiles: Pencil,
+  renameFile: Pencil,
+  readFile: FileText,
+  readMultipleFiles: FileText,
+  deleteFile: Trash2,
+  grep: Search,
+  searchInFiles: Search,
+  planning: Sparkles,
+  typeCheck: ListTree,
+  lintCheck: ListTree,
+  getErrors: ListTree,
+  executeCommand: TerminalSquare,
+  createWorkspace: Globe,
+  deploy: Globe,
+  save: GitBranch,
+};
+
+function getToolIcon(toolName: string): LucideIcon {
+  return TOOL_ICONS[toolName] ?? Wrench;
+}
 
 export interface StreamingAction {
     id: string;
@@ -103,6 +143,7 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
     const active = action.status === 'running' || action.status === 'pending';
     const pair = VERBS[action.toolName];
     const verb = active ? (pair?.[0] ?? action.toolName) : (pair?.[1] ?? action.toolName);
+    const ToolIcon = getToolIcon(action.toolName);
 
     const displaySuffix = FILE_TOOLS.has(action.toolName) && count > 1
         ? `${count} files`
@@ -144,8 +185,14 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
                         <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
                     </span>
                 ) : (
-                    <span className="w-3.5 flex-shrink-0" />
+                    <span className="flex-shrink-0 text-zinc-500">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    </span>
                 )}
+
+                <span className={`flex-shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    <ToolIcon className="w-3.5 h-3.5" />
+                </span>
 
                 <span
                     className={`text-[13px] truncate ${
@@ -232,6 +279,8 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                     <ChevronDown className="w-3.5 h-3.5" />
                 </span>
 
+                <Sparkles className={`w-3.5 h-3.5 flex-shrink-0 ${runningN > 0 ? 'text-blue-400' : isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+
                 <span className="font-medium">
                     {runningN > 0
                         ? `Running ${runningN} action${runningN !== 1 ? 's' : ''}...`
@@ -244,10 +293,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                 </span>
 
                 {runningN > 0 && (
-                    <span className="relative flex h-2 w-2 ml-auto">
-                        <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400/40 animate-ping" />
-                        <span className={`relative inline-flex h-2 w-2 rounded-full ${isDark ? 'bg-blue-400' : 'bg-blue-500'}`} />
-                    </span>
+                    <Loader2 className="w-4 h-4 ml-auto text-blue-400 animate-spin" />
                 )}
 
                 {allActionsFinished && errN === 0 && runningN === 0 && (

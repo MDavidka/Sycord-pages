@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-chat-session"
-import { getSyteConfig, syteAgentChange } from "@/lib/deploy/syte-client"
+import { getSyteConfig, syteAgentChange, syteAgentStatus } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
 export const runtime = "nodejs"
@@ -192,23 +192,59 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }).catch(() => null)
   }
 
-  // Open SSE before submitting the durable change. This avoids accepting a job
-  // that the browser cannot observe; since_id=0 replay is filtered by request_id.
-  const upstream = await openActivityStream(0)
+  // Decide whether we can submit a fresh change or must resume an in-flight task.
+  let observeMode = false
+  let requestId: string | undefined
+
+  let busy = false
+  try {
+    const status = await syteAgentStatus(workspace.uuid)
+    const d = status.data as
+      | { agent_running?: boolean; agent_status?: string }
+      | undefined
+    busy =
+      d?.agent_running === true ||
+      d?.agent_status === "running" ||
+      d?.agent_status === "busy"
+  } catch {
+    busy = false
+  }
+
+  if (busy) {
+    observeMode = true
+  } else {
+    const change = await syteAgentChange(workspace.uuid, message, modelProfile)
+    requestId = change.data?.request_id
+    if (!change.ok || !requestId) {
+      observeMode = true
+    }
+  }
+
+  // In observe mode (resuming an already-running task) we must not replay events
+  // the browser has already seen, otherwise a previous task's output gets
+  // re-applied to the new message. Start the stream just after the last event we
+  // have persisted for this project.
+  let sinceId = 0
+  if (observeMode) {
+    try {
+      const last = await db
+        .collection("agentActivity")
+        .find({ userId: session.user.id, projectId })
+        .sort({ eventId: -1 })
+        .limit(1)
+        .toArray()
+      if (last.length && typeof last[0].eventId === "number") sinceId = last[0].eventId
+    } catch {
+      /* start from 0 */
+    }
+  }
+
+  // Open SSE after the decision so observe mode can use a sensible since_id.
+  const upstream = await openActivityStream(sinceId)
   if (!upstream?.ok || !upstream.body) {
     return Response.json(
       { message: `Unable to open Syte agent activity stream${upstream ? ` (HTTP ${upstream.status})` : ""}.` },
       { status: 502 },
-    )
-  }
-
-  const change = await syteAgentChange(workspace.uuid, message, modelProfile)
-  const requestId = change.data?.request_id
-  if (!change.ok || !requestId) {
-    try { await upstream.body.cancel() } catch { /* ignore */ }
-    return Response.json(
-      { message: change.error || "Syte agent did not accept the request." },
-      { status: change.status || 502 },
     )
   }
 
@@ -284,8 +320,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             }
             if (parsed?.type !== "activity" || !parsed.event) continue
 
+            // In observe mode (resuming an already-running task) we forward all
+            // activity; otherwise we only forward events for this request.
             const eventRequestId = parsed.event.payload?.request_id
-            if (eventRequestId !== requestId) continue
+            if (!observeMode && eventRequestId !== requestId) continue
 
             const eventId = Number(parsed.event.id) || 0
             if (eventId && eventId <= highestEventId) continue
