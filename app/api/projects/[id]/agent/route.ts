@@ -14,9 +14,11 @@ const MODEL_PROFILES = new Set(["syra-nano", "syra-base", "syra-havy"])
 type ActivityEvent = {
   id?: number
   event_type?: string
+  role?: string
   title?: string
   detail?: string
   payload?: Record<string, unknown>
+  created_at?: string
 }
 
 function syteHeaders(apiKey: string, accept: string): HeadersInit {
@@ -73,6 +75,8 @@ function normalizeActivity(event: ActivityEvent, session: number) {
     eventId: Number(event.id) || undefined,
     text: eventText(event),
     title: event.title,
+    payload,
+    createdAt: event.created_at,
     toolCallId:
       typeof rawToolCallId === "string" || typeof rawToolCallId === "number"
         ? String(rawToolCallId)
@@ -143,6 +147,190 @@ function parseSseData(frame: string): unknown {
   }
 }
 
+type DurableSessionDocument = {
+  id?: string
+  project_id?: string
+  session_number?: number
+  model_profile?: string
+  status?: "open" | "completed" | "failed" | "cancelled"
+  events?: ActivityEvent[]
+}
+
+function activityDisplayName(tool: string, args: unknown): string {
+  const values = args && typeof args === "object" ? args as Record<string, unknown> : {}
+  const path = values.path ?? values.file_path ?? values.file
+  if (typeof path === "string") return path
+  const command = values.command ?? values.cmd ?? values.script
+  if (typeof command === "string") return command
+  if (Array.isArray(values.paths)) return `${values.paths.length} files`
+  if (Array.isArray(values.files)) return `${values.files.length} files`
+  return tool
+}
+
+function durableSessionToTurn(document: DurableSessionDocument) {
+  const events = Array.isArray(document.events) ? document.events : []
+  const actions: Array<Record<string, unknown>> = []
+  const pendingByTool = new Map<string, number[]>()
+  const pendingByCallId = new Map<string, number>()
+  const thinking: string[] = []
+  let userMessage = ""
+  let reply = ""
+  let highestEventId = 0
+
+  for (const event of events) {
+    highestEventId = Math.max(highestEventId, Number(event.id) || 0)
+    const payload = event.payload || {}
+    const tool = typeof payload.tool === "string" ? payload.tool : (event.title || "Agent tool")
+    const callValue = payload.tool_call_id ?? payload.call_id
+    const callId = typeof callValue === "string" || typeof callValue === "number"
+      ? String(callValue)
+      : undefined
+
+    if (event.event_type === "request_started") {
+      userMessage = eventText(event)
+    } else if (event.event_type === "thinking") {
+      const text = eventText(event)
+      if (text) thinking.push(text)
+    } else if (event.event_type === "tool_call_started" || (event.event_type === "tool_call" && payload.phase !== "finished")) {
+      const index = actions.push({
+        id: `${document.id || "session"}-${event.id || actions.length}`,
+        toolName: tool,
+        displayName: activityDisplayName(tool, payload.arguments),
+        status: "running",
+        args: payload.arguments,
+        toolCallId: callId,
+        session: document.session_number,
+        eventId: event.id,
+      }) - 1
+      if (callId) pendingByCallId.set(callId, index)
+      const queue = pendingByTool.get(tool) || []
+      queue.push(index)
+      pendingByTool.set(tool, queue)
+    } else if (event.event_type === "tool_call_finished" || (event.event_type === "tool_call" && payload.phase === "finished")) {
+      let index = callId ? pendingByCallId.get(callId) : undefined
+      if (index === undefined) {
+        const queue = pendingByTool.get(tool) || []
+        index = queue.shift()
+        if (queue.length) pendingByTool.set(tool, queue)
+        else pendingByTool.delete(tool)
+      }
+      if (index === undefined) {
+        index = actions.push({
+          id: `${document.id || "session"}-${event.id || actions.length}`,
+          toolName: tool,
+          displayName: activityDisplayName(tool, payload.arguments),
+          status: payload.ok === false ? "error" : "done",
+          args: payload.arguments,
+          toolCallId: callId,
+          session: document.session_number,
+          eventId: event.id,
+        }) - 1
+      } else {
+        actions[index] = {
+          ...actions[index],
+          status: payload.ok === false ? "error" : "done",
+          result: eventText(event),
+        }
+      }
+    } else if (["file_created", "file_modified", "file_deleted", "command_run"].includes(event.event_type || "")) {
+      actions.push({
+        id: `${document.id || "session"}-${event.id || actions.length}`,
+        toolName: event.event_type,
+        displayName: activityDisplayName(event.event_type || "command_run", payload),
+        status: payload.ok === false ? "error" : "done",
+        args: payload,
+        session: document.session_number,
+        eventId: event.id,
+      })
+    } else if (event.event_type === "request_completed") {
+      reply = eventText(event)
+    } else if (event.event_type === "request_failed") {
+      reply = eventText(event)
+    }
+  }
+
+  return {
+    id: document.id,
+    session: Number(document.session_number) || undefined,
+    status: document.status || "completed",
+    modelProfile: document.model_profile,
+    userMessage,
+    reply,
+    thinking: thinking.join("\n\n"),
+    actions,
+    eventId: highestEventId || undefined,
+  }
+}
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) return Response.json({ message: "Unauthorized" }, { status: 401 })
+
+  const { id: projectId } = await params
+  const client = await clientPromise
+  const db = client.db()
+  const project = await getOwnedProject(db, session.user.id, projectId)
+  if (!project) return Response.json({ message: "Project not found" }, { status: 404 })
+
+  const workspace = await requireSyteWorkspaceUuid(project, projectId)
+  if ("error" in workspace) return Response.json({ message: workspace.error, turns: [] }, { status: 409 })
+
+  const config = getSyteConfig()
+  const requestedSessionId = new URL(_request.url).searchParams.get("sessionId")?.trim()
+  const fetchDocument = async (sessionId: string): Promise<DurableSessionDocument | null> => {
+    const detailResponse = await fetch(
+      `${config.baseUrl}/api/agent_session/${encodeURIComponent(sessionId)}`,
+      {
+        headers: syteHeaders(config.apiKey, "application/json"),
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      },
+    ).catch(() => null)
+    if (!detailResponse?.ok) return null
+    return detailResponse.json().catch(() => null) as Promise<DurableSessionDocument | null>
+  }
+
+  if (requestedSessionId) {
+    const document = await fetchDocument(requestedSessionId)
+    const belongsToProject = document?.project_id === workspace.uuid
+    return Response.json({ turns: belongsToProject ? [durableSessionToTurn(document)] : [] })
+  }
+
+  const listUrl = new URL(`${config.baseUrl}/api/agent_sessions`)
+  listUrl.searchParams.set("uuid", workspace.uuid)
+  const listResponse = await fetch(listUrl, {
+    headers: syteHeaders(config.apiKey, "application/json"),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null)
+
+  if (!listResponse?.ok) {
+    return Response.json({
+      message: `Unable to restore durable agent sessions${listResponse ? ` (HTTP ${listResponse.status})` : ""}.`,
+      turns: [],
+    }, { status: listResponse?.status || 502 })
+  }
+
+  const list = await listResponse.json().catch(() => null) as {
+    sessions?: Array<{ id?: string; session_number?: number }>
+  } | null
+  const summaries = Array.isArray(list?.sessions) ? list.sessions.slice(0, 50) : []
+  const documents: Array<DurableSessionDocument | null> = []
+  for (let index = 0; index < summaries.length; index += 5) {
+    const batch = summaries.slice(index, index + 5)
+    documents.push(...await Promise.all(batch.map(summary =>
+      summary.id ? fetchDocument(summary.id) : Promise.resolve(null),
+    )))
+  }
+
+  const turns = documents
+    .filter((document): document is DurableSessionDocument => Boolean(document?.id))
+    .map(durableSessionToTurn)
+    .sort((a, b) => (a.session || 0) - (b.session || 0))
+
+  return Response.json({ turns })
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -204,6 +392,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const change = await syteAgentChange(workspace.uuid, message, modelProfile)
   const requestId = change.data?.request_id
+  const tursoSessionId = change.data?.turso_session_id
   if (!change.ok || !requestId) {
     try { await upstream.body.cancel() } catch { /* ignore */ }
     return Response.json(
@@ -236,6 +425,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       let sessionEmitted = false
       let sessionAuthoritative = false
       let terminal = false
+
+      emit({
+        type: "session",
+        session: agentSession,
+        sessionAuthoritative: false,
+        tursoSessionId,
+        requestId,
+      })
+      sessionEmitted = true
 
       try {
         while (!stopped && !terminal) {

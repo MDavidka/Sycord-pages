@@ -1,7 +1,17 @@
 'use client'
-import { useState, useMemo, memo, useCallback } from 'react';
-import { ChevronDown, Check, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
+import { memo, useMemo } from 'react';
+import {
+    BrainCircuit,
+    Check,
+    FilePenLine,
+    FolderOpen,
+    ServerCog,
+    SquareTerminal,
+    X,
+} from 'lucide-react';
+
+export type ActionKind = 'thinking' | 'read' | 'edit' | 'command' | 'service';
 
 export interface StreamingAction {
     id: string;
@@ -9,7 +19,11 @@ export interface StreamingAction {
     displayName: string;
     status: 'pending' | 'running' | 'done' | 'error';
     result?: string;
-    args?: any;
+    args?: unknown;
+    kind?: ActionKind;
+    toolCallId?: string;
+    session?: number;
+    eventId?: number;
 }
 
 interface ActionsListProps {
@@ -18,189 +32,275 @@ interface ActionsListProps {
     isDark?: boolean;
 }
 
-const VERBS: Record<string, [string, string]> = {
-    createFile:        ['Creating', 'Created'],
-    write_file:        ['Patching', 'Patched'],
-    editFile:          ['Editing', 'Edited'],
-    readFile:          ['Reading', 'Read'],
-    readMultipleFiles: ['Reading', 'Read'],
-    deleteFile:        ['Deleting', 'Deleted'],
-    renameFile:        ['Renaming', 'Renamed'],
-    grep:              ['Searching', 'Searched'],
-    planning:          ['Planning', 'Planned'],
-    searchInFiles:     ['Searching', 'Searched'],
-    typeCheck:         ['Checking types', 'Type checked'],
-    createWorkspace:   ['Creating Syte workspace', 'Workspace ready'],
-    executeCommand:    ['Running command', 'Command finished'],
-    lintCheck:         ['Linting', 'Linted'],
-    listFiles:         ['Listing files', 'Listed files'],
-    drawDiagram:       ['Drawing diagram', 'Drew diagram'],
-    batchCreateFiles:  ['Creating files', 'Created files'],
-    getErrors:         ['Checking errors', 'Checked errors'],
-    deploy:            ['Deploying to sycord.site', 'Deployed to sycord.site'],
-    save:              ['Saving to GitHub', 'Saved to GitHub'],
-};
+const READ_TOOLS = new Set([
+    'readFile', 'readMultipleFiles', 'listFiles', 'grep', 'searchInFiles',
+]);
+const EDIT_TOOLS = new Set([
+    'createFile', 'write_file', 'editFile', 'deleteFile', 'renameFile',
+    'batchCreateFiles', 'file_created', 'file_modified', 'file_deleted',
+]);
+const COMMAND_TOOLS = new Set([
+    'executeCommand', 'command_run', 'typeCheck', 'lintCheck', 'getErrors',
+]);
+const SERVICE_TOOLS = new Set([
+    'deploy', 'save', 'createWorkspace', 'startPreview', 'setDomain',
+]);
 
-const DEPLOY_TOOLS = new Set(['deploy']);
-const TERMINAL_TOOLS = new Set(['typeCheck', 'lintCheck', 'getErrors', 'executeCommand']);
-const FILE_TOOLS = new Set(['createFile', 'write_file', 'editFile', 'readFile', 'readMultipleFiles', 'deleteFile', 'renameFile', 'batchCreateFiles']);
+const COMMAND_READ_RE = /(?:^|[;&|]\s*|\s)(?:cat|head|tail|less|more|grep|rg|find|ls|pwd|stat|wc)(?:\s|$)|\bgit\s+(?:status|diff|log|show)(?:\s|$)/i;
+const COMMAND_EDIT_RE = /(?:^|[;&|]\s*|\s)(?:sed\s+-i|perl\s+-pi|rm|mv|cp|mkdir|touch|truncate|tee)(?:\s|$)|(?:^|[^<>])(?:>>?)\s*[^\s;&|]+/i;
+const COMMAND_SERVICE_RE = /\b(?:docker|podman|systemctl|service|pm2|preview|deploy|issue_deploy)\b|\bnpm\s+(?:run\s+)?(?:dev|start|preview)\b/i;
 
-interface DeduplicatedAction {
-    action: StreamingAction;
-    count: number;
-    groupedActions: StreamingAction[];
+function parseArgs(action: StreamingAction): Record<string, any> {
+    if (!action.args) return {};
+    if (typeof action.args === 'object') return action.args as Record<string, any>;
+    try {
+        return JSON.parse(String(action.args));
+    } catch {
+        return {};
+    }
 }
 
-function deduplicateActions(actions: StreamingAction[]): DeduplicatedAction[] {
-    const result: DeduplicatedAction[] = [];
-    for (const action of actions) {
-        const key = `${action.toolName}::${action.status}`;
-        const last = result[result.length - 1];
-        if (last && FILE_TOOLS.has(action.toolName) && `${last.action.toolName}::${last.action.status}` === key) {
-            last.count++;
-            last.groupedActions.push(action);
-        } else if (last && !FILE_TOOLS.has(action.toolName) && `${last.action.toolName}::${last.action.displayName}::${last.action.status}` === `${action.toolName}::${action.displayName}::${action.status}`) {
-            last.count++;
-            last.groupedActions.push(action);
-        } else {
-            result.push({ action, count: 1, groupedActions: [action] });
+function getCommand(action: StreamingAction): string {
+    const parsed = parseArgs(action);
+    const command = parsed.command ?? parsed.cmd ?? parsed.script;
+    if (typeof command === 'string' && command.trim()) return command.trim();
+    if (COMMAND_TOOLS.has(action.toolName) && action.displayName) return action.displayName.trim();
+    return '';
+}
+
+function commandFileDetails(rawCommand: string, kind: ActionKind): string[] {
+    if (!rawCommand || (kind !== 'read' && kind !== 'edit')) return [];
+    const shellMatch = rawCommand.match(/(?:^|\s)(?:\/bin\/)?(?:ba|z|)sh\s+-lc\s+(['"])([\s\S]*)\1\s*$/i);
+    const unwrapped = (shellMatch?.[2] || rawCommand).replace(/`[^`]*`/g, ' ');
+    let command = '';
+    let substitutionDepth = 0;
+    for (let index = 0; index < unwrapped.length; index++) {
+        if (unwrapped[index] === '$' && unwrapped[index + 1] === '(') {
+            substitutionDepth++;
+            index++;
+            continue;
+        }
+        if (substitutionDepth > 0) {
+            if (unwrapped[index] === '(') substitutionDepth++;
+            else if (unwrapped[index] === ')') substitutionDepth--;
+            continue;
+        }
+        command += unwrapped[index];
+    }
+    const paths = new Set<string>();
+    const addPath = (rawValue: string | undefined) => {
+        const value = rawValue?.replace(/^['"]|['"]$/g, '').replace(/[;&|]+$/g, '');
+        if (!value || value === '.' || value === './' || value.startsWith('-')) return;
+        if (/[*?{}\[\]$()`]/.test(value) || value.startsWith('/bin/')) return;
+        paths.add(value);
+    };
+
+    for (const segment of command.split(/&&|\|\||;|\|/)) {
+        for (const match of segment.matchAll(/(?:^|[^<>])(?:>>?)\s*["']?([^\s"';&|]+)/g)) {
+            addPath(match[1]);
+        }
+
+        const tokens = (segment.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [])
+            .map(token => token.replace(/^['"]|['"]$/g, ''));
+        while (tokens[0] === 'sudo' || tokens[0] === 'command' || /^[A-Z_][A-Z0-9_]*=/.test(tokens[0] || '')) {
+            tokens.shift();
+        }
+        const executable = (tokens.shift() || '').split('/').pop()?.toLowerCase();
+        const operands = tokens.filter(token => token && !token.startsWith('-') && token !== '>' && token !== '>>');
+
+        if (['cat', 'less', 'more', 'stat'].includes(executable || '')) {
+            operands.forEach(addPath);
+        } else if (['head', 'tail', 'wc'].includes(executable || '')) {
+            operands.filter(token => !/^\d+$/.test(token)).forEach(addPath);
+        } else if (executable === 'ls') {
+            operands.forEach(addPath);
+        } else if (executable === 'grep' || executable === 'rg') {
+            operands.slice(1).forEach(addPath);
+        } else if (executable === 'find') {
+            addPath(operands[0]);
+        } else if (executable === 'git') {
+            const separator = tokens.indexOf('--');
+            if (separator >= 0) tokens.slice(separator + 1).forEach(addPath);
+        } else if (['rm', 'mv', 'cp', 'mkdir', 'touch', 'truncate', 'tee'].includes(executable || '')) {
+            operands.forEach(addPath);
+        } else if (executable === 'sed' || executable === 'perl') {
+            // The first operand is the substitution/program expression; the rest are files.
+            operands.slice(1).forEach(addPath);
         }
     }
-    return result;
+
+    return [...paths].slice(0, 3);
 }
 
-function cleanResultForDisplay(result: string): string {
-    return result.replace(/^\[SYSTEM\]\s*/gm, '').trim();
+export function inferActionKind(action: StreamingAction): ActionKind {
+    if (action.kind) return action.kind;
+    if (READ_TOOLS.has(action.toolName)) return 'read';
+    if (EDIT_TOOLS.has(action.toolName)) return 'edit';
+    if (SERVICE_TOOLS.has(action.toolName)) return 'service';
+
+    if (COMMAND_TOOLS.has(action.toolName)) {
+        const command = getCommand(action);
+        // Syte may mark all shell work as command_run. Display the operation the
+        // command actually performed instead of blindly trusting that marker.
+        if (COMMAND_SERVICE_RE.test(command)) return 'service';
+        if (COMMAND_EDIT_RE.test(command)) return 'edit';
+        if (COMMAND_READ_RE.test(command)) return 'read';
+        return 'command';
+    }
+
+    if (/read|search|list/i.test(action.toolName)) return 'read';
+    if (/write|edit|create|delete|rename|patch/i.test(action.toolName)) return 'edit';
+    if (/deploy|preview|service|workspace|domain/i.test(action.toolName)) return 'service';
+    return 'command';
 }
 
 function getFileDetails(action: StreamingAction): string[] {
-    if (!action.args) return [];
-    try {
-        const parsed = typeof action.args === 'string' ? JSON.parse(action.args) : action.args;
-        switch (action.toolName) {
-            case 'createFile':
-            case 'write_file':
-            case 'editFile':
-            case 'readFile':
-            case 'deleteFile':
-                return parsed.path ? [parsed.path] : [];
-            case 'readMultipleFiles':
-                return Array.isArray(parsed.paths) ? parsed.paths : [];
-            case 'batchCreateFiles':
-                return Array.isArray(parsed.files) ? parsed.files.map((f: any) => f.path).filter(Boolean) : [];
-            case 'renameFile':
-                return parsed.oldPath ? [`${parsed.oldPath} → ${parsed.newPath}`] : [];
-            default:
-                return [];
-        }
-    } catch {
-        return [];
+    const parsed = parseArgs(action);
+    const value = parsed.path ?? parsed.file_path ?? parsed.file;
+
+    if (typeof value === 'string' && value) return [value];
+    if (Array.isArray(parsed.paths)) return parsed.paths.filter((path: unknown): path is string => typeof path === 'string');
+    if (Array.isArray(parsed.files)) {
+        return parsed.files
+            .map((file: unknown) => typeof file === 'string' ? file : (file as { path?: unknown })?.path)
+            .filter((path: unknown): path is string => typeof path === 'string');
+    }
+    if (typeof parsed.oldPath === 'string') {
+        return [`${parsed.oldPath}${typeof parsed.newPath === 'string' ? ` → ${parsed.newPath}` : ''}`];
+    }
+    const kind = inferActionKind(action);
+    if (COMMAND_TOOLS.has(action.toolName)) {
+        return commandFileDetails(getCommand(action), kind);
+    }
+    if ((kind === 'read' || kind === 'edit') && action.displayName) {
+        return [action.displayName];
+    }
+    return [];
+}
+
+function shortFileName(path: string): string {
+    const [from, to] = path.split(' → ');
+    const short = (value: string) => value.replace(/\\/g, '/').split('/').filter(Boolean).pop() || value;
+    return to ? `${short(from)} → ${short(to)}` : short(from);
+}
+
+function actionLabel(kind: ActionKind, active: boolean, _count: number): string {
+    switch (kind) {
+        case 'thinking': return active ? 'thinking' : 'thought';
+        case 'read': return active ? 'Reading file' : 'Read file';
+        case 'edit': return active ? 'Editing file' : 'Edited file';
+        case 'service': return active ? 'running service action' : 'service action';
+        default: return active ? 'running command' : 'run command';
     }
 }
 
-const ActionRow = memo(function ActionRow({ action, count, isDark, groupedActions }: { action: StreamingAction; count: number; isDark: boolean; groupedActions: StreamingAction[] }) {
-    const [showOutput, setShowOutput] = useState(false);
-    const active = action.status === 'running' || action.status === 'pending';
-    const pair = VERBS[action.toolName];
-    const verb = active ? (pair?.[0] ?? action.toolName) : (pair?.[1] ?? action.toolName);
+const KIND_ICONS = {
+    thinking: BrainCircuit,
+    read: FolderOpen,
+    edit: FilePenLine,
+    command: SquareTerminal,
+    service: ServerCog,
+} satisfies Record<ActionKind, typeof BrainCircuit>;
 
-    const displaySuffix = FILE_TOOLS.has(action.toolName) && count > 1
-        ? `${count} files`
-        : action.displayName || '';
-    const text = `${verb}${displaySuffix ? ` ${displaySuffix}` : ''}`;
+function FileFormatBadge({ file }: { file: string }) {
+    const clean = file.split(' → ').pop() || file;
+    const extension = clean.split('.').pop()?.toLowerCase() || '';
+    const label: Record<string, string> = {
+        ts: 'TS', tsx: 'TS', js: 'JS', jsx: 'JS', py: 'PY', css: 'CS',
+        scss: 'SC', html: 'HT', json: '{}', md: 'MD', sql: 'SQ', sh: 'SH',
+    };
+    return (
+        <span
+            aria-hidden="true"
+            className="flex h-3.5 min-w-3.5 flex-none items-center justify-center rounded-[2px] bg-amber-400 px-0.5 text-[7px] font-black leading-none text-[#18191b]"
+        >
+            {label[extension] || 'F'}
+        </span>
+    );
+}
 
-    const hasTerminalOutput = TERMINAL_TOOLS.has(action.toolName) && action.result && !active;
+interface ActionGroup {
+    kind: ActionKind;
+    actions: StreamingAction[];
+}
 
-    const allFileDetails: string[] = [];
-    if (!active && FILE_TOOLS.has(action.toolName)) {
-        for (const a of groupedActions) {
-            allFileDetails.push(...getFileDetails(a));
-        }
+function stackActions(actions: StreamingAction[]): ActionGroup[] {
+    const groups: ActionGroup[] = [];
+    for (const action of actions) {
+        const kind = inferActionKind(action);
+        const previous = groups[groups.length - 1];
+        if (previous?.kind === kind) previous.actions.push(action);
+        else groups.push({ kind, actions: [action] });
     }
-    const hasFileDetails = allFileDetails.length > 0;
-    const isExpandable = hasTerminalOutput || hasFileDetails;
+    return groups;
+}
 
-    const toggle = useCallback(() => {
-        if (isExpandable) setShowOutput(v => !v);
-    }, [isExpandable]);
+const ActionGroupRow = memo(function ActionGroupRow({ group, isDark }: { group: ActionGroup; isDark: boolean }) {
+    const { kind, actions } = group;
+    const Icon = KIND_ICONS[kind];
+    const visible = actions.slice(0, 3);
+    const hiddenActionCount = Math.max(0, actions.length - visible.length);
+    const active = actions.some(action => action.status === 'running' || action.status === 'pending');
+    const hasError = actions.some(action => action.status === 'error');
+    const isFileGroup = kind === 'read' || kind === 'edit';
+
+    const allFileNames = actions.flatMap(getFileDetails).map(shortFileName);
+    const fileNames = allFileNames.slice(0, 3);
+    const commandNames = visible.map(action => getCommand(action) || action.displayName || action.toolName);
+    const labelCount = isFileGroup ? Math.max(allFileNames.length, actions.length) : actions.length;
+    const hiddenCount = isFileGroup
+        ? Math.max(0, allFileNames.length - fileNames.length)
+        : hiddenActionCount;
 
     return (
-        <div>
-            <div
-                className={`flex items-center gap-2 py-[3px] ${isExpandable ? 'cursor-pointer' : ''}`}
-                onClick={toggle}
-            >
-                {action.status === 'done' ? (
-                    <span className="text-emerald-500 flex-shrink-0">
-                        <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    </span>
-                ) : action.status === 'error' ? (
-                    <span className="text-red-400 flex-shrink-0">
-                        <X className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    </span>
-                ) : DEPLOY_TOOLS.has(action.toolName) && active ? (
-                    <span className="relative flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/50" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                    </span>
-                ) : (
-                    <span className="w-3.5 flex-shrink-0" />
-                )}
-
-                <span
-                    className={`text-[13px] truncate ${
-                        active
-                            ? DEPLOY_TOOLS.has(action.toolName)
-                                ? `text-amber-400/90 ${isDark ? '' : ''}`
-                                : `text-shimmer ${isDark ? 'text-shimmer-dark' : 'text-shimmer-light'}`
-                            : action.status === 'error'
-                                ? 'text-red-400/80'
-                                : isDark ? 'text-zinc-400' : 'text-gray-500'
-                    }`}
-                >
-                    {text}
+        <div className="py-1.5">
+            <div className="flex min-w-0 items-center gap-2.5">
+                <Icon
+                    aria-hidden="true"
+                    className={`h-[18px] w-[18px] flex-none ${
+                        hasError
+                            ? 'text-red-400'
+                            : isDark ? 'text-zinc-400' : 'text-gray-500'
+                    } ${active ? 'animate-pulse' : ''}`}
+                    strokeWidth={1.8}
+                />
+                <span className={`flex-none text-[14px] font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                    {actionLabel(kind, active, labelCount)}
                 </span>
 
-                {count > 1 && !FILE_TOOLS.has(action.toolName) && (
-                    <span className={`text-[11px] flex-shrink-0 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
-                        x{count}
-                    </span>
+                {isFileGroup && fileNames.length > 0 && (
+                    <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+                        {fileNames.map((file, index) => (
+                            <span key={`${file}-${index}`} className="flex min-w-0 items-center gap-1 text-[13px] text-amber-400">
+                                <FileFormatBadge file={file} />
+                                <span className="truncate font-medium">{file}</span>
+                            </span>
+                        ))}
+                        {(hiddenCount > 0 || actions.flatMap(getFileDetails).length > 3) && (
+                            <span className={`flex-none text-[15px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>…</span>
+                        )}
+                    </div>
                 )}
 
-                {isExpandable && (
-                    <span className={`ml-auto flex-shrink-0 transition-transform duration-150 ${showOutput ? '' : '-rotate-90'} ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
-                        <ChevronDown className="w-3 h-3" />
-                    </span>
+                {hasError && <X className="ml-auto h-3.5 w-3.5 flex-none text-red-400" aria-label="Action failed" />}
+                {!active && !hasError && kind === 'service' && (
+                    <Check className="ml-auto h-3.5 w-3.5 flex-none text-emerald-500" aria-label="Action complete" />
                 )}
             </div>
 
-            {DEPLOY_TOOLS.has(action.toolName) && active && (
-                <div className={`mx-1 mb-1 h-1 overflow-hidden rounded-full ${isDark ? 'bg-amber-950/60' : 'bg-amber-100'}`}>
-                    <div className="h-full w-1/3 animate-[deployBar_1.4s_ease-in-out_infinite] rounded-full bg-amber-400" />
-                </div>
-            )}
-
-            {showOutput && isExpandable && (
-                <div>
-                    {hasFileDetails && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'bg-background border border-border' : 'bg-gray-50 border border-gray-200'} py-1.5 px-3`}>
-                            {allFileDetails.map((file, i) => (
-                                <div key={i} className={`flex items-center gap-2 py-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                    <span className="opacity-40 text-[10px]">{'›'}</span>
-                                    <span className="font-mono truncate">{file}</span>
-                                </div>
-                            ))}
+            {!isFileGroup && (
+                <div className={`ml-[7px] mt-2 border-l-2 pl-[21px] ${isDark ? 'border-zinc-500' : 'border-gray-300'}`}>
+                    {commandNames.map((command, index) => (
+                        <div key={`${command}-${index}`} className={`flex min-w-0 items-center gap-2 py-1 text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            {kind === 'service'
+                                ? <ServerCog className="h-3 w-3 flex-none" strokeWidth={1.8} />
+                                : <SquareTerminal className="h-3 w-3 flex-none" strokeWidth={1.8} />
+                            }
+                            <span className="truncate">{command}</span>
                         </div>
-                    )}
-                    {hasTerminalOutput && action.result && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] font-mono leading-relaxed max-h-[200px] overflow-y-auto scrollbar-hide ${isDark ? 'bg-background text-muted-foreground border border-border' : 'bg-gray-900 text-gray-300 border border-gray-700'} p-3`}>
-                            <pre className="whitespace-pre-wrap break-words">{cleanResultForDisplay(action.result).slice(0, 2000)}</pre>
-                        </div>
-                    )}
-                    {DEPLOY_TOOLS.has(action.toolName) && active && action.result && !hasTerminalOutput && (
-                        <div className={`mt-1 mb-2 mx-1 rounded-lg text-[12px] ${isDark ? 'text-amber-300/80 bg-amber-950/30 border border-amber-900/40' : 'text-amber-800 bg-amber-50 border border-amber-200'} p-2`}>
-                            {cleanResultForDisplay(action.result).slice(0, 500)}
-                        </div>
+                    ))}
+                    {hiddenCount > 0 && (
+                        <div className={`py-0.5 text-[14px] leading-none ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={`${hiddenCount} more action${hiddenCount === 1 ? '' : 's'}`}>…</div>
                     )}
                 </div>
             )}
@@ -208,68 +308,15 @@ const ActionRow = memo(function ActionRow({ action, count, isDark, groupedAction
     );
 });
 
-export const ActionsList = memo(function ActionsList({ actions, isLive = false, isDark = true }: ActionsListProps) {
-    const [collapsed, setCollapsed] = useState(false);
-
-    const deduplicated = useMemo(() => deduplicateActions(actions), [actions]);
-
-    if (actions.length === 0) return null;
-
-    const doneN = actions.filter(a => a.status === 'done').length;
-    const errN = actions.filter(a => a.status === 'error').length;
-    const runningN = actions.filter(a => a.status === 'running' || a.status === 'pending').length;
-    const allActionsFinished = (doneN + errN) === actions.length;
-    const allGood = doneN === actions.length && !isLive;
-    const show = !collapsed;
+export const ActionsList = memo(function ActionsList({ actions, isDark = true }: ActionsListProps) {
+    const groups = useMemo(() => stackActions(actions), [actions]);
+    if (groups.length === 0) return null;
 
     return (
-        <div className={`my-2 rounded-xl border overflow-hidden ${isDark ? 'bg-card border-border' : 'bg-gray-50 border-gray-200'}`}>
-            <button
-                onClick={() => setCollapsed(c => !c)}
-                className={`w-full flex items-center gap-2 px-3.5 py-2.5 text-[13px] ${isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-black/[0.02]'} cursor-pointer ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-colors`}
-            >
-                <span className={`transition-transform duration-150 ${collapsed ? '-rotate-90' : ''}`}>
-                    <ChevronDown className="w-3.5 h-3.5" />
-                </span>
-
-                <span className="font-medium">
-                    {runningN > 0
-                        ? `Running ${runningN} action${runningN !== 1 ? 's' : ''}...`
-                        : allGood
-                            ? `${actions.length} action${actions.length !== 1 ? 's' : ''}`
-                            : errN > 0
-                                ? `${doneN} done, ${errN} failed`
-                                : `${actions.length} action${actions.length !== 1 ? 's' : ''}`
-                    }
-                </span>
-
-                {runningN > 0 && (
-                    <span className="relative flex h-2 w-2 ml-auto">
-                        <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400/40 animate-ping" />
-                        <span className={`relative inline-flex h-2 w-2 rounded-full ${isDark ? 'bg-blue-400' : 'bg-blue-500'}`} />
-                    </span>
-                )}
-
-                {allActionsFinished && errN === 0 && runningN === 0 && (
-                    <span className="text-emerald-500 ml-auto">
-                        <Check className="w-4 h-4" strokeWidth={2.5} />
-                    </span>
-                )}
-
-                {errN > 0 && allActionsFinished && (
-                    <span className="text-red-400 ml-auto">
-                        <X className="w-4 h-4" strokeWidth={2.5} />
-                    </span>
-                )}
-            </button>
-
-            {show && (
-                <div className={`px-3.5 pb-2.5 pt-0.5 space-y-0.5 border-t ${isDark ? 'border-border' : 'border-gray-200'}`}>
-                    {deduplicated.map(({ action, count, groupedActions }) => (
-                        <ActionRow key={action.id} action={action} count={count} isDark={isDark} groupedActions={groupedActions} />
-                    ))}
-                </div>
-            )}
+        <div className="my-2 space-y-1" aria-label="Agent activity">
+            {groups.map((group, index) => (
+                <ActionGroupRow key={`${group.kind}-${group.actions[0]?.id || index}`} group={group} isDark={isDark} />
+            ))}
         </div>
     );
 });

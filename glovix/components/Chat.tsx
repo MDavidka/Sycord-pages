@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
+import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, PanelLeft, UserRound, BrainCircuit } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import { getLatestAgentSession, streamProjectAgent, type ProjectAgentEvent } from '../lib/project-agent';
@@ -15,9 +15,7 @@ import { PlanChecklist } from './PlanChecklist';
 import { ModelLearnPanel } from './ModelLearnPanel';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
-import { BuilderPipelineDocs } from '@/components/builder-pipeline-docs';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -50,6 +48,7 @@ interface MessageGroup {
     content: ContentType; // For user messages and backward compat
     thinking?: string;
     thinkingDuration?: number;
+    agentActions?: StreamingAction[];
     attachments?: FileAttachment[];
     toolCalls?: {
         call: ToolCall;
@@ -242,28 +241,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const addModelLearnEntry = useStore(s => s.addModelLearnEntry);
     const showModelLearn = useStore(s => s.showModelLearn);
     const setShowModelLearn = useStore(s => s.setShowModelLearn);
-    const [profileImgError, setProfileImgError] = useState(false);
 
-    // Local actions state
+    // Local actions state. A ref mirrors it so the complete activity snapshot
+    // can be persisted even when React state updates are still queued.
     const [actions, setActions] = useState<StreamingAction[]>([]);
+    const actionsRef = useRef<StreamingAction[]>([]);
+
+    const replaceActions = (next: StreamingAction[]) => {
+        actionsRef.current = next;
+        setActions(next);
+    };
 
     // Action helpers
-    const addAction = (toolName: string, displayName: string) => {
-        const id = Math.random().toString(36).substring(7);
-        setActions(prev => [...prev, {
+    const addAction = (toolName: string, displayName: string, metadata: Partial<StreamingAction> = {}) => {
+        const id = metadata.id || Math.random().toString(36).substring(7);
+        const action: StreamingAction = {
             id,
             toolName,
             displayName,
-            status: 'pending'
-        }]);
+            status: 'pending',
+            ...metadata,
+        };
+        replaceActions([...actionsRef.current, action]);
         return id;
     };
 
-
-
     const updateAction = (id: string, updates: Partial<StreamingAction>) => {
-        setActions(prev => prev.map(a =>
-            a.id === id ? { ...a, ...updates } : a
+        replaceActions(actionsRef.current.map(action =>
+            action.id === id ? { ...action, ...updates } : action
         ));
     };
 
@@ -504,6 +509,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!currentGroup.thinkingDuration && (msg as any).thinkingDuration) {
                         currentGroup.thinkingDuration = (msg as any).thinkingDuration;
                     }
+                    if (Array.isArray(msg.agentActions) && msg.agentActions.length > 0) {
+                        currentGroup.agentActions = [
+                            ...(currentGroup.agentActions || []),
+                            ...msg.agentActions,
+                        ];
+                    }
                 } else {
                     if (currentGroup) groups.push(currentGroup);
 
@@ -520,6 +531,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         content: msg.content,
                         thinking: (msg as any).thinking,
                         thinkingDuration: (msg as any).thinkingDuration,
+                        agentActions: Array.isArray(msg.agentActions) ? msg.agentActions : undefined,
                         toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
                         segments
                     };
@@ -728,6 +740,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (isLoading) return;
 
         setIsLoading(true);
+        replaceActions([]);
         setCurrentThinking('');
         setThinkingDuration(0);
         const controller = new AbortController();
@@ -739,6 +752,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         const actionByTool = new Map<string, string[]>();
         let assistantContent = '';
         let activeSession = afterSession;
+        let activeTursoSessionId = '';
         let highestEventId = 0;
         let errorText = '';
         let completed = false;
@@ -754,15 +768,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     : Math.max(activeSession, event.session);
             }
             if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
+            if (event.tursoSessionId) activeTursoSessionId = event.tursoSessionId;
 
-            // Keep the durable cursor on the in-memory message as activity arrives.
-            // The finally block saves it even when the stream fails or is stopped.
-            if (activeSession > afterSession || highestEventId > 0) {
+            // Keep durable identity, cursor, and the normalized action snapshot on
+            // the assistant message so closing the UI cannot discard the feed.
+            if (activeSession > afterSession || highestEventId > 0 || activeTursoSessionId) {
                 const state = useStore.getState();
                 const lastMessage = state.messages[state.messages.length - 1];
                 if (lastMessage?.role === 'assistant') {
                     lastMessage.agentSession = activeSession;
                     lastMessage.agentEventId = highestEventId;
+                    lastMessage.agentTursoSessionId = activeTursoSessionId || lastMessage.agentTursoSessionId;
+                    lastMessage.agentActions = [...actionsRef.current];
+                    lastMessage.agentStatus = 'open';
                     setMessages([...state.messages]);
                 }
             }
@@ -783,11 +801,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
                 case 'tool_started': {
                     const tool = event.tool || event.title || 'Agent tool';
-                    const key = tool;
+                    const key = event.toolCallId || tool;
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
-                        : JSON.stringify(event.arguments || {});
-                    const actionId = addAction(tool, getActionDisplayName(tool, args));
+                        : JSON.stringify(event.arguments || event.payload || {});
+                    const actionId = addAction(tool, getActionDisplayName(tool, args), {
+                        toolCallId: event.toolCallId,
+                        session: event.session,
+                        eventId: event.eventId,
+                    });
                     const pendingActions = actionByTool.get(key) || [];
                     pendingActions.push(actionId);
                     actionByTool.set(key, pendingActions);
@@ -796,13 +818,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
                 case 'tool_finished': {
                     const tool = event.tool || event.title || 'Agent tool';
-                    const key = tool;
+                    const key = event.toolCallId || tool;
                     const pendingActions = actionByTool.get(key) || [];
                     let actionId = pendingActions.shift();
                     if (pendingActions.length > 0) actionByTool.set(key, pendingActions);
                     else actionByTool.delete(key);
+                    const fallbackArgs = JSON.stringify(event.arguments || event.payload || {});
                     if (!actionId) {
-                        actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                        actionId = addAction(tool, getActionDisplayName(tool, fallbackArgs) || event.text || tool, {
+                            toolCallId: event.toolCallId,
+                            session: event.session,
+                            eventId: event.eventId,
+                            args: fallbackArgs,
+                        });
                     }
                     updateAction(actionId, {
                         status: event.ok === false ? 'error' : 'done',
@@ -860,6 +888,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             if (lastMessage?.role === 'assistant') {
                 lastMessage.agentSession = activeSession;
                 lastMessage.agentEventId = highestEventId;
+                lastMessage.agentTursoSessionId = activeTursoSessionId || lastMessage.agentTursoSessionId;
+                lastMessage.agentActions = [...actionsRef.current];
+                lastMessage.agentStatus = 'completed';
                 setMessages([...state.messages]);
             }
         } catch (error: any) {
@@ -871,11 +902,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
         } finally {
             const wasAborted = controller.signal.aborted;
+            const state = useStore.getState();
+            const lastMessage = state.messages[state.messages.length - 1];
+            if (lastMessage?.role === 'assistant') {
+                lastMessage.agentSession = activeSession;
+                lastMessage.agentEventId = highestEventId;
+                lastMessage.agentTursoSessionId = activeTursoSessionId || lastMessage.agentTursoSessionId;
+                lastMessage.agentActions = [...actionsRef.current];
+                lastMessage.agentStatus = completed ? 'completed' : wasAborted ? 'open' : 'failed';
+                setMessages([...state.messages]);
+            }
+
             setIsLoading(false);
             abortControllerRef.current = null;
             setCurrentThinking('');
             setThinkingStartTime(null);
-            setTimeout(() => setActions([]), 500);
+            setTimeout(() => replaceActions([]), 500);
 
             if (!wasAborted && completed && onAiComplete) {
                 onAiComplete('remote');
@@ -1596,7 +1638,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
 
             // Clear actions after a delay to allow smooth transition to completed state
-            setTimeout(() => setActions([]), 500);
+            setTimeout(() => replaceActions([]), 500);
 
             if (chatId && user) {
                 try {
@@ -1774,15 +1816,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     }), [isDark]);
 
-    // Embedded inside a Sycord project → show the mobile chrome (back button,
-    // centered "Syra" title, profile avatar) with a progressive blur on top and
-    // safe-area aware spacing. The host injects the real Google avatar + a back
-    // handler via window globals (see GlovixBuilder).
+    // Embedded project chat uses the intentionally sparse chrome from the
+    // supplied Glovix reference: one navigation control and one profile control.
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
-    const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
-    const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
-    // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
-    const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
     const handleBack = () => {
         const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
         if (typeof fn === 'function') fn();
@@ -1798,99 +1834,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     onClose={() => setShowModelLearn(false)}
                 />
             )}
-            {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
+            {/* Minimal embedded header from the supplied Glovix activity reference. */}
             {embedded && (
-                <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
-                    {/* Progressive blur — strongest at the very top, fading to clear so
-                        content scrolls smoothly underneath. Layered for a true gradient blur. */}
-                    <div className="absolute inset-0 -z-10" aria-hidden="true">
-                        <div
-                            className="absolute inset-0 backdrop-blur-[3px]"
-                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)' }}
-                        />
-                        <div
-                            className="absolute inset-0 backdrop-blur-[10px]"
-                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
-                        />
-                        <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
-                        />
-                    </div>
-
-                    <div
-                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-3"
-                        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
+                <header
+                    className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-5 pb-2"
+                    style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.15rem)' }}
+                >
+                    <button
+                        type="button"
+                        onClick={handleBack}
+                        aria-label="Back to projects"
+                        className={`pointer-events-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors active:scale-95 ${isDark ? 'text-zinc-100 hover:bg-white/5' : 'text-gray-800 hover:bg-black/5'}`}
                     >
-                        {/* Back button */}
-                        <button
-                            type="button"
-                            onClick={handleBack}
-                            aria-label="Back"
-                            className={`flex h-11 items-center justify-center rounded-[28px] border px-6 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:bg-[#2a2b2e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-                        >
-                            <Undo2 className="h-5 w-5" />
-                        </button>
-
-                        {/* Profile cluster + preview entry (embedded mobile) */}
-                        <div className="flex flex-col items-end gap-1.5">
-                            <div className="flex items-center gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        aria-label="Docs"
-                                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[350px] p-0 overflow-hidden border-none" style={{ backgroundColor: 'transparent', boxShadow: 'none' }}>
-                                    <BuilderPipelineDocs isDark={isDark} />
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowModelLearn(true)}
-                                aria-label="Model-learn debug"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
-                            >
-                                ML
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowDeepMemory(true)}
-                                aria-label="Profile"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                            >
-                            {profileImage && !profileImgError ? (
-                                <img
-                                    src={profileImage}
-                                    alt="Profile"
-                                    referrerPolicy="no-referrer"
-                                    onError={() => setProfileImgError(true)}
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
-                                <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
-                            )}
-                            </button>
-                            </div>
-
-                            {showPreviewButton && onOpenPreview && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenPreview}
-                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                                    title="Swipe left to preview"
-                                >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Preview
-                                </button>
-                            )}
-                        </div>
-                    </div>
+                        <PanelLeft className="h-5 w-5" strokeWidth={1.8} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowDeepMemory(true)}
+                        aria-label="Profile"
+                        className={`pointer-events-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors active:scale-95 ${isDark ? 'text-white hover:bg-white/5' : 'text-gray-900 hover:bg-black/5'}`}
+                    >
+                        <UserRound className="h-5 w-5" fill="currentColor" strokeWidth={2} />
+                    </button>
                 </header>
             )}
 
@@ -1912,6 +1877,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     isDark={isDark}
                                     thinkingTime={group.thinkingDuration || undefined}
                                     startTime={idx === groupedMessages.length - 1 && isLoading ? thinkingStartTime : undefined}
+                                />
+                            )}
+
+                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && (
+                                !isLoading || idx !== groupedMessages.length - 1 || actions.length === 0
+                            ) && (
+                                <ActionsList
+                                    actions={group.agentActions.filter(action => action.toolName !== 'drawDiagram')}
+                                    isLive={isLoading && idx === groupedMessages.length - 1}
+                                    isDark={isDark}
                                 />
                             )}
 
@@ -2301,42 +2276,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [elapsed, setElapsed] = useState(0);
-
-    useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [startTime, thinkingTime]);
-
+function ThinkingBlock({ thinking, isDark }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
     if (!thinking) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
-
     return (
-        <div className="mb-2 animate-fade-in">
-            <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={`flex items-center gap-1.5 text-sm transition-colors ${isDark ? 'text-[#666] hover:text-[#888]' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-                <span>Thought for {displayTime}s</span>
-                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-            </button>
-
-            {isExpanded && (
-                <div className={`mt-2 text-sm leading-relaxed whitespace-pre-wrap animate-fade-in ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>
-                    {thinking}
-                </div>
-            )}
+        <div className="mb-3 animate-fade-in">
+            <div className="flex items-center gap-2.5">
+                <BrainCircuit className={`h-[18px] w-[18px] flex-none ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} strokeWidth={1.8} />
+                <span className={`text-[14px] font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>thinking</span>
+            </div>
+            <div className={`mt-3 whitespace-pre-wrap pl-0 text-[12px] leading-[1.35] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                {thinking}
+            </div>
         </div>
     );
 }

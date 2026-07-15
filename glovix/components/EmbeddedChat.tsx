@@ -4,6 +4,7 @@ import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle, Rocke
 import { Chat } from './Chat';
 import { useStore } from '../store';
 import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getProjectDeployInfo, startSytePreview } from '../lib/api';
+import { loadDurableProjectAgentTurns, type DurableAgentTurn } from '../lib/project-agent';
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
@@ -13,6 +14,52 @@ type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 type PreviewSource = 'live' | 'deployed' | 'syte' | null;
 type WorkspaceStatus = 'idle' | 'creating' | 'ready' | 'error';
 type DeployStatus = 'idle' | 'deploying' | 'success' | 'error';
+
+function mergeDurableTurns(messages: any[], turns: DurableAgentTurn[]): any[] {
+    const merged = messages.map(message => ({ ...message }));
+
+    for (const turn of turns) {
+        const assistantIndex = merged.findIndex(message =>
+            message?.role === 'assistant' && (
+                (turn.id && message.agentTursoSessionId === turn.id) ||
+                (turn.session && Number(message.agentSession) === turn.session)
+            ),
+        );
+        const assistant = {
+            role: 'assistant' as const,
+            content: turn.reply || (turn.status === 'open' ? 'Syra is still working in the background.' : 'Done.'),
+            thinking: turn.thinking || undefined,
+            agentSession: turn.session,
+            agentEventId: turn.eventId,
+            agentTursoSessionId: turn.id,
+            agentActions: turn.actions,
+            agentStatus: turn.status,
+        };
+
+        if (assistantIndex >= 0) {
+            merged[assistantIndex] = { ...merged[assistantIndex], ...assistant };
+            continue;
+        }
+
+        const normalizedUserMessage = turn.userMessage?.trim();
+        const hasMatchingUser = normalizedUserMessage && merged.some(message => {
+            if (message?.role !== 'user') return false;
+            if (typeof message.content === 'string') return message.content.trim() === normalizedUserMessage;
+            return Array.isArray(message.content) && message.content
+                .filter((part: any) => part?.type === 'text')
+                .map((part: any) => part.text)
+                .join('\n\n')
+                .trim() === normalizedUserMessage;
+        });
+
+        if (normalizedUserMessage && !hasMatchingUser) {
+            merged.push({ role: 'user', content: normalizedUserMessage });
+        }
+        merged.push(assistant);
+    }
+
+    return merged;
+}
 
 /**
  * Chat + live-preview experience used when Syra is embedded inside a Sycord
@@ -25,6 +72,7 @@ type DeployStatus = 'idle' | 'deploying' | 'success' | 'error';
  */
 export function EmbeddedChat() {
     const theme = useStore(s => s.theme);
+    const messages = useStore(s => s.messages);
     const setCurrentChatId = useStore(s => s.setCurrentChatId);
     const setMessages = useStore(s => s.setMessages);
     const setFiles = useStore(s => s.setFiles);
@@ -42,6 +90,8 @@ export function EmbeddedChat() {
     const baseSeededRef = useRef(false);
     const previewTimeoutRef = useRef<number | null>(null);
     const workspaceCreatedRef = useRef(false);
+    const durablePollingRef = useRef(new Set<string>());
+    const durablePollingActiveRef = useRef(false);
 
     const [activePane, setActivePane] = useState(0);
     const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
@@ -151,14 +201,24 @@ export function EmbeddedChat() {
         setFiles({});
 
         (async () => {
-            try {
-                const data = await getChatMessages(chatId, projectId);
-                if (cancelled) return;
-                setMessages(Array.isArray(data?.messages) ? data.messages : []);
-            } catch (err) {
-                console.warn('[EmbeddedChat] Failed to restore messages:', err);
-                if (!cancelled) setMessages([]);
-            }
+            void (async () => {
+                try {
+                    const data = await getChatMessages(chatId, projectId);
+                    if (cancelled) return;
+                    const savedMessages = Array.isArray(data?.messages) ? data.messages : [];
+                    const durableTurns = await loadDurableProjectAgentTurns(projectId).catch(() => []);
+                    if (cancelled) return;
+
+                    const mergedMessages = mergeDurableTurns(savedMessages, durableTurns);
+                    setMessages(mergedMessages);
+                    if (durableTurns.length > 0) {
+                        void saveChatMessages(chatId, mergedMessages, { projectId });
+                    }
+                } catch (err) {
+                    console.warn('[EmbeddedChat] Failed to restore messages:', err);
+                    if (!cancelled) setMessages([]);
+                }
+            })();
 
             try {
                 const project = await getProject(chatId);
@@ -192,6 +252,51 @@ export function EmbeddedChat() {
             }
         };
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
+
+    useEffect(() => {
+        if (!projectId || !chatId) return;
+        const openSessionIds = messages
+            .filter(message => message.role === 'assistant' && message.agentStatus === 'open' && message.agentTursoSessionId)
+            .map(message => message.agentTursoSessionId as string);
+        openSessionIds.forEach(sessionId => durablePollingRef.current.add(sessionId));
+
+        if (durablePollingActiveRef.current || durablePollingRef.current.size === 0) return;
+        durablePollingActiveRef.current = true;
+
+        void (async () => {
+            try {
+                while (durablePollingRef.current.size > 0) {
+                    await new Promise(resolve => window.setTimeout(resolve, 2000));
+                    const sessionIds = [...durablePollingRef.current].slice(0, 5);
+                    const refreshed = await Promise.all(sessionIds.map(async sessionId => {
+                        const [turn] = await loadDurableProjectAgentTurns(projectId, sessionId).catch(() => []);
+                        return { sessionId, turn };
+                    }));
+
+                    const turns = refreshed.flatMap(({ sessionId, turn }) => {
+                        if (turn?.status && turn.status !== 'open') durablePollingRef.current.delete(sessionId);
+                        return turn ? [turn] : [];
+                    });
+                    if (turns.length === 0) continue;
+
+                    const merged = mergeDurableTurns(useStore.getState().messages, turns);
+                    setMessages(merged);
+                    if (turns.some(turn => turn.status !== 'open')) {
+                        void saveChatMessages(chatId, merged, { projectId });
+                    }
+                }
+            } finally {
+                durablePollingActiveRef.current = false;
+            }
+        })();
+    }, [messages, projectId, chatId, setMessages]);
+
+    useEffect(() => {
+        return () => {
+            durablePollingRef.current.clear();
+            durablePollingActiveRef.current = false;
+        };
+    }, [projectId]);
 
     const startSyteServerPreview = useCallback(async (syncFiles = true): Promise<{ ok: boolean; error?: string }> => {
         if (!projectId) return { ok: false, error: 'No project id' };

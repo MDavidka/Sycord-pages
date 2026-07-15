@@ -1,15 +1,31 @@
 import type { Message } from './ai';
+import type { StreamingAction } from '../components/ActionsList';
+
+export type DurableAgentTurn = {
+    id?: string;
+    session?: number;
+    status: 'open' | 'completed' | 'failed' | 'cancelled';
+    modelProfile?: string;
+    userMessage?: string;
+    reply?: string;
+    thinking?: string;
+    actions: StreamingAction[];
+    eventId?: number;
+};
 
 export type ProjectAgentEvent = {
     type: 'session' | 'processing' | 'thinking' | 'tool_started' | 'tool_finished' | 'delta' | 'message' | 'done' | 'error';
     session?: number;
     sessionAuthoritative?: boolean;
     eventId?: number;
+    tursoSessionId?: string;
     text?: string;
     title?: string;
     tool?: string;
     toolCallId?: string;
     arguments?: unknown;
+    payload?: Record<string, unknown>;
+    createdAt?: string;
     ok?: boolean;
 };
 
@@ -53,6 +69,18 @@ function parseSseFrame(frame: string): ProjectAgentEvent | null {
     } catch {
         return null;
     }
+}
+
+export async function loadDurableProjectAgentTurns(projectId: string, sessionId?: string): Promise<DurableAgentTurn[]> {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent${query}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+    });
+    if (!response.ok) return [];
+    const body = await response.json().catch(() => null) as { turns?: DurableAgentTurn[] } | null;
+    return Array.isArray(body?.turns) ? body.turns : [];
 }
 
 export async function streamProjectAgent(options: StreamProjectAgentOptions): Promise<{

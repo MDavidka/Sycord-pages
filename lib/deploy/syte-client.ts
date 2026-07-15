@@ -647,6 +647,8 @@ export type SyteAgentChangeResponse = {
   request_id?: string
   status?: string
   stream_url?: string
+  turso_session_id?: string
+  session_url?: string
   change_applied?: boolean | null
 }
 

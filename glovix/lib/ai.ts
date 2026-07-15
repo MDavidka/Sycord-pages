@@ -64,6 +64,12 @@ export interface Message {
     agentSession?: number;
     /** Highest durable Syte activity event included in this response. */
     agentEventId?: number;
+    /** UUID of the durable Turso session for this cloud-agent turn. */
+    agentTursoSessionId?: string;
+    /** Normalized activity rows persisted with this assistant response. */
+    agentActions?: import('../components/ActionsList').StreamingAction[];
+    /** Durable cloud-agent turn status. */
+    agentStatus?: 'open' | 'completed' | 'failed' | 'cancelled';
 }
 
 export interface ToolCall {
