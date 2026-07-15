@@ -1,4 +1,5 @@
-import type { Message } from './ai';
+import type { Message, ToolCall } from './ai';
+import { canonicalizeToolName, normalizeAgentTool } from './agent-tools';
 
 export type ProjectAgentEvent = {
     type: 'session' | 'processing' | 'thinking' | 'tool_started' | 'tool_finished' | 'delta' | 'message' | 'done' | 'error';
@@ -95,6 +96,27 @@ export function getLatestTursoSessionId(messages: Message[]): string | null {
         if (typeof id === 'string' && id.trim()) return id.trim();
     }
     return null;
+}
+
+/**
+ * Collect assistant messages that have a Turso session id but no persisted tool_calls.
+ * Used on reopen so older cloud turns still show their stacked file/command feed.
+ */
+export function getAssistantMessagesNeedingToolHydration(
+    messages: Message[],
+): Array<{ index: number; tursoSessionId: string }> {
+    const out: Array<{ index: number; tursoSessionId: string }> = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        if (msg?.role !== 'assistant') continue;
+        const id = typeof msg.tursoSessionId === 'string' ? msg.tursoSessionId.trim() : '';
+        if (!id || seen.has(id)) continue;
+        if (msg.tool_calls && msg.tool_calls.length > 0) continue;
+        seen.add(id);
+        out.push({ index: i, tursoSessionId: id });
+    }
+    return out;
 }
 
 function messageToText(message: Message): string {
@@ -197,13 +219,34 @@ function normalizeTursoEvent(
         case 'file_created':
         case 'file_modified':
         case 'file_deleted':
-        case 'command_run':
+        case 'command_run': {
+            // Syte often emits lifecycle snapshots with path/command in payload —
+            // treat these as finished tool calls with concrete arguments for the feed.
+            const path =
+                (typeof payload.path === 'string' && payload.path) ||
+                (typeof payload.file === 'string' && payload.file) ||
+                undefined;
+            const command =
+                (typeof payload.command === 'string' && payload.command) ||
+                (typeof event.detail === 'string' && event.event_type === 'command_run'
+                    ? event.detail
+                    : undefined);
+            const argumentsPayload =
+                payload.arguments && typeof payload.arguments === 'object'
+                    ? payload.arguments
+                    : path
+                      ? { path }
+                      : command
+                        ? { command }
+                        : payload;
             return {
                 type: 'tool_finished',
                 ...common,
                 tool: event.event_type,
+                arguments: argumentsPayload,
                 ok: payload.ok !== false,
             };
+        }
         case 'token_delta':
             return { type: 'delta', ...common };
         case 'message_snapshot':
@@ -452,6 +495,114 @@ export async function resumeProjectAgent(
         tursoSessionId,
         status: result.status,
     };
+}
+
+/**
+ * One-shot fetch of a Turso session document (no long poll).
+ * Used to rebuild older tool history after reconnect when chat lost ephemeral actions.
+ */
+export async function fetchAgentSessionSnapshot(options: {
+    projectId: string;
+    tursoSessionId: string;
+    sinceId?: number;
+    signal?: AbortSignal;
+}): Promise<TursoSessionDoc> {
+    return fetchTursoSession(
+        options.projectId,
+        options.tursoSessionId,
+        Math.max(0, options.sinceId || 0),
+        options.signal,
+    );
+}
+
+/** Convert durable Turso events into OpenAI-style tool_calls for chat persistence. */
+export function toolCallsFromTursoEvents(events: TursoSessionEvent[]): ToolCall[] {
+    const calls: ToolCall[] = [];
+    const openByKey = new Map<string, ToolCall>();
+
+    for (const event of events) {
+        const payload = event.payload || {};
+        const rawTool =
+            (typeof payload.tool === 'string' && payload.tool) ||
+            event.title ||
+            event.event_type;
+        const toolCallIdRaw = payload.tool_call_id ?? payload.call_id;
+        const toolCallId =
+            typeof toolCallIdRaw === 'string' || typeof toolCallIdRaw === 'number'
+                ? String(toolCallIdRaw)
+                : '';
+
+        if (
+            event.event_type === 'tool_call_started' ||
+            (event.event_type === 'tool_call' && payload.phase !== 'finished')
+        ) {
+            const args =
+                typeof payload.arguments === 'string'
+                    ? payload.arguments
+                    : JSON.stringify(payload.arguments || {});
+            const normalized = normalizeAgentTool(String(rawTool || 'Agent tool'), args);
+            const id = toolCallId || (event.id ? `evt_${event.id}` : `turso_${calls.length}`);
+            const tc: ToolCall = {
+                id,
+                type: 'function',
+                function: {
+                    name: normalized.toolName || canonicalizeToolName(String(rawTool)),
+                    arguments: args,
+                },
+            };
+            calls.push(tc);
+            openByKey.set(toolCallId || id, tc);
+            continue;
+        }
+
+        if (
+            event.event_type === 'tool_call_finished' ||
+            (event.event_type === 'tool_call' && payload.phase === 'finished') ||
+            event.event_type === 'file_created' ||
+            event.event_type === 'file_modified' ||
+            event.event_type === 'file_deleted' ||
+            event.event_type === 'command_run'
+        ) {
+            const path =
+                typeof payload.path === 'string'
+                    ? payload.path
+                    : typeof payload.file === 'string'
+                      ? payload.file
+                      : undefined;
+            const command =
+                typeof payload.command === 'string'
+                    ? payload.command
+                    : event.event_type === 'command_run'
+                      ? event.detail
+                      : undefined;
+            const argsObj =
+                payload.arguments && typeof payload.arguments === 'object'
+                    ? payload.arguments
+                    : path
+                      ? { path }
+                      : command
+                        ? { command }
+                        : {};
+            const args = JSON.stringify(argsObj);
+            const normalized = normalizeAgentTool(String(rawTool || event.event_type), args, event.detail);
+            const key = toolCallId || '';
+            if (key && openByKey.has(key)) {
+                // started already recorded — keep that call
+                continue;
+            }
+            // Snapshot-only finished event (common for file_* / command_run)
+            calls.push({
+                id: toolCallId || (event.id ? `evt_${event.id}` : `turso_${calls.length}`),
+                type: 'function',
+                function: {
+                    name: normalized.toolName,
+                    arguments: args,
+                },
+            });
+        }
+    }
+
+    return calls;
 }
 
 /**

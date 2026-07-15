@@ -1,16 +1,21 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
+import { Brain, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, PanelLeft, Slash, Mic, AudioLines, ArrowUp, Eye, UserRound } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
     getLatestAgentSession,
     getLatestTursoSessionId,
+    getAssistantMessagesNeedingToolHydration,
     resumeProjectAgent,
     streamProjectAgent,
+    fetchAgentSessionSnapshot,
+    toolCallsFromTursoEvents,
     type ProjectAgentEvent,
 } from '../lib/project-agent';
+import { getActionDisplayName, normalizeAgentTool } from '../lib/agent-tools';
+import { FileTypeIcon, getFileNameAccent } from '../lib/file-icons';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
@@ -75,99 +80,53 @@ interface ChatProps {
     onAiComplete?: (source?: 'local' | 'remote') => void;
 }
 
-// Claude-Code-style short path: filename only, but keep the parent folder for
-// Next.js route files (page.tsx/layout.tsx/…) so many "page.tsx" rows stay
-// distinguishable. e.g. "app/pricing/page.tsx" → "pricing/page.tsx", but
-// "components/ui/button.tsx" → "button.tsx".
-const NEXT_ROUTE_FILES = new Set([
-    'page.tsx', 'page.ts', 'layout.tsx', 'layout.ts', 'route.ts', 'route.tsx',
-    'loading.tsx', 'error.tsx', 'not-found.tsx', 'template.tsx', 'default.tsx',
-    'globals.css', 'index.tsx', 'index.ts',
-]);
-const shortFilePath = (path: string): string => {
-    if (!path) return '';
-    const parts = path.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
-    const base = parts[parts.length - 1] || path;
-    if (NEXT_ROUTE_FILES.has(base) && parts.length > 1) {
-        return `${parts[parts.length - 2]}/${base}`;
+/** Persist a project-agent tool onto the latest assistant message so reconnect rebuilds the feed. */
+function persistAgentToolCall(toolCall: ToolCall, result?: string, ok: boolean = true) {
+    const state = useStore.getState();
+    const messages = state.messages;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+
+    const existing = last.tool_calls || [];
+    const idx = existing.findIndex(tc => tc.id === toolCall.id);
+    if (idx === -1) {
+        last.tool_calls = [...existing, toolCall];
+    } else {
+        last.tool_calls = existing.map((tc, i) => (i === idx ? toolCall : tc));
     }
-    return base;
-};
+    state.setMessages([...messages]);
 
-const getActionDisplayName = (toolName: string, args: string): string => {
-    if (!toolName) return 'Preparing...';
-
-    const decodeHtml = (text: string): string => {
-        return text
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'");
-    };
-
-    const extract = (key: string) => {
-        const match = args.match(new RegExp(`"${key}"\\s*:\\s*"([^"]*)`));
-        return match ? decodeHtml(match[1]) : '';
-    };
-
-    try {
-        const parsed = JSON.parse(args);
-        switch (toolName) {
-            case 'createFile': return shortFilePath(parsed.path || '');
-            case 'write_file': return shortFilePath(parsed.path || '');
-            case 'editFile': return shortFilePath(parsed.path || '');
-            case 'readFile': return shortFilePath(parsed.path || '');
-            case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
-            case 'deleteFile': return shortFilePath(parsed.path || '');
-            case 'renameFile': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
-            case 'grep':
-            case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
-            case 'createWorkspace': return 'Syte API';
-            case 'setDomain': return decodeHtml(parsed.domain || '');
-            case 'startPreview': return 'sycord.site preview';
-            case 'typeCheck': return 'Workspace';
-            case 'executeCommand': return decodeHtml(parsed.command || 'shell');
-            case 'lintCheck': return parsed.path || 'src/';
-            case 'listFiles': return 'Workspace';
-            case 'getErrors': return 'Workspace';
-            case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
-            case 'planning':
-                if (parsed.action === 'updateStep' && parsed.stepId) return String(parsed.stepId).replace(/-/g, ' ');
-                if (parsed.action === 'create') return parsed.title || parsed.appType || 'new plan';
-                return parsed.action || 'pipeline';
-            case 'deploy': return 'sycord.site';
-            default: return '';
-        }
-    } catch {
-        switch (toolName) {
-            case 'createFile':
-            case 'write_file':
-            case 'editFile':
-            case 'readFile':
-            case 'deleteFile':
-                return shortFilePath(extract('path'));
-            case 'lintCheck':
-                return extract('path');
-            case 'readMultipleFiles':
-                return 'Multiple files';
-            case 'renameFile':
-                const oldP = extract('oldPath');
-                const newP = extract('newPath');
-                return oldP ? `${oldP} → ${newP}` : oldP;
-            case 'grep':
-            case 'searchInFiles':
-                return extract('pattern') || extract('query');
-            case 'batchCreateFiles': return 'Multiple files';
-            case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
-            case 'getErrors': return 'Workspace';
-            case 'setDomain': return extract('domain') || 'domain';
-            case 'startPreview': return 'preview';
-            case 'deploy': return 'sycord.site';
-            default: return '';
+    if (result !== undefined) {
+        const after = useStore.getState().messages;
+        const hasResult = after.some(m => m.role === 'tool' && m.tool_call_id === toolCall.id);
+        if (!hasResult) {
+            state.addMessage({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: toolCall.function.name,
+                content: ok === false
+                    ? (result.startsWith('Error') ? result : `Error: ${result || 'failed'}`)
+                    : result || 'OK',
+            });
         }
     }
-};
+}
+
+function agentEventToToolCall(
+    actionId: string,
+    rawTool: string,
+    args: string,
+): ToolCall {
+    const normalized = normalizeAgentTool(rawTool, args);
+    return {
+        id: actionId,
+        type: 'function',
+        function: {
+            name: normalized.toolName,
+            arguments: args || '{}',
+        },
+    };
+}
 
 function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
     selectedModel: ModelType
@@ -769,12 +728,76 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 agentResumeDoneRef.current = true;
 
                 try {
+                    // Rebuild tool feeds for EVERY assistant turn that has a Turso session
+                    // but lost ephemeral actions (cloud keeps running after the user leaves).
+                    const needingHydration = getAssistantMessagesNeedingToolHydration(msgs);
+                    if (needingHydration.length > 0) {
+                        try {
+                            let hydratedAny = false;
+                            const state = useStore.getState();
+                            const messages = [...state.messages];
+
+                            await Promise.all(
+                                needingHydration.map(async ({ index, tursoSessionId }) => {
+                                    try {
+                                        const snapshot = await fetchAgentSessionSnapshot({
+                                            projectId,
+                                            tursoSessionId,
+                                            sinceId: 0,
+                                            signal: controller.signal,
+                                        });
+                                        const restored = toolCallsFromTursoEvents(snapshot.events || []);
+                                        if (restored.length === 0) return;
+                                        const target = messages[index];
+                                        if (target?.role !== 'assistant') return;
+                                        messages[index] = {
+                                            ...target,
+                                            tool_calls: restored,
+                                            tursoSessionId: target.tursoSessionId || tursoSessionId,
+                                        };
+                                        hydratedAny = true;
+                                    } catch (oneErr: any) {
+                                        console.warn(
+                                            '[ProjectAgent] Tool hydrate skipped for',
+                                            tursoSessionId,
+                                            oneErr?.message || oneErr,
+                                        );
+                                    }
+                                }),
+                            );
+
+                            if (hydratedAny) {
+                                state.setMessages([...messages]);
+                                if (currentChatId && user) {
+                                    void saveChatMessages(currentChatId, useStore.getState().messages, {
+                                        keepalive: true,
+                                        projectId,
+                                    }).catch(() => {});
+                                }
+                            }
+                        } catch (hydrateErr: any) {
+                            console.warn(
+                                '[ProjectAgent] Tool hydrate skipped:',
+                                hydrateErr?.message || hydrateErr,
+                            );
+                        }
+                    }
+
+                    // Only continue into live resume when the turn looks open / interrupted.
+                    if (!lastLooksIncomplete) {
+                        setIsLoading(false);
+                        abortControllerRef.current = null;
+                        return;
+                    }
+
                     setIsLoading(true);
                     abortControllerRef.current = controller;
 
-                    let assistantContent = '';
+                    let assistantContent =
+                        last?.role === 'assistant' && typeof last.content === 'string' ? last.content : '';
                     let activeSession = getLatestAgentSession(msgs);
-                    let highestEventId = Number(last?.agentEventId) || 0;
+                    // Replay from 0 when tools were missing so the feed rebuilds fully.
+                    let highestEventId = toolsMissing ? 0 : Number(last?.agentEventId) || 0;
                     let errorText = '';
                     let completed = false;
                     let thinkingStartedAt: number | null = null;
@@ -830,26 +853,78 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
                                     : JSON.stringify(event.arguments || {});
-                                const actionId = addAction(tool, getActionDisplayName(tool, args));
-                                const pendingActions = actionByTool.get(tool) || [];
+                                const normalized = normalizeAgentTool(tool, args, event.text);
+                                const stableId =
+                                    event.toolCallId ||
+                                    (event.eventId ? `evt_${event.eventId}` : '');
+                                let actionId = stableId;
+                                if (actionId) {
+                                    setActions(prev => {
+                                        if (prev.some(a => a.id === actionId)) return prev;
+                                        return [...prev, {
+                                            id: actionId,
+                                            toolName: normalized.toolName,
+                                            displayName: getActionDisplayName(normalized.toolName, args),
+                                            status: 'pending' as const,
+                                            kind: normalized.kind,
+                                        }];
+                                    });
+                                } else {
+                                    actionId = addAction(
+                                        normalized.toolName,
+                                        getActionDisplayName(normalized.toolName, args),
+                                    );
+                                }
+                                const pendingActions = actionByTool.get(normalized.toolName) || [];
                                 pendingActions.push(actionId);
-                                actionByTool.set(tool, pendingActions);
-                                updateAction(actionId, { status: 'running', args });
+                                actionByTool.set(normalized.toolName, pendingActions);
+                                updateAction(actionId, {
+                                    status: 'running',
+                                    args,
+                                    toolName: normalized.toolName,
+                                    displayName: getActionDisplayName(normalized.toolName, args),
+                                    kind: normalized.kind,
+                                });
+                                persistAgentToolCall(agentEventToToolCall(actionId, tool, args));
                                 break;
                             }
                             case 'tool_finished': {
                                 const tool = event.tool || event.title || 'Agent tool';
-                                const pendingActions = actionByTool.get(tool) || [];
-                                let actionId = pendingActions.shift();
-                                if (pendingActions.length > 0) actionByTool.set(tool, pendingActions);
-                                else actionByTool.delete(tool);
+                                const finishArgs = typeof event.arguments === 'string'
+                                    ? event.arguments
+                                    : JSON.stringify(event.arguments || {});
+                                const normalized = normalizeAgentTool(tool, finishArgs || '{}', event.text);
+                                const pendingActions = actionByTool.get(normalized.toolName) || actionByTool.get(tool) || [];
+                                // Prefer matching an open start; eventId only for orphan finished snapshots.
+                                let actionId =
+                                    event.toolCallId ||
+                                    pendingActions.shift() ||
+                                    (event.eventId ? `evt_${event.eventId}` : undefined);
+                                if (pendingActions.length > 0) {
+                                    actionByTool.set(normalized.toolName, pendingActions);
+                                } else {
+                                    actionByTool.delete(normalized.toolName);
+                                    actionByTool.delete(tool);
+                                }
                                 if (!actionId) {
-                                    actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                                    actionId = addAction(
+                                        normalized.toolName,
+                                        event.text || getActionDisplayName(normalized.toolName, finishArgs || '{}'),
+                                    );
                                 }
                                 updateAction(actionId, {
                                     status: event.ok === false ? 'error' : 'done',
                                     result: event.text,
+                                    args: finishArgs || undefined,
+                                    toolName: normalized.toolName,
+                                    displayName: getActionDisplayName(normalized.toolName, finishArgs || '{}'),
+                                    kind: normalized.kind,
                                 });
+                                persistAgentToolCall(
+                                    agentEventToToolCall(actionId, tool, finishArgs || '{}'),
+                                    event.text || (event.ok === false ? 'Error' : 'OK'),
+                                    event.ok !== false,
+                                );
                                 break;
                             }
                             case 'delta':
@@ -873,9 +948,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     const resumed = await resumeProjectAgent({
                         projectId,
-                        tursoSessionId: knownTursoId && lastLooksIncomplete ? knownTursoId : undefined,
-                        afterEventId: lastLooksIncomplete ? highestEventId : 0,
-                        allowCompleted: lastLooksIncomplete,
+                        tursoSessionId: knownTursoId || undefined,
+                        // When tools were lost, replay the full durable session.
+                        afterEventId: highestEventId,
+                        allowCompleted: true,
                         signal: controller.signal,
                         onEvent: applyEvent,
                     });
@@ -938,6 +1014,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setIsLoading(true);
         setCurrentThinking('');
         setThinkingDuration(0);
+        setActions([]);
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
@@ -1004,31 +1081,81 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
                 case 'tool_started': {
                     const tool = event.tool || event.title || 'Agent tool';
-                    const key = tool;
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
                         : JSON.stringify(event.arguments || {});
-                    const actionId = addAction(tool, getActionDisplayName(tool, args));
+                    const normalized = normalizeAgentTool(tool, args, event.text);
+                    const key = normalized.toolName;
+                    const stableId =
+                        event.toolCallId ||
+                        (event.eventId ? `evt_${event.eventId}` : '');
+                    let actionId = stableId;
+                    if (actionId) {
+                        setActions(prev => {
+                            if (prev.some(a => a.id === actionId)) return prev;
+                            return [...prev, {
+                                id: actionId,
+                                toolName: normalized.toolName,
+                                displayName: getActionDisplayName(normalized.toolName, args),
+                                status: 'pending' as const,
+                                kind: normalized.kind,
+                            }];
+                        });
+                    } else {
+                        actionId = addAction(
+                            normalized.toolName,
+                            getActionDisplayName(normalized.toolName, args),
+                        );
+                    }
                     const pendingActions = actionByTool.get(key) || [];
                     pendingActions.push(actionId);
                     actionByTool.set(key, pendingActions);
-                    updateAction(actionId, { status: 'running', args });
+                    updateAction(actionId, {
+                        status: 'running',
+                        args,
+                        toolName: normalized.toolName,
+                        displayName: getActionDisplayName(normalized.toolName, args),
+                        kind: normalized.kind,
+                    });
+                    persistAgentToolCall(agentEventToToolCall(actionId, tool, args));
                     break;
                 }
                 case 'tool_finished': {
                     const tool = event.tool || event.title || 'Agent tool';
-                    const key = tool;
-                    const pendingActions = actionByTool.get(key) || [];
-                    let actionId = pendingActions.shift();
+                    const finishArgs = typeof event.arguments === 'string'
+                        ? event.arguments
+                        : JSON.stringify(event.arguments || {});
+                    const normalized = normalizeAgentTool(tool, finishArgs || '{}', event.text);
+                    const key = normalized.toolName;
+                    const pendingActions = actionByTool.get(key) || actionByTool.get(tool) || [];
+                    let actionId =
+                        event.toolCallId ||
+                        pendingActions.shift() ||
+                        (event.eventId ? `evt_${event.eventId}` : undefined);
                     if (pendingActions.length > 0) actionByTool.set(key, pendingActions);
-                    else actionByTool.delete(key);
+                    else {
+                        actionByTool.delete(key);
+                        actionByTool.delete(tool);
+                    }
                     if (!actionId) {
-                        actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                        actionId = addAction(
+                            normalized.toolName,
+                            event.text || getActionDisplayName(normalized.toolName, finishArgs || '{}'),
+                        );
                     }
                     updateAction(actionId, {
                         status: event.ok === false ? 'error' : 'done',
                         result: event.text,
+                        args: finishArgs || undefined,
+                        toolName: normalized.toolName,
+                        displayName: getActionDisplayName(normalized.toolName, finishArgs || '{}'),
+                        kind: normalized.kind,
                     });
+                    persistAgentToolCall(
+                        agentEventToToolCall(actionId, tool, finishArgs || '{}'),
+                        event.text || (event.ok === false ? 'Error' : 'OK'),
+                        event.ok !== false,
+                    );
                     break;
                 }
                 case 'delta':
@@ -2032,97 +2159,84 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     onClose={() => setShowModelLearn(false)}
                 />
             )}
-            {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
+            {/* Simplified Syra header: layout icon + profile (Devicon file chips live in the feed/editor). */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
-                    {/* Progressive blur — strongest at the very top, fading to clear so
-                        content scrolls smoothly underneath. Layered for a true gradient blur. */}
                     <div className="absolute inset-0 -z-10" aria-hidden="true">
                         <div
-                            className="absolute inset-0 backdrop-blur-[3px]"
-                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 55%, transparent 100%)' }}
-                        />
-                        <div
-                            className="absolute inset-0 backdrop-blur-[10px]"
-                            style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
-                        />
-                        <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/85 to-transparent' : 'bg-gradient-to-b from-white via-white/85 to-transparent'}`}
                         />
                     </div>
 
                     <div
-                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-3"
-                        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
+                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-2"
+                        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
                     >
-                        {/* Back button */}
                         <button
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 items-center justify-center rounded-[28px] border px-6 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:bg-[#2a2b2e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white active:scale-95"
                         >
-                            <Undo2 className="h-5 w-5" />
+                            <PanelLeft className="h-5 w-5" strokeWidth={1.8} />
                         </button>
 
-                        {/* Profile cluster + preview entry (embedded mobile) */}
-                        <div className="flex flex-col items-end gap-1.5">
-                            <div className="flex items-center gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        aria-label="Docs"
-                                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[350px] p-0 overflow-hidden border-none" style={{ backgroundColor: 'transparent', boxShadow: 'none' }}>
-                                    <BuilderPipelineDocs isDark={isDark} />
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowModelLearn(true)}
-                                aria-label="Model-learn debug"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
-                            >
-                                ML
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowDeepMemory(true)}
-                                aria-label="Profile"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                            >
-                            {profileImage && !profileImgError ? (
-                                <img
-                                    src={profileImage}
-                                    alt="Profile"
-                                    referrerPolicy="no-referrer"
-                                    onError={() => setProfileImgError(true)}
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
-                                <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
-                            )}
-                            </button>
-                            </div>
-
+                        <div className="flex items-center gap-1">
                             {showPreviewButton && onOpenPreview && (
                                 <button
                                     type="button"
                                     onClick={onOpenPreview}
-                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                                    title="Swipe left to preview"
+                                    aria-label="Preview"
+                                    className="flex h-10 w-10 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white active:scale-95"
                                 >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Preview
+                                    <Eye className="h-5 w-5" strokeWidth={1.8} />
                                 </button>
                             )}
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        aria-label="Profile"
+                                        className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full text-white/80 transition-colors hover:bg-white/[0.055] hover:text-white active:scale-95"
+                                    >
+                                        {profileImage && !profileImgError ? (
+                                            <img
+                                                src={profileImage}
+                                                alt="Profile"
+                                                referrerPolicy="no-referrer"
+                                                onError={() => setProfileImgError(true)}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <UserRound className="h-5 w-5" strokeWidth={1.8} />
+                                        )}
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className="w-[220px] border-white/10 bg-[#1c1d1f] p-1.5 text-[#e5e5e5]"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowDeepMemory(true)}
+                                        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm hover:bg-white/[0.055]"
+                                    >
+                                        Deep memory
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowModelLearn(true)}
+                                        className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm hover:bg-white/[0.055]"
+                                    >
+                                        Model learn
+                                    </button>
+                                    <div className="my-1 border-t border-white/10" />
+                                    <div className="max-h-[280px] overflow-y-auto">
+                                        <BuilderPipelineDocs isDark={isDark} />
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </header>
@@ -2135,8 +2249,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 className="flex-1 overflow-y-auto scrollbar-hide"
             >
                 <div
-                    className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: showPreviewButton ? 'calc(env(safe-area-inset-top, 0px) + 6.5rem)' : 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    className={`agent-feed mx-auto w-full max-w-[760px] px-4 py-6 space-y-6 sm:max-w-[680px] sm:px-6 sm:py-8 sm:space-y-7 lg:max-w-[760px] lg:px-8 lg:py-10 lg:space-y-8`}
+                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.75rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
@@ -2194,14 +2308,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 <div key={`seg-${segIdx}`}>
                                                 <ActionsList
                                                     key={`seg-${segIdx}`}
-                                                    actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                        id: `completed_${idx}_${segIdx}_${i}`,
-                                                        toolName: tc.call.function.name,
-                                                        displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                        status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                        result: tc.result,
-                                                        args: tc.call.function.arguments || ''
-                                                    }))}
+                                                    actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => {
+                                                        const args = tc.call.function.arguments || ''
+                                                        const meta = normalizeAgentTool(tc.call.function.name, args)
+                                                        return {
+                                                            id: tc.call.id || `completed_${idx}_${segIdx}_${i}`,
+                                                            toolName: meta.toolName,
+                                                            displayName: getActionDisplayName(meta.toolName, args),
+                                                            status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
+                                                            result: tc.result,
+                                                            args,
+                                                            kind: meta.kind,
+                                                        }
+                                                    })}
                                                     isDark={isDark}
                                                 />
                                                 </div>
@@ -2536,14 +2655,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 }
 
 function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(Boolean(startTime && !thinkingTime));
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
         if (startTime && !thinkingTime) {
-            // Initial calc
             setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
             const interval = setInterval(() => {
                 setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
             }, 1000);
@@ -2553,24 +2670,42 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
 
     if (!thinking) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
     const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
+    const live = Boolean(startTime && !thinkingTime);
 
     return (
-        <div className="mb-2 animate-fade-in">
+        <div className="agent-feed mb-3 animate-fade-in">
             <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className={`flex items-center gap-1.5 text-sm transition-colors ${isDark ? 'text-[#666] hover:text-[#888]' : 'text-gray-400 hover:text-gray-600'}`}
+                type="button"
+                onClick={() => setIsExpanded(v => !v)}
+                className="group flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left hover:bg-white/[0.055]"
             >
-                <span>Thought for {displayTime}s</span>
-                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-            </button>
-
-            {isExpanded && (
-                <div className={`mt-2 text-sm leading-relaxed whitespace-pre-wrap animate-fade-in ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>
-                    {thinking}
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center sm:h-[30px] sm:w-[30px] lg:h-8 lg:w-8">
+                    <Brain className="size-4 text-white/70" strokeWidth={1.8} />
+                </span>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white/[0.94]">thinking</span>
+                        {displayTime > 0 && (
+                            <span className="text-xs text-white/35">{displayTime}s</span>
+                        )}
+                        <ChevronRight
+                            className={`ml-auto size-4 text-white/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            strokeWidth={1.8}
+                        />
+                    </div>
+                    {(isExpanded || live) && (
+                        <p className="agent-summary mt-1.5 max-w-[65ch] text-sm font-normal leading-relaxed text-white/62">
+                            {thinking}
+                        </p>
+                    )}
+                    {!isExpanded && !live && (
+                        <p className="mt-1 line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-white/45">
+                            {thinking}
+                        </p>
+                    )}
                 </div>
-            )}
+            </button>
         </div>
     );
 }
@@ -2593,8 +2728,8 @@ function FileAttachmentBlock({ file, isDark }: { file: FileAttachment; isDark: b
                 onClick={() => setShowMenu(!showMenu)}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors ${isDark ? 'bg-[#1a1a1a] hover:bg-[#1f1f1f]' : 'bg-gray-100 hover:bg-gray-200'}`}
             >
-                <FileCode className={`w-4 h-4 ${isDark ? 'text-[#666]' : 'text-gray-400'}`} />
-                <span className={`text-sm ${isDark ? 'text-[#ccc]' : 'text-gray-700'}`}>{file.name}</span>
+                <FileTypeIcon path={file.name} size={16} />
+                <span className="text-sm font-mono font-medium" style={{ color: getFileNameAccent(file.name) }}>{file.name}</span>
             </button>
 
             {showMenu && (
