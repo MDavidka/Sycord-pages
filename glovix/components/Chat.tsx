@@ -796,8 +796,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     let assistantContent =
                         last?.role === 'assistant' && typeof last.content === 'string' ? last.content : '';
                     let activeSession = getLatestAgentSession(msgs);
+                    // After hydration, re-read whether the latest assistant still lacks tools.
+                    const latestAfterHydrate = useStore.getState().messages[useStore.getState().messages.length - 1];
+                    const toolsStillMissing =
+                        Boolean(knownTursoId) &&
+                        latestAfterHydrate?.role === 'assistant' &&
+                        (!latestAfterHydrate.tool_calls || latestAfterHydrate.tool_calls.length === 0);
                     // Replay from 0 when tools were missing so the feed rebuilds fully.
-                    let highestEventId = toolsMissing ? 0 : Number(last?.agentEventId) || 0;
+                    let highestEventId = toolsStillMissing ? 0 : Number(last?.agentEventId) || 0;
                     let errorText = '';
                     let completed = false;
                     let thinkingStartedAt: number | null = null;
