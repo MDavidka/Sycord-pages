@@ -641,16 +641,28 @@ export async function syteSycordDomain(
 
 
 // ─── Durable Syte agent API ──────────────────────────────────────────────────
+// Docs: https://sycord.site/api/#agent
+// Turns are saved to Turso. Poll GET /sycord/api/agent_session/{turso_session_id}
+// — the old activity SSE stream is no longer the source of truth.
 
 export type SyteAgentChangeResponse = {
   ok?: boolean
   request_id?: string
   status?: string
+  /** Durable Turso session UUID — fetch via GET /sycord/api/agent_session/{id} */
+  turso_session_id?: string
+  /** Relative path to the Turso session document (e.g. /sycord/api/agent_session/…) */
+  session_url?: string
+  /** @deprecated Prefer turso_session_id + polling agent_session */
   stream_url?: string
   change_applied?: boolean | null
 }
 
-/** Submit one durable project-agent turn. Its output is read from agent activity SSE. */
+/**
+ * Submit one durable project-agent turn (async).
+ * Returns request_id + turso_session_id immediately.
+ * Poll GET /sycord/api/agent_session/{turso_session_id} until status != "open".
+ */
 export async function syteAgentChange(
   uuid: string,
   message: string,
@@ -665,32 +677,109 @@ export async function syteAgentChange(
   })
 }
 
-// ─── Agent activity (snapshot) ───────────────────────────────────────────────
+// ─── Turso agent sessions (durable turn records) ─────────────────────────────
+
+export type SyteTursoSessionEvent = {
+  id: number
+  event_type: string
+  role?: string
+  title?: string
+  detail?: string
+  payload?: Record<string, unknown>
+  source?: string
+  created_at?: string
+}
+
+export type SyteTursoSessionSummary = {
+  id: string
+  session_number?: number
+  model_profile?: string
+  status?: "open" | "completed" | "failed" | "cancelled" | string
+  created_at?: string
+  updated_at?: string
+  session_url?: string
+}
+
+export type SyteAgentSessionsResponse = {
+  ok: boolean
+  uuid?: string
+  turso_configured?: boolean
+  sessions: SyteTursoSessionSummary[]
+}
+
+export type SyteAgentSessionResponse = {
+  ok: boolean
+  id: string
+  project_id?: string
+  session_number?: number
+  model_profile?: string
+  status: "open" | "completed" | "failed" | "cancelled" | string
+  created_at?: string
+  updated_at?: string
+  events: SyteTursoSessionEvent[]
+}
+
+/**
+ * List durable Turso agent-session UUIDs for a project (newest first).
+ * GET /sycord/api/agent_sessions?uuid=&limit=
+ */
+export async function syteAgentSessions(
+  uuid: string,
+  options?: { limit?: number },
+): Promise<SyteResult<SyteAgentSessionsResponse>> {
+  return syteSycordRequest<SyteAgentSessionsResponse>("GET", "agent_sessions", {
+    query: {
+      uuid,
+      limit: options?.limit ?? 50,
+    },
+  })
+}
+
+/**
+ * Fetch a durable Turso agent session by UUID.
+ * GET /sycord/api/agent_session/{session_id}?since_id=
+ *
+ * Poll with since_id while status === "open" to observe an in-progress turn.
+ */
+export async function syteAgentSession(
+  sessionId: string,
+  options?: { sinceId?: number },
+): Promise<SyteResult<SyteAgentSessionResponse>> {
+  const path = `agent_session/${encodeURIComponent(sessionId)}`
+  return syteSycordRequest<SyteAgentSessionResponse>("GET", path, {
+    query: {
+      since_id: options?.sinceId ?? 0,
+    },
+  })
+}
+
+// ─── Agent activity (local snapshot fallback) ────────────────────────────────
 
 export type SyteAgentEvent = {
   id: number
-  project_id: string
+  project_id?: string
   event_type: string
-  role: string
-  title: string
-  detail: string
-  payload: Record<string, unknown>
-  source: string
-  created_at: string
+  role?: string
+  title?: string
+  detail?: string
+  payload?: Record<string, unknown>
+  source?: string
+  created_at?: string
 }
 
 export type SyteAgentActivityResponse = {
   ok: boolean
   events: SyteAgentEvent[]
-  count: number
+  count?: number
+  sessions_url?: string
+  uuid?: string
+  since_id?: number
 }
 
 /**
- * Fetch a snapshot of agent activity events from
+ * Local SQLite activity snapshot (not durable across DB moves).
+ * Prefer syteAgentSession / syteAgentSessions when Turso is configured.
  * GET /sycord/api/agent_activity?uuid=&since_id=&limit=&session=
- *
- * For live streaming, use the SSE endpoint directly via the
- * /api/workspace/sycord/agent-activity?projectId=<id>&live=1 proxy route.
  */
 export async function syteAgentActivity(
   uuid: string,

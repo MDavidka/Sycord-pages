@@ -64,6 +64,8 @@ export interface Message {
     agentSession?: number;
     /** Highest durable Syte activity event included in this response. */
     agentEventId?: number;
+    /** Turso session UUID — poll /api/agent_session/{id} to reload prior activity. */
+    tursoSessionId?: string;
 }
 
 export interface ToolCall {

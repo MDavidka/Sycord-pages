@@ -4,7 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
-import { getLatestAgentSession, streamProjectAgent, type ProjectAgentEvent } from '../lib/project-agent';
+import {
+    getLatestAgentSession,
+    getLatestTursoSessionId,
+    resumeProjectAgent,
+    streamProjectAgent,
+    type ProjectAgentEvent,
+} from '../lib/project-agent';
 import { mountFiles } from '../lib/webcontainer';
 import { executeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
@@ -720,6 +726,208 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // When returning to a host project chat, resume any open Turso agent turn
+    // so previous activity is reloaded from the durable database.
+    const agentResumeKeyRef = useRef<string | null>(null);
+    const agentResumeDoneRef = useRef(false);
+    useEffect(() => {
+        const projectId = getHostProjectId();
+        if (!projectId || !currentChatId) return;
+
+        const resumeKey = `${projectId}:${currentChatId}`;
+        if (agentResumeKeyRef.current !== resumeKey) {
+            agentResumeKeyRef.current = resumeKey;
+            agentResumeDoneRef.current = false;
+        }
+        if (agentResumeDoneRef.current) return;
+
+        let cancelled = false;
+        const controller = new AbortController();
+
+        const timer = window.setTimeout(() => {
+            void (async () => {
+                if (cancelled || agentResumeDoneRef.current) return;
+                // Another in-flight agent turn owns the controller — try again later.
+                if (abortControllerRef.current) return;
+
+                const msgs = useStore.getState().messages;
+                const knownTursoId = getLatestTursoSessionId(msgs);
+                const last = msgs[msgs.length - 1];
+                const lastLooksIncomplete =
+                    last?.role === 'assistant' &&
+                    (!last.content ||
+                        (typeof last.content === 'string' &&
+                            (!last.content.trim() ||
+                                last.content.startsWith('Error: Load failed') ||
+                                last.content.startsWith('Error: Failed to fetch') ||
+                                last.content.includes('Stopped listening') ||
+                                last.content.includes('Connection interrupted') ||
+                                last.content.includes('continue working in the background') ||
+                                last.content.includes('reload the agent activity') ||
+                                last.content.includes('reload previous agent activity'))));
+
+                agentResumeDoneRef.current = true;
+
+                try {
+                    setIsLoading(true);
+                    abortControllerRef.current = controller;
+
+                    let assistantContent = '';
+                    let activeSession = getLatestAgentSession(msgs);
+                    let highestEventId = Number(last?.agentEventId) || 0;
+                    let errorText = '';
+                    let completed = false;
+                    let thinkingStartedAt: number | null = null;
+                    const actionByTool = new Map<string, string[]>();
+                    let tursoSessionId = knownTursoId || '';
+                    let addedBubble = false;
+
+                    const ensureAssistantBubble = () => {
+                        if (addedBubble) return;
+                        if (lastLooksIncomplete && last?.role === 'assistant') {
+                            addedBubble = true;
+                            return;
+                        }
+                        addMessage({ role: 'assistant', content: '' });
+                        addedBubble = true;
+                    };
+
+                    const applyEvent = (event: ProjectAgentEvent) => {
+                        if (controller.signal.aborted || cancelled) return;
+                        ensureAssistantBubble();
+                        if (event.tursoSessionId) tursoSessionId = event.tursoSessionId;
+                        if (event.session) {
+                            activeSession = event.sessionAuthoritative
+                                ? event.session
+                                : Math.max(activeSession, event.session);
+                        }
+                        if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
+
+                        const state = useStore.getState();
+                        const lastMessage = state.messages[state.messages.length - 1];
+                        if (lastMessage?.role === 'assistant') {
+                            if (activeSession) lastMessage.agentSession = activeSession;
+                            if (highestEventId) lastMessage.agentEventId = highestEventId;
+                            if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
+                            setMessages([...state.messages]);
+                        }
+
+                        switch (event.type) {
+                            case 'processing':
+                                if (event.text) setCurrentThinking(event.text);
+                                break;
+                            case 'thinking': {
+                                if (!thinkingStartedAt) {
+                                    thinkingStartedAt = Date.now();
+                                    setThinkingStartTime(thinkingStartedAt);
+                                }
+                                setCurrentThinking(event.text || '');
+                                updateLastMessage(assistantContent, undefined, event.text || '');
+                                break;
+                            }
+                            case 'tool_started': {
+                                const tool = event.tool || event.title || 'Agent tool';
+                                const args = typeof event.arguments === 'string'
+                                    ? event.arguments
+                                    : JSON.stringify(event.arguments || {});
+                                const actionId = addAction(tool, getActionDisplayName(tool, args));
+                                const pendingActions = actionByTool.get(tool) || [];
+                                pendingActions.push(actionId);
+                                actionByTool.set(tool, pendingActions);
+                                updateAction(actionId, { status: 'running', args });
+                                break;
+                            }
+                            case 'tool_finished': {
+                                const tool = event.tool || event.title || 'Agent tool';
+                                const pendingActions = actionByTool.get(tool) || [];
+                                let actionId = pendingActions.shift();
+                                if (pendingActions.length > 0) actionByTool.set(tool, pendingActions);
+                                else actionByTool.delete(tool);
+                                if (!actionId) {
+                                    actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                                }
+                                updateAction(actionId, {
+                                    status: event.ok === false ? 'error' : 'done',
+                                    result: event.text,
+                                });
+                                break;
+                            }
+                            case 'delta':
+                                assistantContent += event.text || '';
+                                updateLastMessage(assistantContent);
+                                break;
+                            case 'message':
+                                assistantContent = event.text || assistantContent;
+                                updateLastMessage(assistantContent);
+                                break;
+                            case 'done':
+                                assistantContent = event.text || assistantContent || 'Done.';
+                                updateLastMessage(assistantContent);
+                                completed = true;
+                                break;
+                            case 'error':
+                                errorText = event.text || 'The project agent request failed.';
+                                break;
+                        }
+                    };
+
+                    const resumed = await resumeProjectAgent({
+                        projectId,
+                        tursoSessionId: knownTursoId && lastLooksIncomplete ? knownTursoId : undefined,
+                        afterEventId: lastLooksIncomplete ? highestEventId : 0,
+                        allowCompleted: lastLooksIncomplete,
+                        signal: controller.signal,
+                        onEvent: applyEvent,
+                    });
+
+                    if (!resumed) return;
+
+                    if (errorText && !completed) {
+                        updateLastMessage(`Error: ${errorText}`);
+                    } else if (completed) {
+                        if (thinkingStartedAt) {
+                            const duration = Math.max(1, Math.round((Date.now() - thinkingStartedAt) / 1000));
+                            setThinkingDuration(duration);
+                            setThinkingStartTime(null);
+                        }
+                        if (onAiComplete) onAiComplete('remote');
+                    }
+
+                    if (currentChatId && user) {
+                        try {
+                            await saveChatMessages(currentChatId, useStore.getState().messages, {
+                                keepalive: true,
+                                projectId,
+                            });
+                        } catch {
+                            /* durable Turso session remains */
+                        }
+                    }
+                } catch (error: any) {
+                    if (controller.signal.aborted || cancelled) return;
+                    console.warn('[ProjectAgent] Resume probe skipped:', error?.message || error);
+                } finally {
+                    if (!cancelled) {
+                        setIsLoading(false);
+                        abortControllerRef.current = null;
+                        setCurrentThinking('');
+                        setThinkingStartTime(null);
+                        setTimeout(() => setActions([]), 500);
+                    }
+                }
+            })();
+        }, 700);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+        // Resume after messages hydrate for this chat. Do not depend on isLoading —
+        // toggling it would cancel an in-flight resume.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentChatId, messages.length]);
+
     const triggerProjectAgentResponse = async (
         userMessage: Message,
         projectId: string,
@@ -743,11 +951,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         let errorText = '';
         let completed = false;
         let thinkingStartedAt: number | null = null;
+        let tursoSessionId = '';
 
         addMessage({ role: 'assistant', content: '' });
 
+        const persistCursor = () => {
+            const state = useStore.getState();
+            const lastMessage = state.messages[state.messages.length - 1];
+            if (lastMessage?.role === 'assistant') {
+                if (activeSession) lastMessage.agentSession = activeSession;
+                if (highestEventId) lastMessage.agentEventId = highestEventId;
+                if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
+                setMessages([...state.messages]);
+            }
+        };
+
         const applyEvent = (event: ProjectAgentEvent) => {
             if (controller.signal.aborted) return;
+            if (event.tursoSessionId) tursoSessionId = event.tursoSessionId;
             if (event.session) {
                 activeSession = event.sessionAuthoritative
                     ? event.session
@@ -755,15 +976,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
             if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
 
-            // Keep the durable cursor on the in-memory message as activity arrives.
-            // The finally block saves it even when the stream fails or is stopped.
-            if (activeSession > afterSession || highestEventId > 0) {
-                const state = useStore.getState();
-                const lastMessage = state.messages[state.messages.length - 1];
-                if (lastMessage?.role === 'assistant') {
-                    lastMessage.agentSession = activeSession;
-                    lastMessage.agentEventId = highestEventId;
-                    setMessages([...state.messages]);
+            // Persist Turso cursor as activity arrives so a mid-turn exit can resume.
+            if (tursoSessionId || activeSession > afterSession || highestEventId > 0) {
+                persistCursor();
+                // Best-effort early save so reload can find tursoSessionId.
+                if (tursoSessionId && chatId && user) {
+                    void saveChatMessages(chatId, useStore.getState().messages, {
+                        keepalive: true,
+                        projectId,
+                    }).catch(() => {});
                 }
             }
 
@@ -841,9 +1062,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
             activeSession = Math.max(activeSession, result.session);
             highestEventId = Math.max(highestEventId, result.eventId);
+            if (result.tursoSessionId) tursoSessionId = result.tursoSessionId;
+            persistCursor();
 
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped listening. The project agent may continue working in the background.');
+                updateLastMessage(
+                    assistantContent ||
+                        'Stopped listening. Reopen this project to reload the agent activity from Turso.',
+                );
                 return;
             }
             if (errorText) throw new Error(errorText);
@@ -854,20 +1080,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 setThinkingDuration(duration);
                 setThinkingStartTime(null);
             }
-
-            const state = useStore.getState();
-            const lastMessage = state.messages[state.messages.length - 1];
-            if (lastMessage?.role === 'assistant') {
-                lastMessage.agentSession = activeSession;
-                lastMessage.agentEventId = highestEventId;
-                setMessages([...state.messages]);
-            }
         } catch (error: any) {
             if (controller.signal.aborted) {
-                updateLastMessage(assistantContent || 'Stopped listening. The project agent may continue working in the background.');
+                updateLastMessage(
+                    assistantContent ||
+                        'Stopped listening. Reopen this project to reload the agent activity from Turso.',
+                );
             } else {
-                console.error('[ProjectAgent] Error:', error);
-                updateLastMessage(`Error: ${error?.message || 'Failed to stream the project agent response.'}`);
+                const msg = String(error?.message || '');
+                const looksTransient =
+                    /load failed|failed to fetch|network|fetch failed/i.test(msg);
+
+                if (looksTransient) {
+                    // Do not leave a dead "Error: Load failed" — keep turso cursor and explain resume.
+                    persistCursor();
+                    updateLastMessage(
+                        assistantContent ||
+                            'Connection interrupted. Reopen this chat to reload previous agent activity from the database.',
+                    );
+                } else {
+                    console.error('[ProjectAgent] Error:', error);
+                    updateLastMessage(`Error: ${msg || 'Failed to run the project agent.'}`);
+                }
             }
         } finally {
             const wasAborted = controller.signal.aborted;
@@ -888,7 +1122,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         projectId,
                     });
                 } catch {
-                    // Ignore save errors; the durable agent session remains on Syte.
+                    // Ignore save errors; the durable agent session remains on Turso.
                 }
             }
         }
