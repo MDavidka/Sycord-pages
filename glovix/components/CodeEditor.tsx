@@ -3,6 +3,7 @@ import Editor, { loader, Monaco } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import { useStore } from '../store';
 import { useRef, useCallback, memo } from 'react';
+import { FileTypeIcon, getFileNameAccent } from '../lib/file-icons';
 
 loader.config({ monaco });
 
@@ -71,27 +72,42 @@ export const CodeEditor = memo(function CodeEditor() {
         );
     }
 
+    const baseName = selectedFile.split('/').pop() || selectedFile;
+    const accent = getFileNameAccent(baseName);
+
     return (
-        <div className={`h-full w-full relative ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
-            <Editor
-                height="100%"
-                language={getLanguage(selectedFile)}
-                value={content}
-                theme={isDark ? 'glovix-dark' : 'light'}
-                beforeMount={handleEditorWillMount}
-                onChange={handleChange}
-                options={{
-                    minimap: { enabled: false },
-                    fontSize: 13,
-                    lineHeight: 20,
-                    padding: { top: 16 },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 2,
-                    wordWrap: 'on',
-                    fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-                }}
-            />
+        <div className={`h-full w-full relative flex flex-col ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+            {/* Simplified Syra file header — Devicon + accented filename */}
+            <div className={`flex h-10 shrink-0 items-center gap-2 border-b px-3 ${isDark ? 'border-white/10 bg-[#18191B]' : 'border-gray-200 bg-white'}`}>
+                <FileTypeIcon path={selectedFile} size={16} />
+                <span className="truncate font-mono text-[13px] font-medium" style={{ color: accent }}>
+                    {baseName}
+                </span>
+                <span className="ml-auto truncate font-mono text-[11px] text-white/35 max-w-[50%]" title={selectedFile}>
+                    {selectedFile.includes('/') ? selectedFile : ''}
+                </span>
+            </div>
+            <div className="min-h-0 flex-1">
+                <Editor
+                    height="100%"
+                    language={getLanguage(selectedFile)}
+                    value={content}
+                    theme={isDark ? 'glovix-dark' : 'light'}
+                    beforeMount={handleEditorWillMount}
+                    onChange={handleChange}
+                    options={{
+                        minimap: { enabled: false },
+                        fontSize: 13,
+                        lineHeight: 20,
+                        padding: { top: 16 },
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        tabSize: 2,
+                        wordWrap: 'on',
+                        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                    }}
+                />
+            </div>
         </div>
     );
 });
