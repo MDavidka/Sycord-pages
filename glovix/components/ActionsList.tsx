@@ -304,15 +304,39 @@ const ToolGroupRow = memo(function ToolGroupRow({
               {allPaths.map((path, i) => (
                 <div key={`${path}-${i}`} className="flex min-w-0 items-center gap-2">
                   <FileTypeIcon path={path} size={14} />
-                  <span className="truncate font-mono text-[12px] text-white/55">{path}</span>
+                  <span className="agent-path truncate font-mono text-[12px] text-white/55">{path}</span>
+                  <button
+                    type="button"
+                    className="ml-auto hidden shrink-0 rounded-md p-1.5 text-white/35 hover:bg-white/[0.055] hover:text-white/70 sm:inline-flex"
+                    aria-label="Copy path"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void navigator.clipboard?.writeText(path).catch(() => {})
+                    }}
+                  >
+                    <Copy className="size-3.5" strokeWidth={1.8} />
+                  </button>
                 </div>
               ))}
             </div>
           )}
           {detailText && (
-            <pre className="tool-log max-h-[360px] overflow-auto py-2 font-mono text-xs leading-5 text-white/60 whitespace-pre-wrap break-words">
-              {detailText.slice(0, 8000)}
-            </pre>
+            <div className="relative">
+              <pre className="tool-log agent-output max-h-[360px] overflow-auto py-2 font-mono text-xs leading-5 text-white/60 whitespace-pre-wrap break-words">
+                {detailText.slice(0, 8000)}
+              </pre>
+              <button
+                type="button"
+                className="absolute right-1 top-1 rounded-md p-1.5 text-white/35 hover:bg-white/[0.055] hover:text-white/70"
+                aria-label="Copy output"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void navigator.clipboard?.writeText(detailText).catch(() => {})
+                }}
+              >
+                <Copy className="size-3.5" strokeWidth={1.8} />
+              </button>
+            </div>
           )}
         </CollapsibleContent>
       </div>
