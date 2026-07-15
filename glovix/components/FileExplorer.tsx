@@ -1,8 +1,9 @@
 'use client'
 import { useState, useMemo, useRef, useEffect, memo } from 'react';
-import { File, Folder, FolderOpen, ChevronRight, ChevronDown, Target, Lock, Scissors, Copy, FileText, FolderPlus, Trash2 } from 'lucide-react';
+import { Folder, FolderOpen, ChevronRight, ChevronDown, Target, Lock, Scissors, Copy, FileText, FolderPlus, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import { writeFile, deleteFile as deleteFileWC, renameFile as renameFileWC } from '../lib/webcontainer';
+import { FileTypeIcon } from '../lib/file-icons';
 
 interface FileNode {
     name: string;
@@ -98,7 +99,7 @@ const FileTreeNode = memo(({
                 }`}
                 style={{ paddingLeft: `${level * 12 + 8}px` }}
             >
-                <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-muted-foreground' : 'text-gray-400'}`} />
+                <FileTypeIcon path={node.path} size={14} className="flex-shrink-0" />
                 {renamingPath === node.path ? (
                     <input
                         ref={inputRef}
@@ -354,7 +355,7 @@ export function FileExplorer() {
             {newItemType && !newItemParent && (
                 <div className="flex items-center gap-2 px-2 py-1.5" style={{ paddingLeft: '8px' }}>
                     {newItemType === 'file' ? (
-                        <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-muted-foreground' : 'text-gray-400'}`} />
+                        <FileTypeIcon path={newItemName || 'file.txt'} size={14} className="flex-shrink-0" />
                     ) : (
                         <Folder className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     )}
