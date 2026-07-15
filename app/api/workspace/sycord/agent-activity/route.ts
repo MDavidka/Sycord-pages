@@ -1,11 +1,12 @@
-// Agent activity proxy — SSE stream + snapshot polling.
+// Agent activity proxy — local SQLite snapshot (+ legacy SSE if still available).
 //
-// GET /api/workspace/sycord/agent-activity?projectId=<id>&live=1   → SSE stream
-// GET /api/workspace/sycord/agent-activity?projectId=<id>&since_id=N → JSON snapshot
+// Prefer durable Turso routes for turn observation:
+//   GET /api/workspace/sycord/agent-session?sessionId=…   (poll until status != open)
+//   GET /api/workspace/sycord/agent-sessions?projectId=…
+// See https://sycord.site/api/#agent
 //
-// The browser never holds DEPLOYER_API_KEY. This route proxies:
-//   - Streaming: GET  https://sycord.site/api/projects/{uuid}/agent/activity/stream?live=1
-//   - Snapshot:  GET  https://sycord.site/sycord/api/agent_activity?uuid={uuid}&since_id=N
+// GET /api/workspace/sycord/agent-activity?projectId=<id>&live=1   → legacy SSE (best-effort)
+// GET /api/workspace/sycord/agent-activity?projectId=<id>&since_id=N → local JSON snapshot
 //
 // Auth: NextAuth session required.
 

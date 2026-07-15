@@ -2,7 +2,12 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-chat-session"
-import { getSyteConfig, syteAgentChange } from "@/lib/deploy/syte-client"
+import {
+  syteAgentChange,
+  syteAgentSession,
+  syteAgentSessions,
+  type SyteTursoSessionEvent,
+} from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
 export const runtime = "nodejs"
@@ -10,62 +15,39 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
 const MODEL_PROFILES = new Set(["syra-nano", "syra-base", "syra-havy"])
+const POLL_INTERVAL_MS = 1500
+const MAX_POLL_MS = 280_000
 
-type ActivityEvent = {
-  id?: number
-  event_type?: string
-  title?: string
-  detail?: string
-  payload?: Record<string, unknown>
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"))
+      return
+    }
+    const timer = setTimeout(resolve, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(new DOMException("Aborted", "AbortError"))
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
-function syteHeaders(apiKey: string, accept: string): HeadersInit {
-  return {
-    Accept: accept,
-    "X-API-Key": apiKey,
-    Authorization: `Bearer ${apiKey}`,
-  }
+async function loadLatestSessionNumber(uuid: string, afterSession: number): Promise<number> {
+  const listed = await syteAgentSessions(uuid, { limit: 1 })
+  if (!listed.ok || !listed.data?.sessions?.length) return afterSession
+  const latest = Number(listed.data.sessions[0]?.session_number) || 0
+  return Math.max(afterSession, latest)
 }
 
-function getLatestMarkedSession(text: string): number {
-  let latest = 0
-  for (const match of text.matchAll(/\[session(\d+)\]/g)) {
-    latest = Math.max(latest, Number(match[1]) || 0)
-  }
-  for (const match of text.matchAll(/"session"\s*:\s*(\d+)/g)) {
-    latest = Math.max(latest, Number(match[1]) || 0)
-  }
-  return latest
-}
-
-async function loadLatestSession(uuid: string, afterSession: number): Promise<number> {
-  const config = getSyteConfig()
-  const url = new URL(
-    `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/activity`,
-  )
-  url.searchParams.set("format", "marked")
-  url.searchParams.set("session", "last")
-
-  try {
-    const response = await fetch(url, {
-      headers: syteHeaders(config.apiKey, "text/event-stream, text/plain, application/json"),
-      cache: "no-store",
-    })
-    if (!response.ok) return afterSession
-    return Math.max(afterSession, getLatestMarkedSession(await response.text()))
-  } catch {
-    return afterSession
-  }
-}
-
-function eventText(event: ActivityEvent): string {
+function eventText(event: SyteTursoSessionEvent): string {
   const payload = event.payload || {}
   const preferred =
     payload.reply ?? payload.error ?? payload.delta ?? payload.text ?? event.detail ?? ""
   return typeof preferred === "string" ? preferred : JSON.stringify(preferred)
 }
 
-function normalizeActivity(event: ActivityEvent, session: number) {
+function normalizeTursoEvent(event: SyteTursoSessionEvent, session: number) {
   const payload = event.payload || {}
   const rawToolCallId = payload.tool_call_id ?? payload.call_id
   const common = {
@@ -80,6 +62,8 @@ function normalizeActivity(event: ActivityEvent, session: number) {
   }
 
   switch (event.event_type) {
+    case "request_started":
+      return { type: "processing", ...common }
     case "processing":
       return { type: "processing", ...common }
     case "thinking":
@@ -129,20 +113,6 @@ function normalizeActivity(event: ActivityEvent, session: number) {
   }
 }
 
-function parseSseData(frame: string): unknown {
-  const data = frame
-    .split(/\r?\n/)
-    .filter(line => line.startsWith("data:"))
-    .map(line => line.slice(5).trimStart())
-    .join("\n")
-  if (!data) return null
-  try {
-    return JSON.parse(data)
-  } catch {
-    return null
-  }
-}
-
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
@@ -150,7 +120,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id: projectId } = await params
-  const body = await request.json().catch(() => null) as {
+  const body = (await request.json().catch(() => null)) as {
     message?: unknown
     modelProfile?: unknown
     afterSession?: unknown
@@ -176,45 +146,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
   }
 
-  const latestSavedSession = await loadLatestSession(workspace.uuid, afterSession)
-  const config = getSyteConfig()
-
-  const openActivityStream = async (sinceId: number) => {
-    const activityUrl = new URL(
-      `${config.baseUrl}/api/projects/${encodeURIComponent(workspace.uuid)}/agent/activity/stream`,
-    )
-    activityUrl.searchParams.set("live", "1")
-    activityUrl.searchParams.set("since_id", String(sinceId))
-    return fetch(activityUrl, {
-      headers: syteHeaders(config.apiKey, "text/event-stream"),
-      cache: "no-store",
-      signal: request.signal,
-    }).catch(() => null)
-  }
-
-  // Open SSE before submitting the durable change. This avoids accepting a job
-  // that the browser cannot observe; since_id=0 replay is filtered by request_id.
-  const upstream = await openActivityStream(0)
-  if (!upstream?.ok || !upstream.body) {
-    return Response.json(
-      { message: `Unable to open Syte agent activity stream${upstream ? ` (HTTP ${upstream.status})` : ""}.` },
-      { status: 502 },
-    )
-  }
+  const latestSavedSession = await loadLatestSessionNumber(workspace.uuid, afterSession)
 
   const change = await syteAgentChange(workspace.uuid, message, modelProfile)
   const requestId = change.data?.request_id
+  const tursoSessionId = change.data?.turso_session_id
   if (!change.ok || !requestId) {
-    try { await upstream.body.cancel() } catch { /* ignore */ }
     return Response.json(
       { message: change.error || "Syte agent did not accept the request." },
       { status: change.status || 502 },
     )
   }
 
+  // Without Turso we cannot stream a durable turn record — fail clearly.
+  if (!tursoSessionId) {
+    return Response.json(
+      {
+        message:
+          "Syte agent accepted the request but did not return turso_session_id. " +
+          "Configure turso_database_url in the Syte AI tab, or upgrade the deployer.",
+        request_id: requestId,
+        status: change.data?.status ?? "accepted",
+      },
+      { status: 503 },
+    )
+  }
+
   let agentSession = latestSavedSession + 1
   const encoder = new TextEncoder()
-  let reader = upstream.body.getReader()
   let stopped = false
 
   const stream = new ReadableStream<Uint8Array>({
@@ -222,100 +181,97 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const emit = (value: unknown) => {
         if (!stopped) controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`))
       }
-      const stop = async () => {
+      const stop = () => {
         if (stopped) return
         stopped = true
-        try { await reader.cancel() } catch { /* upstream may already be closed */ }
-        try { controller.close() } catch { /* client may have disconnected */ }
+        try {
+          controller.close()
+        } catch {
+          /* client may have disconnected */
+        }
       }
 
-      let buffer = ""
-      let decoder = new TextDecoder()
-      let highestEventId = 0
-      let reconnectAttempts = 0
+      let sinceId = 0
       let sessionEmitted = false
       let sessionAuthoritative = false
       let terminal = false
+      let highestEventId = 0
+      const startedAt = Date.now()
 
       try {
+        emit({
+          type: "session",
+          session: agentSession,
+          sessionAuthoritative: false,
+          requestId,
+          tursoSessionId,
+        })
+        sessionEmitted = true
+
         while (!stopped && !terminal) {
-          let chunk: ReadableStreamReadResult<Uint8Array>
-          try {
-            chunk = await reader.read()
-          } catch {
-            chunk = { done: true, value: undefined }
+          if (request.signal.aborted) break
+          if (Date.now() - startedAt > MAX_POLL_MS) {
+            emit({
+              type: "error",
+              session: agentSession,
+              eventId: highestEventId || undefined,
+              text: "Timed out waiting for the Turso agent session to finish.",
+              tursoSessionId,
+              requestId,
+            })
+            break
           }
 
-          if (chunk.done) {
-            if (reconnectAttempts >= 4) {
-              emit({
-                type: "error",
-                session: agentSession,
-                eventId: highestEventId || undefined,
-                text: "Agent activity stream disconnected before the request completed.",
-              })
-              break
-            }
-
-            reconnectAttempts++
-            await new Promise(resolve => setTimeout(resolve, reconnectAttempts * 1000))
-            const resumed = await openActivityStream(highestEventId)
-            if (!resumed?.ok || !resumed.body) continue
-            reader = resumed.body.getReader()
-            decoder = new TextDecoder()
-            buffer = ""
+          const snap = await syteAgentSession(tursoSessionId, { sinceId })
+          if (!snap.ok || !snap.data) {
+            // Transient Turso/network errors — keep polling until timeout.
+            await sleep(POLL_INTERVAL_MS, request.signal).catch(() => undefined)
             continue
           }
 
-          buffer += decoder.decode(chunk.value, { stream: true })
-          const frames = buffer.split(/\r?\n\r?\n/)
-          buffer = frames.pop() || ""
+          const doc = snap.data
+          const durableSession = Number(doc.session_number) || 0
+          if (durableSession > 0 && (!sessionAuthoritative || agentSession !== durableSession)) {
+            agentSession = durableSession
+            sessionAuthoritative = true
+            emit({
+              type: "session",
+              session: agentSession,
+              sessionAuthoritative: true,
+              eventId: highestEventId || undefined,
+              requestId,
+              tursoSessionId,
+            })
+            sessionEmitted = true
+          } else if (!sessionEmitted) {
+            emit({
+              type: "session",
+              session: agentSession,
+              sessionAuthoritative: false,
+              requestId,
+              tursoSessionId,
+            })
+            sessionEmitted = true
+          }
 
-          for (const frame of frames) {
-            const parsed = parseSseData(frame) as {
-              type?: string
-              event?: ActivityEvent
-              since_id?: number
-            } | null
+          for (const event of doc.events || []) {
+            const eventId = Number(event.id) || 0
+            if (eventId && eventId <= sinceId) continue
+            if (eventId) {
+              sinceId = Math.max(sinceId, eventId)
+              highestEventId = Math.max(highestEventId, eventId)
+            }
 
-            if (parsed?.type === "ping") {
-              controller.enqueue(encoder.encode(": ping\n\n"))
+            const eventRequestId = event.payload?.request_id
+            if (
+              typeof eventRequestId === "string" &&
+              eventRequestId &&
+              eventRequestId !== requestId
+            ) {
               continue
             }
-            if (parsed?.type !== "activity" || !parsed.event) continue
 
-            const eventRequestId = parsed.event.payload?.request_id
-            if (eventRequestId !== requestId) continue
-
-            const eventId = Number(parsed.event.id) || 0
-            if (eventId && eventId <= highestEventId) continue
-            highestEventId = Math.max(highestEventId, eventId)
-
-            const durableSession = Number(parsed.event.payload?.session)
-            const hasDurableSession = Number.isSafeInteger(durableSession) && durableSession > 0
-            if (hasDurableSession && (!sessionAuthoritative || agentSession !== durableSession)) {
-              agentSession = durableSession
-              sessionAuthoritative = true
-              emit({
-                type: "session",
-                session: agentSession,
-                sessionAuthoritative: true,
-                eventId: highestEventId,
-                requestId,
-              })
-              sessionEmitted = true
-            } else if (!sessionEmitted) {
-              emit({
-                type: "session",
-                session: agentSession,
-                sessionAuthoritative: false,
-                eventId: highestEventId,
-                requestId,
-              })
-              sessionEmitted = true
-            }
-
-            const normalized = normalizeActivity(parsed.event, agentSession)
+            const normalized = normalizeTursoEvent(event, agentSession)
             if (!normalized) continue
             emit(normalized)
 
@@ -324,23 +280,53 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               break
             }
           }
+
+          if (terminal) break
+
+          if (doc.status && doc.status !== "open") {
+            // Session closed without an explicit request_completed/failed event.
+            if (doc.status === "failed" || doc.status === "cancelled") {
+              emit({
+                type: "error",
+                session: agentSession,
+                eventId: highestEventId || undefined,
+                text: `Agent session ${doc.status}.`,
+                tursoSessionId,
+                requestId,
+              })
+            } else {
+              emit({
+                type: "done",
+                session: agentSession,
+                eventId: highestEventId || undefined,
+                text: "",
+                tursoSessionId,
+                requestId,
+              })
+            }
+            terminal = true
+            break
+          }
+
+          await sleep(POLL_INTERVAL_MS, request.signal)
         }
       } catch (error) {
-        if (!stopped) {
+        if (!stopped && !(error instanceof DOMException && error.name === "AbortError")) {
           emit({
             type: "error",
             session: agentSession,
             eventId: highestEventId || undefined,
-            text: error instanceof Error ? error.message : "Agent activity stream failed.",
+            text: error instanceof Error ? error.message : "Turso agent session poll failed.",
+            tursoSessionId,
+            requestId,
           })
         }
       } finally {
-        await stop()
+        stop()
       }
     },
-    async cancel() {
+    cancel() {
       stopped = true
-      try { await reader.cancel() } catch { /* ignore */ }
     },
   })
 
@@ -350,6 +336,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
+      "X-Turso-Session-Id": tursoSessionId,
+      "X-Request-Id": requestId,
     },
   })
 }

@@ -11,6 +11,9 @@ export type ProjectAgentEvent = {
     toolCallId?: string;
     arguments?: unknown;
     ok?: boolean;
+    /** Durable Turso session UUID from agent_change (poll GET /api/agent_session/{id}). */
+    tursoSessionId?: string;
+    requestId?: string;
 };
 
 export type StreamProjectAgentOptions = {

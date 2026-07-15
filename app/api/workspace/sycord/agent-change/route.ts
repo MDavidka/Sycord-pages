@@ -5,6 +5,10 @@
 //
 // POST /api/workspace/sycord/agent-change
 // Body: { projectId: string; message: string; modelProfile?: string }
+//
+// Response includes turso_session_id — poll
+// GET /api/workspace/sycord/agent-session?sessionId=<turso_session_id>&since_id=N
+// until status != "open". See https://sycord.site/api/#agent
 
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
@@ -73,14 +77,22 @@ export async function POST(req: Request): Promise<Response> {
     )
   }
 
+  const tursoSessionId = result.data?.turso_session_id ?? null
+  const sessionPath = tursoSessionId
+    ? `/api/workspace/sycord/agent-session?sessionId=${encodeURIComponent(tursoSessionId)}`
+    : null
+
   return NextResponse.json({
     ok: true,
     uuid,
-    request_id: (result.data as any)?.request_id ?? null,
-    status: (result.data as any)?.status ?? "queued",
-    // Clients should subscribe to the SSE stream at:
-    // GET /api/workspace/sycord/agent-activity?projectId=<projectId>&live=1
-    stream_url: `/api/workspace/sycord/agent-activity?projectId=${encodeURIComponent(projectId)}&live=1`,
+    request_id: result.data?.request_id ?? null,
+    status: result.data?.status ?? "accepted",
+    turso_session_id: tursoSessionId,
+    // Proxied Turso session document — poll until status != "open"
+    session_url: sessionPath,
+    // Discovery helper for listing recent durable sessions on this project
+    sessions_url: `/api/workspace/sycord/agent-sessions?projectId=${encodeURIComponent(projectId)}`,
+    // Local SQLite mirror only — prefer Turso session_url when available
     activity_url: `/api/workspace/sycord/agent-activity?projectId=${encodeURIComponent(projectId)}`,
   })
 }
