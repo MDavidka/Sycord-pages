@@ -75,23 +75,11 @@ interface ChatProps {
     onAiComplete?: (source?: 'local' | 'remote') => void;
 }
 
-// Claude-Code-style short path: filename only, but keep the parent folder for
-// Next.js route files (page.tsx/layout.tsx/…) so many "page.tsx" rows stay
-// distinguishable. e.g. "app/pricing/page.tsx" → "pricing/page.tsx", but
-// "components/ui/button.tsx" → "button.tsx".
-const NEXT_ROUTE_FILES = new Set([
-    'page.tsx', 'page.ts', 'layout.tsx', 'layout.ts', 'route.ts', 'route.tsx',
-    'loading.tsx', 'error.tsx', 'not-found.tsx', 'template.tsx', 'default.tsx',
-    'globals.css', 'index.tsx', 'index.ts',
-]);
+// Keep action labels compact even when the agent sends an absolute workspace path.
 const shortFilePath = (path: string): string => {
     if (!path) return '';
     const parts = path.replace(/\\/g, '/').replace(/\/+$/, '').split('/');
-    const base = parts[parts.length - 1] || path;
-    if (NEXT_ROUTE_FILES.has(base) && parts.length > 1) {
-        return `${parts[parts.length - 2]}/${base}`;
-    }
-    return base;
+    return parts[parts.length - 1] || path;
 };
 
 const getActionDisplayName = (toolName: string, args: string): string => {
@@ -114,24 +102,41 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     try {
         const parsed = JSON.parse(args);
         switch (toolName) {
-            case 'createFile': return shortFilePath(parsed.path || '');
+            case 'createFile':
+            case 'create_file':
+                return shortFilePath(parsed.path || '');
             case 'write_file': return shortFilePath(parsed.path || '');
-            case 'editFile': return shortFilePath(parsed.path || '');
-            case 'readFile': return shortFilePath(parsed.path || '');
-            case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
-            case 'deleteFile': return shortFilePath(parsed.path || '');
-            case 'renameFile': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
+            case 'editFile':
+            case 'edit_file':
+                return shortFilePath(parsed.path || '');
+            case 'readFile':
+            case 'read_file':
+                return shortFilePath(parsed.path || '');
+            case 'readMultipleFiles':
+            case 'read_multiple_files':
+                return `${(parsed.paths || []).length} files`;
+            case 'deleteFile':
+            case 'delete_file':
+                return shortFilePath(parsed.path || '');
+            case 'renameFile':
+            case 'rename_file':
+                return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
             case 'grep':
             case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
             case 'createWorkspace': return 'Syte API';
             case 'setDomain': return decodeHtml(parsed.domain || '');
             case 'startPreview': return 'sycord.site preview';
             case 'typeCheck': return 'Workspace';
-            case 'executeCommand': return decodeHtml(parsed.command || 'shell');
-            case 'lintCheck': return parsed.path || 'src/';
+            case 'executeCommand':
+            case 'execute_command':
+            case 'command':
+                return decodeHtml(parsed.command || 'shell');
+            case 'lintCheck': return shortFilePath(parsed.path || 'src/');
             case 'listFiles': return 'Workspace';
             case 'getErrors': return 'Workspace';
-            case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
+            case 'batchCreateFiles':
+            case 'batch_create_files':
+                return `${(parsed.files || []).length} files`;
             case 'planning':
                 if (parsed.action === 'updateStep' && parsed.stepId) return String(parsed.stepId).replace(/-/g, ' ');
                 if (parsed.action === 'create') return parsed.title || parsed.appType || 'new plan';
@@ -142,23 +147,31 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     } catch {
         switch (toolName) {
             case 'createFile':
+            case 'create_file':
             case 'write_file':
             case 'editFile':
+            case 'edit_file':
             case 'readFile':
+            case 'read_file':
             case 'deleteFile':
+            case 'delete_file':
                 return shortFilePath(extract('path'));
             case 'lintCheck':
-                return extract('path');
+                return shortFilePath(extract('path')) || 'src';
             case 'readMultipleFiles':
+            case 'read_multiple_files':
                 return 'Multiple files';
             case 'renameFile':
+            case 'rename_file':
                 const oldP = extract('oldPath');
                 const newP = extract('newPath');
-                return oldP ? `${oldP} → ${newP}` : oldP;
+                return oldP ? `${shortFilePath(oldP)} → ${shortFilePath(newP)}` : oldP;
             case 'grep':
             case 'searchInFiles':
                 return extract('pattern') || extract('query');
-            case 'batchCreateFiles': return 'Multiple files';
+            case 'batchCreateFiles':
+            case 'batch_create_files':
+                return 'Multiple files';
             case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
             case 'getErrors': return 'Workspace';
             case 'setDomain': return extract('domain') || 'domain';
@@ -167,6 +180,15 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             default: return '';
         }
     }
+};
+
+const DURABLE_FILE_EVENTS = new Set(['file_created', 'file_modified', 'file_deleted']);
+
+const getFinishedActionDisplayName = (toolName: string, eventText: string): string => {
+    if (DURABLE_FILE_EVENTS.has(toolName) && eventText) {
+        return shortFilePath(eventText);
+    }
+    return eventText || getActionDisplayName(toolName, '{}');
 };
 
 function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
@@ -844,7 +866,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 if (pendingActions.length > 0) actionByTool.set(tool, pendingActions);
                                 else actionByTool.delete(tool);
                                 if (!actionId) {
-                                    actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                                    actionId = addAction(tool, getFinishedActionDisplayName(tool, event.text || ''));
                                 }
                                 updateAction(actionId, {
                                     status: event.ok === false ? 'error' : 'done',
