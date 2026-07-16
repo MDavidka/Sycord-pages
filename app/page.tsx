@@ -3,11 +3,12 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, ArrowUpRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
+  ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
   LayoutTemplate, Lock, Menu, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
   ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, X, Zap,
 } from "lucide-react"
@@ -83,7 +84,6 @@ function Hero() {
 
       {/* Headline block */}
       <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center justify-center px-5 text-center" style={{ minHeight: "min(52svh, 560px)" }}>
-        {/* dotted grid only behind the headline */}
         <div className="relative w-full px-2 py-10 sm:py-12">
           <div
             aria-hidden="true"
@@ -105,16 +105,17 @@ function Hero() {
           </h1>
         </div>
 
-        {/* Squared CTA button — matches reference: white rectangle with inline arrow → */}
-        <Link
-          href="/login"
-          className="mt-10 inline-flex items-center gap-3 rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] transition-transform hover:scale-[1.03] sm:px-8 sm:py-4"
+        {/* shadcn Button — pill shape, white, inline arrow, matching the reference image */}
+        <Button
+          asChild
+          size="lg"
+          className="mt-10 h-auto rounded-full bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] hover:bg-white/90 hover:scale-[1.03] transition-transform"
         >
-          Start for free
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-zinc-950 text-white">
-            <ArrowUpRight className="h-4 w-4" />
-          </span>
-        </Link>
+          <Link href="/login">
+            Start for free
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
+        </Button>
       </div>
 
       {/* Phone illustration */}
@@ -197,8 +198,6 @@ function HowItWorks() {
     </section>
   )
 }
-
-/* ── Custom card illustrations ── */
 
 function IlloPrompt() {
   return (
@@ -383,15 +382,19 @@ function Pricing() {
                 </li>
               ))}
             </ul>
-            <Link href="/login" className={`mt-6 inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${p.highlighted?"bg-white text-black hover:bg-white/90":"border border-[#2a2c30] bg-[#18191B] text-white hover:bg-[#212327]"}`}>{p.cta}</Link>
+            <Button
+              asChild
+              variant={p.highlighted ? "default" : "outline"}
+              className={`mt-6 rounded-full ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white"}`}
+            >
+              <Link href="/login">{p.cta}</Link>
+            </Button>
           </div>
         ))}
       </div>
     </section>
   )
 }
-
-/* ── Custom pricing illustrations ── */
 
 function IlloPlanStarter() {
   return (
@@ -488,8 +491,12 @@ function FinalCTA() {
         <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{letterSpacing:"-0.02em",lineHeight:1.1}}>Launch your site with AI</h2>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#A7AAB0] sm:text-lg">Build, host, and publish from one powerful platform.</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/login" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition-transform hover:scale-[1.02]">Start for free <ArrowRight className="h-4 w-4"/></Link>
-          <Link href="#showcase" className="inline-flex items-center gap-2 rounded-xl border border-[#2a2c30] bg-[#18191B] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#212327]">See demo</Link>
+          <Button asChild className="rounded-full bg-white text-black hover:bg-white/90">
+            <Link href="/login">Start for free <ArrowRight className="ml-1 h-4 w-4" /></Link>
+          </Button>
+          <Button asChild variant="outline" className="rounded-full border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white">
+            <Link href="#showcase">See demo</Link>
+          </Button>
         </div>
       </div>
     </section>
@@ -522,7 +529,7 @@ function Footer() {
                   <li key={l.label}>
                     <Link
                       href={l.href}
-                      className="relative text-[#E5E7EB] transition-colors duration-150 hover:text-white after:absolute after:left-0 after:-bottom-px after:h-px after:w-0 after:bg-white/40 after:transition-[width] after:duration-200 hover:after:w-full"
+                      className="text-[#E5E7EB] transition-colors duration-150 hover:text-white"
                     >
                       {l.label}
                     </Link>
@@ -532,12 +539,14 @@ function Footer() {
             </div>
           ))}
         </div>
-        <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[#2a2c30] pt-6 text-xs text-[#A7AAB0] sm:flex-row sm:items-center">
+        {/* Minimalist bold divider line — matches reference image */}
+        <div className="mt-10 h-[2px] w-full rounded-full bg-white/10" />
+        <div className="mt-6 flex flex-col items-start justify-between gap-4 text-xs text-[#A7AAB0] sm:flex-row sm:items-center">
           <span>© {new Date().getFullYear()} Sycord. All rights reserved.</span>
           <div className="flex items-center gap-3">
-            <Link href="/tos" className="relative text-[#A7AAB0] transition-colors duration-150 hover:text-white after:absolute after:left-0 after:-bottom-px after:h-px after:w-0 after:bg-white/40 after:transition-[width] after:duration-200 hover:after:w-full">Terms</Link>
+            <Link href="/tos" className="transition-colors duration-150 hover:text-white">Terms</Link>
             <span>·</span>
-            <Link href="/pap" className="relative text-[#A7AAB0] transition-colors duration-150 hover:text-white after:absolute after:left-0 after:-bottom-px after:h-px after:w-0 after:bg-white/40 after:transition-[width] after:duration-200 hover:after:w-full">Privacy</Link>
+            <Link href="/pap" className="transition-colors duration-150 hover:text-white">Privacy</Link>
           </div>
         </div>
       </div>
