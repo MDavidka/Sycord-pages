@@ -111,13 +111,13 @@ function Hero() {
       </div>
 
       {/* Illustration — half-cut on mobile, full on desktop */}
-      <div className="relative z-10 mx-auto mt-auto w-full max-w-5xl flex-shrink-0 md:mt-2 md:max-w-4xl md:px-8 md:pb-8">
-        <div className="relative h-[38vh] w-full overflow-hidden md:h-auto md:overflow-visible">
+      <div className="relative z-10 mx-auto mt-auto w-full max-w-5xl flex-shrink-0 md:mt-2 md:max-w-4xl md:px-8 md:pb-10">
+        <div className="relative h-[44vh] w-full overflow-hidden md:h-auto md:overflow-visible">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/sycord.svg"
             alt="Sycord product preview on phone and laptop"
-            className="pointer-events-none absolute left-[46%] top-0 h-auto w-[168%] max-w-none -translate-x-1/2 select-none md:relative md:left-auto md:top-auto md:w-full md:translate-x-0"
+            className="pointer-events-none absolute left-[68%] top-0 h-auto w-[200%] max-w-none -translate-x-1/2 select-none sm:left-[60%] sm:w-[170%] md:relative md:left-auto md:top-auto md:w-full md:max-w-full md:translate-x-0"
             draggable={false}
           />
         </div>
@@ -125,7 +125,7 @@ function Hero() {
         {/* Design line under mockup */}
         <div
           aria-hidden="true"
-          className="pointer-events-none relative z-20 mx-auto -mt-px h-px w-[72%] max-w-xl bg-gradient-to-r from-transparent via-white/35 to-transparent md:mt-1 md:w-[85%] md:max-w-3xl md:via-white/25"
+          className="pointer-events-none relative z-20 mx-auto h-px w-[70%] max-w-md -translate-y-px bg-gradient-to-r from-transparent via-[#c8c8c8]/55 to-transparent md:mt-1 md:w-[86%] md:max-w-3xl md:via-white/30"
         />
       </div>
     </section>
