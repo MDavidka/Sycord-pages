@@ -82,9 +82,9 @@ function Hero() {
         </nav>
       ) : null}
 
-      {/* Headline block */}
-      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center justify-center px-5 text-center" style={{ minHeight: "min(52svh, 560px)" }}>
-        <div className="relative w-full px-2 py-10 sm:py-12">
+      {/* Headline + CTA block */}
+      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center px-5 pt-10 text-center sm:pt-14">
+        <div className="relative w-full px-2 pb-8 pt-10 sm:pt-12">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
@@ -105,17 +105,17 @@ function Hero() {
           </h1>
         </div>
 
-        {/* Free badge bar — matches reference image exactly */}
+        {/* Free badge bar */}
         <div className="inline-flex items-center overflow-hidden rounded-full border border-[#2a2c30] bg-[#1c1d20]">
           <span className="rounded-full bg-[#2a2c30] px-4 py-2 text-sm font-bold text-white">Free</span>
           <span className="px-4 py-2 text-sm text-[#A7AAB0]">new users can start building free</span>
         </div>
 
-        {/* CTA button — squared corners (rounded-xl), white, inline arrow */}
+        {/* CTA button */}
         <Button
           asChild
           size="lg"
-          className="mt-6 h-auto rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-5 h-auto rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
@@ -124,8 +124,8 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Phone illustration */}
-      <div className="relative z-10 mx-auto mt-16 flex w-full flex-col items-center px-5 sm:mt-20">
+      {/* Phone illustration — tight to the button, no extra top margin */}
+      <div className="relative z-10 mx-auto mt-8 flex w-full flex-col items-center px-5">
         <div className="relative w-[min(88vw,340px)] sm:w-[380px] lg:w-[420px]">
           <div
             aria-hidden="true"
@@ -141,14 +141,6 @@ function Hero() {
             sizes="(min-width: 1024px) 420px, (min-width: 640px) 380px, 88vw"
             className="relative h-auto w-full drop-shadow-[0_40px_80px_rgba(0,0,0,0.7)]"
           />
-        </div>
-
-        {/* Flat inline caption — no background card, just icon + text end-to-end */}
-        <div className="mt-6 flex items-center justify-center gap-3 pb-6">
-          <Sparkles className="h-7 w-7 shrink-0 text-white/60" />
-          <p className="text-sm leading-relaxed text-[#A7AAB0]">
-            Meet <span className="font-semibold text-white">Syra</span> — reads files, runs commands, ships production-ready code.
-          </p>
         </div>
       </div>
     </section>
