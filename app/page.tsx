@@ -5,7 +5,7 @@ import Link from "next/link"
 
 export default function LandingPage() {
   return (
-    <main className="device-landing relative min-h-dvh overflow-hidden text-white">
+    <main className="device-landing relative min-h-dvh overflow-x-hidden text-white">
       <div aria-hidden="true" className="device-landing-bg pointer-events-none absolute inset-0" />
       <div
         aria-hidden="true"
@@ -46,8 +46,8 @@ export default function LandingPage() {
           </div>
         </header>
 
-        <section className="flex flex-1 flex-col items-center pt-12 sm:pt-16">
-          <div className="device-fade-in-delay max-w-2xl text-center">
+        <section className="relative flex flex-1 flex-col items-center">
+          <div className="device-fade-in-delay z-10 max-w-2xl pt-10 text-center sm:pt-12">
             <h1 className="font-[family-name:var(--font-ara)] text-[2.9rem] font-semibold leading-[0.95] tracking-[-0.055em] sm:text-6xl md:text-[4.5rem]">
               Sycord
             </h1>
@@ -62,19 +62,19 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          <div className="device-fade-in-slow relative mt-10 w-full flex-1 sm:mt-12">
+          <div className="device-fade-in-slow relative mt-6 w-full sm:mt-2">
             <div
               aria-hidden="true"
-              className="device-hero-glow pointer-events-none absolute inset-x-[10%] bottom-[6%] top-[30%] rounded-full blur-3xl"
+              className="device-hero-glow pointer-events-none absolute inset-x-[8%] bottom-[4%] top-[10%] rounded-full blur-3xl"
             />
-            <div className="device-float relative z-10">
+            <div className="device-float relative z-10 flex justify-center">
               <Image
                 src="/hero-devices.png"
                 alt="Sycord on iPhone and MacBook"
                 width={1281}
-                height={1920}
+                height={1008}
                 priority
-                className="mx-auto h-auto w-full max-w-[26rem] select-none object-contain sm:max-w-[34rem] md:max-w-[42rem]"
+                className="mx-auto h-auto max-h-[min(58vh,640px)] w-full max-w-[28rem] select-none object-contain object-bottom sm:max-w-[42rem] md:max-h-[min(62vh,720px)] md:max-w-[54rem] lg:max-w-[60rem]"
               />
             </div>
           </div>
