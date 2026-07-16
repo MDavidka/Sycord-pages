@@ -823,3 +823,102 @@ export async function syteAgentStatus(
 ): Promise<SyteResult<SyteAgentStatusResponse>> {
   return syteSycordRequest<SyteAgentStatusResponse>("GET", "agent_status", { query: { uuid } })
 }
+
+/**
+ * Interrupt the current agent turn (cancel in-progress request).
+ * Prefer this for the chat Stop button so the runtime stays warm.
+ * POST /api/agent_interrupt
+ * Docs: https://sycord.site/api/#agent
+ */
+export async function syteAgentInterrupt(
+  uuid: string,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_interrupt", { body: { uuid } })
+}
+
+/**
+ * Stop the project agent runtime and mark the turn stopped.
+ * POST /api/agent_stop
+ */
+export async function syteAgentStop(
+  uuid: string,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_stop", { body: { uuid } })
+}
+
+export type SyteAgentPlan = {
+  id?: number | string
+  steps?: Array<string | { title?: string; id?: string; status?: string }>
+  note?: string
+  created_at?: string
+}
+
+/**
+ * List persisted plans from update_plan / multi-line thinking.
+ * GET /api/agent_plans?uuid=
+ */
+export async function syteAgentPlans(
+  uuid: string,
+  options?: { limit?: number },
+): Promise<SyteResult<{ ok?: boolean; plans?: SyteAgentPlan[] }>> {
+  return syteWorkspaceRequest("GET", "agent_plans", {
+    query: { uuid, limit: options?.limit ?? 50 },
+  })
+}
+
+/**
+ * List preview screenshots captured by screenshot_preview.
+ * GET /api/agent_screenshots?uuid=
+ */
+export async function syteAgentScreenshots(
+  uuid: string,
+  options?: { limit?: number },
+): Promise<SyteResult<{ ok?: boolean; screenshots?: Array<Record<string, unknown>> }>> {
+  return syteWorkspaceRequest("GET", "agent_screenshots", {
+    query: { uuid, limit: options?.limit ?? 50 },
+  })
+}
+
+/**
+ * Fetch a screenshot PNG bytes from Syte.
+ * GET /api/projects/{uuid}/agent/screenshots/{id}?variant=thumb|full
+ */
+export async function syteAgentScreenshotImage(
+  uuid: string,
+  screenshotId: string,
+  variant: "thumb" | "full" = "full",
+): Promise<SyteResult<ArrayBuffer>> {
+  const config = getSyteConfig()
+  const endpoint =
+    `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/screenshots/${encodeURIComponent(screenshotId)}` +
+    `?variant=${variant}`
+  try {
+    const res = await fetch(endpoint, {
+      headers: {
+        Accept: "image/png,image/*,*/*",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+    })
+    if (!res.ok) {
+      const data = await parseBody(res)
+      return {
+        ok: false,
+        status: res.status,
+        data: null,
+        error: extractError(res.status, data, endpoint),
+        endpoint,
+      }
+    }
+    const buf = await res.arrayBuffer()
+    return { ok: true, status: res.status, data: buf, error: null, endpoint }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error fetching screenshot",
+      endpoint,
+    }
+  }
+}

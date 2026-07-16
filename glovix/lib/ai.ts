@@ -68,6 +68,8 @@ export interface Message {
     tursoSessionId?: string;
     /** True once the durable session has been fully replayed, even if it used no tools. */
     agentTimelineLoaded?: boolean;
+    /** Client timestamp for message footer (HH:MM + copy). */
+    createdAt?: number;
     /** Normalized execution feed saved with the assistant turn for durable history. */
     agentActions?: Array<{
         id: string;
@@ -80,6 +82,13 @@ export interface Message {
         toolCallId?: string;
         startedAt?: number;
         completedAt?: number;
+        screenshots?: Array<{
+            id?: string;
+            viewport?: string;
+            route?: string;
+            imageUrl?: string;
+            imageBase64?: string;
+        }>;
     }>;
 }
 

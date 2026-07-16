@@ -81,7 +81,7 @@ export const PlanChecklist = memo(function PlanChecklist({
         <div
           ref={scrollRef}
           className="overflow-y-auto overscroll-contain"
-          style={{ maxHeight: ROW_H * 2 }}
+          style={{ maxHeight: Math.max(ROW_H * 2, Math.min(plan.steps.length, 10) * ROW_H) }}
         >
           <ul className="space-y-0">
             {plan.steps.map((step) => (
@@ -125,7 +125,7 @@ export const PlanChecklist = memo(function PlanChecklist({
           {completed}/{total}
         </span>
       </div>
-      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: ROW_H * 2 }}>
+      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: Math.max(ROW_H * 2, Math.min(plan.steps.length, 12) * ROW_H) }}>
         <ul>
           {plan.steps.map((step) => (
             <li key={step.id} className="flex items-center gap-2.5" style={{ minHeight: ROW_H }}>

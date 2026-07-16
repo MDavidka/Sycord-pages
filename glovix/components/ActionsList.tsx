@@ -9,6 +9,7 @@ import {
     CircleAlert,
     Cloud,
     Eye,
+    Expand,
     FileCode2,
     FilePen,
     GitBranchPlus,
@@ -35,6 +36,13 @@ export interface StreamingAction {
     toolCallId?: string;
     startedAt?: number;
     completedAt?: number;
+    screenshots?: Array<{
+        id?: string;
+        viewport?: string;
+        route?: string;
+        imageUrl?: string;
+        imageBase64?: string;
+    }>;
 }
 
 interface ActionsListProps {
@@ -43,7 +51,7 @@ interface ActionsListProps {
     isDark?: boolean;
 }
 
-type ActionKind = 'thinking' | 'search' | 'read' | 'edit' | 'command' | 'install' | 'validate' | 'preview' | 'service';
+type ActionKind = 'thinking' | 'search' | 'read' | 'edit' | 'command' | 'install' | 'validate' | 'preview' | 'service' | 'screenshot';
 
 interface ActionGroup {
     kind: ActionKind;
@@ -98,14 +106,15 @@ function classifyAction(action: StreamingAction): ActionKind {
     const args = parseArgs(action.args);
     const command = String(args.command || action.displayName || '').toLowerCase();
 
-    if (name.includes('think') || name === 'planning') return 'thinking';
+    if (name.includes('screenshot') || (action.screenshots && action.screenshots.length > 0)) return 'screenshot';
+    if (name.includes('think') || name === 'planning' || name === 'update_plan') return 'thinking';
     if (name.includes('grep') || name.includes('search') || name.includes('listfiles') || name.includes('list_files')) return 'search';
     if (name.includes('read')) return 'read';
     if (FILE_TOOL_NAMES.has(name) || name.includes('write') || name.includes('edit') || name.includes('patch') || name.startsWith('file_')) return 'edit';
     if (name.includes('preview') || name.includes('browser') || name === 'startpreview' || /\b(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b/.test(command)) return 'preview';
     if (/\b(npm|pnpm|yarn|bun)\s+(install|add)\b|\bpip\s+install\b/.test(command)) return 'install';
     if (name.includes('typecheck') || name.includes('lint') || name.includes('geterrors') || /\b(test|lint|typecheck|tsc)\b/.test(command)) return 'validate';
-    if (name.includes('command') || name === 'bash' || name === 'shell' || name === 'terminal' || name === 'command_run') return 'command';
+    if (name.includes('command') || name === 'bash' || name === 'shell' || name === 'terminal' || name === 'command_run' || name === 'run_command') return 'command';
     return 'service';
 }
 
@@ -261,8 +270,22 @@ function actionTitle(kind: ActionKind, count: number, active: boolean): string {
         validate: ['Validating changes', 'Validated changes'],
         preview: ['Checking preview', 'Checked preview'],
         service: ['Running service action', 'Service action complete'],
+        screenshot: ['Taking screenshot', 'Made a screenshot'],
     };
     return labels[kind][active ? 0 : 1];
+}
+
+function formatWorkedFor(actions: StreamingAction[]): string {
+    const starts = actions.map(a => a.startedAt).filter((n): n is number => typeof n === 'number');
+    const ends = actions.map(a => a.completedAt || a.startedAt).filter((n): n is number => typeof n === 'number');
+    if (starts.length === 0 || ends.length === 0) return 'worked for a moment';
+    const ms = Math.max(0, Math.max(...ends) - Math.min(...starts));
+    if (ms < 60_000) {
+        const secs = Math.max(1, Math.round(ms / 1000));
+        return `worked for ${secs}s`;
+    }
+    const mins = Math.max(1, Math.round(ms / 60_000));
+    return `worked for ${mins} min`;
 }
 
 function phaseCopy(actions: StreamingAction[], isLive: boolean) {
@@ -315,6 +338,7 @@ function kindIcon(kind: ActionKind): LucideIcon {
         validate: Wrench,
         preview: Eye,
         service: Cloud,
+        screenshot: Eye,
     }[kind];
 }
 
@@ -344,8 +368,89 @@ function ConnectorBar({ isDark, active }: { isDark: boolean; active: boolean }) 
     );
 }
 
+const ScreenshotCard = memo(function ScreenshotCard({
+    action,
+    isDark,
+}: {
+    action: StreamingAction;
+    isDark: boolean;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const shot = action.screenshots?.[0];
+    const src = shot?.imageBase64 || shot?.imageUrl;
+
+    return (
+        <div className="px-2 py-2">
+            <div
+                className={cn(
+                    'relative overflow-hidden rounded-xl border',
+                    isDark ? 'border-white/15 bg-[#141516]' : 'border-black/10 bg-white',
+                )}
+            >
+                <div className="p-3 sm:p-4">
+                    <div
+                        className={cn(
+                            'relative flex min-h-[160px] items-center justify-center overflow-hidden rounded-lg border',
+                            isDark ? 'border-white/10 bg-black/40' : 'border-black/8 bg-gray-50',
+                        )}
+                    >
+                        {src ? (
+                            <img
+                                src={src}
+                                alt={shot?.route || 'Screenshot'}
+                                className={cn('max-h-[280px] w-full object-contain', expanded && 'max-h-[70vh]')}
+                            />
+                        ) : (
+                            <span className={cn('text-sm', isDark ? 'text-white/35' : 'text-gray-400')}>Screenshot</span>
+                        )}
+                    </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 pb-3 sm:px-4">
+                    <span className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]',
+                        isDark ? 'border-white/10 bg-white/[0.06] text-white/65' : 'border-black/10 bg-black/[0.04] text-gray-600',
+                    )}>
+                        <SquareTerminal className="size-3" strokeWidth={1.8} />
+                        made a screenshot
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setExpanded(v => !v)}
+                        aria-label="Expand screenshot"
+                        className={cn(
+                            'flex size-8 items-center justify-center rounded-lg border transition-colors',
+                            isDark ? 'border-white/10 text-white/55 hover:bg-white/[0.06]' : 'border-black/10 text-gray-500 hover:bg-black/[0.04]',
+                        )}
+                    >
+                        <Expand className="size-3.5" strokeWidth={1.8} />
+                    </button>
+                </div>
+            </div>
+            {expanded && src && (
+                <button
+                    type="button"
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/90 p-6"
+                    onClick={() => setExpanded(false)}
+                >
+                    <img src={src} alt="" className="max-h-full max-w-full object-contain" />
+                </button>
+            )}
+        </div>
+    );
+});
+
 const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGroup; isDark: boolean }) {
     const [open, setOpen] = useState(false);
+    if (group.kind === 'screenshot') {
+        return (
+            <div className="space-y-2">
+                {group.actions.map(action => (
+                    <ScreenshotCard key={action.id} action={action} isDark={isDark} />
+                ))}
+            </div>
+        );
+    }
+
     const active = group.actions.some(action => action.status === 'running' || action.status === 'pending');
     const failed = group.actions.some(action => action.status === 'error');
     const hasDetails = group.actions.some(action => {
@@ -585,13 +690,45 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     const [phaseOpen, setPhaseOpen] = useState(isLive || actions.some(action => action.status === 'error'));
     const groups = useMemo(() => groupActions(actions), [actions]);
     const phase = useMemo(() => phaseCopy(actions, isLive), [actions, isLive]);
+    const workedFor = useMemo(() => formatWorkedFor(actions), [actions]);
     const running = actions.some(action => action.status === 'running' || action.status === 'pending');
     const failed = actions.some(action => action.status === 'error');
 
     if (actions.length === 0) return null;
 
+    // Finished turns collapse under “worked for …” with an expandable bar.
+    if (!isLive) {
+        return (
+            <Collapsible open={phaseOpen} onOpenChange={setPhaseOpen}>
+                <section className={cn('agent-feed my-4 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
+                    <CollapsibleTrigger asChild>
+                        <button
+                            type="button"
+                            className={cn(
+                                'group/phase flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50',
+                                isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]',
+                            )}
+                        >
+                            <span className={cn('text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>{workedFor}</span>
+                            <ChevronDown className={cn('size-4 shrink-0 transition-transform', isDark ? 'text-white/35' : 'text-gray-400', !phaseOpen && '-rotate-90')} />
+                        </button>
+                    </CollapsibleTrigger>
+                    <div className={cn('mt-2 h-px w-full', isDark ? 'bg-white/10' : 'bg-black/10')} />
+                    <CollapsibleContent>
+                        <div className="mt-2 space-y-1 pl-1 sm:pl-2">
+                            {groups.map((group, index) => (
+                                <ToolStack key={`${group.kind}-${group.actions[0].id}-${index}`} group={group} isDark={isDark} />
+                            ))}
+                        </div>
+                    </CollapsibleContent>
+                </section>
+            </Collapsible>
+        );
+    }
+
     return (
-        <Collapsible open={isLive ? true : phaseOpen} onOpenChange={setPhaseOpen}>
+        <Collapsible open={true} onOpenChange={setPhaseOpen}>
             <section className={cn('agent-feed my-4 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
                 <CollapsibleTrigger asChild>
                     <button type="button" className={cn('group/phase flex w-full items-start gap-3 rounded-lg px-1 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50', isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]')}>
@@ -608,9 +745,6 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                             <span className={cn('block text-base font-semibold leading-[1.35] tracking-[-0.015em]', isDark ? 'text-white/[0.94]' : 'text-gray-900')}>{phase.title}</span>
                             <span className={cn('mt-1 block max-w-[65ch] text-sm leading-6', isDark ? 'text-white/[0.66]' : 'text-gray-600')}>{phase.summary}</span>
                         </span>
-                        {!isLive && (
-                            <ChevronDown className={cn('mt-1 size-4 shrink-0 transition-transform', isDark ? 'text-white/40' : 'text-gray-400', !phaseOpen && '-rotate-90')} />
-                        )}
                     </button>
                 </CollapsibleTrigger>
 
