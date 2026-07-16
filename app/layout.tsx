@@ -3,9 +3,14 @@ import AuthProvider from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
 import "./globals.css"
-import { Geist, Geist_Mono, Inter } from 'next/font/google'
+import { Geist, Geist_Mono, Inter, Sora } from 'next/font/google'
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
+const sora = Sora({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-ara',
+})
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-agent-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-agent-mono' })
 
@@ -15,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="bg-[#18191B] dark">
-      <body className={`${inter.className} ${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-[#18191B]`}>
+    <html lang="en" suppressHydrationWarning className="bg-[#0a0a0b] dark">
+      <body className={`${inter.className} ${sora.variable} ${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-[#0a0a0b]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
           <AuthProvider>
             {children}
@@ -29,8 +34,8 @@ export default function RootLayout({
 }
 
 export const metadata = {
-  title: 'Sycord - Create Your Website Under 5 Minutes',
-  description: 'Build beautiful websites in minutes with AI-powered tools. No coding required. Start for free.',
+  title: 'Sycord — Build, debug, and ship with AI',
+  description: 'The AI workspace that helps you build, debug, and ship.',
   generator: 'v0.app',
   icons: {
     icon: [
