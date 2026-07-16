@@ -7,7 +7,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
+  ArrowRight, ArrowUpRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
   LayoutTemplate, Lock, Menu, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
   ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, X, Zap,
 } from "lucide-react"
@@ -105,11 +105,15 @@ function Hero() {
           </h1>
         </div>
 
+        {/* Squared CTA button — white pill with dark square icon box */}
         <Link
           href="/login"
-          className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-white px-8 py-4 text-base font-semibold text-black shadow-[0_16px_48px_rgba(255,255,255,0.12)] transition-transform hover:scale-[1.03] sm:px-9"
+          className="mt-8 inline-flex items-center gap-3 rounded-2xl bg-white px-6 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] transition-transform hover:scale-[1.03] sm:px-7"
         >
-          Start for free <ArrowRight className="h-4 w-4" />
+          Start for free
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-zinc-950 text-white">
+            <ArrowUpRight className="h-4 w-4" />
+          </span>
         </Link>
       </div>
 
@@ -514,7 +518,16 @@ function Footer() {
             <div key={c.title}>
               <div className="text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">{c.title}</div>
               <ul className="mt-4 space-y-2 text-sm">
-                {c.links.map(l=>(<li key={l.label}><Link href={l.href} className="text-[#E5E7EB] transition-colors hover:text-white">{l.label}</Link></li>))}
+                {c.links.map(l=>(
+                  <li key={l.label}>
+                    <Link
+                      href={l.href}
+                      className="text-[#E5E7EB] border-b border-transparent pb-px transition-colors duration-150 hover:text-white hover:border-white/70"
+                    >
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
           ))}
@@ -522,9 +535,9 @@ function Footer() {
         <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[#2a2c30] pt-6 text-xs text-[#A7AAB0] sm:flex-row sm:items-center">
           <span>© {new Date().getFullYear()} Sycord. All rights reserved.</span>
           <div className="flex items-center gap-3">
-            <Link href="/tos" className="hover:text-white">Terms</Link>
+            <Link href="/tos" className="border-b border-transparent pb-px transition-colors duration-150 hover:text-white hover:border-white/70">Terms</Link>
             <span>·</span>
-            <Link href="/pap" className="hover:text-white">Privacy</Link>
+            <Link href="/pap" className="border-b border-transparent pb-px transition-colors duration-150 hover:text-white hover:border-white/70">Privacy</Link>
           </div>
         </div>
       </div>
