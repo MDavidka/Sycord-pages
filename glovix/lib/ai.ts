@@ -66,6 +66,21 @@ export interface Message {
     agentEventId?: number;
     /** Turso session UUID — poll /api/agent_session/{id} to reload prior activity. */
     tursoSessionId?: string;
+    /** True once the durable session has been fully replayed, even if it used no tools. */
+    agentTimelineLoaded?: boolean;
+    /** Normalized execution feed saved with the assistant turn for durable history. */
+    agentActions?: Array<{
+        id: string;
+        toolName: string;
+        displayName: string;
+        status: 'pending' | 'running' | 'done' | 'error';
+        result?: string;
+        args?: unknown;
+        eventId?: number;
+        toolCallId?: string;
+        startedAt?: number;
+        completedAt?: number;
+    }>;
 }
 
 export interface ToolCall {

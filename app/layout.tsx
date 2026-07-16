@@ -3,9 +3,11 @@ import AuthProvider from "@/components/auth-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "sonner"
 import "./globals.css"
-import { Inter } from 'next/font/google'
+import { Geist, Geist_Mono, Inter } from 'next/font/google'
 
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
+const geistSans = Geist({ subsets: ['latin'], variable: '--font-agent-sans' })
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-agent-mono' })
 
 export default function RootLayout({
   children,
@@ -14,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="bg-[#18191B] dark">
-      <body className={`${inter.className} font-sans antialiased bg-[#18191B]`}>
+      <body className={`${inter.className} ${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-[#18191B]`}>
         <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark" disableTransitionOnChange>
           <AuthProvider>
             {children}

@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Undo2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
+import { ArrowLeft, Brain, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -21,9 +21,7 @@ import { PlanChecklist } from './PlanChecklist';
 import { ModelLearnPanel } from './ModelLearnPanel';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { ImageViewer } from './ImageViewer';
-import { BuilderPipelineDocs } from '@/components/builder-pipeline-docs';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -56,6 +54,7 @@ interface MessageGroup {
     content: ContentType; // For user messages and backward compat
     thinking?: string;
     thinkingDuration?: number;
+    agentActions?: StreamingAction[];
     attachments?: FileAttachment[];
     toolCalls?: {
         call: ToolCall;
@@ -117,8 +116,15 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'createFile': return shortFilePath(parsed.path || '');
             case 'write_file': return shortFilePath(parsed.path || '');
             case 'editFile': return shortFilePath(parsed.path || '');
+            case 'edit_file': return shortFilePath(parsed.path || '');
+            case 'apply_patch': return shortFilePath(parsed.path || parsed.file || '');
             case 'readFile': return shortFilePath(parsed.path || '');
+            case 'read_file': return shortFilePath(parsed.path || '');
             case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
+            case 'read_multiple_files': return `${(parsed.paths || []).length} files`;
+            case 'file_created':
+            case 'file_modified':
+            case 'file_deleted': return shortFilePath(parsed.path || parsed.file || parsed.file_path || '');
             case 'deleteFile': return shortFilePath(parsed.path || '');
             case 'renameFile': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
             case 'grep':
@@ -128,6 +134,8 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'startPreview': return 'sycord.site preview';
             case 'typeCheck': return 'Workspace';
             case 'executeCommand': return decodeHtml(parsed.command || 'shell');
+            case 'execute_command': return decodeHtml(parsed.command || 'shell');
+            case 'command_run': return decodeHtml(parsed.command || parsed.cmd || 'shell');
             case 'lintCheck': return parsed.path || 'src/';
             case 'listFiles': return 'Workspace';
             case 'getErrors': return 'Workspace';
@@ -144,9 +152,15 @@ const getActionDisplayName = (toolName: string, args: string): string => {
             case 'createFile':
             case 'write_file':
             case 'editFile':
+            case 'edit_file':
+            case 'apply_patch':
             case 'readFile':
+            case 'read_file':
+            case 'file_created':
+            case 'file_modified':
+            case 'file_deleted':
             case 'deleteFile':
-                return shortFilePath(extract('path'));
+                return shortFilePath(extract('path') || extract('file') || extract('file_path'));
             case 'lintCheck':
                 return extract('path');
             case 'readMultipleFiles':
@@ -250,26 +264,68 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
 
-    // Local actions state
+    // Live execution actions. Remote project-agent actions are also copied onto
+    // the current assistant message so completed and background runs survive a
+    // reload; local tool calls already persist through tool_calls/tool messages.
     const [actions, setActions] = useState<StreamingAction[]>([]);
+    const actionsRef = useRef<StreamingAction[]>([]);
+    const persistAgentActionsRef = useRef(false);
 
-    // Action helpers
-    const addAction = (toolName: string, displayName: string) => {
-        const id = Math.random().toString(36).substring(7);
-        setActions(prev => [...prev, {
+    const persistActionsOnAssistant = (nextActions: StreamingAction[]) => {
+        if (!persistAgentActionsRef.current) return;
+        const state = useStore.getState();
+        const messageIndex = [...state.messages].map((message, index) => ({ message, index })).reverse()
+            .find(entry => entry.message.role === 'assistant')?.index;
+        if (messageIndex === undefined) return;
+        const nextMessages = [...state.messages];
+        nextMessages[messageIndex] = {
+            ...nextMessages[messageIndex],
+            agentActions: nextActions.map(action => ({ ...action })),
+        };
+        setMessages(nextMessages);
+    };
+
+    const markAgentTimelineLoaded = () => {
+        const state = useStore.getState();
+        const messageIndex = [...state.messages].map((message, index) => ({ message, index })).reverse()
+            .find(entry => entry.message.role === 'assistant')?.index;
+        if (messageIndex === undefined) return;
+        const nextMessages = [...state.messages];
+        nextMessages[messageIndex] = {
+            ...nextMessages[messageIndex],
+            agentTimelineLoaded: true,
+            agentActions: actionsRef.current.map(action => ({ ...action })),
+        };
+        setMessages(nextMessages);
+    };
+
+    const replaceActions = (nextActions: StreamingAction[], persist = true) => {
+        actionsRef.current = nextActions;
+        setActions(nextActions);
+        if (persist) persistActionsOnAssistant(nextActions);
+    };
+
+    const addAction = (
+        toolName: string,
+        displayName: string,
+        metadata?: Partial<StreamingAction>,
+    ) => {
+        const id = metadata?.id || Math.random().toString(36).substring(7);
+        if (actionsRef.current.some(action => action.id === id)) return id;
+        replaceActions([...actionsRef.current, {
             id,
             toolName,
             displayName,
-            status: 'pending'
+            status: 'pending',
+            startedAt: Date.now(),
+            ...metadata,
         }]);
         return id;
     };
 
-
-
     const updateAction = (id: string, updates: Partial<StreamingAction>) => {
-        setActions(prev => prev.map(a =>
-            a.id === id ? { ...a, ...updates } : a
+        replaceActions(actionsRef.current.map(action =>
+            action.id === id ? { ...action, ...updates } : action
         ));
     };
 
@@ -510,6 +566,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!currentGroup.thinkingDuration && (msg as any).thinkingDuration) {
                         currentGroup.thinkingDuration = (msg as any).thinkingDuration;
                     }
+                    if (Array.isArray((msg as any).agentActions) && (msg as any).agentActions.length > 0) {
+                        const byId = new Map((currentGroup.agentActions || []).map(action => [action.id, action]));
+                        for (const action of (msg as any).agentActions as StreamingAction[]) byId.set(action.id, action);
+                        currentGroup.agentActions = Array.from(byId.values());
+                    }
                 } else {
                     if (currentGroup) groups.push(currentGroup);
 
@@ -526,6 +587,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         content: msg.content,
                         thinking: (msg as any).thinking,
                         thinkingDuration: (msg as any).thinkingDuration,
+                        agentActions: Array.isArray((msg as any).agentActions) ? (msg as any).agentActions : undefined,
                         toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
                         segments
                     };
@@ -766,9 +828,39 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 last.content.includes('reload the agent activity') ||
                                 last.content.includes('reload previous agent activity'))));
 
+                const savedActions = last?.role === 'assistant' && Array.isArray(last.agentActions)
+                    ? last.agentActions as StreamingAction[]
+                    : [];
+                const hasPersistedTimeline =
+                    last?.role === 'assistant' &&
+                    (last.agentTimelineLoaded === true || Array.isArray(last.agentActions));
+                const replayHistoryOnly = Boolean(knownTursoId && !lastLooksIncomplete && !hasPersistedTimeline);
+
+                // A completed turn with a saved timeline needs no replay. The
+                // saved message is now the source of truth for older activity.
+                if (knownTursoId && hasPersistedTimeline && !lastLooksIncomplete) {
+                    agentResumeDoneRef.current = true;
+                    return;
+                }
+
                 agentResumeDoneRef.current = true;
+                const actionByCall = new Map<string, string[]>();
 
                 try {
+                    persistAgentActionsRef.current = true;
+                    // Continue from the persisted prefix when reconnecting after
+                    // a mid-turn exit. Polling starts after its saved cursor, so
+                    // clearing here would permanently discard earlier actions.
+                    replaceActions(lastLooksIncomplete ? savedActions : [], false);
+                    if (lastLooksIncomplete) {
+                        for (const action of savedActions) {
+                            if (action.status !== 'running' && action.status !== 'pending') continue;
+                            const key = action.toolCallId || action.toolName;
+                            const pending = actionByCall.get(key) || [];
+                            pending.push(action.id);
+                            actionByCall.set(key, pending);
+                        }
+                    }
                     setIsLoading(true);
                     abortControllerRef.current = controller;
 
@@ -778,13 +870,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     let errorText = '';
                     let completed = false;
                     let thinkingStartedAt: number | null = null;
-                    const actionByTool = new Map<string, string[]>();
                     let tursoSessionId = knownTursoId || '';
                     let addedBubble = false;
 
                     const ensureAssistantBubble = () => {
                         if (addedBubble) return;
-                        if (lastLooksIncomplete && last?.role === 'assistant') {
+                        if ((lastLooksIncomplete || replayHistoryOnly) && last?.role === 'assistant') {
                             addedBubble = true;
                             return;
                         }
@@ -814,15 +905,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                         switch (event.type) {
                             case 'processing':
-                                if (event.text) setCurrentThinking(event.text);
+                                if (!replayHistoryOnly && event.text) setCurrentThinking(event.text);
                                 break;
                             case 'thinking': {
                                 if (!thinkingStartedAt) {
                                     thinkingStartedAt = Date.now();
-                                    setThinkingStartTime(thinkingStartedAt);
+                                    if (!replayHistoryOnly) setThinkingStartTime(thinkingStartedAt);
                                 }
-                                setCurrentThinking(event.text || '');
-                                updateLastMessage(assistantContent, undefined, event.text || '');
+                                if (!replayHistoryOnly) {
+                                    setCurrentThinking(event.text || '');
+                                    updateLastMessage(assistantContent, undefined, event.text || '');
+                                }
                                 break;
                             }
                             case 'tool_started': {
@@ -830,52 +923,81 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
                                     : JSON.stringify(event.arguments || {});
-                                const actionId = addAction(tool, getActionDisplayName(tool, args));
-                                const pendingActions = actionByTool.get(tool) || [];
-                                pendingActions.push(actionId);
-                                actionByTool.set(tool, pendingActions);
+                                const key = event.toolCallId || tool;
+                                const actionId = addAction(tool, getActionDisplayName(tool, args), {
+                                    id: event.toolCallId
+                                        ? `agent_${tursoSessionId}_${event.toolCallId}`
+                                        : `agent_${tursoSessionId}_${event.eventId || Date.now()}`,
+                                    eventId: event.eventId,
+                                    toolCallId: event.toolCallId,
+                                    args,
+                                });
+                                const pendingActions = actionByCall.get(key) || [];
+                                if (!pendingActions.includes(actionId)) pendingActions.push(actionId);
+                                actionByCall.set(key, pendingActions);
                                 updateAction(actionId, { status: 'running', args });
                                 break;
                             }
                             case 'tool_finished': {
                                 const tool = event.tool || event.title || 'Agent tool';
-                                const pendingActions = actionByTool.get(tool) || [];
+                                const key = event.toolCallId || tool;
+                                const pendingActions = actionByCall.get(key) || [];
                                 let actionId = pendingActions.shift();
-                                if (pendingActions.length > 0) actionByTool.set(tool, pendingActions);
-                                else actionByTool.delete(tool);
+                                if (pendingActions.length > 0) actionByCall.set(key, pendingActions);
+                                else actionByCall.delete(key);
+                                const args = typeof event.arguments === 'string'
+                                    ? event.arguments
+                                    : JSON.stringify(event.arguments || {});
                                 if (!actionId) {
-                                    actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                                    actionId = addAction(tool, getActionDisplayName(tool, args) || event.title || '', {
+                                        id: event.toolCallId
+                                            ? `agent_${tursoSessionId}_${event.toolCallId}`
+                                            : `agent_${tursoSessionId}_${event.eventId || Date.now()}`,
+                                        eventId: event.eventId,
+                                        toolCallId: event.toolCallId,
+                                        args,
+                                    });
                                 }
                                 updateAction(actionId, {
                                     status: event.ok === false ? 'error' : 'done',
                                     result: event.text,
+                                    args: args === '{}' ? actionsRef.current.find(action => action.id === actionId)?.args : args,
+                                    eventId: event.eventId,
+                                    completedAt: Date.now(),
                                 });
                                 break;
                             }
                             case 'delta':
                                 assistantContent += event.text || '';
-                                updateLastMessage(assistantContent);
+                                if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 break;
                             case 'message':
                                 assistantContent = event.text || assistantContent;
-                                updateLastMessage(assistantContent);
+                                if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 break;
                             case 'done':
                                 assistantContent = event.text || assistantContent || 'Done.';
-                                updateLastMessage(assistantContent);
+                                if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
+                                markAgentTimelineLoaded();
                                 break;
                             case 'error':
                                 errorText = event.text || 'The project agent request failed.';
+                                replaceActions(actionsRef.current.map(action =>
+                                    action.status === 'running' || action.status === 'pending'
+                                        ? { ...action, status: 'error' as const, result: errorText, completedAt: Date.now() }
+                                        : action
+                                ));
+                                markAgentTimelineLoaded();
                                 break;
                         }
                     };
 
                     const resumed = await resumeProjectAgent({
                         projectId,
-                        tursoSessionId: knownTursoId && lastLooksIncomplete ? knownTursoId : undefined,
+                        tursoSessionId: knownTursoId || undefined,
                         afterEventId: lastLooksIncomplete ? highestEventId : 0,
-                        allowCompleted: lastLooksIncomplete,
+                        allowCompleted: Boolean(knownTursoId),
                         signal: controller.signal,
                         onEvent: applyEvent,
                     });
@@ -883,14 +1005,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!resumed) return;
 
                     if (errorText && !completed) {
-                        updateLastMessage(`Error: ${errorText}`);
+                        if (!replayHistoryOnly) updateLastMessage(`Error: ${errorText}`);
                     } else if (completed) {
-                        if (thinkingStartedAt) {
+                        if (thinkingStartedAt && !replayHistoryOnly) {
                             const duration = Math.max(1, Math.round((Date.now() - thinkingStartedAt) / 1000));
                             setThinkingDuration(duration);
                             setThinkingStartTime(null);
                         }
-                        if (onAiComplete) onAiComplete('remote');
+                        if (!replayHistoryOnly && onAiComplete) onAiComplete('remote');
                     }
 
                     if (currentChatId && user) {
@@ -912,7 +1034,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         abortControllerRef.current = null;
                         setCurrentThinking('');
                         setThinkingStartTime(null);
-                        setTimeout(() => setActions([]), 500);
+                        setTimeout(() => replaceActions([], false), 500);
                     }
                 }
             })();
@@ -935,6 +1057,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     ) => {
         if (isLoading) return;
 
+        persistAgentActionsRef.current = true;
+        replaceActions([], false);
         setIsLoading(true);
         setCurrentThinking('');
         setThinkingDuration(0);
@@ -944,7 +1068,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         const chatId = chatIdOverride || currentChatId;
         const currentMessages = useStore.getState().messages;
         const afterSession = getLatestAgentSession(currentMessages);
-        const actionByTool = new Map<string, string[]>();
+        const actionByCall = new Map<string, string[]>();
         let assistantContent = '';
         let activeSession = afterSession;
         let highestEventId = 0;
@@ -976,18 +1100,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
             if (event.eventId) highestEventId = Math.max(highestEventId, event.eventId);
 
-            // Persist Turso cursor as activity arrives so a mid-turn exit can resume.
-            if (tursoSessionId || activeSession > afterSession || highestEventId > 0) {
-                persistCursor();
-                // Best-effort early save so reload can find tursoSessionId.
-                if (tursoSessionId && chatId && user) {
-                    void saveChatMessages(chatId, useStore.getState().messages, {
-                        keepalive: true,
-                        projectId,
-                    }).catch(() => {});
-                }
-            }
-
             switch (event.type) {
                 case 'processing':
                     if (event.text) setCurrentThinking(event.text);
@@ -1004,30 +1116,50 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
                 case 'tool_started': {
                     const tool = event.tool || event.title || 'Agent tool';
-                    const key = tool;
+                    const key = event.toolCallId || tool;
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
                         : JSON.stringify(event.arguments || {});
-                    const actionId = addAction(tool, getActionDisplayName(tool, args));
-                    const pendingActions = actionByTool.get(key) || [];
-                    pendingActions.push(actionId);
-                    actionByTool.set(key, pendingActions);
+                    const actionId = addAction(tool, getActionDisplayName(tool, args), {
+                        id: event.toolCallId
+                            ? `agent_${tursoSessionId}_${event.toolCallId}`
+                            : `agent_${tursoSessionId}_${event.eventId || Date.now()}`,
+                        eventId: event.eventId,
+                        toolCallId: event.toolCallId,
+                        args,
+                    });
+                    const pendingActions = actionByCall.get(key) || [];
+                    if (!pendingActions.includes(actionId)) pendingActions.push(actionId);
+                    actionByCall.set(key, pendingActions);
                     updateAction(actionId, { status: 'running', args });
                     break;
                 }
                 case 'tool_finished': {
                     const tool = event.tool || event.title || 'Agent tool';
-                    const key = tool;
-                    const pendingActions = actionByTool.get(key) || [];
+                    const key = event.toolCallId || tool;
+                    const pendingActions = actionByCall.get(key) || [];
                     let actionId = pendingActions.shift();
-                    if (pendingActions.length > 0) actionByTool.set(key, pendingActions);
-                    else actionByTool.delete(key);
+                    if (pendingActions.length > 0) actionByCall.set(key, pendingActions);
+                    else actionByCall.delete(key);
+                    const args = typeof event.arguments === 'string'
+                        ? event.arguments
+                        : JSON.stringify(event.arguments || {});
                     if (!actionId) {
-                        actionId = addAction(tool, event.text || getActionDisplayName(tool, '{}'));
+                        actionId = addAction(tool, getActionDisplayName(tool, args) || event.title || '', {
+                            id: event.toolCallId
+                                ? `agent_${tursoSessionId}_${event.toolCallId}`
+                                : `agent_${tursoSessionId}_${event.eventId || Date.now()}`,
+                            eventId: event.eventId,
+                            toolCallId: event.toolCallId,
+                            args,
+                        });
                     }
                     updateAction(actionId, {
                         status: event.ok === false ? 'error' : 'done',
                         result: event.text,
+                        args: args === '{}' ? actionsRef.current.find(action => action.id === actionId)?.args : args,
+                        eventId: event.eventId,
+                        completedAt: Date.now(),
                     });
                     break;
                 }
@@ -1043,10 +1175,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     assistantContent = event.text || assistantContent || 'Done.';
                     updateLastMessage(assistantContent);
                     completed = true;
+                    markAgentTimelineLoaded();
                     break;
                 case 'error':
                     errorText = event.text || 'The project agent request failed.';
+                    replaceActions(actionsRef.current.map(action =>
+                        action.status === 'running' || action.status === 'pending'
+                            ? { ...action, status: 'error' as const, result: errorText, completedAt: Date.now() }
+                            : action
+                    ));
+                    markAgentTimelineLoaded();
                     break;
+            }
+
+            // Save the normalized event and its cursor together. Persisting the
+            // cursor first could make a reload skip an action that was not yet
+            // included in agentActions.
+            if (tursoSessionId || activeSession > afterSession || highestEventId > 0) {
+                persistCursor();
+                if (tursoSessionId && chatId && user) {
+                    void saveChatMessages(chatId, useStore.getState().messages, {
+                        keepalive: true,
+                        projectId,
+                    }).catch(() => {});
+                }
             }
         };
 
@@ -1109,7 +1261,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             abortControllerRef.current = null;
             setCurrentThinking('');
             setThinkingStartTime(null);
-            setTimeout(() => setActions([]), 500);
+            setTimeout(() => replaceActions([], false), 500);
 
             if (!wasAborted && completed && onAiComplete) {
                 onAiComplete('remote');
@@ -1140,6 +1292,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             return;
         }
 
+        persistAgentActionsRef.current = false;
+        replaceActions([], false);
         setIsLoading(true);
         abortControllerRef.current = new AbortController();
 
@@ -1830,7 +1984,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
 
             // Clear actions after a delay to allow smooth transition to completed state
-            setTimeout(() => setActions([]), 500);
+            setTimeout(() => replaceActions([], false), 500);
 
             if (chatId && user) {
                 try {
@@ -2052,77 +2206,53 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     </div>
 
                     <div
-                        className="pointer-events-auto relative flex items-center justify-between px-4 pb-3"
-                        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.625rem)' }}
+                        className="pointer-events-auto relative mx-auto flex h-14 max-w-[760px] items-center justify-between px-4 sm:px-6"
+                        style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
-                        {/* Back button */}
                         <button
                             type="button"
                             onClick={handleBack}
                             aria-label="Back"
-                            className={`flex h-11 items-center justify-center rounded-[28px] border px-6 transition-colors active:scale-95 ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] text-[#9a9b9e] hover:text-white hover:bg-[#2a2b2e]' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                            className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
                         >
-                            <Undo2 className="h-5 w-5" />
+                            <ArrowLeft className="size-5" strokeWidth={1.8} />
                         </button>
 
-                        {/* Profile cluster + preview entry (embedded mobile) */}
-                        <div className="flex flex-col items-end gap-1.5">
-                            <div className="flex items-center gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        aria-label="Docs"
-                                        className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[350px] p-0 overflow-hidden border-none" style={{ backgroundColor: 'transparent', boxShadow: 'none' }}>
-                                    <BuilderPipelineDocs isDark={isDark} />
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                        <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
+                            <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
+                            {isLoading && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                        </div>
 
-                            <button
-                                type="button"
-                                onClick={() => setShowModelLearn(true)}
-                                aria-label="Model-learn debug"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl text-[11px] font-semibold transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-[#9a9b9e] hover:text-white' : 'bg-black/5 text-gray-500 hover:text-gray-900'}`}
-                            >
-                                ML
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setShowDeepMemory(true)}
-                                aria-label="Profile"
-                                className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl transition-transform active:scale-95 ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-gray-900'}`}
-                            >
-                            {profileImage && !profileImgError ? (
-                                <img
-                                    src={profileImage}
-                                    alt="Profile"
-                                    referrerPolicy="no-referrer"
-                                    onError={() => setProfileImgError(true)}
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
-                                <span className="text-[22px] font-extrabold leading-none tracking-tighter">M</span>
-                            )}
-                            </button>
-                            </div>
-
+                        <div className="flex items-center gap-1">
                             {showPreviewButton && onOpenPreview && (
                                 <button
                                     type="button"
                                     onClick={onOpenPreview}
-                                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium shadow-sm transition-all active:scale-95 ${isDark ? 'bg-white/10 text-[#e5e5e5] backdrop-blur hover:bg-white/15' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
-                                    title="Swipe left to preview"
+                                    aria-label="Open preview"
+                                    title="Open preview"
+                                    className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
                                 >
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Preview
+                                    <Eye className="size-[18px]" strokeWidth={1.8} />
                                 </button>
                             )}
+                            <button
+                                type="button"
+                                onClick={() => setShowDeepMemory(true)}
+                                aria-label="Profile"
+                                className={`flex size-9 items-center justify-center overflow-hidden rounded-xl transition-transform active:scale-95 ${isDark ? 'bg-white/[0.08] text-white' : 'bg-black/[0.05] text-gray-900'}`}
+                            >
+                                {profileImage && !profileImgError ? (
+                                    <img
+                                        src={profileImage}
+                                        alt="Profile"
+                                        referrerPolicy="no-referrer"
+                                        onError={() => setProfileImgError(true)}
+                                        className="h-full w-full object-cover"
+                                    />
+                                ) : (
+                                    <span className="text-sm font-semibold">M</span>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </header>
@@ -2135,8 +2265,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 className="flex-1 overflow-y-auto scrollbar-hide"
             >
                 <div
-                    className={`max-w-2xl mx-auto ${embedded ? 'px-4' : 'px-6'} py-6 space-y-5`}
-                    style={embedded ? { paddingTop: showPreviewButton ? 'calc(env(safe-area-inset-top, 0px) + 6.5rem)' : 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
+                    className={`mx-auto w-full max-w-[760px] ${embedded ? 'px-4 sm:px-6 lg:px-8' : 'px-4 sm:px-6 lg:px-8'} py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-7 lg:space-y-8`}
+                    style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
@@ -2146,6 +2276,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     isDark={isDark}
                                     thinkingTime={group.thinkingDuration || undefined}
                                     startTime={idx === groupedMessages.length - 1 && isLoading ? thinkingStartTime : undefined}
+                                />
+                            )}
+
+                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && (
+                                <ActionsList
+                                    actions={idx === groupedMessages.length - 1 && isLoading && actions.length > 0 ? actions : group.agentActions}
+                                    isLive={idx === groupedMessages.length - 1 && isLoading}
+                                    isDark={isDark}
                                 />
                             )}
 
@@ -2181,7 +2319,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (seg.type === 'tools' && seg.toolCalls && seg.toolCalls.length > 0) {
                                             // If this is the last segment and we're live, show live actions
                                             const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
+                                            const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length;
 
                                             if (showLive) {
                                                 return (
@@ -2210,7 +2348,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         return null;
                                     })}
                                     {/* Live actions if no segments have tools yet */}
-                                    {isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.segments.some(s => s.type === 'tools') && (
+                                    {isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                 </>
@@ -2261,7 +2399,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         </div>
                                     </div>
                                     {/* Live actions for assistant without segments */}
-                                    {group.role === 'assistant' && isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && (
+                                    {group.role === 'assistant' && isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                 </>
@@ -2557,20 +2695,27 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
     const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
 
     return (
-        <div className="mb-2 animate-fade-in">
+        <div className="mb-3 animate-fade-in px-1">
             <button
+                type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
-                className={`flex items-center gap-1.5 text-sm transition-colors ${isDark ? 'text-[#666] hover:text-[#888]' : 'text-gray-400 hover:text-gray-600'}`}
+                aria-expanded={isExpanded}
+                className={`group flex min-h-11 w-full items-start gap-3 rounded-lg py-2 text-left transition-colors ${isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]'}`}
             >
-                <span>Thought for {displayTime}s</span>
-                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                <span className="flex size-7 shrink-0 items-center justify-center">
+                    <Brain className={`size-4 ${isDark ? 'text-white/65' : 'text-gray-500'}`} strokeWidth={1.8} />
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
+                        Thinking
+                        {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
+                    </span>
+                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+                        {thinking}
+                    </span>
+                </span>
+                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
             </button>
-
-            {isExpanded && (
-                <div className={`mt-2 text-sm leading-relaxed whitespace-pre-wrap animate-fade-in ${isDark ? 'text-[#555]' : 'text-gray-400'}`}>
-                    {thinking}
-                </div>
-            )}
         </div>
     );
 }
