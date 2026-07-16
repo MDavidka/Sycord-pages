@@ -192,16 +192,29 @@ function normalizeTursoEvent(
                 type: 'tool_finished',
                 ...common,
                 tool: typeof payload.tool === 'string' ? payload.tool : event.title,
-                ok: payload.ok === true,
+                arguments: payload.arguments,
+                ok: payload.ok !== false,
             };
         case 'file_created':
         case 'file_modified':
         case 'file_deleted':
         case 'command_run':
+            // These are semantic activity events, not generic commands. Preserve
+            // their payload so the UI can show the actual path/command and apply
+            // the correct file, terminal, or service icon.
             return {
                 type: 'tool_finished',
                 ...common,
                 tool: event.event_type,
+                arguments: {
+                    ...payload,
+                    ...(event.event_type === 'command_run' && !payload.command && event.detail
+                        ? { command: event.detail }
+                        : {}),
+                    ...(event.event_type !== 'command_run' && !payload.path && event.detail
+                        ? { path: event.detail }
+                        : {}),
+                },
                 ok: payload.ok !== false,
             };
         case 'token_delta':
