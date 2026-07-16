@@ -53,7 +53,7 @@ export default function LandingPage() {
 /* ---------- Hero ---------- */
 function Hero() {
   return (
-    <section className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden bg-[#0a0a0a] md:min-h-0">
+    <section className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden bg-[#0a0a0a] md:min-h-0 md:overflow-visible">
       {/* Header */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-7">
         <Link
@@ -83,7 +83,7 @@ function Hero() {
       </header>
 
       {/* Headline */}
-      <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-5 pb-4 pt-10 text-center md:flex-none md:pb-8 md:pt-20">
+      <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-5 pb-2 pt-8 text-center md:flex-none md:pb-6 md:pt-16">
         <h1
           className="font-semibold tracking-tight text-white"
           style={{
@@ -104,13 +104,13 @@ function Hero() {
       </div>
 
       {/* Illustration — half-cut on mobile, full on desktop */}
-      <div className="relative z-10 mx-auto mt-auto w-full max-w-5xl flex-shrink-0 md:mt-6 md:px-8 md:pb-12">
-        <div className="relative h-[40vh] w-full overflow-hidden md:h-auto md:overflow-visible">
+      <div className="relative z-10 mx-auto mt-auto w-full max-w-5xl flex-shrink-0 md:mt-4 md:max-w-4xl md:px-8 md:pb-10">
+        <div className="relative h-[34vh] w-full overflow-hidden md:h-auto md:overflow-visible">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/sycord.svg"
             alt="Sycord product preview on phone and laptop"
-            className="pointer-events-none absolute left-1/2 top-0 h-auto w-[145%] max-w-none -translate-x-1/2 select-none md:relative md:left-auto md:top-auto md:w-full md:translate-x-0"
+            className="pointer-events-none absolute left-1/2 top-0 h-auto w-[155%] max-w-none -translate-x-1/2 select-none md:relative md:left-auto md:top-auto md:w-full md:translate-x-0"
             draggable={false}
           />
         </div>
