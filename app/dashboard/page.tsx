@@ -58,7 +58,6 @@ function DashboardContent() {
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // URL param handling
   useEffect(() => {
     const openCreate = searchParams.get("open_create_modal")
     const error = searchParams.get("error")
@@ -72,7 +71,6 @@ function DashboardContent() {
     }
   }, [searchParams, router])
 
-  // Parallel data fetch — projects + user status simultaneously
   useEffect(() => {
     if (status !== "authenticated") return
     Promise.all([
@@ -84,7 +82,6 @@ function DashboardContent() {
     }).catch(console.error).finally(() => setIsLoading(false))
   }, [status])
 
-  // Invite polling
   const fetchInvites = useCallback(async () => {
     try {
       const res = await fetch("/api/collab/invites")
@@ -168,7 +165,6 @@ function DashboardContent() {
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16">
-        {/* Header */}
         <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
           <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
@@ -207,9 +203,7 @@ function DashboardContent() {
           </div>
         </header>
 
-        {/* Main */}
         <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6">
-          {/* Top bar */}
           <div className="flex flex-col gap-3 mb-5">
             <div className="flex items-center justify-between">
               <h1 className="text-base font-semibold text-foreground">Projects</h1>
@@ -234,7 +228,6 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* Grid */}
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
@@ -364,8 +357,4 @@ export default function DashboardPage() {
       <DashboardContent />
     </Suspense>
   )
-}
-
-function Skeleton({ className, style }: { className?: string; style?: React.CSSProperties }) {
-  return <div className={`animate-pulse rounded-md bg-muted ${className ?? ""}`} style={style} />
 }
