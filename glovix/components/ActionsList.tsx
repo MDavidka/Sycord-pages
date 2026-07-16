@@ -2,18 +2,18 @@
 
 import { memo, useMemo, useState } from 'react';
 import {
+    BookOpenCheck,
     Brain,
     Check,
     ChevronDown,
     CircleAlert,
-    Code2,
+    Cloud,
     Eye,
     FileCode2,
-    FileSearch,
-    FolderSearch2,
+    FilePen,
+    GitBranchPlus,
     LoaderCircle,
-    ServerCog,
-    Terminal,
+    SquareTerminal,
     Wrench,
     type LucideIcon,
 } from 'lucide-react';
@@ -135,6 +135,19 @@ function getFilePaths(action: StreamingAction): string[] {
     return [];
 }
 
+/** Display basename only (e.g. utils.ts), keep rename arrows readable. */
+function displayFileName(path: string): string {
+    return path
+        .split(' → ')
+        .map(part => {
+            const trimmed = part.trim();
+            if (!trimmed) return trimmed;
+            const segments = trimmed.split(/[/\\]/).filter(Boolean);
+            return segments[segments.length - 1] || trimmed;
+        })
+        .join(' → ');
+}
+
 function getCommand(action: StreamingAction): string {
     const args = parseArgs(action.args);
     return String(args.command || args.cmd || action.displayName || action.toolName).trim();
@@ -203,14 +216,14 @@ function FileTypeIcon({ path, isDark }: { path: string; isDark: boolean }) {
 function kindIcon(kind: ActionKind): LucideIcon {
     return {
         thinking: Brain,
-        search: FolderSearch2,
-        read: FileSearch,
-        edit: Code2,
-        command: Terminal,
+        search: GitBranchPlus,
+        read: BookOpenCheck,
+        edit: FilePen,
+        command: SquareTerminal,
         install: Wrench,
         validate: Wrench,
         preview: Eye,
-        service: ServerCog,
+        service: Cloud,
     }[kind];
 }
 
@@ -253,7 +266,7 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
     const effectiveItems = previewItems.length > 0
         ? previewItems
         : group.actions.map(action => ({ key: action.id, text: action.displayName || action.toolName, isFile: false }));
-    const visibleItems = effectiveItems.slice(0, 3);
+    const visibleItems = open ? effectiveItems : effectiveItems.slice(0, 3);
     const hiddenCount = Math.max(0, effectiveItems.length - visibleItems.length);
     const itemCount = effectiveItems.length;
 
@@ -270,10 +283,6 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
                     )}
                 >
                     <span className="flex min-h-7 items-center gap-2.5">
-                        <ChevronDown
-                            className={cn('size-4 shrink-0 transition-transform', isDark ? 'text-white/40' : 'text-gray-400', !open && '-rotate-90', !expandable && 'opacity-0')}
-                            strokeWidth={1.8}
-                        />
                         <Icon className={cn('size-4 shrink-0', group.kind === 'edit' || group.kind === 'preview' ? 'text-blue-400' : group.kind === 'validate' || group.kind === 'install' ? 'text-violet-400' : isDark ? 'text-white/65' : 'text-gray-500')} strokeWidth={1.8} />
                         <span className={cn('min-w-0 flex-1 text-sm font-semibold', isDark ? 'text-white/85' : 'text-gray-800')}>
                             {actionTitle(group.kind, itemCount, active)}
@@ -284,38 +293,50 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
                         <ActionStatus action={failed ? group.actions.find(action => action.status === 'error')! : active ? group.actions.find(action => action.status === 'running' || action.status === 'pending')! : group.actions[group.actions.length - 1]} isDark={isDark} />
                     </span>
 
-                    <span className="mt-1.5 block space-y-1 pl-[4.15rem] pr-1">
-                        {visibleItems.map(item => (
-                            <span key={item.key} className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
-                                {item.isFile ? <FileTypeIcon path={item.text} isDark={isDark} /> : <span className="size-4 shrink-0" />}
-                                <span className={cn(
-                                    'truncate font-[family-name:var(--font-agent-mono)]',
-                                    item.isFile
-                                        ? isDark ? 'text-[#f2c45a]' : 'text-[#a16207]'
-                                        : isDark ? 'text-white/50' : 'text-gray-500',
-                                )} title={item.text}>
-                                    {item.text}
+                    <span className="mt-1.5 block space-y-1 pl-6 pr-1">
+                        {visibleItems.map(item => {
+                            const label = item.isFile ? displayFileName(item.text) : item.text;
+                            return (
+                                <span key={item.key} className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
+                                    {item.isFile ? <FileTypeIcon path={item.text} isDark={isDark} /> : <span className="size-4 shrink-0" />}
+                                    <span className={cn(
+                                        'truncate font-[family-name:var(--font-agent-mono)]',
+                                        item.isFile
+                                            ? isDark ? 'text-[#f2c45a]' : 'text-[#a16207]'
+                                            : isDark ? 'text-white/50' : 'text-gray-500',
+                                    )} title={item.text}>
+                                        {label}
+                                    </span>
                                 </span>
-                            </span>
-                        ))}
+                            );
+                        })}
                         {hiddenCount > 0 && (
-                            <span className={cn('block pl-6 text-xs', isDark ? 'text-white/35' : 'text-gray-400')}>… {hiddenCount} more</span>
+                            <span className={cn('block pl-6 text-xs underline-offset-2 group-hover/tool:underline', isDark ? 'text-white/35' : 'text-gray-400')}>
+                                See more ({hiddenCount})
+                            </span>
                         )}
                     </span>
                 </button>
             </CollapsibleTrigger>
 
-            <CollapsibleContent className={cn('ml-10 border-l pl-4', isDark ? 'border-white/10' : 'border-black/10')}>
+            <CollapsibleContent className="ml-6 pl-2">
                 <div className="space-y-3 py-2">
                     {group.actions.map(action => {
                         const files = getFilePaths(action);
                         const result = action.result ? cleanResult(action.result) : '';
-                        const detailLabel = files.join(', ') || (group.kind === 'command' || group.kind === 'install' || group.kind === 'validate' ? getCommand(action) : action.displayName || action.toolName);
+                        const detailLabel = files.length > 0
+                            ? files.map(displayFileName).join(', ')
+                            : (group.kind === 'command' || group.kind === 'install' || group.kind === 'validate' ? getCommand(action) : action.displayName || action.toolName);
                         return (
                             <div key={action.id} className="min-w-0">
                                 <div className={cn('flex items-start gap-2 text-xs', isDark ? 'text-white/45' : 'text-gray-500')}>
                                     <ActionStatus action={action} isDark={isDark} />
-                                    <span className={cn('min-w-0 whitespace-pre-wrap break-all font-[family-name:var(--font-agent-mono)] leading-5', files.length > 0 && (isDark ? 'text-[#f2c45a]/80' : 'text-[#a16207]'))}>{detailLabel}</span>
+                                    <span
+                                        className={cn('min-w-0 whitespace-pre-wrap break-all font-[family-name:var(--font-agent-mono)] leading-5', files.length > 0 && (isDark ? 'text-[#f2c45a]/80' : 'text-[#a16207]'))}
+                                        title={files.length > 0 ? files.join(', ') : undefined}
+                                    >
+                                        {detailLabel}
+                                    </span>
                                 </div>
                                 {result && (
                                     <pre className={cn(
@@ -371,10 +392,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                 <CollapsibleContent>
                     <div
                         data-active={running ? 'true' : 'false'}
-                        className={cn(
-                            'ml-3.5 mt-2 space-y-1 border-l pl-3 sm:ml-[15px] sm:pl-5',
-                            running ? 'border-blue-400/55' : isDark ? 'border-white/10' : 'border-black/10',
-                        )}
+                        className="mt-2 space-y-1 pl-1 sm:pl-2"
                     >
                         {groups.map((group, index) => (
                             <ToolStack key={`${group.kind}-${group.actions[0].id}-${index}`} group={group} isDark={isDark} />
