@@ -38,7 +38,7 @@ import {
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen w-full bg-[#18191B] text-white">
+    <main className="min-h-screen w-full bg-[#18191B] text-white" style={{ fontFamily: "'Inter', sans-serif" }}>
       <Hero />
       <TrustStrip />
       <HowItWorks />
@@ -68,7 +68,7 @@ function Hero() {
     >
       {/* Header */}
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
+        <Link href="/" aria-label="Home" className="inline-flex items-center gap-2">
           <Image
             src="/logo.png"
             alt="logo"
@@ -77,19 +77,15 @@ function Hero() {
             priority
             className="h-9 w-9 opacity-90 sm:h-10 sm:w-10"
           />
+          <span className="text-sm font-semibold text-white">sycord</span>
         </Link>
 
         <Link
-          href="/dashboard"
-          aria-label="Open dashboard"
-          className="flex items-center gap-1.5 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-2.5 py-1.5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#212327]"
+          href="/login"
+          aria-label="Sign in"
+          className="flex items-center gap-1.5 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-4 py-2 text-sm font-medium text-[#E5E7EB] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#212327]"
         >
-          <span className="hidden text-xs font-medium text-[#A7AAB0] sm:inline">
-            Dashboard
-          </span>
-          <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-[#18191B] text-xs font-semibold text-white">
-            M
-          </span>
+          sign in
         </Link>
       </header>
 
@@ -103,10 +99,15 @@ function Hero() {
             letterSpacing: "-0.02em",
           }}
         >
-          <span>Create </span>
-          <span className="text-[#A7AAB0]">your site</span>
+          The{" "}
+          <span
+            className="rounded-xl px-3 py-1"
+            style={{ backgroundColor: "rgba(255,255,255,0.08)" }}
+          >
+            Cloud Coding
+          </span>
           <br />
-          <span>under a minute</span>
+          Agent...
         </h1>
 
         <p className="mt-5 max-w-md text-base text-[#A7AAB0] sm:text-lg">
@@ -132,122 +133,81 @@ function Hero() {
         </div>
       </div>
 
-      {/* Hero preview dashboard */}
-      <div className="mx-auto mt-14 w-full max-w-6xl px-4 sm:mt-20 sm:px-8">
-        <HeroPreview />
-      </div>
+      {/* Hero Illustration */}
+      <HeroIllustration />
     </section>
   )
 }
 
-function HeroPreview() {
+function HeroIllustration() {
   return (
-    <div
-      className="relative w-full overflow-hidden rounded-t-[36px] border border-b-0 border-[#2a2c30] bg-[#18191B] p-5 shadow-[0_-30px_80px_-40px_rgba(0,0,0,0.8)] sm:rounded-t-[55px] sm:p-8"
-      style={{ minHeight: 460 }}
-    >
-      {/* Top toolbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#18191B]">
-            <Code2 className="h-3.5 w-3.5 text-white/80" />
-          </div>
-          <span className="text-sm font-semibold text-white">Editor</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-[#2a2c30] bg-[#18191B] px-2.5 py-1 text-[11px] text-[#A7AAB0] sm:inline-flex">
-            <MousePointerClick className="h-3 w-3" />
-            Drag &amp; drop
-          </span>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[#2a2c30] bg-white px-3 py-1.5 text-xs font-semibold text-black"
-          >
-            <Rocket className="h-3.5 w-3.5" />
-            Publish
-          </button>
-        </div>
-      </div>
-
-      {/* Body grid: section list + browser-like preview */}
-      <div className="mt-5 grid grid-cols-12 gap-4">
-        {/* Section list */}
-        <div className="col-span-12 space-y-2 sm:col-span-4">
-          {[
-            { label: "Hero", active: true },
-            { label: "Features" },
-            { label: "Pricing" },
-            { label: "FAQ" },
-            { label: "Footer" },
-          ].map(({ label, active }) => (
-            <div
-              key={label}
-              className={`flex items-center justify-between rounded-xl border border-[#2a2c30] px-3 py-2.5 text-xs font-medium ${
-                active
-                  ? "bg-white text-black"
-                  : "bg-[#18191B] text-[#E5E7EB]"
-              }`}
-            >
-              {label}
-              <ChevronRight className="h-3.5 w-3.5 opacity-60" />
-            </div>
-          ))}
-        </div>
-
-        {/* Browser-like preview */}
-        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#18191B] sm:col-span-8">
-          <div className="flex items-center justify-between border-b border-[#2a2c30] px-4 py-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
-            </div>
-            <div className="rounded-md bg-[#18191B] px-2 py-0.5 text-[11px] text-[#A7AAB0]">
-              myportfolio.sycord.app
-            </div>
-            <div className="w-10" />
-          </div>
-          <div className="aspect-[16/10] w-full bg-gradient-to-br from-[#18191B] to-[#18191B] p-5">
-            <div className="h-2.5 w-28 rounded bg-white/80" />
-            <div className="mt-2 h-1.5 w-44 rounded bg-white/30" />
-            <div className="mt-5 grid grid-cols-3 gap-2">
-              <div className="aspect-square rounded-lg bg-white/[0.06]" />
-              <div className="aspect-square rounded-lg bg-white/[0.04]" />
-              <div className="aspect-square rounded-lg bg-white/[0.05]" />
-            </div>
-            <div className="mt-3 h-6 w-28 rounded-full bg-white/90" />
-          </div>
+    <div className="relative mx-auto mt-14 w-full max-w-6xl sm:mt-20">
+      {/*
+        Mobile: overflow hidden so illustration is half-cut at bottom.
+        Desktop (sm+): show full illustration, no height clipping.
+      */}
+      <div
+        className="relative w-full overflow-hidden sm:overflow-visible"
+        style={{
+          /* Mobile: crop to ~55% of the illustration height */
+          maxHeight: "clamp(260px, 62vw, 420px)",
+        }}
+      >
+        {/* sm+ override — remove the maxHeight clamp */}
+        <style>{`
+          @media (min-width: 640px) {
+            .hero-illus-wrapper { max-height: none !important; overflow: visible !important; }
+          }
+        `}</style>
+        <div className="hero-illus-wrapper relative w-full overflow-hidden sm:overflow-visible" style={{ maxHeight: "clamp(260px, 62vw, 420px)" }}>
+          <img
+            src="/sycord.svg"
+            alt="Sycord dashboard illustration"
+            className="w-full object-top object-cover sm:object-contain"
+            style={{
+              display: "block",
+              width: "100%",
+              /* On mobile we want top-aligned so the UI shows; desktop natural */
+            }}
+          />
+          {/* Bottom fade-out gradient — only on mobile */}
+          <div
+            className="pointer-events-none absolute bottom-0 left-0 right-0 sm:hidden"
+            style={{
+              height: "40%",
+              background:
+                "linear-gradient(to bottom, transparent 0%, #18191B 100%)",
+            }}
+          />
         </div>
       </div>
 
-      {/* Bottom row: hosting status + analytics */}
-      <div className="mt-4 grid grid-cols-12 gap-4">
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4 lg:col-span-7">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
-              <Server className="h-3.5 w-3.5" />
-              Hosting
-            </div>
-            <span className="rounded-full border border-[#2a2c30] bg-[#18191B] px-2 py-0.5 text-[11px] text-emerald-300">
-              Healthy
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            <MetricBlock label="Edge nodes" value="120+" />
-            <MetricBlock label="Avg. TTFB" value="42ms" />
-            <MetricBlock label="Cache hit" value="98%" />
-          </div>
+      {/* Decorative design line beneath mockup */}
+      <div className="relative mt-0 flex items-center justify-center sm:mt-2">
+        {/* Left line */}
+        <div
+          className="h-px flex-1"
+          style={{
+            background:
+              "linear-gradient(to right, transparent, rgba(255,255,255,0.10))",
+          }}
+        />
+        {/* Center dot cluster */}
+        <div className="mx-3 flex items-center gap-1.5">
+          <span className="h-1 w-1 rounded-full bg-white/20" />
+          <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+          <span className="h-2 w-2 rounded-full bg-white/15" />
+          <span className="h-1.5 w-1.5 rounded-full bg-white/30" />
+          <span className="h-1 w-1 rounded-full bg-white/20" />
         </div>
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4 lg:col-span-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
-              <TrendingUp className="h-3.5 w-3.5" />
-              Analytics
-            </div>
-            <span className="text-[11px] text-[#A7AAB0]">Last 7 days</span>
-          </div>
-          <Sparkline />
-        </div>
+        {/* Right line */}
+        <div
+          className="h-px flex-1"
+          style={{
+            background:
+              "linear-gradient(to left, transparent, rgba(255,255,255,0.10))",
+          }}
+        />
       </div>
     </div>
   )
@@ -290,7 +250,6 @@ function MetricBlock({ label, value }: { label: string; value: string }) {
 }
 
 function Sparkline() {
-  // Simple decorative SVG sparkline
   return (
     <svg
       viewBox="0 0 200 60"
