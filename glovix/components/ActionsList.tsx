@@ -50,6 +50,7 @@ interface ActionGroup {
     actions: StreamingAction[];
 }
 
+const SYTE_SERVICE_LOGO = 'https://sycord.site/static/syte-logo.png?v=0.9.16';
 const FILE_ICON_BASE = 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons';
 const FILE_ICON_URLS: Record<string, string> = {
     ts: `${FILE_ICON_BASE}/typescript/typescript-original.svg`,
@@ -77,6 +78,8 @@ const FILE_TOOL_NAMES = new Set([
     'deletefile', 'delete_file', 'renamefile', 'rename_file', 'batchcreatefiles',
     'file_created', 'file_modified', 'file_deleted',
 ]);
+
+const GROUPABLE_KINDS: ActionKind[] = ['thinking', 'read', 'edit', 'command', 'install', 'validate', 'search'];
 
 function parseArgs(args: unknown): Record<string, any> {
     if (!args) return {};
@@ -111,9 +114,7 @@ function groupActions(actions: StreamingAction[]): ActionGroup[] {
     for (const action of actions) {
         const kind = classifyAction(action);
         const previous = groups[groups.length - 1];
-        // File operations and commands form compact, adjacent stacks. Keep unlike
-        // operations separate so "read" is never presented as an "edit".
-        if (previous && previous.kind === kind && ['read', 'edit', 'command', 'install', 'validate', 'search'].includes(kind)) {
+        if (previous && previous.kind === kind && GROUPABLE_KINDS.includes(kind)) {
             previous.actions.push(action);
         } else {
             groups.push({ kind, actions: [action] });
@@ -148,6 +149,60 @@ function displayFileName(path: string): string {
         .join(' → ');
 }
 
+function fileExtension(path: string): string {
+    const fileName = displayFileName(path.split(' → ')[0] || path);
+    const parts = fileName.split('.');
+    return parts.length > 1 ? (parts.pop() || '').toLowerCase() : '';
+}
+
+function fileNameColor(path: string, isDark: boolean): string {
+    const ext = fileExtension(path);
+    const map: Record<string, string> = isDark
+        ? {
+            tsx: 'text-sky-400',
+            ts: 'text-sky-400',
+            jsx: 'text-amber-300',
+            js: 'text-amber-300',
+            mjs: 'text-amber-300',
+            cjs: 'text-amber-300',
+            css: 'text-zinc-400',
+            scss: 'text-zinc-400',
+            sass: 'text-zinc-400',
+            less: 'text-zinc-400',
+            json: 'text-emerald-400',
+            md: 'text-violet-300',
+            mdx: 'text-violet-300',
+            html: 'text-orange-300',
+            htm: 'text-orange-300',
+            py: 'text-yellow-300',
+            svg: 'text-pink-300',
+            yml: 'text-rose-300',
+            yaml: 'text-rose-300',
+        }
+        : {
+            tsx: 'text-sky-600',
+            ts: 'text-sky-600',
+            jsx: 'text-amber-600',
+            js: 'text-amber-600',
+            mjs: 'text-amber-600',
+            cjs: 'text-amber-600',
+            css: 'text-zinc-500',
+            scss: 'text-zinc-500',
+            sass: 'text-zinc-500',
+            less: 'text-zinc-500',
+            json: 'text-emerald-600',
+            md: 'text-violet-600',
+            mdx: 'text-violet-600',
+            html: 'text-orange-600',
+            htm: 'text-orange-600',
+            py: 'text-yellow-700',
+            svg: 'text-pink-600',
+            yml: 'text-rose-600',
+            yaml: 'text-rose-600',
+        };
+    return map[ext] || (isDark ? 'text-[#f2c45a]' : 'text-[#a16207]');
+}
+
 function getCommand(action: StreamingAction): string {
     const args = parseArgs(action.args);
     return String(args.command || args.cmd || action.displayName || action.toolName).trim();
@@ -158,10 +213,46 @@ function getSearchTerm(action: StreamingAction): string {
     return String(args.pattern || args.query || action.displayName || 'Project files').trim();
 }
 
+function getThinkingText(action: StreamingAction): string {
+    const args = parseArgs(action.args);
+    const fromArgs = String(args.notes || args.thought || args.content || args.text || '').trim();
+    if (fromArgs) return fromArgs;
+    if (action.result) return cleanResult(action.result);
+    return String(action.displayName || '').trim();
+}
+
+/** Shorten absolute workspace paths inside command strings for compact preview. */
+function compactCommand(command: string): string {
+    return command
+        .replace(/\/var\/lib\/syte\/workspaces\/[^/\s]+\/app\//g, '')
+        .replace(/\/var\/lib\/syte\/workspaces\/[^/\s]+\//g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function truncateOneLine(text: string, max = 72): string {
+    const single = text.replace(/\s+/g, ' ').trim();
+    if (single.length <= max) return single;
+    return `${single.slice(0, max - 1)}…`;
+}
+
+function thinkingPreviewLines(text: string, maxLines = 3): string {
+    const lines = text
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
+    if (lines.length === 0) return '';
+    const preview = lines.slice(0, maxLines).join('\n');
+    return lines.length > maxLines ? `${preview}\n…` : preview;
+}
+
 function actionTitle(kind: ActionKind, count: number, active: boolean): string {
     const plural = count === 1 ? '' : 's';
     const labels: Record<ActionKind, [string, string]> = {
-        thinking: ['Planning', 'Planned'],
+        thinking: [
+            count === 1 ? 'Thinking' : `Thinking · ${count} times`,
+            count === 1 ? 'Thought 1 time' : `Thought ${count} times`,
+        ],
         search: ['Searching project', 'Searched project'],
         read: [`Reading ${count} file${plural}`, `Read ${count} file${plural}`],
         edit: [`Editing ${count} file${plural}`, `Edited ${count} file${plural}`],
@@ -241,117 +332,251 @@ function ActionStatus({ action, isDark }: { action: StreamingAction; isDark: boo
     return <Check className={cn('size-4 shrink-0', isDark ? 'text-emerald-300' : 'text-emerald-600')} aria-label="Completed" />;
 }
 
+function ConnectorBar({ isDark, active }: { isDark: boolean; active: boolean }) {
+    return (
+        <span
+            aria-hidden="true"
+            className={cn(
+                'mt-0.5 w-[2px] min-h-[1.25rem] flex-1 rounded-full',
+                active ? 'bg-blue-400/55' : isDark ? 'bg-white/18' : 'bg-black/15',
+            )}
+        />
+    );
+}
+
 const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGroup; isDark: boolean }) {
-    const [open, setOpen] = useState(group.actions.some(action => action.status === 'error'));
+    const [open, setOpen] = useState(false);
     const active = group.actions.some(action => action.status === 'running' || action.status === 'pending');
     const failed = group.actions.some(action => action.status === 'error');
-    const expandable = group.actions.some(action => action.result || getFilePaths(action).length > 0 || action.args);
+    const hasDetails = group.actions.some(action => {
+        if (group.kind === 'thinking') return Boolean(getThinkingText(action));
+        return Boolean(action.result) || getFilePaths(action).length > 0 || Boolean(action.args);
+    });
     const Icon = kindIcon(group.kind);
     const isFileGroup = group.kind === 'read' || group.kind === 'edit';
-    const previewItems = isFileGroup
-        ? group.actions.flatMap(action => getFilePaths(action).map((path, index) => ({
-            key: `${action.id}-${index}`,
-            text: path,
-            isFile: true,
-        })))
-        : group.actions.map(action => ({
-            key: action.id,
-            text: group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
-                ? getCommand(action)
-                : group.kind === 'search'
-                    ? getSearchTerm(action)
-                    : action.displayName || action.toolName,
-            isFile: false,
-        }));
+    const isThinking = group.kind === 'thinking';
+
+    const previewItems = isThinking
+        ? []
+        : isFileGroup
+            ? group.actions.flatMap(action => getFilePaths(action).map((path, index) => ({
+                key: `${action.id}-${index}`,
+                text: path,
+                fullText: path,
+                isFile: true,
+                isService: false,
+            })))
+            : group.actions.map(action => {
+                const raw = group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
+                    ? getCommand(action)
+                    : group.kind === 'search'
+                        ? getSearchTerm(action)
+                        : action.displayName || action.toolName;
+                const compact = group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
+                    ? compactCommand(raw)
+                    : raw;
+                return {
+                    key: action.id,
+                    text: compact,
+                    fullText: raw,
+                    isFile: false,
+                    isService: group.kind === 'service',
+                };
+            });
+
     const effectiveItems = previewItems.length > 0
         ? previewItems
-        : group.actions.map(action => ({ key: action.id, text: action.displayName || action.toolName, isFile: false }));
-    const visibleItems = open ? effectiveItems : effectiveItems.slice(0, 3);
+        : (!isThinking
+            ? group.actions.map(action => ({
+                key: action.id,
+                text: action.displayName || action.toolName,
+                fullText: action.displayName || action.toolName,
+                isFile: false,
+                isService: group.kind === 'service',
+            }))
+            : []);
+
+    const collapsedLimit = isFileGroup ? 3 : 2;
+    const visibleItems = open ? effectiveItems : effectiveItems.slice(0, collapsedLimit);
     const hiddenCount = Math.max(0, effectiveItems.length - visibleItems.length);
-    const itemCount = effectiveItems.length;
+    const itemCount = isThinking ? group.actions.length : (effectiveItems.length || group.actions.length);
+
+    const thinkingText = isThinking
+        ? group.actions.map(getThinkingText).filter(Boolean).join('\n\n')
+        : '';
+    const showThinkingPreview = isThinking && !active && Boolean(thinkingText);
+    const expandable = hasDetails || hiddenCount > 0 || Boolean(thinkingText);
 
     return (
         <Collapsible open={open} onOpenChange={setOpen} disabled={!expandable}>
-            <CollapsibleTrigger asChild>
-                <button
-                    type="button"
-                    className={cn(
-                        'group/tool w-full rounded-lg px-2 py-2 text-left transition-colors',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50',
-                        expandable && (isDark ? 'hover:bg-white/[0.055]' : 'hover:bg-black/[0.045]'),
-                        active && 'bg-gradient-to-r from-blue-500/10 to-transparent',
-                    )}
-                >
-                    <span className="flex min-h-7 items-center gap-2.5">
-                        <Icon className={cn('size-4 shrink-0', group.kind === 'edit' || group.kind === 'preview' ? 'text-blue-400' : group.kind === 'validate' || group.kind === 'install' ? 'text-violet-400' : isDark ? 'text-white/65' : 'text-gray-500')} strokeWidth={1.8} />
-                        <span className={cn('min-w-0 flex-1 text-sm font-semibold', isDark ? 'text-white/85' : 'text-gray-800')}>
-                            {actionTitle(group.kind, itemCount, active)}
-                        </span>
-                        <span className={cn('hidden text-xs sm:inline', failed ? 'text-red-400' : active ? 'text-blue-400' : isDark ? 'text-white/40' : 'text-gray-400')}>
-                            {failed ? 'Needs attention' : active ? 'Running' : 'Completed'}
-                        </span>
-                        <ActionStatus action={failed ? group.actions.find(action => action.status === 'error')! : active ? group.actions.find(action => action.status === 'running' || action.status === 'pending')! : group.actions[group.actions.length - 1]} isDark={isDark} />
-                    </span>
-
-                    <span className="mt-1.5 block space-y-1 pl-6 pr-1">
-                        {visibleItems.map(item => {
-                            const label = item.isFile ? displayFileName(item.text) : item.text;
-                            return (
-                                <span key={item.key} className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
-                                    {item.isFile ? <FileTypeIcon path={item.text} isDark={isDark} /> : <span className="size-4 shrink-0" />}
-                                    <span className={cn(
-                                        'truncate font-[family-name:var(--font-agent-mono)]',
-                                        item.isFile
-                                            ? isDark ? 'text-[#f2c45a]' : 'text-[#a16207]'
-                                            : isDark ? 'text-white/50' : 'text-gray-500',
-                                    )} title={item.text}>
-                                        {label}
-                                    </span>
-                                </span>
-                            );
-                        })}
-                        {hiddenCount > 0 && (
-                            <span className={cn('block pl-6 text-xs underline-offset-2 group-hover/tool:underline', isDark ? 'text-white/35' : 'text-gray-400')}>
-                                See more ({hiddenCount})
-                            </span>
+            <div className="rounded-lg px-2 py-2">
+                <div className="flex min-h-7 items-center gap-2.5">
+                    <Icon
+                        className={cn(
+                            'size-4 shrink-0',
+                            group.kind === 'edit' || group.kind === 'preview'
+                                ? 'text-blue-400'
+                                : group.kind === 'validate' || group.kind === 'install'
+                                    ? 'text-violet-400'
+                                    : isDark ? 'text-white/65' : 'text-gray-500',
                         )}
-                    </span>
-                </button>
-            </CollapsibleTrigger>
-
-            <CollapsibleContent className="ml-6 pl-2">
-                <div className="space-y-3 py-2">
-                    {group.actions.map(action => {
-                        const files = getFilePaths(action);
-                        const result = action.result ? cleanResult(action.result) : '';
-                        const detailLabel = files.length > 0
-                            ? files.map(displayFileName).join(', ')
-                            : (group.kind === 'command' || group.kind === 'install' || group.kind === 'validate' ? getCommand(action) : action.displayName || action.toolName);
-                        return (
-                            <div key={action.id} className="min-w-0">
-                                <div className={cn('flex items-start gap-2 text-xs', isDark ? 'text-white/45' : 'text-gray-500')}>
-                                    <ActionStatus action={action} isDark={isDark} />
-                                    <span
-                                        className={cn('min-w-0 whitespace-pre-wrap break-all font-[family-name:var(--font-agent-mono)] leading-5', files.length > 0 && (isDark ? 'text-[#f2c45a]/80' : 'text-[#a16207]'))}
-                                        title={files.length > 0 ? files.join(', ') : undefined}
-                                    >
-                                        {detailLabel}
-                                    </span>
-                                </div>
-                                {result && (
-                                    <pre className={cn(
-                                        'mt-2 max-h-[360px] overflow-auto whitespace-pre-wrap break-words rounded-lg border p-3 font-[family-name:var(--font-agent-mono)] text-xs leading-5',
-                                        isDark ? 'border-white/10 bg-black/20 text-[#b3b6c2]' : 'border-black/10 bg-black/[0.035] text-gray-600',
-                                    )}>
-                                        {result.slice(0, 6000)}
-                                        {result.length > 6000 ? '\n… output truncated' : ''}
-                                    </pre>
-                                )}
-                            </div>
-                        );
-                    })}
+                        strokeWidth={1.8}
+                    />
+                    <CollapsibleTrigger asChild disabled={!expandable}>
+                        <button
+                            type="button"
+                            className={cn(
+                                'flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left transition-colors',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50',
+                                expandable && (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.03]'),
+                            )}
+                        >
+                            <span className={cn('min-w-0 flex-1 text-sm font-semibold', isDark ? 'text-white/85' : 'text-gray-800')}>
+                                {actionTitle(group.kind, itemCount, active)}
+                            </span>
+                            <span className={cn('hidden text-xs sm:inline', failed ? 'text-red-400' : active ? 'text-blue-400' : isDark ? 'text-white/40' : 'text-gray-400')}>
+                                {failed ? 'Needs attention' : active ? 'Running' : 'Completed'}
+                            </span>
+                            <ActionStatus
+                                action={
+                                    failed
+                                        ? group.actions.find(action => action.status === 'error')!
+                                        : active
+                                            ? group.actions.find(action => action.status === 'running' || action.status === 'pending')!
+                                            : group.actions[group.actions.length - 1]
+                                }
+                                isDark={isDark}
+                            />
+                        </button>
+                    </CollapsibleTrigger>
                 </div>
-            </CollapsibleContent>
+
+                {(visibleItems.length > 0 || showThinkingPreview || hiddenCount > 0) && (
+                    <div className="mt-1.5 flex gap-2.5">
+                        <span className="flex w-4 shrink-0 flex-col items-center">
+                            <ConnectorBar isDark={isDark} active={active} />
+                        </span>
+                        <div className="min-w-0 flex-1 space-y-1 pr-1">
+                            {showThinkingPreview && (
+                                <CollapsibleTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'block w-full whitespace-pre-wrap text-left text-[13px] leading-5',
+                                            open ? '' : 'line-clamp-3',
+                                            isDark ? 'text-white/55' : 'text-gray-500',
+                                        )}
+                                    >
+                                        {open ? thinkingText : thinkingPreviewLines(thinkingText, 3)}
+                                    </button>
+                                </CollapsibleTrigger>
+                            )}
+
+                            {visibleItems.map(item => {
+                                const label = item.isFile
+                                    ? displayFileName(item.text)
+                                    : truncateOneLine(item.text);
+                                return (
+                                    <span key={item.key} className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
+                                        {item.isFile ? (
+                                            <FileTypeIcon path={item.fullText} isDark={isDark} />
+                                        ) : item.isService ? (
+                                            <img
+                                                src={SYTE_SERVICE_LOGO}
+                                                alt=""
+                                                aria-hidden="true"
+                                                className="size-3.5 shrink-0 object-contain"
+                                            />
+                                        ) : (
+                                            <span className="size-4 shrink-0" />
+                                        )}
+                                        <span
+                                            className={cn(
+                                                'truncate font-[family-name:var(--font-agent-mono)]',
+                                                item.isFile
+                                                    ? fileNameColor(item.fullText, isDark)
+                                                    : isDark ? 'text-white/50' : 'text-gray-500',
+                                            )}
+                                            title={item.fullText}
+                                        >
+                                            {label}
+                                        </span>
+                                    </span>
+                                );
+                            })}
+
+                            {hiddenCount > 0 && !open && (
+                                <CollapsibleTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'block pl-6 text-left text-xs underline-offset-2 hover:underline',
+                                            isDark ? 'text-white/35' : 'text-gray-400',
+                                        )}
+                                    >
+                                        See more ({hiddenCount})
+                                    </button>
+                                </CollapsibleTrigger>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <CollapsibleContent>
+                    {!isThinking && (
+                        <div className="mt-2 flex gap-2.5">
+                            <span className="flex w-4 shrink-0 flex-col items-center">
+                                <ConnectorBar isDark={isDark} active={active} />
+                            </span>
+                            <div className="min-w-0 flex-1 space-y-3 py-1">
+                                {group.actions.map(action => {
+                                    const files = getFilePaths(action);
+                                    const result = action.result ? cleanResult(action.result) : '';
+                                    const detailLabel = files.length > 0
+                                        ? files.map(displayFileName).join(', ')
+                                        : (group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
+                                            ? compactCommand(getCommand(action))
+                                            : action.displayName || action.toolName);
+                                    return (
+                                        <div key={action.id} className="min-w-0">
+                                            <div className={cn('flex items-start gap-2 text-xs', isDark ? 'text-white/45' : 'text-gray-500')}>
+                                                {group.kind === 'service' ? (
+                                                    <img
+                                                        src={SYTE_SERVICE_LOGO}
+                                                        alt=""
+                                                        aria-hidden="true"
+                                                        className="mt-0.5 size-3.5 shrink-0 object-contain"
+                                                    />
+                                                ) : (
+                                                    <ActionStatus action={action} isDark={isDark} />
+                                                )}
+                                                <span
+                                                    className={cn(
+                                                        'min-w-0 whitespace-pre-wrap break-all font-[family-name:var(--font-agent-mono)] leading-5',
+                                                        files.length > 0 && fileNameColor(files[0], isDark),
+                                                    )}
+                                                    title={files.length > 0 ? files.join(', ') : getCommand(action)}
+                                                >
+                                                    {detailLabel}
+                                                </span>
+                                            </div>
+                                            {result && (
+                                                <pre className={cn(
+                                                    'mt-2 max-h-[240px] overflow-auto whitespace-pre-wrap break-words rounded-lg border p-3 font-[family-name:var(--font-agent-mono)] text-xs leading-5',
+                                                    isDark ? 'border-white/10 bg-black/20 text-[#b3b6c2]' : 'border-black/10 bg-black/[0.035] text-gray-600',
+                                                )}>
+                                                    {result.slice(0, 4000)}
+                                                    {result.length > 4000 ? '\n… output truncated' : ''}
+                                                </pre>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </CollapsibleContent>
+            </div>
         </Collapsible>
     );
 });

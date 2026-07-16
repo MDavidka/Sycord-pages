@@ -2693,6 +2693,13 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
 
     // Use finalized time if available, otherwise live elapsed time
     const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
+    const isLive = Boolean(startTime) && thinkingTime === undefined;
+    const thoughtCount = Math.max(1, thinking.split(/\n{2,}/).filter(part => part.trim()).length);
+    const title = isLive
+        ? 'Thinking'
+        : thoughtCount === 1
+            ? 'Thought 1 time'
+            : `Thought ${thoughtCount} times`;
 
     return (
         <div className="mb-3 animate-fade-in px-1">
@@ -2707,14 +2714,19 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
                 </span>
                 <span className="min-w-0 flex-1">
                     <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
-                        Thinking
+                        {title}
                         {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
                     </span>
-                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                        {thinking}
-                    </span>
+                    {/* While live, keep body hidden; after finish show 2–3 lines (openable). */}
+                    {!isLive && (
+                        <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+                            {thinking}
+                        </span>
+                    )}
                 </span>
-                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
+                {!isLive && (
+                    <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
+                )}
             </button>
         </div>
     );
