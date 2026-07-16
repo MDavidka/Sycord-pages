@@ -105,11 +105,17 @@ function Hero() {
           </h1>
         </div>
 
-        {/* shadcn Button — pill shape, white, inline arrow, matching the reference image */}
+        {/* Free badge bar — matches reference image exactly */}
+        <div className="inline-flex items-center overflow-hidden rounded-full border border-[#2a2c30] bg-[#1c1d20]">
+          <span className="rounded-full bg-[#2a2c30] px-4 py-2 text-sm font-bold text-white">Free</span>
+          <span className="px-4 py-2 text-sm text-[#A7AAB0]">new users can start building free</span>
+        </div>
+
+        {/* CTA button — squared corners (rounded-xl), white, inline arrow */}
         <Button
           asChild
           size="lg"
-          className="mt-10 h-auto rounded-full bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] hover:bg-white/90 hover:scale-[1.03] transition-transform"
+          className="mt-6 h-auto rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
@@ -137,14 +143,11 @@ function Hero() {
           />
         </div>
 
-        {/* caption below phone */}
-        <div className="mt-8 flex max-w-md flex-col items-center gap-3 pb-4 text-center">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#1c1d20] text-white">
-            <Sparkles className="h-5 w-5" />
-          </span>
+        {/* Flat inline caption — no background card, just icon + text end-to-end */}
+        <div className="mt-6 flex items-center justify-center gap-3 pb-6">
+          <Sparkles className="h-7 w-7 shrink-0 text-white/60" />
           <p className="text-sm leading-relaxed text-[#A7AAB0]">
-            Meet <span className="font-semibold text-white">Syra</span> — it reads your files, runs commands, and ships
-            production-ready code from any device.
+            Meet <span className="font-semibold text-white">Syra</span> — reads files, runs commands, ships production-ready code.
           </p>
         </div>
       </div>
@@ -385,7 +388,7 @@ function Pricing() {
             <Button
               asChild
               variant={p.highlighted ? "default" : "outline"}
-              className={`mt-6 rounded-full ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white"}`}
+              className={`mt-6 rounded-xl ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white"}`}
             >
               <Link href="/login">{p.cta}</Link>
             </Button>
@@ -491,10 +494,10 @@ function FinalCTA() {
         <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{letterSpacing:"-0.02em",lineHeight:1.1}}>Launch your site with AI</h2>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#A7AAB0] sm:text-lg">Build, host, and publish from one powerful platform.</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Button asChild className="rounded-full bg-white text-black hover:bg-white/90">
+          <Button asChild className="rounded-xl bg-white text-black hover:bg-white/90">
             <Link href="/login">Start for free <ArrowRight className="ml-1 h-4 w-4" /></Link>
           </Button>
-          <Button asChild variant="outline" className="rounded-full border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white">
+          <Button asChild variant="outline" className="rounded-xl border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white">
             <Link href="#showcase">See demo</Link>
           </Button>
         </div>
@@ -527,10 +530,7 @@ function Footer() {
               <ul className="mt-4 space-y-2 text-sm">
                 {c.links.map(l=>(
                   <li key={l.label}>
-                    <Link
-                      href={l.href}
-                      className="text-[#E5E7EB] transition-colors duration-150 hover:text-white"
-                    >
+                    <Link href={l.href} className="text-[#E5E7EB] transition-colors duration-150 hover:text-white">
                       {l.label}
                     </Link>
                   </li>
@@ -539,7 +539,6 @@ function Footer() {
             </div>
           ))}
         </div>
-        {/* Minimalist bold divider line — matches reference image */}
         <div className="mt-10 h-[2px] w-full rounded-full bg-white/10" />
         <div className="mt-6 flex flex-col items-start justify-between gap-4 text-xs text-[#A7AAB0] sm:flex-row sm:items-center">
           <span>© {new Date().getFullYear()} Sycord. All rights reserved.</span>
