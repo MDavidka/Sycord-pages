@@ -1,7 +1,7 @@
 import type { Message } from './ai';
 
 export type ProjectAgentEvent = {
-    type: 'session' | 'processing' | 'thinking' | 'tool_started' | 'tool_finished' | 'delta' | 'message' | 'done' | 'error';
+    type: 'session' | 'processing' | 'thinking' | 'tool_started' | 'tool_finished' | 'delta' | 'message' | 'done' | 'error' | 'screenshot' | 'stopped';
     session?: number;
     sessionAuthoritative?: boolean;
     eventId?: number;
@@ -14,6 +14,15 @@ export type ProjectAgentEvent = {
     /** Durable Turso session UUID from agent_change. */
     tursoSessionId?: string;
     requestId?: string;
+    screenshots?: AgentScreenshot[];
+};
+
+export type AgentScreenshot = {
+    id?: string;
+    viewport?: string;
+    route?: string;
+    imageUrl?: string;
+    imageBase64?: string;
 };
 
 export type StreamProjectAgentOptions = {
@@ -145,11 +154,46 @@ function eventText(event: TursoSessionEvent): string {
     return typeof preferred === 'string' ? preferred : JSON.stringify(preferred);
 }
 
+function normalizeScreenshots(payload: Record<string, unknown>, projectId?: string): AgentScreenshot[] {
+    const raw = payload.screenshots
+    const list = Array.isArray(raw) ? raw : raw ? [raw] : []
+    return list.map((item, index) => {
+        const shot = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>
+        const id = typeof shot.id === 'string' ? shot.id : typeof shot.screenshot_id === 'string' ? shot.screenshot_id : undefined
+        const imageBase64 = typeof shot.chat_image_base64 === 'string'
+            ? shot.chat_image_base64
+            : typeof shot.image_base64 === 'string'
+                ? shot.image_base64
+                : undefined
+        let imageUrl = typeof shot.image_url === 'string' ? shot.image_url : undefined
+        if (!imageUrl && id && projectId) {
+            imageUrl = `/api/projects/${encodeURIComponent(projectId)}/agent/screenshots/${encodeURIComponent(id)}?variant=full`
+        } else if (imageUrl && imageUrl.startsWith('/') && !imageUrl.startsWith('/api/projects/')) {
+            // Syte-relative path — prefer our auth proxy when we have an id
+            if (id && projectId) {
+                imageUrl = `/api/projects/${encodeURIComponent(projectId)}/agent/screenshots/${encodeURIComponent(id)}?variant=full`
+            } else {
+                imageUrl = `https://sycord.site${imageUrl}`
+            }
+        }
+        return {
+            id,
+            viewport: typeof shot.viewport === 'string' ? shot.viewport : index === 0 ? 'desktop' : 'phone',
+            route: typeof shot.route === 'string' ? shot.route : undefined,
+            imageUrl,
+            imageBase64: imageBase64
+                ? (imageBase64.startsWith('data:') ? imageBase64 : `data:image/png;base64,${imageBase64}`)
+                : undefined,
+        }
+    }).filter(shot => shot.imageUrl || shot.imageBase64)
+}
+
 function normalizeTursoEvent(
     event: TursoSessionEvent,
     session: number,
     tursoSessionId?: string,
     requestId?: string,
+    projectId?: string,
 ): ProjectAgentEvent | null {
     const payload = event.payload || {};
     const rawToolCallId = payload.tool_call_id ?? payload.call_id;
@@ -172,6 +216,15 @@ function normalizeTursoEvent(
             return { type: 'processing', ...common };
         case 'thinking':
             return { type: 'thinking', ...common };
+        case 'screenshot': {
+            const screenshots = normalizeScreenshots(payload, projectId);
+            return {
+                type: 'screenshot',
+                ...common,
+                screenshots,
+                text: event.detail || event.title || 'made a screenshot',
+            };
+        }
         case 'tool_call':
             return {
                 type: payload.phase === 'finished' ? 'tool_finished' : 'tool_started',
@@ -225,6 +278,12 @@ function normalizeTursoEvent(
             return { type: 'done', ...common };
         case 'request_failed':
             return { type: 'error', ...common };
+        case 'agent_stopped':
+            return {
+                type: 'stopped',
+                ...common,
+                text: event.detail || (typeof payload.reason === 'string' ? payload.reason : 'Agent stopped.'),
+            };
         default:
             return null;
     }
@@ -359,13 +418,18 @@ export async function pollTursoAgentSession(options: {
                 session,
                 options.tursoSessionId,
                 options.requestId,
+                options.projectId,
             );
             if (!normalized) continue;
             options.onEvent(normalized);
 
-            if (normalized.type === 'done' || normalized.type === 'error') {
+            if (normalized.type === 'done' || normalized.type === 'error' || normalized.type === 'stopped') {
                 terminal = true;
-                status = normalized.type === 'error' ? 'failed' : 'completed';
+                status = normalized.type === 'error'
+                    ? 'failed'
+                    : normalized.type === 'stopped'
+                        ? 'stopped'
+                        : 'completed';
                 break;
             }
         }
@@ -380,6 +444,15 @@ export async function pollTursoAgentSession(options: {
                     session: session || undefined,
                     eventId: eventId || undefined,
                     text: `Agent session ${status}.`,
+                    tursoSessionId: options.tursoSessionId,
+                    requestId: options.requestId,
+                });
+            } else if (status === 'stopped') {
+                options.onEvent({
+                    type: 'stopped',
+                    session: session || undefined,
+                    eventId: eventId || undefined,
+                    text: 'Agent stopped.',
                     tursoSessionId: options.tursoSessionId,
                     requestId: options.requestId,
                 });

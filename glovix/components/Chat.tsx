@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -27,6 +27,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
+import { planFromAgentUpdate } from '../lib/agent-plan';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -56,6 +57,7 @@ interface MessageGroup {
     thinkingDuration?: number;
     agentActions?: StreamingAction[];
     attachments?: FileAttachment[];
+    createdAt?: number;
     toolCalls?: {
         call: ToolCall;
         result?: string;
@@ -144,6 +146,13 @@ const getActionDisplayName = (toolName: string, args: string): string => {
                 if (parsed.action === 'updateStep' && parsed.stepId) return String(parsed.stepId).replace(/-/g, ' ');
                 if (parsed.action === 'create') return parsed.title || parsed.appType || 'new plan';
                 return parsed.action || 'pipeline';
+            case 'update_plan':
+                return Array.isArray(parsed.steps) ? `${parsed.steps.length} steps` : (parsed.title || 'plan');
+            case 'screenshot_preview':
+            case 'screenshot':
+                return parsed.route || parsed.viewport || 'preview';
+            case 'service':
+                return parsed.action || parsed.name || 'service';
             case 'deploy': return 'sycord.site';
             default: return '';
         }
@@ -174,6 +183,9 @@ const getActionDisplayName = (toolName: string, args: string): string => {
                 return extract('pattern') || extract('query');
             case 'batchCreateFiles': return 'Multiple files';
             case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
+            case 'update_plan': return 'plan';
+            case 'screenshot_preview':
+            case 'screenshot': return extract('route') || 'preview';
             case 'getErrors': return 'Workspace';
             case 'setDomain': return extract('domain') || 'domain';
             case 'startPreview': return 'preview';
@@ -182,6 +194,13 @@ const getActionDisplayName = (toolName: string, args: string): string => {
         }
     }
 };
+
+function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (plan: any) => void) {
+    const name = toolName.toLowerCase();
+    if (name !== 'update_plan' && name !== 'planning') return;
+    const next = planFromAgentUpdate(args, useStore.getState().generationPlan);
+    if (next) setGenerationPlan(next);
+}
 
 function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
     selectedModel: ModelType
@@ -258,6 +277,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
     const generationPlan = useStore(s => s.generationPlan);
+    const setGenerationPlan = useStore(s => s.setGenerationPlan);
     const modelLearnLog = useStore(s => s.modelLearnLog);
     const addModelLearnEntry = useStore(s => s.addModelLearnEntry);
     const showModelLearn = useStore(s => s.showModelLearn);
@@ -571,6 +591,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         for (const action of (msg as any).agentActions as StreamingAction[]) byId.set(action.id, action);
                         currentGroup.agentActions = Array.from(byId.values());
                     }
+                    if (!currentGroup.createdAt && (msg as any).createdAt) {
+                        currentGroup.createdAt = (msg as any).createdAt;
+                    }
                 } else {
                     if (currentGroup) groups.push(currentGroup);
 
@@ -588,6 +611,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         thinking: (msg as any).thinking,
                         thinkingDuration: (msg as any).thinkingDuration,
                         agentActions: Array.isArray((msg as any).agentActions) ? (msg as any).agentActions : undefined,
+                        createdAt: (msg as any).createdAt,
                         toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
                         segments
                     };
@@ -633,11 +657,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, [messages]);
 
     const handleStop = () => {
+        const projectId = getHostProjectId();
+        if (projectId) {
+            // Cancel the durable Syte turn (interrupt), not only the local poller.
+            // Docs: https://sycord.site/api/#agent
+            void fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/interrupt`, {
+                method: 'POST',
+                headers: { Accept: 'application/json' },
+            }).catch(() => { /* local abort still runs */ });
+        }
         if (abortControllerRef.current) {
             // Keep loading state and controller ownership until the active request's
             // finally block runs, preventing a new request from racing old cleanup.
             abortControllerRef.current.abort();
             setCurrentThinking('');
+            setThinkingStartTime(null);
         }
     };
 
@@ -923,6 +957,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
                                     : JSON.stringify(event.arguments || {});
+                                syncPlanFromTool(tool, event.arguments ?? args, setGenerationPlan);
                                 const key = event.toolCallId || tool;
                                 const actionId = addAction(tool, getActionDisplayName(tool, args), {
                                     id: event.toolCallId
@@ -948,6 +983,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
                                     : JSON.stringify(event.arguments || {});
+                                syncPlanFromTool(tool, event.arguments ?? args, setGenerationPlan);
                                 if (!actionId) {
                                     actionId = addAction(tool, getActionDisplayName(tool, args) || event.title || '', {
                                         id: event.toolCallId
@@ -967,6 +1003,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 });
                                 break;
                             }
+                            case 'screenshot': {
+                                const shots = event.screenshots || [];
+                                addAction('screenshot_preview', event.title || event.text || 'made a screenshot', {
+                                    id: `agent_${tursoSessionId}_shot_${event.eventId || Date.now()}`,
+                                    eventId: event.eventId,
+                                    status: 'done',
+                                    completedAt: Date.now(),
+                                    screenshots: shots,
+                                    result: event.text,
+                                });
+                                break;
+                            }
                             case 'delta':
                                 assistantContent += event.text || '';
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
@@ -979,6 +1027,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 assistantContent = event.text || assistantContent || 'Done.';
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
+                                markAgentTimelineLoaded();
+                                break;
+                            case 'stopped':
+                                if (!replayHistoryOnly && !assistantContent) {
+                                    updateLastMessage(event.text || 'Stopped.');
+                                }
+                                completed = true;
+                                replaceActions(actionsRef.current.map(action =>
+                                    action.status === 'running' || action.status === 'pending'
+                                        ? { ...action, status: 'done' as const, completedAt: Date.now() }
+                                        : action
+                                ));
                                 markAgentTimelineLoaded();
                                 break;
                             case 'error':
@@ -1120,6 +1180,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
                         : JSON.stringify(event.arguments || {});
+                    syncPlanFromTool(tool, event.arguments ?? args, setGenerationPlan);
                     const actionId = addAction(tool, getActionDisplayName(tool, args), {
                         id: event.toolCallId
                             ? `agent_${tursoSessionId}_${event.toolCallId}`
@@ -1144,6 +1205,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
                         : JSON.stringify(event.arguments || {});
+                    syncPlanFromTool(tool, event.arguments ?? args, setGenerationPlan);
                     if (!actionId) {
                         actionId = addAction(tool, getActionDisplayName(tool, args) || event.title || '', {
                             id: event.toolCallId
@@ -1163,6 +1225,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     });
                     break;
                 }
+                case 'screenshot': {
+                    const shots = event.screenshots || [];
+                    addAction('screenshot_preview', event.title || event.text || 'made a screenshot', {
+                        id: `agent_${tursoSessionId}_shot_${event.eventId || Date.now()}`,
+                        eventId: event.eventId,
+                        status: 'done',
+                        completedAt: Date.now(),
+                        screenshots: shots,
+                        result: event.text,
+                    });
+                    break;
+                }
                 case 'delta':
                     assistantContent += event.text || '';
                     updateLastMessage(assistantContent);
@@ -1175,6 +1249,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     assistantContent = event.text || assistantContent || 'Done.';
                     updateLastMessage(assistantContent);
                     completed = true;
+                    markAgentTimelineLoaded();
+                    break;
+                case 'stopped':
+                    if (!assistantContent) updateLastMessage(event.text || 'Stopped.');
+                    completed = true;
+                    replaceActions(actionsRef.current.map(action =>
+                        action.status === 'running' || action.status === 'pending'
+                            ? { ...action, status: 'done' as const, completedAt: Date.now() }
+                            : action
+                    ));
                     markAgentTimelineLoaded();
                     break;
                 case 'error':
@@ -1218,10 +1302,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             persistCursor();
 
             if (controller.signal.aborted) {
-                updateLastMessage(
-                    assistantContent ||
-                        'Stopped listening. Reopen this project to reload the agent activity from Turso.',
-                );
+                updateLastMessage(assistantContent || 'Stopped.');
+                markAgentTimelineLoaded();
                 return;
             }
             if (errorText) throw new Error(errorText);
@@ -1234,10 +1316,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
         } catch (error: any) {
             if (controller.signal.aborted) {
-                updateLastMessage(
-                    assistantContent ||
-                        'Stopped listening. Reopen this project to reload the agent activity from Turso.',
-                );
+                updateLastMessage(assistantContent || 'Stopped.');
+                markAgentTimelineLoaded();
             } else {
                 const msg = String(error?.message || '');
                 const looksTransient =
@@ -2351,6 +2431,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     {isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
+                                    <MessageMetaFooter
+                                        content={group.content}
+                                        createdAt={group.createdAt}
+                                        isDark={isDark}
+                                        hide={idx === groupedMessages.length - 1 && isLoading}
+                                    />
                                 </>
                             ) : (
                                 <>
@@ -2401,6 +2487,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     {/* Live actions for assistant without segments */}
                                     {group.role === 'assistant' && isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                    )}
+                                    {group.role === 'assistant' && (
+                                        <MessageMetaFooter
+                                            content={group.content}
+                                            createdAt={group.createdAt}
+                                            isDark={isDark}
+                                            hide={idx === groupedMessages.length - 1 && isLoading}
+                                        />
                                     )}
                                 </>
                             )}
@@ -2673,6 +2767,57 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     );
 }
 
+function MessageMetaFooter({
+    content,
+    createdAt,
+    isDark,
+    hide,
+}: {
+    content: ContentType;
+    createdAt?: number;
+    isDark: boolean;
+    hide?: boolean;
+}) {
+    const [copied, setCopied] = useState(false);
+    const text = typeof content === 'string'
+        ? content
+        : Array.isArray(content)
+            ? content.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text).join('\n')
+            : '';
+
+    if (hide || !text.trim()) return null;
+
+    const timeLabel = new Date(createdAt || Date.now()).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(text.replace(/^\[SYSTEM\] .*/gm, '').trim());
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1500);
+        } catch {
+            /* ignore */
+        }
+    };
+
+    return (
+        <div className="mt-2 flex items-center justify-end gap-2 px-1">
+            <span className={`text-xs tabular-nums ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{timeLabel}</span>
+            <button
+                type="button"
+                onClick={handleCopy}
+                aria-label="Copy message"
+                className={`flex size-7 items-center justify-center rounded-md transition-colors ${isDark ? 'text-white/40 hover:bg-white/[0.06] hover:text-white/70' : 'text-gray-400 hover:bg-black/[0.04] hover:text-gray-700'}`}
+            >
+                {copied ? <CheckIcon className="size-3.5" strokeWidth={2} /> : <Copy className="size-3.5" strokeWidth={1.8} />}
+            </button>
+        </div>
+    );
+}
+
 function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [elapsed, setElapsed] = useState(0);
@@ -2693,6 +2838,13 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
 
     // Use finalized time if available, otherwise live elapsed time
     const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
+    const isLive = Boolean(startTime) && thinkingTime === undefined;
+    const thoughtCount = Math.max(1, thinking.split(/\n{2,}/).filter(part => part.trim()).length);
+    const title = isLive
+        ? 'Thinking'
+        : thoughtCount === 1
+            ? 'Thought 1 time'
+            : `Thought ${thoughtCount} times`;
 
     return (
         <div className="mb-3 animate-fade-in px-1">
@@ -2707,14 +2859,19 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
                 </span>
                 <span className="min-w-0 flex-1">
                     <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
-                        Thinking
+                        {title}
                         {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
                     </span>
-                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                        {thinking}
-                    </span>
+                    {/* While live, keep body hidden; after finish show 2–3 lines (openable). */}
+                    {!isLive && (
+                        <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+                            {thinking}
+                        </span>
+                    )}
                 </span>
-                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
+                {!isLive && (
+                    <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
+                )}
             </button>
         </div>
     );
