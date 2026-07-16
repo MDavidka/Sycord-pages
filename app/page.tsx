@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Cloud,
-  Code2,
   Database,
   Globe,
   LayoutTemplate,
@@ -54,9 +53,6 @@ export default function LandingPage() {
   )
 }
 
-/* ─────────────────────────────────────────
-   HERO
-───────────────────────────────────────── */
 function Hero() {
   return (
     <section
@@ -68,22 +64,12 @@ function Hero() {
         backgroundSize: "38px 38px",
       }}
     >
-      {/* ── Navbar ── */}
+      {/* Navbar */}
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
-          <Image
-            src="/logo.png"
-            alt="Sycord"
-            width={36}
-            height={36}
-            priority
-            className="h-8 w-8 opacity-90"
-          />
-          <span className="text-sm font-semibold tracking-tight text-white">
-            sycord
-          </span>
+          <Image src="/logo.png" alt="Sycord" width={36} height={36} priority className="h-8 w-8 opacity-90" />
+          <span className="text-sm font-semibold tracking-tight text-white">sycord</span>
         </Link>
-
         <Link
           href="/login"
           className="rounded-full border border-[#2a2c30] bg-[#18191B] px-5 py-2 text-sm font-medium text-[#E5E7EB] transition-colors hover:bg-[#212327]"
@@ -92,7 +78,7 @@ function Hero() {
         </Link>
       </header>
 
-      {/* ── Headline ── */}
+      {/* Headline */}
       <div className="mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-14 text-center sm:pt-20">
         <h1
           className="font-extrabold tracking-tight text-white"
@@ -113,11 +99,6 @@ function Hero() {
           Agent...
         </h1>
 
-        <p className="mt-5 max-w-sm text-sm text-[#6B6F78] sm:text-base">
-          AI generates your website. We host it on a fast, secure, global
-          network — no setup required.
-        </p>
-
         <div className="mt-8 flex items-center gap-3">
           <Link
             href="/login"
@@ -135,53 +116,38 @@ function Hero() {
         </div>
       </div>
 
-      {/* ── Illustration ── */}
+      {/* Illustration */}
       <HeroMockup />
     </section>
   )
 }
 
-/* ─────────────────────────────────────────
-   HERO MOCKUP  — phone (left) + desktop (right)
-   Mobile: bottom-half fades into bg
-───────────────────────────────────────── */
 function HeroMockup() {
   return (
     <div className="relative mx-auto mt-12 w-full max-w-5xl px-4 sm:mt-16 sm:px-8">
-      {/*
-        Clipping wrapper:
-        • mobile  → overflow-hidden + fixed max-height so image is half-cut
-        • sm+     → overflow-visible + no max-height
-      */}
       <div
         className="relative overflow-hidden sm:overflow-visible"
         style={{ maxHeight: "clamp(220px, 58vw, 380px)" }}
       >
-        {/* sm+ reset via inline style tag */}
         <style>{`@media(min-width:640px){.hmw{max-height:none!important;overflow:visible!important}}`}</style>
 
         <div className="hmw relative" style={{ maxHeight: "clamp(220px, 58vw, 380px)" }}>
           <div className="flex items-start justify-center gap-3 sm:gap-5">
 
-            {/* ── Phone mockup ── */}
+            {/* Phone */}
             <div className="w-[38%] flex-shrink-0 sm:w-[30%]">
               <div
                 className="relative w-full overflow-hidden rounded-[28px] border border-[#2a2c30] bg-[#111213]"
                 style={{ aspectRatio: "9/19" }}
               >
-                {/* Phone status bar */}
                 <div className="flex items-center justify-between px-4 pt-3 pb-1">
                   <span className="text-[9px] font-semibold text-white/60">17:04</span>
                   <div className="h-1 w-12 rounded-full bg-white/10" />
                   <span className="text-[9px] text-white/40">S M</span>
                 </div>
-
-                {/* Back arrow */}
                 <div className="px-3 py-1">
                   <div className="h-1.5 w-3 rounded bg-white/20" />
                 </div>
-
-                {/* Chat header */}
                 <div className="flex items-center gap-2 px-3 py-2">
                   <div className="h-6 w-6 rounded-full bg-[#2a2c30]" />
                   <div className="space-y-1">
@@ -189,8 +155,6 @@ function HeroMockup() {
                     <div className="h-1 w-10 rounded bg-white/20" />
                   </div>
                 </div>
-
-                {/* Chat bubble — AI response card */}
                 <div className="mx-2 mt-2 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-2.5">
                   <div className="mb-1.5 flex items-center gap-1.5">
                     <div className="h-3 w-3 rounded bg-[#2a2c30]" />
@@ -202,9 +166,7 @@ function HeroMockup() {
                     <div className="h-1 w-full rounded bg-white/15" />
                     <div className="h-1 w-3/5 rounded bg-white/10" />
                   </div>
-
-                  {/* Sub-items */}
-                  {["Design System", "Navbar", "Hosting"].map((lbl, i) => (
+                  {["Design System", "Navbar", "Hosting"].map((lbl) => (
                     <div key={lbl} className="mt-2 flex items-start gap-1">
                       <div className="mt-0.5 h-1 w-1 flex-shrink-0 rounded-full bg-white/30" />
                       <div className="space-y-0.5">
@@ -213,14 +175,10 @@ function HeroMockup() {
                       </div>
                     </div>
                   ))}
-
                   <p className="mt-2 text-[7px] leading-tight text-[#6B6F78]">
-                    Help you write code, debug and ship
-                    production-ready work.
+                    Help you write code, debug and ship production-ready work.
                   </p>
                 </div>
-
-                {/* Bottom input bar */}
                 <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1.5 border-t border-[#2a2c30] bg-[#111213] px-2 py-2">
                   <div className="flex-1 rounded-xl border border-[#2a2c30] bg-[#18191B] px-2 py-1">
                     <div className="h-1 w-16 rounded bg-white/15" />
@@ -232,9 +190,8 @@ function HeroMockup() {
               </div>
             </div>
 
-            {/* ── Desktop dashboard mockup ── */}
+            {/* Desktop */}
             <div className="flex-1 overflow-hidden rounded-t-[20px] border border-b-0 border-[#2a2c30] bg-[#111213] sm:rounded-t-[28px]">
-              {/* Top bar */}
               <div className="flex items-center justify-between border-b border-[#2a2c30] px-4 py-2.5">
                 <div className="flex items-center gap-2">
                   <Image src="/logo.png" alt="" width={18} height={18} className="opacity-70" />
@@ -242,14 +199,9 @@ function HeroMockup() {
                 </div>
                 <div className="h-1.5 w-1.5 rounded-full bg-[#2a2c30]" />
               </div>
-
-              {/* Body: sidebar + chat */}
               <div className="flex" style={{ minHeight: 240 }}>
-                {/* Sidebar */}
                 <div className="hidden w-36 flex-shrink-0 border-r border-[#2a2c30] p-3 sm:block">
                   <div className="mb-3 text-[9px] font-semibold uppercase tracking-widest text-[#4B4F58]">Platform</div>
-
-                  {/* Nav items */}
                   {[
                     { label: "Main", active: true },
                     { label: "Overview" },
@@ -261,28 +213,16 @@ function HeroMockup() {
                     <div
                       key={label}
                       className={`mb-0.5 flex items-center gap-1.5 rounded-lg px-2 py-1 text-[9px] font-medium ${
-                        active
-                          ? "bg-[#1e2022] text-white"
-                          : accent
-                          ? "text-[#7C6FF5]"
-                          : "text-[#6B6F78]"
+                        active ? "bg-[#1e2022] text-white" : accent ? "text-[#7C6FF5]" : "text-[#6B6F78]"
                       }`}
                     >
-                      <div
-                        className={`h-2.5 w-2.5 rounded-sm ${
-                          active ? "bg-white/20" : "bg-[#2a2c30]"
-                        }`}
-                      />
+                      <div className={`h-2.5 w-2.5 rounded-sm ${active ? "bg-white/20" : "bg-[#2a2c30]"}`} />
                       {label}
                     </div>
                   ))}
-
-                  {/* Bottom user row */}
                   <div className="mt-4 border-t border-[#2a2c30] pt-3">
                     <div className="flex items-center gap-1.5">
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2c30] text-[8px] font-bold text-white">
-                        A
-                      </div>
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#2a2c30] text-[8px] font-bold text-white">A</div>
                       <div className="space-y-0.5">
                         <div className="h-1 w-14 rounded bg-white/30" />
                         <div className="h-1 w-8 rounded bg-white/10" />
@@ -290,17 +230,12 @@ function HeroMockup() {
                     </div>
                   </div>
                 </div>
-
-                {/* Chat area */}
                 <div className="flex flex-1 flex-col">
-                  {/* Welcome message */}
                   <div className="flex-1 px-4 pt-4">
                     <div className="mb-3 inline-block rounded-2xl bg-[#1e2022] px-3 py-2 text-[10px] text-[#A7AAB0]">
                       Hey! 👋 How can I help you today?
                     </div>
                   </div>
-
-                  {/* Bottom input */}
                   <div className="border-t border-[#2a2c30] p-3">
                     <div className="flex items-center gap-2 rounded-xl border border-[#2a2c30] bg-[#18191B] px-3 py-2">
                       <div className="h-1 w-32 rounded bg-white/10" />
@@ -314,9 +249,7 @@ function HeroMockup() {
                         <div className="h-3 w-12 rounded bg-[#2a2c30]" />
                         <span className="text-[7px] text-[#4B4F58]">↓</span>
                       </div>
-                      <p className="text-[8px] text-[#4B4F58]">
-                        Help you write code, debug and ship production-ready work.
-                      </p>
+                      <p className="text-[8px] text-[#4B4F58]">Help you write code, debug and ship production-ready work.</p>
                     </div>
                   </div>
                 </div>
@@ -326,22 +259,15 @@ function HeroMockup() {
           </div>
         </div>
 
-        {/* Mobile bottom fade — hidden on sm+ */}
+        {/* Mobile fade */}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 sm:hidden"
-          style={{
-            height: "45%",
-            background: "linear-gradient(to bottom, transparent 0%, #18191B 90%)",
-          }}
+          style={{ height: "45%", background: "linear-gradient(to bottom, transparent 0%, #18191B 90%)" }}
         />
       </div>
     </div>
   )
 }
-
-/* ─────────────────────────────────────────
-   REST OF PAGE (unchanged)
-───────────────────────────────────────── */
 
 function MetricBlock({ label, value }: { label: string; value: string }) {
   return (
@@ -349,21 +275,6 @@ function MetricBlock({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] uppercase tracking-wider text-[#A7AAB0]">{label}</div>
       <div className="mt-1 text-base font-semibold text-white">{value}</div>
     </div>
-  )
-}
-
-function Sparkline() {
-  return (
-    <svg viewBox="0 0 200 60" className="mt-3 h-16 w-full" preserveAspectRatio="none" aria-hidden="true">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.25)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </linearGradient>
-      </defs>
-      <path d="M0,45 L20,40 L40,42 L60,30 L80,33 L100,22 L120,28 L140,18 L160,22 L180,12 L200,16 L200,60 L0,60 Z" fill="url(#g)" />
-      <path d="M0,45 L20,40 L40,42 L60,30 L80,33 L100,22 L120,28 L140,18 L160,22 L180,12 L200,16" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
-    </svg>
   )
 }
 
@@ -458,27 +369,6 @@ function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: stri
       <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#18191B] text-white">{icon}</span>
       <h3 className="mt-5 text-base font-semibold text-white">{title}</h3>
       <p className="mt-2 text-sm text-[#A7AAB0]">{body}</p>
-    </div>
-  )
-}
-
-function ShowcaseLine({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span className="text-white/80">{icon}</span>
-      {children}
-    </li>
-  )
-}
-
-function PanelStat({ label, value, suffix, accent }: { label: string; value: string; suffix?: string; accent?: "emerald" }) {
-  return (
-    <div className="rounded-2xl border border-[#2a2c30] bg-[#18191B] p-3">
-      <div className="text-[11px] uppercase tracking-wider text-[#A7AAB0]">{label}</div>
-      <div className="mt-1 flex items-baseline gap-1.5">
-        <span className={`text-lg font-semibold ${accent === "emerald" ? "text-emerald-300" : "text-white"}`}>{value}</span>
-        {suffix ? <span className="text-[11px] text-[#A7AAB0]">{suffix}</span> : null}
-      </div>
     </div>
   )
 }
