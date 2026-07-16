@@ -33,7 +33,7 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* subtle diagonal band, like the reference */}
+      {/* subtle diagonal band */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0"
@@ -81,9 +81,9 @@ function Hero() {
         </nav>
       ) : null}
 
-      {/* Headline block — fills most of first viewport so the phone is cut at the fold */}
+      {/* Headline block */}
       <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center justify-center px-5 text-center" style={{ minHeight: "min(52svh, 560px)" }}>
-        {/* dotted grid only behind the headline, like the reference */}
+        {/* dotted grid only behind the headline */}
         <div className="relative w-full px-2 py-10 sm:py-12">
           <div
             aria-hidden="true"
@@ -105,10 +105,10 @@ function Hero() {
           </h1>
         </div>
 
-        {/* Squared CTA button — white pill with dark square icon box */}
+        {/* Squared CTA button — matches reference: white rectangle with inline arrow → */}
         <Link
           href="/login"
-          className="mt-8 inline-flex items-center gap-3 rounded-2xl bg-white px-6 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] transition-transform hover:scale-[1.03] sm:px-7"
+          className="mt-10 inline-flex items-center gap-3 rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] transition-transform hover:scale-[1.03] sm:px-8 sm:py-4"
         >
           Start for free
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-zinc-950 text-white">
@@ -117,8 +117,8 @@ function Hero() {
         </Link>
       </div>
 
-      {/* Phone illustration — intentionally crosses the fold, revealed fully on scroll */}
-      <div className="relative z-10 mx-auto mt-12 flex w-full flex-col items-center px-5 sm:mt-16">
+      {/* Phone illustration */}
+      <div className="relative z-10 mx-auto mt-16 flex w-full flex-col items-center px-5 sm:mt-20">
         <div className="relative w-[min(88vw,340px)] sm:w-[380px] lg:w-[420px]">
           <div
             aria-hidden="true"
@@ -136,7 +136,7 @@ function Hero() {
           />
         </div>
 
-        {/* little text + icon revealed with the bottom of the phone */}
+        {/* caption below phone */}
         <div className="mt-8 flex max-w-md flex-col items-center gap-3 pb-4 text-center">
           <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#1c1d20] text-white">
             <Sparkles className="h-5 w-5" />
@@ -198,7 +198,7 @@ function HowItWorks() {
   )
 }
 
-/* ── Custom card illustrations (built in-DOM to stay crisp and on-theme) ── */
+/* ── Custom card illustrations ── */
 
 function IlloPrompt() {
   return (
@@ -488,8 +488,8 @@ function FinalCTA() {
         <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{letterSpacing:"-0.02em",lineHeight:1.1}}>Launch your site with AI</h2>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#A7AAB0] sm:text-lg">Build, host, and publish from one powerful platform.</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/login" className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black transition-transform hover:scale-[1.02]">Start for free <ArrowRight className="h-4 w-4"/></Link>
-          <Link href="#showcase" className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#212327]">See demo</Link>
+          <Link href="/login" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition-transform hover:scale-[1.02]">Start for free <ArrowRight className="h-4 w-4"/></Link>
+          <Link href="#showcase" className="inline-flex items-center gap-2 rounded-xl border border-[#2a2c30] bg-[#18191B] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#212327]">See demo</Link>
         </div>
       </div>
     </section>
@@ -522,7 +522,7 @@ function Footer() {
                   <li key={l.label}>
                     <Link
                       href={l.href}
-                      className="text-[#E5E7EB] border-b border-transparent pb-px transition-colors duration-150 hover:text-white hover:border-white/70"
+                      className="relative text-[#E5E7EB] transition-colors duration-150 hover:text-white after:absolute after:left-0 after:-bottom-px after:h-px after:w-0 after:bg-white/40 after:transition-[width] after:duration-200 hover:after:w-full"
                     >
                       {l.label}
                     </Link>
@@ -535,9 +535,9 @@ function Footer() {
         <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[#2a2c30] pt-6 text-xs text-[#A7AAB0] sm:flex-row sm:items-center">
           <span>© {new Date().getFullYear()} Sycord. All rights reserved.</span>
           <div className="flex items-center gap-3">
-            <Link href="/tos" className="border-b border-transparent pb-px transition-colors duration-150 hover:text-white hover:border-white/70">Terms</Link>
+            <Link href="/tos" className="relative text-[#A7AAB0] transition-colors duration-150 hover:text-white after:absolute after:left-0 after:-bottom-px after:h-px after:w-0 after:bg-white/40 after:transition-[width] after:duration-200 hover:after:w-full">Terms</Link>
             <span>·</span>
-            <Link href="/pap" className="border-b border-transparent pb-px transition-colors duration-150 hover:text-white hover:border-white/70">Privacy</Link>
+            <Link href="/pap" className="relative text-[#A7AAB0] transition-colors duration-150 hover:text-white after:absolute after:left-0 after:-bottom-px after:h-px after:w-0 after:bg-white/40 after:transition-[width] after:duration-200 hover:after:w-full">Privacy</Link>
           </div>
         </div>
       </div>
