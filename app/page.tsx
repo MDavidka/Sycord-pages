@@ -9,9 +9,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  Activity,
   ArrowRight,
-  BarChart3,
   Briefcase,
   CheckCircle2,
   ChevronRight,
@@ -30,7 +28,6 @@ import {
   Smartphone,
   Sparkles,
   Star,
-  TrendingUp,
   User,
   Wand2,
   Zap,
@@ -56,265 +53,69 @@ export default function LandingPage() {
 /* ---------- Hero ---------- */
 function Hero() {
   return (
-    <section
-      className="relative w-full overflow-hidden"
-      style={{
-        backgroundColor: "#18191B",
-        backgroundImage:
-          "radial-gradient(rgba(255,255,255,0.07) 1.6px, transparent 1.6px)",
-        backgroundSize: "38px 38px",
-        backgroundPosition: "0 0",
-      }}
-    >
+    <section className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden bg-[#0a0a0a] md:min-h-0 md:overflow-visible">
       {/* Header */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
-        <Link href="/" aria-label="Home" className="inline-flex items-center">
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-7">
+        <Link
+          href="/"
+          aria-label="Sycord home"
+          className="inline-flex items-center gap-2.5"
+        >
           <Image
             src="/logo.png"
-            alt="logo"
-            width={56}
-            height={56}
+            alt=""
+            width={36}
+            height={36}
             priority
-            className="h-9 w-9 opacity-90 sm:h-10 sm:w-10"
+            className="h-8 w-8 opacity-90 sm:h-9 sm:w-9"
           />
+          <span className="text-[17px] font-medium lowercase tracking-tight text-white sm:text-lg">
+            sycord
+          </span>
         </Link>
 
         <Link
-          href="/dashboard"
-          aria-label="Open dashboard"
-          className="flex items-center gap-1.5 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-2.5 py-1.5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_8px_24px_-12px_rgba(0,0,0,0.6)] transition-colors hover:bg-[#212327]"
+          href="/login"
+          className="rounded-full border border-white/25 px-4 py-1.5 text-sm font-medium lowercase tracking-tight text-white transition-colors hover:border-white/40 hover:bg-white/5"
         >
-          <span className="hidden text-xs font-medium text-[#A7AAB0] sm:inline">
-            Dashboard
-          </span>
-          <span className="flex h-6 w-6 items-center justify-center rounded-xl bg-[#18191B] text-xs font-semibold text-white">
-            M
-          </span>
+          sign in
         </Link>
       </header>
 
       {/* Headline */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col items-center px-5 pt-16 text-center sm:pt-24">
+      <div className="relative z-20 mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-5 pb-2 pt-8 text-center md:flex-none md:pb-6 md:pt-16">
         <h1
-          className="font-extrabold tracking-tight text-white"
+          className="font-semibold tracking-tight text-white"
           style={{
-            fontSize: "clamp(38px, 9.5vw, 72px)",
-            lineHeight: 1.05,
-            letterSpacing: "-0.02em",
+            fontSize: "clamp(32px, 8.5vw, 64px)",
+            lineHeight: 1.15,
+            letterSpacing: "-0.03em",
           }}
         >
-          <span>Create </span>
-          <span className="text-[#A7AAB0]">your site</span>
+          <span className="inline-flex flex-wrap items-center justify-center gap-x-2.5 gap-y-2">
+            <span>The</span>
+            <span className="inline-flex items-center rounded-full bg-[#1c1c1e] px-3.5 py-1 sm:px-4 sm:py-1.5">
+              Cloud Coding
+            </span>
+          </span>
           <br />
-          <span>under a minute</span>
+          <span>Agent...</span>
         </h1>
-
-        <p className="mt-5 max-w-md text-base text-[#A7AAB0] sm:text-lg">
-          AI generates your website. We host it on a fast, secure, global
-          network — no setup required.
-        </p>
-
-        {/* CTAs */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-white px-5 py-3 text-sm font-semibold text-black transition-transform hover:scale-[1.02]"
-          >
-            Start for free
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-          <Link
-            href="#showcase"
-            className="inline-flex items-center gap-2 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-5 py-3 text-sm font-semibold text-[#E5E7EB] transition-colors hover:bg-[#212327]"
-          >
-            See demo
-          </Link>
-        </div>
       </div>
 
-      {/* Hero preview dashboard */}
-      <div className="mx-auto mt-14 w-full max-w-6xl px-4 sm:mt-20 sm:px-8">
-        <HeroPreview />
+      {/* Illustration — half-cut on mobile, full on desktop */}
+      <div className="relative z-10 mx-auto mt-auto w-full max-w-5xl flex-shrink-0 md:mt-4 md:max-w-4xl md:px-8 md:pb-10">
+        <div className="relative h-[34vh] w-full overflow-hidden md:h-auto md:overflow-visible">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/sycord.svg"
+            alt="Sycord product preview on phone and laptop"
+            className="pointer-events-none absolute left-1/2 top-0 h-auto w-[155%] max-w-none -translate-x-1/2 select-none md:relative md:left-auto md:top-auto md:w-full md:translate-x-0"
+            draggable={false}
+          />
+        </div>
       </div>
     </section>
-  )
-}
-
-function HeroPreview() {
-  return (
-    <div
-      className="relative w-full overflow-hidden rounded-t-[36px] border border-b-0 border-[#2a2c30] bg-[#18191B] p-5 shadow-[0_-30px_80px_-40px_rgba(0,0,0,0.8)] sm:rounded-t-[55px] sm:p-8"
-      style={{ minHeight: 460 }}
-    >
-      {/* Top toolbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#18191B]">
-            <Code2 className="h-3.5 w-3.5 text-white/80" />
-          </div>
-          <span className="text-sm font-semibold text-white">Editor</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-[#2a2c30] bg-[#18191B] px-2.5 py-1 text-[11px] text-[#A7AAB0] sm:inline-flex">
-            <MousePointerClick className="h-3 w-3" />
-            Drag &amp; drop
-          </span>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[#2a2c30] bg-white px-3 py-1.5 text-xs font-semibold text-black"
-          >
-            <Rocket className="h-3.5 w-3.5" />
-            Publish
-          </button>
-        </div>
-      </div>
-
-      {/* Body grid: section list + browser-like preview */}
-      <div className="mt-5 grid grid-cols-12 gap-4">
-        {/* Section list */}
-        <div className="col-span-12 space-y-2 sm:col-span-4">
-          {[
-            { label: "Hero", active: true },
-            { label: "Features" },
-            { label: "Pricing" },
-            { label: "FAQ" },
-            { label: "Footer" },
-          ].map(({ label, active }) => (
-            <div
-              key={label}
-              className={`flex items-center justify-between rounded-xl border border-[#2a2c30] px-3 py-2.5 text-xs font-medium ${
-                active
-                  ? "bg-white text-black"
-                  : "bg-[#18191B] text-[#E5E7EB]"
-              }`}
-            >
-              {label}
-              <ChevronRight className="h-3.5 w-3.5 opacity-60" />
-            </div>
-          ))}
-        </div>
-
-        {/* Browser-like preview */}
-        <div className="col-span-12 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#18191B] sm:col-span-8">
-          <div className="flex items-center justify-between border-b border-[#2a2c30] px-4 py-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#2a2c30]" />
-            </div>
-            <div className="rounded-md bg-[#18191B] px-2 py-0.5 text-[11px] text-[#A7AAB0]">
-              myportfolio.sycord.app
-            </div>
-            <div className="w-10" />
-          </div>
-          <div className="aspect-[16/10] w-full bg-gradient-to-br from-[#18191B] to-[#18191B] p-5">
-            <div className="h-2.5 w-28 rounded bg-white/80" />
-            <div className="mt-2 h-1.5 w-44 rounded bg-white/30" />
-            <div className="mt-5 grid grid-cols-3 gap-2">
-              <div className="aspect-square rounded-lg bg-white/[0.06]" />
-              <div className="aspect-square rounded-lg bg-white/[0.04]" />
-              <div className="aspect-square rounded-lg bg-white/[0.05]" />
-            </div>
-            <div className="mt-3 h-6 w-28 rounded-full bg-white/90" />
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom row: hosting status + analytics */}
-      <div className="mt-4 grid grid-cols-12 gap-4">
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4 lg:col-span-7">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
-              <Server className="h-3.5 w-3.5" />
-              Hosting
-            </div>
-            <span className="rounded-full border border-[#2a2c30] bg-[#18191B] px-2 py-0.5 text-[11px] text-emerald-300">
-              Healthy
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            <MetricBlock label="Edge nodes" value="120+" />
-            <MetricBlock label="Avg. TTFB" value="42ms" />
-            <MetricBlock label="Cache hit" value="98%" />
-          </div>
-        </div>
-        <div className="col-span-12 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4 lg:col-span-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">
-              <TrendingUp className="h-3.5 w-3.5" />
-              Analytics
-            </div>
-            <span className="text-[11px] text-[#A7AAB0]">Last 7 days</span>
-          </div>
-          <Sparkline />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StatusCard({
-  icon,
-  title,
-  value,
-  tag,
-}: {
-  icon: React.ReactNode
-  title: string
-  value: string
-  tag: string
-}) {
-  return (
-    <div className="rounded-2xl border border-[#2a2c30] bg-[#18191B] p-3">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#A7AAB0]">
-        {icon}
-        {title}
-      </div>
-      <div className="mt-1.5 truncate text-sm font-semibold text-white">
-        {value}
-      </div>
-      <div className="mt-0.5 text-[11px] text-[#A7AAB0]">{tag}</div>
-    </div>
-  )
-}
-
-function MetricBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-[#2a2c30] bg-[#18191B] p-3">
-      <div className="text-[11px] uppercase tracking-wider text-[#A7AAB0]">
-        {label}
-      </div>
-      <div className="mt-1 text-base font-semibold text-white">{value}</div>
-    </div>
-  )
-}
-
-function Sparkline() {
-  // Simple decorative SVG sparkline
-  return (
-    <svg
-      viewBox="0 0 200 60"
-      className="mt-3 h-16 w-full"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.25)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M0,45 L20,40 L40,42 L60,30 L80,33 L100,22 L120,28 L140,18 L160,22 L180,12 L200,16 L200,60 L0,60 Z"
-        fill="url(#g)"
-      />
-      <path
-        d="M0,45 L20,40 L40,42 L60,30 L80,33 L100,22 L120,28 L140,18 L160,22 L180,12 L200,16"
-        fill="none"
-        stroke="rgba(255,255,255,0.7)"
-        strokeWidth="1.5"
-      />
-    </svg>
   )
 }
 
