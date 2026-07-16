@@ -76,179 +76,489 @@ function Hero() {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   HERO MOCKUP  —  iPhone 15 Pro + MacBook Pro (CSS frames)
+   HERO MOCKUP — iPhone 15 Pro + MacBook Pro
+   Mobile: stacked, iPhone on top centered, MacBook below
+   Desktop: side-by-side, iPhone left, MacBook right
 ───────────────────────────────────────────────────────────── */
 function HeroMockup() {
   return (
-    <div className="relative mx-auto mt-12 w-full max-w-5xl px-4 sm:mt-16 sm:px-8">
+    <div className="relative mx-auto mt-10 w-full max-w-5xl px-4 pb-0 sm:mt-16 sm:px-8">
       <style>{`
-        @media(min-width:640px){
-          .hm-clip{max-height:none!important;overflow:visible!important}
+        /* ── glow backdrop ── */
+        .hm-glow {
+          position:absolute;
+          inset:0;
+          pointer-events:none;
+          background: radial-gradient(ellipse 70% 50% at 55% 60%, rgba(124,111,245,0.13) 0%, transparent 70%),
+                      radial-gradient(ellipse 40% 40% at 20% 70%, rgba(255,255,255,0.04) 0%, transparent 65%);
         }
-        /* MacBook lid */
-        .mac-lid{
-          background:#1a1a1c;
-          border:2.5px solid #3a3a3c;
-          border-radius:14px 14px 0 0;
-          padding:10px 10px 0;
-          box-shadow:0 0 0 1px #111 inset;
+
+        /* ── MacBook shell ── */
+        .mac-shell {
+          display:flex;
+          flex-direction:column;
+          filter: drop-shadow(0 32px 64px rgba(0,0,0,0.7));
         }
-        /* MacBook base */
-        .mac-base{
-          background:linear-gradient(to bottom,#2a2a2c,#222224);
+        .mac-lid {
+          background: linear-gradient(160deg,#2c2c2e 0%,#1c1c1e 60%);
+          border: 2px solid #3a3a3c;
+          border-bottom: none;
+          border-radius: 16px 16px 0 0;
+          padding: 12px 12px 0;
+          position: relative;
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset;
+        }
+        /* notch cutout */
+        .mac-notch {
+          position:absolute;
+          top:-2px; left:50%; transform:translateX(-50%);
+          width:88px; height:12px;
+          background:#1c1c1e;
+          border-radius:0 0 10px 10px;
           border:2px solid #3a3a3c;
           border-top:none;
-          border-radius:0 0 6px 6px;
-          height:14px;
-          position:relative;
+          z-index:5;
         }
-        .mac-base::after{
+        /* FaceTime dot in notch */
+        .mac-notch::after {
           content:'';
           position:absolute;
-          left:50%;transform:translateX(-50%);
-          top:3px;
-          width:60px;height:5px;
-          background:#111;border-radius:3px;
+          top:4px; left:50%; transform:translateX(-50%);
+          width:5px; height:5px;
+          background:#2a2a2c;
+          border-radius:50%;
+          box-shadow:0 0 0 1px rgba(255,255,255,0.06);
         }
-        /* iPhone */
-        .iphone{
+        .mac-screen {
+          border-radius:8px;
+          overflow:hidden;
           background:#111213;
-          border:3px solid #3a3a3c;
-          border-radius:40px;
           position:relative;
-          box-shadow:0 0 0 1px #555 inset, 0 20px 60px rgba(0,0,0,0.6);
         }
-        .iphone::before{
+        .mac-base {
+          height:16px;
+          background: linear-gradient(to bottom,#3a3a3c,#2a2a2c);
+          border: 2px solid #3a3a3c;
+          border-top: 1.5px solid #555;
+          border-radius: 0 0 8px 8px;
+          position:relative;
+        }
+        /* trackpad indent */
+        .mac-base::after {
           content:'';
           position:absolute;
-          top:10px;left:50%;transform:translateX(-50%);
-          width:60px;height:6px;
-          background:#222;border-radius:6px;
+          top:4px; left:50%; transform:translateX(-50%);
+          width:72px; height:6px;
+          background:rgba(0,0,0,0.35);
+          border-radius:4px;
+        }
+        /* hinge edge reflection */
+        .mac-base::before {
+          content:'';
+          position:absolute;
+          top:0; left:10%; right:10%; height:1px;
+          background:rgba(255,255,255,0.09);
+        }
+
+        /* ── iPhone 15 Pro ── */
+        .iphone-shell {
+          background: linear-gradient(160deg,#3a3a3c 0%,#1c1c1e 70%);
+          border-radius: 44px;
+          position: relative;
+          box-shadow:
+            0 0 0 1.5px #555 inset,
+            0 0 0 2.5px #1c1c1e inset,
+            0 28px 72px rgba(0,0,0,0.75),
+            0 8px 24px rgba(0,0,0,0.5);
+        }
+        /* dynamic island */
+        .iphone-island {
+          position:absolute;
+          top:14px; left:50%; transform:translateX(-50%);
+          width:72px; height:9px;
+          background:#000;
+          border-radius:8px;
           z-index:10;
+          box-shadow:0 0 0 1px rgba(255,255,255,0.04);
         }
-        /* volume/power buttons */
-        .iphone::after{
+        /* front camera dot in island */
+        .iphone-island::after {
           content:'';
           position:absolute;
-          left:-5px;top:80px;
-          width:3px;height:28px;
-          background:#3a3a3c;border-radius:2px;
-          box-shadow:0 36px 0 #3a3a3c, 62px -46px 0 2px #3a3a3c;
+          top:50%; right:10px; transform:translateY(-50%);
+          width:5px; height:5px;
+          background:#1a1a1c;
+          border-radius:50%;
+          box-shadow:0 0 0 1.5px rgba(255,255,255,0.04), inset 0 0 3px rgba(100,200,255,0.08);
+        }
+        /* volume buttons left */
+        .iphone-btn-vol {
+          position:absolute;
+          left:-3.5px;
+          top:88px;
+          width:3.5px;
+          height:26px;
+          background: linear-gradient(to right,#2a2a2c,#444);
+          border-radius:2px 0 0 2px;
+          box-shadow:0 38px 0 #3a3a3c,0 68px 0 #3a3a3c;
+        }
+        /* power button right */
+        .iphone-btn-pwr {
+          position:absolute;
+          right:-3.5px;
+          top:104px;
+          width:3.5px;
+          height:36px;
+          background: linear-gradient(to left,#2a2a2c,#444);
+          border-radius:0 2px 2px 0;
+        }
+        .iphone-screen {
+          margin: 12px 7px 10px;
+          border-radius:34px;
+          overflow:hidden;
+          background:#111213;
+          height:calc(100% - 22px);
+          position:relative;
+        }
+
+        /* ── Mac inner UI ── */
+        .mac-titlebar {
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          padding:6px 10px;
+          border-bottom:1px solid #2a2c30;
+          background:#111213;
+          flex-shrink:0;
+        }
+        .mac-traffic-dot {
+          width:10px; height:10px;
+          border-radius:50%;
+          display:inline-block;
+        }
+        .mac-sidebar {
+          width:100px;
+          border-right:1px solid #1e2022;
+          padding:10px 8px;
+          flex-shrink:0;
+          background:#0e0f10;
+          overflow:hidden;
+        }
+        .mac-chat {
+          flex:1;
+          display:flex;
+          flex-direction:column;
+          overflow:hidden;
+          background:#111213;
+        }
+        .mac-chat-messages {
+          flex:1;
+          padding:10px 12px;
+          display:flex;
+          flex-direction:column;
+          gap:7px;
+          overflow:hidden;
+        }
+        .mac-bubble {
+          display:inline-block;
+          max-width:80%;
+          padding:6px 10px;
+          border-radius:14px;
+          font-size:7px;
+          line-height:1.4;
+          color:#A7AAB0;
+          background:#1e2022;
+        }
+        .mac-bubble.user {
+          align-self:flex-end;
+          background:#7C6FF5;
+          color:#fff;
+        }
+        .mac-inputbar {
+          padding:8px 10px;
+          border-top:1px solid #1e2022;
+          display:flex;
+          align-items:center;
+          gap:6px;
+          background:#0e0f10;
+          flex-shrink:0;
+        }
+        .mac-inputfield {
+          flex:1;
+          border-radius:8px;
+          border:1px solid #2a2c30;
+          background:#18191B;
+          padding:5px 8px;
+          display:flex;
+          align-items:center;
+        }
+
+        /* ── iPhone inner UI ── */
+        .ip-statusbar {
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          padding:6px 16px 2px;
+          flex-shrink:0;
+        }
+        .ip-card {
+          margin:6px 8px;
+          border-radius:16px;
+          border:1px solid #2a2c30;
+          background:#18191B;
+          padding:8px;
+          overflow:hidden;
+        }
+        .ip-bubble {
+          border-radius:12px;
+          padding:5px 8px;
+          font-size:6.5px;
+          line-height:1.5;
+          color:#A7AAB0;
+          background:#1e2022;
+          margin:4px 6px;
+          display:inline-block;
+          max-width:72%;
+        }
+        .ip-bubble.user {
+          align-self:flex-end;
+          background:#7C6FF5;
+          color:#fff;
+          margin-left:auto;
+          display:block;
+        }
+        .ip-inputbar {
+          position:absolute;
+          bottom:0; left:0; right:0;
+          padding:6px 8px 10px;
+          border-top:1px solid #2a2c30;
+          background:#111213;
+          display:flex;
+          align-items:center;
+          gap:5px;
+        }
+        .ip-inputfield {
+          flex:1;
+          border-radius:20px;
+          border:1px solid #2a2c30;
+          background:#18191B;
+          padding:4px 10px;
+          display:flex;
+          align-items:center;
+        }
+
+        /* ── Layout wrappers ── */
+        /* Mobile: stacked */
+        .hm-wrap {
+          display:flex;
+          flex-direction:column;
+          align-items:center;
+          gap:0;
+        }
+        /* Desktop: side by side, aligned at bottom */
+        @media(min-width:640px) {
+          .hm-wrap {
+            flex-direction:row;
+            align-items:flex-end;
+            justify-content:center;
+            gap:20px;
+          }
+        }
+
+        /* iPhone sizing */
+        .hm-iphone {
+          width: clamp(148px, 34vw, 220px);
+          flex-shrink:0;
+          position:relative;
+          z-index:2;
+        }
+        .hm-iphone-inner {
+          aspect-ratio:9/19.5;
+          position:relative;
+        }
+        /* on mobile, iPhone sits above and is a bit smaller */
+        @media(max-width:639px) {
+          .hm-iphone {
+            width: clamp(120px, 42vw, 170px);
+            margin-bottom: -16px;
+            z-index:3;
+          }
+        }
+
+        /* MacBook sizing */
+        .hm-mac {
+          flex:1;
+          min-width:0;
+          max-width: 640px;
+        }
+        @media(max-width:639px) {
+          .hm-mac {
+            width:100%;
+            max-width:100%;
+          }
+        }
+
+        /* bottom fade on mobile only */
+        .hm-fade {
+          display:none;
+        }
+        @media(max-width:639px) {
+          .hm-fade {
+            display:block;
+            position:absolute;
+            inset-x:0; bottom:0;
+            height:80px;
+            background:linear-gradient(to bottom, transparent 0%, #18191B 100%);
+            pointer-events:none;
+          }
         }
       `}</style>
 
-      {/* Clip wrapper for mobile */}
-      <div className="hm-clip relative overflow-hidden" style={{ maxHeight: "clamp(240px, 62vw, 420px)" }}>
-        <div className="flex items-end justify-center gap-4 sm:gap-6">
+      {/* Glow */}
+      <div className="hm-glow" />
 
-          {/* ── iPhone 15 Pro ── */}
-          <div className="iphone flex-shrink-0" style={{ width: "clamp(88px,18vw,140px)", aspectRatio: "9/19.5" }}>
-            {/* Screen */}
-            <div className="absolute inset-[3px] rounded-[36px] overflow-hidden bg-[#111213]" style={{ top: 3, left: 3, right: 3, bottom: 3 }}>
-              {/* Status bar */}
-              <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                <span className="text-[7px] font-semibold text-white/60">17:04</span>
-                <div className="flex items-center gap-0.5">
-                  <div className="h-1 w-1 rounded-full bg-white/40" />
-                  <div className="h-1 w-1 rounded-full bg-white/40" />
-                  <div className="h-1 w-3 rounded-sm bg-white/40" />
-                </div>
-              </div>
-              {/* Dynamic island */}
-              <div className="mx-auto mt-1 h-3 w-14 rounded-full bg-black" />
-              {/* Chat bubble */}
-              <div className="mx-2 mt-3 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-2">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <div className="h-3 w-3 rounded bg-[#2a2c30]" />
-                  <div className="h-1.5 w-16 rounded bg-white/40" />
-                </div>
-                <div className="space-y-1">
-                  <div className="h-1 w-full rounded bg-white/15" />
-                  <div className="h-1 w-4/5 rounded bg-white/10" />
-                  <div className="h-1 w-full rounded bg-white/15" />
-                  <div className="h-1 w-3/5 rounded bg-white/10" />
-                </div>
-                {["Design System","Navbar","Hosting"].map(lbl=>(
-                  <div key={lbl} className="mt-1.5 flex items-start gap-1">
-                    <div className="mt-0.5 h-1 w-1 flex-shrink-0 rounded-full bg-white/30" />
-                    <div className="space-y-0.5">
-                      <div className="h-1 w-10 rounded bg-white/30" />
-                      <div className="h-1 w-14 rounded bg-white/10" />
-                    </div>
+      <div className="hm-wrap relative">
+
+        {/* ──────── iPhone 15 Pro ──────── */}
+        <div className="hm-iphone">
+          <div className="hm-iphone-inner">
+            <div className="iphone-shell" style={{ width: "100%", height: "100%", position: "absolute", inset: 0 }}>
+              {/* buttons */}
+              <div className="iphone-btn-vol" />
+              <div className="iphone-btn-pwr" />
+              {/* screen */}
+              <div className="iphone-screen" style={{ position: "absolute", inset: 0, margin: "10px 6px 8px" }}>
+                {/* Dynamic island */}
+                <div className="iphone-island" />
+                {/* status bar */}
+                <div className="ip-statusbar">
+                  <span style={{ fontSize: 6, fontWeight: 600, color: "rgba(255,255,255,0.55)" }}>9:41</span>
+                  <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
+                    <div style={{ width: 10, height: 5, borderRadius: 2, background: "rgba(255,255,255,0.3)" }} />
+                    <div style={{ width: 3, height: 5, borderRadius: 1, background: "rgba(255,255,255,0.25)" }} />
+                    <div style={{ width: 4, height: 5, borderRadius: 1, background: "rgba(255,255,255,0.25)" }} />
                   </div>
-                ))}
-              </div>
-              {/* Bottom bar */}
-              <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1 border-t border-[#2a2c30] bg-[#111213] px-2 py-1.5">
-                <div className="flex-1 rounded-xl border border-[#2a2c30] bg-[#18191B] px-2 py-1">
-                  <div className="h-1 w-12 rounded bg-white/15" />
                 </div>
-                <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-[#2a2c30]">
-                  <div className="h-1.5 w-1.5 rounded-full bg-white/50" />
+                {/* chat area */}
+                <div style={{ flex: 1, overflow: "hidden", paddingTop: 18 }}>
+                  <div className="ip-bubble">Hey! How can I help you today? 👋</div>
+                  <div className="ip-bubble user">Build me a landing page</div>
+                  <div className="ip-bubble" style={{ marginTop: 4 }}>
+                    <div style={{ marginBottom: 4 }}>
+                      <div style={{ height: 1.5, width: 80, borderRadius: 2, background: "rgba(255,255,255,0.2)", marginBottom: 3 }} />
+                      <div style={{ height: 1.5, width: 60, borderRadius: 2, background: "rgba(255,255,255,0.12)" }} />
+                    </div>
+                    {["Hero section", "Features", "Pricing"].map(lbl => (
+                      <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                        <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#7C6FF5", flexShrink: 0 }} />
+                        <div style={{ height: 1.5, width: 40, borderRadius: 2, background: "rgba(255,255,255,0.2)" }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* bottom input */}
+                <div className="ip-inputbar">
+                  <div className="ip-inputfield">
+                    <div style={{ height: 1.5, width: 50, borderRadius: 2, background: "rgba(255,255,255,0.12)" }} />
+                  </div>
+                  <div style={{ width: 20, height: 20, borderRadius: 10, background: "#7C6FF5", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 1, background: "rgba(255,255,255,0.9)", clipPath: "polygon(0 100%, 50% 0, 100% 100%)" }} />
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* ── MacBook Pro ── */}
-          <div className="flex-1 flex flex-col" style={{ maxWidth: 680 }}>
+        {/* ──────── MacBook Pro ──────── */}
+        <div className="hm-mac">
+          <div className="mac-shell">
             {/* Lid */}
             <div className="mac-lid">
-              {/* Notch */}
-              <div className="relative flex justify-center -mt-1 mb-1">
-                <div className="h-2 w-20 rounded-b-xl bg-[#1a1a1c] border-x border-b border-[#3a3a3c]" />
-              </div>
-              {/* Screen content */}
-              <div className="rounded-lg overflow-hidden bg-[#111213]" style={{ aspectRatio: "16/10" }}>
-                {/* Toolbar */}
-                <div className="flex items-center justify-between border-b border-[#2a2c30] px-3 py-2">
-                  <div className="flex items-center gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#ffbd2e]" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+              <div className="mac-notch" />
+              {/* Screen */}
+              <div className="mac-screen" style={{ aspectRatio: "16/10" }}>
+                {/* Title bar */}
+                <div className="mac-titlebar">
+                  <div style={{ display: "flex", gap: 5 }}>
+                    <div className="mac-traffic-dot" style={{ background: "#ff5f57" }} />
+                    <div className="mac-traffic-dot" style={{ background: "#ffbd2e" }} />
+                    <div className="mac-traffic-dot" style={{ background: "#28c840" }} />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Image src="/logo.png" alt="" width={14} height={14} className="opacity-70" />
-                    <span className="text-[9px] font-semibold text-white">Sycord</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <Image src="/logo.png" alt="" width={12} height={12} style={{ opacity: 0.75 }} />
+                    <span style={{ fontSize: 8, fontWeight: 600, color: "#fff" }}>Sycord</span>
                   </div>
-                  <div className="h-1.5 w-1.5 rounded-full bg-[#2a2c30]" />
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#2a2c30" }} />
                 </div>
-                {/* App chrome */}
-                <div className="flex" style={{ minHeight: 0, flex: 1 }}>
+                {/* App body */}
+                <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden" }}>
                   {/* Sidebar */}
-                  <div className="hidden w-28 flex-shrink-0 border-r border-[#2a2c30] p-2.5 sm:block">
-                    <div className="mb-2 text-[7px] font-semibold uppercase tracking-widest text-[#4B4F58]">Platform</div>
-                    {[{label:"Main",active:true},{label:"Overview"},{label:"Domain"},{label:"Pages"},{label:"Syra",accent:true},{label:"Utility"}].map(({label,active,accent})=>(
-                      <div key={label} className={`mb-0.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[8px] font-medium ${
-                        active?"bg-[#1e2022] text-white":accent?"text-[#7C6FF5]":"text-[#6B6F78]"
-                      }`}>
-                        <div className={`h-2 w-2 rounded-sm ${active?"bg-white/20":"bg-[#2a2c30]"}`} />
+                  <div className="mac-sidebar">
+                    <div style={{ fontSize: 6, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#4B4F58", marginBottom: 8 }}>Platform</div>
+                    {[
+                      { label: "Dashboard", active: false },
+                      { label: "Projects", active: true },
+                      { label: "Domain" },
+                      { label: "Pages" },
+                      { label: "Syra", accent: true },
+                      { label: "Settings" },
+                    ].map(({ label, active, accent }) => (
+                      <div
+                        key={label}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          padding: "4px 6px",
+                          borderRadius: 6,
+                          marginBottom: 1,
+                          background: active ? "rgba(255,255,255,0.06)" : "transparent",
+                          fontSize: 7,
+                          fontWeight: active ? 600 : 400,
+                          color: active ? "#fff" : accent ? "#7C6FF5" : "#6B6F78",
+                        }}
+                      >
+                        <div style={{ width: 7, height: 7, borderRadius: 2, background: active ? "rgba(255,255,255,0.18)" : "#2a2c30" }} />
                         {label}
                       </div>
                     ))}
-                    <div className="mt-3 border-t border-[#2a2c30] pt-2.5">
-                      <div className="flex items-center gap-1">
-                        <div className="flex h-4 w-4 items-center justify-center rounded-full bg-[#2a2c30] text-[6px] font-bold text-white">A</div>
-                        <div className="space-y-0.5">
-                          <div className="h-1 w-12 rounded bg-white/30" />
-                          <div className="h-1 w-8 rounded bg-white/10" />
-                        </div>
+                    {/* user chip */}
+                    <div style={{ marginTop: 12, borderTop: "1px solid #1e2022", paddingTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: 8, background: "#7C6FF5", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 6, fontWeight: 700, color: "#fff", flexShrink: 0 }}>A</div>
+                      <div>
+                        <div style={{ height: 1.5, width: 36, borderRadius: 2, background: "rgba(255,255,255,0.3)", marginBottom: 3 }} />
+                        <div style={{ height: 1.5, width: 24, borderRadius: 2, background: "rgba(255,255,255,0.1)" }} />
                       </div>
                     </div>
                   </div>
-                  {/* Chat area */}
-                  <div className="flex flex-1 flex-col">
-                    <div className="flex-1 px-3 pt-3">
-                      <div className="inline-block rounded-2xl bg-[#1e2022] px-2.5 py-1.5 text-[8px] text-[#A7AAB0]">
-                        Hey! 👋 How can I help you today?
+                  {/* Chat */}
+                  <div className="mac-chat">
+                    <div className="mac-chat-messages">
+                      <div className="mac-bubble">Hey! 👋 How can I help you today?</div>
+                      <div className="mac-bubble user">Build me a landing page for Sycord</div>
+                      <div className="mac-bubble">
+                        Sure! Here&apos;s what I&apos;ll generate:
+                        <div style={{ marginTop: 5 }}>
+                          {["Hero section with CTA", "Features grid", "Pricing table", "FAQ accordion"].map(item => (
+                            <div key={item} style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3 }}>
+                              <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#7C6FF5", flexShrink: 0 }} />
+                              <span>{item}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mac-bubble user">Looks great, deploy it!</div>
+                      <div className="mac-bubble" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#28c840" }} />
+                        Deployed to <span style={{ color: "#7C6FF5", marginLeft: 3 }}>mysycord.com</span>
                       </div>
                     </div>
-                    <div className="border-t border-[#2a2c30] p-2.5">
-                      <div className="flex items-center gap-1.5 rounded-lg border border-[#2a2c30] bg-[#18191B] px-2.5 py-1.5">
-                        <div className="h-1 w-24 rounded bg-white/10" />
-                        <div className="ml-auto flex items-center gap-1">
-                          <div className="h-3.5 w-3.5 rounded-md bg-[#2a2c30]" />
-                          <div className="h-3.5 w-3.5 rounded-md bg-[#2a2c30]" />
+                    {/* Input bar */}
+                    <div className="mac-inputbar">
+                      <div className="mac-inputfield">
+                        <div style={{ height: 1.5, width: 80, borderRadius: 2, background: "rgba(255,255,255,0.1)" }} />
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                          <div style={{ width: 14, height: 14, borderRadius: 4, background: "#1e2022" }} />
+                          <div style={{ width: 14, height: 14, borderRadius: 4, background: "#7C6FF5" }} />
                         </div>
                       </div>
                     </div>
@@ -256,18 +566,15 @@ function HeroMockup() {
                 </div>
               </div>
             </div>
-            {/* Base / hinge */}
+            {/* Base */}
             <div className="mac-base" />
           </div>
-
         </div>
 
-        {/* Mobile gradient fade */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 sm:hidden"
-          style={{ height: "45%", background: "linear-gradient(to bottom, transparent 0%, #18191B 90%)" }}
-        />
       </div>
+
+      {/* bottom fade mobile only */}
+      <div className="hm-fade" />
     </div>
   )
 }
@@ -454,7 +761,7 @@ function FAQ() {
       <div className="mt-8 rounded-3xl border border-[#2a2c30] bg-[#18191B]">
         <Accordion type="single" collapsible className="w-full">
           {faqs.map((f,i)=>(
-            <AccordionItem key={f.q} value={`item-${i}`} className={`border-[#2a2c30] px-5 ${i===faqs.length-1?"border-b-0":""}` }>
+            <AccordionItem key={f.q} value={`item-${i}`} className={`border-[#2a2c30] px-5 ${i===faqs.length-1?"border-b-0":""}`}>
               <AccordionTrigger className="text-base font-semibold text-white hover:no-underline">{f.q}</AccordionTrigger>
               <AccordionContent className="text-sm text-[#A7AAB0]">{f.a}</AccordionContent>
             </AccordionItem>
