@@ -123,14 +123,32 @@ export function HeroSection() {
         </h1>
 
         {/* Compact optimized laurel badge */}
-        <div className="relative mt-5 flex w-full items-center justify-center sm:mt-6">
+        <div className="relative mt-5 flex w-full items-center justify-center gap-2.5 sm:mt-6 sm:gap-3">
           <Image
             src="/dev.svg"
-            alt="made for developers since 2026"
-            width={280}
-            height={100}
+            alt=""
+            width={48}
+            height={96}
             priority
-            className="h-auto w-[168px] sm:w-[200px]"
+            aria-hidden="true"
+            className="h-12 w-6 shrink-0 sm:h-14 sm:w-7"
+          />
+          <div className="text-center leading-tight">
+            <p className="text-[13px] font-semibold tracking-tight text-white sm:text-sm">
+              made for developers
+            </p>
+            <p className="mt-0.5 text-[11px] font-medium tracking-[0.08em] text-[#A7AAB0] sm:text-xs">
+              since 2026
+            </p>
+          </div>
+          <Image
+            src="/dev.svg"
+            alt=""
+            width={48}
+            height={96}
+            priority
+            aria-hidden="true"
+            className="h-12 w-6 shrink-0 -scale-x-100 sm:h-14 sm:w-7"
           />
         </div>
 
