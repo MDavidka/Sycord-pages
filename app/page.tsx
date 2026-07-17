@@ -122,21 +122,18 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg badge — full-size illustration */}
-        <div className="mt-8 inline-flex items-center gap-0 overflow-hidden rounded-full border border-[#2a2c30] bg-[#1c1d20]">
-          {/* illustration fills the height of the pill */}
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden">
-            <Image
-              src="/dev.svg"
-              alt="made for developer illustration"
-              width={48}
-              height={48}
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="px-4 py-2 text-left">
-            <p className="text-xs font-semibold text-white leading-tight">made fore developer</p>
-            <p className="text-[11px] text-[#A7AAB0] leading-tight">since 2026</p>
+        {/* dev.svg badge — upscaled, no background */}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <Image
+            src="/dev.svg"
+            alt="made for developer illustration"
+            width={220}
+            height={220}
+            className="h-auto w-[220px] sm:w-[260px]"
+          />
+          <div className="text-center">
+            <p className="text-sm font-semibold text-white leading-tight">made for developer</p>
+            <p className="text-xs text-[#A7AAB0] leading-tight">since 2026</p>
           </div>
         </div>
 
