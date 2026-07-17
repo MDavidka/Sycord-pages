@@ -34,7 +34,7 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* begyar.svg — smaller background, centered, not full-cover so sides are visible */}
+      {/* begyar.svg — smaller centered background, sides visible */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
         <Image
           src="/begyar.svg"
@@ -84,7 +84,7 @@ function Hero() {
         </nav>
       )}
 
-      {/* Headline + CTA */}
+      {/* Headline + dev.svg + CTA — all tightly stacked */}
       <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-16 text-center sm:pt-20">
         {/* Dot grid */}
         <div
@@ -115,8 +115,8 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg — back under title */}
-        <div className="relative mt-8">
+        {/* dev.svg — tight under title */}
+        <div className="relative mt-3">
           <Image
             src="/dev.svg"
             alt="made for developer illustration"
@@ -130,7 +130,7 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="mt-6 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-5 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
@@ -139,7 +139,7 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Phone mockup — bottom-cropped */}
+      {/* Phone mockup */}
       <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center px-5">
         <div className="relative w-[min(82vw,320px)] sm:w-[360px] lg:w-[400px]">
           <div
