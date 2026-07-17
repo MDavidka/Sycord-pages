@@ -34,14 +34,6 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* begyar.svg — anchored to top-center, not stretching section height */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-0 z-0"
-        style={{ transform: "translateX(-50%)", width: 480, height: 480 }}
-      >
-        <Image src="/begyar.svg" alt="" fill className="object-contain" priority />
-      </div>
 
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-8">
@@ -81,8 +73,8 @@ function Hero() {
         </nav>
       )}
 
-      {/* Hero content — compact stack */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-10 pb-0 text-center sm:pt-16">
+      {/* Hero content */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-10 text-center sm:pt-14">
         {/* Dot grid */}
         <div
           aria-hidden="true"
@@ -112,22 +104,34 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg — compact, right under title */}
-        <div className="mt-2">
-          <Image
-            src="/dev.svg"
-            alt="made for developer illustration"
-            width={160}
-            height={160}
-            className="h-auto w-[120px] sm:w-[150px]"
-          />
+        {/* dev.svg + begyar.svg stacked: begyar behind, dev on top */}
+        <div className="relative mt-2 flex flex-col items-center">
+          {/* begyar.svg — absolutely behind dev.svg, centered */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-1/2 z-0"
+            style={{ transform: "translate(-50%, -50%)", width: 340, height: 340 }}
+          >
+            <Image src="/begyar.svg" alt="" fill className="object-contain" priority />
+          </div>
+
+          {/* dev.svg on top */}
+          <div className="relative z-10">
+            <Image
+              src="/dev.svg"
+              alt="made for developer illustration"
+              width={140}
+              height={140}
+              className="h-auto w-[110px] sm:w-[140px]"
+            />
+          </div>
         </div>
 
-        {/* CTA */}
+        {/* CTA — tight below badge */}
         <Button
           asChild
           size="sm"
-          className="mt-4 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-3 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
