@@ -34,36 +34,41 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* subtle diagonal band */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(115deg, transparent 0%, transparent 52%, rgba(255,255,255,0.035) 52%, rgba(255,255,255,0.035) 100%)",
-        }}
-      />
+      {/* Decorative background squares */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute rounded-[32px] bg-[#1e1f22]" style={{ width: 220, height: 220, top: -40, right: -40, opacity: 0.7 }} />
+        <div className="absolute rounded-[24px] bg-[#212327]" style={{ width: 140, height: 140, top: 30, right: 60, opacity: 0.5 }} />
+        <div className="absolute rounded-[28px] bg-[#1e1f22]" style={{ width: 100, height: 100, top: "38%", left: -20, opacity: 0.45 }} />
+        <div className="absolute rounded-[28px] bg-[#212327]" style={{ width: 130, height: 130, bottom: "18%", left: 20, opacity: 0.4 }} />
+        {/* diagonal band */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: "linear-gradient(115deg, transparent 0%, transparent 52%, rgba(255,255,255,0.03) 52%, rgba(255,255,255,0.03) 100%)",
+          }}
+        />
+      </div>
 
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
-          <Image src="/logo.png" alt="Sycord" width={36} height={36} priority className="h-9 w-9 opacity-90" />
-          <span className="sr-only">Sycord home</span>
+          <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
+          <span className="text-base font-semibold text-white tracking-tight">sycord</span>
         </Link>
         <button
           type="button"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(o => !o)}
-          className="flex h-11 w-11 items-center justify-center rounded-2xl text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white"
+          className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white"
         >
-          {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </header>
 
-      {/* Menu dropdown */}
-      {menuOpen ? (
-        <nav className="absolute right-5 top-20 z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8">
+      {/* Dropdown menu */}
+      {menuOpen && (
+        <nav className="absolute right-5 top-[68px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8">
           {[
             { label: "Pricing", href: "#pricing" },
             { label: "How it works", href: "#showcase" },
@@ -80,57 +85,76 @@ function Hero() {
             </Link>
           ))}
         </nav>
-      ) : null}
+      )}
 
-      {/* Headline + CTA block */}
-      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-center px-5 pt-10 text-center sm:pt-14">
-        <div className="relative w-full px-2 pb-8 pt-10 sm:pt-12">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage: "radial-gradient(rgba(255,255,255,0.10) 1.6px, transparent 1.6px)",
-              backgroundSize: "40px 40px",
-              WebkitMaskImage: "radial-gradient(ellipse 62% 68% at 50% 50%, black 35%, transparent 92%)",
-              maskImage: "radial-gradient(ellipse 62% 68% at 50% 50%, black 35%, transparent 92%)",
-            }}
-          />
-          <h1
-            className="relative font-extrabold tracking-tight text-balance text-white"
-            style={{ fontSize: "clamp(40px, 9vw, 76px)", lineHeight: 1.08, letterSpacing: "-0.03em" }}
+      {/* Headline + CTA */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-16 text-center sm:pt-20">
+        {/* Dot grid */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1.5px, transparent 1.5px)",
+            backgroundSize: "38px 38px",
+            WebkitMaskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 88%)",
+            maskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 88%)",
+          }}
+        />
+
+        {/* Main headline */}
+        <h1
+          className="relative font-extrabold tracking-tight text-balance text-white"
+          style={{ fontSize: "clamp(38px, 10vw, 72px)", lineHeight: 1.07, letterSpacing: "-0.03em" }}
+        >
+          The{" "}
+          <span
+            className="inline-block rounded-2xl px-3 py-1"
+            style={{ background: "rgba(255,255,255,0.09)" }}
           >
-            The{" "}
-            <span className="inline-block rounded-2xl px-3 py-1" style={{ background: "rgba(255,255,255,0.08)" }}>Cloud Coding</span>
-            <br />Agent...
-          </h1>
+            coding agent
+          </span>{" "}
+          for
+          <br />
+          all need
+        </h1>
+
+        {/* dev.svg badge */}
+        <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-[#2a2c30] bg-[#1c1d20] px-4 py-2">
+          <Image
+            src="/dev.svg"
+            alt="made for developer"
+            width={36}
+            height={36}
+            className="h-9 w-9 flex-shrink-0"
+          />
+          <div className="text-left">
+            <p className="text-xs font-semibold text-white leading-tight">made fore developer</p>
+            <p className="text-[11px] text-[#A7AAB0] leading-tight">since 2026</p>
+          </div>
         </div>
 
-        {/* Free badge bar */}
-        <div className="inline-flex items-center overflow-hidden rounded-full border border-[#2a2c30] bg-[#1c1d20]">
-          <span className="rounded-full bg-[#2a2c30] px-4 py-2 text-sm font-bold text-white">Free</span>
-          <span className="px-4 py-2 text-sm text-[#A7AAB0]">new users can start building free</span>
-        </div>
-
-        {/* CTA button */}
+        {/* CTA — shadcn size="sm" */}
         <Button
           asChild
-          size="lg"
-          className="mt-5 h-auto rounded-xl bg-white px-7 py-3.5 text-base font-semibold text-zinc-950 shadow-[0_16px_48px_rgba(255,255,255,0.10)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          size="sm"
+          className="mt-7 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
           </Link>
         </Button>
       </div>
 
-      {/* Phone illustration — tight to the button, no extra top margin */}
-      <div className="relative z-10 mx-auto mt-8 flex w-full flex-col items-center px-5">
-        <div className="relative w-[min(88vw,340px)] sm:w-[380px] lg:w-[420px]">
+      {/* Phone mockup — bottom-cropped */}
+      <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center px-5">
+        <div className="relative w-[min(82vw,320px)] sm:w-[360px] lg:w-[400px]">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -inset-x-16 -top-10 bottom-0"
-            style={{ background: "radial-gradient(ellipse 60% 45% at 50% 40%, rgba(124,111,245,0.10) 0%, transparent 70%)" }}
+            className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
+            style={{
+              background: "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(124,111,245,0.11) 0%, transparent 70%)",
+            }}
           />
           <Image
             src="/hero-phone.webp"
@@ -138,8 +162,9 @@ function Hero() {
             width={880}
             height={1780}
             priority
-            sizes="(min-width: 1024px) 420px, (min-width: 640px) 380px, 88vw"
-            className="relative h-auto w-full drop-shadow-[0_40px_80px_rgba(0,0,0,0.7)]"
+            sizes="(min-width: 1024px) 400px, (min-width: 640px) 360px, 82vw"
+            className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
+            style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
           />
         </div>
       </div>
@@ -158,7 +183,7 @@ function TrustStrip() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-24">
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-        {items.map(it=>(
+        {items.map(it => (
           <div key={it.label} className="inline-flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#18191B] px-3.5 py-2 text-xs font-medium text-[#E5E7EB] sm:text-sm">
             <span className="text-[#A7AAB0]">{it.icon}</span>{it.label}
           </div>
@@ -170,15 +195,15 @@ function TrustStrip() {
 
 function HowItWorks() {
   const steps = [
-    { n:"01", icon:<Wand2 className="h-5 w-5"/>, title:"Describe your site", body:"Tell Sycord what you need in plain language — purpose, style, content.", illo:<IlloPrompt/> },
-    { n:"02", icon:<Sparkles className="h-5 w-5"/>, title:"AI builds it instantly", body:"Pages, sections, copy, and layout are generated and ready to edit.", illo:<IlloBuild/> },
-    { n:"03", icon:<Rocket className="h-5 w-5"/>, title:"Publish on fast hosting", body:"One click ships your site to a global CDN with SSL and your domain.", illo:<IlloDeploy/> },
+    { n: "01", icon: <Wand2 className="h-5 w-5" />, title: "Describe your site", body: "Tell Sycord what you need in plain language — purpose, style, content.", illo: <IlloPrompt /> },
+    { n: "02", icon: <Sparkles className="h-5 w-5" />, title: "AI builds it instantly", body: "Pages, sections, copy, and layout are generated and ready to edit.", illo: <IlloBuild /> },
+    { n: "03", icon: <Rocket className="h-5 w-5" />, title: "Publish on fast hosting", body: "One click ships your site to a global CDN with SSL and your domain.", illo: <IlloDeploy /> },
   ]
   return (
     <section id="showcase" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="How it works" title="Launch in minutes" subtitle="Generate, customize, and publish your site with AI-powered hosting." />
       <div className="mt-10 grid gap-4 sm:grid-cols-3">
-        {steps.map(s=>(
+        {steps.map(s => (
           <div key={s.n} className="flex flex-col rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 transition-colors hover:bg-[#212327]">
             <div className="mb-5 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#111213]">{s.illo}</div>
             <div className="flex items-center justify-between">
@@ -252,7 +277,7 @@ function IlloDeploy() {
       <div className="flex items-center gap-2 text-[#A7AAB0]">
         <Globe className="h-3.5 w-3.5" />
         <div className="flex items-center gap-1">
-          {[0,1,2,3,4].map(i => (
+          {[0, 1, 2, 3, 4].map(i => (
             <span key={i} className="h-1 rounded-full bg-white/25" style={{ width: 14 + (i % 3) * 8 }} />
           ))}
         </div>
@@ -264,18 +289,18 @@ function IlloDeploy() {
 
 function AIBuilderFeatures() {
   const features = [
-    { icon:<LayoutTemplate className="h-5 w-5"/>, title:"AI-generated structure", body:"Pages, sections, and navigation built from your prompt." },
-    { icon:<Sparkles className="h-5 w-5"/>, title:"AI-written copy", body:"On-brand headlines, body, and CTAs ready to go live." },
-    { icon:<Palette className="h-5 w-5"/>, title:"Smart page sections", body:"Hero, features, pricing, FAQ — composed with intent." },
-    { icon:<Smartphone className="h-5 w-5"/>, title:"Auto mobile optimization", body:"Every layout adapts to every screen, automatically." },
-    { icon:<MousePointerClick className="h-5 w-5"/>, title:"Instant editing", body:"Click anything to refine text, layout, and styling." },
-    { icon:<Star className="h-5 w-5"/>, title:"Templates powered by AI", body:"Start from a template — customize with prompts." },
+    { icon: <LayoutTemplate className="h-5 w-5" />, title: "AI-generated structure", body: "Pages, sections, and navigation built from your prompt." },
+    { icon: <Sparkles className="h-5 w-5" />, title: "AI-written copy", body: "On-brand headlines, body, and CTAs ready to go live." },
+    { icon: <Palette className="h-5 w-5" />, title: "Smart page sections", body: "Hero, features, pricing, FAQ — composed with intent." },
+    { icon: <Smartphone className="h-5 w-5" />, title: "Auto mobile optimization", body: "Every layout adapts to every screen, automatically." },
+    { icon: <MousePointerClick className="h-5 w-5" />, title: "Instant editing", body: "Click anything to refine text, layout, and styling." },
+    { icon: <Star className="h-5 w-5" />, title: "Templates powered by AI", body: "Start from a template — customize with prompts." },
   ]
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="AI builder" title="Built for speed" subtitle="Everything you need to design, write, and publish — generated in seconds." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map(f=><FeatureCard key={f.title} {...f}/>)}
+        {features.map(f => <FeatureCard key={f.title} {...f} />)}
       </div>
     </section>
   )
@@ -283,24 +308,24 @@ function AIBuilderFeatures() {
 
 function HostingFeatures() {
   const features = [
-    { icon:<Cloud className="h-5 w-5"/>, title:"Fast global hosting", body:"Edge-delivered from 120+ regions for low latency everywhere." },
-    { icon:<Lock className="h-5 w-5"/>, title:"Free SSL certificates", body:"Automatic HTTPS for every domain, renewed for you." },
-    { icon:<Globe className="h-5 w-5"/>, title:"Custom domains", body:"Connect your domain in seconds with guided DNS." },
-    { icon:<Zap className="h-5 w-5"/>, title:"CDN delivery", body:"Static and dynamic assets cached close to your visitors." },
-    { icon:<ShieldCheck className="h-5 w-5"/>, title:"Reliable uptime", body:"99.99% target backed by automated failover." },
-    { icon:<Database className="h-5 w-5"/>, title:"Secure backups", body:"Daily snapshots with point-in-time restore." },
+    { icon: <Cloud className="h-5 w-5" />, title: "Fast global hosting", body: "Edge-delivered from 120+ regions for low latency everywhere." },
+    { icon: <Lock className="h-5 w-5" />, title: "Free SSL certificates", body: "Automatic HTTPS for every domain, renewed for you." },
+    { icon: <Globe className="h-5 w-5" />, title: "Custom domains", body: "Connect your domain in seconds with guided DNS." },
+    { icon: <Zap className="h-5 w-5" />, title: "CDN delivery", body: "Static and dynamic assets cached close to your visitors." },
+    { icon: <ShieldCheck className="h-5 w-5" />, title: "Reliable uptime", body: "99.99% target backed by automated failover." },
+    { icon: <Database className="h-5 w-5" />, title: "Secure backups", body: "Daily snapshots with point-in-time restore." },
   ]
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="Hosting" title="Hosting built in" subtitle="A production-grade platform under every site you ship." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map(f=><FeatureCard key={f.title} {...f}/>)}
+        {features.map(f => <FeatureCard key={f.title} {...f} />)}
       </div>
     </section>
   )
 }
 
-function FeatureCard({icon,title,body}:{icon:React.ReactNode;title:string;body:string}) {
+function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
     <div className="rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 transition-colors hover:bg-[#212327]">
       <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#18191B] text-white">{icon}</span>
@@ -312,18 +337,18 @@ function FeatureCard({icon,title,body}:{icon:React.ReactNode;title:string;body:s
 
 function Templates() {
   const items = [
-    {label:"Portfolio",icon:<User className="h-5 w-5"/>,hue:"from-zinc-400/10 to-zinc-700/10"},
-    {label:"Startup",icon:<Rocket className="h-5 w-5"/>,hue:"from-indigo-400/10 to-indigo-700/10"},
-    {label:"Business",icon:<Briefcase className="h-5 w-5"/>,hue:"from-emerald-400/10 to-emerald-700/10"},
-    {label:"Landing page",icon:<LayoutTemplate className="h-5 w-5"/>,hue:"from-amber-400/10 to-amber-700/10"},
-    {label:"Storefront",icon:<ShoppingBag className="h-5 w-5"/>,hue:"from-rose-400/10 to-rose-700/10"},
-    {label:"Personal brand",icon:<Star className="h-5 w-5"/>,hue:"from-sky-400/10 to-sky-700/10"},
+    { label: "Portfolio", icon: <User className="h-5 w-5" />, hue: "from-zinc-400/10 to-zinc-700/10" },
+    { label: "Startup", icon: <Rocket className="h-5 w-5" />, hue: "from-indigo-400/10 to-indigo-700/10" },
+    { label: "Business", icon: <Briefcase className="h-5 w-5" />, hue: "from-emerald-400/10 to-emerald-700/10" },
+    { label: "Landing page", icon: <LayoutTemplate className="h-5 w-5" />, hue: "from-amber-400/10 to-amber-700/10" },
+    { label: "Storefront", icon: <ShoppingBag className="h-5 w-5" />, hue: "from-rose-400/10 to-rose-700/10" },
+    { label: "Personal brand", icon: <Star className="h-5 w-5" />, hue: "from-sky-400/10 to-sky-700/10" },
   ]
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="Templates" title="Built for every kind of site" subtitle="Start from a template — Sycord tunes it to your brand." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map(t=>(
+        {items.map(t => (
           <div key={t.label} className="group relative overflow-hidden rounded-3xl border border-[#2a2c30] bg-[#18191B] p-5 transition-colors hover:bg-[#212327]">
             <div className={`aspect-[16/9] w-full rounded-2xl border border-[#2a2c30] bg-gradient-to-br ${t.hue}`}>
               <div className="flex h-full w-full flex-col justify-between p-4">
@@ -350,30 +375,30 @@ function Templates() {
 
 function Pricing() {
   const plans = [
-    {name:"Starter",price:"Free",tagline:"For trying things out",features:["10 AI generation credits","Hosting included","Free SSL","Sycord subdomain"],cta:"Start for free",highlighted:false,illo:<IlloPlanStarter/>},
-    {name:"Pro",price:"$19",period:"/mo",tagline:"For makers and small teams",features:["200 AI generation credits","Custom domain","Free SSL","Analytics","Email support"],cta:"Start Pro",highlighted:true,illo:<IlloPlanPro/>},
-    {name:"Business",price:"$49",period:"/mo",tagline:"For growing companies",features:["Unlimited AI generations","Multiple custom domains","Free SSL","Advanced analytics","Priority support"],cta:"Start Business",highlighted:false,illo:<IlloPlanBusiness/>},
+    { name: "Starter", price: "Free", tagline: "For trying things out", features: ["10 AI generation credits", "Hosting included", "Free SSL", "Sycord subdomain"], cta: "Start for free", highlighted: false, illo: <IlloPlanStarter /> },
+    { name: "Pro", price: "$19", period: "/mo", tagline: "For makers and small teams", features: ["200 AI generation credits", "Custom domain", "Free SSL", "Analytics", "Email support"], cta: "Start Pro", highlighted: true, illo: <IlloPlanPro /> },
+    { name: "Business", price: "$49", period: "/mo", tagline: "For growing companies", features: ["Unlimited AI generations", "Multiple custom domains", "Free SSL", "Advanced analytics", "Priority support"], cta: "Start Business", highlighted: false, illo: <IlloPlanBusiness /> },
   ]
   return (
     <section id="pricing" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="Pricing" title="Simple, transparent pricing" subtitle="Start free. Scale when you're ready." />
       <div className="mt-10 grid gap-4 lg:grid-cols-3">
-        {plans.map(p=>(
-          <div key={p.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${p.highlighted?"border-white/20 bg-[#18191B] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]":"border-[#2a2c30] bg-[#18191B] hover:bg-[#212327]"}`}>
+        {plans.map(p => (
+          <div key={p.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${p.highlighted ? "border-white/20 bg-[#18191B] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : "border-[#2a2c30] bg-[#18191B] hover:bg-[#212327]"}`}>
             <div className="mb-5 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#111213]">{p.illo}</div>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-white">{p.name}</h3>
-              {p.highlighted?<span className="rounded-full border border-[#2a2c30] bg-[#18191B] px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">Popular</span>:null}
+              {p.highlighted ? <span className="rounded-full border border-[#2a2c30] bg-[#18191B] px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">Popular</span> : null}
             </div>
             <p className="mt-1 text-sm text-[#A7AAB0]">{p.tagline}</p>
             <div className="mt-5 flex items-baseline gap-1">
               <span className="text-3xl font-bold text-white">{p.price}</span>
-              {p.period?<span className="text-sm text-[#A7AAB0]">{p.period}</span>:null}
+              {p.period ? <span className="text-sm text-[#A7AAB0]">{p.period}</span> : null}
             </div>
             <ul className="mt-5 space-y-2 text-sm text-[#E5E7EB]">
-              {p.features.map(f=>(
+              {p.features.map(f => (
                 <li key={f} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400"/><span>{f}</span>
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /><span>{f}</span>
                 </li>
               ))}
             </ul>
@@ -403,7 +428,7 @@ function IlloPlanStarter() {
             <span className="text-[10px] font-medium text-[#A7AAB0]">you.sycord.app</span>
           </div>
           <div className="flex items-center gap-1.5">
-            {[0,1,2].map(i => <span key={i} className="h-1.5 flex-1 rounded-full bg-white/15" />)}
+            {[0, 1, 2].map(i => <span key={i} className="h-1.5 flex-1 rounded-full bg-white/15" />)}
             <Sparkles className="h-3 w-3 shrink-0 text-[#7C6FF5]" />
           </div>
         </div>
@@ -422,7 +447,7 @@ function IlloPlanPro() {
           <TrendingUp className="ml-auto h-3 w-3 shrink-0 text-[#7C6FF5]" />
         </div>
         <div className="flex items-end gap-1.5 rounded-xl border border-[#2a2c30] bg-[#18191B] px-3 pb-2 pt-3">
-          {[8,14,10,18,13,22,17,26].map((h,i) => (
+          {[8, 14, 10, 18, 13, 22, 17, 26].map((h, i) => (
             <span key={i} className="w-full rounded-t-sm bg-[#7C6FF5]/60" style={{ height: h }} />
           ))}
         </div>
@@ -456,19 +481,19 @@ function IlloPlanBusiness() {
 
 function FAQ() {
   const faqs = [
-    {q:"How fast can I launch?",a:"Most users go from prompt to live site in under a minute. Generation, editing, and publish are all in-app."},
-    {q:"Is hosting included?",a:"Yes — every plan, including the free tier, ships with global hosting, free SSL, and a Sycord subdomain."},
-    {q:"Can I connect my own domain?",a:"Pro and Business plans include custom domain support with guided DNS and automatic SSL."},
-    {q:"Can I edit the AI-generated site?",a:"Absolutely. Click any section to refine text, layout, or style. You can also re-prompt sections."},
-    {q:"Is it mobile responsive?",a:"Every site is responsive by default. Sycord auto-tunes layouts for mobile, tablet, and desktop."},
+    { q: "How fast can I launch?", a: "Most users go from prompt to live site in under a minute. Generation, editing, and publish are all in-app." },
+    { q: "Is hosting included?", a: "Yes — every plan, including the free tier, ships with global hosting, free SSL, and a Sycord subdomain." },
+    { q: "Can I connect my own domain?", a: "Pro and Business plans include custom domain support with guided DNS and automatic SSL." },
+    { q: "Can I edit the AI-generated site?", a: "Absolutely. Click any section to refine text, layout, or style. You can also re-prompt sections." },
+    { q: "Is it mobile responsive?", a: "Every site is responsive by default. Sycord auto-tunes layouts for mobile, tablet, and desktop." },
   ]
   return (
     <section className="mx-auto w-full max-w-3xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="FAQ" title="Frequently asked questions" subtitle="Everything you need to know to get started." />
       <div className="mt-8 rounded-3xl border border-[#2a2c30] bg-[#18191B]">
         <Accordion type="single" collapsible className="w-full">
-          {faqs.map((f,i)=>(
-            <AccordionItem key={f.q} value={`item-${i}`} className={`border-[#2a2c30] px-5 ${i===faqs.length-1?"border-b-0":""}`}>
+          {faqs.map((f, i) => (
+            <AccordionItem key={f.q} value={`item-${i}`} className={`border-[#2a2c30] px-5 ${i === faqs.length - 1 ? "border-b-0" : ""}`}>
               <AccordionTrigger className="text-base font-semibold text-white hover:no-underline">{f.q}</AccordionTrigger>
               <AccordionContent className="text-sm text-[#A7AAB0]">{f.a}</AccordionContent>
             </AccordionItem>
@@ -482,8 +507,8 @@ function FAQ() {
 function FinalCTA() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <div className="overflow-hidden rounded-[36px] border border-[#2a2c30] bg-[#18191B] p-10 text-center sm:rounded-[55px] sm:p-16" style={{backgroundImage:"radial-gradient(rgba(255,255,255,0.05) 1.4px, transparent 1.4px)",backgroundSize:"26px 26px"}}>
-        <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{letterSpacing:"-0.02em",lineHeight:1.1}}>Launch your site with AI</h2>
+      <div className="overflow-hidden rounded-[36px] border border-[#2a2c30] bg-[#18191B] p-10 text-center sm:rounded-[55px] sm:p-16" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1.4px, transparent 1.4px)", backgroundSize: "26px 26px" }}>
+        <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>Launch your site with AI</h2>
         <p className="mx-auto mt-4 max-w-xl text-base text-[#A7AAB0] sm:text-lg">Build, host, and publish from one powerful platform.</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Button asChild className="rounded-xl bg-white text-black hover:bg-white/90">
@@ -500,10 +525,10 @@ function FinalCTA() {
 
 function Footer() {
   const cols = [
-    {title:"Product",links:[{label:"AI Builder",href:"#showcase"},{label:"Hosting",href:"#showcase"},{label:"Templates",href:"#"},{label:"Changelog",href:"/releases"}]},
-    {title:"Pricing",links:[{label:"Plans",href:"#pricing"},{label:"Compare",href:"#pricing"},{label:"Enterprise",href:"/contact"}]},
-    {title:"Docs",links:[{label:"Getting started",href:"#"},{label:"Custom domains",href:"#"},{label:"API",href:"#"}]},
-    {title:"Support",links:[{label:"Help center",href:"/contact"},{label:"Contact",href:"/contact"},{label:"Status",href:"#"}]},
+    { title: "Product", links: [{ label: "AI Builder", href: "#showcase" }, { label: "Hosting", href: "#showcase" }, { label: "Templates", href: "#" }, { label: "Changelog", href: "/releases" }] },
+    { title: "Pricing", links: [{ label: "Plans", href: "#pricing" }, { label: "Compare", href: "#pricing" }, { label: "Enterprise", href: "/contact" }] },
+    { title: "Docs", links: [{ label: "Getting started", href: "#" }, { label: "Custom domains", href: "#" }, { label: "API", href: "#" }] },
+    { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Status", href: "#" }] },
   ]
   return (
     <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:px-8 sm:mt-32">
@@ -516,15 +541,13 @@ function Footer() {
             </div>
             <p className="mt-3 max-w-sm text-sm text-[#A7AAB0]">The AI website builder with hosting built in. Generate, customize, and publish — all from one platform.</p>
           </div>
-          {cols.map(c=>(
+          {cols.map(c => (
             <div key={c.title}>
               <div className="text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">{c.title}</div>
               <ul className="mt-4 space-y-2 text-sm">
-                {c.links.map(l=>(
+                {c.links.map(l => (
                   <li key={l.label}>
-                    <Link href={l.href} className="text-[#E5E7EB] transition-colors duration-150 hover:text-white">
-                      {l.label}
-                    </Link>
+                    <Link href={l.href} className="text-[#E5E7EB] transition-colors duration-150 hover:text-white">{l.label}</Link>
                   </li>
                 ))}
               </ul>
@@ -545,11 +568,11 @@ function Footer() {
   )
 }
 
-function SectionHeading({eyebrow,title,subtitle}:{eyebrow:string;title:string;subtitle:string}) {
+function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
       <span className="inline-flex items-center rounded-full border border-[#2a2c30] bg-[#18191B] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#A7AAB0]">{eyebrow}</span>
-      <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl" style={{letterSpacing:"-0.02em",lineHeight:1.1}}>{title}</h2>
+      <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>{title}</h2>
       <p className="mt-3 text-base text-[#A7AAB0]">{subtitle}</p>
     </div>
   )
