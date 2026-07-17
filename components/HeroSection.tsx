@@ -85,7 +85,7 @@ export function HeroSection() {
       )}
 
       {/* Hero content */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-16 text-center sm:pt-20">
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 pt-10 text-center sm:pt-16">
         {/* Dot grid background behind headline */}
         <div
           aria-hidden="true"
@@ -93,55 +93,52 @@ export function HeroSection() {
           style={{
             backgroundImage:
               "radial-gradient(rgba(255,255,255,0.09) 1.5px, transparent 1.5px)",
-            backgroundSize: "38px 38px",
+            backgroundSize: "32px 32px",
             WebkitMaskImage:
-              "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 88%)",
+              "radial-gradient(ellipse 60% 55% at 50% 40%, black 28%, transparent 88%)",
             maskImage:
-              "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 88%)",
+              "radial-gradient(ellipse 60% 55% at 50% 40%, black 28%, transparent 88%)",
           }}
         />
 
         {/* Main headline */}
         <h1
-          className="relative font-extrabold tracking-tight text-balance text-white"
+          className="relative max-w-[18ch] font-extrabold tracking-tight text-balance text-white sm:max-w-none"
           style={{
-            fontSize: "clamp(38px, 10vw, 72px)",
-            lineHeight: 1.07,
+            fontSize: "clamp(30px, 7.5vw, 64px)",
+            lineHeight: 1.08,
             letterSpacing: "-0.03em",
           }}
         >
           The{" "}
           <span
-            className="inline-block rounded-2xl px-3 py-1"
+            className="inline-block rounded-xl px-2.5 py-0.5 sm:rounded-2xl sm:px-3 sm:py-1"
             style={{ background: "rgba(255,255,255,0.09)" }}
           >
             coding agent
           </span>{" "}
           for
           <br />
-          all need
+          all needs
         </h1>
 
-        {/* "Made for developer" badge using dev.svg illustration */}
-        <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-[#2a2c30] bg-[#1c1d20] px-4 py-2">
+        {/* Compact optimized laurel badge */}
+        <div className="relative mt-5 flex w-full items-center justify-center sm:mt-6">
           <Image
             src="/dev.svg"
-            alt="made for developer"
-            width={36}
-            height={36}
-            className="h-9 w-9 flex-shrink-0"
+            alt="made for developers since 2026"
+            width={280}
+            height={100}
+            priority
+            className="h-auto w-[168px] sm:w-[200px]"
           />
-          <div className="text-left">
-            <p className="text-xs font-semibold text-white leading-tight">made fore developer</p>
-            <p className="text-[11px] text-[#A7AAB0] leading-tight">since 2026</p>
-          </div>
         </div>
 
         {/* CTA button — shadcn size="sm" */}
         <Button
           asChild
           size="sm"
-          className="mt-7 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-5 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03] sm:mt-6"
         >
           <Link href="/login">
             Start for free
@@ -151,8 +148,8 @@ export function HeroSection() {
       </div>
 
       {/* Phone mockup — bottom-cropped, same as screenshot */}
-      <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center px-5 pb-0">
-        <div className="relative w-[min(82vw,320px)] sm:w-[360px] lg:w-[400px]">
+      <div className="relative z-10 mx-auto mt-7 flex w-full flex-col items-center px-6 pb-0 sm:mt-10">
+        <div className="relative w-[min(78vw,300px)] sm:w-[360px] lg:w-[400px]">
           {/* purple glow behind phone */}
           <div
             aria-hidden="true"
