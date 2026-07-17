@@ -162,10 +162,10 @@ function Hero() {
           all need
         </h1>
 
-        {/* "made for developer since 2026" badge — full illustration, from public/begyar.svg */}
+        {/* "made for developer since 2026" badge — full illustration, from public/dev.svg */}
         <div className="relative mt-6 flex items-center justify-center sm:mt-8">
           <Image
-            src="/begyar.svg"
+            src="/dev.svg"
             alt="made for developer since 2026"
             width={320}
             height={160}
