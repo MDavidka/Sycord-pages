@@ -56,10 +56,10 @@ function Hero() {
         className="relative flex min-h-[100dvh] w-full flex-col overflow-hidden md:hidden"
         style={{ backgroundColor: "#18191B" }}
       >
-        {/* Side person (David) — left mid, blends into black bg */}
+        {/* Side person (David) — absolute left, large, blends into black */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-[8%] left-0 top-[6%] z-0 flex items-center overflow-hidden"
+          className="pointer-events-none absolute inset-y-0 left-0 z-0 w-[70%] overflow-hidden"
         >
           <Image
             src="/side-person.png"
@@ -67,13 +67,12 @@ function Hero() {
             width={408}
             height={612}
             priority
-            className="h-full w-auto max-w-none select-none object-contain object-left"
-            style={{ marginLeft: "-12%", transform: "scale(1.08)", transformOrigin: "left center" }}
+            className="absolute -left-[28%] top-[6%] h-[80%] w-auto max-w-none select-none object-contain object-left"
           />
         </div>
 
         {/* Navbar: logo + dashed contact us */}
-        <header className="relative z-20 flex w-full shrink-0 items-center justify-between px-5 pt-6">
+        <header className="relative z-30 flex w-full shrink-0 items-center justify-between px-5 pt-6">
           <Link href="/" className="inline-flex items-center gap-2.5">
             <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
             <span className="text-base font-semibold tracking-tight text-white">sycord</span>
@@ -86,8 +85,8 @@ function Hero() {
           </Link>
         </header>
 
-        {/* Center stack: badge + CTA — mid viewport, above phone */}
-        <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 pb-[36vh] pt-2">
+        {/* Badge + CTA — horizontally centered, mid viewport above phone */}
+        <div className="relative z-20 flex flex-1 flex-col items-center justify-center gap-4 px-5 pb-[38vh] pt-4">
           <div
             className="relative w-[200px] overflow-hidden"
             style={{ aspectRatio: "170 / 99" }}
@@ -105,7 +104,7 @@ function Hero() {
           <Button
             asChild
             size="sm"
-            className="mt-4 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] transition-transform hover:scale-[1.03] hover:bg-white/90"
+            className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] transition-transform hover:scale-[1.03] hover:bg-white/90"
           >
             <Link href="/login">
               Start for free
@@ -114,15 +113,15 @@ function Hero() {
           </Button>
         </div>
 
-        {/* Phone mockup — flush to bottom, only top portion visible */}
-        <div className="absolute bottom-0 left-1/2 z-10 h-[38vh] w-[min(78vw,300px)] -translate-x-1/2 overflow-hidden">
+        {/* Phone mockup — bottom-0 centered, top half visible */}
+        <div className="absolute bottom-0 left-1/2 z-10 h-[36vh] w-[min(74vw,290px)] -translate-x-1/2 overflow-hidden">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
             width={880}
             height={1780}
             priority
-            sizes="78vw"
+            sizes="74vw"
             className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
             style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
           />
