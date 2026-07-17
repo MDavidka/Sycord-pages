@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { motion, useScroll, useTransform } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
@@ -44,8 +45,17 @@ function Hero() {
     { label: "Changelog", href: "/releases" },
   ]
 
+  // Scroll-linked parallax: the phone rises into view as the hero scrolls past,
+  // while the header/headline/badge/CTA stay perfectly still. The wrapper below
+  // clips the image so the crop line at the bottom never moves — it always sits
+  // flush with the section that follows (TrustStrip), only the top of the phone
+  // reveals/hides as scroll progresses.
+  const heroRef = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
+  const phoneY = useTransform(scrollYProgress, [0, 1], [56, -24])
+
   return (
-    <section className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
+    <section ref={heroRef} className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
 
       {/* Decorative rounded squares — scattered behind content, percentage-based so they scale across breakpoints */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -152,16 +162,15 @@ function Hero() {
           all need
         </h1>
 
-        {/* Laurel badge — "made for developer since 2026" */}
-        <div className="relative mt-6 flex items-center justify-center gap-3 sm:mt-8 sm:gap-4">
-          <LaurelBranch />
-          <div className="text-center">
-            <p className="text-xs font-bold text-white leading-tight tracking-wide sm:text-sm">
-              made fore developer
-            </p>
-            <p className="mt-0.5 text-[11px] text-[#8b8e96] leading-tight sm:text-xs">since 2026</p>
-          </div>
-          <LaurelBranch flip />
+        {/* "made for developer since 2026" badge — full illustration, from public/begyar.svg */}
+        <div className="relative mt-6 flex items-center justify-center sm:mt-8">
+          <Image
+            src="/begyar.svg"
+            alt="made for developer since 2026"
+            width={320}
+            height={160}
+            className="h-auto w-[220px] opacity-95 sm:w-[260px]"
+          />
         </div>
 
         {/* CTA button */}
@@ -177,8 +186,11 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Phone mockup */}
-      <div className="relative z-10 mx-auto mt-9 flex w-full flex-col items-center px-5 sm:mt-10 lg:mt-12">
+      {/* Phone mockup — rises into place on scroll. The crop (bottom 12%) is fixed to the
+          section's bottom edge, so it always butts up flush against the content below
+          (TrustStrip); only the translateY on the image animates, everything else in the
+          hero (nav, headline, badge, CTA) is unaffected by scroll. */}
+      <div className="relative z-10 mx-auto mt-9 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-10 lg:mt-12">
         <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
           <div
             aria-hidden="true"
@@ -187,52 +199,21 @@ function Hero() {
               background: "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(124,111,245,0.09) 0%, transparent 70%)",
             }}
           />
-          <Image
-            src="/hero-phone.webp"
-            alt="Syra coding agent on phone"
-            width={880}
-            height={1780}
-            priority
-            sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 84vw"
-            className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
-            style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
-          />
+          <motion.div style={{ y: phoneY }}>
+            <Image
+              src="/hero-phone.webp"
+              alt="Syra coding agent on phone"
+              width={880}
+              height={1780}
+              priority
+              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 84vw"
+              className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
+              style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
+            />
+          </motion.div>
         </div>
       </div>
     </section>
-  )
-}
-
-/** Small decorative laurel branch used to flank the "made for developer" badge. `flip` mirrors it for the right side. */
-function LaurelBranch({ flip = false }: { flip?: boolean }) {
-  const leaves = Array.from({ length: 6 })
-  return (
-    <svg
-      width="26"
-      height="58"
-      viewBox="0 0 26 58"
-      fill="none"
-      aria-hidden="true"
-      className={flip ? "scale-x-[-1]" : ""}
-    >
-      <path d="M14 56C14 56 4 45 4 30C4 18 9 10 14 2" stroke="#7A7D85" strokeWidth="1.4" strokeLinecap="round" />
-      {leaves.map((_, i) => {
-        const y = 7 + i * 8
-        const cx = 9 - i * 0.35
-        return (
-          <ellipse
-            key={i}
-            cx={cx}
-            cy={y}
-            rx="5"
-            ry="2.6"
-            transform={`rotate(-38 ${cx} ${y})`}
-            fill="#8b8e96"
-            opacity={0.9 - i * 0.08}
-          />
-        )
-      })}
-    </svg>
   )
 }
 
