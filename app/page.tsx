@@ -34,22 +34,14 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* Decorative background squares — diagonal staircase top-right to bottom-left */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* top-right */}
-        <div className="absolute rounded-[32px] bg-[#222427]" style={{ width: 200, height: 200, top: -30, right: -30 }} />
-        {/* step 2 */}
-        <div className="absolute rounded-[28px] bg-[#1e1f22]" style={{ width: 160, height: 160, top: 140, right: 110 }} />
-        {/* step 3 */}
-        <div className="absolute rounded-[28px] bg-[#222427]" style={{ width: 130, height: 130, top: 260, left: "55%" }} />
-        {/* bottom-left */}
-        <div className="absolute rounded-[28px] bg-[#1e1f22]" style={{ width: 110, height: 110, top: 360, left: "35%" }} />
-        {/* diagonal band */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background: "linear-gradient(115deg, transparent 0%, transparent 52%, rgba(255,255,255,0.03) 52%, rgba(255,255,255,0.03) 100%)",
-          }}
+      {/* begyar.svg — full background, behind everything */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+        <Image
+          src="/begyar.svg"
+          alt=""
+          fill
+          className="object-cover object-center opacity-100"
+          priority
         />
       </div>
 
@@ -122,26 +114,11 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg badge — upscaled, no background */}
-        <div className="mt-8 flex flex-col items-center gap-3">
-          <Image
-            src="/dev.svg"
-            alt="made for developer illustration"
-            width={220}
-            height={220}
-            className="h-auto w-[220px] sm:w-[260px]"
-          />
-          <div className="text-center">
-            <p className="text-sm font-semibold text-white leading-tight">made for developer</p>
-            <p className="text-xs text-[#A7AAB0] leading-tight">since 2026</p>
-          </div>
-        </div>
-
-        {/* CTA — shadcn size="sm" */}
+        {/* CTA */}
         <Button
           asChild
           size="sm"
-          className="mt-7 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-10 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
