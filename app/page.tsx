@@ -37,44 +37,78 @@ export default function LandingPage() {
 
 function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
+
+  const navLinks = [
+    { label: "Pricing", href: "#pricing" },
+    { label: "How it works", href: "#showcase" },
+    { label: "Changelog", href: "/releases" },
+  ]
+
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
 
-      {/* begyar.svg — top-right corner, decorative only, no layout impact */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-0 z-0"
-        style={{ width: 320, height: 320, opacity: 0.9 }}
-      >
-        <Image src="/begyar.svg" alt="" fill className="object-contain object-right-top" priority />
+      {/* Decorative rounded squares — scattered behind content, percentage-based so they scale across breakpoints */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          className="absolute rounded-[32px] bg-[#1e1f22]"
+          style={{ width: "42%", maxWidth: 240, height: "24%", maxHeight: 260, top: "-6%", right: "-8%", opacity: 0.65 }}
+        />
+        <div
+          className="absolute rounded-[24px] bg-[#212327]"
+          style={{ width: "26%", maxWidth: 150, height: "12%", maxHeight: 140, top: "7%", right: "4%", opacity: 0.45 }}
+        />
+        <div
+          className="absolute rounded-[28px] bg-[#1e1f22]"
+          style={{ width: "20%", maxWidth: 110, height: "8%", maxHeight: 110, top: "36%", left: "-6%", opacity: 0.4 }}
+        />
+        <div
+          className="absolute rounded-[28px] bg-[#212327]"
+          style={{ width: "24%", maxWidth: 130, height: "10%", maxHeight: 130, top: "58%", left: "1%", opacity: 0.35 }}
+        />
       </div>
 
       {/* Navbar */}
-      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-8">
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
           <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
           <span className="text-base font-semibold text-white tracking-tight">sycord</span>
         </Link>
+
+        {/* Desktop nav — visible from md up, replaces the hamburger */}
+        <nav className="hidden items-center gap-8 md:flex">
+          {navLinks.map(l => (
+            <Link
+              key={l.label}
+              href={l.href}
+              className="text-sm font-medium text-[#A7AAB0] transition-colors hover:text-white"
+            >
+              {l.label}
+            </Link>
+          ))}
+          <Link
+            href="/login"
+            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition-transform hover:scale-[1.03]"
+          >
+            Sign in
+          </Link>
+        </nav>
+
+        {/* Mobile menu button */}
         <button
           type="button"
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen(o => !o)}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white"
+          className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white md:hidden"
         >
           {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </header>
 
-      {/* Dropdown menu */}
+      {/* Mobile dropdown menu */}
       {menuOpen && (
-        <nav className="absolute right-5 top-[64px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8">
-          {[
-            { label: "Pricing", href: "#pricing" },
-            { label: "How it works", href: "#showcase" },
-            { label: "Changelog", href: "/releases" },
-            { label: "Sign in", href: "/login" },
-          ].map(l => (
+        <nav className="absolute right-5 top-[64px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8 md:hidden">
+          {[...navLinks, { label: "Sign in", href: "/login" }].map(l => (
             <Link
               key={l.label}
               href={l.href}
@@ -88,7 +122,7 @@ function Hero() {
       )}
 
       {/* Hero content — tight compact stack */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-12 pb-0 text-center sm:pt-16">
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-14 pb-0 text-center sm:pt-16 lg:max-w-3xl lg:pt-20">
         {/* Dot grid */}
         <div
           aria-hidden="true"
@@ -104,7 +138,7 @@ function Hero() {
         {/* Headline */}
         <h1
           className="relative font-extrabold tracking-tight text-balance text-white"
-          style={{ fontSize: "clamp(36px, 10vw, 72px)", lineHeight: 1.07, letterSpacing: "-0.03em" }}
+          style={{ fontSize: "clamp(34px, 8vw, 68px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
         >
           The{" "}
           <span
@@ -118,22 +152,23 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg — directly under title, no begyar interference */}
-        <div className="mt-3">
-          <Image
-            src="/dev.svg"
-            alt="made for developer illustration"
-            width={160}
-            height={160}
-            className="h-auto w-[130px] sm:w-[160px]"
-          />
+        {/* Laurel badge — "made for developer since 2026" */}
+        <div className="relative mt-6 flex items-center justify-center gap-3 sm:mt-8 sm:gap-4">
+          <LaurelBranch />
+          <div className="text-center">
+            <p className="text-xs font-bold text-white leading-tight tracking-wide sm:text-sm">
+              made fore developer
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#8b8e96] leading-tight sm:text-xs">since 2026</p>
+          </div>
+          <LaurelBranch flip />
         </div>
 
-        {/* CTA button — snug below badge */}
+        {/* CTA button */}
         <Button
           asChild
           size="sm"
-          className="mt-3 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="relative mt-6 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-7"
         >
           <Link href="/login">
             Start for free
@@ -143,8 +178,8 @@ function Hero() {
       </div>
 
       {/* Phone mockup */}
-      <div className="relative z-10 mx-auto mt-8 flex w-full flex-col items-center px-5">
-        <div className="relative w-[min(82vw,300px)] sm:w-[340px] lg:w-[380px]">
+      <div className="relative z-10 mx-auto mt-9 flex w-full flex-col items-center px-5 sm:mt-10 lg:mt-12">
+        <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
@@ -158,13 +193,46 @@ function Hero() {
             width={880}
             height={1780}
             priority
-            sizes="(min-width: 1024px) 380px, (min-width: 640px) 340px, 82vw"
+            sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 84vw"
             className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
             style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
           />
         </div>
       </div>
     </section>
+  )
+}
+
+/** Small decorative laurel branch used to flank the "made for developer" badge. `flip` mirrors it for the right side. */
+function LaurelBranch({ flip = false }: { flip?: boolean }) {
+  const leaves = Array.from({ length: 6 })
+  return (
+    <svg
+      width="26"
+      height="58"
+      viewBox="0 0 26 58"
+      fill="none"
+      aria-hidden="true"
+      className={flip ? "scale-x-[-1]" : ""}
+    >
+      <path d="M14 56C14 56 4 45 4 30C4 18 9 10 14 2" stroke="#7A7D85" strokeWidth="1.4" strokeLinecap="round" />
+      {leaves.map((_, i) => {
+        const y = 7 + i * 8
+        const cx = 9 - i * 0.35
+        return (
+          <ellipse
+            key={i}
+            cx={cx}
+            cy={y}
+            rx="5"
+            ry="2.6"
+            transform={`rotate(-38 ${cx} ${y})`}
+            fill="#8b8e96"
+            opacity={0.9 - i * 0.08}
+          />
+        )
+      })}
+    </svg>
   )
 }
 
