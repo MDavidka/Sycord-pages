@@ -34,13 +34,14 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* begyar.svg — full background, behind everything */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+      {/* begyar.svg — smaller background, centered, not full-cover so sides are visible */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
         <Image
           src="/begyar.svg"
           alt=""
-          fill
-          className="object-cover object-center opacity-100"
+          width={520}
+          height={520}
+          className="opacity-100"
           priority
         />
       </div>
@@ -114,11 +115,22 @@ function Hero() {
           all need
         </h1>
 
+        {/* dev.svg — back under title */}
+        <div className="relative mt-8">
+          <Image
+            src="/dev.svg"
+            alt="made for developer illustration"
+            width={200}
+            height={200}
+            className="h-auto w-[180px] sm:w-[200px]"
+          />
+        </div>
+
         {/* CTA */}
         <Button
           asChild
           size="sm"
-          className="mt-10 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-6 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
