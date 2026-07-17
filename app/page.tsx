@@ -57,26 +57,6 @@ function Hero() {
   return (
     <section ref={heroRef} className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
 
-      {/* Decorative rounded squares — scattered behind content, percentage-based so they scale across breakpoints */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div
-          className="absolute rounded-[32px] bg-[#1e1f22]"
-          style={{ width: "42%", maxWidth: 240, height: "24%", maxHeight: 260, top: "-6%", right: "-8%", opacity: 0.65 }}
-        />
-        <div
-          className="absolute rounded-[24px] bg-[#212327]"
-          style={{ width: "26%", maxWidth: 150, height: "12%", maxHeight: 140, top: "7%", right: "4%", opacity: 0.45 }}
-        />
-        <div
-          className="absolute rounded-[28px] bg-[#1e1f22]"
-          style={{ width: "20%", maxWidth: 110, height: "8%", maxHeight: 110, top: "36%", left: "-6%", opacity: 0.4 }}
-        />
-        <div
-          className="absolute rounded-[28px] bg-[#212327]"
-          style={{ width: "24%", maxWidth: 130, height: "10%", maxHeight: 130, top: "58%", left: "1%", opacity: 0.35 }}
-        />
-      </div>
-
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
@@ -162,15 +142,44 @@ function Hero() {
           all need
         </h1>
 
-        {/* "made for developer since 2026" badge — full illustration, from public/dev.svg */}
-        <div className="relative mt-6 flex items-center justify-center sm:mt-8">
-          <Image
-            src="/dev.svg"
-            alt="made for developer since 2026"
-            width={320}
-            height={160}
-            className="h-auto w-[220px] opacity-95 sm:w-[260px]"
+        {/* Badge zone: begyar.svg runs full-bleed, side-to-side, as a background strip
+            directly under the title; the dev.svg badge illustration sits on top of it.
+            dev.svg's actual artwork only occupies a small band of its huge canvas (lots of
+            baked-in transparent padding), so it's cropped tightly here — otherwise it was
+            pushing the CTA button far down the page. */}
+        <div className="relative mt-6 flex w-full items-center justify-center sm:mt-8">
+          {/* begyar.svg — laid side-to-side (tiled left-to-right) as a decorative background
+              strip directly under the title, full-bleed across the viewport. Height is fixed
+              per breakpoint; width is "auto" so each tile keeps its own aspect ratio while
+              repeating horizontally. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-screen -translate-x-1/2 -translate-y-1/2 opacity-40 sm:h-32"
+            style={{
+              backgroundImage: "url(/begyar.svg)",
+              backgroundRepeat: "repeat-x",
+              backgroundSize: "auto 100%",
+              backgroundPosition: "center",
+            }}
           />
+
+          {/* dev.svg — the actual artwork only occupies a band inside a much taller canvas
+              (verified: visible content sits at ~1.5%-79.5% horizontally and ~36%-66.4%
+              vertically of the file), which is why rendering it at full size was pushing the
+              CTA button far down the page. This crops tightly to just that visible band. */}
+          <div
+            className="relative z-10 w-[220px] overflow-hidden sm:w-[260px]"
+            style={{ aspectRatio: "780 / 456" }}
+          >
+            <Image
+              src="/dev.svg"
+              alt="made for developer since 2026"
+              width={3000}
+              height={4500}
+              className="absolute left-0 top-0"
+              style={{ width: "128.2051%", height: "auto", transform: "translate(-1.5%, -36%)" }}
+            />
+          </div>
         </div>
 
         {/* CTA button */}
