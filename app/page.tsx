@@ -34,12 +34,16 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* Decorative background squares */}
+      {/* Decorative background squares — diagonal staircase top-right to bottom-left */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute rounded-[32px] bg-[#1e1f22]" style={{ width: 220, height: 220, top: -40, right: -40, opacity: 0.7 }} />
-        <div className="absolute rounded-[24px] bg-[#212327]" style={{ width: 140, height: 140, top: 30, right: 60, opacity: 0.5 }} />
-        <div className="absolute rounded-[28px] bg-[#1e1f22]" style={{ width: 100, height: 100, top: "38%", left: -20, opacity: 0.45 }} />
-        <div className="absolute rounded-[28px] bg-[#212327]" style={{ width: 130, height: 130, bottom: "18%", left: 20, opacity: 0.4 }} />
+        {/* top-right */}
+        <div className="absolute rounded-[32px] bg-[#222427]" style={{ width: 200, height: 200, top: -30, right: -30 }} />
+        {/* step 2 */}
+        <div className="absolute rounded-[28px] bg-[#1e1f22]" style={{ width: 160, height: 160, top: 140, right: 110 }} />
+        {/* step 3 */}
+        <div className="absolute rounded-[28px] bg-[#222427]" style={{ width: 130, height: 130, top: 260, left: "55%" }} />
+        {/* bottom-left */}
+        <div className="absolute rounded-[28px] bg-[#1e1f22]" style={{ width: 110, height: 110, top: 360, left: "35%" }} />
         {/* diagonal band */}
         <div
           className="pointer-events-none absolute inset-0"
@@ -118,16 +122,19 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg badge */}
-        <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-[#2a2c30] bg-[#1c1d20] px-4 py-2">
-          <Image
-            src="/dev.svg"
-            alt="made for developer"
-            width={36}
-            height={36}
-            className="h-9 w-9 flex-shrink-0"
-          />
-          <div className="text-left">
+        {/* dev.svg badge — full-size illustration */}
+        <div className="mt-8 inline-flex items-center gap-0 overflow-hidden rounded-full border border-[#2a2c30] bg-[#1c1d20]">
+          {/* illustration fills the height of the pill */}
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden">
+            <Image
+              src="/dev.svg"
+              alt="made for developer illustration"
+              width={48}
+              height={48}
+              className="h-full w-full object-cover"
+            />
+          </div>
+          <div className="px-4 py-2 text-left">
             <p className="text-xs font-semibold text-white leading-tight">made fore developer</p>
             <p className="text-[11px] text-[#A7AAB0] leading-tight">since 2026</p>
           </div>
