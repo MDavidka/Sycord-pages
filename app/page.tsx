@@ -34,20 +34,17 @@ function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
     <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
-      {/* begyar.svg — smaller centered background, sides visible */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center">
-        <Image
-          src="/begyar.svg"
-          alt=""
-          width={520}
-          height={520}
-          className="opacity-100"
-          priority
-        />
+      {/* begyar.svg — anchored to top-center, not stretching section height */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-0 z-0"
+        style={{ transform: "translateX(-50%)", width: 480, height: 480 }}
+      >
+        <Image src="/begyar.svg" alt="" fill className="object-contain" priority />
       </div>
 
       {/* Navbar */}
-      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
           <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
           <span className="text-base font-semibold text-white tracking-tight">sycord</span>
@@ -65,7 +62,7 @@ function Hero() {
 
       {/* Dropdown menu */}
       {menuOpen && (
-        <nav className="absolute right-5 top-[68px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8">
+        <nav className="absolute right-5 top-[64px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8">
           {[
             { label: "Pricing", href: "#pricing" },
             { label: "How it works", href: "#showcase" },
@@ -84,8 +81,8 @@ function Hero() {
         </nav>
       )}
 
-      {/* Headline + dev.svg + CTA — all tightly stacked */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-16 text-center sm:pt-20">
+      {/* Hero content — compact stack */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-10 pb-0 text-center sm:pt-16">
         {/* Dot grid */}
         <div
           aria-hidden="true"
@@ -98,10 +95,10 @@ function Hero() {
           }}
         />
 
-        {/* Main headline */}
+        {/* Headline */}
         <h1
           className="relative font-extrabold tracking-tight text-balance text-white"
-          style={{ fontSize: "clamp(38px, 10vw, 72px)", lineHeight: 1.07, letterSpacing: "-0.03em" }}
+          style={{ fontSize: "clamp(36px, 10vw, 72px)", lineHeight: 1.07, letterSpacing: "-0.03em" }}
         >
           The{" "}
           <span
@@ -115,14 +112,14 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg — tight under title */}
-        <div className="relative mt-3">
+        {/* dev.svg — compact, right under title */}
+        <div className="mt-2">
           <Image
             src="/dev.svg"
             alt="made for developer illustration"
-            width={200}
-            height={200}
-            className="h-auto w-[180px] sm:w-[200px]"
+            width={160}
+            height={160}
+            className="h-auto w-[120px] sm:w-[150px]"
           />
         </div>
 
@@ -130,7 +127,7 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="mt-5 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-4 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
@@ -140,8 +137,8 @@ function Hero() {
       </div>
 
       {/* Phone mockup */}
-      <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center px-5">
-        <div className="relative w-[min(82vw,320px)] sm:w-[360px] lg:w-[400px]">
+      <div className="relative z-10 mx-auto mt-8 flex w-full flex-col items-center px-5">
+        <div className="relative w-[min(82vw,300px)] sm:w-[340px] lg:w-[380px]">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
@@ -155,7 +152,7 @@ function Hero() {
             width={880}
             height={1780}
             priority
-            sizes="(min-width: 1024px) 400px, (min-width: 640px) 360px, 82vw"
+            sizes="(min-width: 1024px) 380px, (min-width: 640px) 340px, 82vw"
             className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
             style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
           />
