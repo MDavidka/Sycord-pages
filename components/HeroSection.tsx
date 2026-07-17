@@ -14,27 +14,61 @@ export function HeroSection() {
       className="relative w-full min-h-screen overflow-hidden"
       style={{ backgroundColor: "#18191B" }}
     >
-      {/* Background rounded squares — decorative */}
+      {/* Background begyar.svg decorative blocks */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* top-right large square */}
-        <div
-          className="absolute rounded-[32px] bg-[#1e1f22]"
-          style={{ width: 220, height: 220, top: -40, right: -40, opacity: 0.7 }}
+        {/* top-right large block */}
+        <Image
+          src="/begyar.svg"
+          alt=""
+          width={220}
+          height={220}
+          className="absolute"
+          style={{ top: -40, right: -40, opacity: 0.7, width: 220, height: 220 }}
         />
-        {/* top-right smaller square offset */}
-        <div
-          className="absolute rounded-[24px] bg-[#212327]"
-          style={{ width: 140, height: 140, top: 30, right: 60, opacity: 0.5 }}
+        {/* top-right smaller block */}
+        <Image
+          src="/begyar.svg"
+          alt=""
+          width={140}
+          height={140}
+          className="absolute"
+          style={{ top: 30, right: 60, opacity: 0.5, width: 140, height: 140 }}
         />
-        {/* left mid square */}
-        <div
-          className="absolute rounded-[28px] bg-[#1e1f22]"
-          style={{ width: 100, height: 100, top: "38%", left: -20, opacity: 0.45 }}
+        {/* top-center/mid block (below navbar) */}
+        <Image
+          src="/begyar.svg"
+          alt=""
+          width={100}
+          height={100}
+          className="absolute"
+          style={{ top: "14%", left: "50%", transform: "translateX(-50%)", opacity: 0.35, width: 100, height: 100 }}
         />
-        {/* bottom-left square */}
-        <div
-          className="absolute rounded-[28px] bg-[#212327]"
-          style={{ width: 130, height: 130, bottom: "18%", left: 20, opacity: 0.4 }}
+        {/* left mid block */}
+        <Image
+          src="/begyar.svg"
+          alt=""
+          width={110}
+          height={110}
+          className="absolute"
+          style={{ top: "38%", left: -20, opacity: 0.55, width: 110, height: 110 }}
+        />
+        {/* left mid smaller block */}
+        <Image
+          src="/begyar.svg"
+          alt=""
+          width={80}
+          height={80}
+          className="absolute"
+          style={{ top: "48%", left: 30, opacity: 0.35, width: 80, height: 80 }}
+        />
+        {/* bottom-left block */}
+        <Image
+          src="/begyar.svg"
+          alt=""
+          width={130}
+          height={130}
+          className="absolute"
+          style={{ bottom: "18%", left: 20, opacity: 0.5, width: 130, height: 130 }}
         />
       </div>
 
@@ -171,7 +205,6 @@ export function HeroSection() {
             sizes="(min-width: 1024px) 440px, (min-width: 640px) 400px, 88vw"
             className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
             style={{
-              /* clip the bottom so it looks like the phone is cropped/emerging */
               clipPath: "inset(0 0 8% 0 round 36px 36px 0 0)",
             }}
           />
