@@ -84,8 +84,8 @@ export function HeroSection() {
         </nav>
       )}
 
-      {/* Hero content */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 pt-10 text-center sm:pt-16">
+      {/* Hero content — Title → dev.svg → button */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 pt-8 text-center sm:pt-12">
         {/* Dot grid background behind headline */}
         <div
           aria-hidden="true"
@@ -101,12 +101,12 @@ export function HeroSection() {
           }}
         />
 
-        {/* Main headline */}
+        {/* Title */}
         <h1
-          className="relative max-w-[18ch] font-extrabold tracking-tight text-balance text-white sm:max-w-none"
+          className="relative w-full max-w-[300px] font-extrabold tracking-tight text-balance text-white sm:max-w-[400px]"
           style={{
-            fontSize: "clamp(30px, 7.5vw, 64px)",
-            lineHeight: 1.08,
+            fontSize: "clamp(34px, 8.5vw, 64px)",
+            lineHeight: 1.06,
             letterSpacing: "-0.03em",
           }}
         >
@@ -122,41 +122,23 @@ export function HeroSection() {
           all needs
         </h1>
 
-        {/* Compact optimized laurel badge */}
-        <div className="relative mt-5 flex w-full items-center justify-center gap-2.5 sm:mt-6 sm:gap-3">
+        {/* dev.svg badge pill */}
+        <div className="relative mt-5 flex justify-center sm:mt-6">
           <Image
             src="/dev.svg"
-            alt=""
-            width={48}
-            height={96}
+            alt="made for developers since 2026"
+            width={320}
+            height={88}
             priority
-            aria-hidden="true"
-            className="h-12 w-6 shrink-0 sm:h-14 sm:w-7"
-          />
-          <div className="text-center leading-tight">
-            <p className="text-[13px] font-semibold tracking-tight text-white sm:text-sm">
-              made for developers
-            </p>
-            <p className="mt-0.5 text-[11px] font-medium tracking-[0.08em] text-[#A7AAB0] sm:text-xs">
-              since 2026
-            </p>
-          </div>
-          <Image
-            src="/dev.svg"
-            alt=""
-            width={48}
-            height={96}
-            priority
-            aria-hidden="true"
-            className="h-12 w-6 shrink-0 -scale-x-100 sm:h-14 sm:w-7"
+            className="h-auto w-[230px] sm:w-[250px]"
           />
         </div>
 
-        {/* CTA button — shadcn size="sm" */}
+        {/* Button */}
         <Button
           asChild
           size="sm"
-          className="mt-5 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03] sm:mt-6"
+          className="mt-5 h-11 min-w-[168px] rounded-full bg-white px-8 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03] sm:mt-6 sm:h-12 sm:min-w-[180px] sm:px-9"
         >
           <Link href="/login">
             Start for free
@@ -165,8 +147,8 @@ export function HeroSection() {
         </Button>
       </div>
 
-      {/* Phone mockup — bottom-cropped, same as screenshot */}
-      <div className="relative z-10 mx-auto mt-7 flex w-full flex-col items-center px-6 pb-0 sm:mt-10">
+      {/* Phone mockup — unchanged */}
+      <div className="relative z-10 mx-auto mt-8 flex w-full flex-col items-center px-6 pb-[env(safe-area-inset-bottom)] sm:mt-10">
         <div className="relative w-[min(78vw,300px)] sm:w-[360px] lg:w-[400px]">
           {/* purple glow behind phone */}
           <div
