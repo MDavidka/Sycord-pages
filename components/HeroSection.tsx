@@ -14,27 +14,23 @@ export function HeroSection() {
       className="relative w-full min-h-screen overflow-hidden"
       style={{ backgroundColor: "#18191B" }}
     >
-      {/* Background rounded squares — decorative */}
+      {/* Full-bleed background illustration — thinking.svg at very low opacity */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* top-right large square */}
-        <div
-          className="absolute rounded-[32px] bg-[#1e1f22]"
-          style={{ width: 220, height: 220, top: -40, right: -40, opacity: 0.7 }}
-        />
-        {/* top-right smaller square offset */}
-        <div
-          className="absolute rounded-[24px] bg-[#212327]"
-          style={{ width: 140, height: 140, top: 30, right: 60, opacity: 0.5 }}
-        />
-        {/* left mid square */}
-        <div
-          className="absolute rounded-[28px] bg-[#1e1f22]"
-          style={{ width: 100, height: 100, top: "38%", left: -20, opacity: 0.45 }}
-        />
-        {/* bottom-left square */}
-        <div
-          className="absolute rounded-[28px] bg-[#212327]"
-          style={{ width: 130, height: 130, bottom: "18%", left: 20, opacity: 0.4 }}
+        <Image
+          src="/thinking.svg"
+          alt=""
+          width={900}
+          height={900}
+          className="absolute"
+          style={{
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -46%)",
+            width: "min(900px, 130vw)",
+            height: "auto",
+            opacity: 0.055,
+            filter: "grayscale(1) brightness(2.5)",
+          }}
         />
       </div>
 
@@ -105,7 +101,7 @@ export function HeroSection() {
         <h1
           className="relative font-extrabold tracking-tight text-balance text-white"
           style={{
-            fontSize: "clamp(38px, 10vw, 72px)",
+            fontSize: "clamp(40px, 11vw, 76px)",
             lineHeight: 1.07,
             letterSpacing: "-0.03em",
           }}
@@ -127,9 +123,9 @@ export function HeroSection() {
           <Image
             src="/dev.svg"
             alt="made for developer"
-            width={36}
-            height={36}
-            className="h-9 w-9 flex-shrink-0"
+            width={44}
+            height={44}
+            className="h-11 w-11 flex-shrink-0"
           />
           <div className="text-left">
             <p className="text-xs font-semibold text-white leading-tight">made fore developer</p>
@@ -137,22 +133,22 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* CTA button — shadcn size="sm" */}
+        {/* CTA button — large pill */}
         <Button
           asChild
-          size="sm"
-          className="mt-7 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          size="lg"
+          className="mt-7 rounded-full bg-white px-8 text-base font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
       </div>
 
-      {/* Phone mockup — bottom-cropped, same as screenshot */}
+      {/* Phone mockup — bottom-cropped */}
       <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center px-5 pb-0">
-        <div className="relative w-[min(82vw,320px)] sm:w-[360px] lg:w-[400px]">
+        <div className="relative w-[min(88vw,380px)] sm:w-[400px] lg:w-[440px]">
           {/* purple glow behind phone */}
           <div
             aria-hidden="true"
@@ -168,11 +164,10 @@ export function HeroSection() {
             width={880}
             height={1780}
             priority
-            sizes="(min-width: 1024px) 400px, (min-width: 640px) 360px, 82vw"
+            sizes="(min-width: 1024px) 440px, (min-width: 640px) 400px, 88vw"
             className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
             style={{
-              /* clip the bottom so it looks like the phone is cropped/emerging */
-              clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)",
+              clipPath: "inset(0 0 8% 0 round 36px 36px 0 0)",
             }}
           />
         </div>
