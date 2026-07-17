@@ -42,7 +42,7 @@ function Hero() {
   // crop line at the bottom never moves — flush with TrustStrip below.
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
-  const phoneY = useTransform(scrollYProgress, [0, 1], [40, -28])
+  const phoneY = useTransform(scrollYProgress, [0, 1], [36, -28])
 
   return (
     <section
@@ -51,16 +51,16 @@ function Hero() {
       style={{ backgroundColor: "#18191B" }}
     >
       {/* Side person — left, large faded grayscale bust.
-          Placement mirrors the design: ~40–50% width, cropped by the left edge,
-          soft right + bottom fade so it ghosts into charcoal without fighting copy. */}
+          Same placing/sizing/style as the design: ~45% width, cropped by the left
+          edge from the top, soft right + bottom fade into charcoal. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-0 z-[1] hidden w-[48%] max-w-[720px] select-none sm:block"
+        className="pointer-events-none absolute -left-[4%] top-0 z-[1] hidden h-[92%] w-[52%] max-w-[760px] select-none sm:block lg:-left-[2%] lg:w-[48%]"
         style={{
           WebkitMaskImage:
-            "linear-gradient(90deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.75) 42%, transparent 92%), linear-gradient(180deg, black 0%, black 68%, transparent 100%)",
+            "linear-gradient(90deg, #000 0%, #000 38%, rgba(0,0,0,0.55) 62%, transparent 94%), linear-gradient(180deg, #000 0%, #000 70%, transparent 100%)",
           maskImage:
-            "linear-gradient(90deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.75) 42%, transparent 92%), linear-gradient(180deg, black 0%, black 68%, transparent 100%)",
+            "linear-gradient(90deg, #000 0%, #000 38%, rgba(0,0,0,0.55) 62%, transparent 94%), linear-gradient(180deg, #000 0%, #000 70%, transparent 100%)",
           WebkitMaskComposite: "source-in",
           maskComposite: "intersect",
         }}
@@ -70,20 +70,20 @@ function Hero() {
           alt=""
           fill
           priority
-          sizes="(min-width: 1024px) 48vw, 50vw"
-          className="object-cover object-[8%_6%] opacity-[0.55] grayscale contrast-[1.05] brightness-[0.92]"
+          sizes="(min-width: 1024px) 48vw, 52vw"
+          className="object-cover object-[12%_0%] opacity-[0.62] grayscale contrast-[1.08] brightness-[0.88]"
         />
       </div>
 
-      {/* Soft mobile-only side person — quieter so it doesn't crowd the stack */}
+      {/* Mobile side person — left fade, quieter so badge stays readable */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-[70%] max-w-[420px] select-none sm:hidden"
+        className="pointer-events-none absolute -left-[8%] top-0 z-[1] h-[85%] w-[78%] max-w-[460px] select-none sm:hidden"
         style={{
           WebkitMaskImage:
-            "linear-gradient(90deg, black 0%, transparent 88%), linear-gradient(180deg, black 0%, black 60%, transparent 100%)",
+            "linear-gradient(90deg, #000 0%, #000 35%, transparent 88%), linear-gradient(180deg, #000 0%, #000 62%, transparent 100%)",
           maskImage:
-            "linear-gradient(90deg, black 0%, transparent 88%), linear-gradient(180deg, black 0%, black 60%, transparent 100%)",
+            "linear-gradient(90deg, #000 0%, #000 35%, transparent 88%), linear-gradient(180deg, #000 0%, #000 62%, transparent 100%)",
           WebkitMaskComposite: "source-in",
           maskComposite: "intersect",
         }}
@@ -93,8 +93,8 @@ function Hero() {
           alt=""
           fill
           priority
-          sizes="70vw"
-          className="object-cover object-[20%_10%] opacity-[0.28] grayscale"
+          sizes="78vw"
+          className="object-cover object-[18%_4%] opacity-[0.4] grayscale brightness-[0.9]"
         />
       </div>
 
@@ -107,19 +107,20 @@ function Hero() {
 
         <Link
           href="/contact"
-          className="rounded-full border border-dashed border-white/75 px-[18px] py-[7px] text-[13px] font-medium tracking-wide text-white transition-colors hover:border-white hover:bg-white/5"
+          className="rounded-full px-[18px] py-[7px] text-[13px] font-medium tracking-wide text-white transition-colors hover:bg-white/5"
+          style={{ border: "1.5px dashed rgba(255,255,255,0.85)" }}
         >
           contact us
         </Link>
       </header>
 
-      {/* Center stack sits in the upper-middle band (badge + CTA), phone anchors bottom */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-5 pb-2 pt-6 text-center sm:pt-8 lg:max-w-3xl">
+      {/* Center stack: badge + CTA in the upper-middle band */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-start px-5 pt-[8vh] text-center sm:pt-[9vh] lg:max-w-3xl lg:pt-[10vh]">
         {/* Full "made for developers" SVG (dev.svg). Artwork lives in a mid band of a
             tall canvas — crop with margin so laurels + copy stay complete. */}
         <div className="relative flex w-full items-center justify-center">
           <div
-            className="relative w-[250px] overflow-hidden sm:w-[310px] lg:w-[350px]"
+            className="relative w-[250px] overflow-hidden sm:w-[300px] lg:w-[330px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
@@ -137,7 +138,7 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="relative z-10 mt-6 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-7"
+          className="relative z-10 mt-4 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-5"
         >
           <Link href="/login">
             Start for free
@@ -147,8 +148,8 @@ function Hero() {
       </div>
 
       {/* Phone mockup — existing asset, cropped so it emerges from the bottom edge */}
-      <div className="relative z-10 mx-auto flex w-full shrink-0 flex-col items-center overflow-hidden px-5">
-        <div className="relative w-[min(78vw,300px)] sm:w-[360px] lg:w-[420px]">
+      <div className="relative z-10 mx-auto mt-auto flex w-full shrink-0 flex-col items-center overflow-hidden px-5">
+        <div className="relative w-[min(78vw,300px)] sm:w-[350px] lg:w-[400px]">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
@@ -164,9 +165,9 @@ function Hero() {
               width={880}
               height={1780}
               priority
-              sizes="(min-width: 1024px) 420px, (min-width: 640px) 360px, 78vw"
+              sizes="(min-width: 1024px) 400px, (min-width: 640px) 350px, 78vw"
               className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
-              style={{ clipPath: "inset(0 0 18% 0 round 36px 36px 0 0)" }}
+              style={{ clipPath: "inset(0 0 22% 0 round 36px 36px 0 0)" }}
             />
           </motion.div>
         </div>
