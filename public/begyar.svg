@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260" fill="none">
-  <rect x="8" y="170" width="72" height="72" rx="18" fill="#4b4b4c" opacity=".9"/>
-  <rect x="52" y="110" width="72" height="72" rx="18" fill="#4b4b4c" opacity=".75"/>
-  <rect x="96" y="50" width="72" height="72" rx="18" fill="#4b4b4c" opacity=".6"/>
-  <rect x="128" y="8" width="64" height="64" rx="16" fill="#4b4b4c" opacity=".45"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 160" fill="none" aria-hidden="true">
+  <!-- Wide side-to-side rounded blocs — gentle diagonal across full width -->
+  <rect x="-36" y="78" width="110" height="110" rx="26" fill="#4b4b4c"/>
+  <rect x="28" y="58" width="110" height="110" rx="26" fill="#4b4b4c" opacity=".95"/>
+  <rect x="92" y="38" width="110" height="110" rx="26" fill="#4b4b4c" opacity=".88"/>
+  <rect x="156" y="18" width="110" height="110" rx="26" fill="#4b4b4c" opacity=".80"/>
+  <rect x="220" y="-2" width="110" height="110" rx="26" fill="#4b4b4c" opacity=".70"/>
+  <rect x="284" y="-22" width="110" height="110" rx="26" fill="#4b4b4c" opacity=".58"/>
+  <rect x="340" y="-38" width="100" height="100" rx="24" fill="#4b4b4c" opacity=".42"/>
 </svg>

@@ -125,17 +125,17 @@ function Hero() {
           }}
         />
 
-        {/* Decorative accent — keep faint so it never competes with Title / badge / CTA */}
+        {/* begyar.svg — side-to-side diagonal blocs spanning the hero width */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-14 z-0 flex justify-center opacity-[0.12] sm:top-16"
+          className="pointer-events-none absolute left-1/2 top-2 z-0 w-[100vw] max-w-none -translate-x-1/2 opacity-[0.32] sm:top-4 sm:opacity-[0.28]"
         >
           <Image
             src="/begyar.svg"
             alt=""
-            width={200}
-            height={260}
-            className="h-auto w-[100px] object-contain sm:w-[130px] lg:w-[150px]"
+            width={390}
+            height={160}
+            className="h-auto w-full object-cover object-center sm:object-contain"
           />
         </div>
 
