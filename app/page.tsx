@@ -126,19 +126,21 @@ function Hero() {
         />
 
         {/* begyar.svg — shown once, whole and uncropped (object-contain preserves its full
-            2:3 artwork, nothing clipped), placed under the headline text: positioned behind
-            it in the background (z-0, sits below the z-10 text/badge/CTA below) and starts
-            just under the title so it reads as sitting "under" the copy, not overlapping it. */}
+            artwork, nothing clipped), placed under the headline text as a subtle background
+            accent. Sized and dimmed down from the previous pass: at larger size/opacity its
+            large diagonal shapes read as a visible streak cutting across the headline, badge,
+            and CTA — now scaled smaller and much more transparent so it sits quietly behind
+            the copy instead of competing with it. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-20 z-0 flex justify-center opacity-45 sm:top-24"
+          className="pointer-events-none absolute inset-x-0 top-24 z-0 flex justify-center opacity-[0.12] sm:top-28"
         >
           <Image
             src="/begyar.svg"
             alt=""
             width={3000}
             height={4500}
-            className="h-auto w-[260px] object-contain sm:w-[340px] lg:w-[400px]"
+            className="h-auto w-[160px] object-contain sm:w-[200px] lg:w-[230px]"
           />
         </div>
 
@@ -160,14 +162,16 @@ function Hero() {
         </h1>
 
         {/* "made for developer since 2026" badge — dev.svg's actual artwork only occupies a
-            band inside a much taller canvas (verified: visible content sits at ~1.5%-79.5%
-            horizontally and ~36%-66.4% vertically of the file), which is why rendering it at
-            full size was pushing the CTA button far down the page. This crops tightly to just
-            that visible band. */}
+            band inside a much taller canvas. Measured precisely (via rendering the SVG to a
+            raster image and scanning the alpha channel): visible content sits at ~1.55%-81.55%
+            horizontally and ~36%-66.33% vertically of the file. The previous crop used those
+            bounds with NO margin, which sliced through the left edge of the "m" in "made"
+            (rendered as "nade"). This crop adds a safety margin on every side (0%-85% x,
+            35%-68% y) so the full word and laurel are never clipped. */}
         <div className="relative z-10 mt-6 flex w-full items-center justify-center sm:mt-8">
           <div
-            className="relative w-[220px] overflow-hidden sm:w-[260px]"
-            style={{ aspectRatio: "780 / 456" }}
+            className="relative w-[230px] overflow-hidden sm:w-[270px]"
+            style={{ aspectRatio: "170 / 99" }}
           >
             <Image
               src="/dev.svg"
@@ -175,7 +179,7 @@ function Hero() {
               width={3000}
               height={4500}
               className="absolute left-0 top-0"
-              style={{ width: "128.2051%", height: "auto", transform: "translate(-1.5%, -36%)" }}
+              style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
             />
           </div>
         </div>
