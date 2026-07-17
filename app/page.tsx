@@ -116,7 +116,7 @@ function Hero() {
         {/* Dot grid */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-0 z-0"
           style={{
             backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.5px, transparent 1.5px)",
             backgroundSize: "38px 38px",
@@ -125,9 +125,26 @@ function Hero() {
           }}
         />
 
+        {/* begyar.svg — shown once, whole and uncropped (object-contain preserves its full
+            2:3 artwork, nothing clipped), placed under the headline text: positioned behind
+            it in the background (z-0, sits below the z-10 text/badge/CTA below) and starts
+            just under the title so it reads as sitting "under" the copy, not overlapping it. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-20 z-0 flex justify-center opacity-45 sm:top-24"
+        >
+          <Image
+            src="/begyar.svg"
+            alt=""
+            width={3000}
+            height={4500}
+            className="h-auto w-[260px] object-contain sm:w-[340px] lg:w-[400px]"
+          />
+        </div>
+
         {/* Headline */}
         <h1
-          className="relative font-extrabold tracking-tight text-balance text-white"
+          className="relative z-10 font-extrabold tracking-tight text-balance text-white"
           style={{ fontSize: "clamp(34px, 8vw, 68px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
         >
           The{" "}
@@ -142,33 +159,14 @@ function Hero() {
           all need
         </h1>
 
-        {/* Badge zone: begyar.svg runs full-bleed, side-to-side, as a background strip
-            directly under the title; the dev.svg badge illustration sits on top of it.
-            dev.svg's actual artwork only occupies a small band of its huge canvas (lots of
-            baked-in transparent padding), so it's cropped tightly here — otherwise it was
-            pushing the CTA button far down the page. */}
-        <div className="relative mt-6 flex w-full items-center justify-center sm:mt-8">
-          {/* begyar.svg — laid side-to-side (tiled left-to-right) as a decorative background
-              strip directly under the title, full-bleed across the viewport. Height is fixed
-              per breakpoint; width is "auto" so each tile keeps its own aspect ratio while
-              repeating horizontally. */}
+        {/* "made for developer since 2026" badge — dev.svg's actual artwork only occupies a
+            band inside a much taller canvas (verified: visible content sits at ~1.5%-79.5%
+            horizontally and ~36%-66.4% vertically of the file), which is why rendering it at
+            full size was pushing the CTA button far down the page. This crops tightly to just
+            that visible band. */}
+        <div className="relative z-10 mt-6 flex w-full items-center justify-center sm:mt-8">
           <div
-            aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-1/2 h-24 w-screen -translate-x-1/2 -translate-y-1/2 opacity-40 sm:h-32"
-            style={{
-              backgroundImage: "url(/begyar.svg)",
-              backgroundRepeat: "repeat-x",
-              backgroundSize: "auto 100%",
-              backgroundPosition: "center",
-            }}
-          />
-
-          {/* dev.svg — the actual artwork only occupies a band inside a much taller canvas
-              (verified: visible content sits at ~1.5%-79.5% horizontally and ~36%-66.4%
-              vertically of the file), which is why rendering it at full size was pushing the
-              CTA button far down the page. This crops tightly to just that visible band. */}
-          <div
-            className="relative z-10 w-[220px] overflow-hidden sm:w-[260px]"
+            className="relative w-[220px] overflow-hidden sm:w-[260px]"
             style={{ aspectRatio: "780 / 456" }}
           >
             <Image
@@ -186,7 +184,7 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="relative mt-6 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-7"
+          className="relative z-10 mt-6 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-7"
         >
           <Link href="/login">
             Start for free
