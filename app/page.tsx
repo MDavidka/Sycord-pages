@@ -13,9 +13,14 @@ import {
   ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, X, Zap,
 } from "lucide-react"
 
+const BG = "#1c1d1f"
+const BORDER = "#2a2c30"
+const MUTED = "#A7AAB0"
+const TEXT = "#E5E7EB"
+
 export default function LandingPage() {
   return (
-    <main className="min-h-screen w-full bg-[#18191B] text-white" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <main className="min-h-screen w-full text-white" style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}>
       <Hero />
       <TrustStrip />
       <HowItWorks />
@@ -33,7 +38,16 @@ export default function LandingPage() {
 function Hero() {
   const [menuOpen, setMenuOpen] = useState(false)
   return (
-    <section className="relative w-full overflow-hidden" style={{ backgroundColor: "#18191B" }}>
+    <section className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
+
+      {/* begyar.svg — top-right corner, decorative only, no layout impact */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 top-0 z-0"
+        style={{ width: 320, height: 320, opacity: 0.9 }}
+      >
+        <Image src="/begyar.svg" alt="" fill className="object-contain object-right-top" priority />
+      </div>
 
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-8">
@@ -73,17 +87,17 @@ function Hero() {
         </nav>
       )}
 
-      {/* Hero content */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-10 text-center sm:pt-14">
+      {/* Hero content — tight compact stack */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-12 pb-0 text-center sm:pt-16">
         {/* Dot grid */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage: "radial-gradient(rgba(255,255,255,0.09) 1.5px, transparent 1.5px)",
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.5px, transparent 1.5px)",
             backgroundSize: "38px 38px",
-            WebkitMaskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 88%)",
-            maskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 88%)",
+            WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 90%)",
+            maskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 90%)",
           }}
         />
 
@@ -104,34 +118,22 @@ function Hero() {
           all need
         </h1>
 
-        {/* dev.svg + begyar.svg stacked: begyar behind, dev on top */}
-        <div className="relative mt-2 flex flex-col items-center">
-          {/* begyar.svg — absolutely behind dev.svg, centered */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-1/2 z-0"
-            style={{ transform: "translate(-50%, -50%)", width: 340, height: 340 }}
-          >
-            <Image src="/begyar.svg" alt="" fill className="object-contain" priority />
-          </div>
-
-          {/* dev.svg on top */}
-          <div className="relative z-10">
-            <Image
-              src="/dev.svg"
-              alt="made for developer illustration"
-              width={140}
-              height={140}
-              className="h-auto w-[110px] sm:w-[140px]"
-            />
-          </div>
+        {/* dev.svg — directly under title, no begyar interference */}
+        <div className="mt-3">
+          <Image
+            src="/dev.svg"
+            alt="made for developer illustration"
+            width={160}
+            height={160}
+            className="h-auto w-[130px] sm:w-[160px]"
+          />
         </div>
 
-        {/* CTA — tight below badge */}
+        {/* CTA button — snug below badge */}
         <Button
           asChild
           size="sm"
-          className="mt-3 rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950 shadow-[0_12px_36px_rgba(255,255,255,0.09)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
+          className="mt-3 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] hover:bg-white/90 transition-transform hover:scale-[1.03]"
         >
           <Link href="/login">
             Start for free
@@ -147,12 +149,12 @@ function Hero() {
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
             style={{
-              background: "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(124,111,245,0.11) 0%, transparent 70%)",
+              background: "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(124,111,245,0.09) 0%, transparent 70%)",
             }}
           />
           <Image
             src="/hero-phone.webp"
-            alt="Syra, the Sycord cloud coding agent, reading files and running commands on a phone"
+            alt="Syra coding agent on phone"
             width={880}
             height={1780}
             priority
@@ -178,8 +180,8 @@ function TrustStrip() {
     <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-24">
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         {items.map(it => (
-          <div key={it.label} className="inline-flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#18191B] px-3.5 py-2 text-xs font-medium text-[#E5E7EB] sm:text-sm">
-            <span className="text-[#A7AAB0]">{it.icon}</span>{it.label}
+          <div key={it.label} className="inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}>
+            <span style={{ color: MUTED }}>{it.icon}</span>{it.label}
           </div>
         ))}
       </div>
@@ -198,14 +200,14 @@ function HowItWorks() {
       <SectionHeading eyebrow="How it works" title="Launch in minutes" subtitle="Generate, customize, and publish your site with AI-powered hosting." />
       <div className="mt-10 grid gap-4 sm:grid-cols-3">
         {steps.map(s => (
-          <div key={s.n} className="flex flex-col rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 transition-colors hover:bg-[#212327]">
-            <div className="mb-5 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#111213]">{s.illo}</div>
+          <div key={s.n} className="flex flex-col rounded-3xl border p-6 transition-colors" style={{ borderColor: BORDER, backgroundColor: BG }}>
+            <div className="mb-5 overflow-hidden rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>{s.illo}</div>
             <div className="flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#18191B] text-white">{s.icon}</span>
-              <span className="text-xs font-semibold tracking-widest text-[#A7AAB0]">{s.n}</span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>{s.icon}</span>
+              <span className="text-xs font-semibold tracking-widest" style={{ color: MUTED }}>{s.n}</span>
             </div>
             <h3 className="mt-5 text-lg font-semibold text-white">{s.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-[#A7AAB0]">{s.body}</p>
+            <p className="mt-2 text-sm leading-relaxed" style={{ color: MUTED }}>{s.body}</p>
           </div>
         ))}
       </div>
@@ -220,7 +222,7 @@ function IlloPrompt() {
         <div className="h-1.5 w-28 rounded-full bg-black/70" />
         <div className="h-1.5 w-20 rounded-full bg-black/40" />
       </div>
-      <div className="flex items-center gap-2.5 rounded-2xl border border-[#2a2c30] bg-[#18191B] px-3.5 py-3">
+      <div className="flex items-center gap-2.5 rounded-2xl border px-3.5 py-3" style={{ borderColor: BORDER, backgroundColor: BG }}>
         <div className="h-1.5 w-24 rounded-full bg-white/20" />
         <div className="h-3.5 w-0.5 animate-pulse rounded bg-white/70" />
         <div className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-white">
@@ -234,11 +236,11 @@ function IlloPrompt() {
 function IlloBuild() {
   return (
     <div aria-hidden="true" className="flex aspect-[16/9] w-full items-center justify-center p-5">
-      <div className="w-full max-w-[220px] overflow-hidden rounded-xl border border-[#2a2c30] bg-[#18191B]">
-        <div className="flex items-center gap-1.5 border-b border-[#2a2c30] px-3 py-2">
-          <span className="h-2 w-2 rounded-full bg-[#2a2c30]" />
-          <span className="h-2 w-2 rounded-full bg-[#2a2c30]" />
-          <span className="h-2 w-2 rounded-full bg-[#2a2c30]" />
+      <div className="w-full max-w-[220px] overflow-hidden rounded-xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
+        <div className="flex items-center gap-1.5 border-b px-3 py-2" style={{ borderColor: BORDER }}>
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BORDER }} />
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BORDER }} />
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BORDER }} />
         </div>
         <div className="space-y-2 p-3">
           <div className="h-8 rounded-lg border border-dashed border-[#7C6FF5]/50 bg-[#7C6FF5]/10" />
@@ -260,15 +262,15 @@ function IlloBuild() {
 function IlloDeploy() {
   return (
     <div aria-hidden="true" className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-3 p-5">
-      <div className="flex w-full max-w-[220px] items-center gap-2 rounded-full border border-[#2a2c30] bg-[#18191B] px-3.5 py-2.5">
+      <div className="flex w-full max-w-[220px] items-center gap-2 rounded-full border px-3.5 py-2.5" style={{ borderColor: BORDER, backgroundColor: BG }}>
         <Lock className="h-3 w-3 shrink-0 text-emerald-400" />
-        <span className="text-[11px] font-medium text-[#E5E7EB]">yoursite.com</span>
+        <span className="text-[11px] font-medium" style={{ color: TEXT }}>yoursite.com</span>
         <span className="ml-auto flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2 py-0.5">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
           <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400">Live</span>
         </span>
       </div>
-      <div className="flex items-center gap-2 text-[#A7AAB0]">
+      <div className="flex items-center gap-2" style={{ color: MUTED }}>
         <Globe className="h-3.5 w-3.5" />
         <div className="flex items-center gap-1">
           {[0, 1, 2, 3, 4].map(i => (
@@ -321,10 +323,10 @@ function HostingFeatures() {
 
 function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
-    <div className="rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 transition-colors hover:bg-[#212327]">
-      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#18191B] text-white">{icon}</span>
+    <div className="rounded-3xl border p-6 transition-colors hover:opacity-90" style={{ borderColor: BORDER, backgroundColor: BG }}>
+      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>{icon}</span>
       <h3 className="mt-5 text-base font-semibold text-white">{title}</h3>
-      <p className="mt-2 text-sm text-[#A7AAB0]">{body}</p>
+      <p className="mt-2 text-sm" style={{ color: MUTED }}>{body}</p>
     </div>
   )
 }
@@ -343,12 +345,12 @@ function Templates() {
       <SectionHeading eyebrow="Templates" title="Built for every kind of site" subtitle="Start from a template — Sycord tunes it to your brand." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map(t => (
-          <div key={t.label} className="group relative overflow-hidden rounded-3xl border border-[#2a2c30] bg-[#18191B] p-5 transition-colors hover:bg-[#212327]">
-            <div className={`aspect-[16/9] w-full rounded-2xl border border-[#2a2c30] bg-gradient-to-br ${t.hue}`}>
+          <div key={t.label} className="group relative overflow-hidden rounded-3xl border p-5 transition-colors" style={{ borderColor: BORDER, backgroundColor: BG }}>
+            <div className={`aspect-[16/9] w-full rounded-2xl border bg-gradient-to-br ${t.hue}`} style={{ borderColor: BORDER }}>
               <div className="flex h-full w-full flex-col justify-between p-4">
                 <div className="flex items-center justify-between">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/40 text-white">{t.icon}</span>
-                  <span className="rounded-full border border-[#2a2c30] bg-[#18191B] px-2 py-0.5 text-[10px] uppercase tracking-wider text-[#A7AAB0]">Template</span>
+                  <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider" style={{ borderColor: BORDER, backgroundColor: BG, color: MUTED }}>Template</span>
                 </div>
                 <div className="space-y-1.5">
                   <div className="h-2 w-24 rounded bg-white/70" />
@@ -358,7 +360,7 @@ function Templates() {
             </div>
             <div className="mt-4 flex items-center justify-between">
               <span className="text-sm font-semibold text-white">{t.label}</span>
-              <ChevronRight className="h-4 w-4 text-[#A7AAB0] transition-transform group-hover:translate-x-0.5" />
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" style={{ color: MUTED }} />
             </div>
           </div>
         ))}
@@ -378,18 +380,18 @@ function Pricing() {
       <SectionHeading eyebrow="Pricing" title="Simple, transparent pricing" subtitle="Start free. Scale when you're ready." />
       <div className="mt-10 grid gap-4 lg:grid-cols-3">
         {plans.map(p => (
-          <div key={p.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${p.highlighted ? "border-white/20 bg-[#18191B] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : "border-[#2a2c30] bg-[#18191B] hover:bg-[#212327]"}`}>
-            <div className="mb-5 overflow-hidden rounded-2xl border border-[#2a2c30] bg-[#111213]">{p.illo}</div>
+          <div key={p.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${p.highlighted ? "shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : ""}`} style={{ borderColor: p.highlighted ? "rgba(255,255,255,0.15)" : BORDER, backgroundColor: BG }}>
+            <div className="mb-5 overflow-hidden rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>{p.illo}</div>
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-white">{p.name}</h3>
-              {p.highlighted ? <span className="rounded-full border border-[#2a2c30] bg-[#18191B] px-2 py-0.5 text-[10px] uppercase tracking-wider text-white">Popular</span> : null}
+              {p.highlighted ? <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>Popular</span> : null}
             </div>
-            <p className="mt-1 text-sm text-[#A7AAB0]">{p.tagline}</p>
+            <p className="mt-1 text-sm" style={{ color: MUTED }}>{p.tagline}</p>
             <div className="mt-5 flex items-baseline gap-1">
               <span className="text-3xl font-bold text-white">{p.price}</span>
-              {p.period ? <span className="text-sm text-[#A7AAB0]">{p.period}</span> : null}
+              {p.period ? <span className="text-sm" style={{ color: MUTED }}>{p.period}</span> : null}
             </div>
-            <ul className="mt-5 space-y-2 text-sm text-[#E5E7EB]">
+            <ul className="mt-5 space-y-2 text-sm" style={{ color: TEXT }}>
               {p.features.map(f => (
                 <li key={f} className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /><span>{f}</span>
@@ -399,7 +401,8 @@ function Pricing() {
             <Button
               asChild
               variant={p.highlighted ? "default" : "outline"}
-              className={`mt-6 rounded-xl ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white"}`}
+              className={`mt-6 rounded-xl ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
+              style={p.highlighted ? {} : { borderColor: BORDER }}
             >
               <Link href="/login">{p.cta}</Link>
             </Button>
@@ -414,12 +417,12 @@ function IlloPlanStarter() {
   return (
     <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
       <div className="flex w-full max-w-[200px] items-center gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#2a2c30] bg-[#18191B]">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
           <Wand2 className="h-5 w-5 text-white" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#18191B] px-3 py-1.5">
-            <span className="text-[10px] font-medium text-[#A7AAB0]">you.sycord.app</span>
+          <div className="flex items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor: BORDER, backgroundColor: BG }}>
+            <span className="text-[10px] font-medium" style={{ color: MUTED }}>you.sycord.app</span>
           </div>
           <div className="flex items-center gap-1.5">
             {[0, 1, 2].map(i => <span key={i} className="h-1.5 flex-1 rounded-full bg-white/15" />)}
@@ -435,12 +438,12 @@ function IlloPlanPro() {
   return (
     <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
       <div className="w-full max-w-[210px] space-y-2">
-        <div className="flex items-center gap-2 rounded-full border border-white/20 bg-[#18191B] px-3 py-1.5">
+        <div className="flex items-center gap-2 rounded-full border border-white/20 px-3 py-1.5" style={{ backgroundColor: BG }}>
           <Lock className="h-3 w-3 shrink-0 text-emerald-400" />
           <span className="text-[10px] font-semibold text-white">yourdomain.com</span>
           <TrendingUp className="ml-auto h-3 w-3 shrink-0 text-[#7C6FF5]" />
         </div>
-        <div className="flex items-end gap-1.5 rounded-xl border border-[#2a2c30] bg-[#18191B] px-3 pb-2 pt-3">
+        <div className="flex items-end gap-1.5 rounded-xl border px-3 pb-2 pt-3" style={{ borderColor: BORDER, backgroundColor: BG }}>
           {[8, 14, 10, 18, 13, 22, 17, 26].map((h, i) => (
             <span key={i} className="w-full rounded-t-sm bg-[#7C6FF5]/60" style={{ height: h }} />
           ))}
@@ -454,13 +457,13 @@ function IlloPlanBusiness() {
   return (
     <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
       <div className="relative h-full w-full max-w-[210px]">
-        <div className="absolute left-3 top-1/2 w-[85%] -translate-y-[30%] rounded-xl border border-[#2a2c30] bg-[#1c1d20] px-3 py-2 opacity-60">
+        <div className="absolute left-3 top-1/2 w-[85%] -translate-y-[30%] rounded-xl border px-3 py-2 opacity-60" style={{ borderColor: BORDER, backgroundColor: "#1c1d20" }}>
           <div className="h-1.5 w-16 rounded-full bg-white/20" />
         </div>
-        <div className="absolute left-1.5 top-1/2 w-[90%] -translate-y-[55%] rounded-xl border border-[#2a2c30] bg-[#1e1f23] px-3 py-2 opacity-80">
+        <div className="absolute left-1.5 top-1/2 w-[90%] -translate-y-[55%] rounded-xl border px-3 py-2 opacity-80" style={{ borderColor: BORDER, backgroundColor: "#1e1f23" }}>
           <div className="h-1.5 w-20 rounded-full bg-white/25" />
         </div>
-        <div className="absolute left-0 top-1/2 flex w-[95%] -translate-y-[80%] items-center gap-2 rounded-xl border border-white/20 bg-[#232428] px-3 py-2">
+        <div className="absolute left-0 top-1/2 flex w-[95%] -translate-y-[80%] items-center gap-2 rounded-xl border border-white/20 px-3 py-2" style={{ backgroundColor: "#232428" }}>
           <Server className="h-3.5 w-3.5 shrink-0 text-white" />
           <div className="h-1.5 w-20 rounded-full bg-white/40" />
           <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-400/10 px-1.5 py-0.5">
@@ -484,12 +487,12 @@ function FAQ() {
   return (
     <section className="mx-auto w-full max-w-3xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="FAQ" title="Frequently asked questions" subtitle="Everything you need to know to get started." />
-      <div className="mt-8 rounded-3xl border border-[#2a2c30] bg-[#18191B]">
+      <div className="mt-8 rounded-3xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
         <Accordion type="single" collapsible className="w-full">
           {faqs.map((f, i) => (
-            <AccordionItem key={f.q} value={`item-${i}`} className={`border-[#2a2c30] px-5 ${i === faqs.length - 1 ? "border-b-0" : ""}`}>
+            <AccordionItem key={f.q} value={`item-${i}`} className={`px-5 ${i === faqs.length - 1 ? "border-b-0" : ""}`} style={{ borderColor: BORDER }}>
               <AccordionTrigger className="text-base font-semibold text-white hover:no-underline">{f.q}</AccordionTrigger>
-              <AccordionContent className="text-sm text-[#A7AAB0]">{f.a}</AccordionContent>
+              <AccordionContent className="text-sm" style={{ color: MUTED }}>{f.a}</AccordionContent>
             </AccordionItem>
           ))}
         </Accordion>
@@ -501,14 +504,14 @@ function FAQ() {
 function FinalCTA() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <div className="overflow-hidden rounded-[36px] border border-[#2a2c30] bg-[#18191B] p-10 text-center sm:rounded-[55px] sm:p-16" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1.4px, transparent 1.4px)", backgroundSize: "26px 26px" }}>
+      <div className="overflow-hidden rounded-[36px] border p-10 text-center sm:rounded-[55px] sm:p-16" style={{ borderColor: BORDER, backgroundColor: BG, backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1.4px, transparent 1.4px)", backgroundSize: "26px 26px" }}>
         <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>Launch your site with AI</h2>
-        <p className="mx-auto mt-4 max-w-xl text-base text-[#A7AAB0] sm:text-lg">Build, host, and publish from one powerful platform.</p>
+        <p className="mx-auto mt-4 max-w-xl text-base sm:text-lg" style={{ color: MUTED }}>Build, host, and publish from one powerful platform.</p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <Button asChild className="rounded-xl bg-white text-black hover:bg-white/90">
             <Link href="/login">Start for free <ArrowRight className="ml-1 h-4 w-4" /></Link>
           </Button>
-          <Button asChild variant="outline" className="rounded-xl border-[#2a2c30] bg-transparent text-white hover:bg-[#212327] hover:text-white">
+          <Button asChild variant="outline" className="rounded-xl bg-transparent text-white hover:text-white" style={{ borderColor: BORDER }}>
             <Link href="#showcase">See demo</Link>
           </Button>
         </div>
@@ -526,30 +529,30 @@ function Footer() {
   ]
   return (
     <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:px-8 sm:mt-32">
-      <div className="rounded-3xl border border-[#2a2c30] bg-[#18191B] p-8 sm:p-10">
+      <div className="rounded-3xl border p-8 sm:p-10" style={{ borderColor: BORDER, backgroundColor: BG }}>
         <div className="grid gap-8 lg:grid-cols-5">
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2">
               <Image src="/logo.png" alt="logo" width={28} height={28} className="opacity-90" />
               <span className="text-base font-semibold text-white">Sycord</span>
             </div>
-            <p className="mt-3 max-w-sm text-sm text-[#A7AAB0]">The AI website builder with hosting built in. Generate, customize, and publish — all from one platform.</p>
+            <p className="mt-3 max-w-sm text-sm" style={{ color: MUTED }}>The AI website builder with hosting built in. Generate, customize, and publish — all from one platform.</p>
           </div>
           {cols.map(c => (
             <div key={c.title}>
-              <div className="text-xs font-semibold uppercase tracking-wider text-[#A7AAB0]">{c.title}</div>
+              <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: MUTED }}>{c.title}</div>
               <ul className="mt-4 space-y-2 text-sm">
                 {c.links.map(l => (
                   <li key={l.label}>
-                    <Link href={l.href} className="text-[#E5E7EB] transition-colors duration-150 hover:text-white">{l.label}</Link>
+                    <Link href={l.href} className="transition-colors duration-150 hover:text-white" style={{ color: TEXT }}>{l.label}</Link>
                   </li>
                 ))}
               </ul>
             </div>
           ))}
         </div>
-        <div className="mt-10 h-[2px] w-full rounded-full bg-white/10" />
-        <div className="mt-6 flex flex-col items-start justify-between gap-4 text-xs text-[#A7AAB0] sm:flex-row sm:items-center">
+        <div className="mt-10 h-[1px] w-full rounded-full bg-white/10" />
+        <div className="mt-6 flex flex-col items-start justify-between gap-4 text-xs sm:flex-row sm:items-center" style={{ color: MUTED }}>
           <span>© {new Date().getFullYear()} Sycord. All rights reserved.</span>
           <div className="flex items-center gap-3">
             <Link href="/tos" className="transition-colors duration-150 hover:text-white">Terms</Link>
@@ -565,9 +568,9 @@ function Footer() {
 function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
   return (
     <div className="mx-auto max-w-2xl text-center">
-      <span className="inline-flex items-center rounded-full border border-[#2a2c30] bg-[#18191B] px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#A7AAB0]">{eyebrow}</span>
+      <span className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: BORDER, backgroundColor: BG, color: MUTED }}>{eyebrow}</span>
       <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>{title}</h2>
-      <p className="mt-3 text-base text-[#A7AAB0]">{subtitle}</p>
+      <p className="mt-3 text-base" style={{ color: MUTED }}>{subtitle}</p>
     </div>
   )
 }
