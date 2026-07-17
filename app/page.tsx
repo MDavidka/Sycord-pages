@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion, useScroll, useTransform } from "framer-motion"
@@ -10,11 +10,11 @@ import {
 } from "@/components/ui/accordion"
 import {
   ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
-  LayoutTemplate, Lock, Menu, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
-  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, X, Zap,
+  LayoutTemplate, Lock, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
+  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
 } from "lucide-react"
 
-const BG = "#1c1d1f"
+const BG = "#18191B"
 const BORDER = "#2a2c30"
 const MUTED = "#A7AAB0"
 const TEXT = "#E5E7EB"
@@ -37,158 +37,108 @@ export default function LandingPage() {
 }
 
 function Hero() {
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  const navLinks = [
-    { label: "Pricing", href: "#pricing" },
-    { label: "How it works", href: "#showcase" },
-    { label: "Changelog", href: "/releases" },
-  ]
-
   // Scroll-linked parallax: the phone rises into view as the hero scrolls past,
-  // while the header/headline/badge/CTA stay perfectly still. The wrapper below
-  // clips the image so the crop line at the bottom never moves — it always sits
-  // flush with the section that follows (TrustStrip), only the top of the phone
-  // reveals/hides as scroll progresses.
+  // while the header/badge/CTA stay still. The wrapper clips the image so the
+  // crop line at the bottom never moves — flush with TrustStrip below.
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
-  const phoneY = useTransform(scrollYProgress, [0, 1], [56, -24])
+  const phoneY = useTransform(scrollYProgress, [0, 1], [36, -28])
 
   return (
-    <section ref={heroRef} className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
+    <section
+      ref={heroRef}
+      className="relative flex w-full min-h-[100svh] flex-col overflow-hidden"
+      style={{ backgroundColor: "#18191B" }}
+    >
+      {/* Side person — left, large faded grayscale bust.
+          Same placing/sizing/style as the design: ~45% width, cropped by the left
+          edge from the top, soft right + bottom fade into charcoal. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-[4%] top-0 z-[1] hidden h-[92%] w-[52%] max-w-[760px] select-none sm:block lg:-left-[2%] lg:w-[48%]"
+        style={{
+          WebkitMaskImage:
+            "linear-gradient(90deg, #000 0%, #000 38%, rgba(0,0,0,0.55) 62%, transparent 94%), linear-gradient(180deg, #000 0%, #000 70%, transparent 100%)",
+          maskImage:
+            "linear-gradient(90deg, #000 0%, #000 38%, rgba(0,0,0,0.55) 62%, transparent 94%), linear-gradient(180deg, #000 0%, #000 70%, transparent 100%)",
+          WebkitMaskComposite: "source-in",
+          maskComposite: "intersect",
+        }}
+      >
+        <Image
+          src="/side-person.png"
+          alt=""
+          fill
+          priority
+          sizes="(min-width: 1024px) 48vw, 52vw"
+          className="object-cover object-[12%_0%] opacity-[0.62] grayscale contrast-[1.08] brightness-[0.88]"
+        />
+      </div>
 
-      {/* Navbar */}
-      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+      {/* Mobile side person — left fade, quieter so badge stays readable */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-[8%] top-0 z-[1] h-[85%] w-[78%] max-w-[460px] select-none sm:hidden"
+        style={{
+          WebkitMaskImage:
+            "linear-gradient(90deg, #000 0%, #000 35%, transparent 88%), linear-gradient(180deg, #000 0%, #000 62%, transparent 100%)",
+          maskImage:
+            "linear-gradient(90deg, #000 0%, #000 35%, transparent 88%), linear-gradient(180deg, #000 0%, #000 62%, transparent 100%)",
+          WebkitMaskComposite: "source-in",
+          maskComposite: "intersect",
+        }}
+      >
+        <Image
+          src="/side-person.png"
+          alt=""
+          fill
+          priority
+          sizes="78vw"
+          className="object-cover object-[18%_4%] opacity-[0.4] grayscale brightness-[0.9]"
+        />
+      </div>
+
+      {/* Navbar — brand left, dashed contact pill right */}
+      <header className="relative z-20 mx-auto flex w-full max-w-6xl shrink-0 items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
           <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
-          <span className="text-base font-semibold text-white tracking-tight">sycord</span>
+          <span className="text-base font-semibold tracking-tight text-white">sycord</span>
         </Link>
 
-        {/* Desktop nav — visible from md up, replaces the hamburger */}
-        <nav className="hidden items-center gap-8 md:flex">
-          {navLinks.map(l => (
-            <Link
-              key={l.label}
-              href={l.href}
-              className="text-sm font-medium text-[#A7AAB0] transition-colors hover:text-white"
-            >
-              {l.label}
-            </Link>
-          ))}
-          <Link
-            href="/login"
-            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-zinc-950 transition-transform hover:scale-[1.03]"
-          >
-            Sign in
-          </Link>
-        </nav>
-
-        {/* Mobile menu button */}
-        <button
-          type="button"
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(o => !o)}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white md:hidden"
+        <Link
+          href="/contact"
+          className="rounded-full px-[18px] py-[7px] text-[13px] font-medium tracking-wide text-white transition-colors hover:bg-white/5"
+          style={{ border: "1.5px dashed rgba(255,255,255,0.85)" }}
         >
-          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+          contact us
+        </Link>
       </header>
 
-      {/* Mobile dropdown menu */}
-      {menuOpen && (
-        <nav className="absolute right-5 top-[64px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8 md:hidden">
-          {[...navLinks, { label: "Sign in", href: "/login" }].map(l => (
-            <Link
-              key={l.label}
-              href={l.href}
-              onClick={() => setMenuOpen(false)}
-              className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-[#E5E7EB] transition-colors hover:bg-[#26272b] hover:text-white"
-            >
-              {l.label}
-            </Link>
-          ))}
-        </nav>
-      )}
-
-      {/* Hero content — tight compact stack */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-14 pb-0 text-center sm:pt-16 lg:max-w-3xl lg:pt-20">
-        {/* Dot grid */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-0"
-          style={{
-            backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.5px, transparent 1.5px)",
-            backgroundSize: "38px 38px",
-            WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 90%)",
-            maskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 90%)",
-          }}
-        />
-
-        {/* begyar.svg — shown once, whole and uncropped (object-contain preserves its full
-            artwork, nothing clipped), placed under the headline text as a subtle background
-            accent. Sized and dimmed down from the previous pass: at larger size/opacity its
-            large diagonal shapes read as a visible streak cutting across the headline, badge,
-            and CTA — now scaled smaller and much more transparent so it sits quietly behind
-            the copy instead of competing with it. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-24 z-0 flex justify-center opacity-[0.12] sm:top-28"
-        >
-          <Image
-            src="/begyar.svg"
-            alt=""
-            width={3000}
-            height={4500}
-            className="h-auto w-[160px] object-contain sm:w-[200px] lg:w-[230px]"
-          />
-        </div>
-
-        {/* Headline */}
-        <h1
-          className="relative z-10 font-extrabold tracking-tight text-balance text-white"
-          style={{ fontSize: "clamp(34px, 8vw, 68px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
-        >
-          The{" "}
-          <span
-            className="inline-block rounded-2xl px-3 py-1"
-            style={{ background: "rgba(255,255,255,0.09)" }}
-          >
-            coding agent
-          </span>{" "}
-          for
-          <br />
-          all need
-        </h1>
-
-        {/* "made for developer since 2026" badge — dev.svg's actual artwork only occupies a
-            band inside a much taller canvas. Measured precisely (via rendering the SVG to a
-            raster image and scanning the alpha channel): visible content sits at ~1.55%-81.55%
-            horizontally and ~36%-66.33% vertically of the file. The previous crop used those
-            bounds with NO margin, which sliced through the left edge of the "m" in "made"
-            (rendered as "nade"). This crop adds a safety margin on every side (0%-85% x,
-            35%-68% y) so the full word and laurel are never clipped. */}
-        <div className="relative z-10 mt-6 flex w-full items-center justify-center sm:mt-8">
+      {/* Center stack: badge + CTA in the upper-middle band */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-start px-5 pt-[8vh] text-center sm:pt-[9vh] lg:max-w-3xl lg:pt-[10vh]">
+        {/* Full "made for developers" SVG (dev.svg). Artwork lives in a mid band of a
+            tall canvas — crop with margin so laurels + copy stay complete. */}
+        <div className="relative flex w-full items-center justify-center">
           <div
-            className="relative w-[230px] overflow-hidden sm:w-[270px]"
+            className="relative w-[250px] overflow-hidden sm:w-[300px] lg:w-[330px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
               src="/dev.svg"
-              alt="made for developer since 2026"
+              alt="made for developers since 2026"
               width={3000}
               height={4500}
+              priority
               className="absolute left-0 top-0"
               style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
             />
           </div>
         </div>
 
-        {/* CTA button */}
         <Button
           asChild
           size="sm"
-          className="relative z-10 mt-6 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-7"
+          className="relative z-10 mt-4 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-5"
         >
           <Link href="/login">
             Start for free
@@ -197,17 +147,15 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Phone mockup — rises into place on scroll. The crop (bottom 12%) is fixed to the
-          section's bottom edge, so it always butts up flush against the content below
-          (TrustStrip); only the translateY on the image animates, everything else in the
-          hero (nav, headline, badge, CTA) is unaffected by scroll. */}
-      <div className="relative z-10 mx-auto mt-9 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-10 lg:mt-12">
-        <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
+      {/* Phone mockup — existing asset, cropped so it emerges from the bottom edge */}
+      <div className="relative z-10 mx-auto mt-auto flex w-full shrink-0 flex-col items-center overflow-hidden px-5">
+        <div className="relative w-[min(78vw,300px)] sm:w-[350px] lg:w-[400px]">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
             style={{
-              background: "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(124,111,245,0.09) 0%, transparent 70%)",
+              background:
+                "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(255,255,255,0.035) 0%, transparent 70%)",
             }}
           />
           <motion.div style={{ y: phoneY }}>
@@ -217,9 +165,9 @@ function Hero() {
               width={880}
               height={1780}
               priority
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 84vw"
+              sizes="(min-width: 1024px) 400px, (min-width: 640px) 350px, 78vw"
               className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
-              style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
+              style={{ clipPath: "inset(0 0 22% 0 round 36px 36px 0 0)" }}
             />
           </motion.div>
         </div>
