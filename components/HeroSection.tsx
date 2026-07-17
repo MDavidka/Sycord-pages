@@ -14,61 +14,23 @@ export function HeroSection() {
       className="relative w-full min-h-screen overflow-hidden"
       style={{ backgroundColor: "#18191B" }}
     >
-      {/* Background begyar.svg decorative blocks */}
+      {/* Full-bleed background illustration — thinking.svg at very low opacity */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* top-right large block */}
         <Image
-          src="/begyar.svg"
+          src="/thinking.svg"
           alt=""
-          width={220}
-          height={220}
+          width={900}
+          height={900}
           className="absolute"
-          style={{ top: -40, right: -40, opacity: 0.7, width: 220, height: 220 }}
-        />
-        {/* top-right smaller block */}
-        <Image
-          src="/begyar.svg"
-          alt=""
-          width={140}
-          height={140}
-          className="absolute"
-          style={{ top: 30, right: 60, opacity: 0.5, width: 140, height: 140 }}
-        />
-        {/* top-center/mid block (below navbar) */}
-        <Image
-          src="/begyar.svg"
-          alt=""
-          width={100}
-          height={100}
-          className="absolute"
-          style={{ top: "14%", left: "50%", transform: "translateX(-50%)", opacity: 0.35, width: 100, height: 100 }}
-        />
-        {/* left mid block */}
-        <Image
-          src="/begyar.svg"
-          alt=""
-          width={110}
-          height={110}
-          className="absolute"
-          style={{ top: "38%", left: -20, opacity: 0.55, width: 110, height: 110 }}
-        />
-        {/* left mid smaller block */}
-        <Image
-          src="/begyar.svg"
-          alt=""
-          width={80}
-          height={80}
-          className="absolute"
-          style={{ top: "48%", left: 30, opacity: 0.35, width: 80, height: 80 }}
-        />
-        {/* bottom-left block */}
-        <Image
-          src="/begyar.svg"
-          alt=""
-          width={130}
-          height={130}
-          className="absolute"
-          style={{ bottom: "18%", left: 20, opacity: 0.5, width: 130, height: 130 }}
+          style={{
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -46%)",
+            width: "min(900px, 130vw)",
+            height: "auto",
+            opacity: 0.055,
+            filter: "grayscale(1) brightness(2.5)",
+          }}
         />
       </div>
 
@@ -184,7 +146,7 @@ export function HeroSection() {
         </Button>
       </div>
 
-      {/* Phone mockup — bottom-cropped, same as screenshot */}
+      {/* Phone mockup — bottom-cropped */}
       <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center px-5 pb-0">
         <div className="relative w-[min(88vw,380px)] sm:w-[400px] lg:w-[440px]">
           {/* purple glow behind phone */}
