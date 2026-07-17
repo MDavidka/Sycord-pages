@@ -125,17 +125,17 @@ function Hero() {
           }}
         />
 
-        {/* begyar.svg — side-to-side diagonal blocs spanning the hero width */}
+        {/* begyar.svg — distinct side-to-side rounded blocs behind Title (wireframe) */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-2 z-0 w-[100vw] max-w-none -translate-x-1/2 opacity-[0.32] sm:top-4 sm:opacity-[0.28]"
+          className="pointer-events-none absolute left-1/2 top-0 z-0 w-[100vw] max-w-none -translate-x-1/2 opacity-[0.3] sm:top-2 sm:opacity-[0.28]"
         >
           <Image
             src="/begyar.svg"
             alt=""
             width={390}
-            height={160}
-            className="h-auto w-full object-cover object-center sm:object-contain"
+            height={210}
+            className="h-auto w-full object-contain"
           />
         </div>
 
