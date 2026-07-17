@@ -45,17 +45,32 @@ function Hero() {
     { label: "Changelog", href: "/releases" },
   ]
 
-  // Scroll-linked parallax: the phone rises into view as the hero scrolls past,
-  // while the header/headline/badge/CTA stay perfectly still. The wrapper below
-  // clips the image so the crop line at the bottom never moves — it always sits
-  // flush with the section that follows (TrustStrip), only the top of the phone
-  // reveals/hides as scroll progresses.
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [56, -24])
 
   return (
     <section ref={heroRef} className="relative w-full overflow-hidden" style={{ backgroundColor: BG }}>
+
+      {/* thinking.svg — low-opacity full-bleed background illustration */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <Image
+          src="/thinking.svg"
+          alt=""
+          width={900}
+          height={900}
+          className="absolute"
+          style={{
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -46%)",
+            width: "min(900px, 130vw)",
+            height: "auto",
+            opacity: 0.06,
+            filter: "grayscale(1) brightness(3)",
+          }}
+        />
+      </div>
 
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
@@ -64,7 +79,7 @@ function Hero() {
           <span className="text-base font-semibold text-white tracking-tight">sycord</span>
         </Link>
 
-        {/* Desktop nav — visible from md up, replaces the hamburger */}
+        {/* Desktop nav */}
         <nav className="hidden items-center gap-8 md:flex">
           {navLinks.map(l => (
             <Link
@@ -111,7 +126,7 @@ function Hero() {
         </nav>
       )}
 
-      {/* Hero content — tight compact stack */}
+      {/* Hero content */}
       <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-14 pb-0 text-center sm:pt-16 lg:max-w-3xl lg:pt-20">
         {/* Dot grid */}
         <div
@@ -125,12 +140,7 @@ function Hero() {
           }}
         />
 
-        {/* begyar.svg — shown once, whole and uncropped (object-contain preserves its full
-            artwork, nothing clipped), placed under the headline text as a subtle background
-            accent. Sized and dimmed down from the previous pass: at larger size/opacity its
-            large diagonal shapes read as a visible streak cutting across the headline, badge,
-            and CTA — now scaled smaller and much more transparent so it sits quietly behind
-            the copy instead of competing with it. */}
+        {/* begyar.svg accent behind headline */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-24 z-0 flex justify-center opacity-[0.12] sm:top-28"
@@ -161,13 +171,7 @@ function Hero() {
           all need
         </h1>
 
-        {/* "made for developer since 2026" badge — dev.svg's actual artwork only occupies a
-            band inside a much taller canvas. Measured precisely (via rendering the SVG to a
-            raster image and scanning the alpha channel): visible content sits at ~1.55%-81.55%
-            horizontally and ~36%-66.33% vertically of the file. The previous crop used those
-            bounds with NO margin, which sliced through the left edge of the "m" in "made"
-            (rendered as "nade"). This crop adds a safety margin on every side (0%-85% x,
-            35%-68% y) so the full word and laurel are never clipped. */}
+        {/* dev.svg badge */}
         <div className="relative z-10 mt-6 flex w-full items-center justify-center sm:mt-8">
           <div
             className="relative w-[230px] overflow-hidden sm:w-[270px]"
@@ -197,10 +201,7 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Phone mockup — rises into place on scroll. The crop (bottom 12%) is fixed to the
-          section's bottom edge, so it always butts up flush against the content below
-          (TrustStrip); only the translateY on the image animates, everything else in the
-          hero (nav, headline, badge, CTA) is unaffected by scroll. */}
+      {/* Phone mockup */}
       <div className="relative z-10 mx-auto mt-9 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-10 lg:mt-12">
         <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
           <div
