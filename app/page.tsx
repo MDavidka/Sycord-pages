@@ -111,84 +111,68 @@ function Hero() {
         </nav>
       )}
 
-      {/* Hero content — tight compact stack */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-14 pb-0 text-center sm:pt-16 lg:max-w-3xl lg:pt-20">
+      {/* Hero content — wireframe stack: Title → dev.svg → button → phone (unchanged) */}
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-6 pt-8 pb-0 text-center sm:px-8 sm:pt-12 lg:max-w-3xl lg:pt-16">
         {/* Dot grid */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 z-0"
           style={{
             backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.5px, transparent 1.5px)",
-            backgroundSize: "38px 38px",
-            WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 90%)",
-            maskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 90%)",
+            backgroundSize: "32px 32px",
+            WebkitMaskImage: "radial-gradient(ellipse 70% 55% at 50% 35%, black 28%, transparent 88%)",
+            maskImage: "radial-gradient(ellipse 70% 55% at 50% 35%, black 28%, transparent 88%)",
           }}
         />
 
-        {/* begyar.svg — shown once, whole and uncropped (object-contain preserves its full
-            artwork, nothing clipped), placed under the headline text as a subtle background
-            accent. Sized and dimmed down from the previous pass: at larger size/opacity its
-            large diagonal shapes read as a visible streak cutting across the headline, badge,
-            and CTA — now scaled smaller and much more transparent so it sits quietly behind
-            the copy instead of competing with it. */}
+        {/* begyar.svg — distinct side-to-side rounded blocs behind Title (wireframe) */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-24 z-0 flex justify-center opacity-[0.12] sm:top-28"
+          className="pointer-events-none absolute left-1/2 top-0 z-0 w-[100vw] max-w-none -translate-x-1/2 opacity-[0.3] sm:top-2 sm:opacity-[0.28]"
         >
           <Image
             src="/begyar.svg"
             alt=""
-            width={3000}
-            height={4500}
-            className="h-auto w-[160px] object-contain sm:w-[200px] lg:w-[230px]"
+            width={390}
+            height={210}
+            className="h-auto w-full object-contain"
           />
         </div>
 
-        {/* Headline */}
+        {/* Title — wide hero headline (wireframe "Title") */}
         <h1
-          className="relative z-10 font-extrabold tracking-tight text-balance text-white"
-          style={{ fontSize: "clamp(34px, 8vw, 68px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
+          className="relative z-10 w-full max-w-[300px] font-extrabold tracking-tight text-balance text-white sm:max-w-[400px] lg:max-w-none"
+          style={{ fontSize: "clamp(34px, 8.5vw, 64px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
         >
           The{" "}
           <span
-            className="inline-block rounded-2xl px-3 py-1"
+            className="inline-block rounded-xl px-2.5 py-0.5 sm:rounded-2xl sm:px-3 sm:py-1"
             style={{ background: "rgba(255,255,255,0.09)" }}
           >
             coding agent
           </span>{" "}
           for
           <br />
-          all need
+          all needs
         </h1>
 
-        {/* "made for developer since 2026" badge — dev.svg's actual artwork only occupies a
-            band inside a much taller canvas. Measured precisely (via rendering the SVG to a
-            raster image and scanning the alpha channel): visible content sits at ~1.55%-81.55%
-            horizontally and ~36%-66.33% vertically of the file. The previous crop used those
-            bounds with NO margin, which sliced through the left edge of the "m" in "made"
-            (rendered as "nade"). This crop adds a safety margin on every side (0%-85% x,
-            35%-68% y) so the full word and laurel are never clipped. */}
-        <div className="relative z-10 mt-6 flex w-full items-center justify-center sm:mt-8">
-          <div
-            className="relative w-[230px] overflow-hidden sm:w-[270px]"
-            style={{ aspectRatio: "170 / 99" }}
-          >
-            <Image
-              src="/dev.svg"
-              alt="made for developer since 2026"
-              width={3000}
-              height={4500}
-              className="absolute left-0 top-0"
-              style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
-            />
-          </div>
+        {/* dev.svg — compact centered badge pill (wireframe size) */}
+        <div className="relative z-10 mt-5 flex justify-center sm:mt-6">
+          <Image
+            src="/dev.svg"
+            alt="made for developers since 2026"
+            width={320}
+            height={88}
+            priority
+            className="h-auto w-[230px] sm:w-[250px] lg:w-[270px]"
+          />
         </div>
 
-        {/* CTA button */}
+        {/* Button — pill CTA under badge, matching wireframe rhythm */}
         <Button
           asChild
           size="sm"
-          className="relative z-10 mt-6 rounded-2xl bg-white px-6 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-7"
+          className="relative z-10 mt-5 h-11 min-w-[168px] rounded-full bg-white px-8 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-6 sm:h-12 sm:min-w-[180px] sm:px-9"
         >
           <Link href="/login">
             Start for free
@@ -197,12 +181,9 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Phone mockup — rises into place on scroll. The crop (bottom 12%) is fixed to the
-          section's bottom edge, so it always butts up flush against the content below
-          (TrustStrip); only the translateY on the image animates, everything else in the
-          hero (nav, headline, badge, CTA) is unaffected by scroll. */}
-      <div className="relative z-10 mx-auto mt-9 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-10 lg:mt-12">
-        <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
+      {/* Phone mockup — unchanged composition; keep clear of bottom unsafe area */}
+      <div className="relative z-10 mx-auto mt-8 flex w-full flex-col items-center overflow-hidden px-6 pb-[env(safe-area-inset-bottom)] sm:mt-10 sm:px-8 lg:mt-12">
+        <div className="relative w-[min(78vw,300px)] sm:w-[360px] lg:w-[420px]">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
@@ -217,7 +198,7 @@ function Hero() {
               width={880}
               height={1780}
               priority
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 84vw"
+              sizes="(min-width: 1024px) 420px, (min-width: 640px) 360px, 78vw"
               className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
               style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
             />
