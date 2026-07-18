@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/accordion"
 import {
   ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
-  LayoutTemplate, Lock, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
+  LayoutTemplate, Lock, MousePointerClick, Palette, Phone, Rocket, Server, ShieldCheck,
   ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
 } from "lucide-react"
 
@@ -36,52 +36,121 @@ export default function LandingPage() {
   )
 }
 
-function Hero() {
-  const heroRef = useRef<HTMLElement>(null)
-  const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
-  const phoneY = useTransform(scrollYProgress, [0, 1], [24, -10])
-
+function HeroBackground() {
   return (
-    <section
-      ref={heroRef}
-      className="relative flex h-[100svh] min-h-[600px] w-full flex-col overflow-hidden md:min-h-[100svh] md:h-[100svh]"
-      style={{ backgroundColor: BG }}
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+      <div
+        className="absolute inset-0 opacity-30"
+        style={{
+          WebkitMaskImage:
+            "linear-gradient(to bottom, transparent 0%, black 20%, black 72%, transparent 100%)",
+          maskImage:
+            "linear-gradient(to bottom, transparent 0%, black 20%, black 72%, transparent 100%)",
+        }}
+      >
+        <Image
+          src="/hero-glass-bg.webp"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-[center_35%] md:object-[center_40%]"
+        />
+      </div>
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.65) 12%, transparent 28%, transparent 70%, rgba(24,24,24,0.45) 90%, ${BG} 100%)`,
+        }}
+      />
+    </div>
+  )
+}
+
+function HeroNav() {
+  return (
+    <header className="relative z-30 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1.25rem,env(safe-area-inset-left,0px))] pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] sm:px-8 sm:pt-8 lg:px-10">
+      <Link href="/" className="inline-flex items-center gap-2">
+        <Image
+          src="/logo.png"
+          alt="Sycord"
+          width={40}
+          height={40}
+          priority
+          className="h-9 w-9 opacity-90 sm:h-10 sm:w-10"
+        />
+      </Link>
+      <Link
+        href="/contact"
+        className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-black/50 sm:h-10 sm:px-5"
+      >
+        <Phone className="size-4 text-white" strokeWidth={1.75} />
+        inquiry
+      </Link>
+    </header>
+  )
+}
+
+function HeroCopyMobile({
+  className = "",
+  style,
+}: {
+  className?: string
+  style?: React.ComponentProps<typeof motion.div>["style"]
+}) {
+  return (
+    <motion.div
+      className={`relative z-20 mx-auto flex w-full max-w-[760px] flex-col items-center px-5 text-center ${className}`}
+      style={style}
     >
-      {/* ── Line 1: Navbar ─────────────────────────────────────── */}
-      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.75rem)] sm:px-8 sm:pt-7">
-        <Link href="/" className="inline-flex items-center gap-0 sm:gap-1.5">
-          <Image
-            src="/logo.png"
-            alt="Sycord"
-            width={32}
-            height={32}
-            priority
-            className="h-8 w-8 opacity-90"
-          />
-          <span className="text-base font-semibold tracking-tight text-white">
-            sycord
-          </span>
+      <h1 className="whitespace-nowrap text-[clamp(34px,8.5vw,52px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]">
+        Your coding agent
+      </h1>
+      <div
+        className="relative mt-5 w-[140px] overflow-hidden sm:mt-7 sm:w-[240px]"
+        style={{ aspectRatio: "170 / 99" }}
+      >
+        <Image
+          src="/dev.svg"
+          alt="made fore developer since 2026"
+          width={3000}
+          height={4500}
+          className="absolute left-0 top-0"
+          style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
+        />
+      </div>
+      <Button
+        asChild
+        size="sm"
+        className="mt-5 h-11 min-w-[160px] rounded-full bg-white px-6 text-sm font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"
+      >
+        <Link href="/login">
+          Start for free
+          <ArrowRight className="size-3.5" />
         </Link>
+      </Button>
+    </motion.div>
+  )
+}
 
-        <Button
-          asChild
-          variant="outline"
-          size="sm"
-          className="h-8 rounded-full !border-[1.5px] !border-dashed !border-white/45 !bg-transparent px-3 text-xs font-semibold !text-white !shadow-none hover:!bg-white/5 hover:!text-white sm:h-12 sm:min-w-[148px] sm:px-6 sm:text-[15px]"
-        >
-          <Link href="/contact">contact us</Link>
-        </Button>
-      </header>
-
-      {/* ── Line 2: Headline + badge + CTA (tight readable stack) ─ */}
-      <div className="absolute right-[max(1rem,env(safe-area-inset-right,0px))] top-[calc(env(safe-area-inset-top,0px)+100px)] z-20 flex w-[calc(70%_-_1rem)] max-w-none flex-col items-center gap-4 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
-        <h1 className="whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
-          Your coding agent
+function HeroDesktop() {
+  return (
+    <div className="relative z-20 mx-auto hidden h-full w-full max-w-[1240px] grid-cols-2 items-center gap-8 px-8 pb-8 pt-4 md:grid lg:gap-10 lg:px-10">
+      {/* Left copy */}
+      <motion.div
+        className="relative z-20 flex max-w-[560px] flex-col items-start text-left"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h1 className="text-[clamp(48px,5.6vw,76px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-white">
+          The AI agent
         </h1>
-
-        {/* /dev.svg badge — cropped, unmodified */}
+        <p className="mt-4 max-w-[420px] text-[17px] leading-relaxed text-white/75 lg:text-[18px]">
+          this is a subheading this is a subheading
+        </p>
         <div
-          className="relative w-[132px] overflow-hidden sm:w-[260px] md:w-[280px]"
+          className="relative mt-7 w-[220px] overflow-hidden lg:mt-8 lg:w-[260px]"
           style={{ aspectRatio: "170 / 99" }}
         >
           <Image
@@ -93,102 +162,111 @@ function Hero() {
             style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
           />
         </div>
-
-        <Button
-          asChild
-          size="sm"
-          className="h-9 min-w-[128px] rounded-full bg-white px-3.5 text-xs font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
-        >
-          <Link href="/login">
-            Start for free
-            <ArrowRight className="size-3 sm:size-4" />
-          </Link>
-        </Button>
-      </div>
-
-      {/* ── Line 3: David is the mobile background; phone rises from the bottom ── */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] md:hidden">
-        <div className="absolute inset-0 bg-[#181818]" />
-        <div className="absolute left-[-96px] top-[calc(env(safe-area-inset-top,0px)-40px)] h-[576px] w-[390px]">
-          <Image
-            src="/hero-figure.png"
-            alt=""
-            fill
-            priority
-            quality={100}
-            sizes="350px"
-            className="object-contain object-left-bottom"
-            style={{
-              opacity: 0.42,
-              filter: "brightness(0.58) contrast(1.08)",
-              WebkitMaskImage:
-                "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 88%, transparent 100%)",
-              WebkitMaskComposite: "destination-in",
-              maskImage:
-                "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 88%, transparent 100%)",
-              maskComposite: "intersect",
-            }}
-          />
+        <div className="mt-8 flex flex-wrap items-center gap-3 lg:mt-9">
+          <Button
+            asChild
+            className="h-12 rounded-full bg-white px-7 text-[15px] font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"
+          >
+            <Link href="/login">
+              Start for free
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-12 rounded-full border-white/30 bg-transparent px-7 text-[15px] font-semibold text-white hover:bg-white/5 hover:text-white"
+          >
+            <Link href="#showcase">See demo</Link>
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
-        <div className="absolute left-1/2 top-[83%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
+      {/* Right phone — large, cropped bottom/right */}
+      <motion.div
+        className="relative hidden h-full min-h-0 md:block"
+        initial={{ opacity: 0, x: 36 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.12, duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="absolute -bottom-[12%] -right-[14%] top-[4%] w-[min(118%,580px)] lg:-right-[10%] lg:top-0 lg:w-[min(115%,600px)]">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
             width={880}
             height={1780}
             priority
-            quality={100}
-            sizes="240px"
-            className="h-auto w-full drop-shadow-[0_16px_36px_rgba(0,0,0,0.7)]"
-            style={{ clipPath: "inset(0 0 12% 0 round 24px 24px 0 0)" }}
+            sizes="(min-width: 1024px) 600px, 50vw"
+            className="h-full w-full object-cover object-top drop-shadow-[0_40px_80px_rgba(0,0,0,0.55)]"
+            style={{ borderRadius: "48px" }}
           />
         </div>
-      </div>
+      </motion.div>
+    </div>
+  )
+}
 
-        {/* Desktop */}
-        <div className="pointer-events-none absolute inset-0 hidden md:block">
-          <div
-            aria-hidden="true"
-            className="absolute bottom-0 left-0 h-[85%] w-[clamp(260px,36vw,500px)]"
-          >
-            <Image
-              src="/hero-figure.png"
-              alt=""
-              fill
-              priority
-              quality={90}
-              sizes="36vw"
-              className="object-cover object-left-bottom"
-              style={{
-                filter: "grayscale(18%) brightness(0.8) contrast(1.08)",
-                WebkitMaskImage:
-                  "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
-                WebkitMaskComposite: "destination-in",
-                maskImage:
-                  "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
-                maskComposite: "intersect",
-              }}
-            />
-          </div>
-          <div className="absolute bottom-0 left-1/2 w-[420px] -translate-x-1/2 overflow-hidden">
-            <motion.div style={{ y: phoneY }} className="pointer-events-auto">
+function Hero() {
+  const trackRef = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({
+    target: trackRef,
+    offset: ["start start", "end end"],
+  })
+
+  // Mobile scroll story: peek → rise fully → hold → fade out → rest of site
+  const phoneY = useTransform(scrollYProgress, [0, 0.42, 0.6, 0.82], ["46vh", "0vh", "0vh", "-10vh"])
+  const phoneOpacity = useTransform(scrollYProgress, [0, 0.6, 0.74, 0.9], [1, 1, 0.4, 0])
+  const phoneScale = useTransform(scrollYProgress, [0, 0.42, 0.82], [0.92, 1, 0.96])
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.25, 0.45], [1, 0.5, 0])
+  const copyY = useTransform(scrollYProgress, [0, 0.45], [0, -40])
+  const stageOpacity = useTransform(scrollYProgress, [0.8, 0.95], [1, 0])
+
+  return (
+    <section
+      ref={trackRef}
+      className="relative h-[260vh] w-full md:h-[100svh] md:min-h-[760px]"
+      style={{ backgroundColor: BG }}
+    >
+      <div className="sticky top-0 h-[100svh] overflow-hidden md:relative md:h-full">
+        <div className="absolute inset-0 hidden md:block">
+          <HeroBackground />
+        </div>
+        <motion.div className="absolute inset-0 md:hidden" style={{ opacity: stageOpacity }}>
+          <HeroBackground />
+        </motion.div>
+
+        <div className="relative z-20 flex h-full flex-col">
+          <HeroNav />
+
+          {/* Mobile centered stack + scroll phone */}
+          <HeroCopyMobile
+            className="pt-[clamp(56px,12vh,120px)] md:hidden"
+            style={{ opacity: copyOpacity, y: copyY }}
+          />
+
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center md:hidden">
+            <motion.div
+              style={{ y: phoneY, opacity: phoneOpacity, scale: phoneScale }}
+              className="w-[min(78vw,320px)]"
+            >
               <Image
                 src="/hero-phone.webp"
                 alt="Syra coding agent on phone"
                 width={880}
                 height={1780}
                 priority
-                quality={100}
-                sizes="420px"
-                className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
-                style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
+                sizes="80vw"
+                className="h-auto w-full rounded-[36px] shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
               />
             </motion.div>
           </div>
+
+          {/* Desktop split: copy left, phone right */}
+          <div className="relative hidden min-h-0 flex-1 md:block">
+            <HeroDesktop />
+          </div>
         </div>
+      </div>
     </section>
   )
 }
