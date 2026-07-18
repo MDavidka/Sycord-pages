@@ -36,44 +36,10 @@ export default function LandingPage() {
   )
 }
 
-function LaurelIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 32 56"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-      className={className}
-    >
-      {/* stem */}
-      <path
-        d="M22 52C18 44 12 34 11 24C10 14 13 7 18 3"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      {/* outer leaves */}
-      <ellipse cx="9" cy="44" rx="5.2" ry="2.4" transform="rotate(-38 9 44)" fill="currentColor" opacity="0.95" />
-      <ellipse cx="7.5" cy="37" rx="5" ry="2.3" transform="rotate(-32 7.5 37)" fill="currentColor" opacity="0.9" />
-      <ellipse cx="6.5" cy="30" rx="4.8" ry="2.2" transform="rotate(-26 6.5 30)" fill="currentColor" opacity="0.85" />
-      <ellipse cx="6.2" cy="23.5" rx="4.5" ry="2.1" transform="rotate(-18 6.2 23.5)" fill="currentColor" opacity="0.8" />
-      <ellipse cx="7" cy="17.5" rx="4.2" ry="2" transform="rotate(-8 7 17.5)" fill="currentColor" opacity="0.75" />
-      <ellipse cx="9" cy="12" rx="3.8" ry="1.85" transform="rotate(6 9 12)" fill="currentColor" opacity="0.7" />
-      <ellipse cx="12" cy="7.5" rx="3.4" ry="1.7" transform="rotate(18 12 7.5)" fill="currentColor" opacity="0.65" />
-      {/* inner leaves */}
-      <ellipse cx="14" cy="41" rx="3.6" ry="1.7" transform="rotate(-34 14 41)" fill="currentColor" opacity="0.7" />
-      <ellipse cx="12.5" cy="34.5" rx="3.4" ry="1.6" transform="rotate(-28 12.5 34.5)" fill="currentColor" opacity="0.65" />
-      <ellipse cx="11.5" cy="28" rx="3.2" ry="1.5" transform="rotate(-20 11.5 28)" fill="currentColor" opacity="0.6" />
-      <ellipse cx="11.5" cy="22" rx="3" ry="1.4" transform="rotate(-12 11.5 22)" fill="currentColor" opacity="0.55" />
-      <ellipse cx="12.5" cy="16.5" rx="2.7" ry="1.3" transform="rotate(0 12.5 16.5)" fill="currentColor" opacity="0.5" />
-    </svg>
-  )
-}
-
 function Hero() {
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
-  const phoneY = useTransform(scrollYProgress, [0, 1], [40, -16])
+  const phoneY = useTransform(scrollYProgress, [0, 1], [32, -12])
 
   return (
     <section
@@ -81,51 +47,7 @@ function Hero() {
       className="relative flex w-full min-h-[100svh] flex-col overflow-hidden md:h-[100svh]"
       style={{ backgroundColor: BG }}
     >
-      {/* Layer 1 — David (sharp on mobile; soft edge fade from md+) */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 left-0 z-0 block h-[42vh] w-[48vw] max-w-[180px] md:hidden"
-      >
-        <Image
-          src="/hero-figure.png"
-          alt=""
-          fill
-          priority
-          quality={100}
-          sizes="180px"
-          className="object-cover object-left-bottom"
-        />
-      </div>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 left-0 z-0 hidden md:block"
-        style={{
-          width: "clamp(280px, 42vw, 560px)",
-          height: "clamp(480px, 76vh, 900px)",
-          opacity: 0.85,
-          WebkitMaskImage:
-            "linear-gradient(to right, black 0%, black 5%, black 65%, transparent 100%), " +
-            "linear-gradient(to top, black 0%, black 50%, transparent 100%)",
-          WebkitMaskComposite: "destination-in",
-          maskImage:
-            "linear-gradient(to right, black 0%, black 5%, black 65%, transparent 100%), " +
-            "linear-gradient(to top, black 0%, black 50%, transparent 100%)",
-          maskComposite: "intersect",
-        }}
-      >
-        <Image
-          src="/hero-figure.png"
-          alt=""
-          fill
-          priority
-          quality={90}
-          sizes="42vw"
-          className="object-cover object-left-bottom"
-          style={{ filter: "grayscale(18%) brightness(0.8) contrast(1.08)" }}
-        />
-      </div>
-
-      {/* Layer 2 — Navbar (shadcn Button) */}
+      {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-4 sm:px-8 sm:pt-7">
         <Link href="/" className="inline-flex items-center gap-2">
           <Image
@@ -151,30 +73,33 @@ function Hero() {
         </Button>
       </header>
 
-      {/* Layer 3 — Hero content (compact on mobile) */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-6 text-center sm:px-5 sm:pt-[clamp(140px,26vh,240px)]">
+      {/* Hero copy */}
+      <div className="relative z-20 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-5 text-center sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
         <h1 className="whitespace-nowrap text-[26px] font-extrabold leading-[1.08] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
-        {/* Inline laurel badge (cut SVG — no Image crop / no card) */}
-        <div
-          className="mt-1.5 inline-flex items-center gap-2 sm:mt-8 sm:gap-3"
-          role="img"
-          aria-label="made fore developer since 2026"
-        >
-          <LaurelIcon className="h-9 w-5 shrink-0 text-white sm:h-14 sm:w-8" />
-          <div className="text-center leading-tight">
-            <p className="text-[11px] font-semibold text-white sm:text-[14px]">made fore developer</p>
-            <p className="text-[10px] font-medium text-white/80 sm:text-[13px]">since 2026</p>
+        {/* /dev.svg badge — cropped, unmodified asset */}
+        <div className="mt-2 flex w-full items-center justify-center sm:mt-7">
+          <div
+            className="relative w-[150px] overflow-hidden sm:w-[260px] md:w-[280px]"
+            style={{ aspectRatio: "170 / 99" }}
+          >
+            <Image
+              src="/dev.svg"
+              alt="made fore developer since 2026"
+              width={3000}
+              height={4500}
+              className="absolute left-0 top-0"
+              style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
+            />
           </div>
-          <LaurelIcon className="h-9 w-5 shrink-0 scale-x-[-1] text-white sm:h-14 sm:w-8" />
         </div>
 
         <Button
           asChild
           size="lg"
-          className="mt-1.5 h-9 min-w-[150px] rounded-full bg-white px-4 text-[13px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-8 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
+          className="mt-2 h-9 min-w-[150px] rounded-full bg-white px-4 text-[13px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-7 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
         >
           <Link href="/login">
             Start for free
@@ -183,9 +108,37 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Layer 4 — Phone mockup */}
-      <div className="relative z-10 mx-auto mt-4 flex w-full flex-col items-center px-4 sm:mt-12 sm:overflow-hidden sm:px-5 md:relative">
-        <div className="relative h-[26vh] w-[min(56vw,190px)] overflow-hidden sm:h-auto sm:w-[380px] lg:w-[440px]">
+      {/*
+        Bottom stage fills remaining viewport height.
+        David (left) + phone (center) share the SAME bottom edge — inline.
+      */}
+      <div className="relative z-10 mt-3 min-h-0 w-full flex-1 sm:mt-6">
+        {/* David — bottom-left of the stage */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 z-0 h-[92%] w-[48%] max-w-[200px] sm:max-w-none sm:w-[clamp(260px,36vw,500px)]"
+        >
+          <Image
+            src="/hero-figure.png"
+            alt=""
+            fill
+            priority
+            quality={100}
+            sizes="(max-width: 640px) 200px, 36vw"
+            className="object-cover object-left-bottom"
+            style={{
+              WebkitMaskImage:
+                "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
+              WebkitMaskComposite: "destination-in",
+              maskImage:
+                "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
+              maskComposite: "intersect",
+            }}
+          />
+        </div>
+
+        {/* Phone — bottom-center, same baseline as David */}
+        <div className="absolute bottom-0 left-1/2 z-10 w-[min(70vw,250px)] -translate-x-1/2 overflow-hidden sm:w-[360px] lg:w-[440px]">
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
@@ -194,8 +147,8 @@ function Hero() {
               height={1780}
               priority
               quality={100}
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 190px"
-              className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)] sm:drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
+              sizes="(min-width: 1024px) 440px, (min-width: 640px) 360px, 250px"
+              className="relative h-auto w-full drop-shadow-[0_20px_40px_rgba(0,0,0,0.55)]"
               style={{ clipPath: "inset(0 0 12% 0 round 28px 28px 0 0)" }}
             />
           </motion.div>
