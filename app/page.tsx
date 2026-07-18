@@ -48,7 +48,7 @@ function Hero() {
       style={{ backgroundColor: BG }}
     >
       {/* ── Line 1: Navbar ─────────────────────────────────────── */}
-      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-7 sm:px-8 sm:pt-7">
+      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.75rem)] sm:px-8 sm:pt-7">
         <Link href="/" className="inline-flex items-center gap-0 sm:gap-1.5">
           <Image
             src="/logo.png"
@@ -74,7 +74,7 @@ function Hero() {
       </header>
 
       {/* ── Line 2: Headline + badge + CTA (tight readable stack) ─ */}
-      <div className="absolute right-0 top-[38%] z-20 flex w-[70%] max-w-none flex-col items-center gap-4 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
+      <div className="absolute right-[max(1rem,env(safe-area-inset-right,0px))] top-[calc(env(safe-area-inset-top,0px)+100px)] z-20 flex w-[calc(70%_-_1rem)] max-w-none flex-col items-center gap-4 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
         <h1 className="whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
@@ -109,7 +109,7 @@ function Hero() {
       {/* ── Line 3: David is the mobile background; phone rises from the bottom ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] md:hidden">
         <div className="absolute inset-0 bg-[#181818]" />
-        <div className="absolute bottom-[-16%] left-[-96px] h-[96%] w-[390px]">
+        <div className="absolute left-[-96px] top-[calc(env(safe-area-inset-top,0px)-40px)] h-[576px] w-[390px]">
           <Image
             src="/hero-figure.png"
             alt=""
@@ -133,7 +133,7 @@ function Hero() {
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
-        <div className="absolute left-1/2 top-[87%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
+        <div className="absolute left-1/2 top-[83%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
