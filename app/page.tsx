@@ -41,12 +41,13 @@ function Hero() {
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
 
-  // Bottom marked line ≈ through phone mid; upper blur handled in a dedicated top zone
-  const bottomLine = "70%"
-
-  const sharpMask = `linear-gradient(to bottom, transparent 0%, transparent 14%, black 24%, black 64%, transparent ${bottomLine}, transparent 100%)`
-  const bottomMidBlurMask = `linear-gradient(to bottom, transparent 0%, transparent 60%, black ${bottomLine}, black 84%, transparent 100%)`
-  const bottomHeavyBlurMask = `linear-gradient(to bottom, transparent 0%, transparent 64%, black 78%, black 100%)`
+  // Soft full-height masks only — no clipped boxes (those create hard lines)
+  const sharpMask =
+    "linear-gradient(to bottom, transparent 0%, transparent 8%, rgba(0,0,0,0.35) 16%, black 28%, black 58%, rgba(0,0,0,0.45) 66%, transparent 74%, transparent 100%)"
+  const softBlurMask =
+    "linear-gradient(to bottom, transparent 0%, black 6%, rgba(0,0,0,0.7) 14%, transparent 26%, transparent 58%, rgba(0,0,0,0.55) 68%, black 80%, transparent 100%)"
+  const heavyBlurMask =
+    "linear-gradient(to bottom, black 0%, rgba(0,0,0,0.85) 8%, transparent 20%, transparent 62%, rgba(0,0,0,0.5) 74%, black 90%, black 100%)"
 
   return (
     <section
@@ -54,9 +55,8 @@ function Hero() {
       className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden"
       style={{ backgroundColor: BG }}
     >
-      {/* Hero-only glass bg @ 30% — progressive blur from marked lines → #181818 */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        {/* Sharp band between marked lines */}
+      {/* Hero-only glass bg @ 30% — progressive blur into #181818, no hard edges */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
         <div
           className="absolute inset-0 opacity-30"
           style={{ WebkitMaskImage: sharpMask, maskImage: sharpMask }}
@@ -70,51 +70,9 @@ function Hero() {
             className="object-cover object-[center_35%]"
           />
         </div>
-
-        {/* Upper progressive blur: long soft ramp from top line → #181818 */}
-        <div className="absolute inset-x-0 top-0 h-[28%] overflow-hidden">
-          <div className="absolute inset-0 opacity-30">
-            <Image
-              src="/hero-glass-bg.webp"
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              className="scale-110 object-cover object-[center_20%] blur-md"
-            />
-          </div>
-          <div className="absolute inset-0 opacity-30">
-            <Image
-              src="/hero-glass-bg.webp"
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              className="scale-[1.18] object-cover object-[center_20%] blur-2xl"
-            />
-          </div>
-          <div className="absolute inset-0 opacity-25">
-            <Image
-              src="/hero-glass-bg.webp"
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              className="scale-125 object-cover object-[center_15%] blur-3xl"
-            />
-          </div>
-          <div
-            className="absolute inset-0"
-            style={{
-              background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.9) 14%, rgba(24,24,24,0.55) 38%, rgba(24,24,24,0.22) 62%, transparent 100%)`,
-            }}
-          />
-        </div>
-
-        {/* Bottom progressive blur from phone line → #181818 */}
         <div
           className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: bottomMidBlurMask, maskImage: bottomMidBlurMask }}
+          style={{ WebkitMaskImage: softBlurMask, maskImage: softBlurMask }}
         >
           <Image
             src="/hero-glass-bg.webp"
@@ -122,12 +80,12 @@ function Hero() {
             fill
             priority
             sizes="100vw"
-            className="scale-110 object-cover object-[center_35%] blur-xl"
+            className="scale-110 object-cover object-[center_35%] blur-2xl"
           />
         </div>
         <div
           className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: bottomHeavyBlurMask, maskImage: bottomHeavyBlurMask }}
+          style={{ WebkitMaskImage: heavyBlurMask, maskImage: heavyBlurMask }}
         >
           <Image
             src="/hero-glass-bg.webp"
@@ -135,13 +93,14 @@ function Hero() {
             fill
             priority
             sizes="100vw"
-            className="scale-125 object-cover object-[center_35%] blur-3xl"
+            className="scale-125 object-cover object-[center_30%] blur-3xl"
           />
         </div>
+        {/* Soft color dissolve into #181818 — long ramps, no hard stops */}
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(to bottom, transparent 0%, transparent ${bottomLine}, rgba(24,24,24,0.45) 82%, ${BG} 94%, ${BG} 100%)`,
+            background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.82) 10%, rgba(24,24,24,0.35) 20%, transparent 32%, transparent 62%, rgba(24,24,24,0.4) 76%, ${BG} 92%, ${BG} 100%)`,
           }}
         />
       </div>
@@ -211,8 +170,8 @@ function Hero() {
         </motion.div>
       </motion.div>
 
-      {/* Phone peeking from the bottom third */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-[38%] justify-center overflow-hidden sm:h-[42%]">
+      {/* Phone peeking from the bottom — clip without drop-shadow (shadow clip caused a hard line) */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-[40%] items-end justify-center overflow-hidden sm:h-[44%]">
         <motion.div
           style={{ y: phoneY }}
           className="w-[min(72vw,300px)] sm:w-[360px] md:w-[400px]"
@@ -227,8 +186,7 @@ function Hero() {
             height={1780}
             priority
             sizes="(min-width: 768px) 400px, 72vw"
-            className="relative h-auto w-full drop-shadow-[0_28px_64px_rgba(0,0,0,0.7)]"
-            style={{ clipPath: "inset(0 0 0 0 round 36px 36px 0 0)" }}
+            className="relative h-auto w-full rounded-t-[36px]"
           />
         </motion.div>
       </div>
