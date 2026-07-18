@@ -36,7 +36,6 @@ export function EmbeddedChat() {
     const projectId = getHostProjectId();
     const chatId = projectId ? `project_${projectId}` : null;
 
-    const scrollerRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const previewStartedRef = useRef(false);
     const baseSeededRef = useRef(false);
@@ -367,23 +366,17 @@ export function EmbeddedChat() {
         void startPreview();
     }, [fileCount, previewUrl, previewStatus, startPreview]);
 
+    // Kick off preview as soon as the shell mounts so it compiles while the user chats.
+    useEffect(() => {
+        if (!projectId) return;
+        void startPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId]);
+
     const goToPane = useCallback((i: number) => {
-        const el = scrollerRef.current;
-        if (!el) return;
-        el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
         setActivePane(i);
         if (i === 1) void startPreview();
     }, [startPreview]);
-
-    const handleScroll = useCallback(() => {
-        const el = scrollerRef.current;
-        if (!el) return;
-        const pane = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
-        if (pane !== activePane) {
-            setActivePane(pane);
-            if (pane === 1) void startPreview();
-        }
-    }, [activePane, startPreview]);
 
     const reloadPreview = () => {
         if (!iframeRef.current || !previewUrl) return;
@@ -579,10 +572,9 @@ export function EmbeddedChat() {
         );
     };
 
-    // Preview pane header
+    // Preview pane header — back returns to chat without tearing down the iframe
     const renderPreviewHeader = () => (
         <div className={`flex h-11 flex-shrink-0 items-center gap-1.5 border-b px-2 ${isDark ? 'border-[#2a2b2e] bg-[#1a1b1e]' : 'border-gray-200 bg-white'}`}>
-            {/* Back to chat */}
             <button
                 onClick={() => goToPane(0)}
                 className={`flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[13px] flex-shrink-0 transition-colors ${isDark ? 'text-[#c5c6c9] hover:bg-white/5' : 'text-gray-600 hover:bg-black/5'}`}
@@ -591,7 +583,6 @@ export function EmbeddedChat() {
                 <span className="hidden sm:inline">Chat</span>
             </button>
 
-            {/* Preview URL bar (when available) */}
             {previewHost ? (
                 <button
                     onClick={copyPreviewUrl}
@@ -626,9 +617,7 @@ export function EmbeddedChat() {
                 </div>
             )}
 
-            {/* Action buttons */}
             <div className="flex flex-shrink-0 items-center gap-0.5">
-                {/* Reload */}
                 <button
                     onClick={reloadPreview}
                     disabled={!previewUrl}
@@ -638,7 +627,6 @@ export function EmbeddedChat() {
                     <RotateCw className="h-3.5 w-3.5" />
                 </button>
 
-                {/* Open in new tab */}
                 <a
                     href={previewUrl || undefined}
                     target="_blank"
@@ -649,7 +637,6 @@ export function EmbeddedChat() {
                     <ExternalLink className="h-3.5 w-3.5" />
                 </a>
 
-                {/* Deploy to production */}
                 <button
                     onClick={deployToProduction}
                     disabled={deployStatus === 'deploying' || !projectId}
@@ -679,47 +666,36 @@ export function EmbeddedChat() {
 
     return (
         <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
+            {/* Preview layer — always mounted so Syte/Vite keep compiling in the background */}
             <div
-                ref={scrollerRef}
-                onScroll={handleScroll}
-                className="flex h-full w-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide"
-                style={{ scrollBehavior: 'smooth' }}
+                className={`absolute inset-0 flex flex-col transition-opacity duration-300 ${
+                    activePane === 1 ? 'z-20 opacity-100' : 'z-0 opacity-0 pointer-events-none'
+                }`}
+                aria-hidden={activePane !== 1}
             >
-                {/* Chat pane */}
-                <div className="h-full w-full flex-shrink-0 snap-start overflow-hidden">
-                    <Chat
-                        onOpenPreview={() => goToPane(1)}
-                        showPreviewButton={activePane === 0}
-                        onAiComplete={handleAiComplete}
-                    />
-                </div>
-
-                {/* Preview pane */}
-                <div className="h-full w-full flex-shrink-0 snap-start flex flex-col overflow-hidden">
-                    {renderPreviewHeader()}
-                    <div className="relative min-h-0 flex-1 bg-white">
-                        {renderPreviewBody()}
-                    </div>
+                {renderPreviewHeader()}
+                <div className="relative min-h-0 flex-1 bg-white">
+                    {renderPreviewBody()}
                 </div>
             </div>
 
-            {/* Pane indicators */}
-            <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
-                {[0, 1].map((i) => (
-                    <span
-                        key={i}
-                        className={`h-1.5 rounded-full transition-all ${
-                            activePane === i
-                                ? isDark ? 'w-4 bg-white/80' : 'w-4 bg-gray-900/80'
-                                : isDark ? 'w-1.5 bg-white/30' : 'w-1.5 bg-gray-900/25'
-                        }`}
-                    />
-                ))}
+            {/* Chat layer — slides over the warm preview */}
+            <div
+                className={`absolute inset-0 z-30 transition-transform duration-300 ease-out ${
+                    activePane === 1 ? '-translate-x-full' : 'translate-x-0'
+                }`}
+            >
+                <Chat
+                    onOpenPreview={() => goToPane(1)}
+                    onOpenChat={() => goToPane(0)}
+                    activePane={activePane}
+                    showPreviewButton={activePane === 0}
+                    onAiComplete={handleAiComplete}
+                />
             </div>
 
-            {/* Deploy status toast */}
             {deployStatus === 'error' && deployMessage && (
-                <div className="pointer-events-none absolute bottom-8 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium bg-red-600 text-white shadow-lg">
+                <div className="pointer-events-none absolute bottom-8 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium bg-red-600 text-white shadow-lg">
                     <Zap className="mr-1 inline h-3 w-3" />
                     {deployMessage.length > 60 ? deployMessage.slice(0, 60) + '…' : deployMessage}
                 </div>

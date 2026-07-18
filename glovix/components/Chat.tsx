@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, MessageSquare, Check as CheckIcon } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -69,8 +69,12 @@ interface MessageGroup {
 interface ChatProps {
     scrollRef?: RefObject<HTMLDivElement | null>;
     onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
-    /** Embedded mobile: opens the live preview pane (swipe left). */
+    /** Embedded: opens the live preview pane (kept warm in the background). */
     onOpenPreview?: () => void;
+    /** Embedded: returns to the chat pane. */
+    onOpenChat?: () => void;
+    /** Embedded: 0 = chat, 1 = preview. */
+    activePane?: number;
     showPreviewButton?: boolean;
     /** Called when an AI response finishes, including which agent handled it. */
     onAiComplete?: (source?: 'local' | 'remote') => void;
@@ -255,7 +259,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     )
 }
 
-export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
+export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePane = 0, showPreviewButton = false, onAiComplete }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
     const addMessage = useStore(s => s.addMessage);
@@ -2299,12 +2303,59 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         </button>
 
                         <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
-                            <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
-                            {isLoading && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                            {onOpenPreview && onOpenChat ? (
+                                <div
+                                    className={`pointer-events-auto flex items-center gap-0.5 rounded-full p-0.5 ${isDark ? 'bg-white/[0.08]' : 'bg-black/[0.06]'}`}
+                                    role="tablist"
+                                    aria-label="Chat and preview"
+                                >
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={activePane === 0}
+                                        onClick={onOpenChat}
+                                        aria-label="Chat"
+                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-95 ${
+                                            activePane === 0
+                                                ? isDark
+                                                    ? 'bg-white text-[#18191B]'
+                                                    : 'bg-gray-900 text-white'
+                                                : isDark
+                                                    ? 'text-white/55 hover:text-white'
+                                                    : 'text-gray-500 hover:text-gray-900'
+                                        }`}
+                                    >
+                                        <MessageSquare className="size-3.5" strokeWidth={1.8} />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={activePane === 1}
+                                        onClick={onOpenPreview}
+                                        aria-label="Preview"
+                                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-95 ${
+                                            activePane === 1
+                                                ? isDark
+                                                    ? 'bg-white text-[#18191B]'
+                                                    : 'bg-gray-900 text-white'
+                                                : isDark
+                                                    ? 'text-white/55 hover:text-white'
+                                                    : 'text-gray-500 hover:text-gray-900'
+                                        }`}
+                                    >
+                                        <Eye className="size-3.5" strokeWidth={1.8} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
+                                    {isLoading && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                                </>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-1">
-                            {showPreviewButton && onOpenPreview && (
+                            {showPreviewButton && onOpenPreview && !(onOpenChat && onOpenPreview) && (
                                 <button
                                     type="button"
                                     onClick={onOpenPreview}

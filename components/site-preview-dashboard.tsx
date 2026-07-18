@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   Globe,
   ExternalLink,
@@ -11,14 +11,18 @@ import {
   RefreshCw,
   Copy,
   Check,
+  Info,
+  ArrowLeft,
+  Rocket,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isSytePreviewUrl } from "@/glovix/lib/previewEmbed"
 
 type DeviceMode = "desktop" | "mobile"
 
 export interface SitePreviewDashboardProps {
-  fallbackHtml?: string;
-  /** The deployed URL to preview (full https:// or bare domain) */
+  fallbackHtml?: string
+  /** The deployed or Syte preview URL (full https:// or bare domain) */
   url: string
   /** Display name of the site */
   siteName?: string
@@ -26,8 +30,32 @@ export interface SitePreviewDashboardProps {
   isLive?: boolean
   /** Called when user explicitly closes / navigates away */
   onClose?: () => void
+  /** Open Syra / publish flow from the private-preview notice */
+  onPublish?: () => void
   /** Optional class names for the root wrapper */
   className?: string
+  /** Controlled device mode (optional) */
+  deviceMode?: DeviceMode
+  onDeviceModeChange?: (mode: DeviceMode) => void
+}
+
+/** Same-origin proxy for Syte / Sycord hosts so the iframe is not blanked by XFO. */
+function resolveFrameSrc(url: string): string {
+  const fullUrl = url.startsWith("http") ? url : `https://${url}`
+  try {
+    const host = new URL(fullUrl).hostname.toLowerCase()
+    const isSycord =
+      host.endsWith(".sycord.site") ||
+      host.endsWith(".sycord.com") ||
+      host === "sycord.site" ||
+      host === "sycord.com"
+    if (isSycord || isSytePreviewUrl(fullUrl)) {
+      return `/api/workspace/preview-frame?url=${encodeURIComponent(fullUrl)}`
+    }
+  } catch {
+    /* fall through */
+  }
+  return fullUrl
 }
 
 export function SitePreviewDashboard({
@@ -35,10 +63,19 @@ export function SitePreviewDashboard({
   siteName,
   isLive = true,
   onClose,
+  onPublish,
   className,
   fallbackHtml,
+  deviceMode: controlledMode,
+  onDeviceModeChange,
 }: SitePreviewDashboardProps) {
-  const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop")
+  const [internalMode, setInternalMode] = useState<DeviceMode>("desktop")
+  const deviceMode = controlledMode ?? internalMode
+  const setDeviceMode = (mode: DeviceMode) => {
+    onDeviceModeChange?.(mode)
+    if (controlledMode === undefined) setInternalMode(mode)
+  }
+
   const [frameLoading, setFrameLoading] = useState(true)
   const [frameError, setFrameError] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -49,18 +86,19 @@ export function SitePreviewDashboard({
   const fullUrl = url.startsWith("http") ? url : `https://${url}`
   const displayUrl = url.replace(/^https?:\/\//, "")
   const label = siteName || displayUrl
+  const isPrivatePreview = isSytePreviewUrl(fullUrl)
+  const frameSrc = useMemo(() => resolveFrameSrc(url), [url])
 
   // Mobile phone frame dimensions (CSS pixels at 1x)
   const PHONE_W = 390
   const PHONE_H = 844
 
-  // Desktop: scale iframe to viewport; mobile: scale phone frame to viewport
   const updateScale = useCallback(() => {
     if (!viewportRef.current) return
     if (deviceMode === "mobile") {
-      const availH = viewportRef.current.offsetHeight - 48 // leave breathing room
+      const availH = viewportRef.current.offsetHeight - 48
       const availW = viewportRef.current.offsetWidth - 32
-      const scaleH = availH / (PHONE_H + 48) // +48 for phone chrome
+      const scaleH = availH / (PHONE_H + 48)
       const scaleW = availW / (PHONE_W + 24)
       setIframeScale(Math.min(scaleH, scaleW, 1))
     } else {
@@ -74,6 +112,12 @@ export function SitePreviewDashboard({
     if (viewportRef.current) ro.observe(viewportRef.current)
     return () => ro.disconnect()
   }, [updateScale])
+
+  // Reset loading state when the URL changes so the warm shell feels instant.
+  useEffect(() => {
+    setFrameLoading(true)
+    setFrameError(false)
+  }, [frameSrc])
 
   const handleRefresh = () => {
     setFrameLoading(true)
@@ -98,9 +142,21 @@ export function SitePreviewDashboard({
     >
       {/* ── Top toolbar ── */}
       <div
-        className="flex items-center gap-2 px-4 py-2.5 shrink-0"
+        className="flex items-center gap-2 px-3 sm:px-4 py-2.5 shrink-0"
         style={{ borderBottom: "1px solid #2e2e30" }}
       >
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Back to edit page"
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors shrink-0"
+            style={{ background: "#252527" }}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
+        )}
+
         {/* Device mode toggle */}
         <div
           className="flex items-center rounded-lg p-0.5 shrink-0"
@@ -111,6 +167,7 @@ export function SitePreviewDashboard({
             return (
               <button
                 key={mode}
+                type="button"
                 onClick={() => setDeviceMode(mode)}
                 aria-label={`${mode} preview`}
                 className={cn(
@@ -136,18 +193,27 @@ export function SitePreviewDashboard({
           className="flex items-center gap-2 flex-1 min-w-0 h-8 px-3 rounded-lg"
           style={{ background: "#252527" }}
         >
-          {/* Live dot */}
-          {isLive && (
+          {(isLive || isPrivatePreview) && (
             <span className="relative flex h-1.5 w-1.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+              <span
+                className={cn(
+                  "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                  isPrivatePreview ? "bg-amber-400" : "bg-green-400"
+                )}
+              />
+              <span
+                className={cn(
+                  "relative inline-flex rounded-full h-1.5 w-1.5",
+                  isPrivatePreview ? "bg-amber-500" : "bg-green-500"
+                )}
+              />
             </span>
           )}
           <span className="flex-1 text-[12px] text-zinc-400 truncate font-mono">
             {displayUrl}
           </span>
-          {/* Copy URL */}
           <button
+            type="button"
             onClick={handleCopy}
             aria-label="Copy URL"
             className="shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors"
@@ -160,8 +226,8 @@ export function SitePreviewDashboard({
           </button>
         </div>
 
-        {/* Refresh */}
         <button
+          type="button"
           onClick={handleRefresh}
           aria-label="Refresh preview"
           className="h-8 w-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors shrink-0"
@@ -170,7 +236,7 @@ export function SitePreviewDashboard({
           <RefreshCw className={cn("h-3.5 w-3.5", frameLoading && "animate-spin")} />
         </button>
 
-        {/* Open in new tab */}
+        {/* External open stays as an escape hatch — primary path is in-page. */}
         <a
           href={fullUrl}
           target="_blank"
@@ -183,8 +249,30 @@ export function SitePreviewDashboard({
         </a>
       </div>
 
-      {/* ── Live banner (shown only when site is live) ── */}
-      {isLive && (
+      {/* ── Status banner ── */}
+      {isPrivatePreview ? (
+        <div
+          className="flex items-center gap-2.5 px-4 py-2 shrink-0"
+          style={{ background: "rgba(245,158,11,0.10)", borderBottom: "1px solid rgba(245,158,11,0.18)" }}
+        >
+          <Info className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
+          <span className="text-[12px] text-zinc-300 min-w-0 flex-1">
+            Preview is a version <span className="font-semibold text-zinc-100">only you see</span>
+            {onPublish ? " — publish to share it with your community." : "."}
+          </span>
+          {onPublish && (
+            <button
+              type="button"
+              onClick={onPublish}
+              className="shrink-0 inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[11px] font-semibold text-[#18191B] transition-transform active:scale-[0.97]"
+              style={{ background: "#E8B84A" }}
+            >
+              <Rocket className="h-3 w-3" />
+              Publish
+            </button>
+          )}
+        </div>
+      ) : isLive ? (
         <div
           className="flex items-center gap-2.5 px-4 py-2 shrink-0"
           style={{ background: "rgba(34,168,70,0.12)", borderBottom: "1px solid rgba(34,168,70,0.18)" }}
@@ -195,7 +283,7 @@ export function SitePreviewDashboard({
           </span>
           <span className="text-[12px] text-zinc-500 truncate min-w-0">— {label}</span>
         </div>
-      )}
+      ) : null}
 
       {/* ── Preview viewport ── */}
       <div
@@ -204,7 +292,6 @@ export function SitePreviewDashboard({
         style={{ background: "#111113", paddingTop: deviceMode === "mobile" ? "24px" : "0" }}
       >
         {deviceMode === "desktop" ? (
-          /* ── DESKTOP: full-bleed iframe ── */
           <div className="relative w-full h-full">
             {frameLoading && !frameError && (
               <div
@@ -220,6 +307,7 @@ export function SitePreviewDashboard({
                 <Globe className="h-10 w-10 text-zinc-700" />
                 <p className="text-sm text-zinc-500">Could not load preview</p>
                 <button
+                  type="button"
                   onClick={handleRefresh}
                   className="mt-1 text-xs px-4 py-1.5 rounded-full text-zinc-300 hover:text-white transition-colors"
                   style={{ background: "#2e2e30" }}
@@ -230,8 +318,8 @@ export function SitePreviewDashboard({
             ) : (
               <iframe
                 key={refreshKey}
-                src={fullUrl || undefined}
-                srcDoc={!fullUrl && fallbackHtml ? fallbackHtml : undefined}
+                src={frameSrc || undefined}
+                srcDoc={!url && fallbackHtml ? fallbackHtml : undefined}
                 title={`Preview of ${displayUrl}`}
                 className="w-full h-full border-0 block"
                 onLoad={() => setFrameLoading(false)}
@@ -239,12 +327,12 @@ export function SitePreviewDashboard({
                   setFrameError(true)
                   setFrameLoading(false)
                 }}
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                allow="clipboard-read; clipboard-write"
               />
             )}
           </div>
         ) : (
-          /* ── MOBILE: phone chrome frame ── */
           <div
             style={{
               transform: `scale(${iframeScale})`,
@@ -252,7 +340,6 @@ export function SitePreviewDashboard({
               flexShrink: 0,
             }}
           >
-            {/* Phone outer shell */}
             <div
               className="relative flex flex-col overflow-hidden"
               style={{
@@ -264,7 +351,6 @@ export function SitePreviewDashboard({
                 border: "1.5px solid #3a3a3c",
               }}
             >
-              {/* Status bar notch */}
               <div
                 className="absolute top-0 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center"
                 style={{
@@ -282,7 +368,6 @@ export function SitePreviewDashboard({
                 />
               </div>
 
-              {/* iframe content */}
               <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: "46px" }}>
                 {frameLoading && !frameError && (
                   <div
@@ -301,6 +386,7 @@ export function SitePreviewDashboard({
                     <Globe className="h-10 w-10 text-zinc-700" />
                     <p className="text-sm text-zinc-500">Could not load preview</p>
                     <button
+                      type="button"
                       onClick={handleRefresh}
                       className="mt-1 text-xs px-4 py-1.5 rounded-full text-zinc-300 hover:text-white transition-colors"
                       style={{ background: "#2e2e30" }}
@@ -311,8 +397,8 @@ export function SitePreviewDashboard({
                 ) : (
                   <iframe
                     key={refreshKey}
-                    src={fullUrl || undefined}
-                    srcDoc={!fullUrl && fallbackHtml ? fallbackHtml : undefined}
+                    src={frameSrc || undefined}
+                    srcDoc={!url && fallbackHtml ? fallbackHtml : undefined}
                     title={`Mobile preview of ${displayUrl}`}
                     className="border-0 block"
                     style={{
@@ -324,12 +410,12 @@ export function SitePreviewDashboard({
                       setFrameError(true)
                       setFrameLoading(false)
                     }}
-                    sandbox="allow-scripts"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                    allow="clipboard-read; clipboard-write"
                   />
                 )}
               </div>
 
-              {/* Home bar */}
               <div
                 className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full z-20"
                 style={{ width: "134px", height: "5px", background: "rgba(255,255,255,0.18)" }}
