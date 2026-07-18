@@ -36,6 +36,40 @@ export default function LandingPage() {
   )
 }
 
+function LaurelIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 56"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      className={className}
+    >
+      {/* stem */}
+      <path
+        d="M22 52C18 44 12 34 11 24C10 14 13 7 18 3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+      {/* outer leaves */}
+      <ellipse cx="9" cy="44" rx="5.2" ry="2.4" transform="rotate(-38 9 44)" fill="currentColor" opacity="0.95" />
+      <ellipse cx="7.5" cy="37" rx="5" ry="2.3" transform="rotate(-32 7.5 37)" fill="currentColor" opacity="0.9" />
+      <ellipse cx="6.5" cy="30" rx="4.8" ry="2.2" transform="rotate(-26 6.5 30)" fill="currentColor" opacity="0.85" />
+      <ellipse cx="6.2" cy="23.5" rx="4.5" ry="2.1" transform="rotate(-18 6.2 23.5)" fill="currentColor" opacity="0.8" />
+      <ellipse cx="7" cy="17.5" rx="4.2" ry="2" transform="rotate(-8 7 17.5)" fill="currentColor" opacity="0.75" />
+      <ellipse cx="9" cy="12" rx="3.8" ry="1.85" transform="rotate(6 9 12)" fill="currentColor" opacity="0.7" />
+      <ellipse cx="12" cy="7.5" rx="3.4" ry="1.7" transform="rotate(18 12 7.5)" fill="currentColor" opacity="0.65" />
+      {/* inner leaves */}
+      <ellipse cx="14" cy="41" rx="3.6" ry="1.7" transform="rotate(-34 14 41)" fill="currentColor" opacity="0.7" />
+      <ellipse cx="12.5" cy="34.5" rx="3.4" ry="1.6" transform="rotate(-28 12.5 34.5)" fill="currentColor" opacity="0.65" />
+      <ellipse cx="11.5" cy="28" rx="3.2" ry="1.5" transform="rotate(-20 11.5 28)" fill="currentColor" opacity="0.6" />
+      <ellipse cx="11.5" cy="22" rx="3" ry="1.4" transform="rotate(-12 11.5 22)" fill="currentColor" opacity="0.55" />
+      <ellipse cx="12.5" cy="16.5" rx="2.7" ry="1.3" transform="rotate(0 12.5 16.5)" fill="currentColor" opacity="0.5" />
+    </svg>
+  )
+}
+
 function Hero() {
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
@@ -123,20 +157,18 @@ function Hero() {
           Your coding agent
         </h1>
 
-        <div className="mt-1.5 flex w-full items-center justify-center sm:mt-8">
-          <div
-            className="relative w-[120px] overflow-hidden sm:w-[260px] md:w-[280px]"
-            style={{ aspectRatio: "170 / 99" }}
-          >
-            <Image
-              src="/dev.svg"
-              alt="made fore developer since 2026"
-              width={3000}
-              height={4500}
-              className="absolute left-0 top-0"
-              style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
-            />
+        {/* Inline laurel badge (cut SVG — no Image crop / no card) */}
+        <div
+          className="mt-1.5 inline-flex items-center gap-2 sm:mt-8 sm:gap-3"
+          role="img"
+          aria-label="made fore developer since 2026"
+        >
+          <LaurelIcon className="h-9 w-5 shrink-0 text-white sm:h-14 sm:w-8" />
+          <div className="text-center leading-tight">
+            <p className="text-[11px] font-semibold text-white sm:text-[14px]">made fore developer</p>
+            <p className="text-[10px] font-medium text-white/80 sm:text-[13px]">since 2026</p>
           </div>
+          <LaurelIcon className="h-9 w-5 shrink-0 scale-x-[-1] text-white sm:h-14 sm:w-8" />
         </div>
 
         <Button
