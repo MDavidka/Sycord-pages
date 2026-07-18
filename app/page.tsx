@@ -128,20 +128,25 @@ function Hero() {
       </div>
 
       {/* ── Hero content ─────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-20 pb-0 text-center sm:pt-24 lg:max-w-3xl lg:pt-28">
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-start px-5 pt-28 pb-0 text-left sm:items-center sm:text-center sm:pt-24 lg:max-w-3xl lg:pt-28">
 
         {/* Headline */}
         <h1
-          className="relative z-10 font-extrabold tracking-tight text-balance text-white"
-          style={{ fontSize: "clamp(38px, 9vw, 72px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
+          className="relative z-10 font-bold tracking-tight text-balance"
+          style={{ fontSize: "clamp(48px, 12vw, 72px)", lineHeight: 1.06, letterSpacing: "-0.04em" }}
         >
-          Your coding agent
+          <span className="text-white">Create </span>
+          <span className="font-normal text-[#888A8F]">your</span><br />
+          <span className="font-normal text-[#888A8F]">website </span>
+          <span className="text-white">under</span><br />
+          <span className="text-white block mt-1">5</span>
+          <span className="text-white block">minute!</span>
         </h1>
 
         {/* dev.svg badge ─ same precise crop as before */}
-        <div className="relative z-10 mt-7 flex w-full items-center justify-center sm:mt-9">
+        <div className="relative z-10 mt-7 flex w-full items-center justify-start sm:justify-center sm:mt-9">
           <div
-            className="relative w-[230px] overflow-hidden sm:w-[270px]"
+            className="relative hidden overflow-hidden sm:w-[270px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
@@ -159,11 +164,10 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="relative z-10 mt-7 rounded-2xl bg-white px-7 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-8"
+          className="relative z-10 mt-7 self-start rounded-2xl bg-[#8A8F98] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-[#8A8F98]/90 sm:self-center sm:mt-8"
         >
           <Link href="/login">
-            Start for free
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            Get started
           </Link>
         </Button>
       </div>
