@@ -39,26 +39,26 @@ export default function LandingPage() {
 function Hero() {
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
-  const phoneY = useTransform(scrollYProgress, [0, 1], [32, -12])
+  const phoneY = useTransform(scrollYProgress, [0, 1], [24, -10])
 
   return (
     <section
       ref={heroRef}
-      className="relative flex w-full min-h-[100svh] flex-col overflow-hidden md:h-[100svh]"
+      className="relative w-full overflow-hidden min-h-[100svh] md:h-[100svh]"
       style={{ backgroundColor: BG }}
     >
       {/* Navbar */}
-      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-4 sm:px-8 sm:pt-7">
-        <Link href="/" className="inline-flex items-center gap-2">
+      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 pt-3 sm:px-8 sm:pt-7">
+        <Link href="/" className="inline-flex items-center gap-1.5">
           <Image
             src="/logo.png"
             alt="Sycord"
-            width={28}
-            height={28}
+            width={24}
+            height={24}
             priority
-            className="h-7 w-7 opacity-90 sm:h-8 sm:w-8"
+            className="h-6 w-6 opacity-90 sm:h-8 sm:w-8"
           />
-          <span className="text-[15px] font-semibold tracking-tight text-white sm:text-base">
+          <span className="text-sm font-semibold tracking-tight text-white sm:text-base">
             sycord
           </span>
         </Link>
@@ -67,22 +67,22 @@ function Hero() {
           asChild
           variant="outline"
           size="sm"
-          className="h-9 rounded-full !border-[1.5px] !border-dashed !border-white/45 !bg-transparent px-4 text-[13px] font-semibold !text-white !shadow-none hover:!bg-white/5 hover:!text-white sm:h-12 sm:min-w-[148px] sm:px-6 sm:text-[15px]"
+          className="h-8 rounded-full !border-[1.5px] !border-dashed !border-white/45 !bg-transparent px-3 text-xs font-semibold !text-white !shadow-none hover:!bg-white/5 hover:!text-white sm:h-12 sm:min-w-[148px] sm:px-6 sm:text-[15px]"
         >
           <Link href="/contact">contact us</Link>
         </Button>
       </header>
 
-      {/* Hero copy */}
-      <div className="relative z-20 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-5 text-center sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
-        <h1 className="whitespace-nowrap text-[26px] font-extrabold leading-[1.08] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
+      {/* Hero copy — compact on mobile */}
+      <div className="relative z-20 mx-auto flex w-full max-w-[760px] flex-col items-center px-4 pt-4 text-center sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
+        <h1 className="whitespace-nowrap text-[22px] font-extrabold leading-[1.1] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
         {/* /dev.svg badge — cropped, unmodified asset */}
-        <div className="mt-2 flex w-full items-center justify-center sm:mt-7">
+        <div className="mt-1.5 flex w-full items-center justify-center sm:mt-7">
           <div
-            className="relative w-[150px] overflow-hidden sm:w-[260px] md:w-[280px]"
+            className="relative w-[110px] overflow-hidden sm:w-[260px] md:w-[280px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
@@ -98,25 +98,22 @@ function Hero() {
 
         <Button
           asChild
-          size="lg"
-          className="mt-2 h-9 min-w-[150px] rounded-full bg-white px-4 text-[13px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-7 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
+          size="sm"
+          className="mt-1.5 h-8 min-w-[132px] rounded-full bg-white px-3.5 text-xs font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-7 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
         >
           <Link href="/login">
             Start for free
-            <ArrowRight className="size-3.5 sm:size-4" />
+            <ArrowRight className="size-3 sm:size-4" />
           </Link>
         </Button>
       </div>
 
-      {/*
-        Bottom stage fills remaining viewport height.
-        David (left) + phone (center) share the SAME bottom edge — inline.
-      */}
-      <div className="relative z-10 mt-3 min-h-0 w-full flex-1 sm:mt-6">
-        {/* David — bottom-left of the stage */}
+      {/* Bottom stage — David + phone inline on same baseline, compact on mobile */}
+      <div className="absolute inset-x-0 bottom-0 z-10 h-[38vh] sm:h-[52vh] md:h-[58vh]">
+        {/* David — bottom-left */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 z-0 h-[92%] w-[48%] max-w-[200px] sm:max-w-none sm:w-[clamp(260px,36vw,500px)]"
+          className="pointer-events-none absolute bottom-0 left-0 z-0 h-full w-[42%] max-w-[140px] sm:max-w-none sm:w-[clamp(240px,36vw,500px)]"
         >
           <Image
             src="/hero-figure.png"
@@ -124,7 +121,7 @@ function Hero() {
             fill
             priority
             quality={100}
-            sizes="(max-width: 640px) 200px, 36vw"
+            sizes="(max-width: 640px) 140px, 36vw"
             className="object-cover object-left-bottom"
             style={{
               WebkitMaskImage:
@@ -137,8 +134,8 @@ function Hero() {
           />
         </div>
 
-        {/* Phone — bottom, slightly right of center so David stays visible left */}
-        <div className="absolute bottom-0 left-[58%] z-10 w-[min(62vw,230px)] -translate-x-1/2 overflow-hidden sm:left-1/2 sm:w-[360px] lg:w-[440px]">
+        {/* Phone — bottom-center/right, same baseline, smaller on mobile */}
+        <div className="absolute bottom-0 left-[56%] z-10 w-[148px] -translate-x-1/2 overflow-hidden sm:left-1/2 sm:w-[340px] lg:w-[420px]">
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
@@ -147,9 +144,9 @@ function Hero() {
               height={1780}
               priority
               quality={100}
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 360px, 230px"
-              className="relative h-auto w-full drop-shadow-[0_20px_40px_rgba(0,0,0,0.55)]"
-              style={{ clipPath: "inset(0 0 12% 0 round 28px 28px 0 0)" }}
+              sizes="(min-width: 1024px) 420px, (min-width: 640px) 340px, 148px"
+              className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)]"
+              style={{ clipPath: "inset(0 0 18% 0 round 22px 22px 0 0)" }}
             />
           </motion.div>
         </div>
