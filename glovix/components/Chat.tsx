@@ -361,6 +361,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, onOpenChat, activePan
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const pendingPromptConsumedRef = useRef(false);
+
+    // Pick up prompt drafted on the website edit Preview tab.
+    useEffect(() => {
+        if (pendingPromptConsumedRef.current) return;
+        if (typeof window === 'undefined') return;
+        try {
+            const pending = sessionStorage.getItem('syra_pending_prompt');
+            const pendingModel = sessionStorage.getItem('syra_pending_model');
+            if (pendingModel) {
+                const choice = getModelChoice(pendingModel as ModelType);
+                setSelectedModel(choice.modelType);
+                setAiModel(choice.apiModel);
+                sessionStorage.removeItem('syra_pending_model');
+            }
+            if (pending && pending.trim()) {
+                pendingPromptConsumedRef.current = true;
+                sessionStorage.removeItem('syra_pending_prompt');
+                setInput(pending);
+            }
+        } catch {
+            /* ignore */
+        }
+    }, [setSelectedModel, setAiModel]);
 
     // Set system prompt in store for reference
     useEffect(() => {

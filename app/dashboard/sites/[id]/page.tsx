@@ -92,7 +92,7 @@ import {
 import { useSession, signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
+import { SitePreviewSyraShell } from "@/components/site-preview-syra-shell"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
 import { PagesDeployPanel } from "@/components/pages-deploy-panel"
 import {
@@ -1752,7 +1752,6 @@ export default function SiteSettingsPage() {
                 size="sm"
                 className="hidden md:flex bg-white/5 border-white/10 hover:bg-white/10"
                 onClick={openInPagePreview}
-                disabled={!previewUrl}
               >
                 <Eye className="h-4 w-4 mr-2" />
                 Preview
@@ -1923,51 +1922,18 @@ export default function SiteSettingsPage() {
         <main className={cn("flex-1 relative", (activeTab === "ai" || activeTab === "preview") ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
           <div className={cn("mx-auto", (activeTab === "ai" || activeTab === "preview") ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : "max-w-6xl space-y-8 pb-8")}>
 
-            {/* TAB CONTENT: PREVIEW — in-page shell (no new tab) shared with Syra edit flow */}
+            {/* TAB CONTENT: PREVIEW — sitemap (preview → production) + Syra input */}
             {activeTab === "preview" && (
               <div className="absolute inset-0 flex flex-col">
-                {previewUrl ? (
-                  <SitePreviewDashboard
-                    url={previewUrl}
-                    siteName={project?.businessName}
-                    isLive={!!previewUrl}
-                    className="flex-1 h-full min-h-0"
-                    onClose={() => setActiveTab("overview")}
-                    onPublish={openSyra}
-                  />
-                ) : (
-                  <div
-                    className="flex flex-col items-center justify-center flex-1 gap-4 text-center px-6"
-                    style={{ background: "#1a1a1c" }}
-                  >
-                    <div
-                      className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                      style={{ background: "#252527" }}
-                    >
-                      <Globe className="h-7 w-7 text-zinc-500" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-zinc-200">No deployment yet</p>
-                      <p className="text-sm text-zinc-500 max-w-xs mx-auto">
-                        Build with Syra and deploy — preview loads here on the edit page, not in a new tab.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Button size="sm" className="font-semibold" onClick={openSyra}>
-                        <Zap className="h-4 w-4 mr-2" />
-                        Open Syra
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="font-semibold bg-transparent border-white/10"
-                        onClick={() => setActiveTab("overview")}
-                      >
-                        Back to Overview
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                <SitePreviewSyraShell
+                  projectId={id}
+                  siteName={project?.businessName}
+                  productionUrl={project?.cloudflareUrl || project?.syteUrl || null}
+                  onOpenSyra={() => {
+                    openSyra()
+                  }}
+                  onPublish={openSyra}
+                />
               </div>
             )}
 
@@ -2189,9 +2155,8 @@ export default function SiteSettingsPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
-                              disabled={!previewUrl}
                               aria-label="Open visit options"
-                              className="group/visit shrink-0 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-2.5 sm:pr-3 rounded-full flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="group/visit shrink-0 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-2.5 sm:pr-3 rounded-full flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97]"
                               style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                             >
                               <span>visit</span>
@@ -2217,10 +2182,9 @@ export default function SiteSettingsPage() {
                                 <span>live</span>
                               </div>
                             </DropdownMenuItem>
-                            {/* preview — in-page on the edit shell (faster than a new tab) */}
+                            {/* preview — in-page sitemap + Syra input (works before deploy) */}
                             <DropdownMenuItem
                               onClick={openInPagePreview}
-                              disabled={!previewUrl}
                               className="rounded-full p-0 mt-1.5 focus:bg-transparent data-[highlighted]:bg-transparent"
                             >
                               <div
