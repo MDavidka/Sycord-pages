@@ -202,9 +202,9 @@ function Hero() {
           </div>
 
           {/* Desktop phone peek — static, clear of CTA */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden justify-center overflow-hidden md:flex md:h-[40%] lg:h-[42%]">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden justify-center overflow-hidden md:flex md:h-[34%] lg:h-[36%]">
             <motion.div
-              className="w-[min(26vw,400px)]"
+              className="w-[min(24vw,380px)]"
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
