@@ -185,7 +185,7 @@ export function HomePage() {
                 <div className={cn(
                     "fixed top-0 left-0 h-screen flex-shrink-0 transition-all duration-300 ease-in-out z-30 backdrop-blur-xl",
                     isDark ? 'bg-card/80 border-r border-border' : 'bg-white/40 border-r border-black/10',
-                    sidebarOpen ? 'w-64' : 'w-16'
+                    sidebarOpen ? 'w-64' : 'hidden md:flex flex-col md:w-16'
                 )}>
                     {sidebarOpen ? (
                         <Sidebar onClose={() => setSidebarOpen(false)} />
@@ -223,7 +223,7 @@ export function HomePage() {
             {/* Main content */}
             <div className={cn(
                 "flex-1 flex flex-col relative z-10 transition-all duration-300",
-                user ? (sidebarOpen ? 'ml-64' : 'ml-16') : '',
+                user ? (sidebarOpen ? 'md:ml-64' : 'md:ml-16') : '',
                 'min-h-screen'
             )}>
                 <main className={cn(
@@ -338,9 +338,9 @@ export function HomePage() {
                 {/* Bottom Projects Section */}
                 {user && (
                     <div className={cn(
-                        "rounded-2xl backdrop-blur-xl flex-1",
+                        "rounded-2xl backdrop-blur-xl flex-1 mx-2 mt-8 md:mt-[25vh] mb-1",
                         isDark ? 'bg-card/80' : 'bg-white/80'
-                    )} style={{ marginLeft: '0.5rem', marginRight: '0.5rem', marginTop: '25vh', marginBottom: '0.25rem' }}>
+                    )}>
                         <div className="px-5 py-4">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-1">
