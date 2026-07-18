@@ -41,10 +41,14 @@ function Hero() {
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
 
-  const edgeMask =
-    "linear-gradient(to bottom, black 0%, transparent 28%, transparent 72%, black 100%)"
-  const centerMask =
-    "linear-gradient(to bottom, transparent 0%, black 22%, black 78%, transparent 100%)"
+  // Marked lines: top ≈ just below nav; bottom ≈ through phone mid (~70%)
+  // Progressive blur starts at each line and fades out to #181818
+  const topLine = "10%"
+  const bottomLine = "70%"
+
+  const sharpMask = `linear-gradient(to bottom, transparent 0%, transparent ${topLine}, black 16%, black 64%, transparent ${bottomLine}, transparent 100%)`
+  const midBlurMask = `linear-gradient(to bottom, transparent 0%, black 6%, black ${topLine}, transparent 18%, transparent 62%, black ${bottomLine}, black 82%, transparent 100%)`
+  const heavyBlurMask = `linear-gradient(to bottom, black 0%, black 5%, transparent 14%, transparent 66%, black 78%, black 100%)`
 
   return (
     <section
@@ -52,15 +56,12 @@ function Hero() {
       className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden"
       style={{ backgroundColor: BG }}
     >
-      {/* Hero-only glass bg @ 30% — progressive blur toward top & bottom */}
+      {/* Hero-only glass bg @ 30% — progressive blur from marked lines → #181818 */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        {/* Soft / blurred ends */}
+        {/* Heavy blur outside the marked band, dissolving into #181818 */}
         <div
           className="absolute inset-0 opacity-30"
-          style={{
-            WebkitMaskImage: edgeMask,
-            maskImage: edgeMask,
-          }}
+          style={{ WebkitMaskImage: heavyBlurMask, maskImage: heavyBlurMask }}
         >
           <Image
             src="/hero-glass-bg.webp"
@@ -68,16 +69,27 @@ function Hero() {
             fill
             priority
             sizes="100vw"
-            className="scale-110 object-cover object-[center_35%] blur-2xl"
+            className="scale-125 object-cover object-[center_35%] blur-3xl"
           />
         </div>
-        {/* Sharper mid band that fades into the blurred ends */}
+        {/* Medium blur begins at the marked lines */}
         <div
           className="absolute inset-0 opacity-30"
-          style={{
-            WebkitMaskImage: centerMask,
-            maskImage: centerMask,
-          }}
+          style={{ WebkitMaskImage: midBlurMask, maskImage: midBlurMask }}
+        >
+          <Image
+            src="/hero-glass-bg.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="scale-110 object-cover object-[center_35%] blur-xl"
+          />
+        </div>
+        {/* Sharp only between the marked lines */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{ WebkitMaskImage: sharpMask, maskImage: sharpMask }}
         >
           <Image
             src="/hero-glass-bg.webp"
@@ -88,6 +100,13 @@ function Hero() {
             className="object-cover object-[center_35%]"
           />
         </div>
+        {/* Color fade to #181818 above top line and below bottom line */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to bottom, ${BG} 0%, ${BG} 2%, transparent ${topLine}, transparent ${bottomLine}, ${BG} 92%, ${BG} 100%)`,
+          }}
+        />
       </div>
 
       {/* Navbar */}
