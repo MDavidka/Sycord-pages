@@ -44,7 +44,7 @@ function Hero() {
   return (
     <section
       ref={heroRef}
-      className="relative flex w-full flex-col overflow-hidden min-h-[100svh] md:h-[100svh]"
+      className="relative flex w-full flex-col overflow-hidden md:min-h-[100svh] md:h-[100svh]"
       style={{ backgroundColor: BG }}
     >
       {/* ── Line 1: Navbar ─────────────────────────────────────── */}
@@ -107,9 +107,9 @@ function Hero() {
       </div>
 
       {/* ── Line 3: David + phone inline (shared baseline) ─────── */}
-      <div className="relative z-10 mt-2 flex min-h-0 w-full flex-1 items-end justify-center px-3 pb-0 sm:mt-6 md:px-0">
+      <div className="relative z-10 mt-2 flex w-full shrink-0 items-end justify-center px-3 md:mt-auto md:min-h-0 md:flex-1 md:px-0">
         {/* Mobile: one row, same height, items-end */}
-        <div className="flex h-[42vh] max-h-[320px] w-full max-w-[320px] items-end justify-center md:hidden">
+        <div className="flex h-[230px] w-full max-w-[300px] items-end justify-center md:hidden">
           <div aria-hidden="true" className="relative h-full w-[42%] shrink-0">
             <Image
               src="/hero-figure.png"
