@@ -128,7 +128,7 @@ function Hero() {
       </div>
 
       {/* ── Hero content ─────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-20 pb-0 text-center sm:pt-24 lg:max-w-3xl lg:pt-28">
+      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-20 pb-0 text-center sm:pt-24 lg:pt-28 md:translate-x-[min(6vw,72px)]">
 
         {/* Headline */}
         <h1
@@ -139,9 +139,9 @@ function Hero() {
         </h1>
 
         {/* dev.svg badge ─ same precise crop as before */}
-        <div className="relative z-10 mt-7 flex w-full items-center justify-center sm:mt-9">
+        <div className="relative z-10 mt-7 flex w-full items-center justify-center">
           <div
-            className="relative w-[230px] overflow-hidden sm:w-[270px]"
+            className="relative w-[230px] overflow-hidden"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
@@ -159,7 +159,7 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="relative z-10 mt-7 rounded-2xl bg-white px-7 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-8"
+          className="relative z-10 mt-7 rounded-2xl bg-white px-7 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90"
         >
           <Link href="/login">
             Start for free
@@ -169,7 +169,7 @@ function Hero() {
       </div>
 
       {/* ── Phone mockup ─────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-12 lg:mt-14">
+      <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-12">
         <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
           <div
             aria-hidden="true"
