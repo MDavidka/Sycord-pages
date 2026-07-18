@@ -109,7 +109,7 @@ function Hero() {
       {/* ── Line 3: David + phone inline (shared baseline) ─────── */}
       <div className="relative z-10 mt-2 flex w-full shrink-0 items-end justify-center px-3 md:mt-auto md:min-h-0 md:flex-1 md:px-0">
         {/* Mobile: one row, same height, items-end */}
-        <div className="flex h-[230px] w-full max-w-[300px] items-end justify-center md:hidden">
+        <div className="flex h-[230px] w-full max-w-md items-end justify-between px-4 md:hidden">
           <div aria-hidden="true" className="relative h-full w-[42%] shrink-0">
             <Image
               src="/hero-figure.png"
@@ -129,7 +129,7 @@ function Hero() {
               }}
             />
           </div>
-          <div className="relative -ml-5 h-full w-[52%] shrink-0 overflow-hidden">
+          <div className="relative h-full w-[52%] shrink-0 overflow-hidden">
             <Image
               src="/hero-phone.webp"
               alt="Syra coding agent on phone"
