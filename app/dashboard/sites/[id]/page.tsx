@@ -92,7 +92,7 @@ import {
 import { useSession, signOut } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { SitePreviewDashboard } from "@/components/site-preview-dashboard"
+import { SitePreviewSyraShell } from "@/components/site-preview-syra-shell"
 import { AnimatedRollingSidebar, AnimatedRollingSidebarDesktop } from "@/components/animated-rolling-sidebar"
 import { PagesDeployPanel } from "@/components/pages-deploy-panel"
 import {
@@ -786,12 +786,13 @@ export default function SiteSettingsPage() {
   const [productError, setProductError] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
+    "overview" | "preview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
   >("overview")
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDesktopSidebarExpanded, setIsDesktopSidebarExpanded] = useState(false)
-  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop")
+  /** Keep Syra iframe mounted after first open so switching tabs does not cold-reload it. */
+  const [syraWarm, setSyraWarm] = useState(false)
   const [copiedDomain, setCopiedDomain] = useState(false)
   const copyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => {
@@ -805,8 +806,24 @@ export default function SiteSettingsPage() {
       window.location.assign(`/dashboard/sites/${id}/syra`)
       return
     }
+    setSyraWarm(true)
     setActiveTab("ai")
   }, [id])
+
+  const openInPagePreview = React.useCallback(() => {
+    setActiveTab("preview")
+  }, [])
+
+  // Deep-link: /dashboard/sites/[id]?tab=preview|ai opens the matching in-page shell.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const tab = new URLSearchParams(window.location.search).get("tab")
+    if (tab === "preview") {
+      setActiveTab("preview")
+    } else if (tab === "ai") {
+      openSyra()
+    }
+  }, [id, openSyra])
 
   // Subscription / plan
   const [subscription, setSubscription] = useState<string>("Sycord")
@@ -1164,6 +1181,24 @@ export default function SiteSettingsPage() {
       window.location.assign(`/dashboard/sites/${id}/syra`)
     }
   }, [activeTab, id])
+
+  // Prefetch Syra shell + keep it warm once the AI tab is opened (desktop).
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return
+    const href = `/dashboard/sites/${id}/syra`
+    const existing = document.querySelector(`link[rel="prefetch"][href="${href}"]`)
+    if (!existing) {
+      const link = document.createElement("link")
+      link.rel = "prefetch"
+      link.href = href
+      link.as = "document"
+      document.head.appendChild(link)
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (activeTab === "ai") setSyraWarm(true)
+  }, [activeTab])
 
   // Fetch already-connected integrations when the integrations tab becomes active
   useEffect(() => {
@@ -1569,6 +1604,7 @@ export default function SiteSettingsPage() {
       defaultOpen: true,
       items: [
         { id: "overview", label: "Overview", icon: Layout },
+        { id: "preview", label: "Preview", icon: Eye },
         { id: "domain", label: "Domain", icon: Globe },
         { id: "pages", label: "Pages", icon: FileText },
         { id: "ai", label: "Syra", icon: Zap },
@@ -1689,8 +1725,8 @@ export default function SiteSettingsPage() {
           overflow: "hidden",
         }}
       >
-        {/* Header — hidden on the Glovix (ai) tab so it renders full-screen with its own header */}
-        {activeTab !== "ai" && (
+        {/* Header — hidden on Syra (ai) and full-screen Preview so they own the viewport */}
+        {activeTab !== "ai" && activeTab !== "preview" && (
         <header className={cn("border-b border-white/10 bg-background/50 backdrop-blur-sm z-20 shrink-0")}>
           <div className="flex items-center justify-between h-14 px-4 md:px-6">
             {/* Mobile: hamburger + site name */}
@@ -1715,11 +1751,10 @@ export default function SiteSettingsPage() {
                 variant="outline"
                 size="sm"
                 className="hidden md:flex bg-white/5 border-white/10 hover:bg-white/10"
-                onClick={() => previewUrl && window.open(previewUrl, "_blank")}
-                disabled={!previewUrl}
+                onClick={openInPagePreview}
               >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Visit Site
+                <Eye className="h-4 w-4 mr-2" />
+                Preview
               </Button>
 
               <DropdownMenu>
@@ -1884,8 +1919,23 @@ export default function SiteSettingsPage() {
         )}
 
 
-        <main className={cn("flex-1 relative", activeTab === "ai" ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
-          <div className={cn("mx-auto", activeTab === "ai" ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : "max-w-6xl space-y-8 pb-8")}>
+        <main className={cn("flex-1 relative", (activeTab === "ai" || activeTab === "preview") ? "p-0 overflow-hidden" : "overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 custom-scrollbar")}>
+          <div className={cn("mx-auto", (activeTab === "ai" || activeTab === "preview") ? "h-full w-full max-w-none p-0 pb-0 space-y-0" : "max-w-6xl space-y-8 pb-8")}>
+
+            {/* TAB CONTENT: PREVIEW — sitemap (preview → production) + Syra input */}
+            {activeTab === "preview" && (
+              <div className="absolute inset-0 flex flex-col">
+                <SitePreviewSyraShell
+                  projectId={id}
+                  siteName={project?.businessName}
+                  productionUrl={project?.cloudflareUrl || project?.syteUrl || null}
+                  onOpenSyra={() => {
+                    openSyra()
+                  }}
+                  onPublish={openSyra}
+                />
+              </div>
+            )}
 
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === "overview" && (() => {
@@ -1965,10 +2015,20 @@ export default function SiteSettingsPage() {
                   {/* ── ROW 1: Preview (left) + Domain info & buttons (right, only on lg) ── */}
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
 
-                    {/* Preview box */}
+                    {/* Preview box — tap opens in-page preview (no new tab) */}
                     <div
                       className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px] group/preview"
                       style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
+                      role={previewUrl ? "button" : undefined}
+                      tabIndex={previewUrl ? 0 : undefined}
+                      onClick={() => previewUrl && openInPagePreview()}
+                      onKeyDown={(e) => {
+                        if (!previewUrl) return
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          openInPagePreview()
+                        }
+                      }}
                     >
                       {previewUrl ? (
                         <iframe
@@ -2001,17 +2061,17 @@ export default function SiteSettingsPage() {
                         style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(28,28,30,0.7) 100%)" }}
                       />
 
-                      {/* Open-in-new hover affordance */}
+                      {/* Open in-page preview (no new tab) */}
                       {previewUrl && (
                         <button
                           type="button"
-                          onClick={() => window.open(previewUrl, "_blank", "noopener,noreferrer")}
+                          onClick={openInPagePreview}
                           className="absolute top-3 right-3 h-9 w-9 rounded-full flex items-center justify-center bg-black/50 backdrop-blur-md text-zinc-100 opacity-0 group-hover/preview:opacity-100 transition-all hover:scale-110 hover:bg-black/70 z-10"
                           style={{ border: "1px solid rgba(255,255,255,0.15)" }}
-                          aria-label="Open site in new tab"
-                          title="Open site"
+                          aria-label="Open in-page preview"
+                          title="Open preview"
                         >
-                          <ArrowUpRight className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </button>
                       )}
 
@@ -2095,9 +2155,8 @@ export default function SiteSettingsPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
-                              disabled={!previewUrl}
                               aria-label="Open visit options"
-                              className="group/visit shrink-0 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-2.5 sm:pr-3 rounded-full flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="group/visit shrink-0 h-10 sm:h-12 pl-3.5 sm:pl-5 pr-2.5 sm:pr-3 rounded-full flex items-center gap-1.5 sm:gap-2 text-[13px] sm:text-[15px] font-semibold text-zinc-200 transition-all hover:bg-white/[0.05] hover:border-white/25 active:scale-[0.97]"
                               style={{ border: "1.5px solid rgba(255,255,255,0.14)" }}
                             >
                               <span>visit</span>
@@ -2109,7 +2168,7 @@ export default function SiteSettingsPage() {
                             sideOffset={8}
                             className="bg-[#1c1c1c] border border-white/[0.08] rounded-2xl p-1.5 min-w-[180px] max-h-[260px] overflow-y-auto custom-scrollbar"
                           >
-                            {/* live */}
+                            {/* live — public site in a new tab */}
                             <DropdownMenuItem
                               onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
                               disabled={!previewUrl}
@@ -2123,17 +2182,16 @@ export default function SiteSettingsPage() {
                                 <span>live</span>
                               </div>
                             </DropdownMenuItem>
-                            {/* preview */}
+                            {/* preview — in-page sitemap + Syra input (works before deploy) */}
                             <DropdownMenuItem
-                              onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}
-                              disabled={!previewUrl}
+                              onClick={openInPagePreview}
                               className="rounded-full p-0 mt-1.5 focus:bg-transparent data-[highlighted]:bg-transparent"
                             >
                               <div
                                 className="w-full h-9 sm:h-10 px-4 rounded-full flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-white transition-transform hover:scale-[1.02] active:scale-[0.98]"
                                 style={{ background: VISIT_PILL_PREVIEW_BG, boxShadow: VISIT_PILL_PREVIEW_SHADOW }}
                               >
-                                <ArrowUpRight className="h-4 w-4" />
+                                <Eye className="h-4 w-4" />
                                 <span>preview</span>
                               </div>
                             </DropdownMenuItem>
@@ -2668,10 +2726,16 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: GLOVIX (AI BUILDER) — desktop iframe; mobile uses full-page /syra */}
-            {activeTab === "ai" && (
-              <div className="hidden h-full w-full flex-col md:flex">
-                <div className="flex-1 bg-background overflow-hidden relative">
+            {/* TAB CONTENT: GLOVIX (AI BUILDER) — desktop iframe kept warm after first open */}
+            {(activeTab === "ai" || syraWarm) && (
+              <div
+                className={cn(
+                  "h-full w-full flex-col",
+                  activeTab === "ai" ? "hidden md:flex" : "hidden"
+                )}
+                aria-hidden={activeTab !== "ai"}
+              >
+                <div className="flex-1 bg-background overflow-hidden relative min-h-0">
                   {id ? (
                     <iframe
                       key={id}
