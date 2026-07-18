@@ -118,14 +118,14 @@ function Hero() {
       </header>
 
       {/* Layer 3 — Hero content (compact on mobile) */}
-      <div className="relative z-10 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-8 text-center sm:px-5 sm:pt-[clamp(140px,26vh,240px)]">
-        <h1 className="whitespace-nowrap text-[28px] font-extrabold leading-[1.08] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
+      <div className="relative z-10 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-6 text-center sm:px-5 sm:pt-[clamp(140px,26vh,240px)]">
+        <h1 className="whitespace-nowrap text-[26px] font-extrabold leading-[1.08] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
-        <div className="mt-2 flex w-full items-center justify-center sm:mt-8">
+        <div className="mt-1.5 flex w-full items-center justify-center sm:mt-8">
           <div
-            className="relative w-[148px] overflow-hidden sm:w-[260px] md:w-[280px]"
+            className="relative w-[120px] overflow-hidden sm:w-[260px] md:w-[280px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
@@ -142,7 +142,7 @@ function Hero() {
         <Button
           asChild
           size="lg"
-          className="mt-2 h-10 min-w-[160px] rounded-full bg-white px-5 text-sm font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-8 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
+          className="mt-1.5 h-9 min-w-[150px] rounded-full bg-white px-4 text-[13px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-8 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
         >
           <Link href="/login">
             Start for free
@@ -151,9 +151,9 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Layer 4 — Phone mockup (pinned to bottom on mobile) */}
-      <div className="relative z-10 mt-auto flex w-full flex-col items-center px-4 sm:mt-12 sm:overflow-hidden sm:px-5">
-        <div className="relative h-[30vh] w-[min(62vw,210px)] overflow-hidden sm:h-auto sm:w-[380px] lg:w-[440px]">
+      {/* Layer 4 — Phone mockup */}
+      <div className="relative z-10 mx-auto mt-4 flex w-full flex-col items-center px-4 sm:mt-12 sm:overflow-hidden sm:px-5 md:relative">
+        <div className="relative h-[26vh] w-[min(56vw,190px)] overflow-hidden sm:h-auto sm:w-[380px] lg:w-[440px]">
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
@@ -162,7 +162,7 @@ function Hero() {
               height={1780}
               priority
               quality={100}
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 210px"
+              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 190px"
               className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)] sm:drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
               style={{ clipPath: "inset(0 0 12% 0 round 28px 28px 0 0)" }}
             />
