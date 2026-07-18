@@ -91,28 +91,23 @@ function HeroNav() {
   )
 }
 
-function HeroCopy({
+function HeroCopyMobile({
   className = "",
   style,
-  animateIn = false,
 }: {
   className?: string
   style?: React.ComponentProps<typeof motion.div>["style"]
-  animateIn?: boolean
 }) {
   return (
     <motion.div
       className={`relative z-20 mx-auto flex w-full max-w-[760px] flex-col items-center px-5 text-center ${className}`}
       style={style}
-      initial={animateIn ? { opacity: 0, y: 18 } : undefined}
-      animate={animateIn ? { opacity: 1, y: 0 } : undefined}
-      transition={animateIn ? { duration: 0.7, ease: [0.22, 1, 0.36, 1] } : undefined}
     >
-      <h1 className="whitespace-nowrap text-[clamp(34px,8.5vw,72px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]">
+      <h1 className="whitespace-nowrap text-[clamp(34px,8.5vw,52px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]">
         Your coding agent
       </h1>
       <div
-        className="relative mt-5 w-[140px] overflow-hidden sm:mt-7 sm:w-[260px] md:w-[300px]"
+        className="relative mt-5 w-[140px] overflow-hidden sm:mt-7 sm:w-[240px]"
         style={{ aspectRatio: "170 / 99" }}
       >
         <Image
@@ -127,14 +122,87 @@ function HeroCopy({
       <Button
         asChild
         size="sm"
-        className="mt-5 h-11 min-w-[160px] rounded-full bg-white px-6 text-sm font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-8 sm:h-[56px] sm:min-w-[260px] sm:px-8 sm:text-[16px]"
+        className="mt-5 h-11 min-w-[160px] rounded-full bg-white px-6 text-sm font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"
       >
         <Link href="/login">
           Start for free
-          <ArrowRight className="size-3.5 sm:size-4" />
+          <ArrowRight className="size-3.5" />
         </Link>
       </Button>
     </motion.div>
+  )
+}
+
+function HeroDesktop() {
+  return (
+    <div className="relative z-20 mx-auto hidden h-full w-full max-w-[1240px] grid-cols-2 items-center gap-8 px-8 pb-8 pt-4 md:grid lg:gap-10 lg:px-10">
+      {/* Left copy */}
+      <motion.div
+        className="relative z-20 flex max-w-[560px] flex-col items-start text-left"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <h1 className="text-[clamp(48px,5.6vw,76px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-white">
+          The AI agent
+        </h1>
+        <p className="mt-4 max-w-[420px] text-[17px] leading-relaxed text-white/75 lg:text-[18px]">
+          this is a subheading this is a subheading
+        </p>
+        <div
+          className="relative mt-7 w-[220px] overflow-hidden lg:mt-8 lg:w-[260px]"
+          style={{ aspectRatio: "170 / 99" }}
+        >
+          <Image
+            src="/dev.svg"
+            alt="made fore developer since 2026"
+            width={3000}
+            height={4500}
+            className="absolute left-0 top-0"
+            style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
+          />
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-3 lg:mt-9">
+          <Button
+            asChild
+            className="h-12 rounded-full bg-white px-7 text-[15px] font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"
+          >
+            <Link href="/login">
+              Start for free
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-12 rounded-full border-white/30 bg-transparent px-7 text-[15px] font-semibold text-white hover:bg-white/5 hover:text-white"
+          >
+            <Link href="#showcase">See demo</Link>
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Right phone — large, cropped bottom/right */}
+      <motion.div
+        className="relative hidden h-full min-h-0 md:block"
+        initial={{ opacity: 0, x: 36 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.12, duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="absolute -bottom-[12%] -right-[14%] top-[4%] w-[min(118%,580px)] lg:-right-[10%] lg:top-0 lg:w-[min(115%,600px)]">
+          <Image
+            src="/hero-phone.webp"
+            alt="Syra coding agent on phone"
+            width={880}
+            height={1780}
+            priority
+            sizes="(min-width: 1024px) 600px, 50vw"
+            className="h-full w-full object-cover object-top drop-shadow-[0_40px_80px_rgba(0,0,0,0.55)]"
+            style={{ borderRadius: "48px" }}
+          />
+        </div>
+      </motion.div>
+    </div>
   )
 }
 
@@ -156,11 +224,10 @@ function Hero() {
   return (
     <section
       ref={trackRef}
-      className="relative h-[260vh] w-full md:h-[100svh] md:min-h-[720px]"
+      className="relative h-[260vh] w-full md:h-[100svh] md:min-h-[760px]"
       style={{ backgroundColor: BG }}
     >
       <div className="sticky top-0 h-[100svh] overflow-hidden md:relative md:h-full">
-        {/* Desktop bg stays solid; mobile fades out after phone leaves */}
         <div className="absolute inset-0 hidden md:block">
           <HeroBackground />
         </div>
@@ -171,19 +238,12 @@ function Hero() {
         <div className="relative z-20 flex h-full flex-col">
           <HeroNav />
 
-          {/* Mobile: copy fades as phone rises */}
-          <HeroCopy
+          {/* Mobile centered stack + scroll phone */}
+          <HeroCopyMobile
             className="pt-[clamp(56px,12vh,120px)] md:hidden"
             style={{ opacity: copyOpacity, y: copyY }}
           />
 
-          {/* Desktop: copy stays above the phone peek */}
-          <HeroCopy
-            animateIn
-            className="hidden pt-[clamp(64px,10vh,120px)] md:flex lg:pt-[clamp(72px,11vh,132px)]"
-          />
-
-          {/* Mobile scroll-driven phone: peek → full → disappear */}
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center md:hidden">
             <motion.div
               style={{ y: phoneY, opacity: phoneOpacity, scale: phoneScale }}
@@ -201,24 +261,9 @@ function Hero() {
             </motion.div>
           </div>
 
-          {/* Desktop phone peek — static, clear of CTA */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 hidden justify-center overflow-hidden md:flex md:h-[34%] lg:h-[36%]">
-            <motion.div
-              className="w-[min(24vw,380px)]"
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <Image
-                src="/hero-phone.webp"
-                alt="Syra coding agent on phone"
-                width={880}
-                height={1780}
-                priority
-                sizes="400px"
-                className="h-auto w-full rounded-t-[40px]"
-              />
-            </motion.div>
+          {/* Desktop split: copy left, phone right */}
+          <div className="relative hidden min-h-0 flex-1 md:block">
+            <HeroDesktop />
           </div>
         </div>
       </div>
