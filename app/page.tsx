@@ -109,7 +109,7 @@ function Hero() {
       {/* ── Line 3: David is the mobile background; phone rises from the bottom ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] md:hidden">
         <div className="absolute inset-0 bg-[#181818]" />
-        <div className="absolute bottom-[-10%] left-[-96px] h-[96%] w-[390px]">
+        <div className="absolute left-[-96px] top-[-56px] h-[576px] w-[390px]">
           <Image
             src="/hero-figure.png"
             alt=""
