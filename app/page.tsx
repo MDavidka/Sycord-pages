@@ -21,17 +21,38 @@ const TEXT = "#E5E7EB"
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen w-full text-white" style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}>
-      <Hero />
-      <TrustStrip />
-      <HowItWorks />
-      <AIBuilderFeatures />
-      <HostingFeatures />
-      <Templates />
-      <Pricing />
-      <FAQ />
-      <FinalCTA />
-      <Footer />
+    <main
+      className="relative min-h-screen w-full text-white"
+      style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}
+    >
+      {/* Sitewide base: #181818 + glass texture at 28% opacity, under everything */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{ backgroundColor: BG }}
+      >
+        <Image
+          src="/hero-glass-bg.webp"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-[center_35%] opacity-[0.28]"
+        />
+      </div>
+
+      <div className="relative z-10">
+        <Hero />
+        <TrustStrip />
+        <HowItWorks />
+        <AIBuilderFeatures />
+        <HostingFeatures />
+        <Templates />
+        <Pricing />
+        <FAQ />
+        <FinalCTA />
+        <Footer />
+      </div>
     </main>
   )
 }
@@ -40,38 +61,12 @@ function Hero() {
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
-  const bgScale = useTransform(scrollYProgress, [0, 1], [1, 1.08])
 
   return (
     <section
       ref={heroRef}
-      className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden"
-      style={{ backgroundColor: "#0a0b0d" }}
+      className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden bg-transparent"
     >
-      {/* Full-bleed textured glass sunset background */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 z-0"
-        style={{ scale: bgScale }}
-      >
-        <Image
-          src="/hero-glass-bg.webp"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-[center_35%]"
-        />
-        {/* Darken + vignette so type stays crisp while amber glow stays visible */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(6,7,10,0.72) 0%, rgba(6,7,10,0.45) 28%, rgba(6,7,10,0.58) 55%, rgba(6,7,10,0.92) 100%), radial-gradient(ellipse 65% 50% at 78% 42%, rgba(255,110,30,0.22) 0%, transparent 70%)",
-          }}
-        />
-      </motion.div>
-
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1.25rem,env(safe-area-inset-left,0px))] pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] sm:px-8 sm:pt-7">
         <Link href="/" className="inline-flex items-center gap-2">
