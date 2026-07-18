@@ -74,14 +74,14 @@ function Hero() {
       </header>
 
       {/* ── Line 2: Headline + badge + CTA (tight readable stack) ─ */}
-      <div className="absolute right-0 top-[44%] z-20 flex w-[58%] max-w-none flex-col items-center gap-5 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
-        <h1 className="whitespace-nowrap text-[22px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
+      <div className="absolute right-0 top-[38%] z-20 flex w-[70%] max-w-none flex-col items-center gap-4 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
+        <h1 className="whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
         {/* /dev.svg badge — cropped, unmodified */}
         <div
-          className="relative w-[120px] overflow-hidden sm:w-[260px] md:w-[280px]"
+          className="relative w-[132px] overflow-hidden sm:w-[260px] md:w-[280px]"
           style={{ aspectRatio: "170 / 99" }}
         >
           <Image
@@ -97,7 +97,7 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="h-8 min-w-[112px] rounded-full bg-white px-3.5 text-xs font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
+          className="h-9 min-w-[128px] rounded-full bg-white px-3.5 text-xs font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
         >
           <Link href="/login">
             Start for free
@@ -109,7 +109,7 @@ function Hero() {
       {/* ── Line 3: David is the mobile background; phone rises from the bottom ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] md:hidden">
         <div className="absolute inset-0 bg-[#181818]" />
-        <div className="absolute bottom-[-24%] left-[-88px] h-[86%] w-[350px]">
+        <div className="absolute bottom-[-16%] left-[-96px] h-[96%] w-[390px]">
           <Image
             src="/hero-figure.png"
             alt=""
@@ -133,7 +133,7 @@ function Hero() {
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
-        <div className="absolute left-1/2 top-[92%] w-[58vw] max-w-[240px] -translate-x-1/2 overflow-hidden">
+        <div className="absolute left-1/2 top-[87%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
