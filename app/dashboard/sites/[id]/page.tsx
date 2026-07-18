@@ -1925,13 +1925,13 @@ export default function SiteSettingsPage() {
 
             {/* TAB CONTENT: PREVIEW — in-page shell (no new tab) shared with Syra edit flow */}
             {activeTab === "preview" && (
-              <div className="h-full w-full flex flex-col">
+              <div className="absolute inset-0 flex flex-col">
                 {previewUrl ? (
                   <SitePreviewDashboard
                     url={previewUrl}
                     siteName={project?.businessName}
                     isLive={!!previewUrl}
-                    className="flex-1 h-full"
+                    className="flex-1 h-full min-h-0"
                     onClose={() => setActiveTab("overview")}
                     onPublish={openSyra}
                   />
