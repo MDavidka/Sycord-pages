@@ -41,13 +41,9 @@ function Hero() {
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
 
-  // Soft full-height masks only — no clipped boxes (those create hard lines)
-  const sharpMask =
-    "linear-gradient(to bottom, transparent 0%, transparent 8%, rgba(0,0,0,0.35) 16%, black 28%, black 58%, rgba(0,0,0,0.45) 66%, transparent 74%, transparent 100%)"
-  const softBlurMask =
-    "linear-gradient(to bottom, transparent 0%, black 6%, rgba(0,0,0,0.7) 14%, transparent 26%, transparent 58%, rgba(0,0,0,0.55) 68%, black 80%, transparent 100%)"
-  const heavyBlurMask =
-    "linear-gradient(to bottom, black 0%, rgba(0,0,0,0.85) 8%, transparent 20%, transparent 62%, rgba(0,0,0,0.5) 74%, black 90%, black 100%)"
+  // One continuous image + soft overlay ramps — avoids mask seams / hard lines
+  const imageFade =
+    "linear-gradient(to bottom, transparent 0%, black 18%, black 55%, transparent 85%)"
 
   return (
     <section
@@ -55,11 +51,11 @@ function Hero() {
       className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden"
       style={{ backgroundColor: BG }}
     >
-      {/* Hero-only glass bg @ 30% — progressive blur into #181818, no hard edges */}
+      {/* Hero-only glass bg @ 30% — fade+blur into #181818 at top & bottom */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
         <div
           className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: sharpMask, maskImage: sharpMask }}
+          style={{ WebkitMaskImage: imageFade, maskImage: imageFade }}
         >
           <Image
             src="/hero-glass-bg.webp"
@@ -70,37 +66,40 @@ function Hero() {
             className="object-cover object-[center_35%]"
           />
         </div>
+        {/* Progressive blur toward top */}
         <div
-          className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: softBlurMask, maskImage: softBlurMask }}
-        >
-          <Image
-            src="/hero-glass-bg.webp"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="scale-110 object-cover object-[center_35%] blur-2xl"
-          />
-        </div>
+          className="absolute inset-x-0 top-0 h-[42%]"
+          style={{
+            WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 35%, transparent 100%)",
+            maskImage: "linear-gradient(to bottom, black 0%, black 35%, transparent 100%)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+          }}
+        />
         <div
-          className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: heavyBlurMask, maskImage: heavyBlurMask }}
-        >
-          <Image
-            src="/hero-glass-bg.webp"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="scale-125 object-cover object-[center_30%] blur-3xl"
-          />
-        </div>
-        {/* Soft color dissolve into #181818 — long ramps, no hard stops */}
+          className="absolute inset-x-0 top-0 h-[28%]"
+          style={{
+            WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
+            maskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
+            backdropFilter: "blur(28px)",
+            WebkitBackdropFilter: "blur(28px)",
+          }}
+        />
+        {/* Progressive blur toward bottom */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-[40%]"
+          style={{
+            WebkitMaskImage: "linear-gradient(to top, black 0%, black 30%, transparent 100%)",
+            maskImage: "linear-gradient(to top, black 0%, black 30%, transparent 100%)",
+            backdropFilter: "blur(16px)",
+            WebkitBackdropFilter: "blur(16px)",
+          }}
+        />
+        {/* Color dissolve into #181818 */}
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.82) 10%, rgba(24,24,24,0.35) 20%, transparent 32%, transparent 62%, rgba(24,24,24,0.4) 76%, ${BG} 92%, ${BG} 100%)`,
+            background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.75) 12%, transparent 30%, transparent 58%, rgba(24,24,24,0.55) 78%, ${BG} 100%)`,
           }}
         />
       </div>
