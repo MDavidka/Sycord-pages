@@ -66,12 +66,12 @@ function Hero() {
         }}
       >
         <Image
-          src="/hero-david.png"
+          src="/hero-figure.png"
           alt=""
           fill
           priority
           sizes="42vw"
-          className="object-cover object-bottom"
+          className="object-cover object-left-bottom"
           style={{ filter: "grayscale(18%) brightness(0.8) contrast(1.08)" }}
         />
       </div>
