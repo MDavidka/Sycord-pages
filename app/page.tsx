@@ -137,8 +137,8 @@ function Hero() {
           />
         </div>
 
-        {/* Phone — bottom-center, same baseline as David */}
-        <div className="absolute bottom-0 left-1/2 z-10 w-[min(70vw,250px)] -translate-x-1/2 overflow-hidden sm:w-[360px] lg:w-[440px]">
+        {/* Phone — bottom, slightly right of center so David stays visible left */}
+        <div className="absolute bottom-0 left-[58%] z-10 w-[min(62vw,230px)] -translate-x-1/2 overflow-hidden sm:left-1/2 sm:w-[360px] lg:w-[440px]">
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
@@ -147,7 +147,7 @@ function Hero() {
               height={1780}
               priority
               quality={100}
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 360px, 250px"
+              sizes="(min-width: 1024px) 440px, (min-width: 640px) 360px, 230px"
               className="relative h-auto w-full drop-shadow-[0_20px_40px_rgba(0,0,0,0.55)]"
               style={{ clipPath: "inset(0 0 12% 0 round 28px 28px 0 0)" }}
             />
