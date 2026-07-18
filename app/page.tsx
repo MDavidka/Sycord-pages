@@ -39,21 +39,35 @@ export default function LandingPage() {
 function Hero() {
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
-  const phoneY = useTransform(scrollYProgress, [0, 1], [56, -24])
+  const phoneY = useTransform(scrollYProgress, [0, 1], [40, -16])
 
   return (
     <section
       ref={heroRef}
-      className="relative w-full overflow-hidden"
-      style={{ backgroundColor: BG, height: "100svh", minHeight: "100svh" }}
+      className="relative flex w-full min-h-[100svh] flex-col overflow-hidden md:h-[100svh]"
+      style={{ backgroundColor: BG }}
     >
-      {/* Layer 1 — David figure (bottom-left, fades into BG) */}
+      {/* Layer 1 — David (sharp on mobile; soft edge fade from md+) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 left-0 z-0"
+        className="pointer-events-none absolute bottom-0 left-0 z-0 block h-[42vh] w-[48vw] max-w-[180px] md:hidden"
+      >
+        <Image
+          src="/hero-figure.png"
+          alt=""
+          fill
+          priority
+          quality={100}
+          sizes="180px"
+          className="object-cover object-left-bottom"
+        />
+      </div>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-0 left-0 z-0 hidden md:block"
         style={{
           width: "clamp(280px, 42vw, 560px)",
-          height: "clamp(420px, 76vh, 900px)",
+          height: "clamp(480px, 76vh, 900px)",
           opacity: 0.85,
           WebkitMaskImage:
             "linear-gradient(to right, black 0%, black 5%, black 65%, transparent 100%), " +
@@ -70,51 +84,48 @@ function Hero() {
           alt=""
           fill
           priority
+          quality={90}
           sizes="42vw"
           className="object-cover object-left-bottom"
           style={{ filter: "grayscale(18%) brightness(0.8) contrast(1.08)" }}
         />
       </div>
 
-      {/* Layer 2 — Navbar */}
-      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
-        <Link href="/" className="inline-flex items-center gap-2.5">
-          <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
-          <span className="text-base font-semibold text-white" style={{ letterSpacing: "-0.01em" }}>
+      {/* Layer 2 — Navbar (shadcn Button) */}
+      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-4 sm:px-8 sm:pt-7">
+        <Link href="/" className="inline-flex items-center gap-2">
+          <Image
+            src="/logo.png"
+            alt="Sycord"
+            width={28}
+            height={28}
+            priority
+            className="h-7 w-7 opacity-90 sm:h-8 sm:w-8"
+          />
+          <span className="text-[15px] font-semibold tracking-tight text-white sm:text-base">
             sycord
           </span>
         </Link>
 
-        <Link
-          href="/contact"
-          className="inline-flex h-12 w-[148px] items-center justify-center rounded-full text-[15px] font-semibold text-white transition-colors hover:bg-white/5"
-          style={{ border: "1.5px dashed rgba(255,255,255,0.45)" }}
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="h-9 rounded-full !border-[1.5px] !border-dashed !border-white/45 !bg-transparent px-4 text-[13px] font-semibold !text-white !shadow-none hover:!bg-white/5 hover:!text-white sm:h-12 sm:min-w-[148px] sm:px-6 sm:text-[15px]"
         >
-          contact us
-        </Link>
+          <Link href="/contact">contact us</Link>
+        </Button>
       </header>
 
-      {/* Layer 3 — Hero content (starts ~40–45% from top) */}
-      <div
-        className="relative z-10 mx-auto flex w-full max-w-[760px] flex-col items-center px-5 text-center"
-        style={{ paddingTop: "clamp(160px, 28vh, 260px)" }}
-      >
-        <h1
-          className="whitespace-nowrap font-extrabold text-white"
-          style={{
-            fontSize: "clamp(42px, 8vw, 68px)",
-            lineHeight: 1.06,
-            letterSpacing: "-0.03em",
-            fontWeight: 800,
-          }}
-        >
+      {/* Layer 3 — Hero content (compact on mobile) */}
+      <div className="relative z-10 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-8 text-center sm:px-5 sm:pt-[clamp(140px,26vh,240px)]">
+        <h1 className="whitespace-nowrap text-[28px] font-extrabold leading-[1.08] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
-        {/* Badge — cropped /dev.svg (laurels + text, no card) */}
-        <div className="mt-8 flex w-full items-center justify-center">
+        <div className="mt-2 flex w-full items-center justify-center sm:mt-8">
           <div
-            className="relative w-[260px] overflow-hidden sm:w-[280px]"
+            className="relative w-[148px] overflow-hidden sm:w-[260px] md:w-[280px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
@@ -128,21 +139,21 @@ function Hero() {
           </div>
         </div>
 
-        {/* Primary CTA */}
         <Button
           asChild
-          className="mt-8 h-[60px] min-w-[270px] rounded-full bg-white px-8 text-[16px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white"
+          size="lg"
+          className="mt-2 h-10 min-w-[160px] rounded-full bg-white px-5 text-sm font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:mt-8 sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
         >
           <Link href="/login">
             Start for free
-            <ArrowRight className="ml-2 h-4 w-4" />
+            <ArrowRight className="size-3.5 sm:size-4" />
           </Link>
         </Button>
       </div>
 
-      {/* Layer 4 — Phone mockup (bottom-center, clipped) */}
-      <div className="relative z-10 mx-auto mt-12 flex w-full flex-col items-center overflow-hidden px-5">
-        <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
+      {/* Layer 4 — Phone mockup (pinned to bottom on mobile) */}
+      <div className="relative z-10 mt-auto flex w-full flex-col items-center px-4 sm:mt-12 sm:overflow-hidden sm:px-5">
+        <div className="relative h-[30vh] w-[min(62vw,210px)] overflow-hidden sm:h-auto sm:w-[380px] lg:w-[440px]">
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
@@ -150,9 +161,10 @@ function Hero() {
               width={880}
               height={1780}
               priority
-              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 84vw"
-              className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
-              style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
+              quality={100}
+              sizes="(min-width: 1024px) 440px, (min-width: 640px) 380px, 210px"
+              className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)] sm:drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
+              style={{ clipPath: "inset(0 0 12% 0 round 28px 28px 0 0)" }}
             />
           </motion.div>
         </div>
