@@ -109,50 +109,92 @@ function Hero() {
       </div>
 
       {/*
-        Mobile: stage sits RIGHT under the CTA (no empty middle).
-        Desktop: fills remaining viewport height.
-        David + phone share the same bottom edge.
+        David + phone as a true inline row (items-end = shared baseline).
+        Mobile: compact pair centered under CTA.
+        Desktop: fills remaining height; David left / phone center via absolute.
       */}
-      <div className="relative z-10 mt-3 h-[260px] w-full shrink-0 sm:mt-6 sm:h-[420px] md:mt-auto md:h-auto md:min-h-0 md:flex-1">
-        {/* David — bottom-left */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 z-0 h-full w-[44%] max-w-[130px] sm:max-w-none sm:w-[clamp(240px,36vw,500px)]"
-        >
-          <Image
-            src="/hero-figure.png"
-            alt=""
-            fill
-            priority
-            quality={100}
-            sizes="(max-width: 640px) 130px, 36vw"
-            className="object-cover object-left-bottom"
-            style={{
-              WebkitMaskImage:
-                "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
-              WebkitMaskComposite: "destination-in",
-              maskImage:
-                "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
-              maskComposite: "intersect",
-            }}
-          />
-        </div>
-
-        {/* Phone — same baseline as David */}
-        <div className="absolute bottom-0 left-[56%] z-10 w-[140px] -translate-x-1/2 overflow-hidden sm:left-1/2 sm:w-[340px] lg:w-[420px]">
-          <motion.div style={{ y: phoneY }}>
+      <div className="relative z-10 mt-2 flex w-full shrink-0 items-end justify-center gap-0 px-2 sm:mt-6 md:mt-auto md:min-h-0 md:flex-1 md:px-0">
+        {/* Mobile inline pair */}
+        <div className="flex w-full max-w-[340px] items-end justify-center md:hidden">
+          <div
+            aria-hidden="true"
+            className="relative h-[200px] w-[120px] shrink-0"
+          >
             <Image
-              src="/hero-phone.webp"
-              alt="Syra coding agent on phone"
-              width={880}
-              height={1780}
+              src="/hero-figure.png"
+              alt=""
+              fill
               priority
               quality={100}
-              sizes="(min-width: 1024px) 420px, (min-width: 640px) 340px, 140px"
-              className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)]"
-              style={{ clipPath: "inset(0 0 22% 0 round 20px 20px 0 0)" }}
+              sizes="120px"
+              className="object-cover object-left-bottom"
+              style={{
+                WebkitMaskImage:
+                  "linear-gradient(to right, black 0%, black 70%, transparent 100%), linear-gradient(to top, black 0%, black 75%, transparent 100%)",
+                WebkitMaskComposite: "destination-in",
+                maskImage:
+                  "linear-gradient(to right, black 0%, black 70%, transparent 100%), linear-gradient(to top, black 0%, black 75%, transparent 100%)",
+                maskComposite: "intersect",
+              }}
             />
-          </motion.div>
+          </div>
+          <div className="relative -ml-6 w-[150px] shrink-0 overflow-hidden">
+            <motion.div style={{ y: phoneY }}>
+              <Image
+                src="/hero-phone.webp"
+                alt="Syra coding agent on phone"
+                width={880}
+                height={1780}
+                priority
+                quality={100}
+                sizes="150px"
+                className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)]"
+                style={{ clipPath: "inset(0 0 18% 0 round 20px 20px 0 0)" }}
+              />
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Desktop layout */}
+        <div className="pointer-events-none absolute inset-0 hidden md:block">
+          <div
+            aria-hidden="true"
+            className="absolute bottom-0 left-0 h-[85%] w-[clamp(260px,36vw,500px)]"
+          >
+            <Image
+              src="/hero-figure.png"
+              alt=""
+              fill
+              priority
+              quality={90}
+              sizes="36vw"
+              className="object-cover object-left-bottom"
+              style={{
+                filter: "grayscale(18%) brightness(0.8) contrast(1.08)",
+                WebkitMaskImage:
+                  "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
+                WebkitMaskComposite: "destination-in",
+                maskImage:
+                  "linear-gradient(to right, black 0%, black 58%, transparent 100%), linear-gradient(to top, black 0%, black 70%, transparent 100%)",
+                maskComposite: "intersect",
+              }}
+            />
+          </div>
+          <div className="absolute bottom-0 left-1/2 w-[420px] -translate-x-1/2 overflow-hidden">
+            <motion.div style={{ y: phoneY }} className="pointer-events-auto">
+              <Image
+                src="/hero-phone.webp"
+                alt="Syra coding agent on phone"
+                width={880}
+                height={1780}
+                priority
+                quality={100}
+                sizes="420px"
+                className="relative h-auto w-full drop-shadow-[0_36px_72px_rgba(0,0,0,0.65)]"
+                style={{ clipPath: "inset(0 0 12% 0 round 36px 36px 0 0)" }}
+              />
+            </motion.div>
+          </div>
         </div>
       </div>
     </section>
