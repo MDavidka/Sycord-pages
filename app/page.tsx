@@ -109,7 +109,7 @@ function Hero() {
       {/* ── Line 3: David is the mobile background; phone rises from the bottom ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] md:hidden">
         <div className="absolute inset-0 bg-[#181818]" />
-        <div className="absolute bottom-[-16%] left-[-96px] h-[96%] w-[390px]">
+        <div className="absolute bottom-[-10%] left-[-96px] h-[96%] w-[390px]">
           <Image
             src="/hero-figure.png"
             alt=""
@@ -133,7 +133,7 @@ function Hero() {
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
-        <div className="absolute left-1/2 top-[87%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
+        <div className="absolute left-1/2 top-[83%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
