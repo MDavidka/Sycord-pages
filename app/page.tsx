@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion, useScroll, useTransform } from "framer-motion"
@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/accordion"
 import {
   ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
-  LayoutTemplate, Lock, Menu, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
-  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, X, Zap,
+  LayoutTemplate, Lock, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
+  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
 } from "lucide-react"
 
 const BG = "#181818"
@@ -37,8 +37,6 @@ export default function LandingPage() {
 }
 
 function Hero() {
-  const [menuOpen, setMenuOpen] = useState(false)
-
   const heroRef = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [56, -24])
@@ -47,106 +45,81 @@ function Hero() {
     <section
       ref={heroRef}
       className="relative w-full overflow-hidden"
-      style={{ backgroundColor: BG, minHeight: "100svh" }}
+      style={{ backgroundColor: BG, height: "100svh", minHeight: "100svh" }}
     >
-
-      {/* ── Navbar ─────────────────────────────────────────────── */}
-      <header className="relative z-20 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
-        {/* Logo + wordmark */}
-        <Link href="/" className="inline-flex items-center gap-2.5">
-          <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
-          <span className="text-base font-semibold text-white tracking-tight">sycord</span>
-        </Link>
-
-        {/* Desktop: "contact us" dashed-border pill */}
-        <Link
-          href="/contact"
-          className="hidden md:inline-flex items-center rounded-full px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/5"
-          style={{
-            border: "1.5px dashed rgba(255,255,255,0.45)",
-          }}
-        >
-          contact us
-        </Link>
-
-        {/* Mobile hamburger */}
-        <button
-          type="button"
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(o => !o)}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white md:hidden"
-        >
-          {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </header>
-
-      {/* Mobile dropdown */}
-      {menuOpen && (
-        <nav className="absolute right-5 top-[64px] z-30 w-52 rounded-3xl border border-[#2a2c30] bg-[#1c1d20] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-8 md:hidden">
-          <Link
-            href="/contact"
-            onClick={() => setMenuOpen(false)}
-            className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-[#E5E7EB] transition-colors hover:bg-[#26272b] hover:text-white"
-          >
-            Contact us
-          </Link>
-        </nav>
-      )}
-
-      {/* ── Person image (left side, absolute, mirroring the original statue placement) ── */}
-      {/* Positioned on the left-bottom quadrant, tall portrait, fading into BG via mask */}
+      {/* Layer 1 — David figure (bottom-left, fades into BG) */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute bottom-0 left-0 z-0 hidden md:block"
+        className="pointer-events-none absolute bottom-0 left-0 z-0"
         style={{
-          width: "clamp(260px, 30vw, 420px)",
-          height: "clamp(480px, 72vh, 860px)",
+          width: "clamp(280px, 42vw, 560px)",
+          height: "clamp(420px, 76vh, 900px)",
+          opacity: 0.85,
           WebkitMaskImage:
-            "linear-gradient(to right, transparent 0%, black 28%, black 70%, transparent 100%), " +
-            "linear-gradient(to top, black 0%, black 55%, transparent 100%)",
+            "linear-gradient(to right, black 0%, black 5%, black 65%, transparent 100%), " +
+            "linear-gradient(to top, black 0%, black 50%, transparent 100%)",
           WebkitMaskComposite: "destination-in",
           maskImage:
-            "linear-gradient(to right, transparent 0%, black 28%, black 70%, transparent 100%), " +
-            "linear-gradient(to top, black 0%, black 55%, transparent 100%)",
+            "linear-gradient(to right, black 0%, black 5%, black 65%, transparent 100%), " +
+            "linear-gradient(to top, black 0%, black 50%, transparent 100%)",
           maskComposite: "intersect",
-          opacity: 0.85,
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="https://i.ibb.co/VYrcX3Pj/IMG-3066.png"
+        <Image
+          src="/hero-david.png"
           alt=""
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: "top center",
-            filter: "grayscale(18%) brightness(0.82) contrast(1.08)",
-          }}
+          fill
+          priority
+          sizes="42vw"
+          className="object-cover object-bottom"
+          style={{ filter: "grayscale(18%) brightness(0.8) contrast(1.08)" }}
         />
       </div>
 
-      {/* ── Hero content ─────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto flex w-full max-w-2xl flex-col items-center px-5 pt-20 pb-0 text-center sm:pt-24 lg:max-w-3xl lg:pt-28">
+      {/* Layer 2 — Navbar */}
+      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+        <Link href="/" className="inline-flex items-center gap-2.5">
+          <Image src="/logo.png" alt="Sycord" width={32} height={32} priority className="h-8 w-8 opacity-90" />
+          <span className="text-base font-semibold text-white" style={{ letterSpacing: "-0.01em" }}>
+            sycord
+          </span>
+        </Link>
 
-        {/* Headline */}
+        <Link
+          href="/contact"
+          className="inline-flex h-12 w-[148px] items-center justify-center rounded-full text-[15px] font-semibold text-white transition-colors hover:bg-white/5"
+          style={{ border: "1.5px dashed rgba(255,255,255,0.45)" }}
+        >
+          contact us
+        </Link>
+      </header>
+
+      {/* Layer 3 — Hero content (starts ~40–45% from top) */}
+      <div
+        className="relative z-10 mx-auto flex w-full max-w-[760px] flex-col items-center px-5 text-center"
+        style={{ paddingTop: "clamp(160px, 28vh, 260px)" }}
+      >
         <h1
-          className="relative z-10 font-extrabold tracking-tight text-balance text-white"
-          style={{ fontSize: "clamp(38px, 9vw, 72px)", lineHeight: 1.06, letterSpacing: "-0.03em" }}
+          className="whitespace-nowrap font-extrabold text-white"
+          style={{
+            fontSize: "clamp(42px, 8vw, 68px)",
+            lineHeight: 1.06,
+            letterSpacing: "-0.03em",
+            fontWeight: 800,
+          }}
         >
           Your coding agent
         </h1>
 
-        {/* dev.svg badge ─ same precise crop as before */}
-        <div className="relative z-10 mt-7 flex w-full items-center justify-center sm:mt-9">
+        {/* Badge — cropped /dev.svg (laurels + text, no card) */}
+        <div className="mt-8 flex w-full items-center justify-center">
           <div
-            className="relative w-[230px] overflow-hidden sm:w-[270px]"
+            className="relative w-[260px] overflow-hidden sm:w-[280px]"
             style={{ aspectRatio: "170 / 99" }}
           >
             <Image
               src="/dev.svg"
-              alt="made for developer since 2026"
+              alt="made fore developer since 2026"
               width={3000}
               height={4500}
               className="absolute left-0 top-0"
@@ -155,29 +128,21 @@ function Hero() {
           </div>
         </div>
 
-        {/* CTA button */}
+        {/* Primary CTA */}
         <Button
           asChild
-          size="sm"
-          className="relative z-10 mt-7 rounded-2xl bg-white px-7 py-2.5 text-sm font-semibold text-zinc-950 shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white/90 sm:mt-8"
+          className="mt-8 h-[60px] min-w-[270px] rounded-full bg-white px-8 text-[16px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white"
         >
           <Link href="/login">
             Start for free
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+            <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </Button>
       </div>
 
-      {/* ── Phone mockup ─────────────────────────────────────────── */}
-      <div className="relative z-10 mx-auto mt-10 flex w-full flex-col items-center overflow-hidden px-5 sm:mt-12 lg:mt-14">
+      {/* Layer 4 — Phone mockup (bottom-center, clipped) */}
+      <div className="relative z-10 mx-auto mt-12 flex w-full flex-col items-center overflow-hidden px-5">
         <div className="relative w-[min(84vw,320px)] sm:w-[380px] lg:w-[440px]">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -inset-x-12 -top-8 bottom-0"
-            style={{
-              background: "radial-gradient(ellipse 55% 40% at 50% 38%, rgba(124,111,245,0.09) 0%, transparent 70%)",
-            }}
-          />
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
