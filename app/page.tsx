@@ -21,38 +21,17 @@ const TEXT = "#E5E7EB"
 
 export default function LandingPage() {
   return (
-    <main
-      className="relative min-h-screen w-full text-white"
-      style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}
-    >
-      {/* Sitewide base: #181818 + glass texture at 28% opacity, under everything */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0"
-        style={{ backgroundColor: BG }}
-      >
-        <Image
-          src="/hero-glass-bg.webp"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-[center_35%] opacity-[0.28]"
-        />
-      </div>
-
-      <div className="relative z-10">
-        <Hero />
-        <TrustStrip />
-        <HowItWorks />
-        <AIBuilderFeatures />
-        <HostingFeatures />
-        <Templates />
-        <Pricing />
-        <FAQ />
-        <FinalCTA />
-        <Footer />
-      </div>
+    <main className="min-h-screen w-full text-white" style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}>
+      <Hero />
+      <TrustStrip />
+      <HowItWorks />
+      <AIBuilderFeatures />
+      <HostingFeatures />
+      <Templates />
+      <Pricing />
+      <FAQ />
+      <FinalCTA />
+      <Footer />
     </main>
   )
 }
@@ -62,11 +41,55 @@ function Hero() {
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
 
+  const edgeMask =
+    "linear-gradient(to bottom, black 0%, transparent 28%, transparent 72%, black 100%)"
+  const centerMask =
+    "linear-gradient(to bottom, transparent 0%, black 22%, black 78%, transparent 100%)"
+
   return (
     <section
       ref={heroRef}
-      className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden bg-transparent"
+      className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden"
+      style={{ backgroundColor: BG }}
     >
+      {/* Hero-only glass bg @ 30% — progressive blur toward top & bottom */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        {/* Soft / blurred ends */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            WebkitMaskImage: edgeMask,
+            maskImage: edgeMask,
+          }}
+        >
+          <Image
+            src="/hero-glass-bg.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="scale-110 object-cover object-[center_35%] blur-2xl"
+          />
+        </div>
+        {/* Sharper mid band that fades into the blurred ends */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            WebkitMaskImage: centerMask,
+            maskImage: centerMask,
+          }}
+        >
+          <Image
+            src="/hero-glass-bg.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-[center_35%]"
+          />
+        </div>
+      </div>
+
       {/* Navbar */}
       <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1.25rem,env(safe-area-inset-left,0px))] pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] sm:px-8 sm:pt-7">
         <Link href="/" className="inline-flex items-center gap-2">
