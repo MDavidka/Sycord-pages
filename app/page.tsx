@@ -44,11 +44,11 @@ function Hero() {
   return (
     <section
       ref={heroRef}
-      className="relative w-full overflow-hidden min-h-[100svh] md:h-[100svh]"
+      className="relative flex w-full flex-col overflow-hidden min-h-0 md:min-h-[100svh] md:h-[100svh]"
       style={{ backgroundColor: BG }}
     >
       {/* Navbar */}
-      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 pt-3 sm:px-8 sm:pt-7">
+      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-3 sm:px-8 sm:pt-7">
         <Link href="/" className="inline-flex items-center gap-1.5">
           <Image
             src="/logo.png"
@@ -74,7 +74,7 @@ function Hero() {
       </header>
 
       {/* Hero copy — compact on mobile */}
-      <div className="relative z-20 mx-auto flex w-full max-w-[760px] flex-col items-center px-4 pt-4 text-center sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
+      <div className="relative z-20 mx-auto flex w-full max-w-[760px] shrink-0 flex-col items-center px-4 pt-4 text-center sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
         <h1 className="whitespace-nowrap text-[22px] font-extrabold leading-[1.1] tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
@@ -108,12 +108,16 @@ function Hero() {
         </Button>
       </div>
 
-      {/* Bottom stage — David + phone inline on same baseline, compact on mobile */}
-      <div className="absolute inset-x-0 bottom-0 z-10 h-[38vh] sm:h-[52vh] md:h-[58vh]">
+      {/*
+        Mobile: stage sits RIGHT under the CTA (no empty middle).
+        Desktop: fills remaining viewport height.
+        David + phone share the same bottom edge.
+      */}
+      <div className="relative z-10 mt-3 h-[260px] w-full shrink-0 sm:mt-6 sm:h-[420px] md:mt-auto md:h-auto md:min-h-0 md:flex-1">
         {/* David — bottom-left */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 z-0 h-full w-[42%] max-w-[140px] sm:max-w-none sm:w-[clamp(240px,36vw,500px)]"
+          className="pointer-events-none absolute bottom-0 left-0 z-0 h-full w-[44%] max-w-[130px] sm:max-w-none sm:w-[clamp(240px,36vw,500px)]"
         >
           <Image
             src="/hero-figure.png"
@@ -121,7 +125,7 @@ function Hero() {
             fill
             priority
             quality={100}
-            sizes="(max-width: 640px) 140px, 36vw"
+            sizes="(max-width: 640px) 130px, 36vw"
             className="object-cover object-left-bottom"
             style={{
               WebkitMaskImage:
@@ -134,8 +138,8 @@ function Hero() {
           />
         </div>
 
-        {/* Phone — bottom-center/right, same baseline, smaller on mobile */}
-        <div className="absolute bottom-0 left-[56%] z-10 w-[148px] -translate-x-1/2 overflow-hidden sm:left-1/2 sm:w-[340px] lg:w-[420px]">
+        {/* Phone — same baseline as David */}
+        <div className="absolute bottom-0 left-[56%] z-10 w-[140px] -translate-x-1/2 overflow-hidden sm:left-1/2 sm:w-[340px] lg:w-[420px]">
           <motion.div style={{ y: phoneY }}>
             <Image
               src="/hero-phone.webp"
@@ -144,9 +148,9 @@ function Hero() {
               height={1780}
               priority
               quality={100}
-              sizes="(min-width: 1024px) 420px, (min-width: 640px) 340px, 148px"
+              sizes="(min-width: 1024px) 420px, (min-width: 640px) 340px, 140px"
               className="relative h-auto w-full drop-shadow-[0_16px_32px_rgba(0,0,0,0.5)]"
-              style={{ clipPath: "inset(0 0 18% 0 round 22px 22px 0 0)" }}
+              style={{ clipPath: "inset(0 0 22% 0 round 20px 20px 0 0)" }}
             />
           </motion.div>
         </div>
