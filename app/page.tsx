@@ -115,7 +115,7 @@ function Hero() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="https://i.ibb.co/VYrcX3Pj/IMG-3066.png"
+          src="/person-hero.png"
           alt=""
           style={{
             width: "100%",
