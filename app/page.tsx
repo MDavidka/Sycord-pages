@@ -74,8 +74,8 @@ function Hero() {
       </header>
 
       {/* ── Line 2: Headline + badge + CTA (tight readable stack) ─ */}
-      <div className="absolute right-[max(1rem,env(safe-area-inset-right,0px))] top-[calc(env(safe-area-inset-top,0px)+100px)] z-20 flex w-[calc(70%_-_1rem)] max-w-none flex-col items-center gap-4 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
-        <h1 className="whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
+      <div className="absolute right-[max(1rem,env(safe-area-inset-right,0px))] top-[calc(env(safe-area-inset-top,0px)+118px)] z-20 flex w-[calc(70%_-_1rem)] max-w-none flex-col items-center gap-5 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
+        <h1 className="mb-0.5 whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.03em] text-white sm:mb-0 sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
@@ -133,7 +133,7 @@ function Hero() {
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
-        <div className="absolute left-1/2 top-[83%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
+        <div className="absolute left-1/2 top-[86%] w-[56vw] max-w-[230px] -translate-x-1/2 overflow-hidden">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
@@ -141,9 +141,9 @@ function Hero() {
             height={1780}
             priority
             quality={100}
-            sizes="240px"
+            sizes="200px"
             className="h-auto w-full drop-shadow-[0_16px_36px_rgba(0,0,0,0.7)]"
-            style={{ clipPath: "inset(0 0 12% 0 round 24px 24px 0 0)" }}
+            style={{ clipPath: "inset(0 0 10% 0 round 22px 22px 0 0)" }}
           />
         </div>
       </div>
