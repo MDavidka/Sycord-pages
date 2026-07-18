@@ -49,16 +49,16 @@ function Hero() {
     >
       {/* ── Line 1: Navbar ─────────────────────────────────────── */}
       <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-7 sm:px-8 sm:pt-7">
-        <Link href="/" className="inline-flex items-center gap-1.5">
+        <Link href="/" className="inline-flex items-center gap-0 sm:gap-1.5">
           <Image
             src="/logo.png"
             alt="Sycord"
-            width={24}
-            height={24}
+            width={32}
+            height={32}
             priority
-            className="h-6 w-6 opacity-90 sm:h-8 sm:w-8"
+            className="h-8 w-8 opacity-90"
           />
-          <span className="text-sm font-semibold tracking-tight text-white sm:text-base">
+          <span className="text-base font-semibold tracking-tight text-white">
             sycord
           </span>
         </Link>
