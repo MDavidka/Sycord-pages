@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/accordion"
 import {
   ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
-  LayoutTemplate, Lock, MousePointerClick, Palette, Rocket, Server, ShieldCheck,
+  LayoutTemplate, Lock, MousePointerClick, Palette, Phone, Rocket, Server, ShieldCheck,
   ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
 } from "lucide-react"
 
@@ -41,14 +41,12 @@ function Hero() {
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
 
-  // Marked lines: top ≈ just below nav; bottom ≈ through phone mid (~70%)
-  // Progressive blur starts at each line and fades out to #181818
-  const topLine = "10%"
+  // Bottom marked line ≈ through phone mid; upper blur handled in a dedicated top zone
   const bottomLine = "70%"
 
-  const sharpMask = `linear-gradient(to bottom, transparent 0%, transparent ${topLine}, black 16%, black 64%, transparent ${bottomLine}, transparent 100%)`
-  const midBlurMask = `linear-gradient(to bottom, transparent 0%, black 6%, black ${topLine}, transparent 18%, transparent 62%, black ${bottomLine}, black 82%, transparent 100%)`
-  const heavyBlurMask = `linear-gradient(to bottom, black 0%, black 5%, transparent 14%, transparent 66%, black 78%, black 100%)`
+  const sharpMask = `linear-gradient(to bottom, transparent 0%, transparent 14%, black 24%, black 64%, transparent ${bottomLine}, transparent 100%)`
+  const bottomMidBlurMask = `linear-gradient(to bottom, transparent 0%, transparent 60%, black ${bottomLine}, black 84%, transparent 100%)`
+  const bottomHeavyBlurMask = `linear-gradient(to bottom, transparent 0%, transparent 64%, black 78%, black 100%)`
 
   return (
     <section
@@ -58,35 +56,7 @@ function Hero() {
     >
       {/* Hero-only glass bg @ 30% — progressive blur from marked lines → #181818 */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        {/* Heavy blur outside the marked band, dissolving into #181818 */}
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: heavyBlurMask, maskImage: heavyBlurMask }}
-        >
-          <Image
-            src="/hero-glass-bg.webp"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="scale-125 object-cover object-[center_35%] blur-3xl"
-          />
-        </div>
-        {/* Medium blur begins at the marked lines */}
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: midBlurMask, maskImage: midBlurMask }}
-        >
-          <Image
-            src="/hero-glass-bg.webp"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="scale-110 object-cover object-[center_35%] blur-xl"
-          />
-        </div>
-        {/* Sharp only between the marked lines */}
+        {/* Sharp band between marked lines */}
         <div
           className="absolute inset-0 opacity-30"
           style={{ WebkitMaskImage: sharpMask, maskImage: sharpMask }}
@@ -100,11 +70,78 @@ function Hero() {
             className="object-cover object-[center_35%]"
           />
         </div>
-        {/* Color fade to #181818 above top line and below bottom line */}
+
+        {/* Upper progressive blur: long soft ramp from top line → #181818 */}
+        <div className="absolute inset-x-0 top-0 h-[28%] overflow-hidden">
+          <div className="absolute inset-0 opacity-30">
+            <Image
+              src="/hero-glass-bg.webp"
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="scale-110 object-cover object-[center_20%] blur-md"
+            />
+          </div>
+          <div className="absolute inset-0 opacity-30">
+            <Image
+              src="/hero-glass-bg.webp"
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="scale-[1.18] object-cover object-[center_20%] blur-2xl"
+            />
+          </div>
+          <div className="absolute inset-0 opacity-25">
+            <Image
+              src="/hero-glass-bg.webp"
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="scale-125 object-cover object-[center_15%] blur-3xl"
+            />
+          </div>
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.9) 14%, rgba(24,24,24,0.55) 38%, rgba(24,24,24,0.22) 62%, transparent 100%)`,
+            }}
+          />
+        </div>
+
+        {/* Bottom progressive blur from phone line → #181818 */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{ WebkitMaskImage: bottomMidBlurMask, maskImage: bottomMidBlurMask }}
+        >
+          <Image
+            src="/hero-glass-bg.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="scale-110 object-cover object-[center_35%] blur-xl"
+          />
+        </div>
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{ WebkitMaskImage: bottomHeavyBlurMask, maskImage: bottomHeavyBlurMask }}
+        >
+          <Image
+            src="/hero-glass-bg.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="scale-125 object-cover object-[center_35%] blur-3xl"
+          />
+        </div>
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(to bottom, ${BG} 0%, ${BG} 2%, transparent ${topLine}, transparent ${bottomLine}, ${BG} 92%, ${BG} 100%)`,
+            background: `linear-gradient(to bottom, transparent 0%, transparent ${bottomLine}, rgba(24,24,24,0.45) 82%, ${BG} 94%, ${BG} 100%)`,
           }}
         />
       </div>
@@ -115,10 +152,10 @@ function Hero() {
           <Image
             src="/logo.png"
             alt="Sycord"
-            width={32}
-            height={32}
+            width={40}
+            height={40}
             priority
-            className="h-8 w-8 opacity-90"
+            className="h-9 w-9 opacity-90 sm:h-10 sm:w-10"
           />
         </Link>
 
@@ -126,7 +163,7 @@ function Hero() {
           href="/contact"
           className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-black/50 sm:h-10 sm:px-5"
         >
-          <Sparkles className="size-3.5 text-white" />
+          <Phone className="size-4 text-white" strokeWidth={1.75} />
           inquiry
         </Link>
       </header>
