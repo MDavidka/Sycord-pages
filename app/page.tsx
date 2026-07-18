@@ -48,7 +48,7 @@ function Hero() {
       style={{ backgroundColor: BG }}
     >
       {/* ── Line 1: Navbar ─────────────────────────────────────── */}
-      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-4 pt-7 sm:px-8 sm:pt-7">
+      <header className="relative z-20 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.75rem)] sm:px-8 sm:pt-7">
         <Link href="/" className="inline-flex items-center gap-0 sm:gap-1.5">
           <Image
             src="/logo.png"
@@ -74,14 +74,14 @@ function Hero() {
       </header>
 
       {/* ── Line 2: Headline + badge + CTA (tight readable stack) ─ */}
-      <div className="absolute right-1 top-[78px] z-20 flex w-[62%] max-w-none flex-col items-center gap-3 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
-        <h1 className="whitespace-nowrap text-[21px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
+      <div className="absolute right-[max(1rem,env(safe-area-inset-right,0px))] top-[calc(env(safe-area-inset-top,0px)+84px)] z-20 flex w-[calc(70%_-_1rem)] max-w-none flex-col items-center gap-4 px-0 pt-0 text-center sm:relative sm:right-auto sm:top-auto sm:mx-auto sm:w-full sm:max-w-[760px] sm:shrink-0 sm:gap-7 sm:px-5 sm:pt-[clamp(100px,18vh,200px)]">
+        <h1 className="whitespace-nowrap text-[24px] font-extrabold leading-none tracking-[-0.03em] text-white sm:text-[clamp(42px,8vw,68px)] sm:leading-[1.06]">
           Your coding agent
         </h1>
 
         {/* /dev.svg badge — cropped, unmodified */}
         <div
-          className="relative w-[116px] overflow-hidden sm:w-[260px] md:w-[280px]"
+          className="relative w-[132px] overflow-hidden sm:w-[260px] md:w-[280px]"
           style={{ aspectRatio: "170 / 99" }}
         >
           <Image
@@ -97,11 +97,11 @@ function Hero() {
         <Button
           asChild
           size="sm"
-          className="h-8 min-w-[116px] rounded-full bg-white px-3 text-[11px] font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
+          className="h-9 min-w-[128px] rounded-full bg-white px-3.5 text-xs font-semibold text-[#0a0a0a] shadow-[0_8px_24px_rgba(255,255,255,0.08)] transition-transform hover:scale-[1.03] hover:bg-white sm:h-[60px] sm:min-w-[270px] sm:px-8 sm:text-[16px]"
         >
           <Link href="/login">
             Start for free
-            <ArrowRight className="size-2.5 sm:size-4" />
+            <ArrowRight className="size-3 sm:size-4" />
           </Link>
         </Button>
       </div>
@@ -109,7 +109,7 @@ function Hero() {
       {/* ── Line 3: David is the mobile background; phone rises from the bottom ── */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] md:hidden">
         <div className="absolute inset-0 bg-[#181818]" />
-        <div className="absolute left-[-96px] top-[-56px] h-[576px] w-[390px]">
+        <div className="absolute left-[-96px] top-[calc(env(safe-area-inset-top,0px)-56px)] h-[576px] w-[390px]">
           <Image
             src="/hero-figure.png"
             alt=""
@@ -133,7 +133,7 @@ function Hero() {
       </div>
 
       <div className="pointer-events-none absolute inset-0 z-10 md:hidden">
-        <div className="absolute left-1/2 top-[clamp(408px,68svh,510px)] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
+        <div className="absolute left-1/2 top-[83%] w-[68vw] max-w-[280px] -translate-x-1/2 overflow-hidden">
           <Image
             src="/hero-phone.webp"
             alt="Syra coding agent on phone"
