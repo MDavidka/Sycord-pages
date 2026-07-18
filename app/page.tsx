@@ -41,21 +41,22 @@ function Hero() {
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] })
   const phoneY = useTransform(scrollYProgress, [0, 1], [16, -28])
 
-  // One continuous image + soft overlay ramps — avoids mask seams / hard lines
-  const imageFade =
-    "linear-gradient(to bottom, transparent 0%, black 18%, black 55%, transparent 85%)"
-
   return (
     <section
       ref={heroRef}
       className="relative flex h-[100svh] min-h-[640px] w-full flex-col overflow-hidden"
       style={{ backgroundColor: BG }}
     >
-      {/* Hero-only glass bg @ 30% — fade+blur into #181818 at top & bottom */}
+      {/* Hero-only glass bg @ 30% — soft fade into #181818; continues behind phone */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
         <div
           className="absolute inset-0 opacity-30"
-          style={{ WebkitMaskImage: imageFade, maskImage: imageFade }}
+          style={{
+            WebkitMaskImage:
+              "linear-gradient(to bottom, transparent 0%, black 20%, black 72%, transparent 100%)",
+            maskImage:
+              "linear-gradient(to bottom, transparent 0%, black 20%, black 72%, transparent 100%)",
+          }}
         >
           <Image
             src="/hero-glass-bg.webp"
@@ -66,40 +67,10 @@ function Hero() {
             className="object-cover object-[center_35%]"
           />
         </div>
-        {/* Progressive blur toward top */}
-        <div
-          className="absolute inset-x-0 top-0 h-[42%]"
-          style={{
-            WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 35%, transparent 100%)",
-            maskImage: "linear-gradient(to bottom, black 0%, black 35%, transparent 100%)",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-          }}
-        />
-        <div
-          className="absolute inset-x-0 top-0 h-[28%]"
-          style={{
-            WebkitMaskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
-            maskImage: "linear-gradient(to bottom, black 0%, transparent 100%)",
-            backdropFilter: "blur(28px)",
-            WebkitBackdropFilter: "blur(28px)",
-          }}
-        />
-        {/* Progressive blur toward bottom */}
-        <div
-          className="absolute inset-x-0 bottom-0 h-[40%]"
-          style={{
-            WebkitMaskImage: "linear-gradient(to top, black 0%, black 30%, transparent 100%)",
-            maskImage: "linear-gradient(to top, black 0%, black 30%, transparent 100%)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-          }}
-        />
-        {/* Color dissolve into #181818 */}
         <div
           className="absolute inset-0"
           style={{
-            background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.75) 12%, transparent 30%, transparent 58%, rgba(24,24,24,0.55) 78%, ${BG} 100%)`,
+            background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.65) 12%, transparent 28%, transparent 70%, rgba(24,24,24,0.45) 90%, ${BG} 100%)`,
           }}
         />
       </div>
@@ -169,12 +140,12 @@ function Hero() {
         </motion.div>
       </motion.div>
 
-      {/* Phone peeking from the bottom — clip without drop-shadow (shadow clip caused a hard line) */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-[40%] items-end justify-center overflow-hidden sm:h-[44%]">
+      {/* Phone peeks from bottom: top of device visible, rest clipped below */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex h-[36%] justify-center overflow-hidden sm:h-[40%]">
         <motion.div
           style={{ y: phoneY }}
           className="w-[min(72vw,300px)] sm:w-[360px] md:w-[400px]"
-          initial={{ opacity: 0, y: 48 }}
+          initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.18, duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
         >
