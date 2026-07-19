@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, FileCode, Image as ImageIcon, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -28,6 +28,16 @@ import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
+import {
+    BUILTIN_MCP_FALLBACK,
+    BUILTIN_SKILL_FALLBACK,
+    fetchProjectMcp,
+    fetchProjectSkills,
+    toggleProjectMcp,
+    toggleProjectSkill,
+    type SyraSlashMcpAddon,
+    type SyraSlashSkill,
+} from '../lib/syraSlashExtras';
 
 // Keep for future use
 // const MODELS: ModelType[] = ['glm-4.7'];
@@ -2110,6 +2120,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             return;
         }
 
+        // Slash commands — skills / MCP / attach (do not send as chat)
+        const slashCmd = input.trim().toLowerCase();
+        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp') {
+            openSlashMenu(slashCmd === '/' ? '/' : slashCmd);
+            const projectId = getHostProjectId();
+            if (projectId) void loadSlashExtras(projectId, true);
+            return;
+        }
+        if (slashCmd === '/image') {
+            setInput('');
+            closeSlashMenu();
+            fileInputRef.current?.click();
+            return;
+        }
+        if (slashCmd === '/document' || slashCmd === '/doc') {
+            setInput('');
+            closeSlashMenu();
+            documentInputRef.current?.click();
+            return;
+        }
+
         // Create chat if not exists
         let chatId = currentChatId || getEmbeddedChatId();
         if (chatId && chatId !== currentChatId) {
@@ -2217,9 +2248,109 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const [showModelMenu, setShowModelMenu] = useState(false);
     const [showDeepMemory, setShowDeepMemory] = useState(false);
-    const [showAttachMenu, setShowAttachMenu] = useState(false);
+    const [showSlashMenu, setShowSlashMenu] = useState(false);
+    const [slashFilter, setSlashFilter] = useState('');
+    const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
+    const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
+    const [slashLoading, setSlashLoading] = useState(false);
+    const [slashBusyId, setSlashBusyId] = useState<string | null>(null);
+    const [slashError, setSlashError] = useState<string | null>(null);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [debugLoading, setDebugLoading] = useState(false);
+    const slashLoadedForRef = useRef<string | null>(null);
+
+    const openSlashMenu = (filter = '') => {
+        setSlashFilter(filter);
+        setShowSlashMenu(true);
+        setShowModelMenu(false);
+    };
+
+    const closeSlashMenu = () => {
+        setShowSlashMenu(false);
+        setSlashFilter('');
+    };
+
+    const loadSlashExtras = async (projectId: string, force = false) => {
+        if (!force && slashLoadedForRef.current === projectId) return;
+        setSlashLoading(true);
+        setSlashError(null);
+        const [skillsRes, mcpRes] = await Promise.all([
+            fetchProjectSkills(projectId),
+            fetchProjectMcp(projectId),
+        ]);
+        setSlashSkills(skillsRes.skills);
+        setSlashMcp(mcpRes.addons);
+        slashLoadedForRef.current = projectId;
+        setSlashError(skillsRes.error || mcpRes.error || null);
+        setSlashLoading(false);
+    };
+
+    useEffect(() => {
+        if (!showSlashMenu) return;
+        const projectId = getHostProjectId();
+        if (projectId) void loadSlashExtras(projectId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showSlashMenu]);
+
+    const slashQuery = slashFilter.replace(/^\//, '').trim().toLowerCase();
+    const showSkillsSection = !slashQuery || 'skills'.startsWith(slashQuery) || slashSkills.some((s) =>
+        s.name.toLowerCase().includes(slashQuery) || s.id.toLowerCase().includes(slashQuery),
+    );
+    const showMcpSection = !slashQuery || 'mcp'.startsWith(slashQuery) || slashMcp.some((a) =>
+        a.name.toLowerCase().includes(slashQuery) || a.id.toLowerCase().includes(slashQuery),
+    );
+    const showAttachSection = !slashQuery || 'image'.startsWith(slashQuery) || 'document'.startsWith(slashQuery) || 'attach'.startsWith(slashQuery);
+    const filteredSkills = slashSkills.filter((s) => {
+        if (!slashQuery || 'skills'.startsWith(slashQuery)) return true;
+        return s.name.toLowerCase().includes(slashQuery) || s.id.toLowerCase().includes(slashQuery);
+    });
+    const filteredMcp = slashMcp.filter((a) => {
+        if (!slashQuery || 'mcp'.startsWith(slashQuery)) return true;
+        return a.name.toLowerCase().includes(slashQuery) || a.id.toLowerCase().includes(slashQuery);
+    });
+    const hostProjectIdForSlash = typeof window !== 'undefined' ? getHostProjectId() : null;
+
+    const handleToggleSkill = async (skill: SyraSlashSkill) => {
+        const projectId = getHostProjectId();
+        if (!projectId || slashBusyId) return;
+        setSlashBusyId(skill.id);
+        setSlashError(null);
+        const nextActive = !skill.active;
+        setSlashSkills((prev) =>
+            prev.map((s) => (s.id === skill.id ? { ...s, active: nextActive } : s)),
+        );
+        const result = await toggleProjectSkill(projectId, skill.id, nextActive);
+        if (result.error) {
+            setSlashSkills((prev) =>
+                prev.map((s) => (s.id === skill.id ? { ...s, active: skill.active } : s)),
+            );
+            setSlashError(result.error);
+        } else if (result.skills.length > 0) {
+            setSlashSkills(result.skills);
+        }
+        setSlashBusyId(null);
+    };
+
+    const handleToggleMcp = async (addon: SyraSlashMcpAddon) => {
+        const projectId = getHostProjectId();
+        if (!projectId || slashBusyId) return;
+        setSlashBusyId(addon.id);
+        setSlashError(null);
+        const nextConnected = !addon.connected;
+        setSlashMcp((prev) =>
+            prev.map((a) => (a.id === addon.id ? { ...a, connected: nextConnected } : a)),
+        );
+        const result = await toggleProjectMcp(projectId, addon, nextConnected);
+        if (result.error) {
+            setSlashMcp((prev) =>
+                prev.map((a) => (a.id === addon.id ? { ...a, connected: addon.connected } : a)),
+            );
+            setSlashError(result.error);
+        } else if (result.addons.length > 0) {
+            setSlashMcp(result.addons);
+        }
+        setSlashBusyId(null);
+    };
 
     const markdownComponents = React.useMemo(() => ({
         code({ node, inline, className, children, ...props }: any) {
@@ -2655,17 +2786,31 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 ref={textareaRef}
                                 value={input}
                                 onChange={(e) => {
-                                    setInput(e.target.value);
+                                    const value = e.target.value;
+                                    setInput(value);
+                                    // Open slash command palette when composing a leading "/" command
+                                    if (value.startsWith('/') && !value.includes('\n') && value.length <= 48) {
+                                        openSlashMenu(value);
+                                        const projectId = getHostProjectId();
+                                        if (projectId) void loadSlashExtras(projectId);
+                                    } else if (showSlashMenu && slashFilter.startsWith('/')) {
+                                        closeSlashMenu();
+                                    }
                                     // Auto-resize
                                     const target = e.target as HTMLTextAreaElement;
                                     target.style.height = 'auto';
                                     const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
                                     target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                 }}
-                                placeholder="Help you write code, debug and ship production-ready work."
+                                placeholder="Help you write code, debug and ship production-ready work. Type / for skills & MCP."
                                 className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
                                 style={{ height: 'auto', minHeight: generationPlan ? '44px' : '76px' }}
                                 onKeyDown={(e) => {
+                                    if (e.key === 'Escape' && showSlashMenu) {
+                                        e.preventDefault();
+                                        closeSlashMenu();
+                                        return;
+                                    }
                                     if (e.key === 'Enter' && !e.shiftKey) {
                                         e.preventDefault();
                                         handleSubmit(e);
@@ -2675,31 +2820,193 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                             {/* Toolbar */}
                             <div className="flex items-center gap-2 px-1">
-                                {/* Slash / attach button */}
+                                {/* Slash commands — skills, MCP, attach */}
                                 <div className="relative">
                                     <button
                                         type="button"
-                                        onClick={() => { setShowAttachMenu(!showAttachMenu); setShowModelMenu(false); }}
-                                        aria-label="Attach files"
+                                        onClick={() => {
+                                            if (showSlashMenu) {
+                                                closeSlashMenu();
+                                            } else {
+                                                openSlashMenu(input.startsWith('/') ? input : '');
+                                                const projectId = getHostProjectId();
+                                                if (projectId) void loadSlashExtras(projectId, true);
+                                            }
+                                        }}
+                                        aria-label="Slash commands"
                                         className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
                                         <Slash className="h-3.5 w-3.5" />
                                     </button>
 
-                                    {showAttachMenu && (
+                                    {showSlashMenu && (
                                         <>
-                                            <div className="fixed inset-0 z-10" onClick={() => setShowAttachMenu(false)} />
-                                            <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[170px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                                                <div className="p-1.5">
-                                                    <button type="button" onClick={() => { fileInputRef.current?.click(); setShowAttachMenu(false); }}
-                                                        className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
-                                                        <ImageIcon className="w-4 h-4" /> Image
-                                                    </button>
-                                                    <button type="button" onClick={() => { documentInputRef.current?.click(); setShowAttachMenu(false); }}
-                                                        className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}>
-                                                        <FileCode className="w-4 h-4" /> Document
-                                                    </button>
+                                            <div className="fixed inset-0 z-10" onClick={closeSlashMenu} />
+                                            <div className={`absolute bottom-full left-0 mb-2 z-20 w-[min(92vw,20rem)] max-h-[min(70vh,26rem)] overflow-y-auto rounded-xl ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                                                <div className={`flex items-center justify-between gap-2 px-3 pt-2.5 pb-1`}>
+                                                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                        / commands
+                                                    </span>
+                                                    {slashLoading && (
+                                                        <Loader2 className={`h-3 w-3 animate-spin ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
+                                                    )}
                                                 </div>
+
+                                                {!hostProjectIdForSlash && (
+                                                    <p className={`px-3 pb-2 text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>
+                                                        Open a project chat to toggle Syte skills and MCP.
+                                                    </p>
+                                                )}
+
+                                                {slashError && (
+                                                    <p className={`px-3 pb-2 text-[11px] ${isDark ? 'text-amber-400/90' : 'text-amber-700'}`}>
+                                                        {slashError}
+                                                    </p>
+                                                )}
+
+                                                {showSkillsSection && (
+                                                    <>
+                                                        <div className={`px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                            Skills
+                                                        </div>
+                                                        <div className="px-1.5 pb-1">
+                                                            {filteredSkills.length === 0 ? (
+                                                                <p className={`px-2.5 py-2 text-[12px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>No matching skills</p>
+                                                            ) : (
+                                                                filteredSkills.map((skill) => {
+                                                                    const busy = slashBusyId === skill.id;
+                                                                    return (
+                                                                        <button
+                                                                            key={skill.id}
+                                                                            type="button"
+                                                                            disabled={!hostProjectIdForSlash || busy}
+                                                                            onClick={() => void handleToggleSkill(skill)}
+                                                                            className={`w-full text-left px-2.5 py-2 rounded-lg flex items-start gap-2.5 transition-colors ${
+                                                                                !hostProjectIdForSlash
+                                                                                    ? isDark ? 'opacity-50 cursor-not-allowed' : 'opacity-60 cursor-not-allowed'
+                                                                                    : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
+                                                                            }`}
+                                                                        >
+                                                                            <span className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                                                                                skill.active
+                                                                                    ? isDark ? 'border-white bg-white text-[#18191B]' : 'border-gray-900 bg-gray-900 text-white'
+                                                                                    : isDark ? 'border-[#3a3b3e]' : 'border-gray-300'
+                                                                            }`}>
+                                                                                {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : skill.active ? <Check className="h-2.5 w-2.5" /> : null}
+                                                                            </span>
+                                                                            <span className="min-w-0 flex-1">
+                                                                                <span className={`flex items-center gap-1.5 text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
+                                                                                    {skill.name}
+                                                                                    <span className={`rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-100 text-gray-500'}`}>
+                                                                                        /{skill.id.replace(/.*:/, '')}
+                                                                                    </span>
+                                                                                </span>
+                                                                                {skill.description && (
+                                                                                    <span className={`block text-[11px] leading-snug mt-0.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>
+                                                                                        {skill.description}
+                                                                                    </span>
+                                                                                )}
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {showMcpSection && (
+                                                    <>
+                                                        <div className={`mx-3 my-1 border-t ${isDark ? 'border-[#2a2b2e]' : 'border-gray-200'}`} />
+                                                        <div className={`px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                            MCP
+                                                        </div>
+                                                        <div className="px-1.5 pb-1">
+                                                            {filteredMcp.length === 0 ? (
+                                                                <p className={`px-2.5 py-2 text-[12px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>No matching MCP addons</p>
+                                                            ) : (
+                                                                filteredMcp.map((addon) => {
+                                                                    const busy = slashBusyId === addon.id;
+                                                                    return (
+                                                                        <button
+                                                                            key={addon.id}
+                                                                            type="button"
+                                                                            disabled={!hostProjectIdForSlash || busy}
+                                                                            onClick={() => void handleToggleMcp(addon)}
+                                                                            className={`w-full text-left px-2.5 py-2 rounded-lg flex items-start gap-2.5 transition-colors ${
+                                                                                !hostProjectIdForSlash
+                                                                                    ? isDark ? 'opacity-50 cursor-not-allowed' : 'opacity-60 cursor-not-allowed'
+                                                                                    : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
+                                                                            }`}
+                                                                        >
+                                                                            <span className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                                                                                addon.connected
+                                                                                    ? isDark ? 'border-white bg-white text-[#18191B]' : 'border-gray-900 bg-gray-900 text-white'
+                                                                                    : isDark ? 'border-[#3a3b3e]' : 'border-gray-300'
+                                                                            }`}>
+                                                                                {busy ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : addon.connected ? <Check className="h-2.5 w-2.5" /> : null}
+                                                                            </span>
+                                                                            <span className="min-w-0 flex-1">
+                                                                                <span className={`flex items-center gap-1.5 text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
+                                                                                    {addon.name}
+                                                                                    <span className={`rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-100 text-gray-500'}`}>
+                                                                                        /mcp
+                                                                                    </span>
+                                                                                </span>
+                                                                                <span className={`block text-[11px] leading-snug mt-0.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-500'}`}>
+                                                                                    {addon.description ||
+                                                                                        (addon.connected ? 'Connected — click to disconnect' : 'Available — click to connect')}
+                                                                                    {typeof addon.toolsCount === 'number' && addon.toolsCount > 0
+                                                                                        ? ` · ${addon.toolsCount} tools`
+                                                                                        : ''}
+                                                                                </span>
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {showAttachSection && (
+                                                    <>
+                                                        <div className={`mx-3 my-1 border-t ${isDark ? 'border-[#2a2b2e]' : 'border-gray-200'}`} />
+                                                        <div className={`px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>
+                                                            Attach
+                                                        </div>
+                                                        <div className="p-1.5 pt-0">
+                                                            {(!slashQuery || 'image'.startsWith(slashQuery) || 'attach'.startsWith(slashQuery)) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        fileInputRef.current?.click();
+                                                                        if (input.startsWith('/')) setInput('');
+                                                                        closeSlashMenu();
+                                                                    }}
+                                                                    className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}
+                                                                >
+                                                                    <ImageIcon className="w-4 h-4" /> Image
+                                                                    <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/image</span>
+                                                                </button>
+                                                            )}
+                                                            {(!slashQuery || 'document'.startsWith(slashQuery) || 'attach'.startsWith(slashQuery)) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        documentInputRef.current?.click();
+                                                                        if (input.startsWith('/')) setInput('');
+                                                                        closeSlashMenu();
+                                                                    }}
+                                                                    className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 rounded-lg ${isDark ? 'hover:bg-[#26272a] text-[#e5e5e5]' : 'hover:bg-gray-50 text-gray-700'}`}
+                                                                >
+                                                                    <FileCode className="w-4 h-4" /> Document
+                                                                    <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/document</span>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </>
+                                                )}
                                             </div>
                                         </>
                                     )}
@@ -2714,7 +3021,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         setShowModelMenu(false)
                                     }}
                                     showMenu={showModelMenu}
-                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowAttachMenu(false); }}
+                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); closeSlashMenu(); }}
                                     onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}
                                 />
