@@ -922,3 +922,125 @@ export async function syteAgentScreenshotImage(
     }
   }
 }
+
+// ─── Agent MCP addons + skills (https://sycord.site/api/#agent) ───────────────
+
+export type SyteAgentMcpAddon = {
+  id: string
+  name: string
+  status?: string
+  tools?: unknown[]
+  builtin?: boolean
+  description?: string
+  command?: string
+  args?: string[]
+  connected?: boolean
+  enabled?: boolean
+}
+
+export type SyteAgentMcpListResponse = {
+  ok?: boolean
+  addons?: SyteAgentMcpAddon[]
+}
+
+export type SyteAgentSkill = {
+  id: string
+  name: string
+  active?: boolean
+  parameters?: Record<string, unknown>
+  builtin?: boolean
+  custom?: boolean
+  content?: string
+  description?: string
+}
+
+export type SyteAgentSkillsListResponse = {
+  ok?: boolean
+  skills?: SyteAgentSkill[]
+}
+
+/** GET /api/agent_mcp?uuid= — list built-in + registered MCP addons. */
+export async function syteAgentMcpList(
+  uuid: string,
+): Promise<SyteResult<SyteAgentMcpListResponse>> {
+  return syteWorkspaceRequest<SyteAgentMcpListResponse>("GET", "agent_mcp", {
+    query: { uuid },
+  })
+}
+
+/** POST /api/agent_mcp_connect — enable an MCP addon. */
+export async function syteAgentMcpConnect(
+  uuid: string,
+  addon: string,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_mcp_connect", {
+    body: { uuid, addon },
+  })
+}
+
+/** POST /api/agent_mcp_disconnect — disable an MCP addon (keep registration). */
+export async function syteAgentMcpDisconnect(
+  uuid: string,
+  addon: string,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_mcp_disconnect", {
+    body: { uuid, addon },
+  })
+}
+
+/** POST /api/agent_mcp_register — register a custom MCP stdio provider. */
+export async function syteAgentMcpRegister(
+  uuid: string,
+  input: {
+    name: string
+    command: string
+    args?: string[]
+    env?: Record<string, string>
+    description?: string
+  },
+): Promise<SyteResult<{ ok?: boolean; addon?: SyteAgentMcpAddon }>> {
+  return syteWorkspaceRequest("POST", "agent_mcp_register", {
+    body: {
+      uuid,
+      name: input.name,
+      command: input.command,
+      ...(input.args ? { args: input.args } : {}),
+      ...(input.env ? { env: input.env } : {}),
+      ...(input.description ? { description: input.description } : {}),
+    },
+  })
+}
+
+/** GET /api/agent_skills?uuid= — list built-in + custom skills. */
+export async function syteAgentSkillsList(
+  uuid: string,
+): Promise<SyteResult<SyteAgentSkillsListResponse>> {
+  return syteWorkspaceRequest<SyteAgentSkillsListResponse>("GET", "agent_skills", {
+    query: { uuid },
+  })
+}
+
+/** POST /api/agent_skills_enable — enable a skill (optional parameters). */
+export async function syteAgentSkillsEnable(
+  uuid: string,
+  skillId: string,
+  parameters?: Record<string, unknown>,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_skills_enable", {
+    body: {
+      uuid,
+      skill_id: skillId,
+      ...(parameters ? { parameters } : {}),
+    },
+  })
+}
+
+/** POST /api/agent_skills_disable — disable a project skill. */
+export async function syteAgentSkillsDisable(
+  uuid: string,
+  skillId: string,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_skills_disable", {
+    body: { uuid, skill_id: skillId },
+  })
+}
