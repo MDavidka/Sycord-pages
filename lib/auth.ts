@@ -1,5 +1,4 @@
 import GoogleProvider from "next-auth/providers/google"
-import CredentialsProvider from "next-auth/providers/credentials"
 import type { AuthOptions } from "next-auth"
 import { headers } from "next/headers"
 import clientPromise from "./torso"

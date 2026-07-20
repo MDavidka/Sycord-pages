@@ -51,7 +51,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       })
     }
 
-    return NextResponse.json(project, {
+    // Redact sensitive fields
+    const safeProject = { ...project };
+    delete safeProject.mongoApiKey;
+    delete safeProject.mongoEndpoint;
+    delete safeProject.mongoDatabase;
+    delete safeProject.mongoDataSource;
+
+    // Mask envVars if present
+    if (Array.isArray(safeProject.envVars)) {
+      safeProject.envVars = safeProject.envVars.map((v: any) => ({
+        ...v,
+        value: v.value ? `${v.value.substring(0, 4)}${"*".repeat(Math.max(0, v.value.length - 4))}` : ""
+      }));
+    }
+
+    return NextResponse.json(safeProject, {
       headers: {
         ETag: etag,
         "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
