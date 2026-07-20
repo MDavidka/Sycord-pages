@@ -256,7 +256,7 @@ export async function sendMessage(
             if (signal?.aborted) throw error;
             if (error.message?.includes('401') || error.message?.includes('403')) throw error;
             if (error.message?.includes('Missing API Key')) throw error;
-            if (error.message?.includes('Aborted')) throw error;
+            if (error.message?.includes('Aborted') || error.name === 'AbortError') throw error;
 
             const isRetryable = isRetryableAiError(error.message || '');
 
@@ -376,8 +376,19 @@ async function _sendMessageInternal(
 
     // Create abort controller that combines user signal + our timeout
     const controller = new AbortController();
+    const clearRunState = () => {
+        // Stall/abort safety net: reset the stop button if Chat's finally is
+        // delayed. Ownership-aware endRun in Chat prevents clobbering a newer run.
+        useStore.getState().setIsRunning(false);
+        useStore.getState().setAbortCurrentRun(null);
+    };
     if (signal) {
-        signal.addEventListener('abort', () => controller.abort());
+        signal.addEventListener('abort', () => {
+            controller.abort();
+            // Clear immediately so the stop button never stays stuck if the
+            // outer agentic loop fails to reach its finally block.
+            clearRunState();
+        }, { once: true });
     }
 
     let response: Response;
@@ -389,6 +400,10 @@ async function _sendMessageInternal(
             signal: controller.signal,
         });
     } catch (fetchError: any) {
+        if (signal?.aborted || controller.signal.aborted) {
+            clearRunState();
+            throw new Error('Aborted');
+        }
         console.error('[AI] Fetch failed:', fetchError.message);
         throw new Error(`Network error: ${fetchError.message}. Check your internet connection and API endpoint.`);
     }
@@ -429,15 +444,27 @@ async function _sendMessageInternal(
         if (Date.now() - lastDataTime > STREAM_TIMEOUT_MS) {
             console.warn(`[AI] Stream stalled for ${STREAM_TIMEOUT_MS / 1000}s, aborting...`);
             clearInterval(stallChecker);
+            clearRunState();
             controller.abort();
         }
     }, 5000);
 
     try {
         while (true) {
-            const { done, value } = await reader.read();
+            let done: boolean;
+            let value: Uint8Array | undefined;
+            try {
+                ({ done, value } = await reader.read());
+            } catch (readError: any) {
+                if (signal?.aborted || controller.signal.aborted) {
+                    clearRunState();
+                    throw new Error('Aborted');
+                }
+                throw readError;
+            }
 
             if (done) break;
+            if (!value) continue;
 
             lastDataTime = Date.now();
             buffer += decoder.decode(value, { stream: true });
