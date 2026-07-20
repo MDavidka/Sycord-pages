@@ -8,7 +8,9 @@ export function isSafariBrowser(): boolean {
 /** COEP mode for the current page — must match middleware / next.config headers. */
 export function getPageCoepMode(): 'credentialless' | 'require-corp' {
     if (typeof window === 'undefined') return 'credentialless';
-    if (window.location.pathname.includes('/syra')) return 'require-corp';
+    // Safari does not support credentialless — fall back to require-corp.
+    // All other browsers (Chrome, Firefox, Edge) use credentialless so that
+    // the cross-origin WebContainer preview iframe is not blocked.
     if (isSafariBrowser()) return 'require-corp';
     return 'credentialless';
 }

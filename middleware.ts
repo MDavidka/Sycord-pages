@@ -9,21 +9,13 @@ const COEP_CREDENTIALLESS: Record<string, string> = {
   "Cross-Origin-Resource-Policy": "cross-origin",
 }
 
-/**
- * Safari (incl. iOS) does not treat credentialless as cross-origin isolated.
- * Syra uses require-corp so WebContainer can boot on mobile Safari.
- */
-const COEP_REQUIRE_CORP: Record<string, string> = {
-  "Cross-Origin-Embedder-Policy": "require-corp",
-  "Cross-Origin-Opener-Policy": "same-origin",
-}
-
 function isolationHeadersFor(pathname: string): Record<string, string> | null {
   if (pathname === "/builder" || pathname.startsWith("/builder/")) {
     return COEP_CREDENTIALLESS
   }
+  // /syra uses credentialless — must match coep.ts getPageCoepMode()
   if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) {
-    return COEP_REQUIRE_CORP
+    return COEP_CREDENTIALLESS
   }
   return null
 }
@@ -49,6 +41,11 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/dashboard")) {
     if (!token && !vercelToken) {
       const redirect = NextResponse.redirect(new URL("/login", request.url))
+      // Allow *.sycord.com to embed any sycord.com page in an iframe
+      redirect.headers.set(
+        "Content-Security-Policy",
+        "frame-ancestors 'self' https://*.sycord.com https://sycord.com"
+      )
       return isolation ? applyHeaders(redirect, isolation) : redirect
     }
   }
@@ -60,6 +57,13 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next()
+
+  // Allow *.sycord.com subdomains to embed sycord.com pages in iframes
+  response.headers.set(
+    "Content-Security-Policy",
+    "frame-ancestors 'self' https://*.sycord.com https://sycord.com"
+  )
+
   return isolation ? applyHeaders(response, isolation) : response
 }
 

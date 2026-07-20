@@ -319,6 +319,7 @@ export function Workbench() {
                                         className="absolute inset-0 w-full h-full border-none bg-white"
                                         title="Preview"
                                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                                        credentialless
                                     />
                                 </div>
                             </>
@@ -497,6 +498,7 @@ export function Workbench() {
                             className="absolute inset-0 w-full h-full border-none bg-white"
                             title="Preview Fullscreen"
                             allow="cross-origin-isolated; clipboard-read; clipboard-write"
+                            credentialless
                         />
                     </div>
                 </div>
