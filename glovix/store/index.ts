@@ -143,6 +143,12 @@ interface AppState {
     theme: 'dark' | 'light';
     showTokenCounter: boolean;
 
+    // Agent run lifecycle (stop button / send lock)
+    isRunning: boolean;
+    setIsRunning: (running: boolean) => void;
+    abortCurrentRun: (() => void) | null;
+    setAbortCurrentRun: (fn: (() => void) | null) => void;
+
     // Auth actions
     setUser: (user: User | null) => void;
     setUserTokens: (tokens: UserTokens | null) => void;
@@ -232,6 +238,12 @@ export const useStore = create<AppState>((set) => ({
     isDeploying: false,
     theme: (localStorage.getItem('theme') as 'dark' | 'light') || 'dark',
     showTokenCounter: localStorage.getItem('showTokenCounter') === 'true',
+
+    // Agent run lifecycle
+    isRunning: false,
+    setIsRunning: (isRunning) => set({ isRunning }),
+    abortCurrentRun: null,
+    setAbortCurrentRun: (abortCurrentRun) => set({ abortCurrentRun }),
 
     // Auth actions
     setUser: (user) => set({ user }),

@@ -351,12 +351,37 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const isDark = theme === 'dark';
     const [input, setInput] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    // Run state lives in the Zustand store so the stop button cannot get stuck
+    // after remounts, aborted tool loops, or effect cleanups that skip local finally.
+    const isRunning = useStore(s => s.isRunning);
+    const setIsRunning = useStore(s => s.setIsRunning);
+    const abortCurrentRun = useStore(s => s.abortCurrentRun);
+    const setAbortCurrentRun = useStore(s => s.setAbortCurrentRun);
     const [currentThinking, setCurrentThinking] = useState<string>('');
     const [thinkingDuration, setThinkingDuration] = useState<number>(0);
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+
+    const beginRun = (controller: AbortController) => {
+        abortControllerRef.current = controller;
+        setIsRunning(true);
+        setAbortCurrentRun(() => {
+            controller.abort();
+        });
+    };
+
+    const endRun = (controller?: AbortController) => {
+        // If a newer run already replaced the controller, do not clear its state.
+        if (controller && abortControllerRef.current && abortControllerRef.current !== controller) {
+            return;
+        }
+        setIsRunning(false);
+        setAbortCurrentRun(null);
+        if (!controller || abortControllerRef.current === controller) {
+            abortControllerRef.current = null;
+        }
+    };
 
     // Set system prompt in store for reference
     useEffect(() => {
@@ -445,7 +470,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (
             messages.length === 1 &&
             messages[0].role === 'user' &&
-            !isLoading &&
+            !isRunning &&
             currentChatId &&
             autoProcessedRef.current !== currentChatId
         ) {
@@ -485,12 +510,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 triggerAIResponse(aiMessage, currentChatId);
             });
         }
-    }, [messages, currentChatId, isLoading]);
+    }, [messages, currentChatId, isRunning]);
 
     // Auto-setup template project
     const templateSetupRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!currentChatId || isLoading || templateSetupRef.current === currentChatId) return;
+        if (!currentChatId || isRunning || templateSetupRef.current === currentChatId) return;
 
         const templateFlag = sessionStorage.getItem(`template_setup_${currentChatId}`);
         if (templateFlag) {
@@ -509,12 +534,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 triggerAIResponse(setupMessage, currentChatId);
             }, 100);
         }
-    }, [currentChatId, isLoading]);
+    }, [currentChatId, isRunning]);
 
     // Auto-trigger AI in forked chats — detect fork_context flag from sessionStorage
     const forkSetupRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!currentChatId || isLoading || forkSetupRef.current === currentChatId) return;
+        if (!currentChatId || isRunning || forkSetupRef.current === currentChatId) return;
 
         const forkFlag = sessionStorage.getItem(`fork_context_${currentChatId}`);
         if (forkFlag) {
@@ -536,7 +561,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }, 100);
             });
         }
-    }, [currentChatId, isLoading]);
+    }, [currentChatId, isRunning]);
 
     // Group messages: user messages are standalone, consecutive assistant+tool messages form one group with segments
     const groupedMessages = useMemo(() => {
@@ -666,10 +691,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 headers: { Accept: 'application/json' },
             }).catch(() => { /* local abort still runs */ });
         }
-        if (abortControllerRef.current) {
-            // Keep loading state and controller ownership until the active request's
-            // finally block runs, preventing a new request from racing old cleanup.
-            abortControllerRef.current.abort();
+        // Abort via store so stop works even if the local ref was lost on remount.
+        // ai.ts also clears isRunning on abort as a safety net; Chat's ownership-aware
+        // endRun prevents a finishing run from clobbering a newer one.
+        const abort = abortCurrentRun || (abortControllerRef.current
+            ? () => abortControllerRef.current?.abort()
+            : null);
+        if (abort) {
+            abort();
             setCurrentThinking('');
             setThinkingStartTime(null);
         }
@@ -895,8 +924,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             actionByCall.set(key, pending);
                         }
                     }
-                    setIsLoading(true);
-                    abortControllerRef.current = controller;
+                    beginRun(controller);
 
                     let assistantContent = '';
                     let activeSession = getLatestAgentSession(msgs);
@@ -1089,11 +1117,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (controller.signal.aborted || cancelled) return;
                     console.warn('[ProjectAgent] Resume probe skipped:', error?.message || error);
                 } finally {
+                    // Always clear store run state — even when the effect cleanup
+                    // set cancelled=true (e.g. messages.length changed mid-resume).
+                    // Skipping this left the stop button stuck forever.
+                    endRun(controller);
+                    setCurrentThinking('');
+                    setThinkingStartTime(null);
                     if (!cancelled) {
-                        setIsLoading(false);
-                        abortControllerRef.current = null;
-                        setCurrentThinking('');
-                        setThinkingStartTime(null);
                         setTimeout(() => replaceActions([], false), 500);
                     }
                 }
@@ -1105,7 +1135,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             window.clearTimeout(timer);
             controller.abort();
         };
-        // Resume after messages hydrate for this chat. Do not depend on isLoading —
+        // Resume after messages hydrate for this chat. Do not depend on isRunning —
         // toggling it would cancel an in-flight resume.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentChatId, messages.length]);
@@ -1115,15 +1145,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         projectId: string,
         chatIdOverride?: string,
     ) => {
-        if (isLoading) return;
+        if (isRunning) return;
 
         persistAgentActionsRef.current = true;
         replaceActions([], false);
-        setIsLoading(true);
         setCurrentThinking('');
         setThinkingDuration(0);
         const controller = new AbortController();
-        abortControllerRef.current = controller;
+        beginRun(controller);
 
         const chatId = chatIdOverride || currentChatId;
         const currentMessages = useStore.getState().messages;
@@ -1337,8 +1366,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
         } finally {
             const wasAborted = controller.signal.aborted;
-            setIsLoading(false);
-            abortControllerRef.current = null;
+            endRun(controller);
             setCurrentThinking('');
             setThinkingStartTime(null);
             setTimeout(() => replaceActions([], false), 500);
@@ -1362,7 +1390,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     // Core AI processing function
     const triggerAIResponse = async (userMessage: Message, chatIdOverride?: string) => {
-        if (isLoading) return;
+        if (isRunning) return;
 
         // Embedded project chats use Syte's durable per-project agent. Only the
         // new user turn is submitted; previously saved chat is not resent.
@@ -1374,8 +1402,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         persistAgentActionsRef.current = false;
         replaceActions([], false);
-        setIsLoading(true);
-        abortControllerRef.current = new AbortController();
+        const controller = new AbortController();
+        beginRun(controller);
 
         const chatId = chatIdOverride || currentChatId;
 
@@ -1649,7 +1677,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             updateLastMessage(assistantMessageContent, toolCalls, thinkingContent, thinkingEndTime ? Math.max(1, Math.round((thinkingEndTime - thinkingStartTimeLocal!) / 1000)) : undefined);
                         }
                     },
-                    abortControllerRef.current?.signal,
+                    controller.signal,
                     (toolName, args, toolId) => {
                         // STREAMING TOOLS CALLBACK - called for each chunk of a tool call
                         if (!toolId) return;
@@ -1988,7 +2016,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             }
 
         } catch (error: any) {
-            if (abortControllerRef.current?.signal.aborted) {
+            if (controller.signal.aborted) {
                 // When stopped, check if last message has incomplete tool_calls
                 const state = useStore.getState();
                 const lastMsg = state.messages[state.messages.length - 1] as any;
@@ -2053,9 +2081,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
             }
         } finally {
-            const wasAborted = !abortControllerRef.current || abortControllerRef.current.signal.aborted;
-            setIsLoading(false);
-            abortControllerRef.current = null;
+            const wasAborted = controller.signal.aborted;
+            endRun(controller);
             setCurrentThinking('');
 
             // Notify parent that AI finished a complete response (not aborted)
@@ -2091,7 +2118,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     // Form submit handler
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isLoading) return;
+        if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isRunning) return;
 
         // Handle /debug command - fetch VM connection debug info
         if (input.trim().startsWith("/debug")) {
@@ -2300,7 +2327,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                         <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
                             <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
-                            {isLoading && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
                         </div>
 
                         <div className="flex items-center gap-1">
@@ -2355,14 +2382,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     thinking={group.thinking}
                                     isDark={isDark}
                                     thinkingTime={group.thinkingDuration || undefined}
-                                    startTime={idx === groupedMessages.length - 1 && isLoading ? thinkingStartTime : undefined}
+                                    startTime={idx === groupedMessages.length - 1 && isRunning ? thinkingStartTime : undefined}
                                 />
                             )}
 
                             {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && (
                                 <ActionsList
-                                    actions={idx === groupedMessages.length - 1 && isLoading && actions.length > 0 ? actions : group.agentActions}
-                                    isLive={idx === groupedMessages.length - 1 && isLoading}
+                                    actions={idx === groupedMessages.length - 1 && isRunning && actions.length > 0 ? actions : group.agentActions}
+                                    isLive={idx === groupedMessages.length - 1 && isRunning}
                                     isDark={isDark}
                                 />
                             )}
@@ -2399,7 +2426,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (seg.type === 'tools' && seg.toolCalls && seg.toolCalls.length > 0) {
                                             // If this is the last segment and we're live, show live actions
                                             const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isLoading && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length;
+                                            const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length;
 
                                             if (showLive) {
                                                 return (
@@ -2428,14 +2455,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         return null;
                                     })}
                                     {/* Live actions if no segments have tools yet */}
-                                    {isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
+                                    {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                     <MessageMetaFooter
                                         content={group.content}
                                         createdAt={group.createdAt}
                                         isDark={isDark}
-                                        hide={idx === groupedMessages.length - 1 && isLoading}
+                                        hide={idx === groupedMessages.length - 1 && isRunning}
                                     />
                                 </>
                             ) : (
@@ -2485,7 +2512,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         </div>
                                     </div>
                                     {/* Live actions for assistant without segments */}
-                                    {group.role === 'assistant' && isLoading && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
+                                    {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                     {group.role === 'assistant' && (
@@ -2493,7 +2520,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             content={group.content}
                                             createdAt={group.createdAt}
                                             isDark={isDark}
-                                            hide={idx === groupedMessages.length - 1 && isLoading}
+                                            hide={idx === groupedMessages.length - 1 && isRunning}
                                         />
                                     )}
                                 </>
@@ -2502,17 +2529,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     ))}
 
                     {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
-                    {isLoading && currentThinking && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
+                    {isRunning && currentThinking && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
                         <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
                     )}
 
                     {/* Live Actions - only show here if there's no assistant message group yet */}
-                    {isLoading && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
+                    {isRunning && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                     )}
 
                     {/* Typing indicator — shows when AI is loading but hasn't produced any visible content yet */}
-                    {isLoading && !currentThinking && actions.length === 0 && (
+                    {isRunning && !currentThinking && actions.length === 0 && (
                         !groupedMessages.length ||
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
                         (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content)
@@ -2736,7 +2763,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <AudioLines className="h-5 w-5" />
                                     </button>
 
-                                    {isLoading ? (
+                                    {isRunning ? (
                                         <button
                                             type="button"
                                             onClick={handleStop}
