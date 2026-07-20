@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/lib/auth"
+import { isAdmin } from "@/lib/is-admin"
 import clientPromise from "@/lib/torso"
 
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session || session.user?.email !== "dmarton336@gmail.com") {
+    if (!(await isAdmin())) {
       return new NextResponse("Unauthorized", { status: 401 })
     }
 
