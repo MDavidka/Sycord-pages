@@ -124,10 +124,17 @@ const STATIC_DOCS: Record<string, string> = {
 
 import { checkRateLimit } from "@/lib/security/rate-limit"
 import { getClientIP } from "@/lib/get-client-ip"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 
 export async function POST(req: Request) {
-  const ip = getClientIP(req)
-  const rate = checkRateLimit(`shadcn-docs:${ip}`, { limit: 30, windowMs: 60_000 })
+  const session = await getServerSession(authOptions)
+  const userId = (session?.user as { id?: string } | undefined)?.id
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const rate = checkRateLimit(`shadcn-docs:${userId}`, { limit: 30, windowMs: 60_000 })
   if (!rate.allowed) {
     return Response.json(
       { error: "Rate limit exceeded" },

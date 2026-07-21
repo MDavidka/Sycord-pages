@@ -62,10 +62,6 @@ export default function SubscriptionsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planName: tier.name,
-          price: tier.price,
-          currency: (["USD", "EUR", "GBP", "CAD", "AUD"] as string[]).includes(tier.currency ?? "")
-            ? tier.currency
-            : "USD",
         }),
       })
       const order = await res.json()

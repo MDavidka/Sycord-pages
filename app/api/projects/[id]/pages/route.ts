@@ -8,6 +8,11 @@ import {
   getStoredProjectId,
   ownedProjectMutationFilter,
 } from "@/lib/project-id"
+import {
+  MAX_PAGE_CONTENT_BYTES,
+  MAX_PAGES_PER_PROJECT,
+  utf8ByteLength,
+} from "@/lib/security/payload-limits"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -55,6 +60,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!name || !content) {
       return NextResponse.json({ message: "Name and content required" }, { status: 400 })
     }
+    if (typeof content !== "string") {
+      return NextResponse.json({ message: "content must be a string" }, { status: 400 })
+    }
+    if (utf8ByteLength(content) > MAX_PAGE_CONTENT_BYTES) {
+      return NextResponse.json(
+        { message: `Page content too large (max ${MAX_PAGE_CONTENT_BYTES} bytes)` },
+        { status: 400 },
+      )
+    }
     if (/^\.env(?:\.|$)/.test(name) || /\/\.env(?:\.|$)/.test(name)) {
       return NextResponse.json({ message: "Env files must not be saved" }, { status: 400 })
     }
@@ -78,6 +92,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const project = await getOwnedProject(db, session.user.id, id)
     if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
+
+    const existingPages = Array.isArray(project.pages) ? project.pages : []
+    const alreadyExists = existingPages.some((p: any) => p?.name === name)
+    if (!alreadyExists && existingPages.length >= MAX_PAGES_PER_PROJECT) {
+      return NextResponse.json(
+        { message: `Too many pages (max ${MAX_PAGES_PER_PROJECT})` },
+        { status: 400 },
+      )
     }
 
     const storedProjectId = getStoredProjectId(project)

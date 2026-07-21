@@ -393,6 +393,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     };
 
+    // Abort in-flight work on unmount so isRunning never sticks after navigation.
+    useEffect(() => {
+        return () => {
+            const controller = abortControllerRef.current;
+            if (controller) {
+                controller.abort();
+            }
+            const state = useStore.getState();
+            if (state.isRunning) {
+                state.setIsRunning(false);
+                state.setAbortCurrentRun(null);
+            }
+            abortControllerRef.current = null;
+        };
+    }, []);
+
     // Set system prompt in store for reference
     useEffect(() => {
         if (user) {
@@ -1417,8 +1433,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         const chatId = chatIdOverride || currentChatId;
 
-        const apiKey = process.env.NEXT_PUBLIC_CANOPYWAVE_API_KEY || '';
-
         // Get current project files for context
         const currentFiles = useStore.getState().files;
         const fileList = Object.keys(currentFiles).filter(f => f !== 'glovix-picker.js').sort().join('\n') ||
@@ -1578,7 +1592,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 const usage = await sendMessage(
                     [SYSTEM_PROMPT, ...currentMessages],
                     selectedModel,
-                    apiKey,
+                    '',
                     (content, tools, thinking) => {
                         if (abortControllerRef.current?.signal.aborted) return;
 
@@ -2059,7 +2073,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 }
             } else {
                 console.error('[Chat] Error:', error);
-                const errorMessage = error?.message || 'Failed to get response';
+                const rawMessage = error?.message || 'Failed to get response';
+                const rateLimitMatch = rawMessage.match(/please wait (\d+) second/i);
+                const errorMessage = rateLimitMatch
+                    ? `You're sending requests too quickly. Please wait ${rateLimitMatch[1]} second${rateLimitMatch[1] === '1' ? '' : 's'} and try again.`
+                    : /429|rate limit|RESOURCE_EXHAUSTED|RATE_LIMITED/i.test(rawMessage)
+                        ? 'You\'re sending requests too quickly. Please wait a moment and try again.'
+                        : rawMessage;
 
                 // Same check for errors
                 const state = useStore.getState();
@@ -2085,9 +2105,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 const stateAfter = useStore.getState();
                 const last = stateAfter.messages[stateAfter.messages.length - 1];
                 if (last?.role === 'assistant' && !last.content && !last.tool_calls?.length) {
-                    updateLastMessage(`Error: ${errorMessage}`);
+                    updateLastMessage(errorMessage);
                 } else {
-                    addMessage({ role: 'assistant', content: `Error: ${errorMessage}` });
+                    addMessage({ role: 'assistant', content: errorMessage });
                 }
             }
         } finally {

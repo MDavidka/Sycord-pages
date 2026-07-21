@@ -2,6 +2,11 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import {
+  MAX_ENV_KEY_LEN,
+  MAX_ENV_VALUE_LEN,
+  MAX_ENV_VARS,
+} from "@/lib/security/payload-limits"
 
 
 /**
@@ -67,9 +72,35 @@ export async function POST(
     if (!key || typeof key !== "string") {
       return NextResponse.json({ message: "Missing env var key" }, { status: 400 })
     }
+    if (key.length > MAX_ENV_KEY_LEN || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      return NextResponse.json({ message: "Invalid env var key" }, { status: 400 })
+    }
+    if (value != null && typeof value !== "string") {
+      return NextResponse.json({ message: "Env var value must be a string" }, { status: 400 })
+    }
+    if (typeof value === "string" && value.length > MAX_ENV_VALUE_LEN) {
+      return NextResponse.json(
+        { message: `Env var value too large (max ${MAX_ENV_VALUE_LEN} chars)` },
+        { status: 400 },
+      )
+    }
 
     const client = await clientPromise
     const db = client.db()
+
+    const existing = await db.collection("users").findOne(
+      { id: session.user.id, "projects._id": projectId },
+      { projection: { "projects.$": 1 } },
+    )
+    const project = existing?.projects?.[0]
+    if (!project) {
+      return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
+    const currentEnvVars = Array.isArray(project.envVars) ? project.envVars : []
+    const replacing = currentEnvVars.some((v: any) => v?.key === key)
+    if (!replacing && currentEnvVars.length >= MAX_ENV_VARS) {
+      return NextResponse.json({ message: `Too many env vars (max ${MAX_ENV_VARS})` }, { status: 400 })
+    }
 
     // Remove existing var with same key, then add new one
     await db.collection("users").updateOne(
@@ -95,12 +126,12 @@ export async function POST(
       { id: session.user.id, "projects._id": projectId },
       { projection: { "projects.$": 1 } }
     )
-    const project = projectDoc?.projects?.[0]
-    const currentRequiredEnvKeys = Array.isArray(project?.requiredEnvKeys)
-      ? project.requiredEnvKeys.filter((envKey: unknown) => typeof envKey === "string")
+    const updatedProject = projectDoc?.projects?.[0]
+    const currentRequiredEnvKeys = Array.isArray(updatedProject?.requiredEnvKeys)
+      ? updatedProject.requiredEnvKeys.filter((envKey: unknown) => typeof envKey === "string")
       : []
-    const currentRequiredIntegrationIds = Array.isArray(project?.requiredIntegrationIds)
-      ? project.requiredIntegrationIds.filter((integrationId: unknown) => typeof integrationId === "string")
+    const currentRequiredIntegrationIds = Array.isArray(updatedProject?.requiredIntegrationIds)
+      ? updatedProject.requiredIntegrationIds.filter((integrationId: unknown) => typeof integrationId === "string")
       : []
 
     const nextRequiredEnvKeys = currentRequiredEnvKeys.filter((envKey: string) => envKey !== key)

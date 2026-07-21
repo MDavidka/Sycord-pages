@@ -131,6 +131,8 @@ function AppContent() {
 
     useEffect(() => {
         document.documentElement.classList.toggle('light', theme === 'light');
+        // Keep Tailwind/shadcn `.dark` in sync so card/dialog tokens match the shell.
+        document.documentElement.classList.toggle('dark', theme !== 'light');
     }, [theme]);
 
     useEffect(() => {

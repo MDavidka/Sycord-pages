@@ -83,20 +83,14 @@ export async function generateAndSaveTitle(userText: string, chatId: string): Pr
 // Generate title using AI API (streaming mode for compatibility)
 async function generateTitleWithAI(userText: string): Promise<string | null> {
     try {
-        const { aiApiKey, aiModel } = useStore.getState();
-        const envKey = process.env.NEXT_PUBLIC_AI_API_KEY;
-        const apiKeyToUse = (envKey && envKey !== 'your_api_key_here') ? envKey : aiApiKey;
+        const { aiModel } = useStore.getState();
         const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
-
-        if (!apiKeyToUse) {
-            console.log('[TitleGen] No client key; using server-side Gemini Vertex');
-        }
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
 
+        // Session cookie auth only — never embed API keys in the client bundle.
         const titleHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (apiKeyToUse) titleHeaders['Authorization'] = `Bearer ${apiKeyToUse}`;
 
         const response = await fetch('/api/ai/chat', {
             method: 'POST',

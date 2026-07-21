@@ -2,31 +2,48 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { getOwnedProject } from "@/lib/project-id"
 
+function productProjectIds(requestedId: string, project: any): string[] {
+  const ids = new Set<string>()
+  if (requestedId) ids.add(String(requestedId))
+  if (project?._id != null) ids.add(String(project._id))
+  if (project?.originalProjectId != null) ids.add(String(project.originalProjectId))
+  if (project?.accessProjectId != null) ids.add(String(project.accessProjectId))
+  return Array.from(ids)
+}
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+async function requireOwnedProductsProject(projectId: string, userId: string) {
   const client = await clientPromise
   const db = client.db()
+  const project = await getOwnedProject(db, userId, projectId)
+  return { db, project }
+}
 
-  // Still fetching from products collection as requested to keep scope limited,
-  // but projectId string ID is now used.
-  // Note: projects in user doc have `_id` as ObjectId, but when serialized or passed as string params, it works.
-  // The `products` collection stores `projectId` as string or ObjectId?
-  // Original code: `find({ projectId: id })`.
-  // If `id` comes from params, it's string.
-  // I should check if products store ObjectId or String for projectId.
-  // `app/api/projects/route.ts` creates products? No, this route creates products.
-  // And it stores `projectId: id`.
-  // So it depends on how `id` was passed. In URL it's string.
-  // So likely stored as string.
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
 
-  // Projection drops internal Mongo fields and any large blobs that don't
-  // need to ship to the edit screen. The dashboard mostly renders name,
-  // price, image, and stock.
-  const products = await db.collection("products")
+  const { id } = await params
+  if (!id) {
+    return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
+  }
+
+  const { db, project } = await requireOwnedProductsProject(id, session.user.id)
+  if (!project) {
+    return NextResponse.json({ message: "Project not found" }, { status: 404 })
+  }
+
+  const projectIds = productProjectIds(id, project)
+
+  // Projection drops internal fields and large blobs that don't need to ship
+  // to the edit screen. The dashboard mostly renders name, price, image, stock.
+  const products = await db
+    .collection("products")
     .find(
-      { projectId: id },
+      { projectId: { $in: projectIds } },
       {
         projection: {
           _id: 1,
@@ -61,24 +78,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params
-  const client = await clientPromise
-  const db = client.db()
-
-  // Verify project ownership (embedded in user)
-  const user = await db.collection("users").findOne({ id: session.user.id });
-  if (!user || !user.projects) {
-    return NextResponse.json({ message: "Project not found" }, { status: 404 })
+  if (!id) {
+    return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
-  const project = user.projects.find((p: any) => p._id.toString() === id);
 
+  const { db, project } = await requireOwnedProductsProject(id, session.user.id)
   if (!project) {
     return NextResponse.json({ message: "Project not found" }, { status: 404 })
   }
 
   const body = await request.json()
+  const canonicalProjectId = String(project._id ?? id)
   const newProduct = {
     ...body,
-    projectId: id, // Storing as string to match existing pattern if any
+    projectId: canonicalProjectId,
     createdAt: new Date(),
   }
 
@@ -92,6 +105,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
+  const { id } = await params
+  if (!id) {
+    return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
+  }
+
   const { searchParams } = new URL(request.url)
   const productId = searchParams.get("productId")
 
@@ -99,15 +117,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ message: "Invalid product ID" }, { status: 400 })
   }
 
-  const client = await clientPromise
-  const db = client.db()
+  const { db, project } = await requireOwnedProductsProject(id, session.user.id)
+  if (!project) {
+    return NextResponse.json({ message: "Project not found" }, { status: 404 })
+  }
 
-  // Should also verify ownership here theoretically, but assuming product deletion by ID implies access check or we rely on productId matching?
-  // Original code didn't verify ownership in DELETE (only session). Ideally we should.
-  // I will leave it as is to avoid scope creep, just updating project verification where it existed.
+  const projectIds = productProjectIds(id, project)
 
   const result = await db.collection("products").deleteOne({
     _id: productId,
+    projectId: { $in: projectIds },
   })
 
   if (result.deletedCount === 0) {

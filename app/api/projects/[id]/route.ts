@@ -9,6 +9,17 @@ import {
   getStoredProjectId,
   ownedProjectMutationFilter,
 } from "@/lib/project-id"
+import {
+  MAX_BUSINESS_DESCRIPTION,
+  MAX_BUSINESS_NAME,
+  MAX_PAGE_CONTENT_BYTES,
+  MAX_PAGES_PER_PROJECT,
+  MAX_PROFILE_IMAGE,
+  MAX_STYLE,
+  MAX_SUBDOMAIN,
+  estimateJsonSize,
+  utf8ByteLength,
+} from "@/lib/security/payload-limits"
 
 /** Fields clients may update via PUT — everything else is rejected (mass-assignment guard). */
 const ALLOWED_PROJECT_UPDATE_KEYS = new Set([
@@ -106,7 +117,71 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const updateFields: Record<string, unknown> = {}
   for (const key of Object.keys(body)) {
     if (!ALLOWED_PROJECT_UPDATE_KEYS.has(key)) continue
-    updateFields[`projects.$.${key}`] = body[key]
+    const value = body[key]
+
+    if (key === "businessName") {
+      if (typeof value !== "string" || !value.trim() || value.length > MAX_BUSINESS_NAME) {
+        return NextResponse.json({ message: `businessName must be 1–${MAX_BUSINESS_NAME} chars` }, { status: 400 })
+      }
+      updateFields[`projects.$.${key}`] = value.trim()
+      continue
+    }
+    if (key === "businessDescription") {
+      if (typeof value !== "string" || value.length > MAX_BUSINESS_DESCRIPTION) {
+        return NextResponse.json({ message: `businessDescription max ${MAX_BUSINESS_DESCRIPTION} chars` }, { status: 400 })
+      }
+      updateFields[`projects.$.${key}`] = value
+      continue
+    }
+    if (key === "style") {
+      if (typeof value !== "string" || value.length > MAX_STYLE) {
+        return NextResponse.json({ message: `style max ${MAX_STYLE} chars` }, { status: 400 })
+      }
+      updateFields[`projects.$.${key}`] = value
+      continue
+    }
+    if (key === "subdomain") {
+      if (typeof value !== "string" || value.length > MAX_SUBDOMAIN) {
+        return NextResponse.json({ message: `subdomain max ${MAX_SUBDOMAIN} chars` }, { status: 400 })
+      }
+      updateFields[`projects.$.${key}`] = value
+      continue
+    }
+    if (key === "profileImage") {
+      if (typeof value !== "string" || value.length > MAX_PROFILE_IMAGE) {
+        return NextResponse.json({ message: "profileImage too large" }, { status: 400 })
+      }
+      updateFields[`projects.$.${key}`] = value
+      continue
+    }
+    if (key === "pages") {
+      if (!Array.isArray(value) || value.length > MAX_PAGES_PER_PROJECT) {
+        return NextResponse.json({ message: `pages max ${MAX_PAGES_PER_PROJECT} entries` }, { status: 400 })
+      }
+      if (estimateJsonSize(value) > MAX_PAGE_CONTENT_BYTES * 2) {
+        return NextResponse.json({ message: "pages payload too large" }, { status: 400 })
+      }
+      for (const page of value) {
+        if (!page || typeof page !== "object") {
+          return NextResponse.json({ message: "Invalid page entry" }, { status: 400 })
+        }
+        const content = (page as { content?: unknown }).content
+        if (typeof content === "string" && utf8ByteLength(content) > MAX_PAGE_CONTENT_BYTES) {
+          return NextResponse.json({ message: "page content too large" }, { status: 400 })
+        }
+      }
+      updateFields[`projects.$.${key}`] = value
+      continue
+    }
+    if (key === "status") {
+      if (typeof value !== "string" || value.length > 64) {
+        return NextResponse.json({ message: "Invalid status" }, { status: 400 })
+      }
+      updateFields[`projects.$.${key}`] = value
+      continue
+    }
+
+    updateFields[`projects.$.${key}`] = value
   }
 
   if (Object.keys(updateFields).length === 0) {

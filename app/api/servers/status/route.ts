@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/torso"
+import { checkRateLimit } from "@/lib/security/rate-limit"
+import { getClientIP } from "@/lib/get-client-ip"
 
 export const dynamic = "force-dynamic"
 
@@ -91,7 +93,16 @@ const lastKnownStatus = (history: (boolean | null)[]) => {
   return null
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const ip = getClientIP(request)
+  const rate = checkRateLimit(`servers-status:${ip}`, { limit: 60, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } },
+    )
+  }
+
   try {
     const apiKey = process.env.CRONITOR_API
 

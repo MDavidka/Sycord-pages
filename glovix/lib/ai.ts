@@ -262,9 +262,12 @@ export async function sendMessage(
 
             if (!isRetryable || attempt >= MAX_RETRIES) {
                 if (isRateLimitError(error.message || '')) {
+                    // Prefer the upstream message when it already includes Retry-After guidance.
+                    if (/please wait \d+ second/i.test(error.message || '')) {
+                        throw error;
+                    }
                     throw new Error(
-                        'AI rate limit reached (429 RESOURCE_EXHAUSTED). The request was retried automatically. ' +
-                        'Please wait a moment and try again, or switch to a different model in Settings.'
+                        'AI rate limit reached. Please wait a moment and try again, or switch to a different model in Settings.'
                     );
                 }
                 throw error;
@@ -283,25 +286,16 @@ async function _sendMessageInternal(
     signal?: AbortSignal,
     onToolCallStream?: (toolName: string, partialArgs: string, toolCallId: string) => void
 ): Promise<TokenUsage> {
-    const { aiApiKey, aiModel } = useStore.getState();
+    const { aiModel } = useStore.getState();
 
     const apiUrl = '/api/ai/chat';
+    // Auth is session-based on /api/ai/chat. Never read AI secrets from
+    // NEXT_PUBLIC_* — those would ship in the client bundle.
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
     };
 
-    // Get API key from env or settings
-    const envKey = process.env.NEXT_PUBLIC_AI_API_KEY;
-    const apiKeyToUse = (envKey && envKey !== 'your_api_key_here') ? envKey : aiApiKey;
-
-    // Auth is handled server-side by the Gemini Vertex bridge (/api/ai/chat).
-    // Only forward an Authorization header if the user explicitly configured a
-    // provider key in Settings / env; it is otherwise optional.
-    if (apiKeyToUse) {
-        headers['Authorization'] = `Bearer ${apiKeyToUse}`;
-    }
-
-    // Use env model or fallback
+    // Use env model or fallback (model id is not a secret)
     const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
 
     // Model context limits (approximate input token windows)
@@ -415,7 +409,11 @@ async function _sendMessageInternal(
         const error = await response.text().catch(() => 'Unknown error');
         console.error(`[AI] API Error ${response.status}:`, error.substring(0, 300));
         if (response.status === 429) {
-            throw new Error(`429 RESOURCE_EXHAUSTED: ${error.substring(0, 500)}`);
+            const retryAfterRaw = response.headers.get('Retry-After');
+            const retryAfterSec = Math.max(1, Number.parseInt(retryAfterRaw || '60', 10) || 60);
+            throw new Error(
+                `429 RATE_LIMITED: Too many AI requests. Please wait ${retryAfterSec} second${retryAfterSec === 1 ? '' : 's'} and try again.`
+            );
         }
         throw new Error(`API Error: ${response.status} - ${error.substring(0, 500)}`);
     }

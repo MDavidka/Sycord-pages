@@ -26,7 +26,6 @@ import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-dee
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkRateLimit } from "@/lib/security/rate-limit"
-import { getClientIP } from "@/lib/get-client-ip"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -39,8 +38,15 @@ function isDeepSeekModel(model: string | undefined): boolean {
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
-  const userKey = (session?.user as any)?.id || getClientIP(req) || "anon"
-  const rate = checkRateLimit(`ai-chat:${userKey}`, { limit: 40, windowMs: 60_000 })
+  const userId = (session?.user as { id?: string } | undefined)?.id
+  if (!userId) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  const rate = checkRateLimit(`ai-chat:${userId}`, { limit: 40, windowMs: 60_000 })
   if (!rate.allowed) {
     return new Response(JSON.stringify({ error: "Too many AI requests. Please wait and try again." }), {
       status: 429,

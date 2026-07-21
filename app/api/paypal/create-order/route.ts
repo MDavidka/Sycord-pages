@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import clientPromise from "@/lib/torso"
 
 const PAYPAL_API_BASE =
   process.env.NODE_ENV === "production"
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com"
+
+/** Canonical plan prices — never trust client-supplied amounts. */
+const PLAN_PRICES: Record<string, { price: string; currency: string }> = {
+  "Sycord+": { price: "9.00", currency: "USD" },
+  "Sycord Enterprise": { price: "29.00", currency: "USD" },
+  Professional: { price: "9.00", currency: "USD" },
+  Ultra: { price: "29.00", currency: "USD" },
+}
 
 async function getAccessToken(): Promise<string> {
   const clientId = process.env.PAYPAL_API_KEY
@@ -32,15 +43,50 @@ async function getAccessToken(): Promise<string> {
   return data.access_token as string
 }
 
+async function resolvePlanPrice(planName: string): Promise<{ price: string; currency: string } | null> {
+  if (PLAN_PRICES[planName]) return PLAN_PRICES[planName]
+
+  // Prefer DB tier price when available (admin-managed), but only for known named tiers.
+  try {
+    const client = await clientPromise
+    const db = client.db()
+    const tier = await db.collection("subscriptionTiers").findOne({ name: planName })
+    if (tier && typeof tier.price === "number" && tier.price > 0) {
+      const currency =
+        typeof tier.currency === "string" && ["USD", "EUR", "GBP", "CAD", "AUD"].includes(tier.currency)
+          ? tier.currency
+          : "USD"
+      return { price: Number(tier.price).toFixed(2), currency }
+    }
+  } catch (err) {
+    console.warn("[paypal] Failed to load subscription tier from DB:", err)
+  }
+
+  return null
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { planName, price, currency = "USD" } = await req.json()
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
-    if (!planName || price === undefined) {
-      return NextResponse.json(
-        { error: "planName and price are required" },
-        { status: 400 }
-      )
+    let body: { planName?: string }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
+    const planName = typeof body.planName === "string" ? body.planName.trim() : ""
+    if (!planName) {
+      return NextResponse.json({ error: "planName is required" }, { status: 400 })
+    }
+
+    const priced = await resolvePlanPrice(planName)
+    if (!priced) {
+      return NextResponse.json({ error: "Unknown or unpriced plan" }, { status: 400 })
     }
 
     const accessToken = await getAccessToken()
@@ -61,9 +107,10 @@ export async function POST(req: NextRequest) {
         purchase_units: [
           {
             description: `Sycord ${planName} Plan — Monthly Subscription`,
+            custom_id: `${session.user.id}:${planName}`,
             amount: {
-              currency_code: currency,
-              value: parseFloat(String(price)).toFixed(2),
+              currency_code: priced.currency,
+              value: priced.price,
             },
           },
         ],
@@ -88,7 +135,7 @@ export async function POST(req: NextRequest) {
     console.error("[paypal] create-order error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create PayPal order" },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

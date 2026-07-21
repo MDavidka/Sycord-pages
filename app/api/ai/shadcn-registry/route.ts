@@ -5,15 +5,21 @@
 import { normalizeComponentName, resolveShadcnComponents } from "@/lib/shadcn-registry-server"
 import { normalizeShadcnImportPaths } from "@/lib/shadcn-shared"
 import { checkRateLimit } from "@/lib/security/rate-limit"
-import { getClientIP } from "@/lib/get-client-ip"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 export async function POST(req: Request): Promise<Response> {
-  const ip = getClientIP(req)
-  const rate = checkRateLimit(`shadcn-registry:${ip}`, { limit: 20, windowMs: 60_000 })
+  const session = await getServerSession(authOptions)
+  const userId = (session?.user as { id?: string } | undefined)?.id
+  if (!userId) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const rate = checkRateLimit(`shadcn-registry:${userId}`, { limit: 20, windowMs: 60_000 })
   if (!rate.allowed) {
     return Response.json(
       { error: "Rate limit exceeded" },

@@ -93,6 +93,15 @@ const nextConfig = {
       { source: "/builder", headers: crossOriginCredentialless },
       { source: "/builder/:path*", headers: crossOriginCredentialless },
       { source: "/dashboard/sites/:id/syra", headers: crossOriginRequireCorp },
+      { source: "/dashboard/sites/:id/syra/:path*", headers: crossOriginRequireCorp },
+      // Preview proxy must be frameable by the Syra shell (same-origin iframe).
+      {
+        source: "/api/workspace/preview-frame",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
     ]
   },
   images: {

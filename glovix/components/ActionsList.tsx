@@ -8,6 +8,7 @@ import {
     ChevronDown,
     CircleAlert,
     Cloud,
+    Download,
     Eye,
     Expand,
     FileCode2,
@@ -413,6 +414,22 @@ const ScreenshotCard = memo(function ScreenshotCard({
                         <SquareTerminal className="size-3" strokeWidth={1.8} />
                         made a screenshot
                     </span>
+                    <div className="flex items-center gap-1.5">
+                        {src && (
+                            <a
+                                href={src}
+                                download={shot?.route ? `screenshot-${shot.route.replace(/[^\w.-]+/g, '_')}.png` : 'screenshot.png'}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label="Download screenshot"
+                                className={cn(
+                                    'flex size-8 items-center justify-center rounded-lg border transition-colors',
+                                    isDark ? 'border-white/10 text-white/55 hover:bg-white/[0.06]' : 'border-black/10 text-gray-500 hover:bg-black/[0.04]',
+                                )}
+                            >
+                                <Download className="size-3.5" strokeWidth={1.8} />
+                            </a>
+                        )}
                     <button
                         type="button"
                         onClick={() => setExpanded(v => !v)}
@@ -424,6 +441,7 @@ const ScreenshotCard = memo(function ScreenshotCard({
                     >
                         <Expand className="size-3.5" strokeWidth={1.8} />
                     </button>
+                    </div>
                 </div>
             </div>
             {expanded && src && (

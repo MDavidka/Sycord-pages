@@ -2,8 +2,12 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { assertSameOrigin } from "@/lib/security/same-origin"
 
-export async function POST() {
+export async function POST(request: Request) {
+  const csrf = assertSameOrigin(request)
+  if (csrf) return csrf
+
   const session = await getServerSession(authOptions)
 
   if (!session || !session.user || !session.user.id) {

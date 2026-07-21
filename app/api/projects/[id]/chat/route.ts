@@ -10,6 +10,12 @@ import {
   toChatSessionSummary,
 } from "@/lib/project-chat-session"
 import { checkRateLimit } from "@/lib/security/rate-limit"
+import {
+  MAX_CHAT_MESSAGE_CHARS,
+  MAX_CHAT_MESSAGES,
+  MAX_CHAT_PAYLOAD_CHARS,
+  estimateJsonSize,
+} from "@/lib/security/payload-limits"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -83,6 +89,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     if (messages !== undefined && !Array.isArray(messages)) {
       return NextResponse.json({ message: "messages must be an array" }, { status: 400 })
+    }
+    if (Array.isArray(messages)) {
+      if (messages.length > MAX_CHAT_MESSAGES) {
+        return NextResponse.json(
+          { message: `Too many messages (max ${MAX_CHAT_MESSAGES})` },
+          { status: 400 },
+        )
+      }
+      if (estimateJsonSize(messages) > MAX_CHAT_PAYLOAD_CHARS) {
+        return NextResponse.json({ message: "Chat payload too large" }, { status: 400 })
+      }
+      for (const msg of messages) {
+        const content = (msg as { content?: unknown })?.content
+        if (typeof content === "string" && content.length > MAX_CHAT_MESSAGE_CHARS) {
+          return NextResponse.json(
+            { message: `Message too large (max ${MAX_CHAT_MESSAGE_CHARS} chars)` },
+            { status: 400 },
+          )
+        }
+        if (Array.isArray(content) && estimateJsonSize(content) > MAX_CHAT_MESSAGE_CHARS) {
+          return NextResponse.json({ message: "Message content too large" }, { status: 400 })
+        }
+      }
     }
 
     const client = await clientPromise

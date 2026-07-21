@@ -165,43 +165,63 @@ export async function POST(request: Request) {
     const client = await clientPromise
     const db = client.db()
 
-    // Get GitHub credentials - first try environment variables, then database (users collection)
-    let token: string
-    let owner: string
-    
-    const envCredentials = getEnvGitHubCredentials()
-    if (envCredentials) {
-      token = envCredentials.token
-      owner = envCredentials.owner
-      console.log("[GitHub] Using environment credentials")
-    } else {
-      // Find user to get embedded token
-      const user = await db.collection("users").findOne({ id: session.user.id });
-      const tokenData = user?.github_tokens?.[projectId];
-
-      if (!tokenData?.token) {
-        return NextResponse.json(
-          { error: "GitHub credentials not found. Please configure GITHUB_API_TOKEN and GITHUB_OWNER environment variables." },
-          { status: 400 }
-        )
-      }
-      token = tokenData.token
-      owner = tokenData.owner || tokenData.username
+    const userDoc = await db.collection("users").findOne({ id: session.user.id })
+    if (!userDoc?.projects) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 })
     }
-
-    // Get project (embedded in user)
-    const userDoc = await db.collection("users").findOne({ id: session.user.id });
-    if (!userDoc || !userDoc.projects) {
-        return NextResponse.json({ error: "Project not found" }, { status: 404 })
-    }
-    const project = userDoc.projects.find((p: any) => p._id.toString() === projectId);
-
+    const project = userDoc.projects.find((p: any) => p._id.toString() === projectId)
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
     }
 
+    // Prefer per-user / per-project GitHub credentials. Never fall back to the
+    // shared GITHUB_API_TOKEN for arbitrary client-supplied repo names — that
+    // would let any user write into the org's repos.
+    let token: string
+    let owner: string
+
+    const tokenData = userDoc?.github_tokens?.[projectId]
+
+    if (tokenData?.token) {
+      token = tokenData.token
+      owner = tokenData.owner || tokenData.username
+      console.log("[GitHub] Using per-project user credentials")
+    } else {
+      const envCredentials = getEnvGitHubCredentials()
+      if (!envCredentials) {
+        return NextResponse.json(
+          { error: "GitHub credentials not found. Connect a GitHub token for this project." },
+          { status: 400 },
+        )
+      }
+
+      // Env token is only allowed when writing to an already-bound repo on this
+      // project (owner/repo previously saved by the user), never a free-form repoName.
+      const boundOwner = typeof project.githubOwner === "string" ? project.githubOwner : null
+      const boundRepo = typeof project.githubRepo === "string" ? project.githubRepo : null
+      if (!boundOwner || !boundRepo) {
+        return NextResponse.json(
+          {
+            error:
+              "GitHub is not linked for this project. Connect a personal GitHub token before saving.",
+          },
+          { status: 403 },
+        )
+      }
+      if (repoName && String(repoName) !== boundRepo) {
+        return NextResponse.json(
+          { error: "repoName does not match the linked repository for this project" },
+          { status: 403 },
+        )
+      }
+
+      token = envCredentials.token
+      owner = boundOwner
+      console.log("[GitHub] Using environment credentials for bound project repo only")
+    }
+
     // Determine repository name - use provided name, existing repo, or generate from project
-    let repo = repoName || (project.githubRepo as string | undefined)
+    let repo = (tokenData?.token ? repoName : null) || (project.githubRepo as string | undefined)
     if (!repo) {
       const baseName = project.name || project.businessName || `sycord-project-${projectId}`
       repo = baseName

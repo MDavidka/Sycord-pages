@@ -53,7 +53,7 @@ export const authOptions: AuthOptions = {
           prompt: "select_account",
           access_type: "offline",
           response_type: "code",
-          scope: "openid profile email https://www.googleapis.com/auth/cloud-platform",
+          scope: "openid profile email",
         },
       },
     }),
