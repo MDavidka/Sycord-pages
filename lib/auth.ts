@@ -1,5 +1,4 @@
 import GoogleProvider from "next-auth/providers/google"
-import CredentialsProvider from "next-auth/providers/credentials"
 import type { AuthOptions } from "next-auth"
 import { headers } from "next/headers"
 import clientPromise from "./torso"
@@ -56,24 +55,6 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
-    CredentialsProvider({
-      id: "bypass",
-      name: "Bypass",
-      credentials: {
-        email: { label: "Email", type: "text" }
-      },
-      async authorize(credentials) {
-        if (credentials?.email === "dmarton336@gmail.com") {
-          return {
-            id: "admin-bypass-id",
-            name: "Admin User",
-            email: "dmarton336@gmail.com",
-            image: "https://github.com/shadcn.png"
-          }
-        }
-        return null;
-      }
-    })
   ],
   session: {
     strategy: "jwt",
