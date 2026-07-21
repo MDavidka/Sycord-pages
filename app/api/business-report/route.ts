@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { isAdmin } from "@/lib/is-admin"
 
 const COLLECTION = "business_reports"
 const DOC_FILTER = { docType: "business-activity-report" } as const
 
-/** GET /api/business-report
- *  Returns the saved field map for the Business Activity Report document.
- */
+/** GET /api/business-report — public read of the published report fields. */
 export async function GET() {
   try {
     const client = await clientPromise
@@ -21,30 +22,41 @@ export async function GET() {
   }
 }
 
-/** POST /api/business-report
- *  Body: { fields: Record<string, string> }
- *  Upserts the field map so every in-browser edit is persisted.
- */
+/** POST /api/business-report — admin-only write of the shared report document. */
 export async function POST(request: Request) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   try {
     const body = await request.json()
     if (!body.fields || typeof body.fields !== "object" || Array.isArray(body.fields)) {
       return NextResponse.json({ error: "Invalid body: 'fields' must be an object" }, { status: 400 })
     }
 
-    // Sanitise: only accept string values, discard anything else
     const fields: Record<string, string> = {}
+    let keys = 0
     for (const [k, v] of Object.entries(body.fields)) {
-      if (typeof v === "string") {
-        fields[k] = v.slice(0, 4000) // cap individual field length
+      if (typeof v !== "string") continue
+      keys += 1
+      if (keys > 200) {
+        return NextResponse.json({ error: "Too many fields (max 200)" }, { status: 400 })
       }
+      if (k.length > 120) {
+        return NextResponse.json({ error: "Field key too long" }, { status: 400 })
+      }
+      fields[k] = v.slice(0, 4000)
     }
 
     const client = await clientPromise
     const db = client.db()
     await db.collection(COLLECTION).updateOne(
       DOC_FILTER,
-      { $set: { fields, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+      { $set: { fields, updatedAt: new Date(), updatedBy: session.user.id }, $setOnInsert: { createdAt: new Date() } },
       { upsert: true },
     )
     return NextResponse.json({ ok: true })
