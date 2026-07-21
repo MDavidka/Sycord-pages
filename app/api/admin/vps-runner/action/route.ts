@@ -13,7 +13,12 @@ export async function POST(request: Request) {
   const unauthorized = await requireAdminResponse()
   if (unauthorized) return unauthorized
 
-  const body = await request.json().catch(() => ({}))
+  let body: any
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+  }
   const action = typeof body.action === "string" ? body.action : ""
   const path = ACTION_PATHS[action]
   if (!path) {

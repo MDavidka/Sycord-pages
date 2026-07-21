@@ -73,12 +73,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id: projectId } = await params
-  const body = (await request.json().catch(() => null)) as {
+  let body: {
     action?: unknown
     skillId?: unknown
     skill_id?: unknown
     parameters?: unknown
-  } | null
+  } | null = null
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ message: "Invalid JSON body" }, { status: 400 })
+  }
 
   const action = typeof body?.action === "string" ? body.action.trim().toLowerCase() : ""
   const skillId =

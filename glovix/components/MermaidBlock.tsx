@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 
 import { getMermaid } from '../lib/mermaid';
+import { sanitizeSvg } from '@/lib/security/sanitize-svg';
 
 interface MermaidBlockProps {
     code: string;
@@ -48,7 +49,7 @@ export function MermaidBlock({ code, isDark = true }: MermaidBlockProps) {
                 const { svg: renderedSvg } = await mermaid.render(id, code);
 
                 if (mounted) {
-                    setSvg(renderedSvg);
+                    setSvg(sanitizeSvg(renderedSvg));
                     setIsLoading(false);
                 }
             } catch (err: any) {

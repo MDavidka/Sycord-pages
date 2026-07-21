@@ -184,9 +184,27 @@ async function syteWorkspaceRequest<T = unknown>(
   return syteRequest<T>(method, path, { ...options, base: "workspace" })
 }
 
-/** Map a project page path to the Syte workspace path (files live under app/). */
+/**
+ * Map a project page path to the Syte workspace path (files live under app/).
+ * Rejects path traversal (`..`), null bytes, and absolute paths so callers
+ * cannot escape the workspace root.
+ */
 export function toSyteWorkspacePath(relPath: string): string {
-  const normalized = relPath.replace(/^\/+/, "").replace(/\\/g, "/")
+  if (typeof relPath !== "string") {
+    throw new Error("Invalid path")
+  }
+  if (relPath.includes("\0")) {
+    throw new Error("Invalid path: null byte")
+  }
+
+  // Collapse separators, strip leading slashes, posix-normalize
+  let normalized = relPath.replace(/\\/g, "/").replace(/^\/+/, "")
+  const segments = normalized.split("/").filter((s) => s.length > 0 && s !== ".")
+  if (segments.some((s) => s === "..")) {
+    throw new Error("Invalid path: traversal not allowed")
+  }
+  normalized = segments.join("/")
+
   if (!normalized) return "app"
   if (normalized === "app" || normalized.startsWith("app/")) return normalized
   return `app/${normalized}`
@@ -205,20 +223,38 @@ export async function syteListFiles(uuid: string, path = "") {
 }
 
 export async function syteReadFile(uuid: string, path: string) {
+  let workspacePath: string
+  try {
+    workspacePath = toSyteWorkspacePath(path)
+  } catch (err: any) {
+    return { ok: false as const, status: 400, error: err?.message || "Invalid path", data: undefined }
+  }
   return syteWorkspaceRequest<{ ok?: boolean; content?: string }>("POST", "read_file", {
-    body: { uuid, path: toSyteWorkspacePath(path) },
+    body: { uuid, path: workspacePath },
   })
 }
 
 export async function syteWriteFile(uuid: string, path: string, content: string) {
+  let workspacePath: string
+  try {
+    workspacePath = toSyteWorkspacePath(path)
+  } catch (err: any) {
+    return { ok: false as const, status: 400, error: err?.message || "Invalid path", data: undefined }
+  }
   return syteWorkspaceRequest("POST", "write_file", {
-    body: { uuid, path: toSyteWorkspacePath(path), content },
+    body: { uuid, path: workspacePath, content },
   })
 }
 
 export async function syteDeleteFile(uuid: string, path: string) {
+  let workspacePath: string
+  try {
+    workspacePath = toSyteWorkspacePath(path)
+  } catch (err: any) {
+    return { ok: false as const, status: 400, error: err?.message || "Invalid path", data: undefined }
+  }
   return syteWorkspaceRequest("POST", "delete_file", {
-    body: { uuid, path: toSyteWorkspacePath(path) },
+    body: { uuid, path: workspacePath },
   })
 }
 

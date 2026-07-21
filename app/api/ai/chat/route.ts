@@ -23,6 +23,10 @@
 
 import { isConfigured, streamOpenAICompatible } from "@/lib/glovix-gemini"
 import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-deepseek"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import { checkRateLimit } from "@/lib/security/rate-limit"
+import { getClientIP } from "@/lib/get-client-ip"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -34,6 +38,19 @@ function isDeepSeekModel(model: string | undefined): boolean {
 }
 
 export async function POST(req: Request) {
+  const session = await getServerSession(authOptions)
+  const userKey = (session?.user as any)?.id || getClientIP(req) || "anon"
+  const rate = checkRateLimit(`ai-chat:${userKey}`, { limit: 40, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return new Response(JSON.stringify({ error: "Too many AI requests. Please wait and try again." }), {
+      status: 429,
+      headers: {
+        "Content-Type": "application/json",
+        "Retry-After": String(rate.retryAfterSec),
+      },
+    })
+  }
+
   let body: any
   try {
     body = await req.json()

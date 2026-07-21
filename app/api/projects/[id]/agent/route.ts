@@ -7,6 +7,7 @@ import {
   syteAgentSessions,
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -93,12 +94,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: "Unauthorized" }, { status: 401 })
   }
 
+  const rate = checkRateLimit(`agent:${session.user.id}`, { limit: 20, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return Response.json(
+      { message: "Too many agent requests. Please wait and try again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      },
+    )
+  }
+
   const { id: projectId } = await params
-  const body = (await request.json().catch(() => null)) as {
+  let body: {
     message?: unknown
     modelProfile?: unknown
     afterSession?: unknown
-  } | null
+  } | null = null
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ message: "Invalid JSON body" }, { status: 400 })
+  }
   const message = typeof body?.message === "string" ? body.message.trim() : ""
   const requestedProfile = typeof body?.modelProfile === "string" ? body.modelProfile : ""
   const modelProfile = MODEL_PROFILES.has(requestedProfile) ? requestedProfile : "syra-base"

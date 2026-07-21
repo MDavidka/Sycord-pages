@@ -1,5 +1,4 @@
 import GoogleProvider from "next-auth/providers/google"
-import CredentialsProvider from "next-auth/providers/credentials"
 import type { AuthOptions } from "next-auth"
 import { headers } from "next/headers"
 import clientPromise from "./torso"
@@ -56,24 +55,6 @@ export const authOptions: AuthOptions = {
         },
       },
     }),
-    CredentialsProvider({
-      id: "bypass",
-      name: "Bypass",
-      credentials: {
-        email: { label: "Email", type: "text" }
-      },
-      async authorize(credentials) {
-        if (credentials?.email === "dmarton336@gmail.com") {
-          return {
-            id: "admin-bypass-id",
-            name: "Admin User",
-            email: "dmarton336@gmail.com",
-            image: "https://github.com/shadcn.png"
-          }
-        }
-        return null;
-      }
-    })
   ],
   session: {
     strategy: "jwt",
@@ -113,7 +94,19 @@ export const authOptions: AuthOptions = {
 
         // ALWAYS save/update user in Torso on login
         try {
-          const existingUser = await db.collection("users").findOne<{ user?: { join_date?: string }; createdAt?: string; git_conection?: unknown; infromations?: unknown }>({ id: token.id as string });
+          const existingUser = await db.collection("users").findOne<{
+            user?: { join_date?: string }
+            createdAt?: string
+            git_conection?: unknown
+            infromations?: unknown
+            isBlocked?: boolean
+          }>({ id: token.id as string });
+
+          if (existingUser?.isBlocked) {
+            // Reject sign-in for blocked accounts
+            return null as any;
+          }
+
           const now = new Date();
           const joinDate = existingUser?.user?.join_date || existingUser?.createdAt || now.toISOString();
 
@@ -149,10 +142,16 @@ export const authOptions: AuthOptions = {
           // Don't block login — continue with token from OAuth provider
         }
       } else {
-        // Subsequent requests (check session version)
+        // Subsequent requests (check session version + block status)
         if (token.id) {
           try {
-            const dbUser = await db.collection("users").findOne<{ sessionVersion?: number }>({ id: token.id as string });
+            const dbUser = await db.collection("users").findOne<{
+              sessionVersion?: number
+              isBlocked?: boolean
+            }>({ id: token.id as string });
+            if (dbUser?.isBlocked) {
+              return null as any;
+            }
             if (dbUser && dbUser.sessionVersion) {
               if (token.sessionVersion && (token.sessionVersion as number) < dbUser.sessionVersion) {
                 // Token is older than server session version - invalidate

@@ -90,7 +90,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id: projectId } = await params
-  const body = (await request.json().catch(() => null)) as {
+  let body: {
     action?: unknown
     addon?: unknown
     name?: unknown
@@ -98,7 +98,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     args?: unknown
     env?: unknown
     description?: unknown
-  } | null
+  } | null = null
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ message: "Invalid JSON body" }, { status: 400 })
+  }
 
   const action = typeof body?.action === "string" ? body.action.trim().toLowerCase() : ""
   if (!projectId || !action) {

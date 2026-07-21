@@ -19,12 +19,16 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
-const ALLOWED_HOSTS = [".sycord.site", ".sycord.com"]
+const ALLOWED_HOST_SUFFIXES = ["sycord.site", "sycord.com"]
 
 function isAllowedPreviewUrl(raw: string): boolean {
   try {
-    const { hostname } = new URL(raw)
-    return ALLOWED_HOSTS.some((h) => hostname.endsWith(h))
+    const parsed = new URL(raw)
+    if (parsed.protocol !== "https:") return false
+    const hostname = parsed.hostname.toLowerCase()
+    return ALLOWED_HOST_SUFFIXES.some(
+      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
+    )
   } catch {
     return false
   }
@@ -58,6 +62,7 @@ export async function GET(req: Request): Promise<Response> {
         Accept: "text/html,application/xhtml+xml,*/*",
         "User-Agent": "Sycord-Preview-Proxy/1.0",
       },
+      redirect: "manual",
       signal: AbortSignal.timeout(12000),
     })
   } catch (err: any) {
@@ -65,6 +70,14 @@ export async function GET(req: Request): Promise<Response> {
       status: 502,
       headers: { "Content-Type": "text/plain" },
     })
+  }
+
+  // Do not follow redirects blindly (SSRF escape hatch)
+  if (res.status >= 300 && res.status < 400) {
+    const location = res.headers.get("location")
+    if (!location || !isAllowedPreviewUrl(new URL(location, previewUrl).toString())) {
+      return new Response("Redirect target not allowed", { status: 403 })
+    }
   }
 
   // Forward most headers but strip the embedding blockers

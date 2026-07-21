@@ -139,16 +139,52 @@ export function resolveCwd(root: string, cwd?: string): string {
 
 /** Commands that must never run in the sandbox, regardless of who asks. */
 const DANGEROUS_PATTERNS: RegExp[] = [
-  /rm\s+-rf?\s+(\/|~|\$HOME)/i,
+  /rm\s+-rf?\s*[./~\s]/i,
+  /rm\s+-rf?\s+(\/|~|\$HOME|\*)/i,
   /\bmkfs\b/i,
   /\bdd\s+if=/i,
   /:\s*\(\s*\)\s*\{/, // fork bomb
   />\s*\/dev\/(sd|nvme|disk)/i,
   /\bshutdown\b|\breboot\b|\bhalt\b/i,
+  /\bcurl\b.*\|\s*(ba)?sh\b/i,
+  /\bwget\b.*\|\s*(ba)?sh\b/i,
+  /\bchmod\s+[0-7]*[67][0-7]*\s/i,
+  /\bchown\b.*\sroot\b/i,
+  /\bsudo\b/i,
+  /\bnc\s+-e\b|\bncat\s+-e\b/i,
+  /\bpython[0-9.]*\s+-c\b.*socket/i,
+  /\bbase64\s+-d\b.*\|\s*(ba)?sh\b/i,
+  /\/etc\/(passwd|shadow|sudoers)/i,
+  /\.ssh\//i,
 ]
 
+/** First token allowlist for interactive sandbox commands (defense in depth). */
+const ALLOWED_BINARIES = new Set([
+  "npm", "npx", "node", "pnpm", "yarn", "bun",
+  "tsc", "tsx", "vite", "next", "eslint", "prettier",
+  "cat", "ls", "pwd", "echo", "mkdir", "touch", "cp", "mv", "rm",
+  "head", "tail", "grep", "find", "wc", "sort", "uniq", "sed", "awk",
+  "git", "curl", "wget", "which", "env", "printenv", "true", "false",
+  "cd", "test", "[", "[[",
+])
+
 export function isDangerousCommand(command: string): boolean {
-  return DANGEROUS_PATTERNS.some((p) => p.test(command))
+  if (!command || typeof command !== "string") return true
+  if (DANGEROUS_PATTERNS.some((p) => p.test(command))) return true
+
+  // Split on shell operators and validate the leading binary of each segment
+  const segments = command.split(/&&|\|\||;|\n|\|/).map((s) => s.trim()).filter(Boolean)
+  for (const segment of segments) {
+    // Skip leading ENV=value assignments: FOO=1 BAR=2 npm run build
+    const tokens = segment.replace(/^[0-9<>&\s]+/, "").split(/\s+/).filter(Boolean)
+    let idx = 0
+    while (idx < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[idx])) idx++
+    const first = tokens[idx]
+    if (!first) continue
+    const binary = first.replace(/^.*\//, "").toLowerCase()
+    if (!ALLOWED_BINARIES.has(binary)) return true
+  }
+  return false
 }
 
 /**
