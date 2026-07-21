@@ -24,14 +24,55 @@ const ALLOWED_HOST_SUFFIXES = ["sycord.site", "sycord.com"]
 function isAllowedPreviewUrl(raw: string): boolean {
   try {
     const parsed = new URL(raw)
-    if (parsed.protocol !== "https:") return false
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false
     const hostname = parsed.hostname.toLowerCase()
-    return ALLOWED_HOST_SUFFIXES.some(
-      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
-    )
+    // Production Syte hosts
+    if (
+      ALLOWED_HOST_SUFFIXES.some(
+        (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
+      )
+    ) {
+      // Prefer https in production; allow http only for local loopback.
+      if (parsed.protocol === "http:") {
+        return hostname === "localhost" || hostname === "127.0.0.1"
+      }
+      return true
+    }
+    // Local / preview-dev hosts for developer environments
+    if (hostname === "localhost" || hostname === "127.0.0.1") return true
+    return false
   } catch {
     return false
   }
+}
+
+function frameAncestorsForRequest(req: Request): string {
+  const ancestors = new Set<string>(["'self'"])
+  try {
+    const origin = req.headers.get("origin")
+    if (origin) {
+      const parsed = new URL(origin)
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        ancestors.add(origin)
+      }
+    }
+  } catch {
+    // ignore bad Origin
+  }
+  try {
+    const referer = req.headers.get("referer")
+    if (referer) {
+      const parsed = new URL(referer)
+      ancestors.add(parsed.origin)
+    }
+  } catch {
+    // ignore bad Referer
+  }
+  // Always allow the public app hosts so preview works even when Origin is absent
+  ancestors.add("https://sycord.com")
+  ancestors.add("https://www.sycord.com")
+  ancestors.add("https://app.sycord.com")
+  return Array.from(ancestors).join(" ")
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -85,12 +126,15 @@ export async function GET(req: Request): Promise<Response> {
   res.headers.forEach((value, key) => {
     const k = key.toLowerCase()
     if (k === "x-frame-options") return
-    if (k === "content-security-policy") {
-      // Remove frame-ancestors directive only; keep the rest
+    if (k === "content-security-policy" || k === "content-security-policy-report-only") {
+      // Remove frame-ancestors / XFO-equivalent directives; we set our own below.
       const cleaned = value
         .split(";")
         .map((d) => d.trim())
-        .filter((d) => !d.toLowerCase().startsWith("frame-ancestors"))
+        .filter((d) => {
+          const lower = d.toLowerCase()
+          return !lower.startsWith("frame-ancestors") && !lower.startsWith("x-frame-options")
+        })
         .join("; ")
       if (cleaned) outHeaders.set(key, cleaned)
       return
@@ -100,8 +144,12 @@ export async function GET(req: Request): Promise<Response> {
     outHeaders.set(key, value)
   })
 
-  // Allow framing from any origin (we're now the proxy)
-  outHeaders.set("X-Frame-Options", "ALLOWALL")
+  // Omit X-Frame-Options (ALLOWALL is invalid). Allow framing from the app origin.
+  outHeaders.delete("X-Frame-Options")
+  outHeaders.set(
+    "Content-Security-Policy",
+    `frame-ancestors ${frameAncestorsForRequest(req)}`,
+  )
   outHeaders.set("Content-Type", "text/html; charset=utf-8")
 
   const contentType = res.headers.get("content-type") ?? ""

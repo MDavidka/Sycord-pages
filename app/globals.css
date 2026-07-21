@@ -129,12 +129,19 @@
     background-color: #181818;
     color-scheme: dark;
   }
+  html.light {
+    background-color: #f5f5f5;
+    color-scheme: light;
+  }
   body {
     @apply bg-background text-foreground;
     background-color: #181818;
     min-height: 100dvh;
     /* Avoid a white flash / mismatched color when content bounces past edges */
     overscroll-behavior: none;
+  }
+  html.light body {
+    background-color: #f5f5f5;
   }
 }
 
@@ -144,6 +151,9 @@
    color still extends edge-to-edge underneath them. */
 .safe-area-bg {
   background-color: #181818;
+}
+html.light .safe-area-bg {
+  background-color: #f5f5f5;
 }
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);

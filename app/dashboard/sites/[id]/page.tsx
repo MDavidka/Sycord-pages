@@ -110,12 +110,13 @@ function DeploymentSettingsCard({ projectId, project }: { projectId: string; pro
   const initialDomain: string | null = project?.syteDomain ?? null
   const initialUrl: string | null = project?.syteUrl ?? null
   const initialStatus: string | null = project?.deployStatus ?? null
+  const initialConnectError: string | null = project?.syteConnectError ?? null
 
   const [deploying, setDeploying] = useState(false)
   const [pollStatus, setPollStatus] = useState<string | null>(initialStatus)
   const [liveUrl, setLiveUrl] = useState<string | null>(initialUrl)
   const [syteDomain, setSyteDomain] = useState<string | null>(initialDomain)
-  const [deployError, setDeployError] = useState<string | null>(null)
+  const [deployError, setDeployError] = useState<string | null>(initialConnectError)
   const [copied, setCopied] = useState(false)
 
   const copyUuid = async () => {
@@ -185,6 +186,8 @@ function DeploymentSettingsCard({ projectId, project }: { projectId: string; pro
       ? "text-yellow-500"
       : pollStatus === "created"
       ? "text-blue-400"
+      : pollStatus === "failed"
+      ? "text-red-400"
       : "text-muted-foreground"
 
   const statusLabel =
@@ -194,6 +197,8 @@ function DeploymentSettingsCard({ projectId, project }: { projectId: string; pro
       ? "Deploying…"
       : pollStatus === "created"
       ? "Ready to deploy"
+      : pollStatus === "failed"
+      ? "Workspace setup failed"
       : pollStatus ?? "—"
 
   return (
@@ -226,6 +231,10 @@ function DeploymentSettingsCard({ projectId, project }: { projectId: string; pro
                 {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
             </div>
+          ) : pollStatus === "failed" ? (
+            <p className="text-xs text-red-400">
+              Syte workspace setup failed{deployError ? `: ${deployError}` : "."} Retry deploy or recreate the project.
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground italic">
               Workspace is being created — it will appear here shortly.

@@ -221,6 +221,7 @@ export async function POST(request: Request) {
                   "projects.$.syteUrl": url,
                   "projects.$.deployStatus": "created",
                   "projects.$.deploymentMode": "syte",
+                  "projects.$.syteConnectError": null,
                   "projects.$.updatedAt": new Date(),
                 },
               },
@@ -228,9 +229,36 @@ export async function POST(request: Request) {
             console.log(`[Project Creation] Syte workspace created: ${uuid} (${domain})`)
           } else {
             console.warn(`[Project Creation] Syte project_connect failed: ${result.error}`)
+            await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": projectIdStr },
+              {
+                $set: {
+                  "projects.$.deployStatus": "failed",
+                  "projects.$.syteConnectError": result.error || "Syte project_connect failed",
+                  "projects.$.updatedAt": new Date(),
+                },
+              },
+            )
           }
         } catch (err: any) {
           console.error("[Project Creation] Syte project_connect error:", err?.message)
+          try {
+            await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": projectIdStr },
+              {
+                $set: {
+                  "projects.$.deployStatus": "failed",
+                  "projects.$.syteConnectError": err?.message || "Syte project_connect error",
+                  "projects.$.updatedAt": new Date(),
+                },
+              },
+            )
+          } catch (persistErr: any) {
+            console.error(
+              "[Project Creation] Failed to persist Syte connect failure:",
+              persistErr?.message,
+            )
+          }
         }
       })()
     }

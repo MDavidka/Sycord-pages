@@ -94,16 +94,14 @@ function extractConversationText(messages: any[]): string {
 
 // Generate context summary using AI
 async function generateContextSummary(conversationText: string): Promise<string> {
-    const { aiApiKey, aiModel } = useStore.getState();
-    const envKey = process.env.NEXT_PUBLIC_AI_API_KEY;
-    const apiKeyToUse = (envKey && envKey !== 'your_api_key_here') ? envKey : aiApiKey;
+    const { aiModel } = useStore.getState();
     const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
 
+    // Session cookie auth only — never embed API keys in the client bundle.
     const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (apiKeyToUse) fetchHeaders['Authorization'] = `Bearer ${apiKeyToUse}`;
 
     try {
         const response = await fetch('/api/ai/chat', {
