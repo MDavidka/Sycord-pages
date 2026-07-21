@@ -172,6 +172,9 @@ export function isDangerousCommand(command: string): boolean {
   if (!command || typeof command !== "string") return true
   if (DANGEROUS_PATTERNS.some((p) => p.test(command))) return true
 
+  // Block shell command substitution / expansion vectors even for allowlisted binaries.
+  if (/`/.test(command) || /\$\(|\$\{/.test(command)) return true
+
   // Split on shell operators and validate the leading binary of each segment
   const segments = command.split(/&&|\|\||;|\n|\|/).map((s) => s.trim()).filter(Boolean)
   for (const segment of segments) {

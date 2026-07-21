@@ -91,15 +91,24 @@ export async function POST(
     return NextResponse.json({ message: "Already a collaborator" })
   }
 
-  // Create a shared copy of the project for the invitee
+  // Accept: store a lightweight collaborator stub (not a full project clone).
+  // Reads/writes resolve to the owner's live project via getOwnedProject.
   const sharedProject = {
-    ...project,
-    _id: crypto.randomUUID(), // new unique id in invitee's array
+    _id: crypto.randomUUID(),
     isCollaborator: true,
     originalProjectId: invite.projectId,
     originalOwnerUserId: invite.inviterUserId,
     originalOwnerName: invite.inviterName,
     collaboratorSince: new Date(),
+    // Display fields for dashboard list views only
+    businessName: project.businessName,
+    businessDescription: project.businessDescription,
+    subdomain: project.subdomain,
+    status: project.status,
+    profileImage: project.profileImage,
+    style: project.style,
+    createdAt: project.createdAt,
+    updatedAt: new Date(),
   }
 
   await db.collection("users").updateOne(

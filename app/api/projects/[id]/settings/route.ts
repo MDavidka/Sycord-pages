@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { getOwnedProject, getStoredProjectId } from "@/lib/project-id"
 
 
 const isValidHexColor = (color: string): boolean => {
@@ -45,7 +46,19 @@ const sanitizeSettings = (body: any) => {
   return sanitized
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function requireOwnedSettingsProjectId(
+  db: any,
+  userId: string,
+  id: string,
+): Promise<{ settingsProjectId: string } | { error: NextResponse }> {
+  const project = await getOwnedProject(db, userId, id)
+  if (!project) {
+    return { error: NextResponse.json({ message: "Project not found" }, { status: 404 }) }
+  }
+  return { settingsProjectId: String(getStoredProjectId(project)) }
+}
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
@@ -61,26 +74,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   try {
+    const ownership = await requireOwnedSettingsProjectId(db, session.user.id, id)
+    if ("error" in ownership) return ownership.error
+    const { settingsProjectId } = ownership
+
     const settings = await db.collection("webshop_settings").findOne({
-      projectId: id, // Using string ID
+      projectId: settingsProjectId,
     })
 
     if (!settings) {
-       // Check if it was stored as string previously?
-       // The code was using `projectId: id` (string).
-       // I should probably support both for migration or check consistency.
-       // But I will stick to what the original code did: `projectId: id`
-
-       const settingsString = await db.collection("webshop_settings").findOne({
-            projectId: id,
-       })
-
-       if (settingsString) {
-           return NextResponse.json(settingsString);
-       }
-
       return NextResponse.json({
-        projectId: id,
+        projectId: settingsProjectId,
         headerComponent: "simple",
         heroComponent: "basic",
         productComponent: "grid",
@@ -127,17 +131,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 
   try {
-    // Verify project ownership (embedded in user)
-    const user = await db.collection("users").findOne({ id: session.user.id });
-    if (!user || !user.projects) {
-        return NextResponse.json({ message: "Project not found" }, { status: 404 });
-    }
-    const project = user.projects.find((p: any) => p._id.toString() === id);
-
-    if (!project) {
-      console.error("[v0] Project not found for ID:", id)
-      return NextResponse.json({ message: "Project not found" }, { status: 404 })
-    }
+    const ownership = await requireOwnedSettingsProjectId(db, session.user.id, id)
+    if ("error" in ownership) return ownership.error
+    const { settingsProjectId } = ownership
 
     const body = await request.json()
     console.log("[v0] Received settings update body:", body)
@@ -156,11 +152,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const result = await db.collection("webshop_settings").updateOne(
-      { projectId: id }, // Using string ID
+      { projectId: settingsProjectId },
       {
         $set: {
           ...sanitizedSettings,
-          projectId: id,
+          projectId: settingsProjectId,
           updatedAt: new Date(),
         },
       },
@@ -169,7 +165,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     console.log("[v0] Database update result:", result)
 
-    const savedSettings = await db.collection("webshop_settings").findOne({ projectId: id })
+    const savedSettings = await db.collection("webshop_settings").findOne({ projectId: settingsProjectId })
     return NextResponse.json({ success: true, settings: savedSettings, result })
   } catch (error: any) {
     console.error("[v0] Settings update error:", error)

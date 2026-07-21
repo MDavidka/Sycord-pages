@@ -11,7 +11,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
-import { getOwnedProject } from "@/lib/project-id"
+import { getOwnedProject, ownedProjectMutationFilter } from "@/lib/project-id"
 import {
   syteIssueDeployment,
   syteContainerGet,
@@ -76,10 +76,18 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // Update deployStatus to 'deploying' in DB
-    await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
-      { $set: { "projects.$.deployStatus": "deploying", "projects.$.updatedAt": new Date() } },
-    ).catch(() => {})
+    try {
+      await db.collection("users").updateOne(
+        ownedProjectMutationFilter(userId, project),
+        { $set: { "projects.$.deployStatus": "deploying", "projects.$.updatedAt": new Date() } },
+      )
+    } catch (err) {
+      console.error("[sycord] Failed to persist deployStatus=deploying:", err)
+      return NextResponse.json(
+        { ok: false, error: "Deployment started but failed to update project state" },
+        { status: 500 },
+      )
+    }
 
     return NextResponse.json({
       ok: true,
@@ -102,16 +110,24 @@ export async function POST(req: Request): Promise<Response> {
 
     const newDomain = (result.data as any)?.project?.domain ?? domain
     const newUrl = (result.data as any)?.project?.url ?? null
-    await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
-      {
-        $set: {
-          "projects.$.syteDomain": newDomain,
-          "projects.$.syteUrl": newUrl,
-          "projects.$.updatedAt": new Date(),
+    try {
+      await db.collection("users").updateOne(
+        ownedProjectMutationFilter(userId, project),
+        {
+          $set: {
+            "projects.$.syteDomain": newDomain,
+            "projects.$.syteUrl": newUrl,
+            "projects.$.updatedAt": new Date(),
+          },
         },
-      },
-    ).catch(() => {})
+      )
+    } catch (err) {
+      console.error("[sycord] Failed to persist domain update:", err)
+      return NextResponse.json(
+        { ok: false, error: "Domain set on deployer but failed to update project state" },
+        { status: 500 },
+      )
+    }
 
     return NextResponse.json({ ok: true, uuid, domain: newDomain, url: newUrl })
   }
@@ -167,17 +183,21 @@ export async function GET(req: Request): Promise<Response> {
 
   // If now running, persist the live URL and update deploy status
   if (running && liveUrl) {
-    await db.collection("users").updateOne(
-      { id: userId, "projects._id": projectId },
-      {
-        $set: {
-          "projects.$.syteUrl": liveUrl,
-          "projects.$.syteDomain": data?.domain ?? null,
-          "projects.$.deployStatus": "running",
-          "projects.$.updatedAt": new Date(),
+    try {
+      await db.collection("users").updateOne(
+        ownedProjectMutationFilter(userId, project),
+        {
+          $set: {
+            "projects.$.syteUrl": liveUrl,
+            "projects.$.syteDomain": data?.domain ?? null,
+            "projects.$.deployStatus": "running",
+            "projects.$.updatedAt": new Date(),
+          },
         },
-      },
-    ).catch(() => {})
+      )
+    } catch (err) {
+      console.error("[sycord] Failed to persist container running state:", err)
+    }
   }
 
   return NextResponse.json({

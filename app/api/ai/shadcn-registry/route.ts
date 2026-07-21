@@ -4,12 +4,26 @@
 
 import { normalizeComponentName, resolveShadcnComponents } from "@/lib/shadcn-registry-server"
 import { normalizeShadcnImportPaths } from "@/lib/shadcn-shared"
+import { checkRateLimit } from "@/lib/security/rate-limit"
+import { getClientIP } from "@/lib/get-client-ip"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 export async function POST(req: Request): Promise<Response> {
+  const ip = getClientIP(req)
+  const rate = checkRateLimit(`shadcn-registry:${ip}`, { limit: 20, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return Response.json(
+      { error: "Rate limit exceeded" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      },
+    )
+  }
+
   let body: { component?: string; components?: string[] }
   try {
     body = await req.json()

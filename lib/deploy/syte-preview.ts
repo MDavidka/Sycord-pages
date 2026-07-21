@@ -16,7 +16,7 @@ import {
   createSyteWorkspaceForProject,
   requireSyteWorkspaceUuid,
 } from "@/lib/deploy/syte-workspace"
-import { getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
+import { getStoredProjectId, ownedProjectMutationFilter } from "@/lib/project-id"
 import { projectFiles, type WorkspaceFile } from "@/lib/workspace/sandbox"
 
 export type SytePreviewResult = {
@@ -46,7 +46,7 @@ async function persistProjectDomain(
 ) {
   const storedProjectId = getStoredProjectId(project)
   const normalized = normalizeDomain(domain)
-  await db.collection("users").updateOne(ownedProjectUpdateFilter(userId, storedProjectId), {
+  await db.collection("users").updateOne(ownedProjectMutationFilter(userId, project), {
     $set: {
       "projects.$.domain": normalized,
       "projects.$.updatedAt": new Date(),

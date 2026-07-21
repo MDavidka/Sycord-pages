@@ -2,7 +2,7 @@ import {
   getOwnedProject,
   getStoredProjectId,
   normalizeProjectId,
-  ownedProjectUpdateFilter,
+  ownedProjectMutationFilter,
 } from "@/lib/project-id"
 
 export const PROJECT_CHAT_SESSIONS_COLLECTION = "project_chat_sessions"
@@ -135,7 +135,7 @@ export async function saveProjectChatSession(
     const project = await getOwnedProject(db, userId, normalizedProjectId)
     if (project) {
       await db.collection("users").updateOne(
-        ownedProjectUpdateFilter(userId, getStoredProjectId(project)),
+        ownedProjectMutationFilter(userId, project),
         {
           $set: {
             "projects.$.chatSession": {
@@ -168,7 +168,7 @@ export async function deleteProjectChatSession(db: any, userId: string, projectI
     const project = await getOwnedProject(db, userId, normalizedProjectId)
     if (project) {
       await db.collection("users").updateOne(
-        ownedProjectUpdateFilter(userId, getStoredProjectId(project)),
+        ownedProjectMutationFilter(userId, project),
         {
           $set: {
             "projects.$.chatSession": null,

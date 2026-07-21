@@ -122,7 +122,22 @@ const STATIC_DOCS: Record<string, string> = {
   skeleton: `Skeleton — loading placeholder. Never use custom animate-pulse divs. Just <Skeleton className="h-4 w-[250px]" />.`,
 }
 
+import { checkRateLimit } from "@/lib/security/rate-limit"
+import { getClientIP } from "@/lib/get-client-ip"
+
 export async function POST(req: Request) {
+  const ip = getClientIP(req)
+  const rate = checkRateLimit(`shadcn-docs:${ip}`, { limit: 30, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return Response.json(
+      { error: "Rate limit exceeded" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      },
+    )
+  }
+
   let body: any
   try {
     body = await req.json()

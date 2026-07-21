@@ -5,23 +5,36 @@ import clientPromise from "@/lib/torso"
 export async function POST(request: Request, { params }: { params: Promise<{ userId: string }> }) {
   try {
     await requireAdmin()
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
+  try {
     const { userId } = await params
-    const { isPremium } = await request.json()
+    if (!userId) {
+      return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+    }
+
+    let body: { isPremium?: boolean }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
+    const { isPremium } = body
 
     const client = await clientPromise
     const db = client.db()
 
-    // Update all projects for this user (now embedded)
-    // We can use array update with $[] to update all elements in projects array
     await db.collection("users").updateOne(
       { id: userId },
       {
         $set: {
-            "projects.$[].isPremium": !!isPremium,
-            "projects.$[].premiumUpdatedAt": new Date()
-        }
-      }
+          "projects.$[].isPremium": !!isPremium,
+          "projects.$[].premiumUpdatedAt": new Date(),
+        },
+      },
     )
 
     return NextResponse.json({
@@ -30,6 +43,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
     })
   } catch (error) {
     console.error("[v0] Premium update error:", error)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "Failed to update premium status" }, { status: 500 })
   }
 }

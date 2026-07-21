@@ -76,20 +76,42 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null
   }
 
+  /** Allow only safe CSS color tokens (hex, rgb/rgba/hsl/hsla, named, or CSS vars). */
+  const sanitizeCssColor = (value: unknown): string | null => {
+    if (typeof value !== "string") return null
+    const color = value.trim()
+    if (!color || color.length > 120) return null
+    if (/[<>{};]/.test(color)) return null
+    if (
+      /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color) ||
+      /^(rgb|rgba|hsl|hsla)\([^)]+\)$/i.test(color) ||
+      /^var\(--[a-zA-Z0-9_-]+\)$/.test(color) ||
+      /^[a-zA-Z]+$/.test(color)
+    ) {
+      return color
+    }
+    return null
+  }
+
+  const safeChartId = String(id).replace(/[^a-zA-Z0-9_-]/g, "")
+
   return (
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${safeChartId}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color =
+    const raw =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
+    const color = sanitizeCssColor(raw)
+    const safeKey = String(key).replace(/[^a-zA-Z0-9_-]/g, "")
+    return color && safeKey ? `  --color-${safeKey}: ${color};` : null
   })
+  .filter(Boolean)
   .join("\n")}
 }
 `
