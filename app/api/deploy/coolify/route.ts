@@ -176,7 +176,7 @@ export async function POST(request: Request) {
       )
     }
 
-    return NextResponse.json({ success: result.success, ...result })
+    return NextResponse.json({ ...result })
   }
 
   if (!applicationUuid) {

@@ -6,6 +6,11 @@ let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
 let indexesEnsured: Promise<void> | null = null;
 
+declare global {
+  // eslint-disable-next-line no-var
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+}
+
 function missingMongoPromise(): Promise<MongoClient> {
   const error = new Error("Missing MONGO_URI environment variable");
   console.warn(error.message);

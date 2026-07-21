@@ -462,12 +462,21 @@ export async function ensureSyteWorkspace(
     deploy: false,
   })
 
-  if (!created.ok) return created
-  const uuid =
-    (created.data as any)?.uuid ||
+  if (!created.ok) {
+    return {
+      ok: false,
+      status: created.status,
+      data: null,
+      error: created.error,
+      endpoint: created.endpoint,
+    }
+  }
+  const rawUuid =
+    (created.data as { uuid?: string } | null)?.uuid ||
     (typeof created.data === "object" && created.data && "uuid" in created.data
-      ? String((created.data as any).uuid)
-      : projectId)
+      ? String((created.data as { uuid?: unknown }).uuid ?? "")
+      : "")
+  const uuid = rawUuid || projectId
 
   return { ...created, data: { uuid } }
 }
@@ -851,16 +860,6 @@ export type SyteAgentStatusResponse = {
 }
 
 /**
- * Get agent status for a project.
- * GET /sycord/api/agent_status?uuid=
- */
-export async function syteAgentStatus(
-  uuid: string,
-): Promise<SyteResult<SyteAgentStatusResponse>> {
-  return syteSycordRequest<SyteAgentStatusResponse>("GET", "agent_status", { query: { uuid } })
-}
-
-/**
  * Interrupt the current agent turn (cancel in-progress request).
  * Prefer this for the chat Stop button so the runtime stays warm.
  * POST /api/agent_interrupt
@@ -880,39 +879,6 @@ export async function syteAgentStop(
   uuid: string,
 ): Promise<SyteResult<{ ok?: boolean }>> {
   return syteWorkspaceRequest("POST", "agent_stop", { body: { uuid } })
-}
-
-export type SyteAgentPlan = {
-  id?: number | string
-  steps?: Array<string | { title?: string; id?: string; status?: string }>
-  note?: string
-  created_at?: string
-}
-
-/**
- * List persisted plans from update_plan / multi-line thinking.
- * GET /api/agent_plans?uuid=
- */
-export async function syteAgentPlans(
-  uuid: string,
-  options?: { limit?: number },
-): Promise<SyteResult<{ ok?: boolean; plans?: SyteAgentPlan[] }>> {
-  return syteWorkspaceRequest("GET", "agent_plans", {
-    query: { uuid, limit: options?.limit ?? 50 },
-  })
-}
-
-/**
- * List preview screenshots captured by screenshot_preview.
- * GET /api/agent_screenshots?uuid=
- */
-export async function syteAgentScreenshots(
-  uuid: string,
-  options?: { limit?: number },
-): Promise<SyteResult<{ ok?: boolean; screenshots?: Array<Record<string, unknown>> }>> {
-  return syteWorkspaceRequest("GET", "agent_screenshots", {
-    query: { uuid, limit: options?.limit ?? 50 },
-  })
 }
 
 /**

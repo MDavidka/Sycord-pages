@@ -55,7 +55,6 @@ export async function POST(req: Request): Promise<Response> {
   })
 
   return Response.json({
-    ok: result.ok,
     summary: formatCoolifyMcpForAI(result),
     ...result,
   })
