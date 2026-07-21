@@ -20,6 +20,8 @@ import {
   estimateJsonSize,
   utf8ByteLength,
 } from "@/lib/security/payload-limits"
+import { isSyteConfigured, syteDeleteProject } from "@/lib/deploy/syte-client"
+import { getStoredSyteUuid, resolveCanonicalSyteUuid } from "@/lib/deploy/syte-workspace"
 
 /** Fields clients may update via PUT — everything else is rejected (mass-assignment guard). */
 const ALLOWED_PROJECT_UPDATE_KEYS = new Set([
@@ -240,6 +242,33 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     const ownerUserId = getProjectOwnerUserId(project, session.user.id)
     const storedId = getStoredProjectId(project)
+
+    // Free the Syte workspace so deleted projects no longer count against the
+    // remote max-project quota (fixes create failing at 2/3 after a local delete).
+    if (!project.isCollaborator && isSyteConfigured()) {
+      const projectIdStr = String(storedId ?? id)
+      const syteUuid =
+        getStoredSyteUuid(project) || resolveCanonicalSyteUuid(project, projectIdStr)
+      if (syteUuid) {
+        try {
+          const deleted = await syteDeleteProject(syteUuid)
+          if (!deleted.ok) {
+            console.warn(
+              `[Project Delete] Syte delete_project failed for ${syteUuid}:`,
+              deleted.error,
+            )
+          } else {
+            console.log(`[Project Delete] Syte workspace deleted: ${syteUuid}`)
+          }
+        } catch (err: any) {
+          console.warn(
+            `[Project Delete] Syte delete_project error for ${syteUuid}:`,
+            err?.message,
+          )
+        }
+      }
+    }
+
     const result = await db.collection("users").updateOne(
       { id: ownerUserId },
       {
@@ -250,11 +279,36 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     )
 
     if (result.modifiedCount === 0) {
-      const user = await db.collection("users").findOne({ id: ownerUserId })
-      if (!user) {
-        return NextResponse.json({ message: "User not found" }, { status: 404 })
+      // Legacy rows may store _id with a different type — pull by string id too.
+      const retry = await db.collection("users").updateOne(
+        { id: ownerUserId },
+        {
+          $pull: {
+            projects: { _id: String(storedId ?? id) },
+          } as any,
+        },
+      )
+      if (retry.modifiedCount === 0) {
+        const user = await db.collection("users").findOne({ id: ownerUserId })
+        if (!user) {
+          return NextResponse.json({ message: "User not found" }, { status: 404 })
+        }
+        // Last resort: filter the array in memory (handles id / _id mismatches).
+        const projects = Array.isArray((user as any).projects) ? (user as any).projects : []
+        const next = projects.filter(
+          (p: any) =>
+            String(p?._id) !== String(storedId) &&
+            String(p?._id) !== String(id) &&
+            String(p?.id) !== String(id),
+        )
+        if (next.length === projects.length) {
+          return NextResponse.json({ message: "Project not found" }, { status: 404 })
+        }
+        await db.collection("users").updateOne(
+          { id: ownerUserId },
+          { $set: { projects: next } },
+        )
       }
-      return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
     console.log("[v0] Project deleted:", { projectId: id, userId: session.user.id })

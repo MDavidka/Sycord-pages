@@ -138,6 +138,59 @@ function matchesCondition(values: unknown[], expected: unknown): boolean {
   return values.some((value) => deepEqual(value, expected));
 }
 
+/** Resolve Mongo `$expr` operands (`$field`, `$size`, `$ifNull`, comparisons). */
+function resolveExprOperand(doc: AnyDoc, operand: unknown): unknown {
+  if (typeof operand === "string" && operand.startsWith("$") && !operand.startsWith("$$")) {
+    const path = operand.slice(1);
+    if (!path) return doc;
+    const values = getValuesAtPath(doc, path.split("."));
+    return values.length > 0 ? values[0] : undefined;
+  }
+  if (isPlainObject(operand)) {
+    // Operator object
+    const op = operand as AnyDoc;
+    if ("$size" in op || "$ifNull" in op || "$lt" in op || "$lte" in op || "$gt" in op || "$gte" in op || "$eq" in op) {
+      // Recurse with path-aware evaluation
+      if ("$size" in op) {
+        const value = resolveExprOperand(doc, op.$size);
+        return Array.isArray(value) ? value.length : 0;
+      }
+      if ("$ifNull" in op) {
+        const args = op.$ifNull;
+        if (!Array.isArray(args) || args.length < 2) return null;
+        const primary = resolveExprOperand(doc, args[0]);
+        return primary == null ? resolveExprOperand(doc, args[1]) : primary;
+      }
+      if ("$lt" in op) {
+        const args = op.$lt;
+        if (!Array.isArray(args) || args.length < 2) return false;
+        return (resolveExprOperand(doc, args[0]) as number) < (resolveExprOperand(doc, args[1]) as number);
+      }
+      if ("$lte" in op) {
+        const args = op.$lte;
+        if (!Array.isArray(args) || args.length < 2) return false;
+        return (resolveExprOperand(doc, args[0]) as number) <= (resolveExprOperand(doc, args[1]) as number);
+      }
+      if ("$gt" in op) {
+        const args = op.$gt;
+        if (!Array.isArray(args) || args.length < 2) return false;
+        return (resolveExprOperand(doc, args[0]) as number) > (resolveExprOperand(doc, args[1]) as number);
+      }
+      if ("$gte" in op) {
+        const args = op.$gte;
+        if (!Array.isArray(args) || args.length < 2) return false;
+        return (resolveExprOperand(doc, args[0]) as number) >= (resolveExprOperand(doc, args[1]) as number);
+      }
+      if ("$eq" in op) {
+        const args = op.$eq;
+        if (!Array.isArray(args) || args.length < 2) return false;
+        return deepEqual(resolveExprOperand(doc, args[0]), resolveExprOperand(doc, args[1]));
+      }
+    }
+  }
+  return operand;
+}
+
 function matchFilter(doc: AnyDoc, filter: UpdateFilter): boolean {
   for (const [key, expected] of Object.entries(filter)) {
     if (key === "$or" && Array.isArray(expected)) {
@@ -149,6 +202,14 @@ function matchFilter(doc: AnyDoc, filter: UpdateFilter): boolean {
 
     if (key === "$and" && Array.isArray(expected)) {
       if (!(expected as unknown[]).every((part) => isPlainObject(part) && matchFilter(doc, part as UpdateFilter))) {
+        return false;
+      }
+      continue;
+    }
+
+    // Mongo `$expr` — evaluate expression against the document (used by free-tier project caps).
+    if (key === "$expr") {
+      if (resolveExprOperand(doc, expected) !== true) {
         return false;
       }
       continue;

@@ -747,29 +747,23 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
 
     return (
         <Collapsible open={true} onOpenChange={setPhaseOpen}>
-            <section className={cn('agent-feed my-4 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
-                <CollapsibleTrigger asChild>
-                    <button type="button" className={cn('group/phase flex w-full items-start gap-3 rounded-lg px-1 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50', isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]')}>
-                        <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center">
-                            {running ? (
-                                <LoaderCircle className={cn('size-[18px] animate-spin', isDark ? 'text-blue-300' : 'text-blue-600')} />
-                            ) : failed ? (
-                                <CircleAlert className={cn('size-[18px]', isDark ? 'text-red-300' : 'text-red-600')} />
-                            ) : (
-                                <Check className={cn('size-[18px]', isDark ? 'text-emerald-300' : 'text-emerald-600')} />
-                            )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                            <span className={cn('block text-base font-semibold leading-[1.35] tracking-[-0.015em]', isDark ? 'text-white/[0.94]' : 'text-gray-900')}>{phase.title}</span>
-                            <span className={cn('mt-1 block max-w-[65ch] text-sm leading-6', isDark ? 'text-white/[0.66]' : 'text-gray-600')}>{phase.summary}</span>
-                        </span>
-                    </button>
-                </CollapsibleTrigger>
+            <section className={cn('agent-feed my-3 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
+                {/* Compact inline status — no large “Understanding task / accepted” badge */}
+                <div className={cn('flex items-center gap-2 px-1 py-1 text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>
+                    {running ? (
+                        <LoaderCircle className={cn('size-3.5 animate-spin', isDark ? 'text-blue-300' : 'text-blue-600')} />
+                    ) : failed ? (
+                        <CircleAlert className={cn('size-3.5', isDark ? 'text-red-300' : 'text-red-600')} />
+                    ) : (
+                        <Check className={cn('size-3.5', isDark ? 'text-emerald-300' : 'text-emerald-600')} />
+                    )}
+                    <span className={cn('font-medium', isDark ? 'text-white/75' : 'text-gray-700')}>{phase.title}</span>
+                </div>
 
                 <CollapsibleContent>
                     <div
                         data-active={running ? 'true' : 'false'}
-                        className="mt-2 space-y-1 pl-1 sm:pl-2"
+                        className="mt-1 space-y-1 pl-1 sm:pl-2"
                     >
                         {groups.map((group, index) => (
                             <ToolStack key={`${group.kind}-${group.actions[0].id}-${index}`} group={group} isDark={isDark} />

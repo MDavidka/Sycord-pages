@@ -74,8 +74,8 @@ function DashboardContent() {
   useEffect(() => {
     if (status !== "authenticated") return
     Promise.all([
-      fetch("/api/projects").then(r => r.ok ? r.json() : []),
-      fetch("/api/user/status").then(r => r.ok ? r.json() : null),
+      fetch("/api/projects", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
+      fetch("/api/user/status", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
     ]).then(([projectsData, statusData]) => {
       setProjects(projectsData)
       if (statusData) setUserStatus(statusData)
@@ -160,7 +160,8 @@ function DashboardContent() {
   const filtered: any[] = q
     ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
     : projects
-  const canCreateMore = projects.length < MAX_FREE_PROJECTS
+  const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
+  const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
   return (
     <>
@@ -223,7 +224,7 @@ function DashboardContent() {
                 />
               </div>
               <div className="px-3.5 py-2.5 border border-input rounded-xl bg-muted/50 text-sm font-medium whitespace-nowrap tabular-nums">
-                {projects.length}/{MAX_FREE_PROJECTS}
+                {ownedCount}/{MAX_FREE_PROJECTS}
               </div>
             </div>
           </div>
@@ -263,7 +264,7 @@ function DashboardContent() {
                   </div>
                   <h3 className="text-sm font-semibold mb-1">New Project</h3>
                   <p className="text-xs text-muted-foreground max-w-[200px]">Create a new site in a few clicks</p>
-                  <span className="mt-2 text-[11px] text-muted-foreground/60 tabular-nums">{projects.length}/{MAX_FREE_PROJECTS} used</span>
+                  <span className="mt-2 text-[11px] text-muted-foreground/60 tabular-nums">{ownedCount}/{MAX_FREE_PROJECTS} used</span>
                 </button>
               )}
               {filtered.map((project: any) => {
