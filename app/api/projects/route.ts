@@ -61,22 +61,11 @@ export async function POST(request: Request) {
       safeProfileImage = body.profileImage;
   }
 
-  // Fetch user doc to check limits and existing projects
-  const userDoc = await db.collection("users").findOne<{ projects?: any[] }>({ id: session.user.id })
-  const userProjects = userDoc?.projects || []
-
+  // Fetch user doc to check premium status (limit enforced atomically below)
+  const userDoc = await db.collection("users").findOne<{ projects?: any[]; isPremium?: boolean }>({ id: session.user.id })
   // @ts-ignore
-  const isPremium = session.user.isPremium || false
+  const isPremium = session.user.isPremium || userDoc?.isPremium || false
   const MAX_FREE_WEBSITES = 3
-
-  if (!isPremium && userProjects.length >= MAX_FREE_WEBSITES) {
-    return NextResponse.json(
-      {
-        message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
-      },
-      { status: 403 },
-    )
-  }
 
   const webpageId = generateWebpageId()
 
@@ -136,8 +125,16 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Atomic free-tier limit: only push when project count is still under the cap
+    const filter: Record<string, unknown> = { id: session.user.id }
+    if (!isPremium) {
+      filter.$expr = {
+        $lt: [{ $size: { $ifNull: ["$projects", []] } }, MAX_FREE_WEBSITES],
+      }
+    }
+
     const result = await db.collection("users").updateOne(
-      { id: session.user.id },
+      filter,
       {
         $push: {
           projects: newProject
@@ -145,7 +142,20 @@ export async function POST(request: Request) {
       }
     )
 
-    if (!result.upsertedCount && !result.modifiedCount) {
+    if (result.matchedCount === 0) {
+      const exists = await db.collection("users").findOne(
+        { id: session.user.id },
+        { projection: { id: 1 } },
+      )
+      if (exists && !isPremium) {
+        return NextResponse.json(
+          {
+            message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
+          },
+          { status: 403 },
+        )
+      }
+
       // If user doc doesn't exist, create it first with the project
       const userResult = await db.collection("users").updateOne(
         { id: session.user.id },
@@ -163,7 +173,19 @@ export async function POST(request: Request) {
         { upsert: true }
       )
       if (!userResult.upsertedCount && !userResult.modifiedCount) {
-        throw new Error("Failed to create project: could not update user document")
+        // Race: another request created the user; retry with the size guard
+        const retry = await db.collection("users").updateOne(
+          filter,
+          { $push: { projects: newProject } as any },
+        )
+        if (retry.matchedCount === 0) {
+          return NextResponse.json(
+            {
+              message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
+            },
+            { status: 403 },
+          )
+        }
       }
     }
 

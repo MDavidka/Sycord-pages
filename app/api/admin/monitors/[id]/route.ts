@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/torso"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-
+import { isAdmin } from "@/lib/is-admin"
 
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions)
-  if (!session || session.user?.email !== "dmarton336@gmail.com") {
+  if (!(await isAdmin())) {
     return new NextResponse("Unauthorized", { status: 401 })
   }
 

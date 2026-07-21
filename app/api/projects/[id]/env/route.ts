@@ -36,10 +36,11 @@ export async function GET(
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
 
-    // Return env vars with masked values
+    // Return env vars with fully masked values (no plaintext prefix leak)
     const envVars = (project.envVars || []).map((v: any) => ({
       key: v.key,
-      value: v.value ? `${v.value.substring(0, 4)}${"*".repeat(Math.max(0, v.value.length - 4))}` : "",
+      value: v.value ? "••••••••" : "",
+      hasValue: Boolean(v.value),
       integration: v.integration || null,
     }))
 

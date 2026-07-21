@@ -14,7 +14,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   if (unauthorized) return unauthorized
 
   const { projectId } = await params
-  const body = await request.json().catch(() => ({}))
+  let body: any
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 })
+  }
   const action = typeof body.action === "string" ? body.action : ""
   const pathFactory = ACTION_PATHS[action]
   if (!pathFactory) {

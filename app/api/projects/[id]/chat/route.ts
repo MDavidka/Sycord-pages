@@ -9,6 +9,7 @@ import {
   saveProjectChatSession,
   toChatSessionSummary,
 } from "@/lib/project-chat-session"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -58,13 +59,26 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
+  const rate = checkRateLimit(`chat:${session.user.id}`, { limit: 60, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { message: "Too many chat requests. Please wait and try again." },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } },
+    )
+  }
+
   try {
     const { id } = await params
     if (!id) {
       return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
     }
 
-    const body = await request.json()
+    let body: any
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 })
+    }
     const { messages, title, model } = body ?? {}
 
     if (messages !== undefined && !Array.isArray(messages)) {

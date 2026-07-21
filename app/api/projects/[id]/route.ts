@@ -2,7 +2,18 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { redactProjectForClient } from "@/lib/security/redact-project"
 
+/** Fields clients may update via PUT — everything else is rejected (mass-assignment guard). */
+const ALLOWED_PROJECT_UPDATE_KEYS = new Set([
+  "businessName",
+  "businessDescription",
+  "style",
+  "profileImage",
+  "subdomain",
+  "pages",
+  "status",
+])
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -51,7 +62,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       })
     }
 
-    return NextResponse.json(project, {
+    return NextResponse.json(redactProjectForClient(project), {
       headers: {
         ETag: etag,
         "Cache-Control": "private, max-age=15, stale-while-revalidate=60",
@@ -72,21 +83,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const client = await clientPromise
   const db = client.db()
-  const body = await request.json()
+
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 })
+  }
 
   if (!id) {
     return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })
   }
 
-  // Construct update object for specific fields in the array element
-  // keys in body need to be mapped to "projects.$.key"
-  const updateFields: any = {};
-  for (const key in body) {
-      if (key !== '_id' && key !== 'userId') {
-          updateFields[`projects.$.${key}`] = body[key];
-      }
+  const updateFields: Record<string, unknown> = {}
+  for (const key of Object.keys(body)) {
+    if (!ALLOWED_PROJECT_UPDATE_KEYS.has(key)) continue
+    updateFields[`projects.$.${key}`] = body[key]
   }
-  updateFields[`projects.$.updatedAt`] = new Date();
+
+  if (Object.keys(updateFields).length === 0) {
+    return NextResponse.json({ message: "No updatable fields provided" }, { status: 400 })
+  }
+
+  updateFields[`projects.$.updatedAt`] = new Date()
 
   const result = await db.collection("users").updateOne(
     {
