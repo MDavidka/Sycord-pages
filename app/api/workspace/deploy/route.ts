@@ -26,7 +26,7 @@ import {
   useSyteWorkspace,
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
-import { getOwnedProject, getStoredProjectId, ownedProjectUpdateFilter } from "@/lib/project-id"
+import { getOwnedProject, getStoredProjectId, ownedProjectMutationFilter } from "@/lib/project-id"
 import { isValidProjectId, projectFiles, validateNextBuildable } from "@/lib/workspace/sandbox"
 
 export const runtime = "nodejs"
@@ -179,7 +179,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!hasDockerfile) {
     const dockerfile = generateDockerfile("vite", "20", "3000")
     await db.collection("users").updateOne(
-      ownedProjectUpdateFilter(userId, storedProjectId),
+      ownedProjectMutationFilter(userId, project),
       {
         $push: {
           "projects.$.pages": {
@@ -270,7 +270,7 @@ export async function POST(req: Request): Promise<Response> {
       `https://${deployAppName}.${domain}`
 
     await db.collection("users").updateOne(
-      ownedProjectUpdateFilter(userId, storedProjectId),
+      ownedProjectMutationFilter(userId, project),
       {
         $set: {
           "projects.$.deploymentMode": "syte",

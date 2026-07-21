@@ -4,8 +4,9 @@ import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import {
   getOwnedProject,
+  getProjectOwnerUserId,
   getStoredProjectId,
-  ownedProjectUpdateFilter,
+  ownedProjectMutationFilter,
 } from "@/lib/project-id"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -84,9 +85,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // We need to upsert the page in the `projects.$.pages` array.
     // However, updating an element in an array of objects based on a sub-field is tricky with native Mongo operators if we want to "add or update".
     // 1. Try to update existing page
+    const ownerUserId = getProjectOwnerUserId(project, session.user.id)
     const updateResult = await db.collection("users").updateOne(
         {
-            id: session.user.id,
+            id: ownerUserId,
             "projects": {
                 $elemMatch: {
                     _id: storedProjectId,
@@ -112,7 +114,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (updateResult.matchedCount === 0) {
         // Page did not exist, push it
         await db.collection("users").updateOne(
-            ownedProjectUpdateFilter(session.user.id, storedProjectId),
+            ownedProjectMutationFilter(session.user.id, project),
             {
                 $push: {
                     "projects.$.pages": {
@@ -163,7 +165,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (deleteAll) {
         // Clear all pages for the project
         const result = await db.collection("users").updateOne(
-            ownedProjectUpdateFilter(session.user.id, storedProjectId),
+            ownedProjectMutationFilter(session.user.id, project),
             {
                 $set: {
                     "projects.$.pages": []
@@ -183,7 +185,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         }
 
         const result = await db.collection("users").updateOne(
-            ownedProjectUpdateFilter(session.user.id, storedProjectId),
+            ownedProjectMutationFilter(session.user.id, project),
             {
                 $pull: {
                     "projects.$.pages": { name: pageName }

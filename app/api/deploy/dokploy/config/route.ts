@@ -13,6 +13,8 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
+import { getOwnedProject, ownedProjectMutationFilter } from "@/lib/project-id"
+import { application, environment } from "@/lib/deploy/dokploy-client"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,16 +51,66 @@ export async function POST(request: Request) {
     )
   }
 
+  const client = await clientPromise
+  const db = client.db()
+
+  const project = await getOwnedProject(db, userId, projectId)
+  if (!project) {
+    return NextResponse.json({ success: false, error: "Project not found" }, { status: 404 })
+  }
+
+  // Collaborators must not rebind Dokploy resources on the owner's project.
+  if (project.isCollaborator) {
+    return NextResponse.json(
+      { success: false, error: "Only the project owner can update Dokploy config" },
+      { status: 403 },
+    )
+  }
+
+  // Validate Dokploy resource IDs exist and are not already bound to another tenant.
+  if (environmentId) {
+    const envResult = await environment.one(String(environmentId))
+    if (!envResult.ok) {
+      return NextResponse.json(
+        { success: false, error: `Invalid Dokploy environmentId: ${envResult.error || "not found"}` },
+        { status: 400 },
+      )
+    }
+  }
+
+  if (applicationId) {
+    const appResult = await application.one(String(applicationId))
+    if (!appResult.ok) {
+      return NextResponse.json(
+        { success: false, error: `Invalid Dokploy applicationId: ${appResult.error || "not found"}` },
+        { status: 400 },
+      )
+    }
+
+    // Prevent hijacking another tenant's already-bound application.
+    const claimedByOther = await db.collection("users").findOne(
+      {
+        id: { $ne: userId },
+        "projects.dokployApplicationId": String(applicationId),
+      },
+      { projection: { id: 1 } },
+    )
+    if (claimedByOther) {
+      return NextResponse.json(
+        { success: false, error: "Dokploy applicationId is already bound to another project" },
+        { status: 403 },
+      )
+    }
+  }
+
   const set: Record<string, unknown> = {}
   if (environmentId) set["projects.$.dokployEnvironmentId"] = environmentId
   if (applicationId) set["projects.$.dokployApplicationId"] = applicationId
   if (appName) set["projects.$.dokployAppName"] = appName
 
-  const client = await clientPromise
-  const db = client.db()
   const result = await db
     .collection("users")
-    .updateOne({ id: userId, "projects._id": projectId }, { $set: set })
+    .updateOne(ownedProjectMutationFilter(userId, project), { $set: set })
 
   if (result.matchedCount === 0) {
     return NextResponse.json({ success: false, error: "Project not found" }, { status: 404 })

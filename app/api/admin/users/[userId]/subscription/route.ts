@@ -5,11 +5,26 @@ import clientPromise from "@/lib/torso"
 export async function POST(request: Request, { params }: { params: Promise<{ userId: string }> }) {
   try {
     await requireAdmin()
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
+  try {
     const { userId } = await params
-    const { subscription } = await request.json()
+    if (!userId) {
+      return NextResponse.json({ error: "Missing userId" }, { status: 400 })
+    }
 
-    if (!["Free", "Sycord+", "Sycord Enterprise"].includes(subscription)) {
+    let body: { subscription?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
+
+    const { subscription } = body
+
+    if (!["Free", "Sycord+", "Sycord Enterprise"].includes(subscription || "")) {
       return NextResponse.json({ error: "Invalid subscription tier" }, { status: 400 })
     }
 
@@ -24,21 +39,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
         $set: {
           subscription: subscription,
           isPremium: isPremium,
-          subscriptionUpdatedAt: new Date()
-        }
-      }
+          subscriptionUpdatedAt: new Date(),
+        },
+      },
     )
 
-    // Also update embedded projects
     if (isPremium) {
       await db.collection("users").updateOne(
         { id: userId },
         {
           $set: {
             "projects.$[].isPremium": isPremium,
-            "projects.$[].premiumUpdatedAt": new Date()
-          }
-        }
+            "projects.$[].premiumUpdatedAt": new Date(),
+          },
+        },
       )
     }
 
@@ -48,6 +62,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
     })
   } catch (error) {
     console.error("[v0] Subscription update error:", error)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return NextResponse.json({ error: "Failed to update subscription" }, { status: 500 })
   }
 }

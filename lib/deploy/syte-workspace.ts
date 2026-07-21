@@ -9,7 +9,7 @@
 import {
   getStoredProjectId,
   getOwnedProject,
-  ownedProjectUpdateFilter,
+  ownedProjectMutationFilter,
 } from "@/lib/project-id"
 import { toDeployAppName } from "@/lib/deploy/coolify-client"
 import {
@@ -162,8 +162,7 @@ export async function createSyteWorkspaceForProject(
   const existingUuid = await findExistingSyteUuid(project, projectId)
   if (existingUuid) {
     if (getStoredSyteUuid(project) !== existingUuid) {
-      const storedProjectId = getStoredProjectId(project)
-      await db.collection("users").updateOne(ownedProjectUpdateFilter(userId, storedProjectId), {
+      await db.collection("users").updateOne(ownedProjectMutationFilter(userId, project), {
         $set: {
           "projects.$.syteWorkspaceUuid": existingUuid,
           "projects.$.deploymentMode": "syte",
@@ -203,7 +202,6 @@ export async function createSyteWorkspaceForProject(
     }
   }
 
-  const storedProjectId = getStoredProjectId(project)
   const $set: Record<string, unknown> = {
     "projects.$.syteWorkspaceUuid": parsed.uuid,
     "projects.$.deploymentMode": "syte",
@@ -213,7 +211,7 @@ export async function createSyteWorkspaceForProject(
     $set["projects.$.domain"] = payload.domain
   }
   await db.collection("users").updateOne(
-    ownedProjectUpdateFilter(userId, storedProjectId),
+    ownedProjectMutationFilter(userId, project),
     { $set },
   )
 

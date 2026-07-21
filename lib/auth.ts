@@ -15,10 +15,13 @@ if (!process.env.AUTH_SECRET) {
 }
 
 const NEXTAUTH_URL = process.env.NEXTAUTH_URL || "http://localhost:3000"
+if (!process.env.NEXTAUTH_URL) {
+  process.env.NEXTAUTH_URL = NEXTAUTH_URL
+}
 
-const getRequestIP = () => {
+const getRequestIP = async () => {
   try {
-    const requestHeaders = headers()
+    const requestHeaders = await headers()
     const forwarded = requestHeaders.get("x-forwarded-for")
     if (forwarded) {
       return forwarded.split(",")[0].trim()
@@ -41,7 +44,6 @@ const getCookieDomain = () => {
 }
 
 export const authOptions: AuthOptions = {
-  url: NEXTAUTH_URL,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
@@ -121,7 +123,7 @@ export const authOptions: AuthOptions = {
               name: token.name,
               email: token.email,
               join_date: joinDate,
-              ip: getRequestIP(),
+              ip: await getRequestIP(),
             },
             git_conection: existingUser?.git_conection || {},
             infromations: existingUser?.infromations || {},
@@ -218,9 +220,6 @@ export const authOptions: AuthOptions = {
       } catch (error) {
         console.error("[v0-EVENT] signOut ERROR:", error)
       }
-    },
-    async error(message) {
-      console.error("[v0-EVENT] ERROR:", message)
     },
   },
 }

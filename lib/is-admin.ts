@@ -7,9 +7,9 @@ function loadAdminEmails(): string[] {
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
 
-  // Always allow the primary admin; ADMIN_EMAILS can add more.
-  const defaults = ["dmarton336@gmail.com", "admin@sycord.com"]
-  return Array.from(new Set([...defaults, ...fromEnv]))
+  // Admin allowlist comes only from ADMIN_EMAILS (comma-separated).
+  // No hardcoded emails — misconfiguration fails closed (no admins).
+  return Array.from(new Set(fromEnv))
 }
 
 export function isAdminEmail(email: string | null | undefined): boolean {

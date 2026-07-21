@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   serverExternalPackages: ['ssh2', 'node-ssh'],
   async rewrites() {
@@ -17,6 +17,20 @@ const nextConfig = {
     // Validate that each value is a plain hostname (no protocol, path, or query chars)
     const hostnameRe = /^[a-zA-Z0-9._-]+$/
     if (!projectDomain || !hostnameRe.test(projectDomain)) return []
+
+    // SSRF guard: only allow official Firebase Hosting origins. Rejects evil.com
+    // and suffix tricks like firebaseapp.com.evil.com.
+    if (
+      !projectDomain.endsWith(".firebaseapp.com") ||
+      projectDomain === "firebaseapp.com" ||
+      projectDomain.includes("..")
+    ) {
+      console.warn(
+        "[next.config] NEXT_PUBLIC_FIREBASE_PROJECT_DOMAIN must be a *.firebaseapp.com hostname " +
+          `(got "${projectDomain}"). Firebase auth proxy disabled.`
+      )
+      return []
+    }
 
     // Guard: refuse to create a self-referential proxy that would cause an
     // infinite loop (e.g. authDomain === projectDomain === "sycord.com").

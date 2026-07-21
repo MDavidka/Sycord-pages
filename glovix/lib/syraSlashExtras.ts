@@ -98,63 +98,63 @@ function isMcpConnected(addon: {
 
 export function normalizeSkills(raw: unknown): SyraSlashSkill[] {
   if (!Array.isArray(raw)) return []
-  return raw
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null
-      const obj = item as Record<string, unknown>
-      const id = typeof obj.id === 'string' ? obj.id : ''
-      if (!id) return null
-      const name =
-        (typeof obj.name === 'string' && obj.name.trim()) ||
-        humanizeId(id)
-      const description =
-        typeof obj.description === 'string'
-          ? obj.description
-          : typeof obj.content === 'string'
-            ? obj.content.slice(0, 120)
-            : undefined
-      return {
-        id,
-        name,
-        description,
-        active: obj.active === true,
-        builtin: obj.builtin === true,
-        custom: obj.custom === true,
-      } satisfies SyraSlashSkill
+  const skills: SyraSlashSkill[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const obj = item as Record<string, unknown>
+    const id = typeof obj.id === 'string' ? obj.id : ''
+    if (!id) continue
+    const name =
+      (typeof obj.name === 'string' && obj.name.trim()) ||
+      humanizeId(id)
+    const description =
+      typeof obj.description === 'string'
+        ? obj.description
+        : typeof obj.content === 'string'
+          ? obj.content.slice(0, 120)
+          : undefined
+    skills.push({
+      id,
+      name,
+      description,
+      active: obj.active === true,
+      builtin: obj.builtin === true,
+      custom: obj.custom === true,
     })
-    .filter((s): s is SyraSlashSkill => Boolean(s))
+  }
+  return skills
 }
 
 export function normalizeMcpAddons(raw: unknown): SyraSlashMcpAddon[] {
   if (!Array.isArray(raw)) return []
-  return raw
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null
-      const obj = item as Record<string, unknown>
-      const id =
-        (typeof obj.id === 'string' && obj.id) ||
-        (typeof obj.name === 'string' && obj.name) ||
-        ''
-      if (!id) return null
-      const name =
-        (typeof obj.name === 'string' && obj.name.trim()) ||
-        humanizeId(id)
-      const tools = Array.isArray(obj.tools) ? obj.tools : []
-      return {
-        id,
-        name,
-        description: typeof obj.description === 'string' ? obj.description : undefined,
-        connected: isMcpConnected({
-          status: typeof obj.status === 'string' ? obj.status : undefined,
-          connected: typeof obj.connected === 'boolean' ? obj.connected : undefined,
-          enabled: typeof obj.enabled === 'boolean' ? obj.enabled : undefined,
-        }),
-        builtin: obj.builtin === true,
+  const addons: SyraSlashMcpAddon[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const obj = item as Record<string, unknown>
+    const id =
+      (typeof obj.id === 'string' && obj.id) ||
+      (typeof obj.name === 'string' && obj.name) ||
+      ''
+    if (!id) continue
+    const name =
+      (typeof obj.name === 'string' && obj.name.trim()) ||
+      humanizeId(id)
+    const tools = Array.isArray(obj.tools) ? obj.tools : []
+    addons.push({
+      id,
+      name,
+      description: typeof obj.description === 'string' ? obj.description : undefined,
+      connected: isMcpConnected({
         status: typeof obj.status === 'string' ? obj.status : undefined,
-        toolsCount: tools.length,
-      } satisfies SyraSlashMcpAddon
+        connected: typeof obj.connected === 'boolean' ? obj.connected : undefined,
+        enabled: typeof obj.enabled === 'boolean' ? obj.enabled : undefined,
+      }),
+      builtin: obj.builtin === true,
+      status: typeof obj.status === 'string' ? obj.status : undefined,
+      toolsCount: tools.length,
     })
-    .filter((a): a is SyraSlashMcpAddon => Boolean(a))
+  }
+  return addons
 }
 
 /** Prefer addon name for connect/disconnect body when id is namespaced (`uuid:name`). */

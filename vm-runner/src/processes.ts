@@ -37,8 +37,8 @@ export async function runCommand(
   return { code, stdout, stderr }
 }
 
-async function loadEnvFile(envFile: string): Promise<NodeJS.ProcessEnv> {
-  const env: NodeJS.ProcessEnv = {}
+async function loadEnvFile(envFile: string): Promise<Record<string, string>> {
+  const env: Record<string, string> = {}
   try {
     const content = await readFile(envFile, "utf8")
     const lines = content.split("\n").filter(Boolean)
@@ -70,12 +70,15 @@ export async function pm2Describe(processName: string) {
 export async function startOrRestartProcess(projectId: string, processName: string, port: number, cwd: string, envFile: string) {
   const envFileVars = await loadEnvFile(envFile)
   const existing = await pm2Describe(processName)
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     PORT: String(port),
     HOSTNAME: "0.0.0.0",
-    NODE_ENV: "production",
     ENV_FILE: envFile,
     ...envFileVars,
+    NODE_ENV:
+      envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test"
+        ? envFileVars.NODE_ENV
+        : "production",
   }
 
   if (existing) {
