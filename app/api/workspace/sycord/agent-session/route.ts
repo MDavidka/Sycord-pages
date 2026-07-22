@@ -42,7 +42,19 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: "Missing 'sessionId'" }, { status: 400 })
   }
 
-  const result = await syteAgentSession(sessionId, { sinceId })
+  // Overlap Syte fetch with Mongo ownership check — every poll used to wait
+  // for them sequentially, adding ~50–200ms of dead time per cycle.
+  const clientPromiseResolved = clientPromise.then((client) => client.db())
+
+  const ownershipPromise = projectId
+    ? clientPromiseResolved.then((db) => getOwnedProject(db, userId, projectId))
+    : Promise.resolve(null)
+
+  const [result, ownedProject] = await Promise.all([
+    syteAgentSession(sessionId, { sinceId }),
+    ownershipPromise,
+  ])
+
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, error: result.error },
@@ -53,21 +65,17 @@ export async function GET(req: Request): Promise<Response> {
   const data = result.data
   const remoteProjectId = data?.project_id
 
-  // Prove ownership: match projectId query, or look up by remote project_id UUID.
-  const client = await clientPromise
-  const db = client.db()
-
   if (projectId) {
-    const project = await getOwnedProject(db, userId, projectId)
-    if (!project) {
+    if (!ownedProject) {
       return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
     }
-    const uuid = getStoredSyteUuid(project)
+    const uuid = getStoredSyteUuid(ownedProject)
     if (remoteProjectId && uuid && remoteProjectId !== uuid) {
       return NextResponse.json({ ok: false, error: "Session does not belong to this project" }, { status: 403 })
     }
   } else if (remoteProjectId) {
     // Find a user-owned project whose stored Syte UUID matches project_id.
+    const db = await clientPromiseResolved
     const user = await db.collection("users").findOne(
       { id: userId },
       { projection: { projects: 1 } },

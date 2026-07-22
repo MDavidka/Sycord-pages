@@ -12,7 +12,7 @@ import {
     type ProjectAgentEvent,
 } from '../lib/project-agent';
 import { mountFiles } from '../lib/webcontainer';
-import { executeTool, ToolContext } from '../lib/tools';
+import { executeTool, isParallelSafeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
 import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
 import { generateAndSaveTitle } from '../lib/titleGenerator';
@@ -1811,108 +1811,132 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 console.log(`[Chat] Running ${toolCalls.length} tool(s)...`);
                 let devServerStarted = false;
 
-                for (let i = 0; i < toolCalls.length; i++) {
-                    const toolCall = toolCalls[i];
+                // Run consecutive read-only tools in parallel; keep mutating tools
+                // sequential so create/edit/command ordering stays correct.
+                const toolBatches: ToolCall[][] = [];
+                for (const toolCall of toolCalls) {
+                    const canParallel = isParallelSafeTool(toolCall.function.name);
+                    const last = toolBatches[toolBatches.length - 1];
+                    if (
+                        canParallel &&
+                        last &&
+                        last.length > 0 &&
+                        isParallelSafeTool(last[0].function.name)
+                    ) {
+                        last.push(toolCall);
+                    } else {
+                        toolBatches.push([toolCall]);
+                    }
+                }
+
+                for (const batch of toolBatches) {
                     if (abortControllerRef.current?.signal.aborted) break;
 
-                    // Ensure action exists for this tool call
-                    if (!toolIdToActionId.has(toolCall.id)) {
-                        const displayName = getActionDisplayName(toolCall.function.name, toolCall.function.arguments || '');
-                        const id = addAction(toolCall.function.name, displayName);
-                        toolIdToActionId.set(toolCall.id, id);
-                    }
-
-                    // Get action ID by tool call ID (reliable mapping)
-                    const actionId = toolIdToActionId.get(toolCall.id);
-
-                    // Set THIS action to 'running' and yield so React paints it
-                    if (actionId) {
-                        updateAction(actionId, { status: 'running' });
+                    for (const toolCall of batch) {
+                        if (!toolIdToActionId.has(toolCall.id)) {
+                            const displayName = getActionDisplayName(toolCall.function.name, toolCall.function.arguments || '');
+                            const id = addAction(toolCall.function.name, displayName);
+                            toolIdToActionId.set(toolCall.id, id);
+                        }
+                        const actionId = toolIdToActionId.get(toolCall.id);
+                        if (actionId) {
+                            updateAction(actionId, { status: 'running' });
+                        }
                     }
                     await new Promise(r => requestAnimationFrame(r));
 
-                    // Check for duplicate file creation (loop detection)
-                    if (toolCall.function.name === 'createFile') {
+                    const runOne = async (toolCall: ToolCall): Promise<{ toolCall: ToolCall; result: string }> => {
+                        if (toolCall.function.name === 'createFile') {
+                            try {
+                                const args = JSON.parse(toolCall.function.arguments || '{}');
+                                if (args.path && filesCreatedThisSession.has(args.path)) {
+                                    sameFileCreatedCount++;
+                                    console.log(`[Chat] Warning: ${args.path} already created this session (count: ${sameFileCreatedCount})`);
+                                    if (sameFileCreatedCount >= 5) {
+                                        console.log('[Chat] Loop detected - same file created multiple times, breaking');
+                                        devServerStarted = true;
+                                    }
+                                }
+                                if (args.path) filesCreatedThisSession.add(args.path);
+                            } catch { /* ignore parse errors */ }
+                        }
+
+                        let result = '';
                         try {
-                            const args = JSON.parse(toolCall.function.arguments || '{}');
-                            if (args.path && filesCreatedThisSession.has(args.path)) {
-                                sameFileCreatedCount++;
-                                console.log(`[Chat] Warning: ${args.path} already created this session (count: ${sameFileCreatedCount})`);
-                                if (sameFileCreatedCount >= 5) {
-                                    console.log('[Chat] Loop detected - same file created multiple times, breaking');
-                                    devServerStarted = true;
-                                    break;
-                                }
+                            if (toolCall.function.name === 'deploy') {
+                                const actionId = toolIdToActionId.get(toolCall.id);
+                                toolContext.onDeployProgress = (message: string) => {
+                                    if (actionId) {
+                                        updateAction(actionId, { result: message, status: 'running' });
+                                    }
+                                };
+                            } else {
+                                toolContext.onDeployProgress = undefined;
                             }
-                            filesCreatedThisSession.add(args.path);
-                        } catch { }
-                    }
-
-                    let result = '';
-                    try {
-                        if (toolCall.function.name === 'deploy') {
-                            toolContext.onDeployProgress = (message: string) => {
-                                if (actionId) {
-                                    updateAction(actionId, { result: message, status: 'running' });
-                                }
-                            };
-                        } else {
-                            toolContext.onDeployProgress = undefined;
+                            result = await handleToolCall(toolCall, {
+                                reason: assistantMessageContent.trim(),
+                                turnIndex: turns,
+                            });
+                        } catch (err: any) {
+                            console.error('Tool execution error:', err);
+                            result = `Error executing tool ${toolCall.function.name}: ${err.message}.\n\n⚠️ Suggestion: Try a different approach or use readFile to check the current state.`;
                         }
-                        result = await handleToolCall(toolCall, {
-                            reason: assistantMessageContent.trim(),
-                            turnIndex: turns,
-                        });
-                    } catch (err: any) {
-                        console.error('Tool execution error:', err);
-                        result = `Error executing tool ${toolCall.function.name}: ${err.message}.\n\n⚠️ Suggestion: Try a different approach or use readFile to check the current state.`;
-                    }
-
-                    // Update action status to done or error
-                    if (actionId) {
-                        // Only mark as error if it's a real tool failure, not informational output
-                        const isToolError = (
-                            result.startsWith('Error ') ||
-                            result.startsWith('[SYSTEM] ❌') ||
-                            result.includes('AUTO-FIX REQUIRED') ||
-                            (result.includes('crashed') && !result.includes('Deployment build completed')) ||
-                            (result.includes('FAILED') && !result.includes('[SYSTEM] ✅'))
-                        ) && !result.includes('[SYSTEM] ✅') && !result.includes('TypeScript check found');
-
-                        const newStatus = isToolError ? 'error' : 'done';
-                        console.log(`[Actions] ${toolCall.function.name} (${actionId}) → ${newStatus}`);
-                        updateAction(actionId, {
-                            status: newStatus,
-                            result,
-                            args: toolCall.function.arguments || ''
-                        });
-
-                        // Track consecutive errors for loop detection
-                        if (isToolError) {
-                            consecutiveErrorCount++;
-                            if (toolCall.function.name === 'editFile') {
-                                editFileFailCount++;
-                            }
-                        } else {
-                            consecutiveErrorCount = 0; // Reset on success
-                        }
-                    } else {
-                        console.warn(`[Actions] No actionId found for toolCall ${toolCall.id}`);
-                    }
-
-                    const toolMessage: Message = {
-                        role: 'tool',
-                        tool_call_id: toolCall.id,
-                        name: toolCall.function.name,
-                        content: result
+                        return { toolCall, result };
                     };
 
-                    addMessage(toolMessage);
-                    currentMessages.push(toolMessage);
+                    const settled = batch.length > 1
+                        ? await Promise.all(batch.map(runOne))
+                        : [await runOne(batch[0])];
 
-                    // Check if dev server was started
-                    if (result.includes('DEV SERVER IS NOW RUNNING')) {
-                        devServerStarted = true;
+                    for (const { toolCall, result } of settled) {
+                        const actionId = toolIdToActionId.get(toolCall.id);
+
+                        if (actionId) {
+                            const isToolError = (
+                                result.startsWith('Error ') ||
+                                result.startsWith('[SYSTEM] ❌') ||
+                                result.includes('AUTO-FIX REQUIRED') ||
+                                (result.includes('crashed') && !result.includes('Deployment build completed')) ||
+                                (result.includes('FAILED') && !result.includes('[SYSTEM] ✅'))
+                            ) && !result.includes('[SYSTEM] ✅') && !result.includes('TypeScript check found');
+
+                            const newStatus = isToolError ? 'error' : 'done';
+                            console.log(`[Actions] ${toolCall.function.name} (${actionId}) → ${newStatus}`);
+                            updateAction(actionId, {
+                                status: newStatus,
+                                result,
+                                args: toolCall.function.arguments || ''
+                            });
+
+                            if (isToolError) {
+                                consecutiveErrorCount++;
+                                if (toolCall.function.name === 'editFile') {
+                                    editFileFailCount++;
+                                }
+                            } else {
+                                consecutiveErrorCount = 0;
+                            }
+                        } else {
+                            console.warn(`[Actions] No actionId found for toolCall ${toolCall.id}`);
+                        }
+
+                        const toolMessage: Message = {
+                            role: 'tool',
+                            tool_call_id: toolCall.id,
+                            name: toolCall.function.name,
+                            content: result
+                        };
+
+                        addMessage(toolMessage);
+                        currentMessages.push(toolMessage);
+
+                        if (result.includes('DEV SERVER IS NOW RUNNING')) {
+                            devServerStarted = true;
+                        }
+                    }
+
+                    if (sameFileCreatedCount >= 5) {
+                        break;
                     }
                 }
 

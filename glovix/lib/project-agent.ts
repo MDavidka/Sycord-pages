@@ -86,7 +86,11 @@ type ResumeAgentResponse = {
     message?: string;
 };
 
-const POLL_INTERVAL_MS = 1500;
+/** Fast first polls so token/thinking events appear quickly after submit. */
+const POLL_INTERVAL_FAST_MS = 350;
+/** Back off when the session is quiet to avoid hammering Syte/Turso. */
+const POLL_INTERVAL_IDLE_MS = 900;
+const POLL_INTERVAL_MAX_MS = 2000;
 const MAX_POLL_MS = 10 * 60 * 1000;
 const TRANSIENT_RETRIES = 8;
 
@@ -341,6 +345,8 @@ export async function pollTursoAgentSession(options: {
     let terminal = false;
     let status = 'open';
     let transientFailures = 0;
+    let idlePolls = 0;
+    let pollIntervalMs = POLL_INTERVAL_FAST_MS;
     const startedAt = Date.now();
 
     options.onEvent({
@@ -375,7 +381,7 @@ export async function pollTursoAgentSession(options: {
             }
             if (isTransientNetworkError(error) && transientFailures < TRANSIENT_RETRIES) {
                 transientFailures++;
-                await sleep(POLL_INTERVAL_MS * Math.min(transientFailures, 4), options.signal);
+                await sleep(pollIntervalMs * Math.min(transientFailures, 4), options.signal);
                 continue;
             }
             throw error;
@@ -395,6 +401,7 @@ export async function pollTursoAgentSession(options: {
             });
         }
 
+        let sawNewEvent = false;
         for (const event of doc.events || []) {
             const id = Number(event.id) || 0;
             if (id && id <= sinceId) continue;
@@ -421,6 +428,7 @@ export async function pollTursoAgentSession(options: {
                 options.projectId,
             );
             if (!normalized) continue;
+            sawNewEvent = true;
             options.onEvent(normalized);
 
             if (normalized.type === 'done' || normalized.type === 'error' || normalized.type === 'stopped') {
@@ -470,7 +478,18 @@ export async function pollTursoAgentSession(options: {
             break;
         }
 
-        await sleep(POLL_INTERVAL_MS, options.signal);
+        if (sawNewEvent) {
+            idlePolls = 0;
+            pollIntervalMs = POLL_INTERVAL_FAST_MS;
+        } else {
+            idlePolls += 1;
+            pollIntervalMs = Math.min(
+                POLL_INTERVAL_MAX_MS,
+                idlePolls <= 2 ? POLL_INTERVAL_FAST_MS : POLL_INTERVAL_IDLE_MS + (idlePolls - 3) * 200,
+            );
+        }
+
+        await sleep(pollIntervalMs, options.signal);
     }
 
     return { session, eventId, status };

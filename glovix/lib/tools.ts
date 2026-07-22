@@ -2780,6 +2780,29 @@ export async function handleCallKnowledge(args: { title: string }): Promise<stri
 // MAIN TOOL EXECUTOR — with validation and error boundaries
 // ============================================================
 
+/** Tools that only read state — safe to run concurrently in one AI turn. */
+const PARALLEL_SAFE_TOOLS = new Set([
+    'readFile',
+    'readMultipleFiles',
+    'listFiles',
+    'grep',
+    'Grep',
+    'searchInFiles',
+    'getErrors',
+    'typeCheck',
+    'lintCheck',
+    'listKnowledge',
+    'callKnowledge',
+    'heroUiDocs',
+    'shadcnDocs',
+    'listShadcnComponents',
+    'listDokployResources',
+]);
+
+export function isParallelSafeTool(name: string): boolean {
+    return PARALLEL_SAFE_TOOLS.has(name);
+}
+
 export async function executeTool(
     name: string,
     argsString: string,

@@ -368,9 +368,39 @@ export interface GenerateRequest {
   model?: string
 }
 
+/** Allow only known Gemini ids from the client; fall back to env default. */
+function resolveGeminiModel(requested?: string): string {
+  const candidate = (requested || "").trim()
+  if (!candidate) return GEMINI_MODEL
+  // Reject provider prefixes / non-Gemini ids so DeepSeek/OpenAI names never
+  // leak into Vertex generateContentStream.
+  if (!/^gemini-/i.test(candidate)) return GEMINI_MODEL
+  // Block path-like or oversized junk.
+  if (candidate.length > 80 || /[^\w.\-:/]/.test(candidate)) return GEMINI_MODEL
+  return candidate
+}
+
+/**
+ * Thinking adds significant TTFT on Flash. Prefer a tiny budget (or off) for
+ * flash/lite; keep full thought summaries for Pro.
+ */
+function thinkingConfigForModel(model: string): GenerateContentConfig["thinkingConfig"] | undefined {
+  const id = model.toLowerCase()
+  const supportsThinking = /gemini-(2\.5|3)/.test(id)
+  if (!supportsThinking) return undefined
+
+  const isFlash = id.includes("flash") || id.includes("lite")
+  if (isFlash) {
+    // Flash is marketed as the fast profile (syra-nano). Cap thinking tokens so
+    // TTFT stays low; Pro keeps dynamic/full reasoning.
+    return { includeThoughts: true, thinkingBudget: 256 }
+  }
+  return { includeThoughts: true }
+}
+
 export function streamOpenAICompatible(req: GenerateRequest): Response {
   const encoder = new TextEncoder()
-  const modelLabel = req.model || GEMINI_MODEL
+  const modelLabel = resolveGeminiModel(req.model)
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -388,6 +418,9 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
         const client = getAiClient()
         const { systemInstruction, contents } = convertMessages(req.messages)
         const functionDeclarations = toFunctionDeclarations(req.tools)
+        // Honor the client-selected model (syra-nano → flash, syra-havy → pro).
+        // Previously every request used GOOGLE_AIAGENT_MODEL and ignored the UI.
+        const model = resolveGeminiModel(req.model || client.model)
 
         const config: GenerateContentConfig = {
           temperature: req.temperature ?? 0.7,
@@ -396,13 +429,8 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
           maxOutputTokens: Math.min(Math.max(req.maxOutputTokens ?? 16384, 1024), 65536),
         }
 
-        // Surface the model's reasoning so Syra can "think out loud" (streamed
-        // to the client as `delta.reasoning`). Gemini 2.5+/3.x support thinking;
-        // includeThoughts is a no-op / safely ignored on models that don't.
-        const supportsThinking = /gemini-(2\.5|3)/.test(client.model)
-        if (supportsThinking) {
-          config.thinkingConfig = { includeThoughts: true }
-        }
+        const thinking = thinkingConfigForModel(model)
+        if (thinking) config.thinkingConfig = thinking
         if (systemInstruction) config.systemInstruction = systemInstruction
         if (functionDeclarations) {
           config.tools = [{ functionDeclarations }]
@@ -412,7 +440,7 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
         }
 
         const genStream = await withRetry(() =>
-          client.ai.models.generateContentStream({ model: client.model, contents, config }),
+          client.ai.models.generateContentStream({ model, contents, config }),
         )
 
         let toolIndex = 0
