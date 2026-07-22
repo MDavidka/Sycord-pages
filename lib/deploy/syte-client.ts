@@ -1058,3 +1058,77 @@ export async function syteAgentSkillsDisable(
     body: { uuid, skill_id: skillId },
   })
 }
+
+// ─── Agent interactive questions ─────────────────────────────────────────────
+// Docs: https://sycord.site/api/#agent — ask_question / request_env widgets.
+// Types: answer | input | slider | choice | multi_choice
+
+export type SyteAgentQuestionAnswer =
+  | string
+  | number
+  | string[]
+  | Record<string, unknown>
+
+export type SyteAgentQuestion = {
+  id?: string
+  question_id?: string
+  question_type?: string
+  type?: string
+  prompt?: string
+  question?: string
+  options?: unknown
+  min?: number
+  max?: number
+  min_value?: number
+  max_value?: number
+  step?: number
+  default?: unknown
+  default_value?: unknown
+  value?: unknown
+  placeholder?: string
+  status?: string
+  answer?: SyteAgentQuestionAnswer
+}
+
+export type SyteAgentQuestionsResponse = {
+  ok?: boolean
+  questions?: SyteAgentQuestion[]
+}
+
+/**
+ * List interactive agent questions (pending/answered).
+ * GET /api/agent_questions?uuid=&status=&limit=
+ */
+export async function syteAgentQuestions(
+  uuid: string,
+  options?: { status?: string; limit?: number },
+): Promise<SyteResult<SyteAgentQuestionsResponse>> {
+  return syteWorkspaceRequest<SyteAgentQuestionsResponse>("GET", "agent_questions", {
+    query: {
+      uuid,
+      ...(options?.status ? { status: options.status } : {}),
+      ...(options?.limit != null ? { limit: options.limit } : {}),
+    },
+  })
+}
+
+/**
+ * Answer an ask_question / request_env prompt so the agent turn can continue.
+ * POST /api/agent_answer_question
+ * Body: { uuid, question_id, answer: str|number|string[]|object }
+ */
+export async function syteAgentAnswerQuestion(
+  uuid: string,
+  questionId: string,
+  answer: SyteAgentQuestionAnswer,
+): Promise<
+  SyteResult<{ ok?: boolean; id?: string; status?: string; answer?: SyteAgentQuestionAnswer }>
+> {
+  return syteWorkspaceRequest("POST", "agent_answer_question", {
+    body: {
+      uuid,
+      question_id: questionId,
+      answer,
+    },
+  })
+}

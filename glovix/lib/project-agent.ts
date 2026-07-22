@@ -1,7 +1,42 @@
 import type { Message } from './ai';
 
+/** Interactive ask_question / request_env widget types from Syte. */
+export type AgentQuestionType = 'answer' | 'input' | 'slider' | 'choice' | 'multi_choice';
+
+export type AgentQuestionOption = {
+    label: string;
+    value: string;
+};
+
+export type AgentQuestion = {
+    id: string;
+    questionType: AgentQuestionType;
+    prompt: string;
+    options?: AgentQuestionOption[];
+    min?: number;
+    max?: number;
+    step?: number;
+    defaultValue?: string | number | string[];
+    placeholder?: string;
+    status?: 'pending' | 'answered' | string;
+    answer?: unknown;
+};
+
 export type ProjectAgentEvent = {
-    type: 'session' | 'processing' | 'thinking' | 'tool_started' | 'tool_finished' | 'delta' | 'message' | 'done' | 'error' | 'screenshot' | 'stopped';
+    type:
+        | 'session'
+        | 'processing'
+        | 'thinking'
+        | 'tool_started'
+        | 'tool_finished'
+        | 'delta'
+        | 'message'
+        | 'done'
+        | 'error'
+        | 'screenshot'
+        | 'stopped'
+        | 'question'
+        | 'question_answered';
     session?: number;
     sessionAuthoritative?: boolean;
     eventId?: number;
@@ -15,6 +50,7 @@ export type ProjectAgentEvent = {
     tursoSessionId?: string;
     requestId?: string;
     screenshots?: AgentScreenshot[];
+    question?: AgentQuestion;
 };
 
 export type AgentScreenshot = {
@@ -154,6 +190,145 @@ function eventText(event: TursoSessionEvent): string {
     return typeof preferred === 'string' ? preferred : JSON.stringify(preferred);
 }
 
+const QUESTION_TYPES = new Set<AgentQuestionType>([
+    'answer',
+    'input',
+    'slider',
+    'choice',
+    'multi_choice',
+]);
+
+function asFiniteNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+        return Number(value);
+    }
+    return undefined;
+}
+
+function normalizeQuestionOptions(raw: unknown): AgentQuestionOption[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
+    const options: AgentQuestionOption[] = [];
+    for (const item of raw) {
+        if (typeof item === 'string' || typeof item === 'number') {
+            const value = String(item);
+            options.push({ label: value, value });
+            continue;
+        }
+        if (!item || typeof item !== 'object') continue;
+        const obj = item as Record<string, unknown>;
+        const value =
+            obj.value != null
+                ? String(obj.value)
+                : obj.id != null
+                    ? String(obj.id)
+                    : obj.label != null
+                        ? String(obj.label)
+                        : obj.name != null
+                            ? String(obj.name)
+                            : '';
+        if (!value) continue;
+        const label =
+            obj.label != null
+                ? String(obj.label)
+                : obj.name != null
+                    ? String(obj.name)
+                    : value;
+        options.push({ label, value });
+    }
+    return options.length > 0 ? options : undefined;
+}
+
+export function normalizeAgentQuestion(
+    payload: Record<string, unknown> | null | undefined,
+    fallback?: { title?: string; detail?: string },
+): AgentQuestion | null {
+    if (!payload || typeof payload !== 'object') return null;
+
+    const nested =
+        payload.question && typeof payload.question === 'object'
+            ? (payload.question as Record<string, unknown>)
+            : null;
+    const source = nested || payload;
+
+    const idRaw =
+        source.question_id ??
+        source.id ??
+        payload.question_id ??
+        payload.id;
+    const id = typeof idRaw === 'string' || typeof idRaw === 'number' ? String(idRaw).trim() : '';
+    if (!id) return null;
+
+    const typeRaw = String(
+        source.question_type ?? source.type ?? payload.question_type ?? payload.type ?? 'input',
+    )
+        .trim()
+        .toLowerCase()
+        .replace(/-/g, '_');
+    const questionType: AgentQuestionType = QUESTION_TYPES.has(typeRaw as AgentQuestionType)
+        ? (typeRaw as AgentQuestionType)
+        : typeRaw === 'multichoice' || typeRaw === 'multi'
+            ? 'multi_choice'
+            : typeRaw === 'text' || typeRaw === 'freeform'
+                ? 'input'
+                : typeRaw === 'number' || typeRaw === 'range'
+                    ? 'slider'
+                    : typeRaw === 'confirm' || typeRaw === 'ack'
+                        ? 'answer'
+                        : 'input';
+
+    const prompt =
+        (typeof source.prompt === 'string' && source.prompt.trim()) ||
+        (typeof source.question === 'string' && source.question.trim()) ||
+        (typeof source.text === 'string' && source.text.trim()) ||
+        (typeof source.message === 'string' && source.message.trim()) ||
+        (typeof payload.prompt === 'string' && payload.prompt.trim()) ||
+        (typeof fallback?.detail === 'string' && fallback.detail.trim()) ||
+        (typeof fallback?.title === 'string' && fallback.title.trim()) ||
+        'Question';
+
+    const min = asFiniteNumber(source.min ?? source.min_value ?? source.minimum);
+    const max = asFiniteNumber(source.max ?? source.max_value ?? source.maximum);
+    const step = asFiniteNumber(source.step ?? source.step_value) ?? 1;
+    const defaultRaw = source.default ?? source.default_value ?? source.value ?? source.initial;
+    let defaultValue: string | number | string[] | undefined;
+    if (Array.isArray(defaultRaw)) {
+        defaultValue = defaultRaw.map(String);
+    } else if (typeof defaultRaw === 'number' && Number.isFinite(defaultRaw)) {
+        defaultValue = defaultRaw;
+    } else if (typeof defaultRaw === 'string') {
+        defaultValue = defaultRaw;
+    }
+
+    const placeholder =
+        typeof source.placeholder === 'string'
+            ? source.placeholder
+            : typeof source.hint === 'string'
+                ? source.hint
+                : undefined;
+
+    const status =
+        typeof source.status === 'string'
+            ? source.status
+            : typeof payload.status === 'string'
+                ? payload.status
+                : undefined;
+
+    return {
+        id,
+        questionType,
+        prompt,
+        options: normalizeQuestionOptions(source.options ?? source.choices ?? payload.options),
+        min,
+        max,
+        step,
+        defaultValue,
+        placeholder,
+        status,
+        answer: source.answer ?? payload.answer,
+    };
+}
+
 function normalizeScreenshots(payload: Record<string, unknown>, projectId?: string): AgentScreenshot[] {
     const raw = payload.screenshots
     const list = Array.isArray(raw) ? raw : raw ? [raw] : []
@@ -223,6 +398,31 @@ function normalizeTursoEvent(
                 ...common,
                 screenshots,
                 text: event.detail || event.title || 'made a screenshot',
+            };
+        }
+        case 'question': {
+            const question = normalizeAgentQuestion(payload, {
+                title: event.title,
+                detail: event.detail,
+            });
+            if (!question) return null;
+            return {
+                type: 'question',
+                ...common,
+                question,
+                text: question.prompt,
+            };
+        }
+        case 'question_answered': {
+            const question = normalizeAgentQuestion(payload, {
+                title: event.title,
+                detail: event.detail,
+            });
+            return {
+                type: 'question_answered',
+                ...common,
+                question: question || undefined,
+                text: event.detail || event.title || 'Question answered',
             };
         }
         case 'tool_call':
@@ -621,4 +821,35 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
         tursoSessionId,
         requestId,
     };
+}
+
+/**
+ * Load pending interactive questions for a host project.
+ * GET /api/projects/{id}/agent/questions?status=pending
+ */
+export async function fetchPendingAgentQuestions(
+    projectId: string,
+    signal?: AbortSignal,
+): Promise<AgentQuestion[]> {
+    const data = await fetchJson<{
+        ok?: boolean;
+        questions?: Array<Record<string, unknown>>;
+        message?: string;
+    }>(
+        `/api/projects/${encodeURIComponent(projectId)}/agent/questions?status=pending&limit=20`,
+        {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+            credentials: 'same-origin',
+            signal,
+        },
+    );
+
+    const list = Array.isArray(data.questions) ? data.questions : [];
+    const normalized: AgentQuestion[] = [];
+    for (const raw of list) {
+        const q = normalizeAgentQuestion(raw);
+        if (q && (!q.status || q.status === 'pending')) normalized.push(q);
+    }
+    return normalized;
 }

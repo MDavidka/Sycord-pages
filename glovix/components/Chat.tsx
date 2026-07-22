@@ -5,10 +5,12 @@ import { ArrowLeft, Brain, Copy, FileCode, Image as ImageIcon, X, ChevronRight, 
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
+    fetchPendingAgentQuestions,
     getLatestAgentSession,
     getLatestTursoSessionId,
     resumeProjectAgent,
     streamProjectAgent,
+    type AgentQuestion,
     type ProjectAgentEvent,
 } from '../lib/project-agent';
 import { mountFiles } from '../lib/webcontainer';
@@ -19,6 +21,11 @@ import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { PlanChecklist } from './PlanChecklist';
 import { ModelLearnPanel } from './ModelLearnPanel';
+import {
+    AgentQuestionCard,
+    answerProjectAgentQuestion,
+    type AgentQuestionAnswerValue,
+} from './AgentQuestionCard';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
@@ -371,6 +378,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [currentThinking, setCurrentThinking] = useState<string>('');
     const [thinkingDuration, setThinkingDuration] = useState<number>(0);
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
+    const [pendingQuestion, setPendingQuestion] = useState<AgentQuestion | null>(null);
+    const [questionSubmitting, setQuestionSubmitting] = useState(false);
+    const [questionError, setQuestionError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -728,7 +738,53 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             abort();
             setCurrentThinking('');
             setThinkingStartTime(null);
+            setPendingQuestion(null);
+            setQuestionError(null);
+            setQuestionSubmitting(false);
         }
+    };
+
+    const clearPendingQuestion = () => {
+        setPendingQuestion(null);
+        setQuestionError(null);
+        setQuestionSubmitting(false);
+    };
+
+    const syncPendingQuestions = async (projectId: string, signal?: AbortSignal) => {
+        try {
+            const pending = await fetchPendingAgentQuestions(projectId, signal);
+            if (signal?.aborted) return;
+            if (pending.length > 0) {
+                setPendingQuestion(pending[0]);
+                setQuestionError(null);
+            }
+        } catch {
+            /* ignore — event stream remains source of truth */
+        }
+    };
+
+    const handleAgentQuestionSubmit = async (answer: AgentQuestionAnswerValue) => {
+        const projectId = getHostProjectId();
+        const question = pendingQuestion;
+        if (!projectId || !question || questionSubmitting) return;
+
+        setQuestionSubmitting(true);
+        setQuestionError(null);
+        const result = await answerProjectAgentQuestion(projectId, question.id, answer);
+        if (!result.ok) {
+            setQuestionError(result.message || 'Failed to submit answer.');
+            setQuestionSubmitting(false);
+            return;
+        }
+        // Keep the card until question_answered / turn continues, but mark as submitted.
+        setPendingQuestion((prev) =>
+            prev && prev.id === question.id
+                ? { ...prev, status: 'answered', answer }
+                : prev,
+        );
+        setQuestionSubmitting(false);
+        // Prefer clearing immediately for snappy UI; a later question event can reopen.
+        setPendingQuestion(null);
     };
 
     // Tool execution context
@@ -1071,6 +1127,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 });
                                 break;
                             }
+                            case 'question': {
+                                if (!replayHistoryOnly && event.question && event.question.status !== 'answered') {
+                                    setPendingQuestion(event.question);
+                                    setQuestionError(null);
+                                    setQuestionSubmitting(false);
+                                }
+                                break;
+                            }
+                            case 'question_answered': {
+                                if (replayHistoryOnly) break;
+                                const answeredId = event.question?.id;
+                                setPendingQuestion((prev) =>
+                                    !prev || !answeredId || prev.id === answeredId ? null : prev,
+                                );
+                                setQuestionSubmitting(false);
+                                setQuestionError(null);
+                                break;
+                            }
                             case 'delta':
                                 assistantContent += event.text || '';
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
@@ -1083,6 +1157,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 assistantContent = event.text || assistantContent || 'Done.';
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
+                                clearPendingQuestion();
                                 markAgentTimelineLoaded();
                                 break;
                             case 'stopped':
@@ -1090,6 +1165,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     updateLastMessage(event.text || 'Stopped.');
                                 }
                                 completed = true;
+                                clearPendingQuestion();
                                 replaceActions(actionsRef.current.map(action =>
                                     action.status === 'running' || action.status === 'pending'
                                         ? { ...action, status: 'done' as const, completedAt: Date.now() }
@@ -1099,6 +1175,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 break;
                             case 'error':
                                 errorText = event.text || 'The project agent request failed.';
+                                clearPendingQuestion();
                                 replaceActions(actionsRef.current.map(action =>
                                     action.status === 'running' || action.status === 'pending'
                                         ? { ...action, status: 'error' as const, result: errorText, completedAt: Date.now() }
@@ -1108,6 +1185,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 break;
                         }
                     };
+
+                    void syncPendingQuestions(projectId, controller.signal);
 
                     const resumed = await resumeProjectAgent({
                         projectId,
@@ -1119,6 +1198,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     });
 
                     if (!resumed) return;
+
+                    // Turn left "open" only if still waiting — normally resume returns when status != open.
+                    if (resumed.status !== 'open') {
+                        clearPendingQuestion();
+                    }
 
                     if (errorText && !completed) {
                         if (!replayHistoryOnly) updateLastMessage(`Error: ${errorText}`);
@@ -1294,6 +1378,23 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     });
                     break;
                 }
+                case 'question': {
+                    if (event.question) {
+                        setPendingQuestion(event.question);
+                        setQuestionError(null);
+                        setQuestionSubmitting(false);
+                    }
+                    break;
+                }
+                case 'question_answered': {
+                    const answeredId = event.question?.id;
+                    setPendingQuestion((prev) =>
+                        !prev || !answeredId || prev.id === answeredId ? null : prev,
+                    );
+                    setQuestionSubmitting(false);
+                    setQuestionError(null);
+                    break;
+                }
                 case 'delta':
                     assistantContent += event.text || '';
                     updateLastMessage(assistantContent);
@@ -1306,11 +1407,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     assistantContent = event.text || assistantContent || 'Done.';
                     updateLastMessage(assistantContent);
                     completed = true;
+                    clearPendingQuestion();
                     markAgentTimelineLoaded();
                     break;
                 case 'stopped':
                     if (!assistantContent) updateLastMessage(event.text || 'Stopped.');
                     completed = true;
+                    clearPendingQuestion();
                     replaceActions(actionsRef.current.map(action =>
                         action.status === 'running' || action.status === 'pending'
                             ? { ...action, status: 'done' as const, completedAt: Date.now() }
@@ -1320,6 +1423,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     break;
                 case 'error':
                     errorText = event.text || 'The project agent request failed.';
+                    clearPendingQuestion();
                     replaceActions(actionsRef.current.map(action =>
                         action.status === 'running' || action.status === 'pending'
                             ? { ...action, status: 'error' as const, result: errorText, completedAt: Date.now() }
@@ -1344,6 +1448,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         };
 
         try {
+            void syncPendingQuestions(projectId, controller.signal);
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
@@ -1360,6 +1465,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
             if (controller.signal.aborted) {
                 updateLastMessage(assistantContent || 'Stopped.');
+                clearPendingQuestion();
                 markAgentTimelineLoaded();
                 return;
             }
@@ -1374,6 +1480,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         } catch (error: any) {
             if (controller.signal.aborted) {
                 updateLastMessage(assistantContent || 'Stopped.');
+                clearPendingQuestion();
                 markAgentTimelineLoaded();
             } else {
                 const msg = String(error?.message || '');
@@ -1390,6 +1497,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 } else {
                     console.error('[ProjectAgent] Error:', error);
                     updateLastMessage(`Error: ${msg || 'Failed to run the project agent.'}`);
+                    clearPendingQuestion();
                 }
             }
         } finally {
@@ -2751,6 +2859,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             {/* Input Area - centered with margins */}
             <div className="px-4 pb-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
                 <div className="max-w-[720px] mx-auto">
+                    {pendingQuestion && (
+                        <div className="mb-2.5">
+                            <AgentQuestionCard
+                                question={pendingQuestion}
+                                isDark={isDark}
+                                submitting={questionSubmitting}
+                                error={questionError}
+                                onSubmit={handleAgentQuestionSubmit}
+                            />
+                        </div>
+                    )}
                     <form
                         onSubmit={handleSubmit}
                         onPaste={handlePaste}
