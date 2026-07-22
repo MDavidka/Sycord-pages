@@ -2448,7 +2448,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [debugLoading, setDebugLoading] = useState(false);
-    const [composerFocused, setComposerFocused] = useState(false);
     const slashLoadedForRef = useRef<string | null>(null);
 
     const loadSlashExtras = async (projectId: string, force = false) => {
@@ -2972,48 +2971,45 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Minimized composer — slash, model picker, bottom nav */}
-                        <div className={`rounded-[22px] border px-2 py-1.5 transition-colors ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
-                            <textarea
-                                ref={textareaRef}
-                                value={input}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    setInput(value);
-                                    if (value === '/') {
-                                        setShowSlashMenu(true);
-                                        setShowModelMenu(false);
-                                    }
-                                    const target = e.target as HTMLTextAreaElement;
-                                    target.style.height = 'auto';
-                                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 96 : 140;
-                                    target.style.height = `${Math.min(Math.max(target.scrollHeight, 36), maxH)}px`;
-                                }}
-                                onFocus={() => setComposerFocused(true)}
-                                onBlur={() => {
-                                    if (!input.trim()) setComposerFocused(false);
-                                }}
-                                rows={1}
-                                placeholder="Message Syra… Type / for commands"
-                                className={`w-full bg-transparent text-[15px] leading-snug px-3 pt-1.5 pb-1 focus:outline-none resize-none overflow-y-auto max-h-[96px] md:max-h-[140px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'} ${
-                                    !composerFocused && !input.trim() ? 'sr-only' : ''
-                                }`}
-                                style={{ height: 'auto', minHeight: composerFocused || input.trim() ? '36px' : undefined }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Escape' && showSlashMenu) {
-                                        e.preventDefault();
-                                        setShowSlashMenu(false);
-                                        return;
-                                    }
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        handleSubmit(e);
-                                    }
-                                }}
-                            />
+                        {/* Composer — full size by default; minimized when AI asks a question */}
+                        <div className={`rounded-[28px] border px-2 transition-colors ${
+                            pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
+                        } ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                            {!pendingQuestion && (
+                                <textarea
+                                    ref={textareaRef}
+                                    value={input}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setInput(value);
+                                        if (value === '/') {
+                                            setShowSlashMenu(true);
+                                            setShowModelMenu(false);
+                                        }
+                                        const target = e.target as HTMLTextAreaElement;
+                                        target.style.height = 'auto';
+                                        const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
+                                        target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
+                                    }}
+                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & MCP."
+                                    className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
+                                    style={{ height: 'auto', minHeight: '76px' }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape' && showSlashMenu) {
+                                            e.preventDefault();
+                                            setShowSlashMenu(false);
+                                            return;
+                                        }
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSubmit(e);
+                                        }
+                                    }}
+                                />
+                            )}
 
                             {/* Toolbar */}
-                            <div className="flex items-center gap-1.5 px-0.5">
+                            <div className={`flex items-center gap-2 ${pendingQuestion ? 'px-0.5' : 'px-1'}`}>
                                 <DropdownMenu open={showSlashMenu} onOpenChange={(open) => {
                                     setShowSlashMenu(open);
                                     if (open) {
@@ -3118,33 +3114,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     isDark={isDark}
                                 />
 
-                                {!composerFocused && !input.trim() && (
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setComposerFocused(true);
-                                            requestAnimationFrame(() => textareaRef.current?.focus());
-                                        }}
-                                        className={`ml-1 truncate text-[13px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}
-                                    >
-                                        Message Syra…
-                                    </button>
-                                )}
-
-                                <div className="ml-auto flex items-center gap-0.5">
+                                <div className="ml-auto flex items-center gap-1">
                                     <button
                                         type="button"
                                         aria-label="Voice input"
-                                        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
-                                        <Mic className="h-[18px] w-[18px]" />
+                                        <Mic className="h-5 w-5" />
                                     </button>
                                     <button
                                         type="button"
                                         aria-label="Voice mode"
-                                        className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
-                                        <AudioLines className="h-[18px] w-[18px]" />
+                                        <AudioLines className="h-5 w-5" />
                                     </button>
 
                                     {isRunning ? (
@@ -3152,20 +3135,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             type="button"
                                             onClick={handleStop}
                                             aria-label="Stop"
-                                            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
+                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
                                         >
                                             <div className="h-3 w-3 rounded-sm bg-black" />
                                         </button>
                                     ) : (
                                         <button
                                             type="submit"
-                                            disabled={!input.trim() && selectedImages.length === 0}
+                                            disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
                                             aria-label="Send"
-                                            className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${input.trim() || selectedImages.length > 0
-                                                ? 'bg-white text-black hover:bg-gray-200'
-                                                : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'}`}
+                                            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${
+                                                !pendingQuestion && (input.trim() || selectedImages.length > 0)
+                                                    ? 'bg-white text-black hover:bg-gray-200'
+                                                    : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'
+                                            }`}
                                         >
-                                            <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.5} />
+                                            <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
                                         </button>
                                     )}
                                 </div>
