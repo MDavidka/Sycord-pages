@@ -75,7 +75,10 @@ export default function CreateProjectPage() {
         }
         if (projectsRes.ok) {
           const projects = await projectsRes.json()
-          setExistingProjectCount(Array.isArray(projects) ? projects.length : 0)
+          const owned = Array.isArray(projects)
+            ? projects.filter((p: any) => !p?.isCollaborator).length
+            : 0
+          setExistingProjectCount(owned)
         }
       } catch (err) {
         console.error("Failed to fetch user data:", err)

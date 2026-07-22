@@ -313,6 +313,18 @@ export async function syteCreateProject(input: {
   }>("POST", "create_project", { body: input })
 }
 
+/**
+ * Delete a Syte workspace (stops container + removes files).
+ * Docs: POST /api/delete_project  { uuid }
+ */
+export async function syteDeleteProject(uuid: string) {
+  return syteWorkspaceRequest<{ ok?: boolean; uuid?: string; status?: string }>(
+    "POST",
+    "delete_project",
+    { body: { uuid } },
+  )
+}
+
 export async function syteIssueDeploy(uuid: string) {
   return syteWorkspaceRequest("POST", "issue_deploy", { body: { uuid } })
 }

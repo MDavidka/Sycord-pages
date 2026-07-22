@@ -34,12 +34,14 @@ export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deploy
 }
 
 /**
- * /syra uses COEP require-corp. Cross-origin iframes need credentialless or CORP
- * headers on the child — otherwise the iframe stays white while top-level navigation works.
+ * /syra uses COEP (require-corp / credentialless). Even when HTML is loaded via
+ * the same-origin preview-frame proxy, scripts/CSS still come from
+ * preview*.sycord.site and need a credentialless iframe (or CORP on every asset)
+ * — otherwise the iframe stays white while top-level navigation works.
  */
 export function shouldUseCredentiallessIframe(url: string): boolean {
     if (typeof window === 'undefined' || !url) return false;
-    if (!isCrossOriginPreviewUrl(url)) return false;
     if (!window.location.pathname.includes('/syra')) return false;
+    // Always credentialless inside Syra: proxied HTML still pulls cross-origin assets.
     return true;
 }

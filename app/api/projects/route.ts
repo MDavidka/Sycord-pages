@@ -61,11 +61,24 @@ export async function POST(request: Request) {
       safeProfileImage = body.profileImage;
   }
 
-  // Fetch user doc to check premium status (limit enforced atomically below)
+  // Fetch user doc to check premium status + owned project count (collaborator
+  // stubs must not consume the free-tier slot — they are not owned websites).
   const userDoc = await db.collection("users").findOne<{ projects?: any[]; isPremium?: boolean }>({ id: session.user.id })
   // @ts-ignore
   const isPremium = session.user.isPremium || userDoc?.isPremium || false
   const MAX_FREE_WEBSITES = 3
+  const ownedProjectCount = Array.isArray(userDoc?.projects)
+    ? userDoc!.projects!.filter((p: any) => !p?.isCollaborator).length
+    : 0
+
+  if (!isPremium && ownedProjectCount >= MAX_FREE_WEBSITES) {
+    return NextResponse.json(
+      {
+        message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
+      },
+      { status: 403 },
+    )
+  }
 
   const webpageId = generateWebpageId()
 
@@ -125,16 +138,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Atomic free-tier limit: only push when project count is still under the cap
-    const filter: Record<string, unknown> = { id: session.user.id }
-    if (!isPremium) {
-      filter.$expr = {
-        $lt: [{ $size: { $ifNull: ["$projects", []] } }, MAX_FREE_WEBSITES],
-      }
-    }
-
+    // Pre-check above enforces the free-tier owned-project cap. Push by user id
+    // (Torso has no true multi-doc transactions; the owned-count check is the guard).
     const result = await db.collection("users").updateOne(
-      filter,
+      { id: session.user.id },
       {
         $push: {
           projects: newProject
@@ -143,19 +150,6 @@ export async function POST(request: Request) {
     )
 
     if (result.matchedCount === 0) {
-      const exists = await db.collection("users").findOne(
-        { id: session.user.id },
-        { projection: { id: 1 } },
-      )
-      if (exists && !isPremium) {
-        return NextResponse.json(
-          {
-            message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
-          },
-          { status: 403 },
-        )
-      }
-
       // If user doc doesn't exist, create it first with the project
       const userResult = await db.collection("users").updateOne(
         { id: session.user.id },
@@ -173,18 +167,13 @@ export async function POST(request: Request) {
         { upsert: true }
       )
       if (!userResult.upsertedCount && !userResult.modifiedCount) {
-        // Race: another request created the user; retry with the size guard
+        // Race: another request created the user; retry push
         const retry = await db.collection("users").updateOne(
-          filter,
+          { id: session.user.id },
           { $push: { projects: newProject } as any },
         )
         if (retry.matchedCount === 0) {
-          return NextResponse.json(
-            {
-              message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
-            },
-            { status: 403 },
-          )
+          return NextResponse.json({ message: "Failed to create project" }, { status: 500 })
         }
       }
     }
@@ -364,12 +353,10 @@ export async function GET(request: Request) {
       }
     })
 
-    // Allow short-lived browser caching + CDN caching. The dashboard will
-    // refetch after mutations anyway, so a 30s window keeps load fast on
-    // back/forward navigation without making data feel stale.
+    // Allow short-lived browser caching. Mutations should use cache: 'no-store'.
     return NextResponse.json(projects, {
       headers: {
-        "Cache-Control": "private, max-age=30, stale-while-revalidate=60",
+        "Cache-Control": "private, max-age=10, stale-while-revalidate=30",
       },
     })
   } catch (error: any) {

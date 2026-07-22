@@ -797,6 +797,8 @@ export default function SiteSettingsPage() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "domain" | "pages" | "ai" | "settings" | "items" | "promotions" | "payments" | "customers" | "posts" | "segments" | "integrations"
   >("overview")
+  /** Keep Syra iframe mounted after first open so tab switches are instant. */
+  const [syraEverOpened, setSyraEverOpened] = useState(false)
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isDesktopSidebarExpanded, setIsDesktopSidebarExpanded] = useState(false)
@@ -814,8 +816,28 @@ export default function SiteSettingsPage() {
       window.location.assign(`/dashboard/sites/${id}/syra`)
       return
     }
+    setSyraEverOpened(true)
     setActiveTab("ai")
   }, [id])
+
+  // Prefetch Syra shell as soon as the project page mounts (desktop)
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return
+    if (window.matchMedia("(max-width: 768px)").matches) return
+    const href = `/dashboard/sites/${id}/syra`
+    const link = document.createElement("link")
+    link.rel = "prefetch"
+    link.href = href
+    link.as = "document"
+    document.head.appendChild(link)
+    return () => {
+      link.remove()
+    }
+  }, [id])
+
+  useEffect(() => {
+    if (activeTab === "ai") setSyraEverOpened(true)
+  }, [activeTab])
 
   // Subscription / plan
   const [subscription, setSubscription] = useState<string>("Sycord")
@@ -2677,10 +2699,17 @@ export default function SiteSettingsPage() {
               </div>
             )}
 
-            {/* TAB CONTENT: GLOVIX (AI BUILDER) — desktop iframe; mobile uses full-page /syra */}
-            {activeTab === "ai" && (
-              <div className="hidden h-full w-full flex-col md:flex">
-                <div className="flex-1 bg-background overflow-hidden relative">
+            {/* TAB CONTENT: GLOVIX (AI BUILDER) — desktop iframe; mobile uses full-page /syra.
+                Keep iframe mounted after first open so switching tabs does not remount Syra. */}
+            {(activeTab === "ai" || syraEverOpened) && (
+              <div
+                className={cn(
+                  "h-full w-full flex-col",
+                  activeTab === "ai" ? "hidden md:flex" : "hidden",
+                )}
+                aria-hidden={activeTab !== "ai"}
+              >
+                <div className="flex-1 bg-background overflow-hidden relative min-h-[60vh] md:min-h-0">
                   {id ? (
                     <iframe
                       key={id}

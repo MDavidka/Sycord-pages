@@ -23,6 +23,7 @@ import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
+import { Marker, MarkerContent } from '@/components/ui/marker';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getSystemPrompt } from '../lib/systemPrompts';
@@ -993,7 +994,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                         switch (event.type) {
                             case 'processing':
-                                if (!replayHistoryOnly && event.text) setCurrentThinking(event.text);
+                                // Syte emits "Cloud agent accepted the durable request" —
+                                // keep an inline shimmer marker instead of a big thinking badge.
                                 break;
                             case 'thinking': {
                                 if (!thinkingStartedAt) {
@@ -1217,7 +1219,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
             switch (event.type) {
                 case 'processing':
-                    if (event.text) setCurrentThinking(event.text);
+                    // Accepted/queued system noise — Marker shimmer covers this state.
                     break;
                 case 'thinking': {
                     if (!thinkingStartedAt) {
@@ -2680,7 +2682,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     ))}
 
                     {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
-                    {isRunning && currentThinking && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
+                    {isRunning && currentThinking && !isSystemProcessingText(currentThinking) && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
                         <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
                     )}
 
@@ -2689,19 +2691,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                     )}
 
-                    {/* Typing indicator — shows when AI is loading but hasn't produced any visible content yet */}
-                    {isRunning && !currentThinking && actions.length === 0 && (
+                    {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
+                    {isRunning && (!currentThinking || isSystemProcessingText(currentThinking)) && actions.length === 0 && (
                         !groupedMessages.length ||
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
-                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content)
+                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content && !groupedMessages[groupedMessages.length - 1].thinking)
                     ) && (
-                        <div className="flex justify-start animate-fade-in-up">
-                            <div className={`flex items-center gap-1.5 px-4 py-3 rounded-2xl ${isDark ? 'text-[#888]' : 'text-gray-400'}`}>
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-                                <span className="w-2 h-2 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </div>
-                        </div>
+                        <Marker role="status" className="animate-fade-in-up px-1">
+                            <MarkerContent className="shimmer">Thinking...</MarkerContent>
+                        </Marker>
                     )}
 
                     <div ref={messagesEndRef} />
@@ -3172,6 +3170,18 @@ function MessageMetaFooter({
     );
 }
 
+function isSystemProcessingText(text: string): boolean {
+    const t = text.trim().toLowerCase();
+    if (!t) return true;
+    return (
+        t.includes('accepted the durable request') ||
+        t.includes('cloud agent accepted') ||
+        t.includes('durable request') ||
+        t === 'accepted' ||
+        t === 'processing'
+    );
+}
+
 function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [elapsed, setElapsed] = useState(0);
@@ -3188,7 +3198,7 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
         }
     }, [startTime, thinkingTime]);
 
-    if (!thinking) return null;
+    if (!thinking || isSystemProcessingText(thinking)) return null;
 
     // Use finalized time if available, otherwise live elapsed time
     const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
@@ -3199,6 +3209,14 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
         : thoughtCount === 1
             ? 'Thought 1 time'
             : `Thought ${thoughtCount} times`;
+
+    if (isLive) {
+        return (
+            <Marker role="status" className="mb-3 animate-fade-in px-1">
+                <MarkerContent className="shimmer">Thinking...</MarkerContent>
+            </Marker>
+        );
+    }
 
     return (
         <div className="mb-3 animate-fade-in px-1">
@@ -3216,16 +3234,11 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
                         {title}
                         {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
                     </span>
-                    {/* While live, keep body hidden; after finish show 2–3 lines (openable). */}
-                    {!isLive && (
-                        <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                            {thinking}
-                        </span>
-                    )}
+                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
+                        {thinking}
+                    </span>
                 </span>
-                {!isLive && (
-                    <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
-                )}
+                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
             </button>
         </div>
     );

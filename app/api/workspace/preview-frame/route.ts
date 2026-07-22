@@ -72,6 +72,9 @@ function frameAncestorsForRequest(req: Request): string {
   ancestors.add("https://sycord.com")
   ancestors.add("https://www.sycord.com")
   ancestors.add("https://app.sycord.com")
+  // Local / preview-dev hosts (DAV-115 style frame-ancestors gaps)
+  ancestors.add("http://localhost:3000")
+  ancestors.add("http://127.0.0.1:3000")
   return Array.from(ancestors).join(" ")
 }
 
@@ -150,6 +153,8 @@ export async function GET(req: Request): Promise<Response> {
     "Content-Security-Policy",
     `frame-ancestors ${frameAncestorsForRequest(req)}`,
   )
+  // Required when the Syra shell uses COEP require-corp and the iframe is not credentialless.
+  outHeaders.set("Cross-Origin-Resource-Policy", "cross-origin")
   outHeaders.set("Content-Type", "text/html; charset=utf-8")
 
   const contentType = res.headers.get("content-type") ?? ""
