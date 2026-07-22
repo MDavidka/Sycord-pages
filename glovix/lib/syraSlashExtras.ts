@@ -3,6 +3,8 @@
  * Backed by https://sycord.site/api/#agent (`/api/agent_skills*`, `/api/agent_mcp*`).
  */
 
+import { MCP_PROVIDERS } from '@/lib/mcp-providers'
+
 export type SyraSlashSkill = {
   id: string
   name: string
@@ -20,6 +22,9 @@ export type SyraSlashMcpAddon = {
   builtin?: boolean
   status?: string
   toolsCount?: number
+  authType?: 'oauth' | 'api_key' | 'builtin'
+  logo?: string
+  envKeys?: string[]
 }
 
 /** Built-in catalog from Syte docs — used when the API is unreachable. */
@@ -68,72 +73,17 @@ export const BUILTIN_SKILL_FALLBACK: SyraSlashSkill[] = [
   },
 ]
 
-export const BUILTIN_MCP_FALLBACK: SyraSlashMcpAddon[] = [
-  {
-    id: 'github',
-    name: 'GitHub',
-    description: 'Repos, issues, PRs, and repository tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'linear',
-    name: 'Linear',
-    description: 'Issues, projects, and roadmap tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'supabase',
-    name: 'Supabase',
-    description: 'Database, auth, and storage tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'datadog',
-    name: 'Datadog',
-    description: 'Metrics, logs, and monitoring tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'google-drive',
-    name: 'Google Drive',
-    description: 'Files, folders, and Drive search tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Channels, messages, and workspace tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'gmail',
-    name: 'Gmail',
-    description: 'Email search, draft, and send tools.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI / OpenRouter',
-    description: 'Model and completion tools via OpenAI or OpenRouter.',
-    connected: false,
-    builtin: true,
-    status: 'available',
-  },
-]
+export const BUILTIN_MCP_FALLBACK: SyraSlashMcpAddon[] = MCP_PROVIDERS.map((p) => ({
+  id: p.id,
+  name: p.name,
+  description: p.description,
+  connected: false,
+  builtin: true,
+  status: 'available',
+  authType: p.authType,
+  logo: p.logo,
+  envKeys: p.envKeys,
+}))
 
 function mcpCatalogKey(idOrName: string): string {
   let key = idOrName
@@ -144,6 +94,7 @@ function mcpCatalogKey(idOrName: string): string {
   if (key.includes('openrouter') || key.includes('openroute') || key === 'openai') key = 'openai'
   if (key.includes('google') && key.includes('drive')) key = 'google-drive'
   if (key === 'drive' || key === 'googledrive') key = 'google-drive'
+  if (key.includes('syte') || key.includes('web-search') || key === 'websearch') key = 'syte'
   return key
 }
 
@@ -170,6 +121,9 @@ export function mergeMcpCatalog(remote: SyraSlashMcpAddon[]): SyraSlashMcpAddon[
       connected: remoteItem.connected,
       status: remoteItem.status || (remoteItem.connected ? 'connected' : 'available'),
       toolsCount: remoteItem.toolsCount,
+      authType: catalogItem.authType,
+      logo: catalogItem.logo,
+      envKeys: catalogItem.envKeys,
     }
   })
 
@@ -263,10 +217,11 @@ export function normalizeMcpAddons(raw: unknown): SyraSlashMcpAddon[] {
   return addons
 }
 
-/** Prefer addon name for connect/disconnect body when id is namespaced (`uuid:name`). */
+/** Prefer stable catalog id for connect/disconnect body. */
 export function mcpAddonKey(addon: Pick<SyraSlashMcpAddon, 'id' | 'name'>): string {
+  const bare = addon.id.includes(':') ? addon.id.split(':').pop() || addon.id : addon.id
+  if (bare?.trim()) return bare.trim()
   if (addon.name?.trim()) return addon.name.trim()
-  if (addon.id.includes(':')) return addon.id.split(':').pop() || addon.id
   return addon.id
 }
 
