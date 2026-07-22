@@ -1,12 +1,10 @@
 'use client'
 
-import { memo, useMemo, useState } from 'react';
+import { memo, useLayoutEffect, useMemo, useState } from 'react';
 import {
     BookOpenCheck,
     Brain,
-    Check,
     ChevronDown,
-    CircleAlert,
     Cloud,
     Download,
     Eye,
@@ -295,10 +293,8 @@ function phaseCopy(actions: StreamingAction[], isLive: boolean) {
     }
     const activeAction = [...actions].reverse().find(action => action.status === 'running' || action.status === 'pending');
     const focus = classifyAction(activeAction || actions[actions.length - 1]);
-    const failed = actions.some(action => action.status === 'error');
     const complete = actions.every(action => action.status === 'done' || action.status === 'error');
 
-    if (failed && complete) return { title: 'Needs attention', summary: 'One or more execution steps could not be completed.' };
     if (focus === 'read' || focus === 'search') return { title: 'Inspecting code', summary: 'Syra is reviewing the project before making changes.' };
     if (focus === 'edit') return { title: isLive ? 'Applying changes' : 'Changes applied', summary: 'Project files are being updated with the requested work.' };
     if (focus === 'command' || focus === 'install' || focus === 'validate') return { title: isLive ? 'Validating' : 'Validation complete', summary: 'Commands and checks confirm the project is ready.' };
@@ -351,19 +347,17 @@ function ActionStatus({ action, isDark }: { action: StreamingAction; isDark: boo
     if (action.status === 'running' || action.status === 'pending') {
         return <LoaderCircle className={cn('size-4 shrink-0 animate-spin', isDark ? 'text-blue-300' : 'text-blue-600')} aria-label="Running" />;
     }
-    if (action.status === 'error') {
-        return <CircleAlert className={cn('size-4 shrink-0', isDark ? 'text-red-300' : 'text-red-600')} aria-label="Needs attention" />;
-    }
-    return <Check className={cn('size-4 shrink-0', isDark ? 'text-emerald-300' : 'text-emerald-600')} aria-label="Completed" />;
+    // No checkmark / error mark for finished actions — status is implied by the feed.
+    return <span className="size-4 shrink-0" aria-hidden="true" />;
 }
 
-function ConnectorBar({ isDark, active }: { isDark: boolean; active: boolean }) {
+function ConnectorBar({ isDark }: { isDark: boolean }) {
     return (
         <span
             aria-hidden="true"
             className={cn(
                 'mt-0.5 w-[2px] min-h-[1.25rem] flex-1 rounded-full',
-                active ? 'bg-blue-400/55' : isDark ? 'bg-white/18' : 'bg-black/15',
+                isDark ? 'bg-white/18' : 'bg-black/15',
             )}
         />
     );
@@ -470,7 +464,6 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
     }
 
     const active = group.actions.some(action => action.status === 'running' || action.status === 'pending');
-    const failed = group.actions.some(action => action.status === 'error');
     const hasDetails = group.actions.some(action => {
         if (group.kind === 'thinking') return Boolean(getThinkingText(action));
         return Boolean(action.result) || getFilePaths(action).length > 0 || Boolean(action.args);
@@ -557,16 +550,11 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
                             <span className={cn('min-w-0 flex-1 text-sm font-semibold', isDark ? 'text-white/85' : 'text-gray-800')}>
                                 {actionTitle(group.kind, itemCount, active)}
                             </span>
-                            <span className={cn('hidden text-xs sm:inline', failed ? 'text-red-400' : active ? 'text-blue-400' : isDark ? 'text-white/40' : 'text-gray-400')}>
-                                {failed ? 'Needs attention' : active ? 'Running' : 'Completed'}
-                            </span>
                             <ActionStatus
                                 action={
-                                    failed
-                                        ? group.actions.find(action => action.status === 'error')!
-                                        : active
-                                            ? group.actions.find(action => action.status === 'running' || action.status === 'pending')!
-                                            : group.actions[group.actions.length - 1]
+                                    active
+                                        ? group.actions.find(action => action.status === 'running' || action.status === 'pending')!
+                                        : group.actions[group.actions.length - 1]
                                 }
                                 isDark={isDark}
                             />
@@ -577,7 +565,7 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
                 {(visibleItems.length > 0 || showThinkingPreview || hiddenCount > 0) && (
                     <div className="mt-1.5 flex gap-2.5">
                         <span className="flex w-4 shrink-0 flex-col items-center">
-                            <ConnectorBar isDark={isDark} active={active} />
+                            <ConnectorBar isDark={isDark} />
                         </span>
                         <div className="min-w-0 flex-1 space-y-1 pr-1">
                             {showThinkingPreview && (
@@ -649,7 +637,7 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
                     {!isThinking && (
                         <div className="mt-2 flex gap-2.5">
                             <span className="flex w-4 shrink-0 flex-col items-center">
-                                <ConnectorBar isDark={isDark} active={active} />
+                                <ConnectorBar isDark={isDark} />
                             </span>
                             <div className="min-w-0 flex-1 space-y-3 py-1">
                                 {group.actions.map(action => {
@@ -705,12 +693,20 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
 });
 
 export const ActionsList = memo(function ActionsList({ actions, isLive = false, isDark = true }: ActionsListProps) {
-    const [phaseOpen, setPhaseOpen] = useState(isLive || actions.some(action => action.status === 'error'));
+    const [phaseOpen, setPhaseOpen] = useState(isLive);
     const groups = useMemo(() => groupActions(actions), [actions]);
     const phase = useMemo(() => phaseCopy(actions, isLive), [actions, isLive]);
     const workedFor = useMemo(() => formatWorkedFor(actions), [actions]);
     const running = actions.some(action => action.status === 'running' || action.status === 'pending');
-    const failed = actions.some(action => action.status === 'error');
+
+    // When the run finishes, collapse to the “worked for …” summary before paint.
+    useLayoutEffect(() => {
+        if (isLive) {
+            setPhaseOpen(true);
+        } else {
+            setPhaseOpen(false);
+        }
+    }, [isLive]);
 
     if (actions.length === 0) return null;
 
@@ -748,14 +744,12 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     return (
         <Collapsible open={true} onOpenChange={setPhaseOpen}>
             <section className={cn('agent-feed my-3 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
-                {/* Compact inline status — no large “Understanding task / accepted” badge */}
+                {/* Compact inline status — spinner while live; no completion/failure marks */}
                 <div className={cn('flex items-center gap-2 px-1 py-1 text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>
                     {running ? (
                         <LoaderCircle className={cn('size-3.5 animate-spin', isDark ? 'text-blue-300' : 'text-blue-600')} />
-                    ) : failed ? (
-                        <CircleAlert className={cn('size-3.5', isDark ? 'text-red-300' : 'text-red-600')} />
                     ) : (
-                        <Check className={cn('size-3.5', isDark ? 'text-emerald-300' : 'text-emerald-600')} />
+                        <span className="size-3.5" aria-hidden="true" />
                     )}
                     <span className={cn('font-medium', isDark ? 'text-white/75' : 'text-gray-700')}>{phase.title}</span>
                 </div>
