@@ -89,7 +89,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
  * See https://sycord.site/api/#agent
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getServerSession(authOptions)
+  // Overlap auth + body parse — both are independent and often 20–80ms each.
+  const [session, bodyResult, routeParams] = await Promise.all([
+    getServerSession(authOptions),
+    request.json().then(
+      (body) => ({ ok: true as const, body }),
+      () => ({ ok: false as const, body: null }),
+    ),
+    params,
+  ])
+
   if (!session?.user?.id) {
     return Response.json({ message: "Unauthorized" }, { status: 401 })
   }
@@ -105,16 +114,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     )
   }
 
-  const { id: projectId } = await params
-  let body: {
+  const { id: projectId } = routeParams
+  if (!bodyResult.ok || !bodyResult.body) {
+    return Response.json({ message: "Invalid JSON body" }, { status: 400 })
+  }
+  const body = bodyResult.body as {
     message?: unknown
     modelProfile?: unknown
     afterSession?: unknown
-  } | null = null
-  try {
-    body = await request.json()
-  } catch {
-    return Response.json({ message: "Invalid JSON body" }, { status: 400 })
   }
   const message = typeof body?.message === "string" ? body.message.trim() : ""
   const requestedProfile = typeof body?.modelProfile === "string" ? body.modelProfile : ""
@@ -137,12 +144,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
   }
 
-  const listed = await syteAgentSessions(workspace.uuid, { limit: 1 })
-  const latestSavedSession =
-    listed.ok && listed.data?.sessions?.[0]?.session_number
-      ? Math.max(afterSession, Number(listed.data.sessions[0].session_number) || 0)
-      : afterSession
-
+  // Start the agent immediately — do not block on a sessions list round-trip.
+  // Session numbers from the client (`afterSession`) are authoritative enough
+  // for UI correlation; Turso poll events overwrite with the durable number.
   const change = await syteAgentChange(workspace.uuid, message, modelProfile)
   const requestId = change.data?.request_id
   const tursoSessionId = change.data?.turso_session_id
@@ -166,7 +170,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     )
   }
 
-  const sessionNumber = latestSavedSession + 1
+  const sessionNumber = afterSession + 1
 
   return Response.json({
     ok: true,
