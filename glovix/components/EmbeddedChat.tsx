@@ -704,20 +704,6 @@ export function EmbeddedChat() {
                 </div>
             </div>
 
-            {/* Pane indicators */}
-            <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-1.5">
-                {[0, 1].map((i) => (
-                    <span
-                        key={i}
-                        className={`h-1.5 rounded-full transition-all ${
-                            activePane === i
-                                ? isDark ? 'w-4 bg-white/80' : 'w-4 bg-gray-900/80'
-                                : isDark ? 'w-1.5 bg-white/30' : 'w-1.5 bg-gray-900/25'
-                        }`}
-                    />
-                ))}
-            </div>
-
             {/* Deploy status toast */}
             {deployStatus === 'error' && deployMessage && (
                 <div className="pointer-events-none absolute bottom-8 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-lg px-3 py-2 text-[11px] font-medium bg-red-600 text-white shadow-lg">
