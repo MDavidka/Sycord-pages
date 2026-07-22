@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Check, Loader2, Puzzle, Sparkles } from 'lucide-react'
+import { ArrowLeft, Check, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { McpBrandIcon } from './McpBrandIcons'
 import {
-  BUILTIN_MCP_FALLBACK,
   BUILTIN_SKILL_FALLBACK,
   fetchProjectMcp,
   fetchProjectSkills,
+  mergeMcpCatalog,
   toggleProjectMcp,
   toggleProjectSkill,
   type SyraSlashMcpAddon,
@@ -179,21 +180,23 @@ export function McpLibrary({
   onBack,
   onMcpChange,
 }: McpLibraryProps) {
-  const [addons, setAddons] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK)
+  const [addons, setAddons] = useState<SyraSlashMcpAddon[]>(() => mergeMcpCatalog([]))
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId) {
+      setAddons(mergeMcpCatalog([]))
+      return
+    }
     let cancelled = false
     setLoading(true)
     void fetchProjectMcp(projectId).then((res) => {
       if (cancelled) return
-      const next = res.addons.length ? res.addons : BUILTIN_MCP_FALLBACK
-      setAddons(next)
+      setAddons(res.addons.length ? res.addons : mergeMcpCatalog([]))
       setError(res.error || null)
-      onMcpChange?.(next)
+      onMcpChange?.(res.addons.length ? res.addons : mergeMcpCatalog([]))
       setLoading(false)
     })
     return () => {
@@ -211,8 +214,11 @@ export function McpLibrary({
       setAddons(result.addons)
       onMcpChange?.(result.addons)
     } else {
+      // Optimistic local toggle when API returns empty / fails partially
       setAddons((prev) =>
-        prev.map((a) => (a.id === addon.id ? { ...a, connected: !a.connected } : a)),
+        mergeMcpCatalog(
+          prev.map((a) => (a.id === addon.id ? { ...a, connected: !a.connected } : a)),
+        ),
       )
     }
     setBusyId(null)
@@ -272,20 +278,18 @@ export function McpLibrary({
                 >
                   <span
                     className={cn(
-                      'mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl',
-                      addon.connected
-                        ? 'bg-sky-500/15 text-sky-400'
-                        : isDark
-                          ? 'bg-[#2a2b2e] text-[#9a9b9e]'
-                          : 'bg-gray-200 text-gray-500',
+                      'mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl',
+                      isDark ? 'bg-[#2a2b2e]' : 'bg-gray-200',
                     )}
                   >
                     {busy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : addon.connected ? (
-                      <Check className="h-4 w-4" />
+                      <Loader2 className="h-4 w-4 animate-spin opacity-70" />
                     ) : (
-                      <Puzzle className="h-4 w-4" />
+                      <McpBrandIcon
+                        id={addon.id}
+                        name={addon.name}
+                        className={cn('h-5 w-5', isDark ? 'text-[#e5e5e5]' : 'text-gray-800')}
+                      />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">

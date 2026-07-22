@@ -70,14 +70,120 @@ export const BUILTIN_SKILL_FALLBACK: SyraSlashSkill[] = [
 
 export const BUILTIN_MCP_FALLBACK: SyraSlashMcpAddon[] = [
   {
-    id: 'syte',
-    name: 'syte',
-    description: 'Built-in Syte workspace MCP tools.',
+    id: 'github',
+    name: 'GitHub',
+    description: 'Repos, issues, PRs, and repository tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'linear',
+    name: 'Linear',
+    description: 'Issues, projects, and roadmap tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'supabase',
+    name: 'Supabase',
+    description: 'Database, auth, and storage tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'datadog',
+    name: 'Datadog',
+    description: 'Metrics, logs, and monitoring tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'google-drive',
+    name: 'Google Drive',
+    description: 'Files, folders, and Drive search tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    description: 'Channels, messages, and workspace tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'gmail',
+    name: 'Gmail',
+    description: 'Email search, draft, and send tools.',
+    connected: false,
+    builtin: true,
+    status: 'available',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI / OpenRouter',
+    description: 'Model and completion tools via OpenAI or OpenRouter.',
     connected: false,
     builtin: true,
     status: 'available',
   },
 ]
+
+function mcpCatalogKey(idOrName: string): string {
+  let key = idOrName
+    .toLowerCase()
+    .replace(/^.*:/, '')
+    .replace(/[\s_/]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+  if (key.includes('openrouter') || key.includes('openroute') || key === 'openai') key = 'openai'
+  if (key.includes('google') && key.includes('drive')) key = 'google-drive'
+  if (key === 'drive' || key === 'googledrive') key = 'google-drive'
+  return key
+}
+
+/** Merge API MCP addons onto the known connectable catalog (keep catalog order + icons). */
+export function mergeMcpCatalog(remote: SyraSlashMcpAddon[]): SyraSlashMcpAddon[] {
+  const remoteByKey = new Map<string, SyraSlashMcpAddon>()
+  for (const item of remote) {
+    remoteByKey.set(mcpCatalogKey(item.id), item)
+    if (item.name) remoteByKey.set(mcpCatalogKey(item.name), item)
+  }
+
+  const merged = BUILTIN_MCP_FALLBACK.map((catalogItem) => {
+    const remoteItem =
+      remoteByKey.get(mcpCatalogKey(catalogItem.id)) ||
+      remoteByKey.get(mcpCatalogKey(catalogItem.name))
+    if (!remoteItem) return { ...catalogItem }
+    return {
+      ...catalogItem,
+      ...remoteItem,
+      id: catalogItem.id,
+      name: catalogItem.name,
+      description: catalogItem.description || remoteItem.description,
+      builtin: true,
+      connected: remoteItem.connected,
+      status: remoteItem.status || (remoteItem.connected ? 'connected' : 'available'),
+      toolsCount: remoteItem.toolsCount,
+    }
+  })
+
+  // Append unknown remotes that are not in the catalog
+  const known = new Set(merged.map((m) => mcpCatalogKey(m.id)))
+  for (const item of remote) {
+    const key = mcpCatalogKey(item.id)
+    if (!known.has(key)) {
+      known.add(key)
+      merged.push(item)
+    }
+  }
+  return merged
+}
 
 function humanizeId(id: string): string {
   const bare = id.includes(':') ? id.split(':').pop() || id : id
@@ -221,15 +327,14 @@ export async function fetchProjectMcp(projectId: string): Promise<{
     const data = await res.json().catch(() => null)
     if (!res.ok) {
       return {
-        addons: BUILTIN_MCP_FALLBACK,
+        addons: mergeMcpCatalog([]),
         error: data?.message || `Failed to load MCP (${res.status})`,
       }
     }
-    const addons = normalizeMcpAddons(data?.addons)
-    return { addons: addons.length > 0 ? addons : BUILTIN_MCP_FALLBACK }
+    return { addons: mergeMcpCatalog(normalizeMcpAddons(data?.addons)) }
   } catch (err: any) {
     return {
-      addons: BUILTIN_MCP_FALLBACK,
+      addons: mergeMcpCatalog([]),
       error: err?.message || 'Failed to load MCP',
     }
   }
@@ -256,7 +361,7 @@ export async function toggleProjectMcp(
         error: data?.message || `Failed to ${connect ? 'connect' : 'disconnect'} MCP`,
       }
     }
-    return { addons: normalizeMcpAddons(data?.addons) }
+    return { addons: mergeMcpCatalog(normalizeMcpAddons(data?.addons)) }
   } catch (err: any) {
     return { addons: [], error: err?.message || 'Failed to update MCP' }
   }

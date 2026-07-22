@@ -31,6 +31,7 @@ import {
     McpLibrary,
     SkillsLibrary,
 } from './SlashLibraries';
+import { McpBrandIcon } from './McpBrandIcons';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
@@ -2468,15 +2469,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, []);
 
     const hostProjectIdForSlash = typeof window !== 'undefined' ? getHostProjectId() : null;
-    const activeExtras = useMemo(() => {
-        const activeSkills = slashSkills.filter((s) => s.active).slice(0, 2);
-        const connectedMcp = slashMcp.filter((a) => a.connected);
-        const remaining = Math.max(0, 2 - activeSkills.length);
-        return {
-            skills: activeSkills,
-            mcp: connectedMcp.slice(0, remaining),
-        };
-    }, [slashSkills, slashMcp]);
+    const connectedMcps = useMemo(
+        () => slashMcp.filter((a) => a.connected).slice(0, 4),
+        [slashMcp],
+    );
 
     const closeLibraryView = () => setLibraryView(null);
 
@@ -2943,31 +2939,37 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Active skills / MCP — max 1–2 chips */}
-                        {(activeExtras.skills.length > 0 || activeExtras.mcp.length > 0) && (
-                            <div className="flex flex-wrap gap-1.5 px-0.5">
-                                {activeExtras.skills.map((skill) => (
-                                    <button
-                                        key={`active-skill-${skill.id}`}
-                                        type="button"
-                                        onClick={() => setLibraryView('skills')}
-                                        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors ${isDark ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
-                                    >
-                                        <Sparkles className="h-3 w-3" />
-                                        <span className="max-w-[7rem] truncate">{skill.name}</span>
-                                    </button>
-                                ))}
-                                {activeExtras.mcp.map((addon) => (
-                                    <button
-                                        key={`active-mcp-${addon.id}`}
-                                        type="button"
-                                        onClick={() => setLibraryView('mcp')}
-                                        className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors ${isDark ? 'border-sky-500/30 bg-sky-500/10 text-sky-300' : 'border-sky-200 bg-sky-50 text-sky-700'}`}
-                                    >
-                                        <Puzzle className="h-3 w-3" />
-                                        <span className="max-w-[7rem] truncate">{addon.name}</span>
-                                    </button>
-                                ))}
+                        {/* Connected MCP pill — dashed status chip above composer */}
+                        {connectedMcps.length > 0 && (
+                            <div className="flex justify-start px-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setLibraryView('mcp')}
+                                    className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
+                                        isDark
+                                            ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
+                                            : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
+                                    }`}
+                                    aria-label="Connected MCP"
+                                >
+                                    <span className="flex items-center -space-x-1">
+                                        {connectedMcps.map((addon) => (
+                                            <span
+                                                key={addon.id}
+                                                className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
+                                                    isDark ? 'border-[#18191B] bg-[#1c1d1f]' : 'border-white bg-white'
+                                                }`}
+                                            >
+                                                <McpBrandIcon
+                                                    id={addon.id}
+                                                    name={addon.name}
+                                                    className="h-3.5 w-3.5 text-[#e5e5e5]"
+                                                />
+                                            </span>
+                                        ))}
+                                    </span>
+                                    <span className="text-[12px] leading-none tracking-tight">connected</span>
+                                </button>
                             </div>
                         )}
 
