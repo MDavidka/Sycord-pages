@@ -74,6 +74,22 @@ export function EmbeddedChat() {
         return 'b27GcrRo';
     }, []);
 
+    // ─── Apply credentialless attribute without remounting the iframe ──────────
+    // Using a stable iframeRef directly on the element avoids the React pattern
+    // of passing a callback-ref whose identity changes when previewUrl updates —
+    // that pattern caused React to call the old ref with null and the new ref
+    // with the element, effectively unmounting + remounting the iframe and
+    // producing a white screen on every AI completion.
+    useEffect(() => {
+        const el = iframeRef.current;
+        if (!el || !previewUrl) return;
+        if (shouldUseCredentiallessIframe(previewUrl)) {
+            el.setAttribute('credentialless', '');
+        } else {
+            el.removeAttribute('credentialless');
+        }
+    }, [previewUrl]);
+
     // ─── Auto-create Syte workspace on project open ────────────────────────────
     useEffect(() => {
         if (!projectId || workspaceCreatedRef.current) return;
@@ -393,16 +409,6 @@ export function EmbeddedChat() {
         iframeRef.current.src = src;
     };
 
-    const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
-        iframeRef.current = el;
-        if (!el || !previewUrl) return;
-        if (shouldUseCredentiallessIframe(previewUrl)) {
-            el.setAttribute('credentialless', '');
-        } else {
-            el.removeAttribute('credentialless');
-        }
-    }, [previewUrl]);
-
     const retryPreview = () => {
         previewStartedRef.current = false;
         setPreviewError('');
@@ -521,7 +527,7 @@ export function EmbeddedChat() {
                         </div>
                     )}
                     <iframe
-                        ref={applyIframeEmbedAttrs}
+                        ref={iframeRef}
                         src={frameUrl}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}
