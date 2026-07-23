@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ChevronLeft, RotateCw, ExternalLink, Eye, Loader2, AlertTriangle, Rocket, Copy, Check, Globe, Zap } from 'lucide-react';
 import { Chat } from './Chat';
 import { useStore } from '../store';
@@ -527,7 +527,6 @@ export function EmbeddedChat() {
                         title={previewLabel}
                         allow="cross-origin-isolated; clipboard-read; clipboard-write"
                         referrerPolicy="no-referrer-when-downgrade"
-                        {...({ credentialless: true } as React.IframeHTMLAttributes<HTMLIFrameElement>)}
                     />
                 </>
             );

@@ -34,14 +34,13 @@ export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deploy
 }
 
 /**
- * /syra uses COEP (require-corp / credentialless). Even when HTML is loaded via
- * the same-origin preview-frame proxy, scripts/CSS still come from
- * preview*.sycord.site and need a credentialless iframe (or CORP on every asset)
- * — otherwise the iframe stays white while top-level navigation works.
+ * /syra uses page-level COEP credentialless (same as /builder). That already
+ * allows cross-origin Vite assets from preview*.sycord.site inside the
+ * same-origin /api/workspace/preview-frame iframe.
+ *
+ * Do NOT put credentialless on the iframe itself: the preview-frame proxy is
+ * auth-gated, and a credentialless iframe omits cookies → 401 → blank pane.
  */
-export function shouldUseCredentiallessIframe(url: string): boolean {
-    if (typeof window === 'undefined' || !url) return false;
-    if (!window.location.pathname.includes('/syra')) return false;
-    // Always credentialless inside Syra: proxied HTML still pulls cross-origin assets.
-    return true;
+export function shouldUseCredentiallessIframe(_url: string): boolean {
+    return false;
 }

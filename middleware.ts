@@ -11,19 +11,18 @@ const COEP_CREDENTIALLESS: Record<string, string> = {
 
 /**
  * Safari (incl. iOS) does not treat credentialless as cross-origin isolated.
- * Syra uses require-corp so WebContainer can boot on mobile Safari.
+ * That is acceptable on /syra: mobile uses Syte server preview (not WebContainer),
+ * and require-corp would block Vite assets that lack CORP headers.
  */
-const COEP_REQUIRE_CORP: Record<string, string> = {
-  "Cross-Origin-Embedder-Policy": "require-corp",
-  "Cross-Origin-Opener-Policy": "same-origin",
-}
-
 function isolationHeadersFor(pathname: string): Record<string, string> | null {
   if (pathname === "/builder" || pathname.startsWith("/builder/")) {
     return COEP_CREDENTIALLESS
   }
+  // Same as /builder: credentialless keeps SharedArrayBuffer for WebContainer
+  // while allowing preview*.sycord.site assets inside the proxied iframe.
+  // require-corp left the Syra preview pane white (no CORP on Vite responses).
   if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) {
-    return COEP_REQUIRE_CORP
+    return COEP_CREDENTIALLESS
   }
   return null
 }

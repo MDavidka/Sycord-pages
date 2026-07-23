@@ -153,8 +153,10 @@ export async function GET(req: Request): Promise<Response> {
     "Content-Security-Policy",
     `frame-ancestors ${frameAncestorsForRequest(req)}`,
   )
-  // Required when the Syra shell uses COEP require-corp and the iframe is not credentialless.
+  // CORP so the document embeds under COEP (credentialless / require-corp parents).
   outHeaders.set("Cross-Origin-Resource-Policy", "cross-origin")
+  // Avoid serving a cached empty/stale shell into the Syra preview iframe.
+  outHeaders.set("Cache-Control", "no-store")
   outHeaders.set("Content-Type", "text/html; charset=utf-8")
 
   const contentType = res.headers.get("content-type") ?? ""
