@@ -4,12 +4,10 @@
 // The Sycord app is on sycord.com — a different origin — so the browser
 // silently blanks the iframe.
 //
-// Solution: fetch the preview HTML server-side, follow any server-side
-// redirects (e.g. / → /index.html from Vite), strip the blocking headers,
-// inject <base href="https://preview*.sycord.site/"> so every relative asset
-// URL (scripts, CSS, imports) resolves to the Syte dev server.
-// Vite dev server already sends Access-Control-Allow-Origin: * for all assets,
-// so they load fine cross-origin from the now-sycord.com-origin iframe.
+// Solution: fetch the preview HTML server-side, follow server-side redirects,
+// strip embedding-blocker headers, and rewrite all absolute-path asset
+// references (src="/...", href="/...") to the Syte preview origin so the
+// browser fetches JS/CSS directly from the dev server (which sends CORS *).
 //
 // GET /api/workspace/preview-frame?url=<encoded-syte-preview-url>
 
@@ -71,11 +69,6 @@ function frameAncestorsForRequest(req: Request): string {
   return Array.from(ancestors).join(" ")
 }
 
-/**
- * Fetch previewUrl, following redirects server-side (up to MAX_REDIRECTS).
- * Each redirect target is re-checked against the allowlist to prevent SSRF.
- * Returns the final response and the resolved URL (used for <base href>).
- */
 async function fetchFollowingRedirects(
   startUrl: string,
 ): Promise<{ res: Response; finalUrl: string } | { error: string; status: number }> {
@@ -96,17 +89,11 @@ async function fetchFollowingRedirects(
     }
 
     if (res.status >= 300 && res.status < 400) {
-      if (i === MAX_REDIRECTS) {
-        return { error: "Too many redirects from preview server", status: 502 }
-      }
+      if (i === MAX_REDIRECTS) return { error: "Too many redirects from preview server", status: 502 }
       const location = res.headers.get("location")
-      if (!location) {
-        return { error: "Redirect with no Location header", status: 502 }
-      }
+      if (!location) return { error: "Redirect with no Location header", status: 502 }
       const resolved = new URL(location, currentUrl).toString()
-      if (!isAllowedPreviewUrl(resolved)) {
-        return { error: "Redirect target not allowed", status: 403 }
-      }
+      if (!isAllowedPreviewUrl(resolved)) return { error: "Redirect target not allowed", status: 403 }
       currentUrl = resolved
       continue
     }
@@ -114,6 +101,41 @@ async function fetchFollowingRedirects(
     return { res, finalUrl: currentUrl }
   }
   return { error: "Too many redirects", status: 502 }
+}
+
+/**
+ * Rewrite absolute-path asset references in HTML to the Syte preview origin.
+ *
+ * Vite emits paths like src="/assets/index-abc.js" which are absolute and
+ * resolve to the *proxy* origin (sycord.com) in the browser rather than the
+ * Syte dev server. This causes 404s and a blank white screen.
+ *
+ * We rewrite:
+ *   src="/..."      →  src="https://preview.sycord.site/..."
+ *   href="/..."     →  href="https://preview.sycord.site/..."
+ *   content="/..."  →  content="https://preview.sycord.site/..."
+ *   url("/...")     →  url("https://preview.sycord.site/...")
+ *
+ * Relative paths ("./...", "../..."), protocol-relative ("//..."),
+ * and already-absolute ("https://...") URLs are left untouched.
+ */
+function rewriteAbsolutePaths(html: string, previewOrigin: string): string {
+  // src="/path" or src='/path'
+  html = html.replace(
+    /\b(src|href|content|action)=(["'])\/(?!\/)/g,
+    `$1=$2${previewOrigin}/`,
+  )
+  // url("/path") or url('/path')
+  html = html.replace(
+    /\burl\((["'])\/(?!\/)/g,
+    `url($1${previewOrigin}/`,
+  )
+  // Also handle unquoted src=/path (rare but Vite sometimes emits these in inline styles)
+  html = html.replace(
+    /\b(src|href)=\/(?!\/|\s|>)/g,
+    `$1=${previewOrigin}/`,
+  )
+  return html
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -183,10 +205,12 @@ export async function GET(req: Request): Promise<Response> {
 
   let html = await res.text()
 
-  // Use the final (post-redirect) URL for <base href> so relative paths resolve correctly.
+  // Derive the preview origin (e.g. "https://previewl-test007.sycord.site")
+  const previewOrigin = new URL(finalUrl).origin
+
+  // 1. Inject <base href> for any relative paths Vite emits
   const baseHref = finalUrl.endsWith("/") ? finalUrl : finalUrl + "/"
   const baseTag = `<base href="${baseHref}">`
-
   if (html.includes("<head>")) {
     html = html.replace("<head>", `<head>\n  ${baseTag}`)
   } else if (html.includes("<head ")) {
@@ -196,6 +220,10 @@ export async function GET(req: Request): Promise<Response> {
   } else {
     html = baseTag + "\n" + html
   }
+
+  // 2. Rewrite absolute-path references (/assets/...) to the Syte preview origin
+  //    so Vite JS/CSS bundles are fetched from the dev server, not sycord.com.
+  html = rewriteAbsolutePaths(html, previewOrigin)
 
   return new Response(html, { status: res.status, headers: outHeaders })
 }
