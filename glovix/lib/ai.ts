@@ -24,29 +24,47 @@ export interface ModelChoice {
     subtitle: string
     modelType: ModelType
     apiModel: string
+    /** Provider logo from https://svgl.app (vendored under /public/model-logos) */
+    icon: string
+    iconAlt: string
 }
 
 export const MODEL_CHOICES: ModelChoice[] = [
     {
         id: 'nano',
         label: 'syra-nano',
-        subtitle: 'Fast · Gemini Flash',
+        subtitle: 'Fast',
         modelType: 'mimo-v2-flash',
         apiModel: 'gemini-2.5-flash',
+        icon: '/model-logos/gemini.svg',
+        iconAlt: 'Gemini',
     },
     {
         id: 'base',
         label: 'syra-base',
-        subtitle: 'Balanced · DeepSeek V4 Flash',
+        subtitle: 'Balanced',
         modelType: 'deepseek-v4-flash',
         apiModel: 'deepseek-v4-flash',
+        icon: '/model-logos/deepseek.svg',
+        iconAlt: 'DeepSeek',
     },
     {
         id: 'havy',
         label: 'syra-havy',
-        subtitle: 'Advanced · Gemini 2.5 Pro',
+        subtitle: 'Advanced',
         modelType: 'gemini-3.1-pro',
         apiModel: 'gemini-2.5-pro',
+        icon: '/model-logos/gemini.svg',
+        iconAlt: 'Gemini',
+    },
+    {
+        id: 'ultra',
+        label: 'syra-ultra',
+        subtitle: 'Ultra',
+        modelType: 'deepseek-v4-pro',
+        apiModel: 'deepseek-v4-pro',
+        icon: '/model-logos/deepseek.svg',
+        iconAlt: 'DeepSeek',
     },
 ];
 

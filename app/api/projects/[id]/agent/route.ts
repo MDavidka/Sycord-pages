@@ -13,7 +13,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
-const MODEL_PROFILES = new Set(["syra-nano", "syra-base", "syra-havy"])
+const MODEL_PROFILES = new Set(["syra-nano", "syra-base", "syra-havy", "syra-ultra"])
 
 /**
  * GET /api/projects/[id]/agent
