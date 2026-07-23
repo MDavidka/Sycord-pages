@@ -2,19 +2,19 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'minimax-m3' | 'gemini-3.1-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
     'deepseek-v4-flash': 'DeepSeek V4 Flash',
-    'deepseek-v4-pro': 'DeepSeek V4 Pro',
+    'minimax-m3': 'MiniMax M3',
     'gemini-3.1-pro': 'Gemini 3.1 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
     'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
-    'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
+    'minimax-m3': 'MiniMax-M3',
     'gemini-3.1-pro': 'gemini-3.1-pro',
 };
 
@@ -61,10 +61,10 @@ export const MODEL_CHOICES: ModelChoice[] = [
         id: 'ultra',
         label: 'syra-ultra',
         subtitle: 'Ultra',
-        modelType: 'deepseek-v4-pro',
-        apiModel: 'deepseek-v4-pro',
-        icon: '/model-logos/deepseek.svg',
-        iconAlt: 'DeepSeek',
+        modelType: 'minimax-m3',
+        apiModel: 'MiniMax-M3',
+        icon: '/model-logos/minimax.svg',
+        iconAlt: 'MiniMax',
     },
 ];
 
@@ -335,8 +335,10 @@ async function _sendMessageInternal(
         'deepseek-reasoner': 128000,
         'deepseek-v4-flash': 128000,
         'deepseek/deepseek-v4-flash': 128000,
-        'deepseek-v4-pro': 128000,
-        'deepseek/deepseek-v4-pro': 128000,
+        // MiniMax M3 — 1M context
+        'minimax-m3': 1000000,
+        'MiniMax-M3': 1000000,
+        'minimax/minimax-m3': 1000000,
         // MiMo
         'mimo-v2-flash': 128000,
         'xiaomi/mimo-v2-flash:free': 128000,
