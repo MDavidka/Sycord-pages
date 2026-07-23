@@ -246,17 +246,24 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
             <button
                 type="button"
                 onClick={onToggleMenu}
-                aria-label="Select model"
-                className={`flex h-8 items-center gap-1 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
+                aria-label={`Select model (${current.label})`}
+                title={current.label}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
             >
-                <span className={`text-[13px] font-medium tracking-tight ${isDark ? 'text-[#c5c6c9]' : 'text-gray-700'}`}>{current.label}</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                    src={current.icon}
+                    alt={current.iconAlt}
+                    className="h-4 w-4 object-contain"
+                    draggable={false}
+                />
                 <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
             </button>
 
             {showMenu && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
-                    <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[210px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                    <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[160px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
                         <div className="p-1.5">
                             {MODEL_CHOICES.map((choice) => {
                                 const isActive = choice.modelType === selectedModel
@@ -265,14 +272,22 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                                         key={choice.id}
                                         type="button"
                                         onClick={() => onSelect(choice)}
-                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between transition-colors ${
+                                        title={choice.label}
+                                        aria-label={choice.label}
+                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-colors ${
                                             isActive
                                                 ? isDark ? 'bg-[#26272a]' : 'bg-gray-50'
                                                 : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
                                         }`}
                                     >
-                                        <span className={`text-[13px] font-medium ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>{choice.label}</span>
-                                        <span className={`text-[11px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>{choice.subtitle}</span>
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={choice.icon}
+                                            alt={choice.iconAlt}
+                                            className="h-5 w-5 shrink-0 object-contain"
+                                            draggable={false}
+                                        />
+                                        <span className={`text-[12px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>{choice.subtitle}</span>
                                     </button>
                                 )
                             })}

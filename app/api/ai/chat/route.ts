@@ -1,14 +1,15 @@
-// AI endpoint for the Glovix builder — backed by Google Gemini on Vertex AI and
-// DeepSeek (OpenAI-compatible).
+// AI endpoint for the Glovix builder — backed by Google Gemini on Vertex AI,
+// DeepSeek, and MiniMax (OpenAI-compatible).
 //
 // The Glovix client posts OpenAI-compatible chat-completion requests (streaming,
 // with `tools` / `tool_calls`) to `/api/ai/chat`. This handler routes to the
 // appropriate provider based on the requested model name:
 //
 //   - Models starting with "deepseek" → DeepSeek API (api.deepseek.com)
+//   - Models matching MiniMax (minimax-m3 / MiniMax-*) → MiniMax API (api.minimax.io)
 //   - Everything else → Gemini on Vertex AI (aiplatform.googleapis.com)
 //
-// Both providers stream responses back in OpenAI-compatible SSE so the client
+// Providers stream responses back in OpenAI-compatible SSE so the client
 // is unchanged regardless of which backend is used.
 //
 // Configure via env:
@@ -20,9 +21,14 @@
 //   DeepSeek:
 //     DEEPSEEK_API_KEY                                 → API key (required)
 //     DEEPSEEK_MODEL                                   → model (default deepseek-chat)
+//
+//   MiniMax:
+//     MINIMAX_API_KEY                                  → API key (required)
+//     MINIMAX_MODEL                                    → model (default MiniMax-M3)
 
 import { isConfigured, streamOpenAICompatible } from "@/lib/glovix-gemini"
 import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-deepseek"
+import { isMiniMaxConfigured, streamMiniMaxCompatible } from "@/lib/glovix-minimax"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkRateLimit } from "@/lib/security/rate-limit"
@@ -34,6 +40,12 @@ export const maxDuration = 300
 function isDeepSeekModel(model: string | undefined): boolean {
   if (!model) return false
   return model.toLowerCase().startsWith("deepseek")
+}
+
+function isMiniMaxModel(model: string | undefined): boolean {
+  if (!model) return false
+  const id = model.toLowerCase()
+  return id.startsWith("minimax") || id.startsWith("minimax/")
 }
 
 export async function POST(req: Request) {
@@ -97,12 +109,32 @@ export async function POST(req: Request) {
     })
   }
 
+  // Route to MiniMax for minimax-* / MiniMax-* models (syra-ultra → MiniMax-M3).
+  if (isMiniMaxModel(model)) {
+    if (!isMiniMaxConfigured()) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "MiniMax is not configured. Set MINIMAX_API_KEY in your environment.",
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    return streamMiniMaxCompatible({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: model || undefined,
+    })
+  }
+
   // Default: Gemini on Vertex AI.
   if (!isConfigured()) {
     return new Response(
       JSON.stringify({
         error:
-          "No AI provider is configured. Set DEEPSEEK_API_KEY for DeepSeek, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
+          "No AI provider is configured. Set DEEPSEEK_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
       }),
       { status: 503, headers: { "Content-Type": "application/json" } },
     )

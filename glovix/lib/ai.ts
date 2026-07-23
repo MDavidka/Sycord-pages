@@ -2,19 +2,19 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'deepseek-v4-pro' | 'gemini-3.1-pro';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'minimax-m3' | 'gemini-3.1-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
     'deepseek-v4-flash': 'DeepSeek V4 Flash',
-    'deepseek-v4-pro': 'DeepSeek V4 Pro',
+    'minimax-m3': 'MiniMax M3',
     'gemini-3.1-pro': 'Gemini 3.1 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
     'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
-    'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
+    'minimax-m3': 'MiniMax-M3',
     'gemini-3.1-pro': 'gemini-3.1-pro',
 };
 
@@ -24,29 +24,47 @@ export interface ModelChoice {
     subtitle: string
     modelType: ModelType
     apiModel: string
+    /** Provider logo from https://svgl.app (vendored under /public/model-logos) */
+    icon: string
+    iconAlt: string
 }
 
 export const MODEL_CHOICES: ModelChoice[] = [
     {
         id: 'nano',
         label: 'syra-nano',
-        subtitle: 'Fast · Gemini Flash',
+        subtitle: 'Fast',
         modelType: 'mimo-v2-flash',
         apiModel: 'gemini-2.5-flash',
+        icon: '/model-logos/gemini.svg',
+        iconAlt: 'Gemini',
     },
     {
         id: 'base',
         label: 'syra-base',
-        subtitle: 'Balanced · DeepSeek V4 Flash',
+        subtitle: 'Balanced',
         modelType: 'deepseek-v4-flash',
         apiModel: 'deepseek-v4-flash',
+        icon: '/model-logos/deepseek.svg',
+        iconAlt: 'DeepSeek',
     },
     {
         id: 'havy',
         label: 'syra-havy',
-        subtitle: 'Advanced · Gemini 2.5 Pro',
+        subtitle: 'Advanced',
         modelType: 'gemini-3.1-pro',
         apiModel: 'gemini-2.5-pro',
+        icon: '/model-logos/gemini.svg',
+        iconAlt: 'Gemini',
+    },
+    {
+        id: 'ultra',
+        label: 'syra-ultra',
+        subtitle: 'Ultra',
+        modelType: 'minimax-m3',
+        apiModel: 'MiniMax-M3',
+        icon: '/model-logos/minimax.svg',
+        iconAlt: 'MiniMax',
     },
 ];
 
@@ -317,8 +335,10 @@ async function _sendMessageInternal(
         'deepseek-reasoner': 128000,
         'deepseek-v4-flash': 128000,
         'deepseek/deepseek-v4-flash': 128000,
-        'deepseek-v4-pro': 128000,
-        'deepseek/deepseek-v4-pro': 128000,
+        // MiniMax M3 — 1M context
+        'minimax-m3': 1000000,
+        'MiniMax-M3': 1000000,
+        'minimax/minimax-m3': 1000000,
         // MiMo
         'mimo-v2-flash': 128000,
         'xiaomi/mimo-v2-flash:free': 128000,
