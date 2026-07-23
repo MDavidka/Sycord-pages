@@ -34,12 +34,40 @@ export function shouldEmbedPreviewInIframe(url: string, source: 'live' | 'deploy
 }
 
 /**
- * /syra uses page-level COEP credentialless (same as /builder). That already
- * allows cross-origin Vite assets from preview*.sycord.site inside the
- * same-origin /api/workspace/preview-frame iframe.
+ * iframe src for a live preview URL.
  *
- * Do NOT put credentialless on the iframe itself: the preview-frame proxy is
- * auth-gated, and a credentialless iframe omits cookies → 401 → blank pane.
+ * Syte preview*.sycord.site allows framing from sycord.com via CSP
+ * `frame-ancestors` (and currently sends no X-Frame-Options). Embed the
+ * Syte URL directly so Vite absolute module paths (`/@vite/client`,
+ * `/src/main.tsx`) resolve on the preview origin.
+ *
+ * The same-origin HTML proxy left those absolute paths on sycord.com → 404 →
+ * blank white pane. Rewriting them to the Syte host still fails because Syte
+ * CORS is fixed to `Access-Control-Allow-Origin: https://sycord.site`, which
+ * rejects ES module loads from a sycord.com document.
+ *
+ * Keep `/api/workspace/preview-frame` as a fallback for hosts that still
+ * block framing (legacy XFO / stricter CSP).
+ */
+export function resolvePreviewFrameSrc(
+    url: string,
+    source: 'live' | 'deployed' | 'syte' | null = null,
+    opts?: { preferProxy?: boolean },
+): string {
+    if (!url) return url;
+    const isSyte = source === 'syte' || isSytePreviewUrl(url);
+    if (isSyte && opts?.preferProxy) {
+        return `/api/workspace/preview-frame?url=${encodeURIComponent(url)}`;
+    }
+    // Direct embed for Syte (and non-Syte URLs that are already embeddable).
+    return url;
+}
+
+/**
+ * /syra uses page-level COEP credentialless (same as /builder).
+ *
+ * Do NOT put credentialless on the iframe itself: if we ever fall back to the
+ * auth-gated preview-frame proxy, a credentialless iframe omits cookies → 401.
  */
 export function shouldUseCredentiallessIframe(_url: string): boolean {
     return false;
