@@ -8,7 +8,8 @@ export function isSafariBrowser(): boolean {
 /** COEP mode for the current page — must match middleware / next.config headers. */
 export function getPageCoepMode(): 'credentialless' | 'require-corp' {
     if (typeof window === 'undefined') return 'credentialless';
-    if (window.location.pathname.includes('/syra')) return 'require-corp';
+    // /syra matches /builder: credentialless so proxied Syte Vite assets can load.
+    if (window.location.pathname.includes('/syra')) return 'credentialless';
     if (isSafariBrowser()) return 'require-corp';
     return 'credentialless';
 }
@@ -16,6 +17,6 @@ export function getPageCoepMode(): 'credentialless' | 'require-corp' {
 export function canBootWebContainer(): boolean {
     if (typeof window === 'undefined') return false;
     if (window.crossOriginIsolated) return true;
-    // Safari uses require-corp on /syra — still attempt boot; isolation may lag one tick.
+    // Safari may lack credentialless isolation — still attempt boot on /syra.
     return window.location.pathname.includes('/syra');
 }

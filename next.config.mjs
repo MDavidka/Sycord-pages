@@ -68,11 +68,6 @@ const nextConfig = {
       { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
     ]
 
-    const crossOriginRequireCorp = [
-      { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
-      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-    ]
-
     return [
       {
         source: "/:path*",
@@ -92,13 +87,14 @@ const nextConfig = {
       },
       { source: "/builder", headers: crossOriginCredentialless },
       { source: "/builder/:path*", headers: crossOriginCredentialless },
-      { source: "/dashboard/sites/:id/syra", headers: crossOriginRequireCorp },
-      { source: "/dashboard/sites/:id/syra/:path*", headers: crossOriginRequireCorp },
-      // Preview proxy must be frameable by the Syra shell (same-origin iframe).
+      // credentialless (not require-corp) so Syte Vite assets load in the preview iframe.
+      { source: "/dashboard/sites/:id/syra", headers: crossOriginCredentialless },
+      { source: "/dashboard/sites/:id/syra/:path*", headers: crossOriginCredentialless },
+      // Align with preview-frame route CORP so the document is embeddable under COEP.
       {
         source: "/api/workspace/preview-frame",
         headers: [
-          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
