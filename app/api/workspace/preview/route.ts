@@ -59,9 +59,12 @@ export async function POST(req: Request): Promise<Response> {
     body = {}
   }
 
-  const projectId = String(body?.projectId || new URL(req.url).searchParams.get("projectId") || "").trim()
+  // Prefer query string — body parse can fail/empty on oversized file payloads.
+  const projectId = String(
+    new URL(req.url).searchParams.get("projectId") || body?.projectId || "",
+  ).trim()
   if (!isValidProjectId(projectId)) {
-    return NextResponse.json({ ok: false, error: "Invalid project ID" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "Missing project ID" }, { status: 400 })
   }
 
   const { db, project } = await loadProject(userId, projectId)
@@ -118,7 +121,7 @@ export async function GET(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url)
   const projectId = (searchParams.get("projectId") || "").trim()
   if (!isValidProjectId(projectId)) {
-    return NextResponse.json({ ok: false, error: "Invalid project ID" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "Missing project ID" }, { status: 400 })
   }
 
   const { project } = await loadProject(userId, projectId)
@@ -162,7 +165,7 @@ export async function DELETE(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url)
   const projectId = (searchParams.get("projectId") || "").trim()
   if (!isValidProjectId(projectId)) {
-    return NextResponse.json({ ok: false, error: "Invalid project ID" }, { status: 400 })
+    return NextResponse.json({ ok: false, error: "Missing project ID" }, { status: 400 })
   }
 
   const { project } = await loadProject(userId, projectId)

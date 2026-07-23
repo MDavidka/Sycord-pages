@@ -6,10 +6,27 @@
 // (standalone /builder page), the implementation falls back to localStorage so
 // the open-source experience is unchanged.
 
+/** Parse project id from /dashboard/sites/<id>/syra when window injection is missing. */
+function projectIdFromSyraPath(): string | null {
+    if (typeof window === 'undefined') return null;
+    const match = window.location.pathname.match(/\/dashboard\/sites\/([^/]+)\/syra\/?$/i);
+    if (!match?.[1]) return null;
+    try {
+        const id = decodeURIComponent(match[1]).trim();
+        return id || null;
+    } catch {
+        return match[1].trim() || null;
+    }
+}
+
 /** Returns the host project ID injected by GlovixBuilder, or null. */
 export function getHostProjectId(): string | null {
     if (typeof window === 'undefined') return null;
-    return (window as any).__glovixProjectId ?? null;
+    const injected = (window as any).__glovixProjectId;
+    if (typeof injected === 'string' && injected.trim()) return injected.trim();
+    // Fallback when GlovixBuilder cleanup briefly cleared the window global
+    // (or before the effect re-wrote it after a parent re-render).
+    return projectIdFromSyraPath();
 }
 
 /** Deterministic embedded chat id for the current host project. */
@@ -326,14 +343,21 @@ export async function startSytePreview(
     needsCreate?: boolean
 }> {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const resolvedId = String(projectId || getHostProjectId() || '').trim();
+    if (!resolvedId) {
+        return { ok: false, error: 'Missing project ID' };
+    }
 
     try {
-        const res = await fetch('/api/workspace/preview', {
+        // Keep projectId in the query string so a failed/empty JSON body still
+        // resolves the project (oversized file payloads, parse errors, etc.).
+        const previewUrl = `/api/workspace/preview?projectId=${encodeURIComponent(resolvedId)}`;
+        const res = await fetch(previewUrl, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                projectId,
+                projectId: resolvedId,
                 domain: options?.domain,
                 issueDomain: options?.issueDomain,
                 syncFiles: options?.syncFiles,
@@ -355,10 +379,7 @@ export async function startSytePreview(
         if (res.ok && !data.previewUrl) {
             for (let i = 0; i < 30; i++) {
                 await sleep(2000);
-                const statusRes = await fetch(
-                    `/api/workspace/preview?projectId=${encodeURIComponent(projectId)}`,
-                    { credentials: 'same-origin' },
-                );
+                const statusRes = await fetch(previewUrl, { credentials: 'same-origin' });
                 const status = await statusRes.json().catch(() => ({} as any));
                 if (status?.previewUrl) {
                     return {

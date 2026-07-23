@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 // Glovix is a fully client-side application (WebContainers, Monaco, xterm, and
 // browser-only APIs such as localStorage). It must never be server-rendered, so
@@ -27,6 +27,13 @@ interface GlovixBuilderProps {
 }
 
 export default function GlovixBuilder({ projectId, userImage, onBack, preset }: GlovixBuilderProps) {
+  // Keep unstable callback props out of the projectId effect deps — an inline
+  // onBack from the Syra page was re-running cleanup on every parent render and
+  // briefly clearing window.__glovixProjectId, which made /api/workspace/preview
+  // return "Invalid project ID".
+  const onBackRef = useRef(onBack)
+  onBackRef.current = onBack
+
   // Set synchronously during render so the ssr:false Glovix bundle can read the
   // project id on its very first render (child effects run before this parent's
   // effect, so a useEffect alone would be too late for embedded-mode detection).
@@ -34,7 +41,7 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
     ;(window as any).__glovixProjectId = projectId
     ;(window as any).__glovixChatId = `project_${projectId}`
     ;(window as any).__glovixUserImage = userImage ?? undefined
-    ;(window as any).__glovixOnBack = onBack
+    ;(window as any).__glovixOnBack = () => onBackRef.current?.()
     if (preset) (window as any).__glovixPreset = preset
   }
 
@@ -48,16 +55,26 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
       ;(window as any).__glovixChatId = `project_${projectId}`
     }
     ;(window as any).__glovixUserImage = userImage ?? undefined
-    ;(window as any).__glovixOnBack = onBack
-    if (preset) (window as any).__glovixPreset = preset
-    return () => {
-      ;(window as any).__glovixProjectId = undefined
-      ;(window as any).__glovixChatId = undefined
-      ;(window as any).__glovixUserImage = undefined
-      ;(window as any).__glovixOnBack = undefined
+    ;(window as any).__glovixOnBack = () => onBackRef.current?.()
+    if (preset) {
+      ;(window as any).__glovixPreset = preset
+    } else {
       ;(window as any).__glovixPreset = undefined
     }
-  }, [projectId, userImage, onBack, preset])
+    return () => {
+      // Only clear values we still own. Clearing unconditionally races with a
+      // remount / Strict Mode re-run that already wrote the next project id.
+      if ((window as any).__glovixProjectId === projectId) {
+        ;(window as any).__glovixProjectId = undefined
+        ;(window as any).__glovixChatId = undefined
+      }
+      ;(window as any).__glovixUserImage = undefined
+      ;(window as any).__glovixOnBack = undefined
+      if ((window as any).__glovixPreset === preset) {
+        ;(window as any).__glovixPreset = undefined
+      }
+    }
+  }, [projectId, userImage, preset])
 
   return (
     <div className="glovix-root h-full w-full">

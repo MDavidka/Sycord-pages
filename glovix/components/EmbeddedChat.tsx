@@ -194,11 +194,12 @@ export function EmbeddedChat() {
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
 
     const startSyteServerPreview = useCallback(async (syncFiles = true): Promise<{ ok: boolean; error?: string }> => {
-        if (!projectId) return { ok: false, error: 'No project id' };
+        const resolvedProjectId = (projectId || getHostProjectId() || '').trim();
+        if (!resolvedProjectId) return { ok: false, error: 'No project id' };
         setPreviewStatus('starting');
         setPreviewError('');
         const currentFiles = useStore.getState().files;
-        const result = await startSytePreview(projectId, {
+        const result = await startSytePreview(resolvedProjectId, {
             issueDomain: false,  // Don't call set_domain before preview — that's for production only
             syncFiles,
             files: syncFiles && Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
@@ -293,7 +294,8 @@ export function EmbeddedChat() {
 
         // Primary: Syte server preview (https://sycord.site/api/ — works on mobile)
         let syteError = '';
-        if (projectId) {
+        const resolvedProjectId = (projectId || getHostProjectId() || '').trim();
+        if (resolvedProjectId) {
             const syte = await startSyteServerPreview(syncFiles);
             if (syte.ok) return;
             syteError = syte.error || '';

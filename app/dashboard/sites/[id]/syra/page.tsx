@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useCallback, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import GlovixBuilder from "@/components/glovix-builder"
 import { initErudaIfPresent } from "@/glovix/lib/init-eruda"
@@ -18,18 +18,17 @@ export default function SyraEmbedPage() {
     initErudaIfPresent()
   }, [])
 
+  const onBack = useCallback(() => {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "syra-navigate-back" }, "*")
+    } else {
+      router.push(`/dashboard/sites/${id}`)
+    }
+  }, [id, router])
+
   return (
     <div className="h-[100dvh] w-full overflow-hidden bg-[#18191B]">
-      <GlovixBuilder
-        projectId={id}
-        onBack={() => {
-          if (window.parent !== window) {
-            window.parent.postMessage({ type: "syra-navigate-back" }, "*")
-          } else {
-            router.push(`/dashboard/sites/${id}`)
-          }
-        }}
-      />
+      <GlovixBuilder projectId={id} onBack={onBack} />
     </div>
   )
 }
