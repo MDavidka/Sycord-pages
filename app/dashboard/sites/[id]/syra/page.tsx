@@ -8,7 +8,8 @@ import { initErudaIfPresent } from "@/glovix/lib/init-eruda"
 /**
  * Isolated Syra shell at /dashboard/sites/[id]/syra.
  * Loaded as a top-level page (not nested in the dashboard SPA) so COOP/COEP
- * headers apply and WebContainer can boot on mobile Safari.
+ * headers apply. Preview uses Syte on all browsers; WebContainer only boots on
+ * Chromium when crossOriginIsolated is true (Safari cannot boot WebContainers).
  */
 export default function SyraEmbedPage() {
   const { id } = useParams() as { id: string }

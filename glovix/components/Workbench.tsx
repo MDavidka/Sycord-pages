@@ -8,6 +8,7 @@ import { ErrorPanel } from './ErrorPanel';
 import { FileExplorer } from './FileExplorer';
 import { SkeletonFileTree, SkeletonCodeEditor } from './SkeletonLoader';
 import { executeCommand, mountFiles, autoInstallDependencies, smartInstall } from '../lib/webcontainer';
+import { canBootWebContainer } from '../lib/coep';
 import { createCleanTerminalWriter } from '../lib/tools';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,18 +104,16 @@ export function Workbench() {
 
     useEffect(() => {
         const init = async () => {
-            if (Object.keys(files).length > 0) {
-                try {
-                    await mountFiles(files);
-                } catch (error: any) {
-                    console.error('[Workbench] Mount error:', error);
-                    if (error?.message?.includes('SharedArrayBuffer') || error?.message?.includes('cross-origin')) {
-                        setErrorMsg('WebContainer COEP Error: Check server headers. Reload page if issue persists.');
-                    } else {
-                        setErrorMsg(`Failed to mount files: ${error?.message || 'Unknown error'}`);
-                    }
-                    setStatus('error');
-                }
+            if (Object.keys(files).length === 0) return;
+            if (!canBootWebContainer()) {
+                // Safari / non-isolated: skip in-browser mount — Syte preview handles live view.
+                return;
+            }
+            try {
+                await mountFiles(files);
+            } catch (error: any) {
+                console.warn('[Workbench] Mount skipped/failed:', error?.message || error);
+                // Don't hard-fail the workbench UI — Preview can still use Syte.
             }
         };
         init();

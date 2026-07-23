@@ -14,6 +14,7 @@ import {
     type ProjectAgentEvent,
 } from '../lib/project-agent';
 import { mountFiles } from '../lib/webcontainer';
+import { canBootWebContainer } from '../lib/coep';
 import { executeTool, isParallelSafeTool, ToolContext } from '../lib/tools';
 import { BASE_PROJECT_FILES, getBaseProjectFiles, getPresetDescription } from '../lib/projectTemplate';
 import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbeddedChatId } from '../lib/api';
@@ -490,8 +491,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 // Include preset section components in the base project files
                 const projectFiles = getBaseProjectFiles(presetId);
 
-                // Mount base project files to WebContainer
-                await mountFiles(projectFiles);
+                // Mount base project files to WebContainer when isolation allows it.
+                // Safari / non-isolated shells skip this — Syte preview is used instead.
+                if (canBootWebContainer()) {
+                    await mountFiles(projectFiles);
+                }
 
                 // Update store with base files
                 state.setFiles(projectFiles);
