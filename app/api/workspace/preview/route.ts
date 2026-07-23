@@ -35,8 +35,12 @@ function previewErrorNeedsCreate(error?: string): boolean {
 }
 
 /**
- * POST /api/workspace/preview — sync files, issue domain (if set), start_preview.
+ * POST /api/workspace/preview — sync files, start_preview.
  * GET  /api/workspace/preview?projectId= — preview_status for existing workspace.
+ *
+ * issueDomain defaults to FALSE. Calling set_domain before start_preview
+ * overwrites preview_url with the production domain, causing a blank iframe.
+ * Only pass issueDomain=true explicitly when setting a custom domain.
  */
 export async function POST(req: Request): Promise<Response> {
   const session = await getServerSession(authOptions)
@@ -77,7 +81,10 @@ export async function POST(req: Request): Promise<Response> {
 
   const result = await ensureSyteLivePreview(db, userId, projectId, project, {
     syncFiles: body?.syncFiles !== false,
-    issueDomain: body?.issueDomain !== false,
+    // Default issueDomain to FALSE — set_domain before start_preview overwrites
+    // preview_url with the production domain, causing the iframe to be blank.
+    // The client must explicitly pass issueDomain: true to set a custom domain.
+    issueDomain: body?.issueDomain === true,
     domain: typeof body?.domain === "string" ? body.domain : project?.domain,
     clientFiles,
   })
