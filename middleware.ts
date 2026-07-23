@@ -21,7 +21,9 @@ function isolationHeadersFor(pathname: string): Record<string, string> | null {
   // Same as /builder: credentialless keeps SharedArrayBuffer for WebContainer
   // while allowing preview*.sycord.site assets inside the proxied iframe.
   // require-corp left the Syra preview pane white (no CORP on Vite responses).
-  if (/^\/dashboard\/sites\/[^/]+\/syra\/?$/.test(pathname)) {
+  // Match the base /syra route AND any nested sub-paths (e.g. /syra/settings),
+  // not just the exact route — otherwise those sub-paths lose isolation headers.
+  if (/^\/dashboard\/sites\/[^/]+\/syra(\/.*)?$/.test(pathname)) {
     return COEP_CREDENTIALLESS
   }
   return null
