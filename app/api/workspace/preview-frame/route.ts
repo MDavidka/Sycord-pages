@@ -48,26 +48,7 @@ function isAllowedPreviewUrl(raw: string): boolean {
 
 function frameAncestorsForRequest(req: Request): string {
   const ancestors = new Set<string>(["'self'"])
-  try {
-    const origin = req.headers.get("origin")
-    if (origin) {
-      const parsed = new URL(origin)
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        ancestors.add(origin)
-      }
-    }
-  } catch {
-    // ignore bad Origin
-  }
-  try {
-    const referer = req.headers.get("referer")
-    if (referer) {
-      const parsed = new URL(referer)
-      ancestors.add(parsed.origin)
-    }
-  } catch {
-    // ignore bad Referer
-  }
+
   // Always allow the public app hosts so preview works even when Origin is absent
   ancestors.add("https://sycord.com")
   ancestors.add("https://www.sycord.com")
@@ -75,6 +56,7 @@ function frameAncestorsForRequest(req: Request): string {
   // Local / preview-dev hosts (DAV-115 style frame-ancestors gaps)
   ancestors.add("http://localhost:3000")
   ancestors.add("http://127.0.0.1:3000")
+
   return Array.from(ancestors).join(" ")
 }
 
