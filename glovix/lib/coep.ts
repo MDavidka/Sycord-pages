@@ -5,6 +5,11 @@ export function isSafariBrowser(): boolean {
     return /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|EdgiOS/i.test(ua);
 }
 
+export function isMobileBrowser(): boolean {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
 /** COEP mode for the current page — must match middleware / next.config headers. */
 export function getPageCoepMode(): 'credentialless' | 'require-corp' {
     if (typeof window === 'undefined') return 'credentialless';
@@ -16,7 +21,10 @@ export function getPageCoepMode(): 'credentialless' | 'require-corp' {
 
 export function canBootWebContainer(): boolean {
     if (typeof window === 'undefined') return false;
-    if (window.crossOriginIsolated) return true;
-    // Safari may lack credentialless isolation — still attempt boot on /syra.
-    return window.location.pathname.includes('/syra');
+    // Mobile devices don't support SharedArrayBuffer properly — use Syte server preview.
+    if (isMobileBrowser()) return false;
+    // Safari (incl. iOS) does not achieve cross-origin isolation with credentialless
+    // COEP — SharedArrayBuffer is unavailable, WebContainer boot throws DataCloneError.
+    if (isSafariBrowser()) return false;
+    return window.crossOriginIsolated;
 }
