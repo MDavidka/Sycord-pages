@@ -10,6 +10,7 @@ import {
   syteStartPreview,
   syteSyncProjectFiles,
   syteExecuteCommand,
+  syteListFiles,
   type SytePreviewFields,
 } from "@/lib/deploy/syte-client"
 import {
@@ -56,8 +57,29 @@ async function persistProjectDomain(
 }
 
 /**
+ * Check whether node_modules already exists in the workspace.
+ * If it does, we skip npm install to avoid blocking preview for 2-5 min
+ * on every HMR refresh / mobile preview restart.
+ */
+async function needsNpmInstall(uuid: string): Promise<boolean> {
+  try {
+    const result = await syteListFiles(uuid, "app/node_modules")
+    // If the directory lists at least one entry, deps are already installed.
+    const files = (result.data as any)?.files ?? (result.data as any)?.entries ?? []
+    return !result.ok || (Array.isArray(files) && files.length === 0)
+  } catch {
+    return true
+  }
+}
+
+/**
  * Ensure workspace exists, sync files, optionally issue set_domain, start_preview,
  * and poll until preview_ready (or timeout).
+ *
+ * issueDomain defaults to FALSE — set_domain before start_preview overwrites
+ * preview_url with the production domain, causing the iframe to show a blank
+ * deployed site instead of the live dev server. Only pass issueDomain=true
+ * when explicitly setting a custom domain for production.
  */
 export async function ensureSyteLivePreview(
   db: { collection: (name: string) => any },
@@ -75,7 +97,9 @@ export async function ensureSyteLivePreview(
   },
 ): Promise<SytePreviewResult> {
   const syncFiles = options?.syncFiles !== false
-  const issueDomain = options?.issueDomain !== false
+  // Default issueDomain to FALSE — prevents set_domain from overwriting preview_url
+  // with the production domain before start_preview returns the dev-server URL.
+  const issueDomain = options?.issueDomain === true
   const pollMs = options?.pollMs ?? 1500
   const maxWaitMs = options?.maxWaitMs ?? 90_000
 
@@ -117,33 +141,34 @@ export async function ensureSyteLivePreview(
       }
     }
 
-    // Run npm install after syncing files so the dev server can resolve
-    // all dependencies (Vite + React + HeroUI etc.) before start_preview.
-    // Per Syte docs: "Run npm install via execute_command before first preview."
-    // We pass --no-audit --no-fund --prefer-offline to keep it fast.
-    const install = await syteExecuteCommand(
-      uuid,
-      "npm install --no-audit --no-fund --prefer-offline",
-      { cwd: "app", timeout: 300 },
-    )
-    if (!install.ok) {
-      // Warn but continue — some deps may already be cached from the scaffold
-      console.warn(`[syte-preview] npm install warning for ${uuid}: ${install.error}`)
+    // Only run npm install when node_modules is absent (first sync or cleared workspace).
+    // Skipping on subsequent HMR refreshes avoids 2-5 min blocking install on mobile.
+    const shouldInstall = await needsNpmInstall(uuid)
+    if (shouldInstall) {
+      const install = await syteExecuteCommand(
+        uuid,
+        "npm install --no-audit --no-fund --prefer-offline",
+        { cwd: "app", timeout: 300 },
+      )
+      if (!install.ok) {
+        console.warn(`[syte-preview] npm install warning for ${uuid}: ${install.error}`)
+      }
     }
   }
 
-  const domainToIssue =
-    (typeof options?.domain === "string" && options.domain.trim()) ||
-    (typeof project?.domain === "string" && project.domain.trim()) ||
-    null
-
   let domainIssued = false
-  if (issueDomain && domainToIssue) {
-    const normalized = normalizeDomain(domainToIssue)
-    const setDomain = await syteSetDomain(uuid, normalized)
-    if (setDomain.ok) {
-      domainIssued = true
-      await persistProjectDomain(db, userId, project, normalized)
+  if (issueDomain) {
+    const domainToIssue =
+      (typeof options?.domain === "string" && options.domain.trim()) ||
+      (typeof project?.domain === "string" && project.domain.trim()) ||
+      null
+    if (domainToIssue) {
+      const normalized = normalizeDomain(domainToIssue)
+      const setDomain = await syteSetDomain(uuid, normalized)
+      if (setDomain.ok) {
+        domainIssued = true
+        await persistProjectDomain(db, userId, project, normalized)
+      }
     }
   }
 
