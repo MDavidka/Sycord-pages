@@ -55,7 +55,7 @@ export function BuilderPipelineDocs({ isDark = true }: { isDark?: boolean }) {
               step="1. Prompt & System Context"
               description={[
                 "User prompt is wrapped with the Syra system prompt (700+ lines) containing: engineering rules, Next.js App Router conventions, the full 57-component shadcn/ui catalog, mobile-first design philosophy, 2026 AI design standards, and the SHADCN-ONLY MANDATE that forbids custom CSS/Tailwind styling.",
-                "The AI's model profile (syra-nano / syra-base / syra-havy / syra-ultra) determines which LLM provider is used: Gemini Flash, DeepSeek V4 Flash, Gemini Pro, or MiniMax M3.",
+                "The AI's model profile (syra-nano / syra-base / syra-havy / syra-ultra) determines which LLM provider is used: Gemini Flash, DeepSeek V4 Flash, Gemini Pro, or GLM 5.2.",
                 "All requests flow through /api/ai/chat — the server-side route that proxies to the correct provider.",
               ]}
             />
