@@ -51,7 +51,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const { id } = await params
-    const { name, content, usedFor } = await request.json()
+    let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 });
+  }
+  const { name, content, usedFor } = body;
 
     if (!id) {
         return NextResponse.json({ message: "Invalid project ID" }, { status: 400 })

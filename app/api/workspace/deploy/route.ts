@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth/next"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"

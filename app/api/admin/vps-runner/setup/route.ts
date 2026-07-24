@@ -45,7 +45,12 @@ export async function POST(request: Request) {
   if (unauthorized) return unauthorized
 
   // Parse request body for user-provided credentials
-  const body = await request.json().catch(() => ({}))
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 });
+  }
   const host = String(body.host || "").trim()
   const password = String(body.rootPassword || body.password || "")
   const port = Number(body.port || 22)
