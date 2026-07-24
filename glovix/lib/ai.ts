@@ -2,19 +2,19 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'minimax-m3' | 'gemini-3.1-pro';
+export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'glm-5.2' | 'gemini-3.1-pro';
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
     'deepseek-v4-flash': 'DeepSeek V4 Flash',
-    'minimax-m3': 'MiniMax M3',
+    'glm-5.2': 'GLM 5.2',
     'gemini-3.1-pro': 'Gemini 3.1 Pro',
 };
 
 export const MODEL_IDS: Record<ModelType, string> = {
     'mimo-v2-flash': 'xiaomi/mimo-v2-flash:free',
     'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
-    'minimax-m3': 'MiniMax-M3',
+    'glm-5.2': 'glm-5.2',
     'gemini-3.1-pro': 'gemini-3.1-pro',
 };
 
@@ -61,10 +61,10 @@ export const MODEL_CHOICES: ModelChoice[] = [
         id: 'ultra',
         label: 'syra-ultra',
         subtitle: 'Ultra',
-        modelType: 'minimax-m3',
-        apiModel: 'MiniMax-M3',
-        icon: '/model-logos/minimax.svg',
-        iconAlt: 'MiniMax',
+        modelType: 'glm-5.2',
+        apiModel: 'glm-5.2',
+        icon: '/model-logos/zai.svg',
+        iconAlt: 'Z.ai GLM',
     },
 ];
 
@@ -335,7 +335,11 @@ async function _sendMessageInternal(
         'deepseek-reasoner': 128000,
         'deepseek-v4-flash': 128000,
         'deepseek/deepseek-v4-flash': 128000,
-        // MiniMax M3 — 1M context
+        // GLM 5.2 — 1M context
+        'glm-5.2': 1000000,
+        'glm-5.2[1m]': 1000000,
+        'z-ai/glm-5.2': 1000000,
+        // MiniMax M3 — 1M context (legacy ids still accepted by the chat bridge)
         'minimax-m3': 1000000,
         'MiniMax-M3': 1000000,
         'minimax/minimax-m3': 1000000,
