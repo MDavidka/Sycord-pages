@@ -1,11 +1,12 @@
 // AI endpoint for the Glovix builder — backed by Google Gemini on Vertex AI,
-// DeepSeek, MiniMax, and GLM / Z.ai (OpenAI-compatible).
+// DeepSeek, Qwen (DashScope), MiniMax, and GLM / Z.ai (OpenAI-compatible).
 //
 // The Glovix client posts OpenAI-compatible chat-completion requests (streaming,
 // with `tools` / `tool_calls`) to `/api/ai/chat`. This handler routes to the
 // appropriate provider based on the requested model name:
 //
 //   - Models starting with "deepseek" → DeepSeek API (api.deepseek.com)
+//   - Models matching Qwen (qwen*) → DashScope (dashscope-intl.aliyuncs.com)
 //   - Models matching GLM (glm-* / z-ai/glm-*) → Z.ai API (api.z.ai)
 //   - Models matching MiniMax (minimax-m3 / MiniMax-*) → MiniMax API (api.minimax.io)
 //   - Everything else → Gemini on Vertex AI (aiplatform.googleapis.com)
@@ -23,7 +24,12 @@
 //     DEEPSEEK_API_KEY                                 → API key (required)
 //     DEEPSEEK_MODEL                                   → model (default deepseek-chat)
 //
-//   GLM / Z.ai (syra-ultra → glm-5.2):
+//   Qwen / DashScope (syra-ultra → qwen3.7-plus):
+//     DASHSCOPE_API_KEY (or QWEN_API_KEY)              → API key (required)
+//     QWEN_MODEL                                       → model (default qwen3.7-plus)
+//     QWEN_BASE_URL                                    → optional region override
+//
+//   GLM / Z.ai:
 //     ZAI_API_KEY (or GLM_API_KEY)                     → API key (required)
 //     GLM_MODEL                                        → model (default glm-5.2)
 //
@@ -33,6 +39,7 @@
 
 import { isConfigured, streamOpenAICompatible } from "@/lib/glovix-gemini"
 import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-deepseek"
+import { isQwenConfigured, streamQwenCompatible } from "@/lib/glovix-qwen"
 import { isGlmConfigured, streamGlmCompatible } from "@/lib/glovix-glm"
 import { isMiniMaxConfigured, streamMiniMaxCompatible } from "@/lib/glovix-minimax"
 import { getServerSession } from "next-auth/next"
@@ -46,6 +53,12 @@ export const maxDuration = 300
 function isDeepSeekModel(model: string | undefined): boolean {
   if (!model) return false
   return model.toLowerCase().startsWith("deepseek")
+}
+
+function isQwenModel(model: string | undefined): boolean {
+  if (!model) return false
+  const id = model.toLowerCase()
+  return id.startsWith("qwen")
 }
 
 function isGlmModel(model: string | undefined): boolean {
@@ -121,7 +134,27 @@ export async function POST(req: Request) {
     })
   }
 
-  // Route to GLM / Z.ai for glm-* models (syra-ultra → glm-5.2).
+  // Route to Qwen / DashScope for qwen* models (syra-ultra → qwen3.7-plus).
+  if (isQwenModel(model)) {
+    if (!isQwenConfigured()) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Qwen is not configured. Set DASHSCOPE_API_KEY (or QWEN_API_KEY) in your environment.",
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    return streamQwenCompatible({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: model || undefined,
+    })
+  }
+
+  // Route to GLM / Z.ai for glm-* models.
   if (isGlmModel(model)) {
     if (!isGlmConfigured()) {
       return new Response(
@@ -166,7 +199,7 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({
         error:
-          "No AI provider is configured. Set DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
+          "No AI provider is configured. Set DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
       }),
       { status: 503, headers: { "Content-Type": "application/json" } },
     )
