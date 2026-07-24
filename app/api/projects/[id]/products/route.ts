@@ -87,7 +87,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ message: "Project not found" }, { status: 404 })
   }
 
-  const body = await request.json()
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 });
+  }
   const canonicalProjectId = String(project._id ?? id)
   const newProduct = {
     ...body,

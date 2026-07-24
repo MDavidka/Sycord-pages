@@ -135,7 +135,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if ("error" in ownership) return ownership.error
     const { settingsProjectId } = ownership
 
-    const body = await request.json()
+    let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 });
+  }
     console.log("[v0] Received settings update body:", body)
 
     const sanitizedSettings = sanitizeSettings(body)

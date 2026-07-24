@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getClientIP } from "@/lib/get-client-ip"
@@ -15,6 +16,14 @@ export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
+
+  const rate = checkRateLimit(`create-project:${session.user.id}`, { limit: 10, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { message: "Too many project creation requests. Please wait and try again." },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } },
+    )
   }
 
   const client = await clientPromise
