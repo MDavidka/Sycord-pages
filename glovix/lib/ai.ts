@@ -24,7 +24,7 @@ export interface ModelChoice {
     subtitle: string
     modelType: ModelType
     apiModel: string
-    /** Provider logo from https://svgl.app (vendored under /public/model-logos) */
+    /** Model icon under /public/model-logos, matched by profile name */
     icon: string
     iconAlt: string
 }
