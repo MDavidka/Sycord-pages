@@ -65,6 +65,7 @@
     "gcp-metadata": "latest",
     "html-validator": "6.0.1",
     "input-otp": "1.4.1",
+    "isomorphic-dompurify": "^3.19.0",
     "jszip": "^3.10.1",
     "kerberos": "latest",
     "lucide-react": "^0.454.0",
