@@ -254,7 +254,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                 <img
                     src={current.icon}
                     alt={current.iconAlt}
-                    className="h-4 w-4 object-contain"
+                    className={`h-5 w-5 object-contain ${isDark ? 'brightness-150' : ''}`}
                     draggable={false}
                 />
                 <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
@@ -263,7 +263,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
             {showMenu && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
-                    <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[160px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
+                    <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[168px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
                         <div className="p-1.5">
                             {MODEL_CHOICES.map((choice) => {
                                 const isActive = choice.modelType === selectedModel
@@ -274,7 +274,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                                         onClick={() => onSelect(choice)}
                                         title={choice.label}
                                         aria-label={choice.label}
-                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-3 transition-colors ${
+                                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 transition-colors ${
                                             isActive
                                                 ? isDark ? 'bg-[#26272a]' : 'bg-gray-50'
                                                 : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
@@ -284,10 +284,10 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                                         <img
                                             src={choice.icon}
                                             alt={choice.iconAlt}
-                                            className="h-5 w-5 shrink-0 object-contain"
+                                            className={`h-7 w-7 shrink-0 object-contain ${isDark ? 'brightness-150' : ''}`}
                                             draggable={false}
                                         />
-                                        <span className={`text-[12px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>{choice.subtitle}</span>
+                                        <span className={`text-[13px] ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>{choice.subtitle}</span>
                                     </button>
                                 )
                             })}
