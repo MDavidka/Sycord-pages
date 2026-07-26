@@ -2,20 +2,10 @@
 
 import { memo, useLayoutEffect, useMemo, useState } from 'react';
 import {
-    BookOpenCheck,
-    Brain,
     ChevronDown,
-    Cloud,
     Download,
-    Eye,
     Expand,
-    FileCode2,
-    FilePen,
-    GitBranchPlus,
-    LoaderCircle,
     SquareTerminal,
-    Wrench,
-    type LucideIcon,
 } from 'lucide-react';
 import {
     Collapsible,
@@ -23,6 +13,14 @@ import {
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { ToolGroup } from '@/components/agent-elements/tools/tool-group';
+import { SearchTool } from '@/components/agent-elements/tools/search-tool';
+import { SubagentTool } from '@/components/agent-elements/tools/subagent-tool';
+import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
+import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
+import { Markdown } from '@/components/agent-elements/markdown';
+import type { GenerationPlan } from '../lib/generation-plan';
+import { useStore } from '../store';
 
 export interface StreamingAction {
     id: string;
@@ -42,6 +40,8 @@ export interface StreamingAction {
         imageUrl?: string;
         imageBase64?: string;
     }>;
+    nestedActions?: StreamingAction[];
+    subagentTaskId?: string;
 }
 
 interface ActionsListProps {
@@ -50,40 +50,30 @@ interface ActionsListProps {
     isDark?: boolean;
 }
 
-type ActionKind = 'thinking' | 'search' | 'read' | 'edit' | 'command' | 'install' | 'validate' | 'preview' | 'service' | 'screenshot';
+type ActionKind =
+    | 'thinking'
+    | 'search'
+    | 'read'
+    | 'edit'
+    | 'command'
+    | 'install'
+    | 'validate'
+    | 'preview'
+    | 'service'
+    | 'screenshot'
+    | 'plan'
+    | 'subagent';
 
 interface ActionGroup {
     kind: ActionKind;
     actions: StreamingAction[];
 }
 
-const SYTE_SERVICE_LOGO = 'https://sycord.site/static/syte-logo.png?v=0.9.16';
-const FILE_ICON_BASE = 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons';
-const FILE_ICON_URLS: Record<string, string> = {
-    ts: `${FILE_ICON_BASE}/typescript/typescript-original.svg`,
-    tsx: `${FILE_ICON_BASE}/typescript/typescript-original.svg`,
-    js: `${FILE_ICON_BASE}/javascript/javascript-original.svg`,
-    jsx: `${FILE_ICON_BASE}/react/react-original.svg`,
-    py: `${FILE_ICON_BASE}/python/python-original.svg`,
-    html: `${FILE_ICON_BASE}/html5/html5-original.svg`,
-    htm: `${FILE_ICON_BASE}/html5/html5-original.svg`,
-    md: `${FILE_ICON_BASE}/markdown/markdown-original.svg`,
-    mdx: `${FILE_ICON_BASE}/markdown/markdown-original.svg`,
-    json: `${FILE_ICON_BASE}/json/json-original.svg`,
-};
-
-const SPECIAL_FILE_ICON_URLS = {
-    node: `${FILE_ICON_BASE}/nodejs/nodejs-original.svg`,
-    docker: `${FILE_ICON_BASE}/docker/docker-original.svg`,
-    git: `${FILE_ICON_BASE}/git/git-original.svg`,
-    next: `${FILE_ICON_BASE}/nextjs/nextjs-original.svg`,
-};
-
 const FILE_TOOL_NAMES = new Set([
     'createfile', 'write_file', 'writefile', 'editfile', 'edit_file', 'apply_patch',
     'patch', 'readfile', 'read_file', 'readmultiplefiles', 'read_multiple_files',
     'deletefile', 'delete_file', 'renamefile', 'rename_file', 'batchcreatefiles',
-    'file_created', 'file_modified', 'file_deleted',
+    'file_created', 'file_modified', 'file_deleted', 'file_read', 'file_changed',
 ]);
 
 const GROUPABLE_KINDS: ActionKind[] = ['thinking', 'read', 'edit', 'command', 'install', 'validate', 'search'];
@@ -106,14 +96,16 @@ function classifyAction(action: StreamingAction): ActionKind {
     const command = String(args.command || action.displayName || '').toLowerCase();
 
     if (name.includes('screenshot') || (action.screenshots && action.screenshots.length > 0)) return 'screenshot';
-    if (name.includes('think') || name === 'planning' || name === 'update_plan') return 'thinking';
-    if (name.includes('grep') || name.includes('search') || name.includes('listfiles') || name.includes('list_files')) return 'search';
-    if (name.includes('read')) return 'read';
+    if (name === 'subagent' || name.includes('subagent') || action.subagentTaskId || action.nestedActions?.length) return 'subagent';
+    if (name === 'planning' || name === 'update_plan' || name === 'plan' || name.includes('planwrite')) return 'plan';
+    if (name.includes('think')) return 'thinking';
+    if (name.includes('grep') || name.includes('search') || name === 'file_search' || name.includes('listfiles') || name.includes('list_files')) return 'search';
+    if (name.includes('read') || name === 'file_read') return 'read';
     if (FILE_TOOL_NAMES.has(name) || name.includes('write') || name.includes('edit') || name.includes('patch') || name.startsWith('file_')) return 'edit';
     if (name.includes('preview') || name.includes('browser') || name === 'startpreview' || /\b(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|serve)\b/.test(command)) return 'preview';
     if (/\b(npm|pnpm|yarn|bun)\s+(install|add)\b|\bpip\s+install\b/.test(command)) return 'install';
     if (name.includes('typecheck') || name.includes('lint') || name.includes('geterrors') || /\b(test|lint|typecheck|tsc)\b/.test(command)) return 'validate';
-    if (name.includes('command') || name === 'bash' || name === 'shell' || name === 'terminal' || name === 'command_run' || name === 'run_command') return 'command';
+    if (name.includes('command') || name === 'bash' || name === 'shell' || name === 'terminal' || name === 'command_run' || name === 'command_output' || name === 'run_command') return 'command';
     return 'service';
 }
 
@@ -133,7 +125,7 @@ function groupActions(actions: StreamingAction[]): ActionGroup[] {
 
 function getFilePaths(action: StreamingAction): string[] {
     const args = parseArgs(action.args);
-    const directPath = args.path || args.file || args.filePath || args.filename;
+    const directPath = args.path || args.file || args.filePath || args.file_path || args.filename;
     if (directPath) return [String(directPath)];
     if (Array.isArray(args.paths)) return args.paths.map(String);
     if (Array.isArray(args.files)) {
@@ -144,134 +136,137 @@ function getFilePaths(action: StreamingAction): string[] {
     return [];
 }
 
-/** Display basename only (e.g. utils.ts), keep rename arrows readable. */
 function displayFileName(path: string): string {
     return path
         .split(' → ')
-        .map(part => {
-            const trimmed = part.trim();
-            if (!trimmed) return trimmed;
-            const segments = trimmed.split(/[/\\]/).filter(Boolean);
-            return segments[segments.length - 1] || trimmed;
-        })
+        .map(part => part.split('/').filter(Boolean).pop() || part)
         .join(' → ');
-}
-
-function fileExtension(path: string): string {
-    const fileName = displayFileName(path.split(' → ')[0] || path);
-    const parts = fileName.split('.');
-    return parts.length > 1 ? (parts.pop() || '').toLowerCase() : '';
-}
-
-function fileNameColor(path: string, isDark: boolean): string {
-    const ext = fileExtension(path);
-    const map: Record<string, string> = isDark
-        ? {
-            tsx: 'text-sky-400',
-            ts: 'text-sky-400',
-            jsx: 'text-amber-300',
-            js: 'text-amber-300',
-            mjs: 'text-amber-300',
-            cjs: 'text-amber-300',
-            css: 'text-zinc-400',
-            scss: 'text-zinc-400',
-            sass: 'text-zinc-400',
-            less: 'text-zinc-400',
-            json: 'text-emerald-400',
-            md: 'text-violet-300',
-            mdx: 'text-violet-300',
-            html: 'text-orange-300',
-            htm: 'text-orange-300',
-            py: 'text-yellow-300',
-            svg: 'text-pink-300',
-            yml: 'text-rose-300',
-            yaml: 'text-rose-300',
-        }
-        : {
-            tsx: 'text-sky-600',
-            ts: 'text-sky-600',
-            jsx: 'text-amber-600',
-            js: 'text-amber-600',
-            mjs: 'text-amber-600',
-            cjs: 'text-amber-600',
-            css: 'text-zinc-500',
-            scss: 'text-zinc-500',
-            sass: 'text-zinc-500',
-            less: 'text-zinc-500',
-            json: 'text-emerald-600',
-            md: 'text-violet-600',
-            mdx: 'text-violet-600',
-            html: 'text-orange-600',
-            htm: 'text-orange-600',
-            py: 'text-yellow-700',
-            svg: 'text-pink-600',
-            yml: 'text-rose-600',
-            yaml: 'text-rose-600',
-        };
-    return map[ext] || (isDark ? 'text-[#f2c45a]' : 'text-[#a16207]');
 }
 
 function getCommand(action: StreamingAction): string {
     const args = parseArgs(action.args);
-    return String(args.command || args.cmd || action.displayName || action.toolName).trim();
+    return String(args.command || args.cmd || action.displayName || action.toolName || '');
 }
 
 function getSearchTerm(action: StreamingAction): string {
     const args = parseArgs(action.args);
-    return String(args.pattern || args.query || action.displayName || 'Project files').trim();
+    return String(args.query || args.pattern || args.grep || args.search || action.displayName || '');
 }
 
 function getThinkingText(action: StreamingAction): string {
+    if (action.result) return String(action.result);
     const args = parseArgs(action.args);
-    const fromArgs = String(args.notes || args.thought || args.content || args.text || '').trim();
-    if (fromArgs) return fromArgs;
-    if (action.result) return cleanResult(action.result);
-    return String(action.displayName || '').trim();
+    return String(args.notes || args.thought || args.text || action.displayName || '');
 }
 
-/** Shorten absolute workspace paths inside command strings for compact preview. */
-function compactCommand(command: string): string {
-    return command
-        .replace(/\/var\/lib\/syte\/workspaces\/[^/\s]+\/app\//g, '')
-        .replace(/\/var\/lib\/syte\/workspaces\/[^/\s]+\//g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+function partState(action: StreamingAction): string {
+    if (action.status === 'error') return 'output-error';
+    if (action.status === 'done') return 'output-available';
+    if (action.status === 'running') return 'input-streaming';
+    return 'input-available';
 }
 
-function truncateOneLine(text: string, max = 72): string {
-    const single = text.replace(/\s+/g, ' ').trim();
-    if (single.length <= max) return single;
-    return `${single.slice(0, max - 1)}…`;
-}
-
-function thinkingPreviewLines(text: string, maxLines = 3): string {
-    const lines = text
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(Boolean);
-    if (lines.length === 0) return '';
-    const preview = lines.slice(0, maxLines).join('\n');
-    return lines.length > maxLines ? `${preview}\n…` : preview;
-}
-
-function actionTitle(kind: ActionKind, count: number, active: boolean): string {
-    const plural = count === 1 ? '' : 's';
-    const labels: Record<ActionKind, [string, string]> = {
-        thinking: [
-            count === 1 ? 'Thinking' : `Thinking · ${count} times`,
-            count === 1 ? 'Thought 1 time' : `Thought ${count} times`,
-        ],
-        search: ['Searching project', 'Searched project'],
-        read: [`Reading ${count} file${plural}`, `Read ${count} file${plural}`],
-        edit: [`Editing ${count} file${plural}`, `Edited ${count} file${plural}`],
-        command: [`Running ${count} command${plural}`, `Ran ${count} command${plural}`],
-        install: ['Installing dependencies', 'Installed dependencies'],
-        validate: ['Validating changes', 'Validated changes'],
-        preview: ['Checking preview', 'Checked preview'],
-        service: ['Running service action', 'Service action complete'],
-        screenshot: ['Taking screenshot', 'Made a screenshot'],
+function actionToNestedPart(action: StreamingAction) {
+    const kind = classifyAction(action);
+    const args = parseArgs(action.args);
+    const paths = getFilePaths(action);
+    const filePath = paths[0] || '';
+    const base = {
+        id: action.id,
+        toolCallId: action.toolCallId || action.id,
+        state: partState(action),
+        startedAt: action.startedAt,
+        output: action.result
+            ? { result: action.result, success: action.status !== 'error' }
+            : action.status === 'done'
+                ? { success: true }
+                : undefined,
     };
-    return labels[kind][active ? 0 : 1];
+
+    if (kind === 'read') {
+        return { ...base, type: 'tool-Read', input: { file_path: filePath, ...args } };
+    }
+    if (kind === 'edit') {
+        const isCreate = /create|write|file_created/i.test(action.toolName);
+        return {
+            ...base,
+            type: isCreate ? 'tool-Write' : 'tool-Edit',
+            input: {
+                file_path: filePath,
+                old_string: args.old_text || args.old_string || '',
+                new_string: args.new_text || args.new_string || args.content || '',
+                ...args,
+            },
+        };
+    }
+    if (kind === 'search') {
+        return {
+            ...base,
+            type: /web/i.test(action.toolName) ? 'tool-WebSearch' : 'tool-Grep',
+            input: { pattern: getSearchTerm(action), query: getSearchTerm(action), path: args.path, ...args },
+            output: {
+                results: normalizeSearchResults(action),
+                numFiles: normalizeSearchResults(action).length,
+            },
+        };
+    }
+    if (kind === 'command' || kind === 'install' || kind === 'validate' || kind === 'preview') {
+        return {
+            ...base,
+            type: 'tool-Bash',
+            input: { command: getCommand(action), ...args },
+            output: action.result ? { result: action.result } : base.output,
+        };
+    }
+    if (kind === 'thinking') {
+        return { ...base, type: 'tool-Thinking', input: { thought: getThinkingText(action) } };
+    }
+    if (kind === 'subagent') {
+        return {
+            ...base,
+            type: 'tool-Agent',
+            input: {
+                description: action.displayName || 'Subagent',
+                subagent_type: action.subagentTaskId || args.profile || 'syra-subagent',
+                ...args,
+            },
+        };
+    }
+    return {
+        ...base,
+        type: 'tool-Skill',
+        input: { skill: action.displayName || action.toolName, ...args },
+    };
+}
+
+function normalizeSearchResults(action: StreamingAction) {
+    const args = parseArgs(action.args);
+    const raw = args.results || args.matches || args.files;
+    if (Array.isArray(raw)) {
+        return raw.map((item: any, index: number) => {
+            if (typeof item === 'string') {
+                return { source: 'web' as const, title: item, date: '' };
+            }
+            return {
+                source: 'web' as const,
+                title: String(item?.title || item?.path || item?.file || item?.url || `Result ${index + 1}`),
+                date: String(item?.date || item?.path || ''),
+            };
+        });
+    }
+    const paths = getFilePaths(action);
+    if (paths.length > 0) {
+        return paths.map(path => ({ source: 'web' as const, title: displayFileName(path), date: path }));
+    }
+    if (action.result) {
+        return action.result
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+            .slice(0, 12)
+            .map(line => ({ source: 'web' as const, title: line, date: '' }));
+    }
+    return [];
 }
 
 function formatWorkedFor(actions: StreamingAction[]): string {
@@ -295,6 +290,8 @@ function phaseCopy(actions: StreamingAction[], isLive: boolean) {
     const focus = classifyAction(activeAction || actions[actions.length - 1]);
     const complete = actions.every(action => action.status === 'done' || action.status === 'error');
 
+    if (focus === 'subagent') return { title: isLive ? 'Running subagent' : 'Subagent complete', summary: 'Delegated work is in progress.' };
+    if (focus === 'plan') return { title: isLive ? 'Planning' : 'Plan ready', summary: 'Build plan updated.' };
     if (focus === 'read' || focus === 'search') return { title: 'Inspecting code', summary: 'Syra is reviewing the project before making changes.' };
     if (focus === 'edit') return { title: isLive ? 'Applying changes' : 'Changes applied', summary: 'Project files are being updated with the requested work.' };
     if (focus === 'command' || focus === 'install' || focus === 'validate') return { title: isLive ? 'Validating' : 'Validation complete', summary: 'Commands and checks confirm the project is ready.' };
@@ -303,64 +300,30 @@ function phaseCopy(actions: StreamingAction[], isLive: boolean) {
     return { title: 'Understanding task', summary: 'Syra is preparing the next project steps.' };
 }
 
-function FileTypeIcon({ path, isDark }: { path: string; isDark: boolean }) {
-    const cleanPath = path.split(' → ')[0];
-    const fileName = cleanPath.split('/').pop() || cleanPath;
-    const extension = fileName.split('.').pop()?.toLowerCase() || '';
-    const lowerName = fileName.toLowerCase();
-    const url = lowerName === 'package.json'
-        ? SPECIAL_FILE_ICON_URLS.node
-        : lowerName === 'dockerfile' || lowerName.startsWith('docker-compose')
-            ? SPECIAL_FILE_ICON_URLS.docker
-            : lowerName === '.gitignore' || lowerName === '.gitattributes'
-                ? SPECIAL_FILE_ICON_URLS.git
-                : lowerName.startsWith('next.config')
-                    ? SPECIAL_FILE_ICON_URLS.next
-                    : FILE_ICON_URLS[extension];
-
-    if (url) {
-        return <img src={url} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />;
+function planSummaryFromActions(actions: StreamingAction[], generationPlan: GenerationPlan | null): { title: string; summary: string; id?: string } {
+    if (generationPlan) {
+        const steps = generationPlan.steps
+            .map((step, index) => `${index + 1}. ${step.title}${step.description ? ` — ${step.description}` : ''}`)
+            .join('\n');
+        const notes = generationPlan.notes?.trim() || '';
+        return {
+            id: generationPlan.id,
+            title: generationPlan.title,
+            summary: [notes, steps].filter(Boolean).join('\n\n'),
+        };
     }
-    return <FileCode2 className={cn('size-4 shrink-0', isDark ? 'text-white/55' : 'text-gray-500')} strokeWidth={1.8} />;
-}
-
-function kindIcon(kind: ActionKind): LucideIcon {
-    return {
-        thinking: Brain,
-        search: GitBranchPlus,
-        read: BookOpenCheck,
-        edit: FilePen,
-        command: SquareTerminal,
-        install: Wrench,
-        validate: Wrench,
-        preview: Eye,
-        service: Cloud,
-        screenshot: Eye,
-    }[kind];
-}
-
-function cleanResult(result: string): string {
-    return result.replace(/^\[SYSTEM\]\s*/gm, '').trim();
-}
-
-function ActionStatus({ action, isDark }: { action: StreamingAction; isDark: boolean }) {
-    if (action.status === 'running' || action.status === 'pending') {
-        return <LoaderCircle className={cn('size-4 shrink-0 animate-spin', isDark ? 'text-blue-300' : 'text-blue-600')} aria-label="Running" />;
-    }
-    // No checkmark / error mark for finished actions — status is implied by the feed.
-    return <span className="size-4 shrink-0" aria-hidden="true" />;
-}
-
-function ConnectorBar({ isDark }: { isDark: boolean }) {
-    return (
-        <span
-            aria-hidden="true"
-            className={cn(
-                'mt-0.5 w-[2px] min-h-[1.25rem] flex-1 rounded-full',
-                isDark ? 'bg-white/18' : 'bg-black/15',
-            )}
-        />
+    const action = actions[0];
+    const args = parseArgs(action?.args);
+    const title = String(args.title || action?.displayName || 'Plan');
+    const summary = String(
+        args.summary ||
+        args.notes ||
+        action?.result ||
+        (Array.isArray(args.steps)
+            ? args.steps.map((step: any, i: number) => `${i + 1}. ${typeof step === 'string' ? step : step?.title || step?.name || 'Step'}`).join('\n')
+            : ''),
     );
+    return { id: String(args.plan_id || args.id || action?.id || 'plan'), title, summary };
 }
 
 const ScreenshotCard = memo(function ScreenshotCard({
@@ -375,17 +338,17 @@ const ScreenshotCard = memo(function ScreenshotCard({
     const src = shot?.imageBase64 || shot?.imageUrl;
 
     return (
-        <div className="px-2 py-2">
+        <div className="px-1 py-1.5">
             <div
                 className={cn(
-                    'relative overflow-hidden rounded-xl border',
-                    isDark ? 'border-white/15 bg-[#141516]' : 'border-black/10 bg-white',
+                    'relative overflow-hidden rounded-an-tool-border-radius border',
+                    isDark ? 'border-an-tool-border-color bg-an-tool-background' : 'border-black/10 bg-white',
                 )}
             >
-                <div className="p-3 sm:p-4">
+                <div className="p-2.5">
                     <div
                         className={cn(
-                            'relative flex min-h-[160px] items-center justify-center overflow-hidden rounded-lg border',
+                            'relative flex min-h-[120px] items-center justify-center overflow-hidden rounded-md border',
                             isDark ? 'border-white/10 bg-black/40' : 'border-black/8 bg-gray-50',
                         )}
                     >
@@ -393,22 +356,22 @@ const ScreenshotCard = memo(function ScreenshotCard({
                             <img
                                 src={src}
                                 alt={shot?.route || 'Screenshot'}
-                                className={cn('max-h-[280px] w-full object-contain', expanded && 'max-h-[70vh]')}
+                                className={cn('max-h-[220px] w-full object-contain', expanded && 'max-h-[70vh]')}
                             />
                         ) : (
                             <span className={cn('text-sm', isDark ? 'text-white/35' : 'text-gray-400')}>Screenshot</span>
                         )}
                     </div>
                 </div>
-                <div className="flex items-center justify-between gap-2 px-3 pb-3 sm:px-4">
+                <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5">
                     <span className={cn(
-                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]',
-                        isDark ? 'border-white/10 bg-white/[0.06] text-white/65' : 'border-black/10 bg-black/[0.04] text-gray-600',
+                        'inline-flex items-center gap-1.5 text-[11px]',
+                        isDark ? 'text-an-tool-color-muted' : 'text-gray-600',
                     )}>
                         <SquareTerminal className="size-3" strokeWidth={1.8} />
                         made a screenshot
                     </span>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                         {src && (
                             <a
                                 href={src}
@@ -417,24 +380,24 @@ const ScreenshotCard = memo(function ScreenshotCard({
                                 rel="noreferrer"
                                 aria-label="Download screenshot"
                                 className={cn(
-                                    'flex size-8 items-center justify-center rounded-lg border transition-colors',
+                                    'flex size-7 items-center justify-center rounded-md border transition-colors',
                                     isDark ? 'border-white/10 text-white/55 hover:bg-white/[0.06]' : 'border-black/10 text-gray-500 hover:bg-black/[0.04]',
                                 )}
                             >
                                 <Download className="size-3.5" strokeWidth={1.8} />
                             </a>
                         )}
-                    <button
-                        type="button"
-                        onClick={() => setExpanded(v => !v)}
-                        aria-label="Expand screenshot"
-                        className={cn(
-                            'flex size-8 items-center justify-center rounded-lg border transition-colors',
-                            isDark ? 'border-white/10 text-white/55 hover:bg-white/[0.06]' : 'border-black/10 text-gray-500 hover:bg-black/[0.04]',
-                        )}
-                    >
-                        <Expand className="size-3.5" strokeWidth={1.8} />
-                    </button>
+                        <button
+                            type="button"
+                            onClick={() => setExpanded(v => !v)}
+                            aria-label="Expand screenshot"
+                            className={cn(
+                                'flex size-7 items-center justify-center rounded-md border transition-colors',
+                                isDark ? 'border-white/10 text-white/55 hover:bg-white/[0.06]' : 'border-black/10 text-gray-500 hover:bg-black/[0.04]',
+                            )}
+                        >
+                            <Expand className="size-3.5" strokeWidth={1.8} />
+                        </button>
                     </div>
                 </div>
             </div>
@@ -451,11 +414,20 @@ const ScreenshotCard = memo(function ScreenshotCard({
     );
 });
 
-const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGroup; isDark: boolean }) {
-    const [open, setOpen] = useState(false);
+const ToolStack = memo(function ToolStack({
+    group,
+    isDark,
+    chatStatus,
+    generationPlan,
+}: {
+    group: ActionGroup;
+    isDark: boolean;
+    chatStatus: string;
+    generationPlan: GenerationPlan | null;
+}) {
     if (group.kind === 'screenshot') {
         return (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
                 {group.actions.map(action => (
                     <ScreenshotCard key={action.id} action={action} isDark={isDark} />
                 ))}
@@ -463,243 +435,137 @@ const ToolStack = memo(function ToolStack({ group, isDark }: { group: ActionGrou
         );
     }
 
+    if (group.kind === 'plan') {
+        const plan = planSummaryFromActions(group.actions, generationPlan);
+        const pending = group.actions.some(a => a.status === 'running' || a.status === 'pending');
+        return (
+            <PlanTool
+                chatStatus={chatStatus}
+                part={{
+                    type: 'tool-PlanWrite',
+                    toolCallId: group.actions[0]?.toolCallId || group.actions[0]?.id,
+                    state: pending ? 'input-streaming' : 'output-available',
+                    input: {
+                        // No manual approval flow yet — auto-approve in the UI.
+                        approved: true,
+                        plan: {
+                            id: plan.id,
+                            title: plan.title,
+                            summary: plan.summary || 'Plan ready.',
+                        },
+                    },
+                }}
+            />
+        );
+    }
+
+    if (group.kind === 'subagent') {
+        return (
+            <div className="space-y-2">
+                {group.actions.map(action => (
+                    <SubagentTool
+                        key={action.id}
+                        chatStatus={chatStatus}
+                        part={actionToNestedPart(action)}
+                        nestedTools={(action.nestedActions || []).map(actionToNestedPart)}
+                    />
+                ))}
+            </div>
+        );
+    }
+
+    if (group.kind === 'search') {
+        const primary = group.actions[0];
+        const results = group.actions.flatMap(normalizeSearchResults);
+        return (
+            <SearchTool
+                part={{
+                    ...actionToNestedPart(primary),
+                    output: { results, numFiles: results.length },
+                }}
+                results={results}
+                defaultOpen={results.length > 0 && results.length <= 6}
+            />
+        );
+    }
+
+    if (group.kind === 'thinking') {
+        const active = group.actions.some(a => a.status === 'running' || a.status === 'pending');
+        const text = group.actions.map(getThinkingText).filter(Boolean).join('\n\n');
+        return (
+            <div className="px-1 py-1">
+                <div className="flex items-center gap-2 text-sm text-an-tool-color-muted">
+                    {active ? <SpiralLoader size={14} /> : null}
+                    <span className="font-medium text-an-tool-color">{active ? 'Thinking' : 'Thought'}</span>
+                </div>
+                {text ? (
+                    <div className="mt-1.5 max-h-[120px] overflow-hidden text-sm text-an-tool-color-muted">
+                        <Markdown content={text} className="text-sm" />
+                    </div>
+                ) : null}
+            </div>
+        );
+    }
+
     const active = group.actions.some(action => action.status === 'running' || action.status === 'pending');
-    const hasDetails = group.actions.some(action => {
-        if (group.kind === 'thinking') return Boolean(getThinkingText(action));
-        return Boolean(action.result) || getFilePaths(action).length > 0 || Boolean(action.args);
-    });
-    const Icon = kindIcon(group.kind);
-    const isFileGroup = group.kind === 'read' || group.kind === 'edit';
-    const isThinking = group.kind === 'thinking';
-
-    const previewItems = isThinking
-        ? []
-        : isFileGroup
-            ? group.actions.flatMap(action => getFilePaths(action).map((path, index) => ({
-                key: `${action.id}-${index}`,
-                text: path,
-                fullText: path,
-                isFile: true,
-                isService: false,
-            })))
-            : group.actions.map(action => {
-                const raw = group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
-                    ? getCommand(action)
-                    : group.kind === 'search'
-                        ? getSearchTerm(action)
-                        : action.displayName || action.toolName;
-                const compact = group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
-                    ? compactCommand(raw)
-                    : raw;
-                return {
-                    key: action.id,
-                    text: compact,
-                    fullText: raw,
-                    isFile: false,
-                    isService: group.kind === 'service',
-                };
-            });
-
-    const effectiveItems = previewItems.length > 0
-        ? previewItems
-        : (!isThinking
-            ? group.actions.map(action => ({
-                key: action.id,
-                text: action.displayName || action.toolName,
-                fullText: action.displayName || action.toolName,
-                isFile: false,
-                isService: group.kind === 'service',
-            }))
-            : []);
-
-    const collapsedLimit = isFileGroup ? 3 : 2;
-    const visibleItems = open ? effectiveItems : effectiveItems.slice(0, collapsedLimit);
-    const hiddenCount = Math.max(0, effectiveItems.length - visibleItems.length);
-    const itemCount = isThinking ? group.actions.length : (effectiveItems.length || group.actions.length);
-
-    const thinkingText = isThinking
-        ? group.actions.map(getThinkingText).filter(Boolean).join('\n\n')
-        : '';
-    const showThinkingPreview = isThinking && !active && Boolean(thinkingText);
-    const expandable = hasDetails || hiddenCount > 0 || Boolean(thinkingText);
+    const nestedTools = group.actions.map(actionToNestedPart);
+    const labels: Record<string, [string, string]> = {
+        read: ['Reading files', 'Read files'],
+        edit: ['Editing files', 'Edited files'],
+        command: ['Running commands', 'Ran commands'],
+        install: ['Installing dependencies', 'Installed dependencies'],
+        validate: ['Validating changes', 'Validated changes'],
+        preview: ['Checking preview', 'Checked preview'],
+        service: ['Running service action', 'Service action complete'],
+    };
+    const [shimmer, complete] = labels[group.kind] || ['Working', 'Done'];
 
     return (
-        <Collapsible open={open} onOpenChange={setOpen} disabled={!expandable}>
-            <div className="rounded-lg px-2 py-2">
-                <div className="flex min-h-7 items-center gap-2.5">
-                    <Icon
-                        className={cn(
-                            'size-4 shrink-0',
-                            group.kind === 'edit' || group.kind === 'preview'
-                                ? 'text-blue-400'
-                                : group.kind === 'validate' || group.kind === 'install'
-                                    ? 'text-violet-400'
-                                    : isDark ? 'text-white/65' : 'text-gray-500',
-                        )}
-                        strokeWidth={1.8}
-                    />
-                    <CollapsibleTrigger asChild disabled={!expandable}>
-                        <button
-                            type="button"
-                            className={cn(
-                                'flex min-w-0 flex-1 items-center gap-2.5 rounded-md text-left transition-colors',
-                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50',
-                                expandable && (isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-black/[0.03]'),
-                            )}
-                        >
-                            <span className={cn('min-w-0 flex-1 text-sm font-semibold', isDark ? 'text-white/85' : 'text-gray-800')}>
-                                {actionTitle(group.kind, itemCount, active)}
-                            </span>
-                            <ActionStatus
-                                action={
-                                    active
-                                        ? group.actions.find(action => action.status === 'running' || action.status === 'pending')!
-                                        : group.actions[group.actions.length - 1]
-                                }
-                                isDark={isDark}
-                            />
-                        </button>
-                    </CollapsibleTrigger>
-                </div>
-
-                {(visibleItems.length > 0 || showThinkingPreview || hiddenCount > 0) && (
-                    <div className="mt-1.5 flex gap-2.5">
-                        <span className="flex w-4 shrink-0 flex-col items-center">
-                            <ConnectorBar isDark={isDark} />
-                        </span>
-                        <div className="min-w-0 flex-1 space-y-1 pr-1">
-                            {showThinkingPreview && (
-                                <CollapsibleTrigger asChild>
-                                    <button
-                                        type="button"
-                                        className={cn(
-                                            'block w-full whitespace-pre-wrap text-left text-[13px] leading-5',
-                                            open ? '' : 'line-clamp-3',
-                                            isDark ? 'text-white/55' : 'text-gray-500',
-                                        )}
-                                    >
-                                        {open ? thinkingText : thinkingPreviewLines(thinkingText, 3)}
-                                    </button>
-                                </CollapsibleTrigger>
-                            )}
-
-                            {visibleItems.map(item => {
-                                const label = item.isFile
-                                    ? displayFileName(item.text)
-                                    : truncateOneLine(item.text);
-                                return (
-                                    <span key={item.key} className="flex min-w-0 items-center gap-2 text-[13px] leading-5">
-                                        {item.isFile ? (
-                                            <FileTypeIcon path={item.fullText} isDark={isDark} />
-                                        ) : item.isService ? (
-                                            <img
-                                                src={SYTE_SERVICE_LOGO}
-                                                alt=""
-                                                aria-hidden="true"
-                                                className="size-3.5 shrink-0 object-contain"
-                                            />
-                                        ) : (
-                                            <span className="size-4 shrink-0" />
-                                        )}
-                                        <span
-                                            className={cn(
-                                                'truncate font-[family-name:var(--font-agent-mono)]',
-                                                item.isFile
-                                                    ? fileNameColor(item.fullText, isDark)
-                                                    : isDark ? 'text-white/50' : 'text-gray-500',
-                                            )}
-                                            title={item.fullText}
-                                        >
-                                            {label}
-                                        </span>
-                                    </span>
-                                );
-                            })}
-
-                            {hiddenCount > 0 && !open && (
-                                <CollapsibleTrigger asChild>
-                                    <button
-                                        type="button"
-                                        className={cn(
-                                            'block pl-6 text-left text-xs underline-offset-2 hover:underline',
-                                            isDark ? 'text-white/35' : 'text-gray-400',
-                                        )}
-                                    >
-                                        See more ({hiddenCount})
-                                    </button>
-                                </CollapsibleTrigger>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                <CollapsibleContent>
-                    {!isThinking && (
-                        <div className="mt-2 flex gap-2.5">
-                            <span className="flex w-4 shrink-0 flex-col items-center">
-                                <ConnectorBar isDark={isDark} />
-                            </span>
-                            <div className="min-w-0 flex-1 space-y-3 py-1">
-                                {group.actions.map(action => {
-                                    const files = getFilePaths(action);
-                                    const result = action.result ? cleanResult(action.result) : '';
-                                    const detailLabel = files.length > 0
-                                        ? files.map(displayFileName).join(', ')
-                                        : (group.kind === 'command' || group.kind === 'install' || group.kind === 'validate'
-                                            ? compactCommand(getCommand(action))
-                                            : action.displayName || action.toolName);
-                                    return (
-                                        <div key={action.id} className="min-w-0">
-                                            <div className={cn('flex items-start gap-2 text-xs', isDark ? 'text-white/45' : 'text-gray-500')}>
-                                                {group.kind === 'service' ? (
-                                                    <img
-                                                        src={SYTE_SERVICE_LOGO}
-                                                        alt=""
-                                                        aria-hidden="true"
-                                                        className="mt-0.5 size-3.5 shrink-0 object-contain"
-                                                    />
-                                                ) : (
-                                                    <ActionStatus action={action} isDark={isDark} />
-                                                )}
-                                                <span
-                                                    className={cn(
-                                                        'min-w-0 whitespace-pre-wrap break-all font-[family-name:var(--font-agent-mono)] leading-5',
-                                                        files.length > 0 && fileNameColor(files[0], isDark),
-                                                    )}
-                                                    title={files.length > 0 ? files.join(', ') : getCommand(action)}
-                                                >
-                                                    {detailLabel}
-                                                </span>
-                                            </div>
-                                            {result && (
-                                                <pre className={cn(
-                                                    'mt-2 max-h-[240px] overflow-auto whitespace-pre-wrap break-words rounded-lg border p-3 font-[family-name:var(--font-agent-mono)] text-xs leading-5',
-                                                    isDark ? 'border-white/10 bg-black/20 text-[#b3b6c2]' : 'border-black/10 bg-black/[0.035] text-gray-600',
-                                                )}>
-                                                    {result.slice(0, 4000)}
-                                                    {result.length > 4000 ? '\n… output truncated' : ''}
-                                                </pre>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </CollapsibleContent>
-            </div>
-        </Collapsible>
+        <ToolGroup
+            part={{
+                id: group.actions[0]?.id,
+                toolCallId: group.actions[0]?.toolCallId || group.actions[0]?.id,
+                state: active ? 'input-streaming' : 'output-available',
+                startedAt: group.actions[0]?.startedAt,
+                input: {
+                    description: group.actions
+                        .flatMap(getFilePaths)
+                        .slice(0, 3)
+                        .map(displayFileName)
+                        .join(', '),
+                },
+                output: active
+                    ? undefined
+                    : {
+                        success: true,
+                        totalDurationMs: Math.max(
+                            0,
+                            (Math.max(...group.actions.map(a => a.completedAt || a.startedAt || 0)) -
+                                Math.min(...group.actions.map(a => a.startedAt || Date.now()))),
+                        ),
+                    },
+            }}
+            nestedTools={nestedTools}
+            chatStatus={chatStatus}
+            completeLabel={complete}
+            shimmerLabel={shimmer}
+            interruptedLabel="Interrupted"
+            maxVisibleTools={group.kind === 'read' || group.kind === 'edit' ? 4 : 5}
+            defaultOpen={active}
+            showElapsed
+        />
     );
 });
 
 export const ActionsList = memo(function ActionsList({ actions, isLive = false, isDark = true }: ActionsListProps) {
     const [phaseOpen, setPhaseOpen] = useState(isLive);
+    const generationPlan = useStore(s => s.generationPlan);
     const groups = useMemo(() => groupActions(actions), [actions]);
     const phase = useMemo(() => phaseCopy(actions, isLive), [actions, isLive]);
     const workedFor = useMemo(() => formatWorkedFor(actions), [actions]);
     const running = actions.some(action => action.status === 'running' || action.status === 'pending');
+    const chatStatus = isLive && running ? 'streaming' : 'ready';
 
-    // When the run finishes, collapse to the “worked for …” summary before paint.
     useLayoutEffect(() => {
         if (isLive) {
             setPhaseOpen(true);
@@ -710,29 +576,34 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
 
     if (actions.length === 0) return null;
 
-    // Finished turns collapse under “worked for …” with an expandable bar.
     if (!isLive) {
         return (
             <Collapsible open={phaseOpen} onOpenChange={setPhaseOpen}>
-                <section className={cn('agent-feed my-4 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
+                <section className={cn('agent-feed my-3 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
                     <CollapsibleTrigger asChild>
                         <button
                             type="button"
                             className={cn(
-                                'group/phase flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left',
+                                'group/phase flex w-full items-center gap-2 rounded-md px-1 py-1 text-left',
                                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50',
                                 isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]',
                             )}
                         >
                             <span className={cn('text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>{workedFor}</span>
-                            <ChevronDown className={cn('size-4 shrink-0 transition-transform', isDark ? 'text-white/35' : 'text-gray-400', !phaseOpen && '-rotate-90')} />
+                            <ChevronDown className={cn('size-3.5 shrink-0 transition-transform', isDark ? 'text-white/35' : 'text-gray-400', !phaseOpen && '-rotate-90')} />
                         </button>
                     </CollapsibleTrigger>
-                    <div className={cn('mt-2 h-px w-full', isDark ? 'bg-white/10' : 'bg-black/10')} />
+                    <div className={cn('mt-1.5 h-px w-full', isDark ? 'bg-white/10' : 'bg-black/10')} />
                     <CollapsibleContent>
-                        <div className="mt-2 space-y-1 pl-1 sm:pl-2">
+                        <div className="mt-1.5 space-y-1.5 pl-0.5 sm:pl-1">
                             {groups.map((group, index) => (
-                                <ToolStack key={`${group.kind}-${group.actions[0].id}-${index}`} group={group} isDark={isDark} />
+                                <ToolStack
+                                    key={`${group.kind}-${group.actions[0].id}-${index}`}
+                                    group={group}
+                                    isDark={isDark}
+                                    chatStatus={chatStatus}
+                                    generationPlan={generationPlan}
+                                />
                             ))}
                         </div>
                     </CollapsibleContent>
@@ -742,29 +613,26 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     }
 
     return (
-        <Collapsible open={true} onOpenChange={setPhaseOpen}>
-            <section className={cn('agent-feed my-3 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
-                {/* Compact inline status — spinner while live; no completion/failure marks */}
-                <div className={cn('flex items-center gap-2 px-1 py-1 text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>
-                    {running ? (
-                        <LoaderCircle className={cn('size-3.5 animate-spin', isDark ? 'text-blue-300' : 'text-blue-600')} />
-                    ) : (
-                        <span className="size-3.5" aria-hidden="true" />
-                    )}
-                    <span className={cn('font-medium', isDark ? 'text-white/75' : 'text-gray-700')}>{phase.title}</span>
-                </div>
+        <section className={cn('agent-feed my-2 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
+            <div className={cn('flex items-center gap-2 px-1 py-1 text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>
+                {running ? <SpiralLoader size={14} /> : <span className="size-3.5" aria-hidden="true" />}
+                <span className={cn('font-medium', isDark ? 'text-white/75' : 'text-gray-700')}>{phase.title}</span>
+            </div>
 
-                <CollapsibleContent>
-                    <div
-                        data-active={running ? 'true' : 'false'}
-                        className="mt-1 space-y-1 pl-1 sm:pl-2"
-                    >
-                        {groups.map((group, index) => (
-                            <ToolStack key={`${group.kind}-${group.actions[0].id}-${index}`} group={group} isDark={isDark} />
-                        ))}
-                    </div>
-                </CollapsibleContent>
-            </section>
-        </Collapsible>
+            <div
+                data-active={running ? 'true' : 'false'}
+                className="mt-1 space-y-1.5 pl-0.5 sm:pl-1"
+            >
+                {groups.map((group, index) => (
+                    <ToolStack
+                        key={`${group.kind}-${group.actions[0].id}-${index}`}
+                        group={group}
+                        isDark={isDark}
+                        chatStatus={chatStatus}
+                        generationPlan={generationPlan}
+                    />
+                ))}
+            </div>
+        </section>
     );
 });

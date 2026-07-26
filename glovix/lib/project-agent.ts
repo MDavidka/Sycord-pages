@@ -36,7 +36,12 @@ export type ProjectAgentEvent = {
         | 'screenshot'
         | 'stopped'
         | 'question'
-        | 'question_answered';
+        | 'question_answered'
+        | 'plan'
+        | 'subagent_started'
+        | 'subagent_completed'
+        | 'subagent_failed'
+        | 'subagent_scope';
     session?: number;
     sessionAuthoritative?: boolean;
     eventId?: number;
@@ -51,6 +56,13 @@ export type ProjectAgentEvent = {
     requestId?: string;
     screenshots?: AgentScreenshot[];
     question?: AgentQuestion;
+    /** Structured plan payload from SSE `plan` events. */
+    plan?: unknown;
+    /** Subagent task id / profile when present. */
+    subagentTaskId?: string;
+    subagentProfile?: string;
+    /** True when this event came from the SSE hot path (may never hit Turso). */
+    fromStream?: boolean;
 };
 
 export type AgentScreenshot = {
@@ -373,11 +385,21 @@ function normalizeTursoEvent(
     tursoSessionId?: string,
     requestId?: string,
     projectId?: string,
+    fromStream = false,
 ): ProjectAgentEvent | null {
     const payload = event.payload || {};
     const rawToolCallId = payload.tool_call_id ?? payload.call_id;
+    const payloadSession =
+        typeof payload.session === 'number'
+            ? payload.session
+            : Number(payload.session) || undefined;
+    const payloadTurso =
+        typeof payload.turso_session_id === 'string' ? payload.turso_session_id : undefined;
+    const payloadRequestId =
+        typeof payload.request_id === 'string' ? payload.request_id : undefined;
+    const rawSubagentId = payload.subagent_task_id ?? payload.task_id;
     const common = {
-        session,
+        session: payloadSession || session,
         eventId: Number(event.id) || undefined,
         text: eventText(event),
         title: event.title,
@@ -385,16 +407,37 @@ function normalizeTursoEvent(
             typeof rawToolCallId === 'string' || typeof rawToolCallId === 'number'
                 ? String(rawToolCallId)
                 : undefined,
-        tursoSessionId,
-        requestId,
+        tursoSessionId: payloadTurso || tursoSessionId,
+        requestId: payloadRequestId || requestId,
+        fromStream,
+        subagentTaskId:
+            typeof rawSubagentId === 'string' || typeof rawSubagentId === 'number'
+                ? String(rawSubagentId)
+                : undefined,
+        subagentProfile:
+            typeof payload.profile === 'string'
+                ? payload.profile
+                : typeof payload.subagent_type === 'string'
+                    ? payload.subagent_type
+                    : undefined,
     };
 
     switch (event.event_type) {
         case 'request_started':
         case 'processing':
+        case 'status':
             return { type: 'processing', ...common };
         case 'thinking':
+        case 'thinking_delta':
             return { type: 'thinking', ...common };
+        case 'plan':
+            return {
+                type: 'plan',
+                ...common,
+                plan: payload.plan ?? payload,
+                arguments: payload,
+                tool: 'update_plan',
+            };
         case 'screenshot': {
             const screenshots = normalizeScreenshots(payload, projectId);
             return {
@@ -434,7 +477,7 @@ function normalizeTursoEvent(
                 type: payload.phase === 'finished' ? 'tool_finished' : 'tool_started',
                 ...common,
                 tool: typeof payload.tool === 'string' ? payload.tool : event.title,
-                arguments: payload.arguments,
+                arguments: payload.arguments ?? payload,
                 ok: payload.ok === true,
             };
         case 'tool_call_started':
@@ -442,55 +485,267 @@ function normalizeTursoEvent(
                 type: 'tool_started',
                 ...common,
                 tool: typeof payload.tool === 'string' ? payload.tool : event.title,
-                arguments: payload.arguments,
+                arguments: payload.arguments ?? payload,
             };
         case 'tool_call_finished':
+        case 'tool_error':
             return {
                 type: 'tool_finished',
                 ...common,
                 tool: typeof payload.tool === 'string' ? payload.tool : event.title,
-                arguments: payload.arguments,
-                ok: payload.ok !== false,
+                arguments: payload.arguments ?? payload,
+                ok: event.event_type === 'tool_error' ? false : payload.ok !== false,
             };
         case 'file_created':
         case 'file_modified':
         case 'file_deleted':
+        case 'file_read':
+        case 'file_search':
+        case 'file_changed':
         case 'command_run':
-            // These are semantic activity events, not generic commands. Preserve
-            // their payload so the UI can show the actual path/command and apply
-            // the correct file, terminal, or service icon.
+        case 'command_output':
+            // Semantic activity events — preserve payload for file/search/command UI.
             return {
-                type: 'tool_finished',
+                type: event.event_type === 'file_search' || event.event_type === 'file_read'
+                    ? 'tool_finished'
+                    : 'tool_finished',
                 ...common,
                 tool: event.event_type,
                 arguments: {
                     ...payload,
-                    ...(event.event_type === 'command_run' && !payload.command && event.detail
+                    ...(event.event_type.startsWith('command') && !payload.command && event.detail
                         ? { command: event.detail }
                         : {}),
-                    ...(event.event_type !== 'command_run' && !payload.path && event.detail
+                    ...(!event.event_type.startsWith('command') && !payload.path && event.detail
                         ? { path: event.detail }
+                        : {}),
+                    ...(event.event_type === 'file_search' && !payload.query && event.detail
+                        ? { query: event.detail, pattern: event.detail }
                         : {}),
                 },
                 ok: payload.ok !== false,
             };
+        case 'subagent_started':
+            return {
+                type: 'subagent_started',
+                ...common,
+                tool: 'subagent',
+                arguments: payload,
+                text: event.detail || event.title || 'Subagent started',
+            };
+        case 'subagent_completed':
+            return {
+                type: 'subagent_completed',
+                ...common,
+                tool: 'subagent',
+                arguments: payload,
+                ok: true,
+                text: event.detail || event.title || 'Subagent completed',
+            };
+        case 'subagent_failed':
+            return {
+                type: 'subagent_failed',
+                ...common,
+                tool: 'subagent',
+                arguments: payload,
+                ok: false,
+                text: event.detail || (typeof payload.error === 'string' ? payload.error : 'Subagent failed'),
+            };
+        case 'subagent_scope':
+            return {
+                type: 'subagent_scope',
+                ...common,
+                tool: 'subagent',
+                arguments: payload,
+                text: event.detail || event.title || 'Subagent scope',
+            };
         case 'token_delta':
             return { type: 'delta', ...common };
         case 'message_snapshot':
+        case 'assistant_message':
             return { type: 'message', ...common };
+        case 'user_message':
+            return null;
         case 'request_completed':
             return { type: 'done', ...common };
         case 'request_failed':
             return { type: 'error', ...common };
+        case 'session_stopped':
         case 'agent_stopped':
             return {
                 type: 'stopped',
                 ...common,
                 text: event.detail || (typeof payload.reason === 'string' ? payload.reason : 'Agent stopped.'),
             };
+        case 'heartbeat':
+        case 'usage':
+        case 'service_action':
+        case 'agent_started':
+        case 'agent_restarted':
+            return null;
         default:
             return null;
     }
+}
+
+/** Parse one SSE chunk block into an activity event (or null for heartbeats). */
+function parseSseBlock(block: string): TursoSessionEvent | null {
+    const lines = block.split(/\r?\n/);
+    let eventName = '';
+    let data = '';
+    let id = 0;
+    for (const line of lines) {
+        if (!line || line.startsWith(':')) continue; // heartbeat / comment
+        if (line.startsWith('id:')) {
+            id = parseInt(line.slice(3).trim(), 10) || id;
+        } else if (line.startsWith('event:')) {
+            eventName = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+            data += (data ? '\n' : '') + line.slice(5).trimStart();
+        }
+    }
+    if (!data) return null;
+    try {
+        const parsed = JSON.parse(data) as Record<string, unknown>;
+        const eventType =
+            (typeof parsed.event_type === 'string' && parsed.event_type) ||
+            eventName ||
+            'status';
+        const payload =
+            parsed.payload && typeof parsed.payload === 'object'
+                ? (parsed.payload as Record<string, unknown>)
+                : {};
+        return {
+            id: Number(parsed.id) || id || 0,
+            event_type: eventType,
+            role: typeof parsed.role === 'string' ? parsed.role : undefined,
+            title: typeof parsed.title === 'string' ? parsed.title : undefined,
+            detail: typeof parsed.detail === 'string' ? parsed.detail : undefined,
+            payload,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Consume the Syte SSE hot path (token_delta / thinking_delta skip Turso).
+ * Docs: https://sycord.site/api/#stream/
+ */
+export async function streamAgentActivitySse(options: {
+    projectId: string;
+    sinceId?: number;
+    session?: number | string;
+    requestId?: string;
+    tursoSessionId?: string;
+    signal?: AbortSignal;
+    onEvent: (event: ProjectAgentEvent) => void;
+    /** Called whenever a higher event id is observed. */
+    onEventId?: (eventId: number) => void;
+}): Promise<{ lastEventId: number; terminal: boolean }> {
+    let sinceId = Math.max(0, options.sinceId || 0);
+    let lastEventId = sinceId;
+    let terminal = false;
+    let session = Math.max(0, Number(options.session) || 0);
+
+    const url =
+        `/api/workspace/sycord/agent-activity?projectId=${encodeURIComponent(options.projectId)}` +
+        `&live=1&since_id=${sinceId}` +
+        (options.session ? `&session=${encodeURIComponent(String(options.session))}` : '');
+
+    const response = await fetch(url, {
+        headers: {
+            Accept: 'text/event-stream',
+            'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
+        signal: options.signal,
+    });
+
+    if (!response.ok || !response.body) {
+        const text = await response.text().catch(() => '');
+        throw new Error(
+            text.slice(0, 240) || `Agent activity stream failed (HTTP ${response.status}).`,
+        );
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const emit = (raw: TursoSessionEvent) => {
+        const id = Number(raw.id) || 0;
+        if (id && id <= sinceId) return;
+        if (id) {
+            sinceId = Math.max(sinceId, id);
+            lastEventId = Math.max(lastEventId, id);
+            options.onEventId?.(lastEventId);
+        }
+
+        const eventRequestId = raw.payload?.request_id;
+        if (
+            options.requestId &&
+            typeof eventRequestId === 'string' &&
+            eventRequestId &&
+            eventRequestId !== options.requestId
+        ) {
+            return;
+        }
+
+        const payloadSession =
+            typeof raw.payload?.session === 'number'
+                ? raw.payload.session
+                : Number(raw.payload?.session) || 0;
+        if (payloadSession > 0) session = payloadSession;
+
+        const normalized = normalizeTursoEvent(
+            raw,
+            session,
+            options.tursoSessionId,
+            options.requestId,
+            options.projectId,
+            true,
+        );
+        if (!normalized) return;
+        options.onEvent(normalized);
+        if (
+            normalized.type === 'done' ||
+            normalized.type === 'error' ||
+            normalized.type === 'stopped'
+        ) {
+            terminal = true;
+        }
+    };
+
+    try {
+        while (!terminal) {
+            if (options.signal?.aborted) {
+                throw new DOMException('Aborted', 'AbortError');
+            }
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            let splitAt = buffer.indexOf('\n\n');
+            while (splitAt !== -1) {
+                const block = buffer.slice(0, splitAt);
+                buffer = buffer.slice(splitAt + 2);
+                const parsed = parseSseBlock(block);
+                if (parsed) emit(parsed);
+                if (terminal) break;
+                splitAt = buffer.indexOf('\n\n');
+            }
+            if (terminal) break;
+        }
+    } finally {
+        try {
+            reader.releaseLock();
+        } catch {
+            /* ignore */
+        }
+    }
+
+    return { lastEventId, terminal };
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -525,9 +780,10 @@ async function fetchTursoSession(
 }
 
 /**
- * Poll a durable Turso agent session until it leaves status "open".
- * Retries transient network errors (Safari "Load failed", offline blips)
- * instead of treating disconnect as a fatal agent failure.
+ * Observe a durable Turso agent session until it leaves status "open".
+ * Prefers the SSE hot path (token_delta / thinking_delta skip Turso) and
+ * keeps Turso polling as a durable fallback / terminal status source.
+ * Docs: https://sycord.site/api/#stream/
  */
 export async function pollTursoAgentSession(options: {
     projectId: string;
@@ -548,6 +804,7 @@ export async function pollTursoAgentSession(options: {
     let idlePolls = 0;
     let pollIntervalMs = POLL_INTERVAL_FAST_MS;
     const startedAt = Date.now();
+    const seenEventIds = new Set<number>();
 
     options.onEvent({
         type: 'session',
@@ -558,138 +815,195 @@ export async function pollTursoAgentSession(options: {
         eventId: eventId || undefined,
     });
 
-    while (!terminal) {
-        if (options.signal?.aborted) {
-            throw new DOMException('Aborted', 'AbortError');
+    const emitNormalized = (normalized: ProjectAgentEvent) => {
+        if (normalized.eventId) {
+            if (seenEventIds.has(normalized.eventId)) return;
+            seenEventIds.add(normalized.eventId);
+            sinceId = Math.max(sinceId, normalized.eventId);
+            eventId = Math.max(eventId, normalized.eventId);
         }
-        if (Date.now() - startedAt > MAX_POLL_MS) {
-            throw new Error('Timed out waiting for the Turso agent session to finish.');
+        if (normalized.session) {
+            if (!sessionAuthoritative || normalized.session !== session) {
+                session = normalized.session;
+                if (normalized.sessionAuthoritative || normalized.fromStream) {
+                    sessionAuthoritative = true;
+                }
+            }
         }
+        options.onEvent(normalized);
+        if (normalized.type === 'done' || normalized.type === 'error' || normalized.type === 'stopped') {
+            terminal = true;
+            status = normalized.type === 'error'
+                ? 'failed'
+                : normalized.type === 'stopped'
+                    ? 'stopped'
+                    : 'completed';
+        }
+    };
 
-        let doc: TursoSessionDoc;
-        try {
-            doc = await fetchTursoSession(
-                options.projectId,
-                options.tursoSessionId,
-                sinceId,
-                options.signal,
-            );
-            transientFailures = 0;
-        } catch (error) {
-            if (options.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+    // SSE hot path — required for token_delta / thinking_delta.
+    const streamAbort = new AbortController();
+    const onParentAbort = () => streamAbort.abort();
+    options.signal?.addEventListener('abort', onParentAbort, { once: true });
+
+    const streamPromise = streamAgentActivitySse({
+        projectId: options.projectId,
+        sinceId,
+        session: session || undefined,
+        requestId: options.requestId,
+        tursoSessionId: options.tursoSessionId,
+        signal: streamAbort.signal,
+        onEvent: emitNormalized,
+        onEventId: (id) => {
+            sinceId = Math.max(sinceId, id);
+            eventId = Math.max(eventId, id);
+        },
+    }).catch((error) => {
+        if (options.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+            return { lastEventId: eventId, terminal };
+        }
+        // SSE may be unavailable — Turso poll remains the source of truth for cold events.
+        console.warn('[project-agent] SSE stream unavailable, falling back to Turso poll:', error);
+        return { lastEventId: eventId, terminal: false };
+    });
+
+    try {
+        while (!terminal) {
+            if (options.signal?.aborted) {
+                throw new DOMException('Aborted', 'AbortError');
+            }
+            if (Date.now() - startedAt > MAX_POLL_MS) {
+                throw new Error('Timed out waiting for the Turso agent session to finish.');
+            }
+
+            let doc: TursoSessionDoc;
+            try {
+                doc = await fetchTursoSession(
+                    options.projectId,
+                    options.tursoSessionId,
+                    sinceId,
+                    options.signal,
+                );
+                transientFailures = 0;
+            } catch (error) {
+                if (options.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+                    throw error;
+                }
+                if (isTransientNetworkError(error) && transientFailures < TRANSIENT_RETRIES) {
+                    transientFailures++;
+                    await sleep(pollIntervalMs * Math.min(transientFailures, 4), options.signal);
+                    continue;
+                }
                 throw error;
             }
-            if (isTransientNetworkError(error) && transientFailures < TRANSIENT_RETRIES) {
-                transientFailures++;
-                await sleep(pollIntervalMs * Math.min(transientFailures, 4), options.signal);
-                continue;
-            }
-            throw error;
-        }
 
-        const durableSession = Number(doc.session_number) || 0;
-        if (durableSession > 0 && (!sessionAuthoritative || session !== durableSession)) {
-            session = durableSession;
-            sessionAuthoritative = true;
-            options.onEvent({
-                type: 'session',
-                session,
-                sessionAuthoritative: true,
-                tursoSessionId: options.tursoSessionId,
-                requestId: options.requestId,
-                eventId: eventId || undefined,
-            });
-        }
-
-        let sawNewEvent = false;
-        for (const event of doc.events || []) {
-            const id = Number(event.id) || 0;
-            if (id && id <= sinceId) continue;
-            if (id) {
-                sinceId = Math.max(sinceId, id);
-                eventId = Math.max(eventId, id);
+            const durableSession = Number(doc.session_number) || 0;
+            if (durableSession > 0 && (!sessionAuthoritative || session !== durableSession)) {
+                session = durableSession;
+                sessionAuthoritative = true;
+                options.onEvent({
+                    type: 'session',
+                    session,
+                    sessionAuthoritative: true,
+                    tursoSessionId: options.tursoSessionId,
+                    requestId: options.requestId,
+                    eventId: eventId || undefined,
+                });
             }
 
-            const eventRequestId = event.payload?.request_id;
-            if (
-                options.requestId &&
-                typeof eventRequestId === 'string' &&
-                eventRequestId &&
-                eventRequestId !== options.requestId
-            ) {
-                continue;
+            let sawNewEvent = false;
+            for (const event of doc.events || []) {
+                const id = Number(event.id) || 0;
+                if (id && id <= sinceId) continue;
+                if (id && seenEventIds.has(id)) {
+                    sinceId = Math.max(sinceId, id);
+                    continue;
+                }
+
+                const eventRequestId = event.payload?.request_id;
+                if (
+                    options.requestId &&
+                    typeof eventRequestId === 'string' &&
+                    eventRequestId &&
+                    eventRequestId !== options.requestId
+                ) {
+                    if (id) sinceId = Math.max(sinceId, id);
+                    continue;
+                }
+
+                const normalized = normalizeTursoEvent(
+                    event,
+                    session,
+                    options.tursoSessionId,
+                    options.requestId,
+                    options.projectId,
+                    false,
+                );
+                if (!normalized) {
+                    if (id) {
+                        seenEventIds.add(id);
+                        sinceId = Math.max(sinceId, id);
+                        eventId = Math.max(eventId, id);
+                    }
+                    continue;
+                }
+                sawNewEvent = true;
+                emitNormalized(normalized);
+                if (terminal) break;
             }
 
-            const normalized = normalizeTursoEvent(
-                event,
-                session,
-                options.tursoSessionId,
-                options.requestId,
-                options.projectId,
-            );
-            if (!normalized) continue;
-            sawNewEvent = true;
-            options.onEvent(normalized);
+            if (terminal) break;
 
-            if (normalized.type === 'done' || normalized.type === 'error' || normalized.type === 'stopped') {
-                terminal = true;
-                status = normalized.type === 'error'
-                    ? 'failed'
-                    : normalized.type === 'stopped'
-                        ? 'stopped'
-                        : 'completed';
+            status = doc.status || status;
+            if (status && status !== 'open') {
+                if (status === 'failed' || status === 'cancelled') {
+                    emitNormalized({
+                        type: 'error',
+                        session: session || undefined,
+                        eventId: eventId || undefined,
+                        text: `Agent session ${status}.`,
+                        tursoSessionId: options.tursoSessionId,
+                        requestId: options.requestId,
+                    });
+                } else if (status === 'stopped') {
+                    emitNormalized({
+                        type: 'stopped',
+                        session: session || undefined,
+                        eventId: eventId || undefined,
+                        text: 'Agent stopped.',
+                        tursoSessionId: options.tursoSessionId,
+                        requestId: options.requestId,
+                    });
+                } else {
+                    emitNormalized({
+                        type: 'done',
+                        session: session || undefined,
+                        eventId: eventId || undefined,
+                        text: '',
+                        tursoSessionId: options.tursoSessionId,
+                        requestId: options.requestId,
+                    });
+                }
                 break;
             }
-        }
 
-        if (terminal) break;
-
-        status = doc.status || status;
-        if (status && status !== 'open') {
-            if (status === 'failed' || status === 'cancelled') {
-                options.onEvent({
-                    type: 'error',
-                    session: session || undefined,
-                    eventId: eventId || undefined,
-                    text: `Agent session ${status}.`,
-                    tursoSessionId: options.tursoSessionId,
-                    requestId: options.requestId,
-                });
-            } else if (status === 'stopped') {
-                options.onEvent({
-                    type: 'stopped',
-                    session: session || undefined,
-                    eventId: eventId || undefined,
-                    text: 'Agent stopped.',
-                    tursoSessionId: options.tursoSessionId,
-                    requestId: options.requestId,
-                });
+            if (sawNewEvent) {
+                idlePolls = 0;
+                pollIntervalMs = POLL_INTERVAL_FAST_MS;
             } else {
-                options.onEvent({
-                    type: 'done',
-                    session: session || undefined,
-                    eventId: eventId || undefined,
-                    text: '',
-                    tursoSessionId: options.tursoSessionId,
-                    requestId: options.requestId,
-                });
+                idlePolls += 1;
+                pollIntervalMs = Math.min(
+                    POLL_INTERVAL_MAX_MS,
+                    idlePolls <= 2 ? POLL_INTERVAL_FAST_MS : POLL_INTERVAL_IDLE_MS + (idlePolls - 3) * 200,
+                );
             }
-            terminal = true;
-            break;
-        }
 
-        if (sawNewEvent) {
-            idlePolls = 0;
-            pollIntervalMs = POLL_INTERVAL_FAST_MS;
-        } else {
-            idlePolls += 1;
-            pollIntervalMs = Math.min(
-                POLL_INTERVAL_MAX_MS,
-                idlePolls <= 2 ? POLL_INTERVAL_FAST_MS : POLL_INTERVAL_IDLE_MS + (idlePolls - 3) * 200,
-            );
+            await sleep(pollIntervalMs, options.signal);
         }
-
-        await sleep(pollIntervalMs, options.signal);
+    } finally {
+        streamAbort.abort();
+        options.signal?.removeEventListener('abort', onParentAbort);
+        await streamPromise.catch(() => null);
     }
 
     return { session, eventId, status };

@@ -3,6 +3,7 @@ import { useState, useMemo, useRef, useEffect, memo } from 'react';
 import { File, Folder, FolderOpen, ChevronRight, ChevronDown, Target, Lock, Scissors, Copy, FileText, FolderPlus, Trash2 } from 'lucide-react';
 import { useStore } from '../store';
 import { writeFile, deleteFile as deleteFileWC, renameFile as renameFileWC } from '../lib/webcontainer';
+import { cn } from '@/lib/utils';
 
 interface FileNode {
     name: string;
@@ -17,6 +18,40 @@ interface ContextMenuState {
     y: number;
     targetPath: string;
     targetType: 'file' | 'folder' | 'root';
+}
+
+const FILE_ICON_BASE = 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons';
+const FILE_ICON_URLS: Record<string, string> = {
+    ts: `${FILE_ICON_BASE}/typescript/typescript-original.svg`,
+    tsx: `${FILE_ICON_BASE}/typescript/typescript-original.svg`,
+    js: `${FILE_ICON_BASE}/javascript/javascript-original.svg`,
+    jsx: `${FILE_ICON_BASE}/react/react-original.svg`,
+    py: `${FILE_ICON_BASE}/python/python-original.svg`,
+    html: `${FILE_ICON_BASE}/html5/html5-original.svg`,
+    htm: `${FILE_ICON_BASE}/html5/html5-original.svg`,
+    css: `${FILE_ICON_BASE}/css3/css3-original.svg`,
+    md: `${FILE_ICON_BASE}/markdown/markdown-original.svg`,
+    mdx: `${FILE_ICON_BASE}/markdown/markdown-original.svg`,
+    json: `${FILE_ICON_BASE}/json/json-original.svg`,
+    svg: `${FILE_ICON_BASE}/svg/svg-original.svg`,
+};
+
+function FileTypeIcon({ name, isDark }: { name: string; isDark: boolean }) {
+    const lower = name.toLowerCase();
+    const extension = lower.split('.').pop() || '';
+    const url =
+        lower === 'package.json'
+            ? `${FILE_ICON_BASE}/nodejs/nodejs-original.svg`
+            : lower === 'dockerfile' || lower.startsWith('docker-compose')
+                ? `${FILE_ICON_BASE}/docker/docker-original.svg`
+                : lower.startsWith('next.config')
+                    ? `${FILE_ICON_BASE}/nextjs/nextjs-original.svg`
+                    : FILE_ICON_URLS[extension];
+
+    if (url) {
+        return <img src={url} alt="" aria-hidden="true" className="size-3.5 shrink-0 object-contain opacity-90" />;
+    }
+    return <File className={cn('size-3.5 shrink-0', isDark ? 'text-muted-foreground' : 'text-gray-400')} />;
 }
 
 const buildFileTree = (files: string[]): FileNode[] => {
@@ -46,28 +81,28 @@ const buildFileTree = (files: string[]): FileNode[] => {
     return root;
 };
 
-const FileTreeNode = memo(({ 
-    node, 
-    level, 
-    selectedFile, 
-    onSelect, 
+const FileTreeNode = memo(({
+    node,
+    level,
+    selectedFile,
+    onSelect,
     isDark,
     onContextMenu,
     renamingPath,
     onRenameSubmit,
-    onRenameCancel
-}: { 
-    node: FileNode; 
-    level: number; 
-    selectedFile: string | null; 
-    onSelect: (path: string) => void; 
+    onRenameCancel,
+}: {
+    node: FileNode;
+    level: number;
+    selectedFile: string | null;
+    onSelect: (path: string) => void;
     isDark: boolean;
     onContextMenu: (e: React.MouseEvent, path: string, type: 'file' | 'folder') => void;
     renamingPath: string | null;
     onRenameSubmit: (oldPath: string, newName: string) => void;
     onRenameCancel: () => void;
 }) => {
-    const [isOpen, setIsOpen] = useState(true);
+    const [isOpen, setIsOpen] = useState(level < 2);
     const [renameValue, setRenameValue] = useState(node.name);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -86,19 +121,27 @@ const FileTreeNode = memo(({
         }
     };
 
+    const rowClass = cn(
+        'group flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[12px] leading-none cursor-pointer transition-colors',
+        selectedFile === node.path
+            ? isDark
+                ? 'bg-an-tool-background text-an-tool-color'
+                : 'bg-blue-50 text-blue-900'
+            : isDark
+                ? 'text-muted-foreground hover:bg-white/[0.04] hover:text-foreground'
+                : 'text-gray-600 hover:bg-black/[0.04] hover:text-gray-900',
+    );
+
     if (node.type === 'file') {
         return (
             <div
                 onClick={() => onSelect(node.path)}
                 onContextMenu={(e) => onContextMenu(e, node.path, 'file')}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${
-                    selectedFile === node.path
-                        ? isDark ? 'bg-accent text-white' : 'bg-blue-100 text-blue-900'
-                        : isDark ? 'text-muted-foreground hover:bg-accent hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-                style={{ paddingLeft: `${level * 12 + 8}px` }}
+                className={rowClass}
+                style={{ paddingLeft: `${level * 10 + 6}px` }}
+                title={node.path}
             >
-                <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-muted-foreground' : 'text-gray-400'}`} />
+                <FileTypeIcon name={node.name} isDark={isDark} />
                 {renamingPath === node.path ? (
                     <input
                         ref={inputRef}
@@ -106,11 +149,14 @@ const FileTreeNode = memo(({
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={handleRenameKeyDown}
                         onBlur={() => onRenameCancel()}
-                        className={`flex-1 bg-transparent border rounded px-1 text-sm outline-none ${isDark ? 'border-[#444] text-white' : 'border-gray-300 text-gray-900'}`}
+                        className={cn(
+                            'h-5 min-w-0 flex-1 rounded border bg-transparent px-1 text-[12px] outline-none',
+                            isDark ? 'border-[#444] text-white' : 'border-gray-300 text-gray-900',
+                        )}
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <span className="truncate text-sm">{node.name}</span>
+                    <span className="truncate font-[450]">{node.name}</span>
                 )}
             </div>
         );
@@ -121,11 +167,16 @@ const FileTreeNode = memo(({
             <div
                 onClick={() => setIsOpen(!isOpen)}
                 onContextMenu={(e) => onContextMenu(e, node.path, 'folder')}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ${isDark ? 'text-muted-foreground hover:bg-accent hover:text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`}
-                style={{ paddingLeft: `${level * 12 + 8}px` }}
+                className={rowClass}
+                style={{ paddingLeft: `${level * 10 + 6}px` }}
+                title={node.path}
             >
-                {isOpen ? <ChevronDown className="w-3 h-3 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 flex-shrink-0" />}
-                {isOpen ? <FolderOpen className="w-4 h-4 text-blue-400 flex-shrink-0" /> : <Folder className="w-4 h-4 text-blue-400 flex-shrink-0" />}
+                {isOpen
+                    ? <ChevronDown className="size-3 shrink-0 opacity-70" />
+                    : <ChevronRight className="size-3 shrink-0 opacity-70" />}
+                {isOpen
+                    ? <FolderOpen className="size-3.5 shrink-0 text-sky-400" />
+                    : <Folder className="size-3.5 shrink-0 text-sky-400" />}
                 {renamingPath === node.path ? (
                     <input
                         ref={inputRef}
@@ -133,20 +184,23 @@ const FileTreeNode = memo(({
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={handleRenameKeyDown}
                         onBlur={() => onRenameCancel()}
-                        className={`flex-1 bg-transparent border rounded px-1 text-sm outline-none ${isDark ? 'border-[#444] text-white' : 'border-gray-300 text-gray-900'}`}
+                        className={cn(
+                            'h-5 min-w-0 flex-1 rounded border bg-transparent px-1 text-[12px] outline-none',
+                            isDark ? 'border-[#444] text-white' : 'border-gray-300 text-gray-900',
+                        )}
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <span className="truncate font-medium text-sm">{node.name}</span>
+                    <span className="truncate font-medium">{node.name}</span>
                 )}
             </div>
             {isOpen && node.children.map(child => (
-                <FileTreeNode 
-                    key={child.path} 
-                    node={child} 
-                    level={level + 1} 
-                    selectedFile={selectedFile} 
-                    onSelect={onSelect} 
+                <FileTreeNode
+                    key={child.path}
+                    node={child}
+                    level={level + 1}
+                    selectedFile={selectedFile}
+                    onSelect={onSelect}
                     isDark={isDark}
                     onContextMenu={onContextMenu}
                     renamingPath={renamingPath}
@@ -166,7 +220,6 @@ export function FileExplorer() {
     const theme = useStore(s => s.theme);
     const isDark = theme === 'dark';
 
-    // Only rebuild tree when file keys change (not content)
     const fileKeys = useMemo(() => Object.keys(files).filter(f => f !== 'glovix-picker.js').sort().join('\n'), [files]);
     const fileTree = useMemo(() => buildFileTree(Object.keys(files).filter(f => f !== 'glovix-picker.js')), [fileKeys]);
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, targetPath: '', targetType: 'root' });
@@ -176,6 +229,7 @@ export function FileExplorer() {
     const [newItemName, setNewItemName] = useState('');
     const [, setClipboard] = useState<{ path: string; action: 'cut' | 'copy' } | null>(null);
     const newItemInputRef = useRef<HTMLInputElement>(null);
+    const fileCount = useMemo(() => Object.keys(files).filter(f => f !== 'glovix-picker.js').length, [fileKeys]);
 
     useEffect(() => {
         if (newItemType && newItemInputRef.current) {
@@ -183,7 +237,6 @@ export function FileExplorer() {
         }
     }, [newItemType]);
 
-    // Close context menu on click outside
     useEffect(() => {
         const handleClick = () => setContextMenu(prev => ({ ...prev, visible: false }));
         document.addEventListener('click', handleClick);
@@ -193,29 +246,25 @@ export function FileExplorer() {
     const handleContextMenu = (e: React.MouseEvent, path: string = '', type: 'file' | 'folder' | 'root' = 'root') => {
         e.preventDefault();
         e.stopPropagation();
-        
-        // Calculate position to keep menu within viewport
-        const menuWidth = 200;
-        const menuHeight = type === 'root' ? 100 : 380;
-        
+
+        const menuWidth = 180;
+        const menuHeight = type === 'root' ? 88 : 320;
+
         let x = e.clientX;
         let y = e.clientY;
-        
-        // Adjust if menu would go off right edge
+
         if (x + menuWidth > window.innerWidth) {
             x = window.innerWidth - menuWidth - 10;
         }
-        
-        // Adjust if menu would go off bottom edge
         if (y + menuHeight > window.innerHeight) {
             y = window.innerHeight - menuHeight - 10;
         }
-        
+
         setContextMenu({ visible: true, x, y, targetPath: path, targetType: type });
     };
 
     const handleNewFile = () => {
-        const parent = contextMenu.targetType === 'folder' ? contextMenu.targetPath : 
+        const parent = contextMenu.targetType === 'folder' ? contextMenu.targetPath :
                        contextMenu.targetType === 'file' ? contextMenu.targetPath.split('/').slice(0, -1).join('/') : '';
         setNewItemParent(parent);
         setNewItemType('file');
@@ -224,7 +273,7 @@ export function FileExplorer() {
     };
 
     const handleNewFolder = () => {
-        const parent = contextMenu.targetType === 'folder' ? contextMenu.targetPath : 
+        const parent = contextMenu.targetType === 'folder' ? contextMenu.targetPath :
                        contextMenu.targetType === 'file' ? contextMenu.targetPath.split('/').slice(0, -1).join('/') : '';
         setNewItemParent(parent);
         setNewItemType('folder');
@@ -238,13 +287,12 @@ export function FileExplorer() {
             return;
         }
         const newPath = newItemParent ? `${newItemParent}/${newItemName}` : newItemName;
-        
+
         if (newItemType === 'file') {
             await writeFile(newPath, '');
             setFiles({ ...files, [newPath]: { file: { contents: '' } } });
             setSelectedFile(newPath);
         } else {
-            // For folder, create a placeholder file
             const placeholderPath = `${newPath}/.gitkeep`;
             await writeFile(placeholderPath, '');
             setFiles({ ...files, [placeholderPath]: { file: { contents: '' } } });
@@ -256,16 +304,14 @@ export function FileExplorer() {
         const path = contextMenu.targetPath;
         if (!path) return;
 
-        // Protect .glovix directory from deletion
         if (path === '.glovix' || path.startsWith('.glovix/')) {
             setContextMenu(prev => ({ ...prev, visible: false }));
             return;
         }
-        
+
         const newFiles = { ...files };
-        
+
         if (contextMenu.targetType === 'folder') {
-            // Delete all files in folder
             Object.keys(newFiles).forEach(filePath => {
                 if (filePath.startsWith(path + '/') || filePath === path) {
                     delete newFiles[filePath];
@@ -279,7 +325,7 @@ export function FileExplorer() {
                 console.error('Failed to delete file:', e);
             }
         }
-        
+
         setFiles(newFiles);
         if (selectedFile === path || selectedFile?.startsWith(path + '/')) {
             setSelectedFile(null);
@@ -297,21 +343,21 @@ export function FileExplorer() {
             setRenamingPath(null);
             return;
         }
-        
+
         const parentPath = oldPath.split('/').slice(0, -1).join('/');
         const newPath = parentPath ? `${parentPath}/${newName}` : newName;
-        
+
         const newFiles = { ...files };
         const content = newFiles[oldPath]?.file.contents || '';
         delete newFiles[oldPath];
         newFiles[newPath] = { file: { contents: content } };
-        
+
         try {
             await renameFileWC(oldPath, newPath);
         } catch (e) {
             console.error('Failed to rename file:', e);
         }
-        
+
         setFiles(newFiles);
         if (selectedFile === oldPath) {
             setSelectedFile(newPath);
@@ -339,24 +385,37 @@ export function FileExplorer() {
         setContextMenu(prev => ({ ...prev, visible: false }));
     };
 
+    const menuItemClass = cn(
+        'flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-[12px]',
+        isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50',
+    );
+
     return (
-        <div 
-            className={`h-full p-2 overflow-y-auto text-sm custom-scrollbar ${isDark ? 'text-muted-foreground' : 'text-gray-600'}`}
+        <div
+            className={cn(
+                'custom-scrollbar h-full overflow-y-auto px-1.5 py-1.5 font-[family-name:var(--font-agent-sans)]',
+                isDark ? 'text-muted-foreground' : 'text-gray-600',
+            )}
             onContextMenu={(e) => handleContextMenu(e, '', 'root')}
         >
-            <div className={`font-semibold mb-2 px-2 text-xs uppercase tracking-wider ${isDark ? 'text-muted-foreground/60' : 'text-gray-400'}`}>Files</div>
-            
+            <div className={cn(
+                'mb-1.5 flex items-center justify-between px-1.5 text-[10px] font-semibold uppercase tracking-[0.08em]',
+                isDark ? 'text-muted-foreground/60' : 'text-gray-400',
+            )}>
+                <span>Files</span>
+                <span className="normal-case tracking-normal tabular-nums opacity-80">{fileCount}</span>
+            </div>
+
             {Object.keys(files).length === 0 && !newItemType && (
-                <div className={`italic px-2 ${isDark ? 'text-muted-foreground/60' : 'text-gray-400'}`}>No files</div>
+                <div className={cn('px-1.5 text-[12px] italic', isDark ? 'text-muted-foreground/60' : 'text-gray-400')}>No files</div>
             )}
-            
-            {/* New item input at root level */}
+
             {newItemType && !newItemParent && (
-                <div className="flex items-center gap-2 px-2 py-1.5" style={{ paddingLeft: '8px' }}>
+                <div className="mb-0.5 flex h-7 items-center gap-1.5 px-1.5">
                     {newItemType === 'file' ? (
-                        <File className={`w-4 h-4 flex-shrink-0 ${isDark ? 'text-muted-foreground' : 'text-gray-400'}`} />
+                        <File className={cn('size-3.5 shrink-0', isDark ? 'text-muted-foreground' : 'text-gray-400')} />
                     ) : (
-                        <Folder className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                        <Folder className="size-3.5 shrink-0 text-sky-400" />
                     )}
                     <input
                         ref={newItemInputRef}
@@ -368,18 +427,21 @@ export function FileExplorer() {
                         }}
                         onBlur={() => setNewItemType(null)}
                         placeholder={newItemType === 'file' ? 'filename.ext' : 'folder name'}
-                        className={`flex-1 bg-transparent border rounded px-1 text-sm outline-none ${isDark ? 'border-[#444] text-white placeholder:text-[#555]' : 'border-gray-300 text-gray-900'}`}
+                        className={cn(
+                            'h-5 min-w-0 flex-1 rounded border bg-transparent px-1 text-[12px] outline-none',
+                            isDark ? 'border-[#444] text-white placeholder:text-[#555]' : 'border-gray-300 text-gray-900',
+                        )}
                     />
                 </div>
             )}
-            
+
             {fileTree.map(node => (
-                <FileTreeNode 
-                    key={node.path} 
-                    node={node} 
-                    level={0} 
-                    selectedFile={selectedFile} 
-                    onSelect={setSelectedFile} 
+                <FileTreeNode
+                    key={node.path}
+                    node={node}
+                    level={0}
+                    selectedFile={selectedFile}
+                    onSelect={setSelectedFile}
                     isDark={isDark}
                     onContextMenu={handleContextMenu}
                     renamingPath={renamingPath}
@@ -388,77 +450,74 @@ export function FileExplorer() {
                 />
             ))}
 
-            {/* Context Menu */}
             {contextMenu.visible && (
-                <div 
-                    className={`fixed z-50 min-w-[180px] rounded-lg overflow-hidden shadow-xl ${isDark ? 'bg-card border border-border' : 'bg-white border border-gray-200'}`}
+                <div
+                    className={cn(
+                        'fixed z-50 min-w-[168px] overflow-hidden rounded-an-tool-border-radius border shadow-xl',
+                        isDark ? 'border-an-tool-border-color bg-an-tool-background' : 'border-gray-200 bg-white',
+                    )}
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {/* New file/folder */}
-                    <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
-                        <button onClick={handleNewFile} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                            <FileText className="w-4 h-4 opacity-0" />
-                            New file...
+                    <div className={cn('py-0.5', isDark ? 'border-b border-border' : 'border-b border-gray-100')}>
+                        <button onClick={handleNewFile} className={menuItemClass}>
+                            <FileText className="size-3.5 opacity-70" />
+                            New file…
                         </button>
-                        <button onClick={handleNewFolder} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                            <FolderPlus className="w-4 h-4 opacity-0" />
-                            New folder...
+                        <button onClick={handleNewFolder} className={menuItemClass}>
+                            <FolderPlus className="size-3.5 opacity-70" />
+                            New folder…
                         </button>
                     </div>
 
-                    {/* Target/Lock */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
-                            <button className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <Target className="w-4 h-4" />
+                        <div className={cn('py-0.5', isDark ? 'border-b border-border' : 'border-b border-gray-100')}>
+                            <button className={menuItemClass}>
+                                <Target className="size-3.5" />
                                 Target file
                             </button>
-                            <button className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <Lock className="w-4 h-4" />
+                            <button className={menuItemClass}>
+                                <Lock className="size-3.5" />
                                 Lock file
                             </button>
                         </div>
                     )}
 
-                    {/* Cut/Copy */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
-                            <button onClick={handleCut} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <Scissors className="w-4 h-4 opacity-0" />
+                        <div className={cn('py-0.5', isDark ? 'border-b border-border' : 'border-b border-gray-100')}>
+                            <button onClick={handleCut} className={menuItemClass}>
+                                <Scissors className="size-3.5 opacity-70" />
                                 Cut
                             </button>
-                            <button onClick={handleCopy} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <Copy className="w-4 h-4 opacity-0" />
+                            <button onClick={handleCopy} className={menuItemClass}>
+                                <Copy className="size-3.5 opacity-70" />
                                 Copy
                             </button>
                         </div>
                     )}
 
-                    {/* Copy path */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className={`py-1 ${isDark ? 'border-b border-border' : 'border-b border-gray-100'}`}>
-                            <button onClick={handleCopyPath} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <span className="w-4" />
+                        <div className={cn('py-0.5', isDark ? 'border-b border-border' : 'border-b border-gray-100')}>
+                            <button onClick={handleCopyPath} className={menuItemClass}>
+                                <span className="w-3.5" />
                                 Copy path
                             </button>
-                            <button onClick={handleCopyRelativePath} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <span className="w-4" />
+                            <button onClick={handleCopyRelativePath} className={menuItemClass}>
+                                <span className="w-3.5" />
                                 Copy relative path
                             </button>
                         </div>
                     )}
 
-                    {/* Rename/Delete */}
                     {contextMenu.targetType !== 'root' && (
-                        <div className="py-1">
-                            <button onClick={handleRename} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 ${isDark ? 'text-foreground/80 hover:bg-accent' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                <span className="w-4" />
-                                Rename...
+                        <div className="py-0.5">
+                            <button onClick={handleRename} className={menuItemClass}>
+                                <span className="w-3.5" />
+                                Rename…
                             </button>
                             {contextMenu.targetPath !== '.glovix' && !contextMenu.targetPath.startsWith('.glovix/') && (
-                                <button onClick={handleDelete} className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 text-red-400 ${isDark ? 'hover:bg-accent' : 'hover:bg-gray-50'}`}>
-                                    <Trash2 className="w-4 h-4 opacity-0" />
+                                <button onClick={handleDelete} className={cn(menuItemClass, 'text-red-400')}>
+                                    <Trash2 className="size-3.5 opacity-70" />
                                     Delete
                                 </button>
                             )}
