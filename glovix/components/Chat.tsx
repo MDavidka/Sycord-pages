@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -37,7 +37,6 @@ import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
-import { Marker, MarkerContent } from '@/components/ui/marker';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -48,7 +47,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Markdown } from '@/components/agent-elements/markdown';
-import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
+import { ThinkingTool } from '@/components/agent-elements/tools/thinking-tool';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -1418,7 +1417,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
             switch (event.type) {
                 case 'processing':
-                    // Accepted/queued system noise — Marker shimmer covers this state.
+                    // Accepted/queued system noise — ThinkingTool shimmer covers this state.
                     break;
                 case 'thinking': {
                     if (!thinkingStartedAt) {
@@ -2835,7 +2834,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             {group.role === 'assistant' && group.thinking && (
                                 <ThinkingBlock
                                     thinking={group.thinking}
-                                    isDark={isDark}
                                     thinkingTime={group.thinkingDuration || undefined}
                                     startTime={idx === groupedMessages.length - 1 && isRunning ? thinkingStartTime : undefined}
                                 />
@@ -2920,28 +2918,48 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 <>
                                     {/* Fallback: user messages or assistant without segments */}
                                     <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        <div
-                                            className={`text-[14px] leading-relaxed ${group.role === 'user'
-                                                ? isDark ? 'bg-[#1f1f1f] text-[#e5e5e5] rounded-2xl px-4 py-2.5 max-w-[85%]' : 'bg-gray-100 text-gray-900 rounded-2xl px-4 py-2.5 max-w-[85%]'
-                                                : isDark ? 'text-[#e5e5e5] max-w-full' : 'text-gray-800 max-w-full'
-                                                }`}
-                                        >
-                                            {/* Picked element indicator */}
-                                            {group.role === 'user' && (group as any).pickedElement && (
-                                                <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                    <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="font-medium">
-                                                        {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                    </span>
-                                                    {(group as any).pickedElement.text && (
-                                                        <span className="truncate opacity-70">
-                                                            {(group as any).pickedElement.text.length > 30
-                                                                ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                : (group as any).pickedElement.text}
-                                                        </span>
+                                        {group.role === 'user' ? (
+                                            <div className="max-w-[calc(95%-40px)] ms-[70px]">
+                                                <div className="rounded-an-message bg-an-user-message-bg px-3.5 py-1.5 text-sm text-an-user-message-text transition-colors">
+                                                    {(group as any).pickedElement && (
+                                                        <div className={`mb-1.5 flex items-center gap-1.5 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
+                                                            <MousePointer2 className="h-3 w-3 shrink-0" />
+                                                            <span className="font-medium">
+                                                                {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
+                                                            </span>
+                                                            {(group as any).pickedElement.text && (
+                                                                <span className="truncate opacity-70">
+                                                                    {(group as any).pickedElement.text.length > 30
+                                                                        ? (group as any).pickedElement.text.slice(0, 30) + '…'
+                                                                        : (group as any).pickedElement.text}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {(() => {
+                                                        const text = Array.isArray(group.content)
+                                                            ? group.content
+                                                                .map((part) => (part.type === 'image_url' ? '' : part.text || ''))
+                                                                .join('')
+                                                            : String(group.content || '');
+                                                        return text ? (
+                                                            <p className="leading-5 whitespace-pre-wrap wrap-break-word">{text}</p>
+                                                        ) : null;
+                                                    })()}
+                                                    {Array.isArray(group.content) && group.content.some((part) => part.type === 'image_url') && (
+                                                        <div className="mt-2 space-y-2">
+                                                            {group.content.map((part, i) => {
+                                                                if (part.type !== 'image_url') return null;
+                                                                return <img key={i} src={part.image_url.url} alt="" className="max-h-[250px] max-w-full rounded-an-message-inner object-contain" />;
+                                                            })}
+                                                        </div>
                                                     )}
                                                 </div>
-                                            )}
+                                            </div>
+                                        ) : (
+                                        <div
+                                            className={`text-[14px] leading-relaxed ${isDark ? 'text-[#e5e5e5] max-w-full' : 'text-gray-800 max-w-full'}`}
+                                        >
                                             {group.content && (
                                                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                     {Array.isArray(group.content) ? (
@@ -2959,6 +2977,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 </div>
                                             )}
                                         </div>
+                                        )}
                                     </div>
                                     {/* Live actions for assistant without segments */}
                                     {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
@@ -2979,7 +2998,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
                     {isRunning && currentThinking && !isSystemProcessingText(currentThinking) && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
-                        <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
+                        <ThinkingBlock thinking={currentThinking} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
                     )}
 
                     {/* Live Actions - only show here if there's no assistant message group yet */}
@@ -2987,15 +3006,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                     )}
 
-                    {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
+                    {/* ThinkingTool shimmer while waiting / after durable accept */}
                     {isRunning && (!currentThinking || isSystemProcessingText(currentThinking)) && actions.length === 0 && (
                         !groupedMessages.length ||
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
                         (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content && !groupedMessages[groupedMessages.length - 1].thinking)
                     ) && (
-                        <Marker role="status" className="animate-fade-in-up px-1">
-                            <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                        </Marker>
+                        <div className="animate-fade-in-up px-1">
+                            <ThinkingTool
+                                part={{
+                                    id: 'waiting-thinking',
+                                    toolCallId: 'waiting-thinking',
+                                    state: 'input-streaming',
+                                    input: {},
+                                }}
+                            />
+                        </div>
                     )}
 
                     <div ref={messagesEndRef} />
@@ -3419,67 +3445,22 @@ function isSystemProcessingText(text: string): boolean {
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [elapsed, setElapsed] = useState(0);
-
-    useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [startTime, thinkingTime]);
-
+function ThinkingBlock({ thinking, thinkingTime, startTime }: { thinking: string; thinkingTime?: number; startTime?: number | null }) {
     if (!thinking || isSystemProcessingText(thinking)) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
     const isLive = Boolean(startTime) && thinkingTime === undefined;
-    const thoughtCount = Math.max(1, thinking.split(/\n{2,}/).filter(part => part.trim()).length);
-    const title = isLive
-        ? 'Thinking'
-        : thoughtCount === 1
-            ? 'Thought 1 time'
-            : `Thought ${thoughtCount} times`;
-
-    if (isLive) {
-        return (
-            <Marker role="status" className="mb-3 animate-fade-in px-1">
-                <span className="inline-flex items-center gap-2">
-                    <SpiralLoader size={14} />
-                    <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                </span>
-            </Marker>
-        );
-    }
 
     return (
         <div className="mb-3 animate-fade-in px-1">
-            <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                aria-expanded={isExpanded}
-                className={`group flex min-h-11 w-full items-start gap-3 rounded-lg py-2 text-left transition-colors ${isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]'}`}
-            >
-                <span className="flex size-7 shrink-0 items-center justify-center">
-                    <Brain className={`size-4 ${isDark ? 'text-white/65' : 'text-gray-500'}`} strokeWidth={1.8} />
-                </span>
-                <span className="min-w-0 flex-1">
-                    <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
-                        {title}
-                        {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
-                    </span>
-                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                        {thinking}
-                    </span>
-                </span>
-                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
-            </button>
+            <ThinkingTool
+                part={{
+                    id: 'message-thinking',
+                    toolCallId: 'message-thinking',
+                    state: isLive ? 'input-streaming' : 'output-available',
+                    input: { thought: thinking },
+                }}
+                defaultOpen={false}
+            />
         </div>
     );
 }
