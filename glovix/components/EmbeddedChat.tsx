@@ -7,7 +7,12 @@ import { getHostProjectId, getChatMessages, getProject, saveChatMessages, getPro
 import { getBaseProjectFiles } from '../lib/projectTemplate';
 import { canBootWebContainer } from '../lib/coep';
 import { mountFiles, autoInstallDependencies, smartInstall, executeCommand, getWebContainer, getCachedPreviewUrl } from '../lib/webcontainer';
-import { shouldEmbedPreviewInIframe, shouldUseCredentiallessIframe, isSytePreviewUrl } from '../lib/previewEmbed';
+import {
+    shouldEmbedPreviewInIframe,
+    shouldUseCredentiallessIframe,
+    isSytePreviewUrl,
+    resolvePreviewFrameSrc,
+} from '../lib/previewEmbed';
 
 type PreviewStatus = 'idle' | 'starting' | 'ready' | 'error' | 'blocked';
 type PreviewSource = 'live' | 'deployed' | 'syte' | null;
@@ -73,6 +78,19 @@ export function EmbeddedChat() {
         } catch { /* ignore */ }
         return 'b27GcrRo';
     }, []);
+
+    // Apply credentialless without remounting the iframe.
+    // A callback-ref whose identity depends on previewUrl causes React to
+    // unmount+remount the iframe on every URL update → white screen.
+    useEffect(() => {
+        const el = iframeRef.current;
+        if (!el || !previewUrl) return;
+        if (shouldUseCredentiallessIframe(previewUrl)) {
+            el.setAttribute('credentialless', '');
+        } else {
+            el.removeAttribute('credentialless');
+        }
+    }, [previewUrl]);
 
     // ─── Auto-create Syte workspace on project open ────────────────────────────
     useEffect(() => {
@@ -339,13 +357,10 @@ export function EmbeddedChat() {
         if (source === 'local' && Object.keys(currentFiles).length === 0) return;
         if (previewStartedRef.current && previewUrl) {
             // Dev server is live. Give Vite ~2.5 s to recompile the new files,
-            // then reload the proxy iframe so the updated site appears.
+            // then reload the iframe so the updated site appears.
             setTimeout(() => {
                 if (iframeRef.current && previewUrl) {
-                    const src = (previewSource === 'syte' || isSytePreviewUrl(previewUrl))
-                        ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-                        : previewUrl;
-                    iframeRef.current.src = src;
+                    iframeRef.current.src = resolvePreviewFrameSrc(previewUrl, previewSource);
                 }
             }, 2500);
             return;
@@ -394,21 +409,8 @@ export function EmbeddedChat() {
 
     const reloadPreview = () => {
         if (!iframeRef.current || !previewUrl) return;
-        const src = (previewSource === 'syte' || isSytePreviewUrl(previewUrl))
-            ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-            : previewUrl;
-        iframeRef.current.src = src;
+        iframeRef.current.src = resolvePreviewFrameSrc(previewUrl, previewSource);
     };
-
-    const applyIframeEmbedAttrs = useCallback((el: HTMLIFrameElement | null) => {
-        iframeRef.current = el;
-        if (!el || !previewUrl) return;
-        if (shouldUseCredentiallessIframe(previewUrl)) {
-            el.setAttribute('credentialless', '');
-        } else {
-            el.removeAttribute('credentialless');
-        }
-    }, [previewUrl]);
 
     const retryPreview = () => {
         previewStartedRef.current = false;
@@ -468,14 +470,11 @@ export function EmbeddedChat() {
 
     const renderPreviewBody = () => {
         if (previewUrl) {
-            // Syte preview subdomains send X-Frame-Options: SAMEORIGIN which the browser
-            // enforces for any cross-origin parent (sycord.com ≠ preview*.sycord.com/site).
-            // Route through our server-side proxy that strips the header and injects
-            // <base href> so assets still load directly from the Syte dev server.
+            // Syte allows framing from sycord.com via CSP frame-ancestors — embed
+            // the preview URL directly so Vite absolute module paths resolve on
+            // the Syte origin (proxy left them on sycord.com → blank pane).
             const isSyte = previewSource === 'syte' || isSytePreviewUrl(previewUrl);
-            const frameUrl = isSyte
-                ? `/api/workspace/preview-frame?url=${encodeURIComponent(previewUrl)}`
-                : previewUrl;
+            const frameUrl = resolvePreviewFrameSrc(previewUrl, previewSource);
 
             const embedInline = isSyte ? true : shouldEmbedPreviewInIframe(previewUrl, previewSource);
 
@@ -528,7 +527,7 @@ export function EmbeddedChat() {
                         </div>
                     )}
                     <iframe
-                        ref={applyIframeEmbedAttrs}
+                        ref={iframeRef}
                         src={frameUrl}
                         className={`absolute inset-0 h-full w-full border-none bg-white ${previewSource === 'deployed' || previewSource === 'syte' ? 'pt-8' : ''}`}
                         title={previewLabel}

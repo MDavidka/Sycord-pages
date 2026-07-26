@@ -85,19 +85,22 @@ const nextConfig = {
           },
         ],
       },
+      // Preview-frame proxy: must stay embeddable. Global /:path* adds
+      // X-Frame-Options: SAMEORIGIN which Next merges additively — override
+      // with an empty value so Vercel omits it for this route.
+      {
+        source: "/api/workspace/preview-frame",
+        headers: [
+          { key: "X-Frame-Options", value: "" },
+          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
       { source: "/builder", headers: crossOriginCredentialless },
       { source: "/builder/:path*", headers: crossOriginCredentialless },
       // credentialless (not require-corp) so Syte Vite assets load in the preview iframe.
       { source: "/dashboard/sites/:id/syra", headers: crossOriginCredentialless },
       { source: "/dashboard/sites/:id/syra/:path*", headers: crossOriginCredentialless },
-      // Align with preview-frame route CORP so the document is embeddable under COEP.
-      {
-        source: "/api/workspace/preview-frame",
-        headers: [
-          { key: "Cross-Origin-Resource-Policy", value: "cross-origin" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-        ],
-      },
     ]
   },
   images: {
