@@ -323,16 +323,19 @@ export async function handleStartPreview(args?: { domain?: string }): Promise<st
     try {
         const state = useStore.getState();
         const files = state.files;
-        const res = await fetch('/api/workspace/preview', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                projectId,
-                domain: args?.domain,
-                issueDomain: false,  // set_domain is for production; don't call it before preview
-                files: Object.keys(files).length > 0 ? files : undefined,
-            }),
-        });
+        const res = await fetch(
+            `/api/workspace/preview?projectId=${encodeURIComponent(projectId)}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectId,
+                    domain: args?.domain,
+                    issueDomain: false,  // set_domain is for production; don't call it before preview
+                    files: Object.keys(files).length > 0 ? files : undefined,
+                }),
+            },
+        );
         const data = await res.json().catch(() => ({} as any));
         if (!res.ok || !data?.previewUrl) {
             const err = data?.error || `HTTP ${res.status}`;

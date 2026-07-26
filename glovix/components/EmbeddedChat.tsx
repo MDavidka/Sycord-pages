@@ -135,6 +135,8 @@ export function EmbeddedChat() {
 
     useEffect(() => {
         if (!webContainerReady) return;
+        // Warm the container only when isolation is real (Chromium + COOP/COEP).
+        // Safari never qualifies — Syte preview is the path there.
         void getWebContainer().catch(() => {});
         const cached = getCachedPreviewUrl();
         if (cached) {
@@ -194,11 +196,12 @@ export function EmbeddedChat() {
     }, [projectId, chatId, setMessages, setFiles, webContainerReady, presetId]);
 
     const startSyteServerPreview = useCallback(async (syncFiles = true): Promise<{ ok: boolean; error?: string }> => {
-        if (!projectId) return { ok: false, error: 'No project id' };
+        const resolvedProjectId = (projectId || getHostProjectId() || '').trim();
+        if (!resolvedProjectId) return { ok: false, error: 'No project id' };
         setPreviewStatus('starting');
         setPreviewError('');
         const currentFiles = useStore.getState().files;
-        const result = await startSytePreview(projectId, {
+        const result = await startSytePreview(resolvedProjectId, {
             issueDomain: false,  // Don't call set_domain before preview — that's for production only
             syncFiles,
             files: syncFiles && Object.keys(currentFiles).length > 0 ? currentFiles : undefined,
@@ -272,13 +275,20 @@ export function EmbeddedChat() {
             console.warn('[EmbeddedChat] live preview failed:', err);
             previewStartedRef.current = false;
             if (previewTimeoutRef.current) window.clearTimeout(previewTimeoutRef.current);
+            // Prefer Syte over a deployed snapshot when the in-browser container fails
+            // (DataCloneError / missing isolation on Safari and some desktop shells).
+            const syte = await startSyteServerPreview(true);
+            if (syte.ok) return;
             const usedFallback = await showDeployedFallback();
             if (!usedFallback) {
                 setPreviewStatus('error');
-                setPreviewError(err instanceof Error ? err.message : 'Failed to start live preview');
+                setPreviewError(
+                    syte.error ||
+                    (err instanceof Error ? err.message : 'Failed to start live preview'),
+                );
             }
         }
-    }, [setPreviewUrl, showDeployedFallback]);
+    }, [setPreviewUrl, showDeployedFallback, startSyteServerPreview]);
 
     const startPreview = useCallback(async (force = false, syncFiles = true) => {
         if (previewStartedRef.current && !force) return;
@@ -291,21 +301,18 @@ export function EmbeddedChat() {
             return;
         }
 
-        // Primary: Syte server preview (https://sycord.site/api/ — works on mobile)
+        // Primary: Syte server preview — works on Safari, mobile, and desktop.
         let syteError = '';
-        if (projectId) {
+        const resolvedProjectId = (projectId || getHostProjectId() || '').trim();
+        if (resolvedProjectId) {
             const syte = await startSyteServerPreview(syncFiles);
             if (syte.ok) return;
             syteError = syte.error || '';
         }
 
-        // Secondary: in-browser WebContainer (desktop / isolated shells only)
-        const isMobile = window.matchMedia('(max-width: 768px)').matches;
-        const shouldTryWebContainer =
-            !isMobile &&
-            webContainerReady &&
-            (window.crossOriginIsolated || window.location.pathname.includes('/syra'));
-        if (shouldTryWebContainer) {
+        // Secondary: in-browser WebContainer (Chromium + cross-origin isolated only).
+        // Safari cannot boot WebContainers (DataCloneError) — never attempt there.
+        if (webContainerReady) {
             await startLivePreview(currentFiles);
             return;
         }

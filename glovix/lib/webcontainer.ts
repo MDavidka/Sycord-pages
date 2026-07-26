@@ -1,18 +1,19 @@
 import { WebContainer, FileSystemTree, DirectoryNode, PreviewMessageType } from '@webcontainer/api';
 
 import { useStore } from '../store';
-import { getPageCoepMode } from './coep';
+import { canBootWebContainer, getPageCoepMode } from './coep';
 
 declare global {
     interface Window {
         _webContainerInstance: WebContainer;
-        _bootPromise: Promise<WebContainer>;
+        _bootPromise: Promise<WebContainer> | null;
     }
 }
 
 let webContainerInstance: WebContainer | null = null;
 let cachedPreviewUrl: string | null = null;
 let previewListenerRegistered = false;
+let bootFailed = false;
 
 /** Last URL emitted by WebContainer's server-ready event (survives store resets). */
 export function getCachedPreviewUrl(): string | null {
@@ -38,15 +39,26 @@ function registerPreviewListener(instance: WebContainer) {
     });
 }
 
+function bootUnavailableError(): Error {
+    return new Error(
+        'WebContainer unavailable in this browser — using Syte server preview instead.',
+    );
+}
+
 export async function getWebContainer() {
     if (webContainerInstance) {
         registerPreviewListener(webContainerInstance);
         return webContainerInstance;
     }
-    if (window._webContainerInstance) {
+    if (typeof window !== 'undefined' && window._webContainerInstance) {
         webContainerInstance = window._webContainerInstance;
         registerPreviewListener(webContainerInstance);
         return webContainerInstance;
+    }
+
+    // Safari / non-isolated pages cannot boot — fail fast without DataCloneError spam.
+    if (!canBootWebContainer() || bootFailed) {
+        throw bootUnavailableError();
     }
 
     if (!window._bootPromise) {
@@ -59,20 +71,33 @@ export async function getWebContainer() {
             .then(async (instance) => {
                 window._webContainerInstance = instance;
                 webContainerInstance = instance;
+                bootFailed = false;
                 registerPreviewListener(instance);
                 // Ensure .glovix system directory exists from the start
                 try { await instance.fs.mkdir('.glovix', { recursive: true }); } catch { /* ok */ }
                 return instance;
             })
             .catch((error: any) => {
-                console.error('[WebContainer] Boot failed:', error);
-                // Provide helpful error message for COOP/COEP issues
-                if (error?.message?.includes('SharedArrayBuffer') || error?.message?.includes('cross-origin')) {
-                    console.error('[WebContainer] SharedArrayBuffer/COEP Error: Ensure server has proper COEP headers');
-                    cachedPreviewUrl = null;
-                    useStore.getState().setPreviewUrl('');
+                bootFailed = true;
+                window._bootPromise = null;
+                const name = error?.name || '';
+                const message = error?.message || String(error);
+                // DataCloneError = missing SharedArrayBuffer / isolation (common on Safari).
+                if (
+                    name === 'DataCloneError' ||
+                    message.includes('DataCloneError') ||
+                    message.includes('SharedArrayBuffer') ||
+                    message.includes('cross-origin') ||
+                    message.includes('cloned')
+                ) {
+                    console.warn(
+                        '[WebContainer] Boot skipped — browser is not cross-origin isolated. Preview uses Syte.',
+                    );
+                } else {
+                    console.warn('[WebContainer] Boot failed:', name || message);
                 }
-                throw error;
+                cachedPreviewUrl = null;
+                throw bootUnavailableError();
             });
     }
 

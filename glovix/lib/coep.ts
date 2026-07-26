@@ -9,14 +9,20 @@ export function isSafariBrowser(): boolean {
 export function getPageCoepMode(): 'credentialless' | 'require-corp' {
     if (typeof window === 'undefined') return 'credentialless';
     // /syra matches /builder: credentialless so proxied Syte Vite assets can load.
+    // Safari ignores credentialless (crossOriginIsolated stays false) — preview uses Syte.
     if (window.location.pathname.includes('/syra')) return 'credentialless';
     if (isSafariBrowser()) return 'require-corp';
     return 'credentialless';
 }
 
+/**
+ * True only when WebContainers can actually boot.
+ * Safari never qualifies (no COEP credentialless → no SharedArrayBuffer → DataCloneError).
+ * Syte server preview is the universal path for Safari + any non-isolated shell.
+ */
 export function canBootWebContainer(): boolean {
     if (typeof window === 'undefined') return false;
-    if (window.crossOriginIsolated) return true;
-    // Safari may lack credentialless isolation — still attempt boot on /syra.
-    return window.location.pathname.includes('/syra');
+    if (isSafariBrowser()) return false;
+    if (!window.crossOriginIsolated) return false;
+    return typeof SharedArrayBuffer !== 'undefined';
 }

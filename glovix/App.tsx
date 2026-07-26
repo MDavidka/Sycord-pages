@@ -12,6 +12,7 @@ import { getChatMessages, getProject, getChat } from './lib/api';
 import { getHostProjectId } from './lib/api';
 import { useAutoSave } from './lib/autoSave';
 import { mountFiles, autoInstallDependencies } from './lib/webcontainer';
+import { canBootWebContainer } from './lib/coep';
 import { initErudaIfPresent } from './lib/init-eruda';
 
 function HomePageRoute() {
@@ -77,8 +78,9 @@ function ChatPage() {
             if (project?.files) {
                 const files = typeof project.files === 'string' ? JSON.parse(project.files) : project.files;
                 setFiles(files);
-                // Mount files to WebContainer so they're available in terminal
-                if (Object.keys(files).length > 0) {
+                // Mount files to WebContainer when isolation allows (Chromium).
+                // Safari skips this — Syte server preview is used instead.
+                if (Object.keys(files).length > 0 && canBootWebContainer()) {
                     console.log('[App] Mounting files to WebContainer...');
                     await mountFiles(files);
                     console.log('[App] Files mounted successfully');
