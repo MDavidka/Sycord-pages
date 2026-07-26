@@ -46,6 +46,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Markdown } from '@/components/agent-elements/markdown';
+import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -226,7 +228,7 @@ const getActionDisplayName = (toolName: string, args: string): string => {
 
 function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (plan: any) => void) {
     const name = toolName.toLowerCase();
-    if (name !== 'update_plan' && name !== 'planning') return;
+    if (name !== 'update_plan' && name !== 'planning' && name !== 'plan') return;
     const next = planFromAgentUpdate(args, useStore.getState().generationPlan);
     if (next) setGenerationPlan(next);
 }
@@ -1085,8 +1087,91 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     if (!replayHistoryOnly) setThinkingStartTime(thinkingStartedAt);
                                 }
                                 if (!replayHistoryOnly) {
-                                    setCurrentThinking(event.text || '');
-                                    updateLastMessage(assistantContent, undefined, event.text || '');
+                                    const chunk = event.text || '';
+                                    setCurrentThinking(prev =>
+                                        event.fromStream && prev && chunk && !chunk.startsWith(prev)
+                                            ? prev + chunk
+                                            : chunk || prev,
+                                    );
+                                    if (event.fromStream && chunk) {
+                                        const state = useStore.getState();
+                                        const last = state.messages[state.messages.length - 1] as any;
+                                        updateLastMessage(
+                                            assistantContent,
+                                            undefined,
+                                            `${last?.thinking || ''}${chunk}`,
+                                        );
+                                    } else {
+                                        updateLastMessage(assistantContent, undefined, chunk);
+                                    }
+                                }
+                                break;
+                            }
+                            case 'plan': {
+                                syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
+                                const args = typeof event.arguments === 'string'
+                                    ? event.arguments
+                                    : JSON.stringify((event.plan ?? event.arguments) || {});
+                                addAction('update_plan', event.title || 'plan', {
+                                    id: `agent_${tursoSessionId}_plan_${event.eventId || Date.now()}`,
+                                    eventId: event.eventId,
+                                    toolCallId: event.toolCallId,
+                                    args,
+                                    status: 'done',
+                                    completedAt: Date.now(),
+                                    result: event.text,
+                                });
+                                break;
+                            }
+                            case 'subagent_started': {
+                                const args = typeof event.arguments === 'string'
+                                    ? event.arguments
+                                    : JSON.stringify(event.arguments || {});
+                                const actionId = addAction('subagent', event.text || event.title || 'Subagent', {
+                                    id: event.subagentTaskId
+                                        ? `agent_${tursoSessionId}_sub_${event.subagentTaskId}`
+                                        : `agent_${tursoSessionId}_sub_${event.eventId || Date.now()}`,
+                                    eventId: event.eventId,
+                                    toolCallId: event.subagentTaskId || event.toolCallId,
+                                    args,
+                                    subagentTaskId: event.subagentTaskId,
+                                });
+                                updateAction(actionId, { status: 'running', args });
+                                break;
+                            }
+                            case 'subagent_scope': {
+                                const args = typeof event.arguments === 'string'
+                                    ? event.arguments
+                                    : JSON.stringify(event.arguments || {});
+                                const key = event.subagentTaskId
+                                    ? `agent_${tursoSessionId}_sub_${event.subagentTaskId}`
+                                    : null;
+                                if (key) {
+                                    updateAction(key, { args, status: 'running' });
+                                }
+                                break;
+                            }
+                            case 'subagent_completed':
+                            case 'subagent_failed': {
+                                const key = event.subagentTaskId
+                                    ? `agent_${tursoSessionId}_sub_${event.subagentTaskId}`
+                                    : null;
+                                if (key) {
+                                    updateAction(key, {
+                                        status: event.type === 'subagent_failed' ? 'error' : 'done',
+                                        result: event.text,
+                                        completedAt: Date.now(),
+                                    });
+                                } else {
+                                    addAction('subagent', event.text || 'Subagent', {
+                                        id: `agent_${tursoSessionId}_sub_${event.eventId || Date.now()}`,
+                                        eventId: event.eventId,
+                                        status: event.type === 'subagent_failed' ? 'error' : 'done',
+                                        completedAt: Date.now(),
+                                        result: event.text,
+                                        args: event.arguments,
+                                        subagentTaskId: event.subagentTaskId,
+                                    });
                                 }
                                 break;
                             }
@@ -1336,9 +1421,88 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         thinkingStartedAt = Date.now();
                         setThinkingStartTime(thinkingStartedAt);
                     }
-                    const thinking = event.text || '';
-                    setCurrentThinking(thinking);
-                    updateLastMessage(assistantContent, undefined, thinking);
+                    const chunk = event.text || '';
+                    setCurrentThinking(prev =>
+                        event.fromStream && prev && chunk && !chunk.startsWith(prev)
+                            ? prev + chunk
+                            : chunk || prev,
+                    );
+                    if (event.fromStream && chunk) {
+                        const state = useStore.getState();
+                        const last = state.messages[state.messages.length - 1] as any;
+                        const nextThinking = `${last?.thinking || ''}${chunk}`;
+                        updateLastMessage(assistantContent, undefined, nextThinking);
+                    } else {
+                        updateLastMessage(assistantContent, undefined, chunk);
+                    }
+                    break;
+                }
+                case 'plan': {
+                    syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
+                    const args = typeof event.arguments === 'string'
+                        ? event.arguments
+                        : JSON.stringify((event.plan ?? event.arguments) || {});
+                    addAction('update_plan', event.title || 'plan', {
+                        id: `agent_${tursoSessionId}_plan_${event.eventId || Date.now()}`,
+                        eventId: event.eventId,
+                        toolCallId: event.toolCallId,
+                        args,
+                        status: 'done',
+                        completedAt: Date.now(),
+                        result: event.text,
+                    });
+                    break;
+                }
+                case 'subagent_started': {
+                    const args = typeof event.arguments === 'string'
+                        ? event.arguments
+                        : JSON.stringify(event.arguments || {});
+                    const actionId = addAction('subagent', event.text || event.title || 'Subagent', {
+                        id: event.subagentTaskId
+                            ? `agent_${tursoSessionId}_sub_${event.subagentTaskId}`
+                            : `agent_${tursoSessionId}_sub_${event.eventId || Date.now()}`,
+                        eventId: event.eventId,
+                        toolCallId: event.subagentTaskId || event.toolCallId,
+                        args,
+                        subagentTaskId: event.subagentTaskId,
+                    });
+                    updateAction(actionId, { status: 'running', args });
+                    break;
+                }
+                case 'subagent_scope': {
+                    const args = typeof event.arguments === 'string'
+                        ? event.arguments
+                        : JSON.stringify(event.arguments || {});
+                    const key = event.subagentTaskId
+                        ? `agent_${tursoSessionId}_sub_${event.subagentTaskId}`
+                        : null;
+                    if (key) {
+                        updateAction(key, { args, status: 'running' });
+                    }
+                    break;
+                }
+                case 'subagent_completed':
+                case 'subagent_failed': {
+                    const key = event.subagentTaskId
+                        ? `agent_${tursoSessionId}_sub_${event.subagentTaskId}`
+                        : null;
+                    if (key) {
+                        updateAction(key, {
+                            status: event.type === 'subagent_failed' ? 'error' : 'done',
+                            result: event.text,
+                            completedAt: Date.now(),
+                        });
+                    } else {
+                        addAction('subagent', event.text || 'Subagent', {
+                            id: `agent_${tursoSessionId}_sub_${event.eventId || Date.now()}`,
+                            eventId: event.eventId,
+                            status: event.type === 'subagent_failed' ? 'error' : 'done',
+                            completedAt: Date.now(),
+                            result: event.text,
+                            args: event.arguments,
+                            subagentTaskId: event.subagentTaskId,
+                        });
+                    }
                     break;
                 }
                 case 'tool_started': {
@@ -2512,6 +2676,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     }), [isDark]);
 
+    const renderAssistantMarkdown = (raw: string) => {
+        const content = raw.replace(/^\[SYSTEM\] .*/gm, '');
+        if (/```mermaid/.test(content)) {
+            return (
+                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                        {content}
+                    </ReactMarkdown>
+                </div>
+            );
+        }
+        return <Markdown content={content} className="an-markdown w-full max-w-none" />;
+    };
+
     // Embedded inside a Sycord project → show the mobile chrome (back button,
     // centered "Syra" title, profile avatar) with a progressive blur on top and
     // safe-area aware spacing. The host injects the real Google avatar + a back
@@ -2687,11 +2865,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
                                                     <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                                                {textContent.replace(/^\[SYSTEM\] .*/gm, '')}
-                                                            </ReactMarkdown>
-                                                        </div>
+                                                        {renderAssistantMarkdown(textContent)}
                                                     </div>
                                                 </div>
                                             );
@@ -2772,13 +2946,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                                 if (part.type === 'image_url') {
                                                                     return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
                                                                 }
-                                                                return <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={markdownComponents}>{part.text.replace(/^\[SYSTEM\] .*/gm, '')}</ReactMarkdown>;
+                                                                return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
                                                             })}
                                                         </div>
                                                     ) : (
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                                                            {group.content.replace(/^\[SYSTEM\] .*/gm, '')}
-                                                        </ReactMarkdown>
+                                                        renderAssistantMarkdown(String(group.content || ''))
                                                     )}
                                                 </div>
                                             )}
@@ -3274,7 +3446,10 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
     if (isLive) {
         return (
             <Marker role="status" className="mb-3 animate-fade-in px-1">
-                <MarkerContent className="shimmer">Thinking...</MarkerContent>
+                <span className="inline-flex items-center gap-2">
+                    <SpiralLoader size={14} />
+                    <MarkerContent className="shimmer">Thinking...</MarkerContent>
+                </span>
             </Marker>
         );
     }

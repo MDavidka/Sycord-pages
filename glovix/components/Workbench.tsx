@@ -250,16 +250,15 @@ export function Workbench() {
                         )}
                         <div className={cn(
                             "flex-col overflow-hidden border-r",
-                            showFilesMobile ? 'flex absolute z-30 inset-y-0 left-0 w-3/4 max-w-[260px] shadow-2xl' : 'hidden',
-                            'md:relative md:flex md:w-56 md:max-w-none md:shadow-none',
+                            showFilesMobile ? 'flex absolute z-30 inset-y-0 left-0 w-[68%] max-w-[220px] shadow-2xl' : 'hidden',
+                            'md:relative md:flex md:w-48 md:max-w-none md:shadow-none',
                             isDark ? 'bg-background border-border' : 'bg-white border-gray-200'
                         )}>
                             <div className={cn(
-                                "h-9 flex items-center gap-3 px-3 border-b text-xs",
+                                "h-8 flex items-center gap-2 px-2.5 border-b text-[11px]",
                                 isDark ? 'border-border text-muted-foreground' : 'border-gray-200 text-gray-500'
                             )}>
-                                <span className="font-medium text-foreground/70">Files</span>
-                                <span className="opacity-50">Search</span>
+                                <span className="font-medium text-foreground/70">Explorer</span>
                             </div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 {Object.keys(files).length === 0 ? (

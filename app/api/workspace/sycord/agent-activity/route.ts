@@ -1,12 +1,11 @@
-// Agent activity proxy — local SQLite snapshot (+ legacy SSE if still available).
+// Agent activity proxy — SSE hot path + local snapshot fallback.
 //
-// Prefer durable Turso routes for turn observation:
-//   GET /api/workspace/sycord/agent-session?sessionId=…   (poll until status != open)
-//   GET /api/workspace/sycord/agent-sessions?projectId=…
-// See https://sycord.site/api/#agent
+// Prefer live SSE for token_delta / thinking_delta (hot events skip Turso):
+//   GET /api/workspace/sycord/agent-activity?projectId=<id>&live=1&since_id=N
+// Docs: https://sycord.site/api/#stream/
 //
-// GET /api/workspace/sycord/agent-activity?projectId=<id>&live=1   → legacy SSE (best-effort)
-// GET /api/workspace/sycord/agent-activity?projectId=<id>&since_id=N → local JSON snapshot
+// Snapshot (polling):
+//   GET /api/workspace/sycord/agent-activity?projectId=<id>&since_id=N
 //
 // Auth: NextAuth session required.
 
@@ -22,6 +21,60 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 // Allow long-lived SSE connections — Vercel/Next max is 300 s on Pro.
 export const maxDuration = 300
+
+async function openUpstreamStream(
+  config: ReturnType<typeof getSyteConfig>,
+  uuid: string,
+  sinceId: number,
+  sessionFilter: string,
+  signal: AbortSignal,
+): Promise<Response> {
+  // Prefer the token API hot path from https://sycord.site/api/#stream/
+  // Fall back to session-auth + sycord mirrors if the primary path is unavailable.
+  const candidates = [
+    `${config.baseUrl}/api/agent_activity/stream?uuid=${encodeURIComponent(uuid)}`,
+    `${config.baseUrl}/sycord/api/agent_activity/stream?uuid=${encodeURIComponent(uuid)}`,
+    `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/activity/stream`,
+  ]
+
+  let lastError: Error | null = null
+  for (const candidate of candidates) {
+    const upstreamUrl = new URL(candidate)
+    if (sinceId > 0) upstreamUrl.searchParams.set("since_id", String(sinceId))
+    if (sessionFilter) upstreamUrl.searchParams.set("session", sessionFilter)
+    if (!upstreamUrl.searchParams.has("live")) {
+      upstreamUrl.searchParams.set("live", "1")
+    }
+
+    try {
+      const upstream = await fetch(upstreamUrl.toString(), {
+        headers: {
+          Accept: "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Accept-Encoding": "identity",
+          "X-API-Key": config.apiKey,
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        // @ts-ignore — Next.js node runtime accepts aborting the upstream
+        signal,
+      })
+      if (upstream.ok && upstream.body) {
+        return upstream
+      }
+      const text = await upstream.text().catch(() => "")
+      lastError = new Error(
+        `Upstream ${upstreamUrl.pathname} returned ${upstream.status}${
+          text ? ": " + text.slice(0, 200) : ""
+        }`,
+      )
+    } catch (err: any) {
+      if (err?.name === "AbortError") throw err
+      lastError = err instanceof Error ? err : new Error(String(err))
+    }
+  }
+
+  throw lastError || new Error("Failed to connect to Syte agent activity stream")
+}
 
 export async function GET(req: Request): Promise<Response> {
   const session = await getServerSession(authOptions)
@@ -63,60 +116,30 @@ export async function GET(req: Request): Promise<Response> {
     )
   }
 
-  // ── SSE live stream ─────────────────────────────────────────────────────────
-  // Forward the Syte SSE endpoint to the browser, rewriting the auth header.
-  // Syte SSE path: GET /api/projects/{uuid}/agent/activity/stream?live=1
+  // ── SSE live stream (hot path) ──────────────────────────────────────────────
+  // https://sycord.site/api/#stream/ — token_delta / thinking_delta are SSE-only.
   if (live) {
     const config = getSyteConfig()
-    const upstreamUrl = new URL(
-      `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/activity/stream`,
-    )
-    upstreamUrl.searchParams.set("live", "1")
-    if (sinceId > 0) upstreamUrl.searchParams.set("since_id", String(sinceId))
-
-    let upstream: Response
     try {
-      upstream = await fetch(upstreamUrl.toString(), {
+      const upstream = await openUpstreamStream(config, uuid, sinceId, session_, req.signal)
+      return new Response(upstream.body, {
+        status: 200,
         headers: {
-          Accept: "text/event-stream",
-          "Cache-Control": "no-cache",
-          "X-API-Key": config.apiKey,
-          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
         },
-        // Node fetch: keep connection alive
-        // @ts-ignore — Next.js node runtime accepts this
-        signal: req.signal,
       })
     } catch (err: any) {
+      if (err?.name === "AbortError") {
+        return new Response(null, { status: 499 })
+      }
       return NextResponse.json(
         { ok: false, error: err?.message || "Failed to connect to upstream Syte stream" },
         { status: 502 },
       )
     }
-
-    if (!upstream.ok || !upstream.body) {
-      const text = await upstream.text().catch(() => "")
-      return NextResponse.json(
-        {
-          ok: false,
-          error: `Upstream returned ${upstream.status}${
-            text ? ": " + text.slice(0, 300) : ""
-          }`,
-        },
-        { status: upstream.status || 502 },
-      )
-    }
-
-    // Pipe the upstream SSE body directly to the client
-    return new Response(upstream.body, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        Connection: "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
-    })
   }
 
   // ── Snapshot (polling) ───────────────────────────────────────────────────────
