@@ -51,26 +51,6 @@ function isAllowedPreviewUrl(raw: string): boolean {
 
 function frameAncestorsForRequest(req: Request): string {
   const ancestors = new Set<string>(["'self'"])
-  try {
-    const origin = req.headers.get("origin")
-    if (origin) {
-      const parsed = new URL(origin)
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        ancestors.add(origin)
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const referer = req.headers.get("referer")
-    if (referer) {
-      const parsed = new URL(referer)
-      ancestors.add(parsed.origin)
-    }
-  } catch {
-    /* ignore */
-  }
   ancestors.add("https://sycord.com")
   ancestors.add("https://www.sycord.com")
   ancestors.add("https://app.sycord.com")
