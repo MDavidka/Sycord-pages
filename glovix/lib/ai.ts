@@ -24,7 +24,7 @@ export interface ModelChoice {
     subtitle: string
     modelType: ModelType
     apiModel: string
-    /** Provider logo from https://svgl.app (vendored under /public/model-logos) */
+    /** Model icon under /public/model-logos, matched by profile name */
     icon: string
     iconAlt: string
 }
@@ -36,8 +36,8 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Fast',
         modelType: 'mimo-v2-flash',
         apiModel: 'gemini-2.5-flash',
-        icon: '/model-logos/gemini.svg',
-        iconAlt: 'Gemini',
+        icon: '/model-logos/nano.svg',
+        iconAlt: 'syra-nano',
     },
     {
         id: 'base',
@@ -45,8 +45,8 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Balanced',
         modelType: 'deepseek-v4-flash',
         apiModel: 'deepseek-v4-flash',
-        icon: '/model-logos/deepseek.svg',
-        iconAlt: 'DeepSeek',
+        icon: '/model-logos/base.svg',
+        iconAlt: 'syra-base',
     },
     {
         id: 'havy',
@@ -54,8 +54,8 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Advanced',
         modelType: 'gemini-3.1-pro',
         apiModel: 'gemini-2.5-pro',
-        icon: '/model-logos/gemini.svg',
-        iconAlt: 'Gemini',
+        icon: '/model-logos/pro.svg',
+        iconAlt: 'syra-havy',
     },
     {
         id: 'ultra',
@@ -63,8 +63,8 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Ultra',
         modelType: 'glm-5.2',
         apiModel: 'glm-5.2',
-        icon: '/model-logos/zai.svg',
-        iconAlt: 'Z.ai GLM',
+        icon: '/model-logos/ultra.svg',
+        iconAlt: 'syra-ultra',
     },
 ];
 
