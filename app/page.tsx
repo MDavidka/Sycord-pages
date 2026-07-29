@@ -11,7 +11,7 @@ import {
 import {
   ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
   LayoutTemplate, Lock, MousePointerClick, Palette, Phone, Rocket, Server, ShieldCheck,
-  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
+  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap, ArrowUpRight,
 } from "lucide-react"
 
 const BG = "#181818"
@@ -29,6 +29,7 @@ export default function LandingPage() {
       <HostingFeatures />
       <Templates />
       <Pricing />
+      <CodeToolComparison />
       <FAQ />
       <FinalCTA />
       <Footer />
@@ -280,7 +281,7 @@ function TrustStrip() {
     { icon: <Globe className="h-3.5 w-3.5" />, label: "Custom domain" },
   ]
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-24">
+    <section className="mx-auto w-full max-w-[1280px] px-5 pt-14 sm:px-8 sm:pt-20 lg:px-10">
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         {items.map(it => (
           <div key={it.label} className="inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}>
@@ -299,7 +300,7 @@ function HowItWorks() {
     { n: "03", icon: <Rocket className="h-5 w-5" />, title: "Publish on fast hosting", body: "One click ships your site to a global CDN with SSL and your domain.", illo: <IlloDeploy /> },
   ]
   return (
-    <section id="showcase" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section id="showcase" className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
       <SectionHeading eyebrow="How it works" title="Launch in minutes" subtitle="Generate, customize, and publish your site with AI-powered hosting." />
       <div className="mt-10 grid gap-4 sm:grid-cols-3">
         {steps.map(s => (
@@ -396,7 +397,7 @@ function AIBuilderFeatures() {
     { icon: <Star className="h-5 w-5" />, title: "Templates powered by AI", body: "Start from a template — customize with prompts." },
   ]
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
       <SectionHeading eyebrow="AI builder" title="Built for speed" subtitle="Everything you need to design, write, and publish — generated in seconds." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {features.map(f => <FeatureCard key={f.title} {...f} />)}
@@ -415,7 +416,7 @@ function HostingFeatures() {
     { icon: <Database className="h-5 w-5" />, title: "Secure backups", body: "Daily snapshots with point-in-time restore." },
   ]
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
       <SectionHeading eyebrow="Hosting" title="Hosting built in" subtitle="A production-grade platform under every site you ship." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {features.map(f => <FeatureCard key={f.title} {...f} />)}
@@ -444,7 +445,7 @@ function Templates() {
     { label: "Personal brand", icon: <Star className="h-5 w-5" />, hue: "from-sky-400/10 to-sky-700/10" },
   ]
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
       <SectionHeading eyebrow="Templates" title="Built for every kind of site" subtitle="Start from a template — Sycord tunes it to your brand." />
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map(t => (
@@ -479,7 +480,7 @@ function Pricing() {
     { name: "Business", price: "$49", period: "/mo", tagline: "For growing companies", features: ["Unlimited AI generations", "Multiple custom domains", "Free SSL", "Advanced analytics", "Priority support"], cta: "Start Business", highlighted: false, illo: <IlloPlanBusiness /> },
   ]
   return (
-    <section id="pricing" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section id="pricing" className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
       <SectionHeading eyebrow="Pricing" title="Simple, transparent pricing" subtitle="Start free. Scale when you're ready." />
       <div className="mt-10 grid gap-4 lg:grid-cols-3">
         {plans.map(p => (
@@ -512,6 +513,77 @@ function Pricing() {
           </div>
         ))}
       </div>
+    </section>
+  )
+}
+
+function CodeToolComparison() {
+  const tools = [
+    {
+      name: "Cursor",
+      description: "AI-first editor for fast, visual coding workflows.",
+      icon: "/svgl/cursor.svg",
+      href: "https://cursor.com/pricing",
+      plans: [
+        { label: "Hobby", price: "Free", amount: 0 },
+        { label: "Pro", price: "$20", amount: 20 },
+        { label: "Business", price: "$40 / user", amount: 40 },
+      ],
+    },
+    {
+      name: "Claude Code",
+      description: "Terminal-first agent included with Claude subscriptions.",
+      icon: "/svgl/claude-code.svg",
+      href: "https://claude.com/pricing",
+      plans: [
+        { label: "Pro", price: "$20", amount: 20 },
+        { label: "Max 5x", price: "$100", amount: 100 },
+        { label: "Max 20x", price: "$200", amount: 200 },
+      ],
+    },
+  ]
+
+  return (
+    <section id="tool-comparison" className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
+      <SectionHeading
+        eyebrow="Tool comparison"
+        title="Productivity over costs"
+        subtitle="See the monthly starting points for two popular AI coding workflows before you commit."
+      />
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        {tools.map((tool) => (
+          <article key={tool.name} className="rounded-3xl border p-5 sm:p-6" style={{ borderColor: BORDER, backgroundColor: BG }}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border bg-white p-2.5" style={{ borderColor: BORDER }}>
+                  <Image src={tool.icon} alt={`${tool.name} logo from SVGL`} width={28} height={28} className="h-full w-full object-contain" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{tool.name}</h3>
+                  <p className="mt-1 max-w-xs text-sm" style={{ color: MUTED }}>{tool.description}</p>
+                </div>
+              </div>
+              <Link href={tool.href} target="_blank" rel="noreferrer" aria-label={`View ${tool.name} pricing`} className="rounded-full border p-2 text-white transition-colors hover:bg-white/10" style={{ borderColor: BORDER }}>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="mt-6 space-y-3">
+              {tool.plans.map((plan) => (
+                <div key={plan.label} className="flex items-center gap-3">
+                  <span className="w-20 shrink-0 text-xs font-medium uppercase tracking-wider" style={{ color: MUTED }}>{plan.label}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                    <span className="block h-full rounded-full bg-white/70" style={{ width: `${Math.max(plan.amount / 200 * 100, plan.amount === 0 ? 4 : 10)}%` }} />
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-white">{plan.price}<span className="text-xs font-normal" style={{ color: MUTED }}>{plan.amount > 0 && "/mo"}</span></span>
+                </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+      <p className="mx-auto mt-4 max-w-2xl text-center text-xs" style={{ color: MUTED }}>
+        Prices shown in USD per month; included usage and limits vary by plan. Check each provider before subscribing.
+      </p>
     </section>
   )
 }
@@ -588,7 +660,7 @@ function FAQ() {
     { q: "Is it mobile responsive?", a: "Every site is responsive by default. Sycord auto-tunes layouts for mobile, tablet, and desktop." },
   ]
   return (
-    <section className="mx-auto w-full max-w-3xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section className="mx-auto w-full max-w-3xl px-5 pt-20 sm:px-8 sm:pt-28">
       <SectionHeading eyebrow="FAQ" title="Frequently asked questions" subtitle="Everything you need to know to get started." />
       <div className="mt-8 rounded-3xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
         <Accordion type="single" collapsible className="w-full">
@@ -606,7 +678,7 @@ function FAQ() {
 
 function FinalCTA() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section className="mx-auto w-full max-w-[1280px] px-5 pt-20 sm:px-8 sm:pt-28 lg:px-10">
       <div className="overflow-hidden rounded-[36px] border p-10 text-center sm:rounded-[55px] sm:p-16" style={{ borderColor: BORDER, backgroundColor: BG, backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1.4px, transparent 1.4px)", backgroundSize: "26px 26px" }}>
         <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>Launch your site with AI</h2>
         <p className="mx-auto mt-4 max-w-xl text-base sm:text-lg" style={{ color: MUTED }}>Build, host, and publish from one powerful platform.</p>
@@ -626,12 +698,12 @@ function FinalCTA() {
 function Footer() {
   const cols = [
     { title: "Product", links: [{ label: "AI Builder", href: "#showcase" }, { label: "Hosting", href: "#showcase" }, { label: "Templates", href: "#" }, { label: "Changelog", href: "/releases" }] },
-    { title: "Pricing", links: [{ label: "Plans", href: "#pricing" }, { label: "Compare", href: "#pricing" }, { label: "Enterprise", href: "/contact" }] },
+    { title: "Pricing", links: [{ label: "Plans", href: "#pricing" }, { label: "Compare tools", href: "#tool-comparison" }, { label: "Enterprise", href: "/contact" }] },
     { title: "Docs", links: [{ label: "Getting started", href: "#" }, { label: "Custom domains", href: "#" }, { label: "API", href: "#" }] },
-    { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Status", href: "#" }] },
+    { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Status", href: "/servers" }] },
   ]
   return (
-    <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:px-8 sm:mt-32">
+    <footer className="mx-auto mt-20 w-full max-w-[1280px] px-5 pb-10 sm:mt-28 sm:px-8 sm:pb-12 lg:px-10">
       <div className="rounded-3xl border p-8 sm:p-10" style={{ borderColor: BORDER, backgroundColor: BG }}>
         <div className="grid gap-8 lg:grid-cols-5">
           <div className="lg:col-span-2">
