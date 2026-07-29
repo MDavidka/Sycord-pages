@@ -1,7 +1,7 @@
 "use client"
 
 import { Activity, Cloud, Cpu, Database, Globe2, HardDrive, Lock, Network, Server, Shield, Wifi, type LucideIcon } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 
 interface ServerStatusCardProps {
   name: string
@@ -27,72 +27,53 @@ const iconMap: Record<string, LucideIcon> = {
 }
 
 function validateCustomIcon(icon: string | undefined): boolean {
-  if (!icon) return false
-  return icon.startsWith('data:image/') && icon.includes(';base64,')
+  return Boolean(icon?.startsWith("data:image/") && icon.includes(";base64,"))
 }
 
 export function ServerStatusCard({ name, status, provider, providerIcon, iconType, uptime }: ServerStatusCardProps) {
   const isOperational = status === 200
-  const iconKey = providerIcon?.toLowerCase() ?? ""
-  const IconComponent = iconMap[iconKey] ?? Server
-  const isCustomIcon = iconType === 'custom'
+  const IconComponent = iconMap[providerIcon?.toLowerCase() ?? ""] ?? Server
   const [imageLoadError, setImageLoadError] = useState(false)
-  
-  // Reset error state when providerIcon changes
+  const isValidCustomIcon = iconType === "custom" && validateCustomIcon(providerIcon) && !imageLoadError
+
   useEffect(() => {
     setImageLoadError(false)
   }, [providerIcon])
-  
-  // Validate custom icon is a safe data URL with proper format
-  const isValidCustomIcon = isCustomIcon && 
-    validateCustomIcon(providerIcon) &&
-    !imageLoadError
 
   return (
-    <div className="space-y-3">
-      {/* Header Row */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-[#e5e5e5]">{name}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-[#e5e5e5]">{status}</span>
-          <div 
-            className={`w-3 h-3 rounded-full ${
-              isOperational ? 'bg-emerald-500' : 'bg-red-500'
-            }`} 
-          />
+    <article className="rounded-2xl border border-white/10 bg-[#222224] p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/65">
+            {isValidCustomIcon ? (
+              <img src={providerIcon} alt={`${name} provider icon`} className="h-4 w-4 object-contain" onError={() => setImageLoadError(true)} />
+            ) : (
+              <IconComponent className="h-4 w-4" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold text-white">{name}</h3>
+            <p className="mt-0.5 truncate text-xs text-white/40">{provider}</p>
+          </div>
         </div>
+        <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${isOperational ? "bg-emerald-400/10 text-emerald-300" : "bg-red-400/10 text-red-300"}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${isOperational ? "bg-emerald-400" : "bg-red-400"}`} />
+          {isOperational ? "Operational" : status === 0 ? "Checking" : "Degraded"}
+        </span>
       </div>
 
-      <div className="flex gap-1">
+      <div className="mt-5 flex items-center gap-1" role="img" aria-label="30-hour uptime history">
         {uptime.map((isUp, index) => (
-          <div
+          <span
             key={index}
-            className={`h-12 w-4 rounded-md ${
-              isUp === null 
-                ? 'bg-[#4a4a4a]' 
-                : isUp 
-                  ? 'bg-emerald-500' 
-                  : 'bg-red-500'
-            }`}
+            className={`h-2 min-w-0 flex-1 rounded-full ${isUp === null ? "bg-white/10" : isUp ? "bg-emerald-400" : "bg-red-400"}`}
           />
         ))}
       </div>
-
-      <div className="flex items-center gap-2">
-        <div className="w-6 h-6 flex items-center justify-center text-[#b3b3b3]">
-          {isValidCustomIcon ? (
-            <img 
-              src={providerIcon} 
-              alt={`Custom icon for ${name}`}
-              className="w-4 h-4 object-contain"
-              onError={() => setImageLoadError(true)}
-            />
-          ) : (
-            <IconComponent className="w-4 h-4" />
-          )}
-        </div>
-        <span className="text-sm text-[#888888]">{provider}</span>
+      <div className="mt-2 flex justify-between text-[10px] text-white/35">
+        <span>30h ago</span>
+        <span>Now</span>
       </div>
-    </div>
+    </article>
   )
 }
