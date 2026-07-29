@@ -402,17 +402,35 @@ function PriceComparison() {
       icon: "/icons/cursor.svg",
       price: "$20",
       period: "/mo",
-      tagline: "AI-first code editor",
-      features: ["AI code completions", "Inline editing", "Chat with codebase", "Terminal integration", "Multiple models"],
+      tagline: "AI-first code editor for professional developers",
+      features: [
+        { text: "AI code completions", included: true },
+        { text: "Inline editing & commands", included: true },
+        { text: "Chat with codebase", included: true },
+        { text: "Terminal integration", included: true },
+        { text: "Multiple LLM models", included: true },
+        { text: "Global hosting included", included: false },
+        { text: "Free SSL & CDN", included: false },
+        { text: "Custom domains", included: false },
+      ],
       highlight: false,
     },
     {
       name: "Cloud Code",
       icon: "/icons/cloud-code.svg",
       price: "Free",
-      period: "/mo",
-      tagline: "Google Cloud developer tools",
-      features: ["Cloud IDE", "GitHub integration", "Docker support", "Kubernetes tools", "Google Cloud connectors"],
+      period: " / mo",
+      tagline: "Google Cloud developer tools for teams",
+      features: [
+        { text: "AI code completions", included: true },
+        { text: "Cloud IDE", included: true },
+        { text: "GitHub integration", included: true },
+        { text: "Docker & Kubernetes", included: true },
+        { text: "Google Cloud connectors", included: true },
+        { text: "Global hosting included", included: false },
+        { text: "Free SSL & CDN", included: false },
+        { text: "Custom domains", included: false },
+      ],
       highlight: false,
     },
     {
@@ -420,44 +438,63 @@ function PriceComparison() {
       icon: "/logo.png",
       price: "Free",
       period: " / mo",
-      tagline: "AI website builder with hosting",
-      features: ["AI site generation", "Global hosting included", "Free SSL & CDN", "Custom domains", "One-click publish"],
+      tagline: "AI website builder with full hosting stack",
+      features: [
+        { text: "AI site generation", included: true },
+        { text: "Global hosting included", included: true },
+        { text: "Free SSL & CDN", included: true },
+        { text: "Custom domains", included: true },
+        { text: "One-click publish", included: true },
+        { text: "AI code completions", included: true },
+        { text: "Enterprise scaling", included: true },
+        { text: "Priority support", included: true },
+      ],
       highlight: true,
     },
   ]
   return (
-    <section id="compare" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="Compare" title="Cursor vs Cloud Code vs Sycord" subtitle="See how Sycord stacks up against the competition." />
-      <div className="mt-10 grid gap-4 lg:grid-cols-3">
+    <section id="compare" className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
+      <SectionHeading eyebrow="Price Comparison" title="Cursor vs Cloud Code vs Sycord" subtitle="Compare features, pricing, and value across the leading AI development platforms." />
+      <div className="mt-10 grid gap-6 lg:grid-cols-3">
         {competitors.map(c => (
-          <div key={c.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${c.highlight ? "shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : ""}`} style={{ borderColor: c.highlight ? "rgba(255,255,255,0.15)" : BORDER, backgroundColor: BG }}>
+          <div key={c.name} className={`relative flex flex-col rounded-3xl border p-6 transition-all ${c.highlight ? "border-white/20 bg-gradient-to-b from-[#1e1e24] to-[#181818] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.03]" : "border-[#2a2c30] bg-[#181818] hover:border-white/10"}`} style={{ borderColor: c.highlight ? "rgba(255,255,255,0.15)" : BORDER }}>
+            {c.highlight && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-black">Recommended</div>
+            )}
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>
-                <Image src={c.icon} alt={c.name} width={24} height={24} className="h-6 w-6 object-contain" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>
+                <Image src={c.icon} alt={c.name} width={28} height={28} className="h-7 w-7 object-contain" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-white">{c.name}</h3>
+                <h3 className="text-lg font-semibold text-white">{c.name}</h3>
                 <p className="text-xs" style={{ color: MUTED }}>{c.tagline}</p>
               </div>
             </div>
-            <div className="mt-5 flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-white">{c.price}</span>
-              <span className="text-sm" style={{ color: MUTED }}>{c.period}</span>
+            <div className="mt-6 flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold text-white">{c.price}</span>
+              <span className="text-sm font-medium" style={{ color: MUTED }}>{c.period}</span>
             </div>
-            <ul className="mt-5 space-y-2 text-sm" style={{ color: TEXT }}>
+            <ul className="mt-6 space-y-3">
               {c.features.map(f => (
-                <li key={f} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /><span>{f}</span>
+                <li key={f.text} className="flex items-start gap-3 text-sm">
+                  {f.included ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                  ) : (
+                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full border" style={{ borderColor: BORDER, backgroundColor: "#111213" }} />
+                  )}
+                  <span style={{ color: f.included ? TEXT : MUTED, textDecoration: f.included ? "none" : "line-through" }}>{f.text}</span>
                 </li>
               ))}
             </ul>
             <Button
               asChild
               variant={c.highlight ? "default" : "outline"}
-              className={`mt-6 rounded-xl ${c.highlight ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
+              className={`mt-auto rounded-xl ${c.highlight ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
               style={c.highlight ? {} : { borderColor: BORDER }}
             >
-              <Link href={c.name === "Sycord" ? "/login" : c.name === "Cursor" ? "https://cursor.com" : "https://cloud.google.com/code"} target="_blank" rel="noopener noreferrer">{c.name === "Sycord" ? "Start for free" : "View Pricing"}</Link>
+              <Link href={c.name === "Sycord" ? "/login" : c.name === "Cursor" ? "https://cursor.com" : "https://cloud.google.com/code"} target="_blank" rel="noopener noreferrer">
+                {c.name === "Sycord" ? "Start for free" : "Get Started"}
+              </Link>
             </Button>
           </div>
         ))}

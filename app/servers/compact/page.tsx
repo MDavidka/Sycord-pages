@@ -5,6 +5,10 @@ import { Inter } from "next/font/google"
 
 const inter = Inter({ subsets: ["latin"], weight: ['400', '500', '600', '700'] })
 
+const BG = "#181818"
+const BORDER = "#2a2c30"
+const MUTED = "#A7AAB0"
+
 
 type ServerStatus = {
   id: string
@@ -98,7 +102,3 @@ export default async function CompactServersPage() {
     </div>
   )
 }
-
-const BG = "#181818"
-const BORDER = "#2a2c30"
-const MUTED = "#A7AAB0"
