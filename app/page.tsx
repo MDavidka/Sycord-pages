@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/accordion"
 import {
   ArrowRight, Briefcase, CheckCircle2, Cloud, Globe,
-  Lock, Rocket, Server, Sparkles, Wand2, Zap,
+  Lock, Phone, Rocket, Server, Sparkles, TrendingUp, Wand2, Zap,
 } from "lucide-react"
 
 const BG = "#181818"
