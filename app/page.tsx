@@ -29,6 +29,7 @@ export default function LandingPage() {
       <HostingFeatures />
       <Templates />
       <Pricing />
+      <PriceComparison />
       <FAQ />
       <FinalCTA />
       <Footer />
@@ -222,9 +223,9 @@ function Hero() {
   const stageOpacity = useTransform(scrollYProgress, [0.8, 0.95], [1, 0])
 
   return (
-    <section
+      <section
       ref={trackRef}
-      className="relative h-[260vh] w-full md:h-[100svh] md:min-h-[760px]"
+      className="relative h-[180vh] w-full md:h-[100svh] md:min-h-[600px]"
       style={{ backgroundColor: BG }}
     >
       <div className="sticky top-0 h-[100svh] overflow-hidden md:relative md:h-full">
@@ -280,10 +281,10 @@ function TrustStrip() {
     { icon: <Globe className="h-3.5 w-3.5" />, label: "Custom domain" },
   ]
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-24">
+    <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
       <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         {items.map(it => (
-          <div key={it.label} className="inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}>
+          <div key={it.label} className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}>
             <span style={{ color: MUTED }}>{it.icon}</span>{it.label}
           </div>
         ))}
@@ -299,7 +300,7 @@ function HowItWorks() {
     { n: "03", icon: <Rocket className="h-5 w-5" />, title: "Publish on fast hosting", body: "One click ships your site to a global CDN with SSL and your domain.", illo: <IlloDeploy /> },
   ]
   return (
-    <section id="showcase" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+    <section id="showcase" className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
       <SectionHeading eyebrow="How it works" title="Launch in minutes" subtitle="Generate, customize, and publish your site with AI-powered hosting." />
       <div className="mt-10 grid gap-4 sm:grid-cols-3">
         {steps.map(s => (
@@ -576,6 +577,77 @@ function IlloPlanBusiness() {
         </div>
       </div>
     </div>
+  )
+}
+
+function PriceComparison() {
+  const competitors = [
+    {
+      name: "Cursor",
+      icon: "/icons/cursor.svg",
+      price: "$20",
+      period: "/mo",
+      tagline: "AI-first code editor",
+      features: ["AI code completions", "Inline editing", "Chat with codebase", "Terminal integration", "Multiple models"],
+      highlight: false,
+    },
+    {
+      name: "Cloud Code",
+      icon: "/icons/cloud-code.svg",
+      price: "Free",
+      period: "/mo",
+      tagline: "Google Cloud developer tools",
+      features: ["Cloud IDE", "GitHub integration", "Docker support", "Kubernetes tools", "Google Cloud connectors"],
+      highlight: false,
+    },
+    {
+      name: "Sycord",
+      icon: "/logo.png",
+      price: "Free",
+      period: " / mo",
+      tagline: "AI website builder with hosting",
+      features: ["AI site generation", "Global hosting included", "Free SSL & CDN", "Custom domains", "One-click publish"],
+      highlight: true,
+    },
+  ]
+  return (
+    <section id="compare" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+      <SectionHeading eyebrow="Compare" title="Cursor vs Cloud Code vs Sycord" subtitle="See how Sycord stacks up against the competition." />
+      <div className="mt-10 grid gap-4 lg:grid-cols-3">
+        {competitors.map(c => (
+          <div key={c.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${c.highlight ? "shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : ""}`} style={{ borderColor: c.highlight ? "rgba(255,255,255,0.15)" : BORDER, backgroundColor: BG }}>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>
+                <Image src={c.icon} alt={c.name} width={24} height={24} className="h-6 w-6 object-contain" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">{c.name}</h3>
+                <p className="text-xs" style={{ color: MUTED }}>{c.tagline}</p>
+              </div>
+            </div>
+            <div className="mt-5 flex items-baseline gap-1">
+              <span className="text-3xl font-bold text-white">{c.price}</span>
+              <span className="text-sm" style={{ color: MUTED }}>{c.period}</span>
+            </div>
+            <ul className="mt-5 space-y-2 text-sm" style={{ color: TEXT }}>
+              {c.features.map(f => (
+                <li key={f} className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /><span>{f}</span>
+                </li>
+              ))}
+            </ul>
+            <Button
+              asChild
+              variant={c.highlight ? "default" : "outline"}
+              className={`mt-6 rounded-xl ${c.highlight ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
+              style={c.highlight ? {} : { borderColor: BORDER }}
+            >
+              <Link href={c.name === "Sycord" ? "/login" : "#"}>{c.name === "Sycord" ? "Start for free" : "Learn more"}</Link>
+            </Button>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
