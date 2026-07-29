@@ -9,7 +9,7 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, Briefcase, CheckCircle2, ChevronRight, Cloud, Database, Globe,
+  ArrowRight, Briefcase, CheckCircle2, Cloud, Database, Globe,
   LayoutTemplate, Lock, MousePointerClick, Palette, Phone, Rocket, Server, ShieldCheck,
   ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
 } from "lucide-react"
@@ -24,10 +24,6 @@ export default function LandingPage() {
     <main className="min-h-screen w-full text-white" style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}>
       <Hero />
       <TrustStrip />
-      <HowItWorks />
-      <AIBuilderFeatures />
-      <HostingFeatures />
-      <Templates />
       <Pricing />
       <PriceComparison />
       <FAQ />
