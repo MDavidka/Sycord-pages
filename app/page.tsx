@@ -9,9 +9,8 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, Briefcase, CheckCircle2, Cloud, Database, Globe,
-  LayoutTemplate, Lock, MousePointerClick, Palette, Phone, Rocket, Server, ShieldCheck,
-  ShoppingBag, Smartphone, Sparkles, Star, TrendingUp, User, Wand2, Zap,
+  ArrowRight, Briefcase, CheckCircle2, Cloud, Globe,
+  Lock, Rocket, Server, Sparkles, Wand2, Zap,
 } from "lucide-react"
 
 const BG = "#181818"
@@ -174,7 +173,7 @@ function HeroDesktop() {
             variant="outline"
             className="h-12 rounded-full border-white/30 bg-transparent px-7 text-[15px] font-semibold text-white hover:bg-white/5 hover:text-white"
           >
-            <Link href="#showcase">See demo</Link>
+            <Link href="/login">Get started</Link>
           </Button>
         </div>
       </motion.div>
@@ -282,186 +281,6 @@ function TrustStrip() {
         {items.map(it => (
           <div key={it.label} className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}>
             <span style={{ color: MUTED }}>{it.icon}</span>{it.label}
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function HowItWorks() {
-  const steps = [
-    { n: "01", icon: <Wand2 className="h-5 w-5" />, title: "Describe your site", body: "Tell Sycord what you need in plain language — purpose, style, content.", illo: <IlloPrompt /> },
-    { n: "02", icon: <Sparkles className="h-5 w-5" />, title: "AI builds it instantly", body: "Pages, sections, copy, and layout are generated and ready to edit.", illo: <IlloBuild /> },
-    { n: "03", icon: <Rocket className="h-5 w-5" />, title: "Publish on fast hosting", body: "One click ships your site to a global CDN with SSL and your domain.", illo: <IlloDeploy /> },
-  ]
-  return (
-    <section id="showcase" className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
-      <SectionHeading eyebrow="How it works" title="Launch in minutes" subtitle="Generate, customize, and publish your site with AI-powered hosting." />
-      <div className="mt-10 grid gap-4 sm:grid-cols-3">
-        {steps.map(s => (
-          <div key={s.n} className="flex flex-col rounded-3xl border p-6 transition-colors" style={{ borderColor: BORDER, backgroundColor: BG }}>
-            <div className="mb-5 overflow-hidden rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>{s.illo}</div>
-            <div className="flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>{s.icon}</span>
-              <span className="text-xs font-semibold tracking-widest" style={{ color: MUTED }}>{s.n}</span>
-            </div>
-            <h3 className="mt-5 text-lg font-semibold text-white">{s.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: MUTED }}>{s.body}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function IlloPrompt() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/9] w-full flex-col justify-center gap-3 p-5">
-      <div className="inline-flex max-w-[85%] flex-col gap-1.5 self-end rounded-2xl rounded-br-md bg-white px-3.5 py-2.5">
-        <div className="h-1.5 w-28 rounded-full bg-black/70" />
-        <div className="h-1.5 w-20 rounded-full bg-black/40" />
-      </div>
-      <div className="flex items-center gap-2.5 rounded-2xl border px-3.5 py-3" style={{ borderColor: BORDER, backgroundColor: BG }}>
-        <div className="h-1.5 w-24 rounded-full bg-white/20" />
-        <div className="h-3.5 w-0.5 animate-pulse rounded bg-white/70" />
-        <div className="ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-white">
-          <ArrowRight className="h-3.5 w-3.5 text-black" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function IlloBuild() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/9] w-full items-center justify-center p-5">
-      <div className="w-full max-w-[220px] overflow-hidden rounded-xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
-        <div className="flex items-center gap-1.5 border-b px-3 py-2" style={{ borderColor: BORDER }}>
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BORDER }} />
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BORDER }} />
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: BORDER }} />
-        </div>
-        <div className="space-y-2 p-3">
-          <div className="h-8 rounded-lg border border-dashed border-[#7C6FF5]/50 bg-[#7C6FF5]/10" />
-          <div className="grid grid-cols-3 gap-2">
-            <div className="h-6 rounded-lg bg-[#26272b]" />
-            <div className="h-6 rounded-lg bg-[#26272b]" />
-            <div className="h-6 rounded-lg border border-dashed border-white/25 bg-white/5" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-3 w-3 shrink-0 text-[#7C6FF5]" />
-            <div className="h-1.5 w-20 rounded-full bg-[#7C6FF5]/50" />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function IlloDeploy() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-3 p-5">
-      <div className="flex w-full max-w-[220px] items-center gap-2 rounded-full border px-3.5 py-2.5" style={{ borderColor: BORDER, backgroundColor: BG }}>
-        <Lock className="h-3 w-3 shrink-0 text-emerald-400" />
-        <span className="text-[11px] font-medium" style={{ color: TEXT }}>yoursite.com</span>
-        <span className="ml-auto flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2 py-0.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-400">Live</span>
-        </span>
-      </div>
-      <div className="flex items-center gap-2" style={{ color: MUTED }}>
-        <Globe className="h-3.5 w-3.5" />
-        <div className="flex items-center gap-1">
-          {[0, 1, 2, 3, 4].map(i => (
-            <span key={i} className="h-1 rounded-full bg-white/25" style={{ width: 14 + (i % 3) * 8 }} />
-          ))}
-        </div>
-        <Zap className="h-3.5 w-3.5 text-[#7C6FF5]" />
-      </div>
-    </div>
-  )
-}
-
-function AIBuilderFeatures() {
-  const features = [
-    { icon: <LayoutTemplate className="h-5 w-5" />, title: "AI-generated structure", body: "Pages, sections, and navigation built from your prompt." },
-    { icon: <Sparkles className="h-5 w-5" />, title: "AI-written copy", body: "On-brand headlines, body, and CTAs ready to go live." },
-    { icon: <Palette className="h-5 w-5" />, title: "Smart page sections", body: "Hero, features, pricing, FAQ — composed with intent." },
-    { icon: <Smartphone className="h-5 w-5" />, title: "Auto mobile optimization", body: "Every layout adapts to every screen, automatically." },
-    { icon: <MousePointerClick className="h-5 w-5" />, title: "Instant editing", body: "Click anything to refine text, layout, and styling." },
-    { icon: <Star className="h-5 w-5" />, title: "Templates powered by AI", body: "Start from a template — customize with prompts." },
-  ]
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="AI builder" title="Built for speed" subtitle="Everything you need to design, write, and publish — generated in seconds." />
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map(f => <FeatureCard key={f.title} {...f} />)}
-      </div>
-    </section>
-  )
-}
-
-function HostingFeatures() {
-  const features = [
-    { icon: <Cloud className="h-5 w-5" />, title: "Fast global hosting", body: "Edge-delivered from 120+ regions for low latency everywhere." },
-    { icon: <Lock className="h-5 w-5" />, title: "Free SSL certificates", body: "Automatic HTTPS for every domain, renewed for you." },
-    { icon: <Globe className="h-5 w-5" />, title: "Custom domains", body: "Connect your domain in seconds with guided DNS." },
-    { icon: <Zap className="h-5 w-5" />, title: "CDN delivery", body: "Static and dynamic assets cached close to your visitors." },
-    { icon: <ShieldCheck className="h-5 w-5" />, title: "Reliable uptime", body: "99.99% target backed by automated failover." },
-    { icon: <Database className="h-5 w-5" />, title: "Secure backups", body: "Daily snapshots with point-in-time restore." },
-  ]
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="Hosting" title="Hosting built in" subtitle="A production-grade platform under every site you ship." />
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map(f => <FeatureCard key={f.title} {...f} />)}
-      </div>
-    </section>
-  )
-}
-
-function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
-  return (
-    <div className="rounded-3xl border p-6 transition-colors hover:opacity-90" style={{ borderColor: BORDER, backgroundColor: BG }}>
-      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>{icon}</span>
-      <h3 className="mt-5 text-base font-semibold text-white">{title}</h3>
-      <p className="mt-2 text-sm" style={{ color: MUTED }}>{body}</p>
-    </div>
-  )
-}
-
-function Templates() {
-  const items = [
-    { label: "Portfolio", icon: <User className="h-5 w-5" />, hue: "from-zinc-400/10 to-zinc-700/10" },
-    { label: "Startup", icon: <Rocket className="h-5 w-5" />, hue: "from-indigo-400/10 to-indigo-700/10" },
-    { label: "Business", icon: <Briefcase className="h-5 w-5" />, hue: "from-emerald-400/10 to-emerald-700/10" },
-    { label: "Landing page", icon: <LayoutTemplate className="h-5 w-5" />, hue: "from-amber-400/10 to-amber-700/10" },
-    { label: "Storefront", icon: <ShoppingBag className="h-5 w-5" />, hue: "from-rose-400/10 to-rose-700/10" },
-    { label: "Personal brand", icon: <Star className="h-5 w-5" />, hue: "from-sky-400/10 to-sky-700/10" },
-  ]
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="Templates" title="Built for every kind of site" subtitle="Start from a template — Sycord tunes it to your brand." />
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map(t => (
-          <div key={t.label} className="group relative overflow-hidden rounded-3xl border p-5 transition-colors" style={{ borderColor: BORDER, backgroundColor: BG }}>
-            <div className={`aspect-[16/9] w-full rounded-2xl border bg-gradient-to-br ${t.hue}`} style={{ borderColor: BORDER }}>
-              <div className="flex h-full w-full flex-col justify-between p-4">
-                <div className="flex items-center justify-between">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/40 text-white">{t.icon}</span>
-                  <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider" style={{ borderColor: BORDER, backgroundColor: BG, color: MUTED }}>Template</span>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="h-2 w-24 rounded bg-white/70" />
-                  <div className="h-1.5 w-32 rounded bg-white/30" />
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm font-semibold text-white">{t.label}</span>
-              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" style={{ color: MUTED }} />
-            </div>
           </div>
         ))}
       </div>
@@ -638,7 +457,7 @@ function PriceComparison() {
               className={`mt-6 rounded-xl ${c.highlight ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
               style={c.highlight ? {} : { borderColor: BORDER }}
             >
-              <Link href={c.name === "Sycord" ? "/login" : "#"}>{c.name === "Sycord" ? "Start for free" : "Learn more"}</Link>
+              <Link href={c.name === "Sycord" ? "/login" : c.name === "Cursor" ? "https://cursor.com" : "https://cloud.google.com/code"} target="_blank" rel="noopener noreferrer">{c.name === "Sycord" ? "Start for free" : "View Pricing"}</Link>
             </Button>
           </div>
         ))}
@@ -683,7 +502,7 @@ function FinalCTA() {
             <Link href="/login">Start for free <ArrowRight className="ml-1 h-4 w-4" /></Link>
           </Button>
           <Button asChild variant="outline" className="rounded-xl bg-transparent text-white hover:text-white" style={{ borderColor: BORDER }}>
-            <Link href="#showcase">See demo</Link>
+            <Link href="/login">Get started</Link>
           </Button>
         </div>
       </div>
@@ -693,7 +512,7 @@ function FinalCTA() {
 
 function Footer() {
   const cols = [
-    { title: "Product", links: [{ label: "AI Builder", href: "#showcase" }, { label: "Hosting", href: "#showcase" }, { label: "Templates", href: "#" }, { label: "Changelog", href: "/releases" }] },
+    { title: "Product", links: [{ label: "Pricing", href: "#pricing" }, { label: "Compare", href: "#compare" }, { label: "Changelog", href: "/releases" }] },
     { title: "Pricing", links: [{ label: "Plans", href: "#pricing" }, { label: "Compare", href: "#pricing" }, { label: "Enterprise", href: "/contact" }] },
     { title: "Docs", links: [{ label: "Getting started", href: "#" }, { label: "Custom domains", href: "#" }, { label: "API", href: "#" }] },
     { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Status", href: "#" }] },
