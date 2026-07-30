@@ -123,6 +123,18 @@ const nextConfig = {
         port: "",
         pathname: "/user-attachments/**",
       },
+      {
+        protocol: "https",
+        hostname: "svgl.app",
+        port: "",
+        pathname: "/library/**",
+      },
+      {
+        protocol: "https",
+        hostname: "sycord.com",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
 }
