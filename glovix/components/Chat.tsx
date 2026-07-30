@@ -247,6 +247,7 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
     const displayModel = agentModel || current.apiModel
     const displayIcon = agentModel ? getProviderIconUrl(agentModel) : current.icon
     const displayLabel = agentModel || current.label
+    const shortModel = displayModel.split('-').slice(0, 2).join('-')
 
     return (
         <div className="relative">
@@ -255,31 +256,37 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                 onClick={onToggleMenu}
                 aria-label={`Select model (${displayLabel})`}
                 title={displayLabel}
-                className={`flex h-8 items-center gap-1.5 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
+                className={`flex h-9 sm:h-8 items-center gap-1.5 rounded-xl px-2 sm:px-2.5 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/[0.06] border border-white/[0.06]' : 'hover:bg-gray-50 border border-gray-200/50'}`}
             >
                 {displayIcon ? (
                     <img
                         src={displayIcon}
                         alt={displayModel}
-                        className={`h-5 w-5 object-contain ${isDark ? 'brightness-150' : ''}`}
+                        className={`h-5 w-5 sm:h-4.5 sm:w-4.5 object-contain shrink-0 ${isDark ? 'brightness-150' : ''}`}
                         draggable={false}
                     />
                 ) : (
-                    <span className={`text-[13px] font-medium ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
+                    <span className={`text-[12px] font-semibold ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
                         {displayModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
                     </span>
                 )}
-                <span className={`text-[13px] font-medium ${isDark ? 'text-[#e8e8e8]' : 'text-gray-700'}`}>
+                <span className={`text-[12px] sm:text-[13px] font-medium hidden sm:inline max-w-[100px] truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
                     {displayModel}
                 </span>
-                <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
+                <span className={`text-[12px] font-medium sm:hidden ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
+                    {shortModel}
+                </span>
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-white/30' : 'text-gray-400'}`} />
             </button>
 
             {showMenu && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
-                    <div className={`absolute bottom-full left-0 mb-2 rounded-xl overflow-hidden z-20 min-w-[168px] ${isDark ? 'bg-[#1c1d1f] border border-[#2a2b2e] shadow-xl' : 'bg-white border border-gray-200 shadow-lg'}`}>
-                        <div className="p-1.5">
+                    <div className={`absolute bottom-full left-0 mb-2 rounded-2xl overflow-hidden z-20 w-[220px] ${isDark ? 'bg-[#1a1a1b] border border-white/[0.08] shadow-2xl shadow-black/40' : 'bg-white border border-gray-200 shadow-xl shadow-black/5'}`}>
+                        <div className="px-2 pt-1.5 pb-0.5">
+                            <p className={`text-[10px] font-medium uppercase tracking-wider px-2 py-1 ${isDark ? 'text-white/20' : 'text-gray-400'}`}>Models</p>
+                        </div>
+                        <div className="p-1.5 space-y-0.5">
                             {MODEL_CHOICES.map((choice) => {
                                 const isActive = choice.modelType === selectedModel
                                 const choiceIcon = getProviderIconUrl(choice.apiModel) || choice.icon
@@ -290,25 +297,31 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                                         onClick={() => onSelect(choice)}
                                         title={choice.apiModel}
                                         aria-label={choice.apiModel}
-                                        className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 transition-colors ${
+                                        className={`w-full text-left px-2.5 py-2.5 sm:py-2 rounded-xl flex items-center gap-3 transition-colors active:scale-[0.98] ${
                                             isActive
-                                                ? isDark ? 'bg-[#26272a]' : 'bg-gray-50'
-                                                : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
+                                                ? isDark ? 'bg-white/[0.08]' : 'bg-gray-100'
+                                                : isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-gray-50'
                                         }`}
                                     >
                                         {choiceIcon ? (
                                             <img
                                                 src={choiceIcon}
                                                 alt={choice.apiModel}
-                                                className={`h-7 w-7 shrink-0 object-contain ${isDark ? 'brightness-150' : ''}`}
+                                                className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg ${isDark ? 'brightness-150' : ''}`}
                                                 draggable={false}
                                             />
                                         ) : (
-                                            <span className={`text-[13px] font-medium ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
+                                            <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'}`}>
                                                 {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
                                             </span>
                                         )}
-                                        <span className={`text-[13px] ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>{choice.apiModel}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className={`text-[13px] sm:text-[13px] font-medium truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{choice.apiModel}</div>
+                                            <div className={`text-[11px] ${isDark ? 'text-white/30' : 'text-gray-400'}`}>{choice.subtitle}</div>
+                                        </div>
+                                        {isActive && (
+                                            <Check className={`h-4 w-4 shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+                                        )}
                                     </button>
                                 )
                             })}
@@ -2920,7 +2933,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             if (!textContent) return null;
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-[#e5e5e5]' : 'text-gray-800'}`}>
+                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words rounded-2xl px-3 py-2 ${isDark ? 'text-white/80 bg-white/[0.02] border border-white/[0.03]' : 'text-gray-700 bg-gray-50/60 border border-gray-200/30'}`}>
                                                         {renderAssistantMarkdown(textContent)}
                                                     </div>
                                                 </div>
@@ -2973,11 +2986,17 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     {/* Fallback: user messages or assistant without segments */}
                                     <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                         <div
-                                            className={`text-[14px] leading-relaxed ${group.role === 'user'
-                                                ? isDark ? 'bg-[#1f1f1f] text-[#e5e5e5] rounded-2xl px-4 py-2.5 max-w-[85%]' : 'bg-gray-100 text-gray-900 rounded-2xl px-4 py-2.5 max-w-[85%]'
-                                                : isDark ? 'text-[#e5e5e5] max-w-full' : 'text-gray-800 max-w-full'
-                                                }`}
+                                            className={`text-[14px] leading-relaxed ${
+                                                group.role === 'user'
+                                                    ? isDark
+                                                        ? 'bg-white/[0.04] text-white/85 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.04]'
+                                                        : 'bg-gray-100/80 text-gray-800 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-gray-200/50'
+                                                    : isDark
+                                                        ? 'text-white/80 max-w-full bg-white/[0.02] rounded-2xl px-3 py-2 border border-white/[0.03]'
+                                                        : 'text-gray-700 max-w-full bg-gray-50/60 rounded-2xl px-3 py-2 border border-gray-200/30'
+                                            }`}
                                         >
+
                                             {/* Picked element indicator */}
                                             {group.role === 'user' && (group as any).pickedElement && (
                                                 <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
@@ -2995,8 +3014,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 </div>
                                             )}
                                             {group.content && (
-                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#1a1a1a] prose-pre:border prose-pre:border-[#2a2a2a] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                    {Array.isArray(group.content) ? (
+                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>                                                    {Array.isArray(group.content) ? (
                                                         <div className="space-y-2">
                                                             {group.content.map((part, i) => {
                                                                 if (part.type === 'image_url') {
