@@ -9,9 +9,9 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, Briefcase, Gamepad2, Globe, LayoutDashboard,
-  Lock, Monitor, Phone, Rocket, Sparkles, Zap,
+  ArrowRight, Globe, Lock, Phone, Rocket, Sparkles, Zap,
 } from "lucide-react"
+import { AgentPromptCycler } from "@/components/agent-prompt-cycler"
 
 const BG = "#181818"
 const BORDER = "#2a2c30"
@@ -310,7 +310,15 @@ function WorldMapSection() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="Global Infrastructure" title="Deploy worldwide" subtitle="Three server locations across the globe for low-latency hosting." />
-      <div className="mt-10 overflow-hidden rounded-3xl border p-6 sm:p-10" style={{ borderColor: BORDER, backgroundColor: BG }}>
+      <div className="mt-10 overflow-hidden rounded-3xl border p-6 sm:p-10 space-y-8" style={{ borderColor: BORDER, backgroundColor: BG }}>
+        <div className="relative w-full flex items-center justify-center">
+          <img
+            src="https://sycord.com/_next/image?url=%2Fb2adf1e2-fe2d-479c-ad8a.png&w=1920&q=75"
+            alt="Sycord global infrastructure"
+            className="w-full max-w-2xl opacity-50"
+            style={{ filter: "invert(1) brightness(0.4)" }}
+          />
+        </div>
         <WorldMapSVG />
       </div>
     </section>
@@ -375,26 +383,11 @@ function WorldMapSVG() {
 }
 
 function OneAgentSection() {
-  const modes = [
-    { icon: <LayoutDashboard className="h-5 w-5" />, title: "Productivity", desc: "Streamline workflows, automate tasks, and ship faster with AI assistance.", color: "#7C6FF5" },
-    { icon: <Briefcase className="h-5 w-5" />, title: "Business", desc: "Launch professional sites, manage clients, and scale your online presence.", color: "#00E599" },
-    { icon: <Gamepad2 className="h-5 w-5" />, title: "Gaming", desc: "Build gaming communities, clan pages, and interactive web experiences.", color: "#F59E0B" },
-    { icon: <Monitor className="h-5 w-5" />, title: "Office", desc: "Create internal tools, dashboards, and team portals effortlessly.", color: "#3B82F6" },
-  ]
-
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="One Agent" title="One agent for all needs" subtitle="From productivity to gaming — a single AI agent that adapts to your workflow." />
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {modes.map(m => (
-          <div key={m.title} className="group flex flex-col rounded-2xl border p-5 transition-all hover:border-white/20" style={{ borderColor: BORDER, backgroundColor: BG }}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border" style={{ borderColor: BORDER, backgroundColor: "#111213", color: m.color }}>
-              {m.icon}
-            </div>
-            <h3 className="mt-4 text-sm font-semibold text-white">{m.title}</h3>
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: MUTED }}>{m.desc}</p>
-          </div>
-        ))}
+      <div className="mt-10 flex justify-center">
+        <AgentPromptCycler />
       </div>
     </section>
   )
