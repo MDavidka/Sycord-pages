@@ -17,8 +17,8 @@ import { ToolGroup } from '@/components/agent-elements/tools/tool-group';
 import { SearchTool } from '@/components/agent-elements/tools/search-tool';
 import { SubagentTool } from '@/components/agent-elements/tools/subagent-tool';
 import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
+import { ThinkingTool } from '@/components/agent-elements/tools/thinking-tool';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
-import { Markdown } from '@/components/agent-elements/markdown';
 import type { GenerationPlan } from '../lib/generation-plan';
 import { useStore } from '../store';
 
@@ -493,17 +493,15 @@ const ToolStack = memo(function ToolStack({
         const active = group.actions.some(a => a.status === 'running' || a.status === 'pending');
         const text = group.actions.map(getThinkingText).filter(Boolean).join('\n\n');
         return (
-            <div className="px-1 py-1">
-                <div className="flex items-center gap-2 text-sm text-an-tool-color-muted">
-                    {active ? <SpiralLoader size={14} /> : null}
-                    <span className="font-medium text-an-tool-color">{active ? 'Thinking' : 'Thought'}</span>
-                </div>
-                {text ? (
-                    <div className="mt-1.5 max-h-[120px] overflow-hidden text-sm text-an-tool-color-muted">
-                        <Markdown content={text} className="text-sm" />
-                    </div>
-                ) : null}
-            </div>
+            <ThinkingTool
+                part={{
+                    id: group.actions[0]?.id || 'thinking',
+                    toolCallId: group.actions[0]?.toolCallId || group.actions[0]?.id || 'thinking',
+                    state: active ? 'input-streaming' : 'output-available',
+                    input: { thought: text },
+                }}
+                defaultOpen={false}
+            />
         );
     }
 
