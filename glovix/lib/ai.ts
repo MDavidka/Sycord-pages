@@ -72,6 +72,31 @@ export function getModelChoice(modelType: ModelType): ModelChoice {
     return MODEL_CHOICES.find(c => c.modelType === modelType) ?? MODEL_CHOICES[0]
 }
 
+export function getProviderFromModel(model: string): string {
+    const lower = model.toLowerCase()
+    if (lower.startsWith("gemini")) return "gemini"
+    if (lower.startsWith("deepseek")) return "deepseek"
+    if (lower.startsWith("glm")) return "glm"
+    if (lower.startsWith("mimo")) return "mimo"
+    if (lower.startsWith("gpt") || lower.startsWith("o1") || lower.startsWith("o3") || lower.includes("openai")) return "openai"
+    if (lower.startsWith("claude")) return "claude"
+    if (lower.startsWith("llama")) return "llama"
+    if (lower.startsWith("qwen")) return "qwen"
+    if (lower.includes("@") || lower.includes("/")) return lower.split(/[\/@]/)[0]
+    return lower.split("-")[0] || lower.split("_")[0] || model
+}
+
+export function getProviderIconUrl(model: string): string | null {
+    const provider = getProviderFromModel(model)
+    const known = new Set([
+        "gemini", "google", "deepseek", "openai", "groq", "meta", "perplexity", "cohere"
+    ])
+    if (known.has(provider)) {
+        return `https://svgl.app/library/${provider}.svg`
+    }
+    return null
+}
+
 export interface Message {
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string | null | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;

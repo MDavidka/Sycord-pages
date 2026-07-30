@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, getProviderIconUrl, type ModelChoice, type ModelType } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -234,32 +234,44 @@ function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (p
     if (next) setGenerationPlan(next);
 }
 
-function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
+function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark, agentModel }: {
     selectedModel: ModelType
     onSelect: (choice: ModelChoice) => void
     showMenu: boolean
     onToggleMenu: () => void
     onCloseMenu: () => void
     isDark: boolean
+    agentModel?: string | null
 }) {
     const current = getModelChoice(selectedModel)
+    const displayModel = agentModel || current.apiModel
+    const displayIcon = agentModel ? getProviderIconUrl(agentModel) : current.icon
+    const displayLabel = agentModel || current.label
 
     return (
         <div className="relative">
             <button
                 type="button"
                 onClick={onToggleMenu}
-                aria-label={`Select model (${current.label})`}
-                title={current.label}
+                aria-label={`Select model (${displayLabel})`}
+                title={displayLabel}
                 className={`flex h-8 items-center gap-1.5 rounded-lg px-2 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50'}`}
             >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                    src={current.icon}
-                    alt={current.iconAlt}
-                    className={`h-5 w-5 object-contain ${isDark ? 'brightness-150' : ''}`}
-                    draggable={false}
-                />
+                {displayIcon ? (
+                    <img
+                        src={displayIcon}
+                        alt={displayModel}
+                        className={`h-5 w-5 object-contain ${isDark ? 'brightness-150' : ''}`}
+                        draggable={false}
+                    />
+                ) : (
+                    <span className={`text-[13px] font-medium ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
+                        {displayModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
+                    </span>
+                )}
+                <span className={`text-[13px] font-medium ${isDark ? 'text-[#e8e8e8]' : 'text-gray-700'}`}>
+                    {displayModel}
+                </span>
                 <ChevronDown className={`h-3.5 w-3.5 ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`} />
             </button>
 
@@ -270,27 +282,33 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                         <div className="p-1.5">
                             {MODEL_CHOICES.map((choice) => {
                                 const isActive = choice.modelType === selectedModel
+                                const choiceIcon = getProviderIconUrl(choice.apiModel) || choice.icon
                                 return (
                                     <button
                                         key={choice.id}
                                         type="button"
                                         onClick={() => onSelect(choice)}
-                                        title={choice.label}
-                                        aria-label={choice.label}
+                                        title={choice.apiModel}
+                                        aria-label={choice.apiModel}
                                         className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 transition-colors ${
                                             isActive
                                                 ? isDark ? 'bg-[#26272a]' : 'bg-gray-50'
                                                 : isDark ? 'hover:bg-[#26272a]' : 'hover:bg-gray-50'
                                         }`}
                                     >
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
-                                            src={choice.icon}
-                                            alt={choice.iconAlt}
-                                            className={`h-7 w-7 shrink-0 object-contain ${isDark ? 'brightness-150' : ''}`}
-                                            draggable={false}
-                                        />
-                                        <span className={`text-[13px] ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>{choice.subtitle}</span>
+                                        {choiceIcon ? (
+                                            <img
+                                                src={choiceIcon}
+                                                alt={choice.apiModel}
+                                                className={`h-7 w-7 shrink-0 object-contain ${isDark ? 'brightness-150' : ''}`}
+                                                draggable={false}
+                                            />
+                                        ) : (
+                                            <span className={`text-[13px] font-medium ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
+                                                {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
+                                            </span>
+                                        )}
+                                        <span className={`text-[13px] ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>{choice.apiModel}</span>
                                     </button>
                                 )
                             })}
@@ -330,6 +348,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const showModelLearn = useStore(s => s.showModelLearn);
     const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
+    const [agentStatusModel, setAgentStatusModel] = useState<string | null>(null);
+    const [agentStatusProfile, setAgentStatusProfile] = useState<string | null>(null);
 
     // Live execution actions. Remote project-agent actions are also copied onto
     // the current assistant message so completed and background runs survive a
@@ -464,6 +484,38 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Fetch agent status to get real-time model info
+    useEffect(() => {
+        const hostProjectId = getHostProjectId();
+        if (!hostProjectId) return;
+
+        let cancelled = false;
+        const fetchStatus = async () => {
+            try {
+                const res = await fetch(`/api/projects/${encodeURIComponent(hostProjectId)}/agent/status`, {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (cancelled) return;
+                const model = typeof data?.agent_model?.model === 'string' ? data.agent_model.model : null;
+                const profile = typeof data?.agent_model?.profile === 'string' ? data.agent_model.profile : null;
+                if (model) setAgentStatusModel(model);
+                if (profile) setAgentStatusProfile(profile);
+            } catch {
+                // ignore agent status fetch errors
+            }
+        };
+
+        fetchStatus();
+        const interval = setInterval(fetchStatus, 30_000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, []);
 
     // Initialize base project when chat starts
     const projectInitializedRef = useRef<string | null>(null);
@@ -1646,7 +1698,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
-                modelProfile: getModelChoice(selectedModel).label,
+                modelProfile: agentStatusProfile || getModelChoice(selectedModel).label,
                 afterSession,
                 signal: controller.signal,
                 onEvent: applyEvent,
@@ -3305,6 +3357,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
                                     onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}
+                                    agentModel={agentStatusModel}
                                 />
 
                                 <div className="ml-auto flex items-center gap-1">

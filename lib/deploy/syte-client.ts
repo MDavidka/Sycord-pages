@@ -438,6 +438,19 @@ export async function sytePreviewStatus(uuid: string) {
   return syteWorkspaceRequest<SytePreviewFields>("GET", "preview_status", { query: { uuid } })
 }
 
+/**
+ * Fetch live agent runtime status + model.
+ * GET /sycord/api/agent_status?uuid=
+ * Docs: https://sycord.site/api/#agent/agent-status
+ */
+export async function syteAgentStatus(
+  uuid: string,
+): Promise<SyteResult<SyteAgentStatusResponse>> {
+  return syteSycordRequest<SyteAgentStatusResponse>("GET", "agent_status", {
+    query: { uuid },
+  })
+}
+
 /** Sync project pages into the Syte workspace (write_file per file). */
 export async function syteSyncProjectFiles(
   uuid: string,
