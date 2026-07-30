@@ -17,6 +17,7 @@ type Release = {
   title: string
   version: string
   image: string
+  body: string
   createdAt: string
 }
 
@@ -30,6 +31,7 @@ export default function ReleasesPage() {
   const [title, setTitle] = useState("")
   const [version, setVersion] = useState("")
   const [image, setImage] = useState("")
+  const [body, setBody] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
 
@@ -58,12 +60,13 @@ export default function ReleasesPage() {
       const res = await fetch("/api/releases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), version: version.trim(), image: image.trim() }),
+        body: JSON.stringify({ title: title.trim(), version: version.trim(), image: image.trim(), body: body.trim() }),
       })
       if (!res.ok) throw new Error("Failed")
       setTitle("")
       setVersion("")
       setImage("")
+      setBody("")
       setShowForm(false)
       await fetchReleases()
     } catch {
@@ -156,6 +159,16 @@ export default function ReleasesPage() {
                   className="h-11 w-full rounded-xl border border-[#2a2c30] bg-[#111213] px-4 text-sm text-white placeholder-[#3a3c40] outline-none focus:border-white/30"
                 />
               </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[#A7AAB0]">Release Notes</label>
+                <textarea
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                  placeholder="Describe the changes..."
+                  rows={4}
+                  className="w-full rounded-xl border border-[#2a2c30] bg-[#111213] px-4 py-3 text-sm text-white placeholder-[#3a3c40] outline-none focus:border-white/30 resize-none"
+                />
+              </div>
               {error && <p className="text-xs text-red-400">{error}</p>}
               <Button
                 type="submit"
@@ -199,28 +212,31 @@ export default function ReleasesPage() {
                       />
                     </div>
                   )}
-                  <CardHeader className="flex flex-row items-start justify-between pb-2">
-                    <div>
-                      <CardDescription className="text-xs font-mono tracking-wider text-[#7C6FF5]">
-                        {r.version}
-                      </CardDescription>
-                      <CardTitle className="mt-1 text-lg font-semibold text-white">{r.title}</CardTitle>
-                      <CardDescription className="mt-1 text-xs text-[#6B6F78]">
-                        {new Date(r.createdAt).toLocaleDateString("en-US", {
-                          year: "numeric", month: "long", day: "numeric",
-                        })}
-                      </CardDescription>
-                    </div>
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleDelete(r)}
-                        className="rounded-lg p-1.5 text-[#4B4F58] transition-colors hover:bg-red-500/10 hover:text-red-400"
-                        title="Delete release"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </CardHeader>
+                   <CardHeader className="flex flex-row items-start justify-between pb-2">
+                     <div>
+                       <CardDescription className="text-xs font-mono tracking-wider text-[#7C6FF5]">
+                         {r.version}
+                       </CardDescription>
+                       <CardTitle className="mt-1 text-lg font-semibold text-white">{r.title}</CardTitle>
+                       {r.body && (
+                         <p className="mt-2 text-sm text-white/60 leading-relaxed whitespace-pre-wrap">{r.body}</p>
+                       )}
+                       <CardDescription className="mt-1 text-xs text-[#6B6F78]">
+                         {new Date(r.createdAt).toLocaleDateString("en-US", {
+                           year: "numeric", month: "long", day: "numeric",
+                         })}
+                       </CardDescription>
+                     </div>
+                     {isAdmin && (
+                       <button
+                         onClick={() => handleDelete(r)}
+                         className="rounded-lg p-1.5 text-[#4B4F58] transition-colors hover:bg-red-500/10 hover:text-red-400"
+                         title="Delete release"
+                       >
+                         <Trash2 className="h-4 w-4" />
+                       </button>
+                     )}
+                   </CardHeader>
                   <CardContent />
                 </Card>
               )

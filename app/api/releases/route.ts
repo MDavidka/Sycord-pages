@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
-    const { title, version, image } = await req.json()
+    const { title, version, image, body } = await req.json()
     if (!title || !version) {
       return NextResponse.json({ error: "Title and version required" }, { status: 400 })
     }
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       title,
       version,
       image: image || "",
+      body: body || "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
