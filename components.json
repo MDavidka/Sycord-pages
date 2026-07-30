@@ -1,0 +1,2291 @@
+{
+  "schema": "shadcn-ui-ai-cheatsheet",
+  "schema_version": "1.0.0",
+  "generated_at": "2026-04-27T13:16:18Z",
+  "component_count": 57,
+  "scope": "57 core shadcn/ui components for AI UI generation",
+  "library": {
+    "name": "shadcn/ui",
+    "registry": "latest",
+    "cli": "shadcn@latest",
+    "package_manager_example": "pnpm dlx shadcn@latest add <component>",
+    "notes": [
+      "shadcn/ui components are copied into the project source; they do not have npm package versions per component.",
+      "This cheatsheet uses registry_version='latest' for each component.",
+      "Verify installed local component source if your registry is pinned or customized."
+    ]
+  },
+  "global_ai_rules": [
+    "Use only components listed in this cheatsheet unless project registry says otherwise.",
+    "Generate mobile-first layouts by default.",
+    "Use semantic Tailwind tokens instead of hard-coded colors.",
+    "For page JSON generators, do not output TSX inside JSON.",
+    "For interactions, use handler placeholders such as $handler.onSubmit.",
+    "For dynamic data, use state placeholders such as $state.items.",
+    "Prefer component composition over raw div/button/input when shadcn has a matching component.",
+    "Do not render global header/nav/footer inside page-body JSON if the scaffold already provides them."
+  ],
+  "components": [
+    {
+      "slug": "accordion",
+      "name": "Accordion",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add accordion",
+      "import_path": "@/components/ui/accordion",
+      "exports": [
+        "Accordion",
+        "AccordionItem",
+        "AccordionTrigger",
+        "AccordionContent"
+      ],
+      "variants_or_versions": [
+        "single",
+        "multiple",
+        "collapsible",
+        "defaultValue"
+      ],
+      "purpose": "Disclosure/FAQ sections.",
+      "ai_generation_rules": [
+        "Use Accordion for: Disclosure/FAQ sections.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Accordion",
+          "AccordionItem",
+          "AccordionTrigger",
+          "AccordionContent"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "Accordion > AccordionItem[value] > AccordionTrigger + AccordionContent."
+    },
+    {
+      "slug": "alert",
+      "name": "Alert",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add alert",
+      "import_path": "@/components/ui/alert",
+      "exports": [
+        "Alert",
+        "AlertTitle",
+        "AlertDescription"
+      ],
+      "variants_or_versions": [
+        "default",
+        "destructive"
+      ],
+      "purpose": "Inline status/callout message.",
+      "ai_generation_rules": [
+        "Use Alert for: Inline status/callout message.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Alert",
+          "AlertTitle",
+          "AlertDescription"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "alert-dialog",
+      "name": "Alert Dialog",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add alert-dialog",
+      "import_path": "@/components/ui/alert-dialog",
+      "exports": [
+        "AlertDialog",
+        "AlertDialogTrigger",
+        "AlertDialogContent",
+        "AlertDialogHeader",
+        "AlertDialogFooter",
+        "AlertDialogTitle",
+        "AlertDialogDescription",
+        "AlertDialogAction",
+        "AlertDialogCancel"
+      ],
+      "variants_or_versions": [
+        "default",
+        "sm",
+        "destructive action"
+      ],
+      "purpose": "Blocking confirmation dialog.",
+      "ai_generation_rules": [
+        "Use Alert Dialog for: Blocking confirmation dialog.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "AlertDialog",
+          "AlertDialogTrigger",
+          "AlertDialogContent",
+          "AlertDialogHeader",
+          "AlertDialogFooter",
+          "AlertDialogTitle",
+          "AlertDialogDescription",
+          "AlertDialogAction",
+          "AlertDialogCancel"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "AlertDialog > AlertDialogTrigger + AlertDialogContent > AlertDialogHeader + AlertDialogFooter."
+    },
+    {
+      "slug": "aspect-ratio",
+      "name": "Aspect Ratio",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add aspect-ratio",
+      "import_path": "@/components/ui/aspect-ratio",
+      "exports": [
+        "AspectRatio"
+      ],
+      "variants_or_versions": [
+        "ratio"
+      ],
+      "purpose": "Responsive media containers.",
+      "ai_generation_rules": [
+        "Use Aspect Ratio for: Responsive media containers.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "AspectRatio"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "avatar",
+      "name": "Avatar",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add avatar",
+      "import_path": "@/components/ui/avatar",
+      "exports": [
+        "Avatar",
+        "AvatarImage",
+        "AvatarFallback"
+      ],
+      "variants_or_versions": [
+        "image",
+        "fallback"
+      ],
+      "purpose": "User/customer identity image.",
+      "ai_generation_rules": [
+        "Use Avatar for: User/customer identity image.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Avatar",
+          "AvatarImage",
+          "AvatarFallback"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "badge",
+      "name": "Badge",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add badge",
+      "import_path": "@/components/ui/badge",
+      "exports": [
+        "Badge"
+      ],
+      "variants_or_versions": [
+        "default",
+        "secondary",
+        "destructive",
+        "outline"
+      ],
+      "purpose": "Small label/status/pill.",
+      "ai_generation_rules": [
+        "Use Badge for: Small label/status/pill.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Badge"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "breadcrumb",
+      "name": "Breadcrumb",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add breadcrumb",
+      "import_path": "@/components/ui/breadcrumb",
+      "exports": [
+        "Breadcrumb",
+        "BreadcrumbList",
+        "BreadcrumbItem",
+        "BreadcrumbLink",
+        "BreadcrumbPage",
+        "BreadcrumbSeparator",
+        "BreadcrumbEllipsis"
+      ],
+      "variants_or_versions": [
+        "links",
+        "current page",
+        "ellipsis"
+      ],
+      "purpose": "Hierarchical navigation path.",
+      "ai_generation_rules": [
+        "Use Breadcrumb for: Hierarchical navigation path.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Breadcrumb",
+          "BreadcrumbList",
+          "BreadcrumbItem",
+          "BreadcrumbLink",
+          "BreadcrumbPage",
+          "BreadcrumbSeparator",
+          "BreadcrumbEllipsis"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "button",
+      "name": "Button",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add button",
+      "import_path": "@/components/ui/button",
+      "exports": [
+        "Button",
+        "buttonVariants"
+      ],
+      "variants_or_versions": [
+        "default",
+        "destructive",
+        "outline",
+        "secondary",
+        "ghost",
+        "link",
+        "sm",
+        "default size",
+        "lg",
+        "icon"
+      ],
+      "purpose": "Primary and secondary actions.",
+      "ai_generation_rules": [
+        "Use Button for: Primary and secondary actions.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Button",
+          "buttonVariants"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "common_props": {
+        "variant": [
+          "default",
+          "destructive",
+          "outline",
+          "secondary",
+          "ghost",
+          "link"
+        ],
+        "size": [
+          "default",
+          "sm",
+          "lg",
+          "icon"
+        ],
+        "asChild": "Use when wrapping Link or anchor."
+      }
+    },
+    {
+      "slug": "calendar",
+      "name": "Calendar",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add calendar",
+      "import_path": "@/components/ui/calendar",
+      "exports": [
+        "Calendar"
+      ],
+      "variants_or_versions": [
+        "single",
+        "multiple",
+        "range"
+      ],
+      "purpose": "Date selection UI.",
+      "ai_generation_rules": [
+        "Use Calendar for: Date selection UI.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Calendar"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "card",
+      "name": "Card",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add card",
+      "import_path": "@/components/ui/card",
+      "exports": [
+        "Card",
+        "CardHeader",
+        "CardTitle",
+        "CardDescription",
+        "CardContent",
+        "CardFooter",
+        "CardAction"
+      ],
+      "variants_or_versions": [
+        "default",
+        "compact",
+        "interactive via className"
+      ],
+      "purpose": "Grouped content blocks.",
+      "ai_generation_rules": [
+        "Use Card for: Grouped content blocks.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Card",
+          "CardHeader",
+          "CardTitle",
+          "CardDescription",
+          "CardContent",
+          "CardFooter",
+          "CardAction"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "Card > CardHeader > CardTitle + CardDescription; CardContent; optional CardFooter/CardAction."
+    },
+    {
+      "slug": "carousel",
+      "name": "Carousel",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add carousel",
+      "import_path": "@/components/ui/carousel",
+      "exports": [
+        "Carousel",
+        "CarouselContent",
+        "CarouselItem",
+        "CarouselPrevious",
+        "CarouselNext"
+      ],
+      "variants_or_versions": [
+        "horizontal",
+        "vertical",
+        "plugins"
+      ],
+      "purpose": "Scrollable/slide content.",
+      "ai_generation_rules": [
+        "Use Carousel for: Scrollable/slide content.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Carousel",
+          "CarouselContent",
+          "CarouselItem",
+          "CarouselPrevious",
+          "CarouselNext"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "chart",
+      "name": "Chart",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add chart",
+      "import_path": "@/components/ui/chart",
+      "exports": [
+        "ChartContainer",
+        "ChartTooltip",
+        "ChartTooltipContent",
+        "ChartLegend",
+        "ChartLegendContent",
+        "ChartStyle"
+      ],
+      "variants_or_versions": [
+        "line",
+        "bar",
+        "area",
+        "pie",
+        "radar via recharts"
+      ],
+      "purpose": "Data visualization wrapper.",
+      "ai_generation_rules": [
+        "Use Chart for: Data visualization wrapper.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use for structured data only; avoid fake placeholder charts/tables without meaningful rows."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "ChartContainer",
+          "ChartTooltip",
+          "ChartTooltipContent",
+          "ChartLegend",
+          "ChartLegendContent",
+          "ChartStyle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "checkbox",
+      "name": "Checkbox",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add checkbox",
+      "import_path": "@/components/ui/checkbox",
+      "exports": [
+        "Checkbox"
+      ],
+      "variants_or_versions": [
+        "checked",
+        "unchecked",
+        "disabled"
+      ],
+      "purpose": "Boolean input.",
+      "ai_generation_rules": [
+        "Use Checkbox for: Boolean input.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Checkbox"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "collapsible",
+      "name": "Collapsible",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add collapsible",
+      "import_path": "@/components/ui/collapsible",
+      "exports": [
+        "Collapsible",
+        "CollapsibleTrigger",
+        "CollapsibleContent"
+      ],
+      "variants_or_versions": [
+        "open",
+        "closed"
+      ],
+      "purpose": "Expandable section.",
+      "ai_generation_rules": [
+        "Use Collapsible for: Expandable section.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Collapsible",
+          "CollapsibleTrigger",
+          "CollapsibleContent"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "combobox",
+      "name": "Combobox",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add combobox",
+      "import_path": "@/components/ui/combobox",
+      "exports": [
+        "Command",
+        "CommandInput",
+        "CommandList",
+        "CommandItem",
+        "Popover"
+      ],
+      "variants_or_versions": [
+        "single select",
+        "searchable"
+      ],
+      "purpose": "Searchable select pattern.",
+      "ai_generation_rules": [
+        "Use Combobox for: Searchable select pattern.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Command",
+          "CommandInput",
+          "CommandList",
+          "CommandItem",
+          "Popover"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "command",
+      "name": "Command",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add command",
+      "import_path": "@/components/ui/command",
+      "exports": [
+        "Command",
+        "CommandDialog",
+        "CommandInput",
+        "CommandList",
+        "CommandEmpty",
+        "CommandGroup",
+        "CommandItem",
+        "CommandShortcut",
+        "CommandSeparator"
+      ],
+      "variants_or_versions": [
+        "dialog",
+        "inline"
+      ],
+      "purpose": "Command palette/search menu.",
+      "ai_generation_rules": [
+        "Use Command for: Command palette/search menu.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Command",
+          "CommandDialog",
+          "CommandInput",
+          "CommandList",
+          "CommandEmpty",
+          "CommandGroup",
+          "CommandItem",
+          "CommandShortcut",
+          "CommandSeparator"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "context-menu",
+      "name": "Context Menu",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add context-menu",
+      "import_path": "@/components/ui/context-menu",
+      "exports": [
+        "ContextMenu",
+        "ContextMenuTrigger",
+        "ContextMenuContent",
+        "ContextMenuItem",
+        "ContextMenuCheckboxItem",
+        "ContextMenuRadioItem",
+        "ContextMenuLabel",
+        "ContextMenuSeparator",
+        "ContextMenuShortcut",
+        "ContextMenuGroup",
+        "ContextMenuSub",
+        "ContextMenuSubTrigger",
+        "ContextMenuSubContent",
+        "ContextMenuRadioGroup"
+      ],
+      "variants_or_versions": [
+        "item",
+        "checkbox",
+        "radio",
+        "sub menu"
+      ],
+      "purpose": "Right-click/context actions.",
+      "ai_generation_rules": [
+        "Use Context Menu for: Right-click/context actions.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "ContextMenu",
+          "ContextMenuTrigger",
+          "ContextMenuContent",
+          "ContextMenuItem",
+          "ContextMenuCheckboxItem",
+          "ContextMenuRadioItem",
+          "ContextMenuLabel",
+          "ContextMenuSeparator",
+          "ContextMenuShortcut",
+          "ContextMenuGroup",
+          "ContextMenuSub",
+          "ContextMenuSubTrigger",
+          "ContextMenuSubContent",
+          "ContextMenuRadioGroup"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "data-table",
+      "name": "Data Table",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add data-table",
+      "import_path": "@/components/ui/data-table",
+      "exports": [
+        "Table",
+        "TableHeader",
+        "TableBody",
+        "TableRow",
+        "TableHead",
+        "TableCell"
+      ],
+      "variants_or_versions": [
+        "sorting",
+        "filtering",
+        "pagination with tanstack table"
+      ],
+      "purpose": "Complex data table pattern.",
+      "ai_generation_rules": [
+        "Use Data Table for: Complex data table pattern.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use for structured data only; avoid fake placeholder charts/tables without meaningful rows."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Table",
+          "TableHeader",
+          "TableBody",
+          "TableRow",
+          "TableHead",
+          "TableCell"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "date-picker",
+      "name": "Date Picker",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add date-picker",
+      "import_path": "@/components/ui/date-picker",
+      "exports": [
+        "Popover",
+        "Calendar",
+        "Button"
+      ],
+      "variants_or_versions": [
+        "single",
+        "range",
+        "form field"
+      ],
+      "purpose": "Date picking composition.",
+      "ai_generation_rules": [
+        "Use Date Picker for: Date picking composition.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Popover",
+          "Calendar",
+          "Button"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "dialog",
+      "name": "Dialog",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add dialog",
+      "import_path": "@/components/ui/dialog",
+      "exports": [
+        "Dialog",
+        "DialogTrigger",
+        "DialogContent",
+        "DialogHeader",
+        "DialogFooter",
+        "DialogTitle",
+        "DialogDescription",
+        "DialogClose"
+      ],
+      "variants_or_versions": [
+        "default",
+        "sm via className"
+      ],
+      "purpose": "Modal dialog.",
+      "ai_generation_rules": [
+        "Use Dialog for: Modal dialog.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Dialog",
+          "DialogTrigger",
+          "DialogContent",
+          "DialogHeader",
+          "DialogFooter",
+          "DialogTitle",
+          "DialogDescription",
+          "DialogClose"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "Dialog > DialogTrigger + DialogContent > DialogHeader + DialogFooter."
+    },
+    {
+      "slug": "drawer",
+      "name": "Drawer",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add drawer",
+      "import_path": "@/components/ui/drawer",
+      "exports": [
+        "Drawer",
+        "DrawerTrigger",
+        "DrawerContent",
+        "DrawerHeader",
+        "DrawerFooter",
+        "DrawerTitle",
+        "DrawerDescription",
+        "DrawerClose"
+      ],
+      "variants_or_versions": [
+        "bottom",
+        "nested",
+        "responsive dialog replacement"
+      ],
+      "purpose": "Mobile drawer/sheet-like panel.",
+      "ai_generation_rules": [
+        "Use Drawer for: Mobile drawer/sheet-like panel.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Drawer",
+          "DrawerTrigger",
+          "DrawerContent",
+          "DrawerHeader",
+          "DrawerFooter",
+          "DrawerTitle",
+          "DrawerDescription",
+          "DrawerClose"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "dropdown-menu",
+      "name": "Dropdown Menu",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add dropdown-menu",
+      "import_path": "@/components/ui/dropdown-menu",
+      "exports": [
+        "DropdownMenu",
+        "DropdownMenuTrigger",
+        "DropdownMenuContent",
+        "DropdownMenuItem",
+        "DropdownMenuCheckboxItem",
+        "DropdownMenuRadioItem",
+        "DropdownMenuLabel",
+        "DropdownMenuSeparator",
+        "DropdownMenuShortcut",
+        "DropdownMenuGroup",
+        "DropdownMenuPortal",
+        "DropdownMenuSub",
+        "DropdownMenuSubContent",
+        "DropdownMenuSubTrigger",
+        "DropdownMenuRadioGroup"
+      ],
+      "variants_or_versions": [
+        "item",
+        "checkbox",
+        "radio",
+        "sub menu"
+      ],
+      "purpose": "Button-triggered menu.",
+      "ai_generation_rules": [
+        "Use Dropdown Menu for: Button-triggered menu.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "DropdownMenu",
+          "DropdownMenuTrigger",
+          "DropdownMenuContent",
+          "DropdownMenuItem",
+          "DropdownMenuCheckboxItem",
+          "DropdownMenuRadioItem",
+          "DropdownMenuLabel",
+          "DropdownMenuSeparator",
+          "DropdownMenuShortcut",
+          "DropdownMenuGroup",
+          "DropdownMenuPortal",
+          "DropdownMenuSub",
+          "DropdownMenuSubContent",
+          "DropdownMenuSubTrigger",
+          "DropdownMenuRadioGroup"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "DropdownMenu > DropdownMenuTrigger + DropdownMenuContent > DropdownMenuItem/Group/Sub."
+    },
+    {
+      "slug": "form",
+      "name": "Form",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add form",
+      "import_path": "@/components/ui/form",
+      "exports": [
+        "Form",
+        "FormField",
+        "FormItem",
+        "FormLabel",
+        "FormControl",
+        "FormDescription",
+        "FormMessage"
+      ],
+      "variants_or_versions": [
+        "react-hook-form",
+        "zod"
+      ],
+      "purpose": "Validated form composition.",
+      "ai_generation_rules": [
+        "Use Form for: Validated form composition.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Form",
+          "FormField",
+          "FormItem",
+          "FormLabel",
+          "FormControl",
+          "FormDescription",
+          "FormMessage"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "Form > form > FormField > FormItem > FormLabel + FormControl + FormDescription + FormMessage."
+    },
+    {
+      "slug": "hover-card",
+      "name": "Hover Card",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add hover-card",
+      "import_path": "@/components/ui/hover-card",
+      "exports": [
+        "HoverCard",
+        "HoverCardTrigger",
+        "HoverCardContent"
+      ],
+      "variants_or_versions": [
+        "default",
+        "open delay"
+      ],
+      "purpose": "Hover preview card.",
+      "ai_generation_rules": [
+        "Use Hover Card for: Hover preview card.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "HoverCard",
+          "HoverCardTrigger",
+          "HoverCardContent"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "input",
+      "name": "Input",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add input",
+      "import_path": "@/components/ui/input",
+      "exports": [
+        "Input"
+      ],
+      "variants_or_versions": [
+        "text",
+        "email",
+        "password",
+        "search",
+        "file",
+        "disabled"
+      ],
+      "purpose": "Text input.",
+      "ai_generation_rules": [
+        "Use Input for: Text input.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Input"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "input-otp",
+      "name": "Input Otp",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add input-otp",
+      "import_path": "@/components/ui/input-otp",
+      "exports": [
+        "InputOTP",
+        "InputOTPGroup",
+        "InputOTPSlot",
+        "InputOTPSeparator"
+      ],
+      "variants_or_versions": [
+        "numeric",
+        "groups",
+        "separator"
+      ],
+      "purpose": "One-time password input.",
+      "ai_generation_rules": [
+        "Use Input Otp for: One-time password input.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "InputOTP",
+          "InputOTPGroup",
+          "InputOTPSlot",
+          "InputOTPSeparator"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "label",
+      "name": "Label",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add label",
+      "import_path": "@/components/ui/label",
+      "exports": [
+        "Label"
+      ],
+      "variants_or_versions": [
+        "default",
+        "disabled state via peer"
+      ],
+      "purpose": "Accessible form label.",
+      "ai_generation_rules": [
+        "Use Label for: Accessible form label.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Label"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "menubar",
+      "name": "Menubar",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add menubar",
+      "import_path": "@/components/ui/menubar",
+      "exports": [
+        "Menubar",
+        "MenubarMenu",
+        "MenubarTrigger",
+        "MenubarContent",
+        "MenubarItem",
+        "MenubarSeparator",
+        "MenubarLabel",
+        "MenubarCheckboxItem",
+        "MenubarRadioGroup",
+        "MenubarRadioItem",
+        "MenubarPortal",
+        "MenubarSub",
+        "MenubarSubContent",
+        "MenubarSubTrigger",
+        "MenubarShortcut"
+      ],
+      "variants_or_versions": [
+        "menu",
+        "sub menu",
+        "checkbox",
+        "radio"
+      ],
+      "purpose": "Desktop app-style menu bar.",
+      "ai_generation_rules": [
+        "Use Menubar for: Desktop app-style menu bar.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Menubar",
+          "MenubarMenu",
+          "MenubarTrigger",
+          "MenubarContent",
+          "MenubarItem",
+          "MenubarSeparator",
+          "MenubarLabel",
+          "MenubarCheckboxItem",
+          "MenubarRadioGroup",
+          "MenubarRadioItem",
+          "MenubarPortal",
+          "MenubarSub",
+          "MenubarSubContent",
+          "MenubarSubTrigger",
+          "MenubarShortcut"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "navigation-menu",
+      "name": "Navigation Menu",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add navigation-menu",
+      "import_path": "@/components/ui/navigation-menu",
+      "exports": [
+        "NavigationMenu",
+        "NavigationMenuList",
+        "NavigationMenuItem",
+        "NavigationMenuContent",
+        "NavigationMenuTrigger",
+        "NavigationMenuLink",
+        "NavigationMenuIndicator",
+        "NavigationMenuViewport",
+        "navigationMenuTriggerStyle"
+      ],
+      "variants_or_versions": [
+        "link",
+        "dropdown",
+        "mega menu"
+      ],
+      "purpose": "Top-level navigation.",
+      "ai_generation_rules": [
+        "Use Navigation Menu for: Top-level navigation.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "NavigationMenu",
+          "NavigationMenuList",
+          "NavigationMenuItem",
+          "NavigationMenuContent",
+          "NavigationMenuTrigger",
+          "NavigationMenuLink",
+          "NavigationMenuIndicator",
+          "NavigationMenuViewport",
+          "navigationMenuTriggerStyle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "NavigationMenu > NavigationMenuList > NavigationMenuItem > NavigationMenuTrigger/Link + NavigationMenuContent."
+    },
+    {
+      "slug": "pagination",
+      "name": "Pagination",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add pagination",
+      "import_path": "@/components/ui/pagination",
+      "exports": [
+        "Pagination",
+        "PaginationContent",
+        "PaginationEllipsis",
+        "PaginationItem",
+        "PaginationLink",
+        "PaginationNext",
+        "PaginationPrevious"
+      ],
+      "variants_or_versions": [
+        "default",
+        "active",
+        "ellipsis"
+      ],
+      "purpose": "Page navigation.",
+      "ai_generation_rules": [
+        "Use Pagination for: Page navigation.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Pagination",
+          "PaginationContent",
+          "PaginationEllipsis",
+          "PaginationItem",
+          "PaginationLink",
+          "PaginationNext",
+          "PaginationPrevious"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "popover",
+      "name": "Popover",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add popover",
+      "import_path": "@/components/ui/popover",
+      "exports": [
+        "Popover",
+        "PopoverTrigger",
+        "PopoverContent",
+        "PopoverAnchor"
+      ],
+      "variants_or_versions": [
+        "default",
+        "modal"
+      ],
+      "purpose": "Floating content anchored to trigger.",
+      "ai_generation_rules": [
+        "Use Popover for: Floating content anchored to trigger.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Popover",
+          "PopoverTrigger",
+          "PopoverContent",
+          "PopoverAnchor"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "progress",
+      "name": "Progress",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add progress",
+      "import_path": "@/components/ui/progress",
+      "exports": [
+        "Progress"
+      ],
+      "variants_or_versions": [
+        "0-100 value",
+        "indeterminate via custom"
+      ],
+      "purpose": "Progress bar.",
+      "ai_generation_rules": [
+        "Use Progress for: Progress bar.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Progress"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "radio-group",
+      "name": "Radio Group",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add radio-group",
+      "import_path": "@/components/ui/radio-group",
+      "exports": [
+        "RadioGroup",
+        "RadioGroupItem"
+      ],
+      "variants_or_versions": [
+        "single option",
+        "disabled"
+      ],
+      "purpose": "Pick one option.",
+      "ai_generation_rules": [
+        "Use Radio Group for: Pick one option.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "RadioGroup",
+          "RadioGroupItem"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "resizable",
+      "name": "Resizable",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add resizable",
+      "import_path": "@/components/ui/resizable",
+      "exports": [
+        "ResizablePanelGroup",
+        "ResizablePanel",
+        "ResizableHandle"
+      ],
+      "variants_or_versions": [
+        "horizontal",
+        "vertical",
+        "with handle"
+      ],
+      "purpose": "Resizable panels.",
+      "ai_generation_rules": [
+        "Use Resizable for: Resizable panels.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "ResizablePanelGroup",
+          "ResizablePanel",
+          "ResizableHandle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "scroll-area",
+      "name": "Scroll Area",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add scroll-area",
+      "import_path": "@/components/ui/scroll-area",
+      "exports": [
+        "ScrollArea",
+        "ScrollBar"
+      ],
+      "variants_or_versions": [
+        "vertical",
+        "horizontal"
+      ],
+      "purpose": "Custom scrollable area.",
+      "ai_generation_rules": [
+        "Use Scroll Area for: Custom scrollable area.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "ScrollArea",
+          "ScrollBar"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "select",
+      "name": "Select",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add select",
+      "import_path": "@/components/ui/select",
+      "exports": [
+        "Select",
+        "SelectGroup",
+        "SelectValue",
+        "SelectTrigger",
+        "SelectContent",
+        "SelectLabel",
+        "SelectItem",
+        "SelectSeparator",
+        "SelectScrollUpButton",
+        "SelectScrollDownButton"
+      ],
+      "variants_or_versions": [
+        "single select",
+        "groups"
+      ],
+      "purpose": "Select dropdown.",
+      "ai_generation_rules": [
+        "Use Select for: Select dropdown.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Select",
+          "SelectGroup",
+          "SelectValue",
+          "SelectTrigger",
+          "SelectContent",
+          "SelectLabel",
+          "SelectItem",
+          "SelectSeparator",
+          "SelectScrollUpButton",
+          "SelectScrollDownButton"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "separator",
+      "name": "Separator",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add separator",
+      "import_path": "@/components/ui/separator",
+      "exports": [
+        "Separator"
+      ],
+      "variants_or_versions": [
+        "horizontal",
+        "vertical",
+        "decorative"
+      ],
+      "purpose": "Visual divider.",
+      "ai_generation_rules": [
+        "Use Separator for: Visual divider.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Separator"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "sheet",
+      "name": "Sheet",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add sheet",
+      "import_path": "@/components/ui/sheet",
+      "exports": [
+        "Sheet",
+        "SheetTrigger",
+        "SheetContent",
+        "SheetHeader",
+        "SheetFooter",
+        "SheetTitle",
+        "SheetDescription",
+        "SheetClose"
+      ],
+      "variants_or_versions": [
+        "top",
+        "right",
+        "bottom",
+        "left"
+      ],
+      "purpose": "Side panel / mobile nav.",
+      "ai_generation_rules": [
+        "Use Sheet for: Side panel / mobile nav.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility.",
+        "For mobile navigation, prefer SheetContent className=\"w-full max-w-none sm:w-80 sm:max-w-sm\"."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Sheet",
+          "SheetTrigger",
+          "SheetContent",
+          "SheetHeader",
+          "SheetFooter",
+          "SheetTitle",
+          "SheetDescription",
+          "SheetClose"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "common_props": {
+        "side": [
+          "top",
+          "right",
+          "bottom",
+          "left"
+        ],
+        "modal": "boolean"
+      }
+    },
+    {
+      "slug": "sidebar",
+      "name": "Sidebar",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add sidebar",
+      "import_path": "@/components/ui/sidebar",
+      "exports": [
+        "Sidebar",
+        "SidebarContent",
+        "SidebarFooter",
+        "SidebarGroup",
+        "SidebarGroupAction",
+        "SidebarGroupContent",
+        "SidebarGroupLabel",
+        "SidebarHeader",
+        "SidebarInput",
+        "SidebarInset",
+        "SidebarMenu",
+        "SidebarMenuAction",
+        "SidebarMenuBadge",
+        "SidebarMenuButton",
+        "SidebarMenuItem",
+        "SidebarMenuSkeleton",
+        "SidebarMenuSub",
+        "SidebarMenuSubButton",
+        "SidebarMenuSubItem",
+        "SidebarProvider",
+        "SidebarRail",
+        "SidebarSeparator",
+        "SidebarTrigger"
+      ],
+      "variants_or_versions": [
+        "inset",
+        "floating",
+        "collapsible",
+        "icon"
+      ],
+      "purpose": "App sidebar/layout shell.",
+      "ai_generation_rules": [
+        "Use Sidebar for: App sidebar/layout shell.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Sidebar",
+          "SidebarContent",
+          "SidebarFooter",
+          "SidebarGroup",
+          "SidebarGroupAction",
+          "SidebarGroupContent",
+          "SidebarGroupLabel",
+          "SidebarHeader",
+          "SidebarInput",
+          "SidebarInset",
+          "SidebarMenu",
+          "SidebarMenuAction",
+          "SidebarMenuBadge",
+          "SidebarMenuButton",
+          "SidebarMenuItem",
+          "SidebarMenuSkeleton",
+          "SidebarMenuSub",
+          "SidebarMenuSubButton",
+          "SidebarMenuSubItem",
+          "SidebarProvider",
+          "SidebarRail",
+          "SidebarSeparator",
+          "SidebarTrigger"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "SidebarProvider > Sidebar + SidebarInset; Sidebar contains Header/Content/Footer and SidebarMenu items."
+    },
+    {
+      "slug": "skeleton",
+      "name": "Skeleton",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add skeleton",
+      "import_path": "@/components/ui/skeleton",
+      "exports": [
+        "Skeleton"
+      ],
+      "variants_or_versions": [
+        "text",
+        "card",
+        "avatar via className"
+      ],
+      "purpose": "Loading placeholder.",
+      "ai_generation_rules": [
+        "Use Skeleton for: Loading placeholder.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Skeleton"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "slider",
+      "name": "Slider",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add slider",
+      "import_path": "@/components/ui/slider",
+      "exports": [
+        "Slider"
+      ],
+      "variants_or_versions": [
+        "single",
+        "range"
+      ],
+      "purpose": "Numeric slider.",
+      "ai_generation_rules": [
+        "Use Slider for: Numeric slider.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Slider"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "sonner",
+      "name": "Sonner",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add sonner",
+      "import_path": "@/components/ui/sonner",
+      "exports": [
+        "Toaster",
+        "toast"
+      ],
+      "variants_or_versions": [
+        "success",
+        "error",
+        "warning",
+        "info",
+        "action"
+      ],
+      "purpose": "Toast notifications.",
+      "ai_generation_rules": [
+        "Use Sonner for: Toast notifications.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Toaster",
+          "toast"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "switch",
+      "name": "Switch",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add switch",
+      "import_path": "@/components/ui/switch",
+      "exports": [
+        "Switch"
+      ],
+      "variants_or_versions": [
+        "checked",
+        "unchecked",
+        "disabled"
+      ],
+      "purpose": "On/off toggle.",
+      "ai_generation_rules": [
+        "Use Switch for: On/off toggle.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Switch"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "table",
+      "name": "Table",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add table",
+      "import_path": "@/components/ui/table",
+      "exports": [
+        "Table",
+        "TableHeader",
+        "TableBody",
+        "TableFooter",
+        "TableHead",
+        "TableRow",
+        "TableCell",
+        "TableCaption"
+      ],
+      "variants_or_versions": [
+        "basic",
+        "responsive wrapper"
+      ],
+      "purpose": "Simple tables.",
+      "ai_generation_rules": [
+        "Use Table for: Simple tables.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use for structured data only; avoid fake placeholder charts/tables without meaningful rows."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Table",
+          "TableHeader",
+          "TableBody",
+          "TableFooter",
+          "TableHead",
+          "TableRow",
+          "TableCell",
+          "TableCaption"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "Table > TableHeader/TableBody > TableRow > TableHead/TableCell."
+    },
+    {
+      "slug": "tabs",
+      "name": "Tabs",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add tabs",
+      "import_path": "@/components/ui/tabs",
+      "exports": [
+        "Tabs",
+        "TabsList",
+        "TabsTrigger",
+        "TabsContent"
+      ],
+      "variants_or_versions": [
+        "default",
+        "controlled",
+        "vertical via className"
+      ],
+      "purpose": "Tabbed content.",
+      "ai_generation_rules": [
+        "Use Tabs for: Tabbed content.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Tabs",
+          "TabsList",
+          "TabsTrigger",
+          "TabsContent"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "Tabs > TabsList > TabsTrigger; TabsContent for each trigger value."
+    },
+    {
+      "slug": "textarea",
+      "name": "Textarea",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add textarea",
+      "import_path": "@/components/ui/textarea",
+      "exports": [
+        "Textarea"
+      ],
+      "variants_or_versions": [
+        "default",
+        "disabled"
+      ],
+      "purpose": "Multi-line text input.",
+      "ai_generation_rules": [
+        "Use Textarea for: Multi-line text input.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Textarea"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "toast",
+      "name": "Toast",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add toast",
+      "import_path": "@/components/ui/toast",
+      "exports": [
+        "Toast",
+        "ToastAction",
+        "ToastClose",
+        "ToastDescription",
+        "ToastProvider",
+        "ToastTitle",
+        "ToastViewport",
+        "useToast",
+        "toast"
+      ],
+      "variants_or_versions": [
+        "default",
+        "destructive"
+      ],
+      "purpose": "Legacy toast system.",
+      "ai_generation_rules": [
+        "Use Toast for: Legacy toast system.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Toast",
+          "ToastAction",
+          "ToastClose",
+          "ToastDescription",
+          "ToastProvider",
+          "ToastTitle",
+          "ToastViewport",
+          "useToast",
+          "toast"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "toggle",
+      "name": "Toggle",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add toggle",
+      "import_path": "@/components/ui/toggle",
+      "exports": [
+        "Toggle"
+      ],
+      "variants_or_versions": [
+        "default",
+        "outline",
+        "sm",
+        "default size",
+        "lg"
+      ],
+      "purpose": "Two-state button.",
+      "ai_generation_rules": [
+        "Use Toggle for: Two-state button.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Toggle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "toggle-group",
+      "name": "Toggle Group",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add toggle-group",
+      "import_path": "@/components/ui/toggle-group",
+      "exports": [
+        "ToggleGroup",
+        "ToggleGroupItem"
+      ],
+      "variants_or_versions": [
+        "single",
+        "multiple",
+        "default",
+        "outline",
+        "sm",
+        "lg"
+      ],
+      "purpose": "Grouped toggles.",
+      "ai_generation_rules": [
+        "Use Toggle Group for: Grouped toggles.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "ToggleGroup",
+          "ToggleGroupItem"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "tooltip",
+      "name": "Tooltip",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add tooltip",
+      "import_path": "@/components/ui/tooltip",
+      "exports": [
+        "Tooltip",
+        "TooltipContent",
+        "TooltipProvider",
+        "TooltipTrigger"
+      ],
+      "variants_or_versions": [
+        "default",
+        "delay"
+      ],
+      "purpose": "Small hover/focus hint.",
+      "ai_generation_rules": [
+        "Use Tooltip for: Small hover/focus hint.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Use trigger/content composition and ensure keyboard accessibility."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Tooltip",
+          "TooltipContent",
+          "TooltipProvider",
+          "TooltipTrigger"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "typography",
+      "name": "Typography",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add typography",
+      "import_path": "@/components/ui/typography",
+      "exports": [
+        "Typography styles"
+      ],
+      "variants_or_versions": [
+        "h1",
+        "h2",
+        "h3",
+        "p",
+        "blockquote",
+        "table",
+        "list",
+        "code"
+      ],
+      "purpose": "Prose and text hierarchy.",
+      "ai_generation_rules": [
+        "Use Typography for: Prose and text hierarchy.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Typography styles"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "field",
+      "name": "Field",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add field",
+      "import_path": "@/components/ui/field",
+      "exports": [
+        "Field",
+        "FieldContent",
+        "FieldDescription",
+        "FieldError",
+        "FieldGroup",
+        "FieldLabel",
+        "FieldLegend",
+        "FieldSeparator",
+        "FieldSet",
+        "FieldTitle"
+      ],
+      "variants_or_versions": [
+        "default",
+        "error",
+        "orientation"
+      ],
+      "purpose": "Modern form field layout.",
+      "ai_generation_rules": [
+        "Use Field for: Modern form field layout.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Field",
+          "FieldContent",
+          "FieldDescription",
+          "FieldError",
+          "FieldGroup",
+          "FieldLabel",
+          "FieldLegend",
+          "FieldSeparator",
+          "FieldSet",
+          "FieldTitle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      },
+      "composition": "FieldGroup > Field > FieldLabel + control + FieldDescription + FieldError."
+    },
+    {
+      "slug": "input-group",
+      "name": "Input Group",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add input-group",
+      "import_path": "@/components/ui/input-group",
+      "exports": [
+        "InputGroup",
+        "InputGroupAddon",
+        "InputGroupButton",
+        "InputGroupInput",
+        "InputGroupText",
+        "InputGroupTextarea"
+      ],
+      "variants_or_versions": [
+        "text addon",
+        "button addon",
+        "textarea"
+      ],
+      "purpose": "Input with prefix/suffix/actions.",
+      "ai_generation_rules": [
+        "Use Input Group for: Input with prefix/suffix/actions.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component.",
+        "Always provide accessible labels/descriptions for form controls."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "InputGroup",
+          "InputGroupAddon",
+          "InputGroupButton",
+          "InputGroupInput",
+          "InputGroupText",
+          "InputGroupTextarea"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "item",
+      "name": "Item",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add item",
+      "import_path": "@/components/ui/item",
+      "exports": [
+        "Item",
+        "ItemActions",
+        "ItemContent",
+        "ItemDescription",
+        "ItemFooter",
+        "ItemGroup",
+        "ItemHeader",
+        "ItemMedia",
+        "ItemTitle"
+      ],
+      "variants_or_versions": [
+        "default",
+        "card-like",
+        "list rows"
+      ],
+      "purpose": "List items/records.",
+      "ai_generation_rules": [
+        "Use Item for: List items/records.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Item",
+          "ItemActions",
+          "ItemContent",
+          "ItemDescription",
+          "ItemFooter",
+          "ItemGroup",
+          "ItemHeader",
+          "ItemMedia",
+          "ItemTitle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "empty",
+      "name": "Empty",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add empty",
+      "import_path": "@/components/ui/empty",
+      "exports": [
+        "Empty",
+        "EmptyContent",
+        "EmptyDescription",
+        "EmptyHeader",
+        "EmptyMedia",
+        "EmptyTitle"
+      ],
+      "variants_or_versions": [
+        "default",
+        "with media",
+        "with actions"
+      ],
+      "purpose": "Empty state.",
+      "ai_generation_rules": [
+        "Use Empty for: Empty state.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Empty",
+          "EmptyContent",
+          "EmptyDescription",
+          "EmptyHeader",
+          "EmptyMedia",
+          "EmptyTitle"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "kbd",
+      "name": "Kbd",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add kbd",
+      "import_path": "@/components/ui/kbd",
+      "exports": [
+        "Kbd",
+        "KbdGroup"
+      ],
+      "variants_or_versions": [
+        "single",
+        "combo"
+      ],
+      "purpose": "Keyboard shortcut display.",
+      "ai_generation_rules": [
+        "Use Kbd for: Keyboard shortcut display.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Kbd",
+          "KbdGroup"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    },
+    {
+      "slug": "spinner",
+      "name": "Spinner",
+      "registry_version": "latest",
+      "cli_add": "pnpm dlx shadcn@latest add spinner",
+      "import_path": "@/components/ui/spinner",
+      "exports": [
+        "Spinner"
+      ],
+      "variants_or_versions": [
+        "default",
+        "sm",
+        "lg via className"
+      ],
+      "purpose": "Loading spinner.",
+      "ai_generation_rules": [
+        "Use Spinner for: Loading spinner.",
+        "Prefer shadcn composition exports over custom HTML when an equivalent component exists.",
+        "Use semantic Tailwind tokens: bg-background, text-foreground, bg-card, text-muted-foreground, border-border, bg-primary, text-primary-foreground.",
+        "Keep layout mobile-first: base classes for mobile, then sm:/md:/lg: enhancements.",
+        "Do not invent exports that are not listed for this component."
+      ],
+      "json_generator_hint": {
+        "node_name_options": [
+          "Spinner"
+        ],
+        "props_style": "Use props object only; event handlers must be strings like \"$handler.onSubmit\"; state values must be strings like \"$state.items\".",
+        "composition_hint": "Nest children using the exports listed above in the usual trigger/content/header/body/footer pattern."
+      }
+    }
+  ],
+  "extras_not_in_57_core_set": [
+    {
+      "slug": "native-select",
+      "reason": "Newer/current docs include Native Select; excluded to keep requested count at 57."
+    },
+    {
+      "slug": "direction",
+      "reason": "Utility/docs entry, not included in the 57 component core file."
+    }
+  ]
+}

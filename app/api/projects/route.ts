@@ -1,0 +1,366 @@
+import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import clientPromise from "@/lib/torso"
+import { getClientIP } from "@/lib/get-client-ip"
+import { containsCurseWords } from "@/lib/curse-word-filter"
+import { generateWebpageId } from "@/lib/generate-webpage-id"
+import { loadProjectChatSummariesForUser } from "@/lib/project-chat-session"
+import { syteProjectConnect, isSyteConfigured } from "@/lib/deploy/syte-client"
+import { resolveCanonicalSyteUuid } from "@/lib/deploy/syte-workspace"
+
+import { ensureContainer, bootstrapContainer } from "@/lib/deploy/ssh-deploy"
+
+export async function POST(request: Request) {
+  const session = await getServerSession(authOptions)
+  if (!session || !session.user || !session.user.id) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
+
+  const client = await clientPromise
+  const db = client.db()
+
+  console.log("==========================================");
+  console.log(`[Project Creation] Start for User: ${session.user.email}`);
+
+  let body;
+  try {
+      body = await request.json();
+  } catch (e) {
+      return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 });
+  }
+
+  // Validate businessName
+  if (!body.businessName || typeof body.businessName !== 'string' || body.businessName.trim().length === 0) {
+      return NextResponse.json({ message: "Business name is required" }, { status: 400 });
+  }
+  if (body.businessName.length > 100) {
+      return NextResponse.json({ message: "Business name is too long (max 100 chars)" }, { status: 400 });
+  }
+
+  // Validate description if present
+  if (body.businessDescription && (typeof body.businessDescription !== 'string' || body.businessDescription.length > 1000)) {
+       return NextResponse.json({ message: "Business description is invalid or too long" }, { status: 400 });
+  }
+
+  // Validate profileImage if present (data URL or http(s) URL). Cap size to protect DB docs.
+  let safeProfileImage = "";
+  if (body.profileImage !== undefined && body.profileImage !== null && body.profileImage !== "") {
+      if (typeof body.profileImage !== 'string') {
+          return NextResponse.json({ message: "profileImage must be a string" }, { status: 400 });
+      }
+      // A 2MB image encoded as base64 data URL is ~2.8MB; allow some headroom.
+      if (body.profileImage.length > 3_500_000) {
+          return NextResponse.json({ message: "profileImage is too large (max 2MB image)" }, { status: 400 });
+      }
+      const isDataUrl = /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(body.profileImage);
+      const isHttpUrl = /^https?:\/\//i.test(body.profileImage);
+      if (!isDataUrl && !isHttpUrl) {
+          return NextResponse.json({ message: "profileImage must be an image data URL or http(s) URL" }, { status: 400 });
+      }
+      safeProfileImage = body.profileImage;
+  }
+
+  // Fetch user doc to check premium status + owned project count (collaborator
+  // stubs must not consume the free-tier slot — they are not owned websites).
+  const userDoc = await db.collection("users").findOne<{ projects?: any[]; isPremium?: boolean }>({ id: session.user.id })
+  // @ts-ignore
+  const isPremium = session.user.isPremium || userDoc?.isPremium || false
+  const MAX_FREE_WEBSITES = 3
+  const ownedProjectCount = Array.isArray(userDoc?.projects)
+    ? userDoc!.projects!.filter((p: any) => !p?.isCollaborator).length
+    : 0
+
+  if (!isPremium && ownedProjectCount >= MAX_FREE_WEBSITES) {
+    return NextResponse.json(
+      {
+        message: `Free users can only create up to ${MAX_FREE_WEBSITES} websites. Upgrade to premium for unlimited websites.`,
+      },
+      { status: 403 },
+    )
+  }
+
+  const webpageId = generateWebpageId()
+
+  // sanitize body fields to prevent injection of unexpected fields
+  const safeBody = {
+      businessName: body.businessName.trim(),
+      businessDescription: (body.businessDescription || "").trim(),
+      subdomain: body.subdomain,
+      style: body.style,
+      profileImage: safeProfileImage,
+      // explicitly exclude fields that shouldn't be user-settable if any
+  };
+
+  let sanitizedSubdomain: string | null = null
+  let deploymentData: any = null
+
+  if (body.subdomain) {
+    if (typeof body.subdomain === 'string') {
+        const cleaned = body.subdomain
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9-]/g, "-")
+          .replace(/^-+|-+$/g, "")
+
+        if (cleaned.length >= 3 && !containsCurseWords(cleaned)) {
+            sanitizedSubdomain = cleaned
+            deploymentData = {
+              subdomain: cleaned,
+              domain: `${cleaned}.pages.dev`,
+              status: "active",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              deploymentData: {
+                businessName: safeBody.businessName,
+                businessDescription: safeBody.businessDescription,
+              },
+            }
+        }
+    }
+  }
+
+  const projectId = crypto.randomUUID()
+
+  const newProject = {
+    _id: projectId,
+    ...safeBody,
+    subdomain: sanitizedSubdomain, // Ensure subdomain is updated with sanitized version
+    webpageId,
+    userId: session.user.id, // Keep userId for reference, though embedded
+    isPremium: isPremium,
+    status: "active",
+    createdAt: new Date(),
+    pages: [], // Empty until the builder generates the Vite/React SPA files
+    deployment: deploymentData, // Embed deployment info
+    // Legacy fields for compatibility if needed, but we try to move away
+    deploymentId: deploymentData ? crypto.randomUUID() : null,
+  }
+
+  try {
+    // Pre-check above enforces the free-tier owned-project cap. Push by user id
+    // (Torso has no true multi-doc transactions; the owned-count check is the guard).
+    const result = await db.collection("users").updateOne(
+      { id: session.user.id },
+      {
+        $push: {
+          projects: newProject
+        } as any
+      }
+    )
+
+    if (result.matchedCount === 0) {
+      // If user doc doesn't exist, create it first with the project
+      const userResult = await db.collection("users").updateOne(
+        { id: session.user.id },
+        {
+          $setOnInsert: {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            image: session.user.image,
+            projects: [newProject],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        },
+        { upsert: true }
+      )
+      if (!userResult.upsertedCount && !userResult.modifiedCount) {
+        // Race: another request created the user; retry push
+        const retry = await db.collection("users").updateOne(
+          { id: session.user.id },
+          { $push: { projects: newProject } as any },
+        )
+        if (retry.matchedCount === 0) {
+          return NextResponse.json({ message: "Failed to create project" }, { status: 500 })
+        }
+      }
+    }
+
+    console.log("[Project Creation] Project created successfully embedded in user:", projectId.toString())
+
+    // Trigger container setup in background (don't block response)
+    const projectIdStr = projectId.toString()
+    ensureContainer(newProject, projectIdStr)
+      .then((container) => bootstrapContainer(container))
+      .catch((err) => console.error("[Project Creation] Container setup failed:", err?.message))
+
+    // Create Syte workspace in background — fire-and-forget so project creation
+    // is never blocked by Syte latency. UUID is saved to the project doc once ready.
+    if (isSyteConfigured()) {
+      ;(async () => {
+        try {
+          const canonicalUuid = resolveCanonicalSyteUuid(newProject, projectIdStr)
+          const result = await syteProjectConnect({
+            name: safeBody.businessName,
+            stack: "nextjs",
+            uuid: canonicalUuid,
+          })
+          if (result.ok && result.data?.uuid) {
+            const uuid = result.data.uuid
+            const domain = result.data.project?.domain ?? null
+            const url = result.data.project?.url ?? null
+            await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": projectIdStr },
+              {
+                $set: {
+                  "projects.$.syteWorkspaceUuid": uuid,
+                  "projects.$.syteDomain": domain,
+                  "projects.$.syteUrl": url,
+                  "projects.$.deployStatus": "created",
+                  "projects.$.deploymentMode": "syte",
+                  "projects.$.syteConnectError": null,
+                  "projects.$.updatedAt": new Date(),
+                },
+              },
+            )
+            console.log(`[Project Creation] Syte workspace created: ${uuid} (${domain})`)
+          } else {
+            console.warn(`[Project Creation] Syte project_connect failed: ${result.error}`)
+            await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": projectIdStr },
+              {
+                $set: {
+                  "projects.$.deployStatus": "failed",
+                  "projects.$.syteConnectError": result.error || "Syte project_connect failed",
+                  "projects.$.updatedAt": new Date(),
+                },
+              },
+            )
+          }
+        } catch (err: any) {
+          console.error("[Project Creation] Syte project_connect error:", err?.message)
+          try {
+            await db.collection("users").updateOne(
+              { id: session.user.id, "projects._id": projectIdStr },
+              {
+                $set: {
+                  "projects.$.deployStatus": "failed",
+                  "projects.$.syteConnectError": err?.message || "Syte project_connect error",
+                  "projects.$.updatedAt": new Date(),
+                },
+              },
+            )
+          } catch (persistErr: any) {
+            console.error(
+              "[Project Creation] Failed to persist Syte connect failure:",
+              persistErr?.message,
+            )
+          }
+        }
+      })()
+    }
+
+    // Return the new project. We cast _id to string for JSON serialization compatibility if needed,
+    // but Next.js usually handles ObjectId in JSON response or we should stringify it.
+    // However, existing frontend likely expects _id to be present.
+    return NextResponse.json(newProject, { status: 201 })
+  } catch (error: any) {
+    console.error("[v0] Error creating project:", error)
+    return NextResponse.json(
+      {
+        message: "Failed to create project",
+        error: error.message,
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions)
+  if (!session || !session.user || !session.user.id) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
+
+  const client = await clientPromise
+  const db = client.db()
+
+  try {
+    // Use projection so we don't pull the full user document (which may include
+    // sessions, settings, preferences, and other unrelated fields). Also only
+    // project the fields the dashboard actually needs per project so we avoid
+    // shipping large blobs (pages, history, AI logs) to the client.
+    const userDoc = await db.collection("users").findOne(
+      { id: session.user.id },
+      {
+        projection: {
+          projects: 1,
+          _id: 0,
+        },
+      },
+    )
+
+    const rawProjects = (userDoc?.projects as any[]) || []
+    const chatSummaries = await loadProjectChatSummariesForUser(db, session.user.id)
+
+    // Sort newest-first (most recent project on top of dashboard) — fast in-memory sort.
+    rawProjects.sort((a, b) => {
+      const ta = new Date(a?.createdAt || 0).getTime()
+      const tb = new Date(b?.createdAt || 0).getTime()
+      return tb - ta
+    })
+
+    // Trim each project to the dashboard-friendly shape. Avoid returning large
+    // nested fields like `pages`, `buildLogs`, etc.
+    const projects = rawProjects.map((project: any) => {
+      const deployedUrl =
+        project.cloudflareUrl ||
+        project.deploymentRuntime?.url ||
+        project.deployment?.domain ||
+        null
+      const chatSession =
+        chatSummaries.get(String(project._id)) ||
+        (project.chatSession
+          ? {
+              id: project.chatSession.id,
+              title: project.chatSession.title || "Syra Chat",
+              messageCount: Array.isArray(project.chatSession.messages)
+                ? project.chatSession.messages.length
+                : project.chatSession.messageCount ?? 0,
+              updatedAt: project.chatSession.updatedAt,
+              createdAt: project.chatSession.createdAt,
+            }
+          : null)
+      return {
+        _id: project._id,
+        id: project.id,
+        businessName: project.businessName,
+        businessDescription: project.businessDescription,
+        subdomain: project.subdomain,
+        domain: project.domain || deployedUrl || null,
+        cloudflareUrl: deployedUrl || project.cloudflareUrl || null,
+        style: project.style,
+        status: project.status,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        applicationId: project.applicationId,
+        projectId: project.projectId,
+        previewImage: project.previewImage,
+        profileImage: project.profileImage,
+        chatSession,
+        deploymentRuntime: project.deploymentRuntime
+          ? {
+              status: project.deploymentRuntime.status,
+              url: project.deploymentRuntime.url,
+              lastDeployedAt: project.deploymentRuntime.lastDeployedAt,
+            }
+          : undefined,
+        deployment: project.deployment
+          ? { domain: project.deployment.domain }
+          : undefined,
+      }
+    })
+
+    // Allow short-lived browser caching. Mutations should use cache: 'no-store'.
+    return NextResponse.json(projects, {
+      headers: {
+        "Cache-Control": "private, max-age=10, stale-while-revalidate=30",
+      },
+    })
+  } catch (error: any) {
+    console.error("Error fetching projects:", error)
+    return NextResponse.json({ message: "Failed to fetch projects" }, { status: 500 })
+  }
+}

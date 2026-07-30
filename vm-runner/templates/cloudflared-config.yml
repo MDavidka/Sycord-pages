@@ -1,0 +1,11 @@
+tunnel: __TUNNEL_ID__
+credentials-file: __CREDENTIALS_FILE__
+
+ingress:
+  - hostname: "api.__BASE_DOMAIN__"
+    service: http://localhost:__RUNNER_PORT__
+  - hostname: "*.__BASE_DOMAIN__"
+    service: http://localhost:__NGINX_PORT__
+  - hostname: "__BASE_DOMAIN__"
+    service: http://localhost:__NGINX_PORT__
+  - service: http_status:404
