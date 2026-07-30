@@ -9,8 +9,8 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, Briefcase, Gamepad2, Globe, LayoutDashboard,
-  Lock, Monitor, Phone, Rocket, Sparkles, Zap,
+  ArrowRight, Globe,
+  Lock, Phone, Rocket, Sparkles, Zap,
 } from "lucide-react"
 
 const BG = "#181818"
@@ -29,7 +29,6 @@ export default function LandingPage() {
       <FAQ />
       <FinalCTA />
       <Footer />
-      <VersionMark />
     </main>
   )
 }
@@ -104,6 +103,7 @@ function HeroCopyMobile({
       <h1 className="whitespace-nowrap text-[clamp(34px,8.5vw,52px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]">
         Your coding agent
       </h1>
+      <AlphaBadge className="mt-4" />
       <div
         className="relative mt-5 w-[140px] overflow-hidden sm:mt-7 sm:w-[240px]"
         style={{ aspectRatio: "170 / 99" }}
@@ -144,6 +144,7 @@ function HeroDesktop() {
         <h1 className="text-[clamp(48px,5.6vw,76px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-white">
           The AI agent
         </h1>
+        <AlphaBadge className="mt-4" />
         <p className="mt-4 max-w-[420px] text-[17px] leading-relaxed text-white/75 lg:text-[18px]">
           this is a subheading this is a subheading
         </p>
@@ -318,81 +319,152 @@ function WorldMapSection() {
 }
 
 function WorldMapSVG() {
+  const markers = [
+    { x: 214, y: 154, label: "USA · Texas", sublabel: "North America", color: "#00E599", labelX: 150, labelY: 206 },
+    { x: 456, y: 134, label: "Frankfurt", sublabel: "Europe", color: "#7C6FF5", labelX: 486, labelY: 92 },
+    { x: 682, y: 250, label: "Singapore", sublabel: "Asia Pacific", color: "#F59E0B", labelX: 704, labelY: 303 },
+  ]
+
   return (
     <svg viewBox="0 0 900 450" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full" aria-hidden="true">
       <defs>
-        <radialGradient id="dotGlow1" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#00E599" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#00E599" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="dotGlow2" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#7C6FF5" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#7C6FF5" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="dotGlow3" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.6" />
-          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
+        <linearGradient id="continentFill" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#25272c" />
+          <stop offset="100%" stopColor="#17181b" />
+        </linearGradient>
+        <radialGradient id="mapGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.11" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </radialGradient>
       </defs>
 
-      {/* North America */}
-      <path d="M130,60 L200,45 L270,50 L310,65 L340,90 L340,130 L310,160 L280,175 L240,185 L200,190 L150,185 L110,170 L90,145 L100,105 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
-      {/* South America */}
-      <path d="M200,200 L240,195 L280,200 L290,240 L280,280 L250,330 L220,350 L190,340 L170,310 L170,270 L180,230 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
-      {/* Europe */}
-      <path d="M410,50 L460,40 L510,45 L540,60 L550,90 L530,110 L500,120 L460,115 L430,105 L400,95 L395,70 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
-      {/* Africa */}
-      <path d="M430,120 L480,115 L510,130 L520,170 L510,220 L490,260 L460,280 L430,275 L400,250 L390,210 L400,160 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
-      {/* Asia */}
-      <path d="M560,40 L660,30 L750,35 L800,60 L810,100 L790,130 L750,140 L680,135 L620,125 L570,105 L550,80 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
-      {/* Southeast Asia / islands */}
-      <path d="M750,145 L780,150 L810,165 L790,185 L760,180 L740,160 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
-      {/* Australia */}
-      <path d="M720,330 L780,320 L820,340 L820,380 L780,400 L730,390 L710,360 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      <rect width="900" height="450" rx="32" fill="url(#mapGlow)" opacity="0.65" />
+      <g opacity="0.35" stroke="#34373d" strokeWidth="0.7">
+        {[120, 240, 360, 480, 600, 720, 840].map(x => <path key={`lng-${x}`} d={`M${x} 34V416`} />)}
+        {[90, 160, 230, 300, 370].map(y => <path key={`lat-${y}`} d={`M48 ${y}H852`} />)}
+      </g>
 
-      {/* Server location 1: US West (Oregon) */}
-      <circle cx="155" cy="118" r="28" fill="url(#dotGlow1)" />
-      <circle cx="155" cy="118" r="4" fill="#00E599" />
-      <line x1="155" y1="118" x2="155" y2="145" stroke="#2a2c30" strokeWidth="0.8" />
-      <rect x="128" y="147" width="54" height="22" rx="6" fill="#111213" stroke="#2a2c30" strokeWidth="0.8" />
-      <text x="155" y="162" fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">US West</text>
+      <g fill="url(#continentFill)" stroke="#383b42" strokeWidth="1.4" strokeLinejoin="round">
+        <path d="M95 109C116 78 157 64 189 72C207 52 245 51 270 67C302 65 333 84 338 112C369 125 380 154 360 181C342 205 305 203 282 217C250 236 226 226 198 236C159 250 128 226 124 195C96 185 82 155 95 109Z" />
+        <path d="M162 246C181 226 222 229 243 254C265 280 257 313 274 337C290 358 274 387 247 397C227 371 205 352 205 317C178 298 164 277 162 246Z" />
+        <path d="M411 111C424 88 450 78 476 86C489 72 521 79 533 98C556 103 568 122 557 143C536 137 520 151 500 151C474 151 456 139 435 145C417 138 405 128 411 111Z" />
+        <path d="M427 158C460 142 502 151 521 180C537 206 525 237 514 267C501 304 477 331 443 319C416 309 403 278 388 249C372 217 395 176 427 158Z" />
+        <path d="M536 111C565 72 626 59 670 75C706 54 773 63 810 98C846 132 831 181 787 194C744 207 716 180 680 198C646 214 608 200 587 176C562 170 532 145 536 111Z" />
+        <path d="M650 210C670 202 699 214 711 235C728 236 741 249 735 266C720 274 701 267 689 258C671 261 653 249 650 210Z" />
+        <path d="M702 331C735 312 793 313 821 344C842 368 826 396 791 403C748 412 706 389 702 331Z" />
+        <path d="M373 91C386 78 410 79 421 93C412 108 387 109 373 91Z" />
+      </g>
 
-      {/* Server location 2: Europe (Frankfurt) */}
-      <circle cx="470" cy="85" r="28" fill="url(#dotGlow2)" />
-      <circle cx="470" cy="85" r="4" fill="#7C6FF5" />
-      <line x1="470" y1="85" x2="470" y2="112" stroke="#2a2c30" strokeWidth="0.8" />
-      <rect x="435" y="114" width="70" height="22" rx="6" fill="#111213" stroke="#2a2c30" strokeWidth="0.8" />
-      <text x="470" y="129" fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">Frankfurt</text>
+      <g opacity="0.35" stroke="#555963" strokeWidth="1" strokeDasharray="4 7">
+        <path d="M214 154C304 89 383 88 456 134" />
+        <path d="M456 134C536 159 612 189 682 250" />
+      </g>
 
-      {/* Server location 3: Asia (Singapore) */}
-      <circle cx="770" cy="148" r="28" fill="url(#dotGlow3)" />
-      <circle cx="770" cy="148" r="4" fill="#F59E0B" />
-      <line x1="770" y1="148" x2="770" y2="175" stroke="#2a2c30" strokeWidth="0.8" />
-      <rect x="735" y="177" width="70" height="22" rx="6" fill="#111213" stroke="#2a2c30" strokeWidth="0.8" />
-      <text x="770" y="192" fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">Singapore</text>
+      {markers.map(marker => {
+        const labelWidth = marker.label.length > 10 ? 104 : 88
+        const labelX = marker.labelX - labelWidth / 2
+
+        return (
+          <g key={marker.label}>
+            <circle cx={marker.x} cy={marker.y} r="30" fill={marker.color} opacity="0.12" />
+            <circle cx={marker.x} cy={marker.y} r="16" fill={marker.color} opacity="0.2" />
+            <circle cx={marker.x} cy={marker.y} r="5.5" fill={marker.color} />
+            <circle cx={marker.x} cy={marker.y} r="9" stroke={marker.color} strokeWidth="1.5" opacity="0.75" />
+            <path d={`M${marker.x} ${marker.y + 10}L${marker.labelX} ${marker.labelY - 23}`} stroke={marker.color} strokeWidth="1.2" strokeOpacity="0.7" />
+            <rect x={labelX} y={marker.labelY - 24} width={labelWidth} height="42" rx="11" fill="#111213" stroke={marker.color} strokeOpacity="0.35" />
+            <text x={marker.labelX} y={marker.labelY - 7} fill="#FFFFFF" fontSize="11" textAnchor="middle" className="font-semibold">{marker.label}</text>
+            <text x={marker.labelX} y={marker.labelY + 8} fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">{marker.sublabel}</text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+
+function BrandIcon({ name }: { name: "gmail" | "discord" | "slack" | "office" }) {
+  if (name === "gmail") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-10 w-10" aria-hidden="true">
+        <path d="M7 14.5C7 12.6 8.6 11 10.5 11h27c1.9 0 3.5 1.6 3.5 3.5v19c0 1.9-1.6 3.5-3.5 3.5h-27C8.6 37 7 35.4 7 33.5v-19Z" fill="#F2F2F2" />
+        <path d="M10 14l14 10.5L38 14v6.4L24 31 10 20.4V14Z" fill="#EA4335" />
+        <path d="M7 15.5 10 14v20H7V15.5Z" fill="#4285F4" />
+        <path d="M41 15.5 38 14v20h3V15.5Z" fill="#34A853" />
+        <path d="M10 14l14 10.5L38 14l-3.2-2.3L24 19.8 13.2 11.7 10 14Z" fill="#FBBC04" />
+      </svg>
+    )
+  }
+
+  if (name === "discord") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-10 w-10" aria-hidden="true">
+        <rect x="6" y="8" width="36" height="32" rx="12" fill="#5865F2" />
+        <path d="M17.4 19.2c4.2-1.5 8.6-1.5 13.2 0l1.8 10.6c-5.2 3.7-11.6 3.7-16.8 0l1.8-10.6Z" fill="white" />
+        <circle cx="20.4" cy="26" r="1.8" fill="#5865F2" />
+        <circle cx="27.6" cy="26" r="1.8" fill="#5865F2" />
+        <path d="M20 31c2.5 1.1 5.5 1.1 8 0" stroke="#5865F2" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  if (name === "slack") {
+    return (
+      <svg viewBox="0 0 48 48" className="h-10 w-10" aria-hidden="true">
+        <rect x="10" y="20" width="8" height="18" rx="4" fill="#36C5F0" />
+        <rect x="8" y="10" width="18" height="8" rx="4" fill="#2EB67D" />
+        <rect x="30" y="10" width="8" height="18" rx="4" fill="#ECB22E" />
+        <rect x="22" y="30" width="18" height="8" rx="4" fill="#E01E5A" />
+        <rect x="20" y="20" width="8" height="8" rx="3" fill="#111213" opacity="0.18" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 48 48" className="h-10 w-10" aria-hidden="true">
+      <defs>
+        <linearGradient id="officeGradient" x1="8" x2="40" y1="9" y2="39">
+          <stop stopColor="#F25022" />
+          <stop offset="0.52" stopColor="#7FBA00" />
+          <stop offset="1" stopColor="#00A4EF" />
+        </linearGradient>
+      </defs>
+      <path d="M10 16.5 25 9l13 6.5v17L25 40l-15-7.5v-16Z" fill="url(#officeGradient)" />
+      <path d="M25 15.2 16 19.7v8.6l9 4.5 8-4.6v-8.4l-8-4.6Z" fill="#181818" opacity="0.22" />
+      <path d="M25 15.2v17.6" stroke="white" strokeOpacity="0.8" strokeWidth="2" />
     </svg>
   )
 }
 
 function OneAgentSection() {
   const modes = [
-    { icon: <LayoutDashboard className="h-5 w-5" />, title: "Productivity", desc: "Streamline workflows, automate tasks, and ship faster with AI assistance.", color: "#7C6FF5" },
-    { icon: <Briefcase className="h-5 w-5" />, title: "Business", desc: "Launch professional sites, manage clients, and scale your online presence.", color: "#00E599" },
-    { icon: <Gamepad2 className="h-5 w-5" />, title: "Gaming", desc: "Build gaming communities, clan pages, and interactive web experiences.", color: "#F59E0B" },
-    { icon: <Monitor className="h-5 w-5" />, title: "Office", desc: "Create internal tools, dashboards, and team portals effortlessly.", color: "#3B82F6" },
+    { icon: "gmail" as const, title: "Productivity", prompt: "Please send an email to Jason about the meeting" },
+    { icon: "discord" as const, title: "Gaming", prompt: "Create a Discord landing page for my esports clan" },
+    { icon: "slack" as const, title: "Business", prompt: "Build a polished service website for my consulting studio" },
+    { icon: "office" as const, title: "Office", prompt: "Generate a team dashboard for tasks, docs, and reports" },
   ]
 
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
       <SectionHeading eyebrow="One Agent" title="One agent for all needs" subtitle="From productivity to gaming — a single AI agent that adapts to your workflow." />
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-10 grid gap-4 sm:grid-cols-2">
         {modes.map(m => (
-          <div key={m.title} className="group flex flex-col rounded-2xl border p-5 transition-all hover:border-white/20" style={{ borderColor: BORDER, backgroundColor: BG }}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border" style={{ borderColor: BORDER, backgroundColor: "#111213", color: m.color }}>
-              {m.icon}
+          <div
+            key={m.title}
+            className="group min-h-[220px] rounded-[28px] p-7 transition-transform duration-200 hover:-translate-y-1 sm:p-8"
+            style={{
+              background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012))",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.07)",
+            }}
+          >
+            <div className="flex items-center gap-4">
+              <BrandIcon name={m.icon} />
+              <h3 className="text-2xl font-extrabold tracking-[-0.02em] text-white sm:text-3xl">{m.title}</h3>
             </div>
-            <h3 className="mt-4 text-sm font-semibold text-white">{m.title}</h3>
-            <p className="mt-2 text-xs leading-relaxed" style={{ color: MUTED }}>{m.desc}</p>
+            <div className="flex min-h-[120px] items-center justify-center px-2 text-center">
+              <p className="text-[clamp(22px,4vw,34px)] font-extrabold leading-[1.18] tracking-[-0.025em] text-white">
+                “{m.prompt}”
+              </p>
+            </div>
           </div>
         ))}
       </div>
@@ -498,24 +570,22 @@ function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: 
   )
 }
 
-function VersionMark() {
+function AlphaBadge({ className = "" }: { className?: string }) {
   return (
-    <div className="fixed bottom-4 right-4 z-50">
-      <Link
-        href="/releases"
-        className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium tracking-wide backdrop-blur-md transition-all hover:border-white/25"
-        style={{
-          borderColor: "rgba(255,255,255,0.1)",
-          backgroundColor: "rgba(24,24,24,0.85)",
-          color: MUTED,
-        }}
-      >
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/60" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
-        </span>
-        v0.1 Private alpha
-      </Link>
-    </div>
+    <Link
+      href="/releases"
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium tracking-wide backdrop-blur-md transition-all hover:border-white/25 ${className}`}
+      style={{
+        borderColor: "rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(24,24,24,0.72)",
+        color: MUTED,
+      }}
+    >
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/60" />
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
+      </span>
+      v0.1 Private alpha
+    </Link>
   )
 }
