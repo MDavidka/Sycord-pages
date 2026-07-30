@@ -64,10 +64,12 @@ const PROMPTS: AgentPrompt[] = [
 export function AgentPromptCycler() {
   const [index, setIndex] = useState(0)
   const [visible, setVisible] = useState(true)
+  const [iconError, setIconError] = useState(false)
 
   useEffect(() => {
     const timer = setInterval(() => {
       setVisible(false)
+      setIconError(false)
       setTimeout(() => {
         setIndex((i) => (i + 1) % PROMPTS.length)
         setVisible(true)
@@ -83,12 +85,22 @@ export function AgentPromptCycler() {
       className="flex items-center gap-3 transition-opacity duration-300"
       style={{ opacity: visible ? 1 : 0 }}
     >
-      <img
-        src={prompt.iconUrl}
-        alt={prompt.appName}
-        className="h-6 w-6 shrink-0"
-      />
-      <span className="text-sm text-[#A7AAB0]">{prompt.text}</span>
+      {iconError ? (
+        <div
+          className="h-5 w-5 shrink-0 rounded-full bg-white/10 flex items-center justify-center text-[10px] text-white/70 font-semibold"
+          aria-hidden="true"
+        >
+          {prompt.appName[0]}
+        </div>
+      ) : (
+        <img
+          src={prompt.iconUrl}
+          alt=""
+          className="h-5 w-5 shrink-0 opacity-80"
+          onError={() => setIconError(true)}
+        />
+      )}
+      <span className="text-base font-medium text-white/90">{prompt.text}</span>
     </div>
   )
 }
