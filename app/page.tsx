@@ -1,16 +1,29 @@
 "use client"
 
-import { useRef } from "react"
+import type React from "react"
+import { useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { motion, useScroll, useTransform } from "framer-motion"
 import { Button } from "@/components/ui/button"
+import { StatusBadge } from "@/components/status-badge"
 import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from "@/components/ui/accordion"
-import {
-  ArrowRight, Briefcase, CheckCircle2, Cloud, Globe,
-  Lock, Phone, Rocket, Server, Sparkles, TrendingUp, Wand2, Zap,
+  ArrowRight,
+  BriefcaseBusiness,
+  Check,
+  Code2,
+  Gamepad2,
+  Globe2,
+  Laptop2,
+  MapPin,
+  Phone,
+  Rocket,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  WandSparkles,
+  Zap,
 } from "lucide-react"
 
 const BG = "#181818"
@@ -18,13 +31,49 @@ const BORDER = "#2a2c30"
 const MUTED = "#A7AAB0"
 const TEXT = "#E5E7EB"
 
+const lanes = [
+  {
+    label: "Productivity",
+    icon: <Zap className="size-4" />,
+    title: "Turn the busywork into momentum.",
+    copy: "Draft, organize, and ship the little things before they become the big things.",
+    accent: "#f1c75b",
+    tasks: ["Plan the week", "Summarize research", "Write the first draft"],
+  },
+  {
+    label: "Business",
+    icon: <BriefcaseBusiness className="size-4" />,
+    title: "Make a sharp business presence.",
+    copy: "From first idea to a polished site, one agent keeps the whole launch moving.",
+    accent: "#86d6b5",
+    tasks: ["Shape the offer", "Build the landing page", "Publish the update"],
+  },
+  {
+    label: "Gaming",
+    icon: <Gamepad2 className="size-4" />,
+    title: "Build worlds worth coming back to.",
+    copy: "Create community hubs, launch pages, and playful experiments without breaking flow.",
+    accent: "#b9a5ff",
+    tasks: ["Sketch the world", "Create the showcase", "Share with your squad"],
+  },
+  {
+    label: "Office",
+    icon: <Laptop2 className="size-4" />,
+    title: "Give every team a better starting point.",
+    copy: "A calm, capable agent for docs, internal tools, and the work between meetings.",
+    accent: "#83b9ed",
+    tasks: ["Prepare the brief", "Polish the workspace", "Keep everyone aligned"],
+  },
+]
+
 export default function LandingPage() {
   return (
     <main className="min-h-screen w-full text-white" style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}>
       <Hero />
       <TrustStrip />
-      <Pricing />
-      <PriceComparison />
+      <GlobalNetwork />
+      <UseCases />
+      <AgentWorkflow />
       <FAQ />
       <FinalCTA />
       <Footer />
@@ -34,96 +83,46 @@ export default function LandingPage() {
 
 function HeroBackground() {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
-      <div
-        className="absolute inset-0 opacity-30"
-        style={{
-          WebkitMaskImage:
-            "linear-gradient(to bottom, transparent 0%, black 20%, black 72%, transparent 100%)",
-          maskImage:
-            "linear-gradient(to bottom, transparent 0%, black 20%, black 72%, transparent 100%)",
-        }}
-      >
-        <Image
-          src="/hero-glass-bg.webp"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-[center_35%] md:object-[center_40%]"
-        />
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      <div className="absolute inset-0 opacity-35" style={{ WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 18%, black 72%, transparent 100%)", maskImage: "linear-gradient(to bottom, transparent 0%, black 18%, black 72%, transparent 100%)" }}>
+        <Image src="/hero-glass-bg.webp" alt="" fill priority sizes="100vw" className="object-cover object-[center_35%]" />
       </div>
-      <div
-        className="absolute inset-0"
-        style={{
-          background: `linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.65) 12%, transparent 28%, transparent 70%, rgba(24,24,24,0.45) 90%, ${BG} 100%)`,
-        }}
-      />
+      <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse 75% 55% at 50% 28%, rgba(124,111,245,0.16), transparent 72%), linear-gradient(to bottom, ${BG} 0%, rgba(24,24,24,0.52) 22%, transparent 58%, ${BG} 100%)` }} />
+      <div className="absolute -left-24 top-28 h-72 w-72 rounded-full bg-[#7c6ff5]/10 blur-[100px]" />
+      <div className="absolute -right-28 bottom-10 h-80 w-80 rounded-full bg-[#4bbd9a]/10 blur-[110px]" />
     </div>
   )
 }
 
 function HeroNav() {
   return (
-    <header className="relative z-30 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between pl-[max(1.25rem,env(safe-area-inset-left,0px))] pr-[max(1.25rem,env(safe-area-inset-right,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] sm:px-8 sm:pt-8 lg:px-10">
+    <header className="relative z-30 mx-auto flex w-full max-w-[1200px] shrink-0 items-center justify-between px-[max(1.25rem,env(safe-area-inset-left,0px))] pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] sm:px-8 sm:pt-8 lg:px-10">
       <Link href="/" className="inline-flex items-center gap-2">
-        <Image
-          src="/logo.png"
-          alt="Sycord"
-          width={40}
-          height={40}
-          priority
-          className="h-9 w-9 opacity-90 sm:h-10 sm:w-10"
-        />
+        <Image src="/logo.png" alt="Sycord" width={40} height={40} priority className="h-9 w-9 opacity-90 sm:h-10 sm:w-10" />
       </Link>
-      <Link
-        href="/contact"
-        className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-black/35 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-black/50 sm:h-10 sm:px-5"
-      >
-        <Phone className="size-4 text-white" strokeWidth={1.75} />
-        inquiry
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link href="/releases" className="hidden text-xs font-medium text-white/55 underline-offset-4 transition-colors hover:text-white hover:underline sm:inline">
+          0.1 Private alpha
+        </Link>
+        <Link href="/contact" className="inline-flex h-9 items-center gap-2 rounded-full border border-white/15 bg-black/25 px-4 text-sm font-medium text-white backdrop-blur-md transition-colors hover:bg-black/45 sm:h-10 sm:px-5">
+          <Phone className="size-4" strokeWidth={1.75} />
+          inquiry
+        </Link>
+      </div>
     </header>
   )
 }
 
-function HeroCopyMobile({
-  className = "",
-  style,
-}: {
-  className?: string
-  style?: React.ComponentProps<typeof motion.div>["style"]
-}) {
+function HeroCopyMobile({ className = "", style }: { className?: string; style?: React.ComponentProps<typeof motion.div>["style"] }) {
   return (
-    <motion.div
-      className={`relative z-20 mx-auto flex w-full max-w-[760px] flex-col items-center px-5 text-center ${className}`}
-      style={style}
-    >
-      <h1 className="whitespace-nowrap text-[clamp(34px,8.5vw,52px)] font-extrabold leading-[1.05] tracking-[-0.03em] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]">
-        Your coding agent
+    <motion.div className={`relative z-20 mx-auto flex w-full max-w-[760px] flex-col items-center px-5 text-center ${className}`} style={style}>
+      <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/50">The all-purpose AI agent</p>
+      <h1 className="max-w-[350px] text-[clamp(40px,10vw,58px)] font-extrabold leading-[0.96] tracking-[-0.05em] text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.45)]">
+        One agent.<br /><span className="text-white/55">Every direction.</span>
       </h1>
-      <div
-        className="relative mt-5 w-[140px] overflow-hidden sm:mt-7 sm:w-[240px]"
-        style={{ aspectRatio: "170 / 99" }}
-      >
-        <Image
-          src="/dev.svg"
-          alt="made fore developer since 2026"
-          width={3000}
-          height={4500}
-          className="absolute left-0 top-0"
-          style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
-        />
-      </div>
-      <Button
-        asChild
-        size="sm"
-        className="mt-5 h-11 min-w-[160px] rounded-full bg-white px-6 text-sm font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"
-      >
-        <Link href="/login">
-          Start for free
-          <ArrowRight className="size-3.5" />
-        </Link>
+      <p className="mt-5 max-w-xs text-sm leading-relaxed text-white/65">Think it, build it, ship it — with an agent that keeps up.</p>
+      <Button asChild size="sm" className="mt-6 h-11 min-w-[160px] rounded-full bg-white px-6 text-sm font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white">
+        <Link href="/login">Start for free <ArrowRight className="size-3.5" /></Link>
       </Button>
     </motion.div>
   )
@@ -132,70 +131,19 @@ function HeroCopyMobile({
 function HeroDesktop() {
   return (
     <div className="relative z-20 mx-auto hidden h-full w-full max-w-[1240px] grid-cols-2 items-center gap-8 px-8 pb-8 pt-4 md:grid lg:gap-10 lg:px-10">
-      {/* Left copy */}
-      <motion.div
-        className="relative z-20 flex max-w-[560px] flex-col items-start text-left"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <h1 className="text-[clamp(48px,5.6vw,76px)] font-extrabold leading-[1.02] tracking-[-0.035em] text-white">
-          The AI agent
-        </h1>
-        <p className="mt-4 max-w-[420px] text-[17px] leading-relaxed text-white/75 lg:text-[18px]">
-          this is a subheading this is a subheading
-        </p>
-        <div
-          className="relative mt-7 w-[220px] overflow-hidden lg:mt-8 lg:w-[260px]"
-          style={{ aspectRatio: "170 / 99" }}
-        >
-          <Image
-            src="/dev.svg"
-            alt="made fore developer since 2026"
-            width={3000}
-            height={4500}
-            className="absolute left-0 top-0"
-            style={{ width: "117.6471%", height: "auto", transform: "translate(0%, -35%)" }}
-          />
-        </div>
+      <motion.div className="relative z-20 flex max-w-[560px] flex-col items-start text-left" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
+        <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.3em] text-white/50">The all-purpose AI agent</p>
+        <h1 className="text-[clamp(52px,6vw,80px)] font-extrabold leading-[0.96] tracking-[-0.055em] text-white">One agent.<br /><span className="text-white/50">Every direction.</span></h1>
+        <p className="mt-6 max-w-[430px] text-[17px] leading-relaxed text-white/70 lg:text-[18px]">Think it, build it, ship it — with an agent that moves from idea to outcome with you.</p>
         <div className="mt-8 flex flex-wrap items-center gap-3 lg:mt-9">
-          <Button
-            asChild
-            className="h-12 rounded-full bg-white px-7 text-[15px] font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"
-          >
-            <Link href="/login">
-              Start for free
-              <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="h-12 rounded-full border-white/30 bg-transparent px-7 text-[15px] font-semibold text-white hover:bg-white/5 hover:text-white"
-          >
-            <Link href="/login">Get started</Link>
-          </Button>
+          <Button asChild className="h-12 rounded-full bg-white px-7 text-[15px] font-semibold text-[#0a0a0a] shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03] hover:bg-white"><Link href="/login">Start for free <ArrowRight className="size-4" /></Link></Button>
+          <Link href="/releases" className="px-3 text-sm font-medium text-white/55 underline-offset-4 transition-colors hover:text-white hover:underline">0.1 Private alpha</Link>
         </div>
       </motion.div>
 
-      {/* Right phone — large, cropped bottom/right */}
-      <motion.div
-        className="relative hidden h-full min-h-0 md:block"
-        initial={{ opacity: 0, x: 36 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.12, duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-      >
+      <motion.div className="relative hidden h-full min-h-0 md:block" initial={{ opacity: 0, x: 36 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.12, duration: 0.85, ease: [0.22, 1, 0.36, 1] }}>
         <div className="absolute -bottom-[12%] -right-[14%] top-[4%] w-[min(118%,580px)] lg:-right-[10%] lg:top-0 lg:w-[min(115%,600px)]">
-          <Image
-            src="/hero-phone.webp"
-            alt="Syra coding agent on phone"
-            width={880}
-            height={1780}
-            priority
-            sizes="(min-width: 1024px) 600px, 50vw"
-            className="h-full w-full object-cover object-top drop-shadow-[0_40px_80px_rgba(0,0,0,0.55)]"
-            style={{ borderRadius: "48px" }}
-          />
+          <Image src="/hero-phone.webp" alt="Syra coding agent on phone" width={880} height={1780} priority sizes="(min-width: 1024px) 600px, 50vw" className="h-full w-full object-cover object-top drop-shadow-[0_40px_80px_rgba(0,0,0,0.55)]" style={{ borderRadius: "48px" }} />
         </div>
       </motion.div>
     </div>
@@ -204,63 +152,33 @@ function HeroDesktop() {
 
 function Hero() {
   const trackRef = useRef<HTMLElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: trackRef,
-    offset: ["start start", "end end"],
-  })
-
-  // Mobile scroll story: peek → rise fully → hold → fade out → rest of site
-  const phoneY = useTransform(scrollYProgress, [0, 0.42, 0.6, 0.82], ["46vh", "0vh", "0vh", "-10vh"])
-  const phoneOpacity = useTransform(scrollYProgress, [0, 0.6, 0.74, 0.9], [1, 1, 0.4, 0])
-  const phoneScale = useTransform(scrollYProgress, [0, 0.42, 0.82], [0.92, 1, 0.96])
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.25, 0.45], [1, 0.5, 0])
-  const copyY = useTransform(scrollYProgress, [0, 0.45], [0, -40])
-  const stageOpacity = useTransform(scrollYProgress, [0.8, 0.95], [1, 0])
+  const { scrollYProgress } = useScroll({ target: trackRef, offset: ["start start", "end end"] })
+  const phoneY = useTransform(scrollYProgress, [0, 0.34, 0.58, 0.78], ["40vh", "0vh", "0vh", "-8vh"])
+  const phoneOpacity = useTransform(scrollYProgress, [0, 0.56, 0.74, 0.88], [1, 1, 0.55, 0])
+  const phoneScale = useTransform(scrollYProgress, [0, 0.34, 0.78], [0.9, 1, 0.96])
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.2, 0.4], [1, 0.55, 0])
+  const copyY = useTransform(scrollYProgress, [0, 0.4], [0, -40])
+  const stageOpacity = useTransform(scrollYProgress, [0.74, 0.94], [1, 0])
+  const storyOpacity = useTransform(scrollYProgress, [0.55, 0.7, 0.9], [0, 1, 0])
 
   return (
-      <section
-      ref={trackRef}
-      className="relative h-[180vh] w-full md:h-[100svh] md:min-h-[600px]"
-      style={{ backgroundColor: BG }}
-    >
+    <section ref={trackRef} className="relative h-[145svh] w-full md:h-[100svh] md:min-h-[600px]" style={{ backgroundColor: BG }}>
       <div className="sticky top-0 h-[100svh] overflow-hidden md:relative md:h-full">
-        <div className="absolute inset-0 hidden md:block">
-          <HeroBackground />
-        </div>
-        <motion.div className="absolute inset-0 md:hidden" style={{ opacity: stageOpacity }}>
-          <HeroBackground />
-        </motion.div>
-
+        <div className="absolute inset-0 hidden md:block"><HeroBackground /></div>
+        <motion.div className="absolute inset-0 md:hidden" style={{ opacity: stageOpacity }}><HeroBackground /></motion.div>
         <div className="relative z-20 flex h-full flex-col">
           <HeroNav />
-
-          {/* Mobile centered stack + scroll phone */}
-          <HeroCopyMobile
-            className="pt-[clamp(56px,12vh,120px)] md:hidden"
-            style={{ opacity: copyOpacity, y: copyY }}
-          />
-
+          <HeroCopyMobile className="pt-[clamp(56px,12vh,120px)] md:hidden" style={{ opacity: copyOpacity, y: copyY }} />
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center md:hidden">
-            <motion.div
-              style={{ y: phoneY, opacity: phoneOpacity, scale: phoneScale }}
-              className="w-[min(78vw,320px)]"
-            >
-              <Image
-                src="/hero-phone.webp"
-                alt="Syra coding agent on phone"
-                width={880}
-                height={1780}
-                priority
-                sizes="80vw"
-                className="h-auto w-full rounded-[36px] shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
-              />
+            <motion.div style={{ y: phoneY, opacity: phoneOpacity, scale: phoneScale }} className="w-[min(78vw,320px)] transform-gpu will-change-transform">
+              <Image src="/hero-phone.webp" alt="Syra coding agent on phone" width={880} height={1780} priority sizes="80vw" className="h-auto w-full rounded-[36px] shadow-[0_24px_60px_rgba(0,0,0,0.55)]" />
             </motion.div>
           </div>
-
-          {/* Desktop split: copy left, phone right */}
-          <div className="relative hidden min-h-0 flex-1 md:block">
-            <HeroDesktop />
-          </div>
+          <motion.div style={{ opacity: storyOpacity }} className="pointer-events-none absolute inset-x-5 bottom-[9%] z-20 text-center md:hidden">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/45">More than a chat box</p>
+            <p className="mx-auto mt-3 max-w-[280px] text-xl font-semibold leading-tight tracking-[-0.03em] text-white">From your next task to your next launch.</p>
+          </motion.div>
+          <div className="relative hidden min-h-0 flex-1 md:block"><HeroDesktop /></div>
         </div>
       </div>
     </section>
@@ -269,335 +187,106 @@ function Hero() {
 
 function TrustStrip() {
   const items = [
-    { icon: <Sparkles className="h-3.5 w-3.5" />, label: "AI site generation" },
-    { icon: <Zap className="h-3.5 w-3.5" />, label: "Fast hosting" },
-    { icon: <Lock className="h-3.5 w-3.5" />, label: "Free SSL" },
-    { icon: <Rocket className="h-3.5 w-3.5" />, label: "One-click publish" },
-    { icon: <Globe className="h-3.5 w-3.5" />, label: "Custom domain" },
+    { icon: <Sparkles className="size-3.5" />, label: "AI site generation" },
+    { icon: <Zap className="size-3.5" />, label: "Fast hosting" },
+    { icon: <ShieldCheck className="size-3.5" />, label: "Free SSL" },
+    { icon: <Rocket className="size-3.5" />, label: "One-click publish" },
+    { icon: <Globe2 className="size-3.5" />, label: "Global reach" },
   ]
+  return <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20"><div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">{items.map((item) => <div key={item.label} className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}><span className="text-white/55">{item.icon}</span>{item.label}</div>)}</div></section>
+}
+
+function GlobalNetwork() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
-        {items.map(it => (
-          <div key={it.label} className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:text-sm" style={{ borderColor: BORDER, backgroundColor: BG, color: TEXT }}>
-            <span style={{ color: MUTED }}>{it.icon}</span>{it.label}
+    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+      <div className="grid overflow-hidden rounded-[32px] border bg-[#1c1d21] lg:grid-cols-[0.82fr_1.18fr]" style={{ borderColor: BORDER }}>
+        <div className="flex flex-col justify-between p-7 sm:p-10 lg:p-12">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">Always within reach</span>
+            <h2 className="mt-5 max-w-md text-3xl font-extrabold leading-[1.02] tracking-[-0.04em] text-white sm:text-5xl">One agent, wherever the work takes you.</h2>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-white/55">Your projects move fast. Our infrastructure follows with three ready locations and a calm, clear status view.</p>
           </div>
-        ))}
+          <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-white/60"><StatusBadge /><Link href="/servers" className="inline-flex items-center gap-1.5 text-white/40 underline-offset-4 hover:text-white hover:underline"><Server className="size-3.5" /> Explore servers <ArrowRight className="size-3" /></Link></div>
+        </div>
+        <WorldIllustration />
       </div>
     </section>
   )
 }
 
-function Pricing() {
-  const plans = [
-    { name: "Starter", price: "Free", tagline: "For trying things out", features: ["10 AI generation credits", "Hosting included", "Free SSL", "Sycord subdomain"], cta: "Start for free", highlighted: false, illo: <IlloPlanStarter /> },
-    { name: "Pro", price: "$19", period: "/mo", tagline: "For makers and small teams", features: ["200 AI generation credits", "Custom domain", "Free SSL", "Analytics", "Email support"], cta: "Start Pro", highlighted: true, illo: <IlloPlanPro /> },
-    { name: "Business", price: "$49", period: "/mo", tagline: "For growing companies", features: ["Unlimited AI generations", "Multiple custom domains", "Free SSL", "Advanced analytics", "Priority support"], cta: "Start Business", highlighted: false, illo: <IlloPlanBusiness /> },
+function WorldIllustration() {
+  const locations = [
+    { name: "Virginia", x: 178, y: 156, detail: "US East" },
+    { name: "Amsterdam", x: 415, y: 111, detail: "EU West" },
+    { name: "Singapore", x: 598, y: 248, detail: "AP Southeast" },
   ]
   return (
-    <section id="pricing" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="Pricing" title="Simple, transparent pricing" subtitle="Start free. Scale when you're ready." />
-      <div className="mt-10 grid gap-4 lg:grid-cols-3">
-        {plans.map(p => (
-          <div key={p.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${p.highlighted ? "shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : ""}`} style={{ borderColor: p.highlighted ? "rgba(255,255,255,0.15)" : BORDER, backgroundColor: BG }}>
-            <div className="mb-5 overflow-hidden rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>{p.illo}</div>
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">{p.name}</h3>
-              {p.highlighted ? <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>Popular</span> : null}
-            </div>
-            <p className="mt-1 text-sm" style={{ color: MUTED }}>{p.tagline}</p>
-            <div className="mt-5 flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-white">{p.price}</span>
-              {p.period ? <span className="text-sm" style={{ color: MUTED }}>{p.period}</span> : null}
-            </div>
-            <ul className="mt-5 space-y-2 text-sm" style={{ color: TEXT }}>
-              {p.features.map(f => (
-                <li key={f} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /><span>{f}</span>
-                </li>
-              ))}
-            </ul>
-            <Button
-              asChild
-              variant={p.highlighted ? "default" : "outline"}
-              className={`mt-6 rounded-xl ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
-              style={p.highlighted ? {} : { borderColor: BORDER }}
-            >
-              <Link href="/login">{p.cta}</Link>
-            </Button>
-          </div>
-        ))}
+    <div className="relative min-h-[330px] overflow-hidden border-t border-white/[0.06] bg-[radial-gradient(circle_at_50%_42%,rgba(124,111,245,0.14),transparent_58%)] lg:min-h-[440px] lg:border-l lg:border-t-0">
+      <div className="absolute inset-0 opacity-50" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)", backgroundSize: "42px 42px" }} />
+      <svg viewBox="0 0 760 400" className="absolute inset-0 h-full w-full" aria-label="World map showing Sycord server locations" role="img">
+        <defs><linearGradient id="continent" x1="0" x2="1" y1="0" y2="1"><stop stopColor="#69708b" stopOpacity=".46" /><stop offset="1" stopColor="#353b55" stopOpacity=".12" /></linearGradient><filter id="glow"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
+        <g fill="url(#continent)" stroke="#a8afd0" strokeOpacity=".18" strokeWidth="1">
+          <path d="M82 102 116 77 168 71 198 89 224 92 243 125 224 146 209 178 179 179 159 158 128 162 109 141 87 135 69 116Z" />
+          <path d="M246 187 273 201 287 232 278 262 294 297 277 332 253 318 249 286 233 262 238 230 221 210Z" />
+          <path d="M346 95 378 72 420 74 437 90 473 94 493 119 475 141 448 142 427 157 397 148 374 128 350 126 332 109Z" />
+          <path d="M443 165 475 153 509 167 532 195 553 208 548 238 518 245 498 229 478 236 458 214 438 205Z" />
+          <path d="M555 118 591 107 633 120 671 144 691 173 672 190 643 182 625 202 591 188 575 163 548 151Z" />
+          <path d="M634 264 675 263 699 281 687 300 654 301 632 286Z" />
+        </g>
+        <path d="M178 156 Q295 73 415 111 T598 248" fill="none" stroke="#9b91ff" strokeDasharray="5 8" strokeOpacity=".4" />
+        {locations.map((location) => <g key={location.name} filter="url(#glow)"><circle cx={location.x} cy={location.y} r="18" fill="#9b91ff" fillOpacity=".09" /><circle cx={location.x} cy={location.y} r="5" fill="#c3baff" /><circle cx={location.x} cy={location.y} r="2" fill="white" /></g>)}
+      </svg>
+      <div className="absolute inset-x-5 bottom-5 flex flex-wrap justify-between gap-3 sm:inset-x-8 sm:bottom-8">{locations.map((location) => <div key={location.name} className="flex items-center gap-2 text-xs text-white/70"><span className="h-1.5 w-1.5 rounded-full bg-[#a79cff] shadow-[0_0_12px_#a79cff]" /><span>{location.name}</span><span className="text-white/30">{location.detail}</span></div>)}</div>
+    </div>
+  )
+}
+
+function UseCases() {
+  const [active, setActive] = useState(0)
+  const lane = lanes[active]
+  return (
+    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+      <div className="mx-auto max-w-2xl text-center"><span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">Made for the whole day</span><h2 className="mt-4 text-3xl font-extrabold tracking-[-0.035em] text-white sm:text-5xl">Your work has more than one mode.</h2><p className="mt-4 text-base text-white/55">Keep one capable agent close, whether you are deep in focus or making something fun.</p></div>
+      <div className="mt-10 rounded-[32px] border p-2 sm:p-3" style={{ borderColor: BORDER, backgroundColor: "#1c1d21" }}>
+        <div className="grid grid-cols-2 gap-1 md:grid-cols-4">{lanes.map((item, index) => <button key={item.label} type="button" onClick={() => setActive(index)} className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold transition-colors sm:py-4 ${index === active ? "bg-white text-black" : "text-white/45 hover:bg-white/[0.04] hover:text-white"}`}>{item.icon}<span>{item.label}</span></button>)}</div>
+        <motion.div key={lane.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="grid gap-8 px-5 pb-5 pt-10 sm:px-8 sm:pb-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-12 lg:py-14">
+          <div><div className="mb-5 flex items-center gap-2 text-sm font-medium" style={{ color: lane.accent }}><span className="h-2 w-2 rounded-full" style={{ backgroundColor: lane.accent }} /> {lane.label} mode</div><h3 className="max-w-lg text-3xl font-bold leading-tight tracking-[-0.035em] text-white sm:text-4xl">{lane.title}</h3><p className="mt-4 max-w-md text-base leading-relaxed text-white/55">{lane.copy}</p><Link href="/login" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 hover:underline">Try it free <ArrowRight className="size-4" /></Link></div>
+          <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#151619] p-5 sm:p-7"><div className="absolute -right-14 -top-14 h-40 w-40 rounded-full opacity-20 blur-3xl" style={{ backgroundColor: lane.accent }} /><div className="relative flex items-center justify-between border-b border-white/[0.08] pb-4"><div className="flex items-center gap-2 text-sm font-semibold text-white"><WandSparkles className="size-4" style={{ color: lane.accent }} /> Syra workspace</div><span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-emerald-300/80"><span className="h-1.5 w-1.5 rounded-full bg-emerald-300" /> Ready</span></div><div className="relative mt-5 space-y-3">{lane.tasks.map((task, index) => <div key={task} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-sm text-white/75"><span className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold text-black" style={{ backgroundColor: index === 0 ? lane.accent : `${lane.accent}55` }}>{index + 1}</span>{task}<Check className="ml-auto size-4 text-white/35" /></div>)}</div></div>
+        </motion.div>
       </div>
     </section>
   )
 }
 
-function IlloPlanStarter() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
-      <div className="flex w-full max-w-[200px] items-center gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
-          <Wand2 className="h-5 w-5 text-white" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor: BORDER, backgroundColor: BG }}>
-            <span className="text-[10px] font-medium" style={{ color: MUTED }}>you.sycord.app</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {[0, 1, 2].map(i => <span key={i} className="h-1.5 flex-1 rounded-full bg-white/15" />)}
-            <Sparkles className="h-3 w-3 shrink-0 text-[#7C6FF5]" />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function IlloPlanPro() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
-      <div className="w-full max-w-[210px] space-y-2">
-        <div className="flex items-center gap-2 rounded-full border border-white/20 px-3 py-1.5" style={{ backgroundColor: BG }}>
-          <Lock className="h-3 w-3 shrink-0 text-emerald-400" />
-          <span className="text-[10px] font-semibold text-white">yourdomain.com</span>
-          <TrendingUp className="ml-auto h-3 w-3 shrink-0 text-[#7C6FF5]" />
-        </div>
-        <div className="flex items-end gap-1.5 rounded-xl border px-3 pb-2 pt-3" style={{ borderColor: BORDER, backgroundColor: BG }}>
-          {[8, 14, 10, 18, 13, 22, 17, 26].map((h, i) => (
-            <span key={i} className="w-full rounded-t-sm bg-[#7C6FF5]/60" style={{ height: h }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function IlloPlanBusiness() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
-      <div className="relative h-full w-full max-w-[210px]">
-        <div className="absolute left-3 top-1/2 w-[85%] -translate-y-[30%] rounded-xl border px-3 py-2 opacity-60" style={{ borderColor: BORDER, backgroundColor: "#1c1d20" }}>
-          <div className="h-1.5 w-16 rounded-full bg-white/20" />
-        </div>
-        <div className="absolute left-1.5 top-1/2 w-[90%] -translate-y-[55%] rounded-xl border px-3 py-2 opacity-80" style={{ borderColor: BORDER, backgroundColor: "#1e1f23" }}>
-          <div className="h-1.5 w-20 rounded-full bg-white/25" />
-        </div>
-        <div className="absolute left-0 top-1/2 flex w-[95%] -translate-y-[80%] items-center gap-2 rounded-xl border border-white/20 px-3 py-2" style={{ backgroundColor: "#232428" }}>
-          <Server className="h-3.5 w-3.5 shrink-0 text-white" />
-          <div className="h-1.5 w-20 rounded-full bg-white/40" />
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-400/10 px-1.5 py-0.5">
-            <span className="h-1 w-1 rounded-full bg-emerald-400" />
-            <span className="text-[8px] font-semibold uppercase tracking-wider text-emerald-400">99.99%</span>
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PriceComparison() {
-  const competitors = [
-    {
-      name: "Cursor",
-      icon: "/icons/cursor.svg",
-      price: "$20",
-      period: "/mo",
-      tagline: "AI-first code editor for professional developers",
-      features: [
-        { text: "AI code completions", included: true },
-        { text: "Inline editing & commands", included: true },
-        { text: "Chat with codebase", included: true },
-        { text: "Terminal integration", included: true },
-        { text: "Multiple LLM models", included: true },
-        { text: "Global hosting included", included: false },
-        { text: "Free SSL & CDN", included: false },
-        { text: "Custom domains", included: false },
-      ],
-      highlight: false,
-    },
-    {
-      name: "Cloud Code",
-      icon: "/icons/cloud-code.svg",
-      price: "Free",
-      period: " / mo",
-      tagline: "Google Cloud developer tools for teams",
-      features: [
-        { text: "AI code completions", included: true },
-        { text: "Cloud IDE", included: true },
-        { text: "GitHub integration", included: true },
-        { text: "Docker & Kubernetes", included: true },
-        { text: "Google Cloud connectors", included: true },
-        { text: "Global hosting included", included: false },
-        { text: "Free SSL & CDN", included: false },
-        { text: "Custom domains", included: false },
-      ],
-      highlight: false,
-    },
-    {
-      name: "Sycord",
-      icon: "/logo.png",
-      price: "Free",
-      period: " / mo",
-      tagline: "AI website builder with full hosting stack",
-      features: [
-        { text: "AI site generation", included: true },
-        { text: "Global hosting included", included: true },
-        { text: "Free SSL & CDN", included: true },
-        { text: "Custom domains", included: true },
-        { text: "One-click publish", included: true },
-        { text: "AI code completions", included: true },
-        { text: "Enterprise scaling", included: true },
-        { text: "Priority support", included: true },
-      ],
-      highlight: true,
-    },
+function AgentWorkflow() {
+  const steps = [
+    { icon: <Terminal className="size-5" />, title: "Start with a thought", copy: "Describe the outcome, not the perfect prompt." },
+    { icon: <Code2 className="size-5" />, title: "Shape it together", copy: "Refine the work in a live, responsive workspace." },
+    { icon: <Rocket className="size-5" />, title: "Send it into the world", copy: "Publish with hosting, SSL, and status built in." },
   ]
-  return (
-    <section id="compare" className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
-      <SectionHeading eyebrow="Price Comparison" title="Cursor vs Cloud Code vs Sycord" subtitle="Compare features, pricing, and value across the leading AI development platforms." />
-      <div className="mt-10 grid gap-6 lg:grid-cols-3">
-        {competitors.map(c => (
-          <div key={c.name} className={`relative flex flex-col rounded-3xl border p-6 transition-all ${c.highlight ? "border-white/20 bg-gradient-to-b from-[#1e1e24] to-[#181818] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.03]" : "border-[#2a2c30] bg-[#181818] hover:border-white/10"}`} style={{ borderColor: c.highlight ? "rgba(255,255,255,0.15)" : BORDER }}>
-            {c.highlight && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-black">Recommended</div>
-            )}
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>
-                <Image src={c.icon} alt={c.name} width={28} height={28} className="h-7 w-7 object-contain" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">{c.name}</h3>
-                <p className="text-xs" style={{ color: MUTED }}>{c.tagline}</p>
-              </div>
-            </div>
-            <div className="mt-6 flex items-baseline gap-1">
-              <span className="text-4xl font-extrabold text-white">{c.price}</span>
-              <span className="text-sm font-medium" style={{ color: MUTED }}>{c.period}</span>
-            </div>
-            <ul className="mt-6 space-y-3">
-              {c.features.map(f => (
-                <li key={f.text} className="flex items-start gap-3 text-sm">
-                  {f.included ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                  ) : (
-                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full border" style={{ borderColor: BORDER, backgroundColor: "#111213" }} />
-                  )}
-                  <span style={{ color: f.included ? TEXT : MUTED, textDecoration: f.included ? "none" : "line-through" }}>{f.text}</span>
-                </li>
-              ))}
-            </ul>
-            <Button
-              asChild
-              variant={c.highlight ? "default" : "outline"}
-              className={`mt-auto rounded-xl ${c.highlight ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
-              style={c.highlight ? {} : { borderColor: BORDER }}
-            >
-              <Link href={c.name === "Sycord" ? "/login" : c.name === "Cursor" ? "https://cursor.com" : "https://cloud.google.com/code"} target="_blank" rel="noopener noreferrer">
-                {c.name === "Sycord" ? "Start for free" : "Get Started"}
-              </Link>
-            </Button>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
+  return <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32"><div className="grid gap-10 rounded-[32px] border p-7 sm:p-10 lg:grid-cols-[0.75fr_1.25fr] lg:items-center lg:p-14" style={{ borderColor: BORDER, backgroundColor: "#1b1c20" }}><div><span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">A simpler loop</span><h2 className="mt-4 max-w-md text-3xl font-extrabold leading-tight tracking-[-0.04em] text-white sm:text-5xl">Less setup.<br /><span className="text-white/45">More making.</span></h2></div><div className="space-y-3">{steps.map((step, index) => <div key={step.title} className="flex gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-white">{step.icon}</div><div><div className="flex items-center gap-2 text-sm font-semibold text-white"><span className="text-white/35">0{index + 1}</span>{step.title}</div><p className="mt-1 text-sm leading-relaxed text-white/45">{step.copy}</p></div></div>)}</div></div></section>
 }
 
 function FAQ() {
   const faqs = [
-    { q: "How fast can I launch?", a: "Most users go from prompt to live site in under a minute. Generation, editing, and publish are all in-app." },
-    { q: "Is hosting included?", a: "Yes — every plan, including the free tier, ships with global hosting, free SSL, and a Sycord subdomain." },
-    { q: "Can I connect my own domain?", a: "Pro and Business plans include custom domain support with guided DNS and automatic SSL." },
-    { q: "Can I edit the AI-generated site?", a: "Absolutely. Click any section to refine text, layout, or style. You can also re-prompt sections." },
-    { q: "Is it mobile responsive?", a: "Every site is responsive by default. Sycord auto-tunes layouts for mobile, tablet, and desktop." },
+    { q: "What can Syra help me make?", a: "Syra can help with websites, internal tools, launch pages, documents, research, and the everyday work that connects them." },
+    { q: "Is hosting included?", a: "Yes. Publish with global hosting, free SSL, and a Sycord subdomain included." },
+    { q: "Can I edit the work myself?", a: "Absolutely. Keep the conversation going or jump into the responsive workspace and shape every detail." },
+    { q: "Is it mobile responsive?", a: "Yes. Sycord tunes layouts for mobile, tablet, and desktop as part of the build." },
   ]
-  return (
-    <section className="mx-auto w-full max-w-3xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="FAQ" title="Frequently asked questions" subtitle="Everything you need to know to get started." />
-      <div className="mt-8 rounded-3xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
-        <Accordion type="single" collapsible className="w-full">
-          {faqs.map((f, i) => (
-            <AccordionItem key={f.q} value={`item-${i}`} className={`px-5 ${i === faqs.length - 1 ? "border-b-0" : ""}`} style={{ borderColor: BORDER }}>
-              <AccordionTrigger className="text-base font-semibold text-white hover:no-underline">{f.q}</AccordionTrigger>
-              <AccordionContent className="text-sm" style={{ color: MUTED }}>{f.a}</AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
-      </div>
-    </section>
-  )
+  const [open, setOpen] = useState<number | null>(null)
+  return <section className="mx-auto w-full max-w-3xl px-5 pt-24 sm:px-8 sm:pt-32"><div className="mx-auto max-w-2xl text-center"><span className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">FAQ</span><h2 className="mt-4 text-3xl font-extrabold tracking-[-0.035em] text-white sm:text-4xl">A few useful answers.</h2></div><div className="mt-8 overflow-hidden rounded-3xl border" style={{ borderColor: BORDER, backgroundColor: "#1b1c20" }}>{faqs.map((faq, index) => <div key={faq.q} className="border-b last:border-b-0" style={{ borderColor: BORDER }}><button type="button" onClick={() => setOpen(open === index ? null : index)} className="flex w-full items-center justify-between gap-4 px-5 py-5 text-left text-base font-semibold text-white"><span>{faq.q}</span><span className={`text-xl font-normal text-white/35 transition-transform ${open === index ? "rotate-45" : ""}`}>+</span></button>{open === index && <p className="px-5 pb-5 text-sm leading-relaxed text-white/50">{faq.a}</p>}</div>)}</div></section>
 }
 
 function FinalCTA() {
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <div className="overflow-hidden rounded-[36px] border p-10 text-center sm:rounded-[55px] sm:p-16" style={{ borderColor: BORDER, backgroundColor: BG, backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1.4px, transparent 1.4px)", backgroundSize: "26px 26px" }}>
-        <h2 className="mx-auto max-w-2xl text-3xl font-extrabold tracking-tight text-white sm:text-5xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>Launch your site with AI</h2>
-        <p className="mx-auto mt-4 max-w-xl text-base sm:text-lg" style={{ color: MUTED }}>Build, host, and publish from one powerful platform.</p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Button asChild className="rounded-xl bg-white text-black hover:bg-white/90">
-            <Link href="/login">Start for free <ArrowRight className="ml-1 h-4 w-4" /></Link>
-          </Button>
-          <Button asChild variant="outline" className="rounded-xl bg-transparent text-white hover:text-white" style={{ borderColor: BORDER }}>
-            <Link href="/login">Get started</Link>
-          </Button>
-        </div>
-      </div>
-    </section>
-  )
+  return <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32"><div className="relative overflow-hidden rounded-[36px] border p-10 text-center sm:rounded-[55px] sm:p-16" style={{ borderColor: BORDER, backgroundColor: "#1c1d21" }}><div className="pointer-events-none absolute inset-0 opacity-50" style={{ background: "radial-gradient(circle at 50% 0%, rgba(124,111,245,0.25), transparent 55%)" }} /><div className="relative"><p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">Your next direction starts here</p><h2 className="mx-auto mt-4 max-w-2xl text-3xl font-extrabold tracking-[-0.04em] text-white sm:text-5xl">Make something that moves.</h2><p className="mx-auto mt-4 max-w-xl text-base sm:text-lg" style={{ color: MUTED }}>Build, host, and publish from one calm, capable workspace.</p><div className="mt-8 flex flex-wrap items-center justify-center gap-3"><Button asChild className="rounded-xl bg-white text-black hover:bg-white/90"><Link href="/login">Start for free <ArrowRight className="ml-1 size-4" /></Link></Button><Link href="/servers" className="inline-flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white/55 transition-colors hover:text-white"><MapPin className="size-4" /> See the infrastructure</Link></div></div></div></section>
 }
 
 function Footer() {
   const cols = [
-    { title: "Product", links: [{ label: "Pricing", href: "#pricing" }, { label: "Compare", href: "#compare" }, { label: "Changelog", href: "/releases" }] },
-    { title: "Pricing", links: [{ label: "Plans", href: "#pricing" }, { label: "Compare", href: "#pricing" }, { label: "Enterprise", href: "/contact" }] },
-    { title: "Docs", links: [{ label: "Getting started", href: "#" }, { label: "Custom domains", href: "#" }, { label: "API", href: "#" }] },
-    { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Status", href: "#" }] },
+    { title: "Product", links: [{ label: "Servers", href: "/servers" }, { label: "Versions", href: "/releases" }, { label: "Contact", href: "/contact" }] },
+    { title: "Explore", links: [{ label: "About", href: "/about" }, { label: "Status", href: "/servers" }, { label: "Business report", href: "/business-report" }] },
+    { title: "Support", links: [{ label: "Terms", href: "/tos" }, { label: "Privacy", href: "/pap" }, { label: "Get started", href: "/login" }] },
   ]
-  return (
-    <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:px-8 sm:mt-32">
-      <div className="rounded-3xl border p-8 sm:p-10" style={{ borderColor: BORDER, backgroundColor: BG }}>
-        <div className="grid gap-8 lg:grid-cols-5">
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-2">
-              <Image src="/logo.png" alt="logo" width={28} height={28} className="opacity-90" />
-              <span className="text-base font-semibold text-white">Sycord</span>
-            </div>
-            <p className="mt-3 max-w-sm text-sm" style={{ color: MUTED }}>The AI website builder with hosting built in. Generate, customize, and publish — all from one platform.</p>
-          </div>
-          {cols.map(c => (
-            <div key={c.title}>
-              <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: MUTED }}>{c.title}</div>
-              <ul className="mt-4 space-y-2 text-sm">
-                {c.links.map(l => (
-                  <li key={l.label}>
-                    <Link href={l.href} className="transition-colors duration-150 hover:text-white" style={{ color: TEXT }}>{l.label}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <div className="mt-10 h-[1px] w-full rounded-full bg-white/10" />
-        <div className="mt-6 flex flex-col items-start justify-between gap-4 text-xs sm:flex-row sm:items-center" style={{ color: MUTED }}>
-          <span>© {new Date().getFullYear()} Sycord. All rights reserved.</span>
-          <div className="flex items-center gap-3">
-            <Link href="/tos" className="transition-colors duration-150 hover:text-white">Terms</Link>
-            <span>·</span>
-            <Link href="/pap" className="transition-colors duration-150 hover:text-white">Privacy</Link>
-          </div>
-        </div>
-      </div>
-    </footer>
-  )
-}
-
-function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
-  return (
-    <div className="mx-auto max-w-2xl text-center">
-      <span className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: BORDER, backgroundColor: BG, color: MUTED }}>{eyebrow}</span>
-      <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>{title}</h2>
-      <p className="mt-3 text-base" style={{ color: MUTED }}>{subtitle}</p>
-    </div>
-  )
+  return <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:mt-32 sm:px-8"><div className="rounded-3xl border p-8 sm:p-10" style={{ borderColor: BORDER, backgroundColor: "#1b1c20" }}><div className="grid gap-8 lg:grid-cols-5"><div className="lg:col-span-2"><div className="flex items-center gap-2"><Image src="/logo.png" alt="Sycord" width={28} height={28} className="opacity-90" /><span className="text-base font-semibold text-white">Sycord</span></div><p className="mt-3 max-w-sm text-sm leading-relaxed" style={{ color: MUTED }}>One capable agent for the work, ideas, and launches that make up your day.</p><Link href="/releases" className="mt-5 inline-block text-xs text-white/45 underline-offset-4 hover:text-white hover:underline">0.1 Private alpha</Link></div>{cols.map((column) => <div key={column.title}><div className="text-xs font-semibold uppercase tracking-wider" style={{ color: MUTED }}>{column.title}</div><ul className="mt-4 space-y-2 text-sm">{column.links.map((link) => <li key={link.label}><Link href={link.href} className="transition-colors duration-150 hover:text-white" style={{ color: TEXT }}>{link.label}</Link></li>)}</ul></div>)}</div><div className="mt-10 h-px w-full rounded-full bg-white/10" /><div className="mt-6 flex flex-col items-start justify-between gap-4 text-xs sm:flex-row sm:items-center" style={{ color: MUTED }}><span>© {new Date().getFullYear()} Sycord. All rights reserved.</span><span>Built for the next direction.</span></div></div></footer>
 }

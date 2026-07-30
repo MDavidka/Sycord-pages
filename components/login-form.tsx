@@ -31,14 +31,19 @@ export default function LoginForm() {
 
   return (
     <main
-      className="relative min-h-screen w-full overflow-hidden bg-[#18191B] text-white"
+      className="relative min-h-screen w-full overflow-hidden bg-[#181818] text-white"
       style={{
-        backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.6px, transparent 1.6px)",
-        backgroundSize: "38px 38px",
-        backgroundPosition: "0 0",
         fontFamily: "'Inter', sans-serif",
       }}
     >
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-35">
+          <Image src="/hero-glass-bg.webp" alt="" fill priority sizes="100vw" className="object-cover object-[center_35%]" />
+        </div>
+        <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse 75% 55% at 50% 18%, rgba(124,111,245,0.16), transparent 72%), linear-gradient(to bottom, #181818 0%, rgba(24,24,24,0.55) 28%, rgba(24,24,24,0.82) 74%, #181818 100%)" }} />
+        <div className="absolute -right-24 top-32 h-72 w-72 rounded-full bg-[#7c6ff5]/10 blur-[100px]" />
+        <div className="absolute -left-24 bottom-8 h-80 w-80 rounded-full bg-[#4bbd9a]/10 blur-[110px]" />
+      </div>
       {/* Shake keyframe */}
       <style>{`
         @keyframes shake {
@@ -52,14 +57,14 @@ export default function LoginForm() {
       `}</style>
 
       {/* Header */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
           <Image src="/logo.png" alt="Sycord" width={36} height={36} priority className="h-8 w-8 opacity-90" />
           <span className="text-sm font-semibold tracking-tight text-white">sycord</span>
         </Link>
         <Link
           href="/"
-          className="inline-flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#18191B] px-4 py-2 text-xs font-medium text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white"
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-4 py-2 text-xs font-medium text-[#A7AAB0] backdrop-blur-md transition-colors hover:bg-black/45 hover:text-white"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Back</span>
@@ -67,12 +72,12 @@ export default function LoginForm() {
       </header>
 
       {/* Body */}
-      <div className="mx-auto grid w-full max-w-6xl gap-10 px-5 pb-20 pt-12 sm:px-8 sm:pt-20 lg:grid-cols-2 lg:gap-16">
+      <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-5 pb-20 pt-12 sm:px-8 sm:pt-20 lg:grid-cols-2 lg:gap-16">
 
         {/* ── Card ── */}
         <div className="flex items-start justify-center lg:items-center">
           <div className="w-full max-w-md">
-            <div className="rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_30px_80px_-40px_rgba(0,0,0,0.8)] sm:p-8">
+            <div className="rounded-3xl border border-white/[0.1] bg-[#1c1d21]/90 p-6 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset,0_30px_80px_-40px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:p-8">
 
               {/* Logo row */}
               <div className="flex items-center gap-3">
@@ -102,7 +107,7 @@ export default function LoginForm() {
                         placeholder="e.g. XXXXXX"
                         autoComplete="off"
                         spellCheck={false}
-                        className={`h-12 w-full rounded-2xl border bg-[#111213] px-4 text-sm font-mono tracking-widest text-white placeholder-[#3a3c40] outline-none transition-colors focus:border-white/30 sm:h-14 sm:text-base ${
+                        className={`h-12 w-full rounded-2xl border bg-[#151619] px-4 text-sm font-mono tracking-widest text-white placeholder-[#3a3c40] outline-none transition-colors focus:border-white/30 sm:h-14 sm:text-base ${
                           error ? "border-red-500/60" : "border-[#2a2c30]"
                         }`}
                       />
@@ -145,7 +150,7 @@ export default function LoginForm() {
                   <button
                     type="button"
                     onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-                    className="mt-7 inline-flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-[#2a2c30] bg-white text-sm font-semibold text-black transition-transform hover:scale-[1.01] sm:h-14 sm:text-base"
+                    className="mt-7 inline-flex h-12 w-full items-center justify-center gap-3 rounded-2xl border border-white/20 bg-white text-sm font-semibold text-black transition-transform hover:scale-[1.01] sm:h-14 sm:text-base"
                   >
                     <svg className="h-5 w-5" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -210,8 +215,8 @@ export default function LoginForm() {
 
 function FeatureRow({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <li className="flex items-start gap-4 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4">
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#18191B] text-white">{icon}</div>
+    <li className="flex items-start gap-4 rounded-2xl border border-white/[0.08] bg-[#1c1d21]/80 p-4 backdrop-blur-md">
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white">{icon}</div>
       <div>
         <h3 className="text-sm font-semibold text-white">{title}</h3>
         <p className="mt-1 text-sm text-[#6B6F78]">{desc}</p>
