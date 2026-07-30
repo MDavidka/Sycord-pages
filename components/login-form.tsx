@@ -31,14 +31,48 @@ export default function LoginForm() {
 
   return (
     <main
-      className="relative min-h-screen w-full overflow-hidden bg-[#18191B] text-white"
+      className="relative min-h-screen w-full overflow-hidden bg-[#181818] text-white"
       style={{
-        backgroundImage: "radial-gradient(rgba(255,255,255,0.07) 1.6px, transparent 1.6px)",
-        backgroundSize: "38px 38px",
-        backgroundPosition: "0 0",
         fontFamily: "'Inter', sans-serif",
       }}
     >
+      {/* Background: shared with landing page */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            WebkitMaskImage:
+              "linear-gradient(to bottom, transparent 0%, black 18%, black 70%, transparent 100%)",
+            maskImage:
+              "linear-gradient(to bottom, transparent 0%, black 18%, black 70%, transparent 100%)",
+          }}
+        >
+          <Image
+            src="/hero-glass-bg.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-[center_35%]"
+          />
+        </div>
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "linear-gradient(to bottom, #181818 0%, rgba(24,24,24,0.65) 12%, transparent 32%, transparent 68%, rgba(24,24,24,0.45) 88%, #181818 100%)",
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1.2px, transparent 1.2px)",
+            backgroundSize: "30px 30px",
+            WebkitMaskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 80%)",
+            maskImage: "radial-gradient(ellipse 60% 55% at 50% 45%, black 30%, transparent 80%)",
+          }}
+        />
+      </div>
+
       {/* Shake keyframe */}
       <style>{`
         @keyframes shake {
@@ -52,14 +86,14 @@ export default function LoginForm() {
       `}</style>
 
       {/* Header */}
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-5 pt-6 sm:px-8 sm:pt-8">
         <Link href="/" className="inline-flex items-center gap-2.5">
           <Image src="/logo.png" alt="Sycord" width={36} height={36} priority className="h-8 w-8 opacity-90" />
           <span className="text-sm font-semibold tracking-tight text-white">sycord</span>
         </Link>
         <Link
           href="/"
-          className="inline-flex items-center gap-2 rounded-full border border-[#2a2c30] bg-[#18191B] px-4 py-2 text-xs font-medium text-[#A7AAB0] transition-colors hover:bg-[#212327] hover:text-white"
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-xs font-medium text-[#A7AAB0] backdrop-blur-md transition-colors hover:bg-black/40 hover:text-white"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Back</span>
@@ -67,12 +101,12 @@ export default function LoginForm() {
       </header>
 
       {/* Body */}
-      <div className="mx-auto grid w-full max-w-6xl gap-10 px-5 pb-20 pt-12 sm:px-8 sm:pt-20 lg:grid-cols-2 lg:gap-16">
+      <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-5 pb-20 pt-12 sm:px-8 sm:pt-20 lg:grid-cols-2 lg:gap-16">
 
         {/* ── Card ── */}
         <div className="flex items-start justify-center lg:items-center">
           <div className="w-full max-w-md">
-            <div className="rounded-3xl border border-[#2a2c30] bg-[#18191B] p-6 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_30px_80px_-40px_rgba(0,0,0,0.8)] sm:p-8">
+            <div className="rounded-3xl border border-white/10 bg-[#181818]/70 p-6 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_30px_80px_-40px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:p-8">
 
               {/* Logo row */}
               <div className="flex items-center gap-3">
@@ -210,8 +244,8 @@ export default function LoginForm() {
 
 function FeatureRow({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <li className="flex items-start gap-4 rounded-2xl border border-[#2a2c30] bg-[#18191B] p-4">
-      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#18191B] text-white">{icon}</div>
+    <li className="flex items-start gap-4 rounded-2xl border border-white/10 bg-[#181818]/60 p-4 backdrop-blur-sm">
+      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[#181818]/80 text-white">{icon}</div>
       <div>
         <h3 className="text-sm font-semibold text-white">{title}</h3>
         <p className="mt-1 text-sm text-[#6B6F78]">{desc}</p>

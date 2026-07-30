@@ -9,8 +9,8 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  ArrowRight, Briefcase, CheckCircle2, Cloud, Globe,
-  Lock, Phone, Rocket, Server, Sparkles, TrendingUp, Wand2, Zap,
+  ArrowRight, Briefcase, Gamepad2, Globe, LayoutDashboard,
+  Lock, Monitor, Phone, Rocket, Sparkles, Zap,
 } from "lucide-react"
 
 const BG = "#181818"
@@ -22,12 +22,14 @@ export default function LandingPage() {
   return (
     <main className="min-h-screen w-full text-white" style={{ fontFamily: "'Inter', sans-serif", backgroundColor: BG }}>
       <Hero />
+      <StatusStrip />
       <TrustStrip />
-      <Pricing />
-      <PriceComparison />
+      <WorldMapSection />
+      <OneAgentSection />
       <FAQ />
       <FinalCTA />
       <Footer />
+      <VersionMark />
     </main>
   )
 }
@@ -210,17 +212,17 @@ function Hero() {
   })
 
   // Mobile scroll story: peek → rise fully → hold → fade out → rest of site
-  const phoneY = useTransform(scrollYProgress, [0, 0.42, 0.6, 0.82], ["46vh", "0vh", "0vh", "-10vh"])
-  const phoneOpacity = useTransform(scrollYProgress, [0, 0.6, 0.74, 0.9], [1, 1, 0.4, 0])
-  const phoneScale = useTransform(scrollYProgress, [0, 0.42, 0.82], [0.92, 1, 0.96])
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.25, 0.45], [1, 0.5, 0])
-  const copyY = useTransform(scrollYProgress, [0, 0.45], [0, -40])
-  const stageOpacity = useTransform(scrollYProgress, [0.8, 0.95], [1, 0])
+  const phoneY = useTransform(scrollYProgress, [0, 0.35, 0.55, 0.78], ["46vh", "0vh", "0vh", "-10vh"])
+  const phoneOpacity = useTransform(scrollYProgress, [0, 0.52, 0.7, 0.88], [1, 1, 0.4, 0])
+  const phoneScale = useTransform(scrollYProgress, [0, 0.35, 0.78], [0.92, 1, 0.96])
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.2, 0.4], [1, 0.5, 0])
+  const copyY = useTransform(scrollYProgress, [0, 0.4], [0, -40])
+  const stageOpacity = useTransform(scrollYProgress, [0.7, 0.92], [1, 0])
 
   return (
-      <section
+    <section
       ref={trackRef}
-      className="relative h-[180vh] w-full md:h-[100svh] md:min-h-[600px]"
+      className="relative h-[140vh] w-full md:h-[100svh] md:min-h-[600px]"
       style={{ backgroundColor: BG }}
     >
       <div className="sticky top-0 h-[100svh] overflow-hidden md:relative md:h-full">
@@ -288,214 +290,109 @@ function TrustStrip() {
   )
 }
 
-function Pricing() {
-  const plans = [
-    { name: "Starter", price: "Free", tagline: "For trying things out", features: ["10 AI generation credits", "Hosting included", "Free SSL", "Sycord subdomain"], cta: "Start for free", highlighted: false, illo: <IlloPlanStarter /> },
-    { name: "Pro", price: "$19", period: "/mo", tagline: "For makers and small teams", features: ["200 AI generation credits", "Custom domain", "Free SSL", "Analytics", "Email support"], cta: "Start Pro", highlighted: true, illo: <IlloPlanPro /> },
-    { name: "Business", price: "$49", period: "/mo", tagline: "For growing companies", features: ["Unlimited AI generations", "Multiple custom domains", "Free SSL", "Advanced analytics", "Priority support"], cta: "Start Business", highlighted: false, illo: <IlloPlanBusiness /> },
-  ]
+function StatusStrip() {
   return (
-    <section id="pricing" className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
-      <SectionHeading eyebrow="Pricing" title="Simple, transparent pricing" subtitle="Start free. Scale when you're ready." />
-      <div className="mt-10 grid gap-4 lg:grid-cols-3">
-        {plans.map(p => (
-          <div key={p.name} className={`flex flex-col rounded-3xl border p-6 transition-colors ${p.highlighted ? "shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.02]" : ""}`} style={{ borderColor: p.highlighted ? "rgba(255,255,255,0.15)" : BORDER, backgroundColor: BG }}>
-            <div className="mb-5 overflow-hidden rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>{p.illo}</div>
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">{p.name}</h3>
-              {p.highlighted ? <span className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider text-white" style={{ borderColor: BORDER, backgroundColor: BG }}>Popular</span> : null}
-            </div>
-            <p className="mt-1 text-sm" style={{ color: MUTED }}>{p.tagline}</p>
-            <div className="mt-5 flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-white">{p.price}</span>
-              {p.period ? <span className="text-sm" style={{ color: MUTED }}>{p.period}</span> : null}
-            </div>
-            <ul className="mt-5 space-y-2 text-sm" style={{ color: TEXT }}>
-              {p.features.map(f => (
-                <li key={f} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" /><span>{f}</span>
-                </li>
-              ))}
-            </ul>
-            <Button
-              asChild
-              variant={p.highlighted ? "default" : "outline"}
-              className={`mt-6 rounded-xl ${p.highlighted ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
-              style={p.highlighted ? {} : { borderColor: BORDER }}
-            >
-              <Link href="/login">{p.cta}</Link>
-            </Button>
-          </div>
-        ))}
+    <section className="mx-auto w-full max-w-6xl px-5 pt-6 sm:px-8 sm:pt-8">
+      <div className="flex justify-center">
+        <Link href="/servers" className="inline-flex items-center gap-2.5 rounded-full border px-4 py-2 transition-colors hover:border-white/20" style={{ borderColor: BORDER, backgroundColor: BG }}>
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[#00E599]" />
+          </span>
+          <span className="text-xs font-medium" style={{ color: MUTED }}>All systems operational</span>
+        </Link>
       </div>
     </section>
   )
 }
 
-function IlloPlanStarter() {
+function WorldMapSection() {
   return (
-    <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
-      <div className="flex w-full max-w-[200px] items-center gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: BG }}>
-          <Wand2 className="h-5 w-5 text-white" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor: BORDER, backgroundColor: BG }}>
-            <span className="text-[10px] font-medium" style={{ color: MUTED }}>you.sycord.app</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {[0, 1, 2].map(i => <span key={i} className="h-1.5 flex-1 rounded-full bg-white/15" />)}
-            <Sparkles className="h-3 w-3 shrink-0 text-[#7C6FF5]" />
-          </div>
-        </div>
+    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+      <SectionHeading eyebrow="Global Infrastructure" title="Deploy worldwide" subtitle="Three server locations across the globe for low-latency hosting." />
+      <div className="mt-10 overflow-hidden rounded-3xl border p-6 sm:p-10" style={{ borderColor: BORDER, backgroundColor: BG }}>
+        <WorldMapSVG />
       </div>
-    </div>
+    </section>
   )
 }
 
-function IlloPlanPro() {
+function WorldMapSVG() {
   return (
-    <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
-      <div className="w-full max-w-[210px] space-y-2">
-        <div className="flex items-center gap-2 rounded-full border border-white/20 px-3 py-1.5" style={{ backgroundColor: BG }}>
-          <Lock className="h-3 w-3 shrink-0 text-emerald-400" />
-          <span className="text-[10px] font-semibold text-white">yourdomain.com</span>
-          <TrendingUp className="ml-auto h-3 w-3 shrink-0 text-[#7C6FF5]" />
-        </div>
-        <div className="flex items-end gap-1.5 rounded-xl border px-3 pb-2 pt-3" style={{ borderColor: BORDER, backgroundColor: BG }}>
-          {[8, 14, 10, 18, 13, 22, 17, 26].map((h, i) => (
-            <span key={i} className="w-full rounded-t-sm bg-[#7C6FF5]/60" style={{ height: h }} />
-          ))}
-        </div>
-      </div>
-    </div>
+    <svg viewBox="0 0 900 450" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full" aria-hidden="true">
+      <defs>
+        <radialGradient id="dotGlow1" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#00E599" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#00E599" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="dotGlow2" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#7C6FF5" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#7C6FF5" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="dotGlow3" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#F59E0B" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
+      {/* North America */}
+      <path d="M130,60 L200,45 L270,50 L310,65 L340,90 L340,130 L310,160 L280,175 L240,185 L200,190 L150,185 L110,170 L90,145 L100,105 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      {/* South America */}
+      <path d="M200,200 L240,195 L280,200 L290,240 L280,280 L250,330 L220,350 L190,340 L170,310 L170,270 L180,230 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      {/* Europe */}
+      <path d="M410,50 L460,40 L510,45 L540,60 L550,90 L530,110 L500,120 L460,115 L430,105 L400,95 L395,70 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      {/* Africa */}
+      <path d="M430,120 L480,115 L510,130 L520,170 L510,220 L490,260 L460,280 L430,275 L400,250 L390,210 L400,160 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      {/* Asia */}
+      <path d="M560,40 L660,30 L750,35 L800,60 L810,100 L790,130 L750,140 L680,135 L620,125 L570,105 L550,80 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      {/* Southeast Asia / islands */}
+      <path d="M750,145 L780,150 L810,165 L790,185 L760,180 L740,160 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+      {/* Australia */}
+      <path d="M720,330 L780,320 L820,340 L820,380 L780,400 L730,390 L710,360 Z" fill="#1e1f23" stroke="#2a2c30" strokeWidth="1" />
+
+      {/* Server location 1: US West (Oregon) */}
+      <circle cx="155" cy="118" r="28" fill="url(#dotGlow1)" />
+      <circle cx="155" cy="118" r="4" fill="#00E599" />
+      <line x1="155" y1="118" x2="155" y2="145" stroke="#2a2c30" strokeWidth="0.8" />
+      <rect x="128" y="147" width="54" height="22" rx="6" fill="#111213" stroke="#2a2c30" strokeWidth="0.8" />
+      <text x="155" y="162" fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">US West</text>
+
+      {/* Server location 2: Europe (Frankfurt) */}
+      <circle cx="470" cy="85" r="28" fill="url(#dotGlow2)" />
+      <circle cx="470" cy="85" r="4" fill="#7C6FF5" />
+      <line x1="470" y1="85" x2="470" y2="112" stroke="#2a2c30" strokeWidth="0.8" />
+      <rect x="435" y="114" width="70" height="22" rx="6" fill="#111213" stroke="#2a2c30" strokeWidth="0.8" />
+      <text x="470" y="129" fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">Frankfurt</text>
+
+      {/* Server location 3: Asia (Singapore) */}
+      <circle cx="770" cy="148" r="28" fill="url(#dotGlow3)" />
+      <circle cx="770" cy="148" r="4" fill="#F59E0B" />
+      <line x1="770" y1="148" x2="770" y2="175" stroke="#2a2c30" strokeWidth="0.8" />
+      <rect x="735" y="177" width="70" height="22" rx="6" fill="#111213" stroke="#2a2c30" strokeWidth="0.8" />
+      <text x="770" y="192" fill="#A7AAB0" fontSize="9" textAnchor="middle" className="font-medium">Singapore</text>
+    </svg>
   )
 }
 
-function IlloPlanBusiness() {
-  return (
-    <div aria-hidden="true" className="flex aspect-[16/7] w-full items-center justify-center p-4">
-      <div className="relative h-full w-full max-w-[210px]">
-        <div className="absolute left-3 top-1/2 w-[85%] -translate-y-[30%] rounded-xl border px-3 py-2 opacity-60" style={{ borderColor: BORDER, backgroundColor: "#1c1d20" }}>
-          <div className="h-1.5 w-16 rounded-full bg-white/20" />
-        </div>
-        <div className="absolute left-1.5 top-1/2 w-[90%] -translate-y-[55%] rounded-xl border px-3 py-2 opacity-80" style={{ borderColor: BORDER, backgroundColor: "#1e1f23" }}>
-          <div className="h-1.5 w-20 rounded-full bg-white/25" />
-        </div>
-        <div className="absolute left-0 top-1/2 flex w-[95%] -translate-y-[80%] items-center gap-2 rounded-xl border border-white/20 px-3 py-2" style={{ backgroundColor: "#232428" }}>
-          <Server className="h-3.5 w-3.5 shrink-0 text-white" />
-          <div className="h-1.5 w-20 rounded-full bg-white/40" />
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-400/10 px-1.5 py-0.5">
-            <span className="h-1 w-1 rounded-full bg-emerald-400" />
-            <span className="text-[8px] font-semibold uppercase tracking-wider text-emerald-400">99.99%</span>
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PriceComparison() {
-  const competitors = [
-    {
-      name: "Cursor",
-      icon: "/icons/cursor.svg",
-      price: "$20",
-      period: "/mo",
-      tagline: "AI-first code editor for professional developers",
-      features: [
-        { text: "AI code completions", included: true },
-        { text: "Inline editing & commands", included: true },
-        { text: "Chat with codebase", included: true },
-        { text: "Terminal integration", included: true },
-        { text: "Multiple LLM models", included: true },
-        { text: "Global hosting included", included: false },
-        { text: "Free SSL & CDN", included: false },
-        { text: "Custom domains", included: false },
-      ],
-      highlight: false,
-    },
-    {
-      name: "Cloud Code",
-      icon: "/icons/cloud-code.svg",
-      price: "Free",
-      period: " / mo",
-      tagline: "Google Cloud developer tools for teams",
-      features: [
-        { text: "AI code completions", included: true },
-        { text: "Cloud IDE", included: true },
-        { text: "GitHub integration", included: true },
-        { text: "Docker & Kubernetes", included: true },
-        { text: "Google Cloud connectors", included: true },
-        { text: "Global hosting included", included: false },
-        { text: "Free SSL & CDN", included: false },
-        { text: "Custom domains", included: false },
-      ],
-      highlight: false,
-    },
-    {
-      name: "Sycord",
-      icon: "/logo.png",
-      price: "Free",
-      period: " / mo",
-      tagline: "AI website builder with full hosting stack",
-      features: [
-        { text: "AI site generation", included: true },
-        { text: "Global hosting included", included: true },
-        { text: "Free SSL & CDN", included: true },
-        { text: "Custom domains", included: true },
-        { text: "One-click publish", included: true },
-        { text: "AI code completions", included: true },
-        { text: "Enterprise scaling", included: true },
-        { text: "Priority support", included: true },
-      ],
-      highlight: true,
-    },
+function OneAgentSection() {
+  const modes = [
+    { icon: <LayoutDashboard className="h-5 w-5" />, title: "Productivity", desc: "Streamline workflows, automate tasks, and ship faster with AI assistance.", color: "#7C6FF5" },
+    { icon: <Briefcase className="h-5 w-5" />, title: "Business", desc: "Launch professional sites, manage clients, and scale your online presence.", color: "#00E599" },
+    { icon: <Gamepad2 className="h-5 w-5" />, title: "Gaming", desc: "Build gaming communities, clan pages, and interactive web experiences.", color: "#F59E0B" },
+    { icon: <Monitor className="h-5 w-5" />, title: "Office", desc: "Create internal tools, dashboards, and team portals effortlessly.", color: "#3B82F6" },
   ]
+
   return (
-    <section id="compare" className="mx-auto w-full max-w-6xl px-5 pt-16 sm:px-8 sm:pt-20">
-      <SectionHeading eyebrow="Price Comparison" title="Cursor vs Cloud Code vs Sycord" subtitle="Compare features, pricing, and value across the leading AI development platforms." />
-      <div className="mt-10 grid gap-6 lg:grid-cols-3">
-        {competitors.map(c => (
-          <div key={c.name} className={`relative flex flex-col rounded-3xl border p-6 transition-all ${c.highlight ? "border-white/20 bg-gradient-to-b from-[#1e1e24] to-[#181818] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.7)] lg:scale-[1.03]" : "border-[#2a2c30] bg-[#181818] hover:border-white/10"}`} style={{ borderColor: c.highlight ? "rgba(255,255,255,0.15)" : BORDER }}>
-            {c.highlight && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-black">Recommended</div>
-            )}
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border" style={{ borderColor: BORDER, backgroundColor: "#111213" }}>
-                <Image src={c.icon} alt={c.name} width={28} height={28} className="h-7 w-7 object-contain" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">{c.name}</h3>
-                <p className="text-xs" style={{ color: MUTED }}>{c.tagline}</p>
-              </div>
+    <section className="mx-auto w-full max-w-6xl px-5 pt-24 sm:px-8 sm:pt-32">
+      <SectionHeading eyebrow="One Agent" title="One agent for all needs" subtitle="From productivity to gaming — a single AI agent that adapts to your workflow." />
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {modes.map(m => (
+          <div key={m.title} className="group flex flex-col rounded-2xl border p-5 transition-all hover:border-white/20" style={{ borderColor: BORDER, backgroundColor: BG }}>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border" style={{ borderColor: BORDER, backgroundColor: "#111213", color: m.color }}>
+              {m.icon}
             </div>
-            <div className="mt-6 flex items-baseline gap-1">
-              <span className="text-4xl font-extrabold text-white">{c.price}</span>
-              <span className="text-sm font-medium" style={{ color: MUTED }}>{c.period}</span>
-            </div>
-            <ul className="mt-6 space-y-3">
-              {c.features.map(f => (
-                <li key={f.text} className="flex items-start gap-3 text-sm">
-                  {f.included ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                  ) : (
-                    <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full border" style={{ borderColor: BORDER, backgroundColor: "#111213" }} />
-                  )}
-                  <span style={{ color: f.included ? TEXT : MUTED, textDecoration: f.included ? "none" : "line-through" }}>{f.text}</span>
-                </li>
-              ))}
-            </ul>
-            <Button
-              asChild
-              variant={c.highlight ? "default" : "outline"}
-              className={`mt-auto rounded-xl ${c.highlight ? "bg-white text-black hover:bg-white/90" : "bg-transparent text-white hover:text-white"}`}
-              style={c.highlight ? {} : { borderColor: BORDER }}
-            >
-              <Link href={c.name === "Sycord" ? "/login" : c.name === "Cursor" ? "https://cursor.com" : "https://cloud.google.com/code"} target="_blank" rel="noopener noreferrer">
-                {c.name === "Sycord" ? "Start for free" : "Get Started"}
-              </Link>
-            </Button>
+            <h3 className="mt-4 text-sm font-semibold text-white">{m.title}</h3>
+            <p className="mt-2 text-xs leading-relaxed" style={{ color: MUTED }}>{m.desc}</p>
           </div>
         ))}
       </div>
@@ -549,10 +446,9 @@ function FinalCTA() {
 
 function Footer() {
   const cols = [
-    { title: "Product", links: [{ label: "Pricing", href: "#pricing" }, { label: "Compare", href: "#compare" }, { label: "Changelog", href: "/releases" }] },
-    { title: "Pricing", links: [{ label: "Plans", href: "#pricing" }, { label: "Compare", href: "#pricing" }, { label: "Enterprise", href: "/contact" }] },
-    { title: "Docs", links: [{ label: "Getting started", href: "#" }, { label: "Custom domains", href: "#" }, { label: "API", href: "#" }] },
-    { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Status", href: "#" }] },
+    { title: "Product", links: [{ label: "Features", href: "#" }, { label: "Changelog", href: "/releases" }, { label: "Servers", href: "/servers" }] },
+    { title: "Resources", links: [{ label: "Documentation", href: "#" }, { label: "API", href: "#" }, { label: "Status", href: "/servers" }] },
+    { title: "Support", links: [{ label: "Help center", href: "/contact" }, { label: "Contact", href: "/contact" }, { label: "Enterprise", href: "/contact" }] },
   ]
   return (
     <footer className="mx-auto mt-24 w-full max-w-6xl px-5 pb-12 sm:px-8 sm:mt-32">
@@ -598,6 +494,28 @@ function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: 
       <span className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: BORDER, backgroundColor: BG, color: MUTED }}>{eyebrow}</span>
       <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-white sm:text-4xl" style={{ letterSpacing: "-0.02em", lineHeight: 1.1 }}>{title}</h2>
       <p className="mt-3 text-base" style={{ color: MUTED }}>{subtitle}</p>
+    </div>
+  )
+}
+
+function VersionMark() {
+  return (
+    <div className="fixed bottom-4 right-4 z-50">
+      <Link
+        href="/releases"
+        className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium tracking-wide backdrop-blur-md transition-all hover:border-white/25"
+        style={{
+          borderColor: "rgba(255,255,255,0.1)",
+          backgroundColor: "rgba(24,24,24,0.85)",
+          color: MUTED,
+        }}
+      >
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/60" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
+        </span>
+        v0.1 Private alpha
+      </Link>
     </div>
   )
 }
