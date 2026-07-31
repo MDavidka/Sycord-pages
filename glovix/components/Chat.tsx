@@ -2749,14 +2749,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         const content = raw.replace(/^\[SYSTEM\] .*/gm, '');
         if (/```mermaid/.test(content)) {
             return (
-                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
+                <div className={`prose prose-sm w-full max-w-full overflow-hidden break-words ${isDark ? 'prose-invert' : ''}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {content}
                     </ReactMarkdown>
                 </div>
             );
         }
-        return <Markdown content={content} className="an-markdown w-full max-w-none" />;
+        return <Markdown content={content} className="an-markdown w-full max-w-full overflow-hidden break-words" />;
     };
 
     // Embedded inside a Sycord project → show the mobile chrome (back button,
@@ -2989,8 +2989,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             className={`text-[14px] leading-relaxed ${
                                                 group.role === 'user'
                                                     ? isDark
-                                                        ? 'bg-white/[0.04] text-white/85 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.04]'
-                                                        : 'bg-gray-100/80 text-gray-800 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-gray-200/50'
+                                                        ? 'bg-white/[0.04] text-white/85 rounded-2xl px-4 py-2.5 max-w-[90%] sm:max-w-[85%] lg:max-w-[75%] border border-white/[0.04]'
+                                                        : 'bg-gray-100/80 text-gray-800 rounded-2xl px-4 py-2.5 max-w-[90%] sm:max-w-[85%] lg:max-w-[75%] border border-gray-200/50'
                                                     : isDark
                                                         ? 'text-white/80 max-w-full bg-white/[0.02] rounded-2xl px-3 py-2 border border-white/[0.03]'
                                                         : 'text-gray-700 max-w-full bg-gray-50/60 rounded-2xl px-3 py-2 border border-gray-200/30'

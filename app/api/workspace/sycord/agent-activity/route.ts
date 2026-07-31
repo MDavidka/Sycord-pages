@@ -135,9 +135,16 @@ export async function GET(req: Request): Promise<Response> {
       if (err?.name === "AbortError") {
         return new Response(null, { status: 499 })
       }
-      return NextResponse.json(
-        { ok: false, error: err?.message || "Failed to connect to upstream Syte stream" },
-        { status: 502 },
+      return new Response(
+        `event: error\ndata: ${JSON.stringify({ event_type: 'error', error: 'stream_failed', message: err?.message || 'Failed to connect to upstream Syte stream' })}\n\n`,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+        }
       )
     }
   }

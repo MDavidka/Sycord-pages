@@ -174,6 +174,7 @@ export async function GET(request: Request) {
       addon: provider.id,
       projectId: state.projectId,
       connectError,
+      tokens: exchanged.tokens,
     }),
     { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
   )
