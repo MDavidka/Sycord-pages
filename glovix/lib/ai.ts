@@ -88,8 +88,26 @@ export function getProviderFromModel(model: string): string {
 
 export function getProviderIconUrl(model: string): string | null {
     const provider = getProviderFromModel(model)
+
+    // Use local icons for providers that svgl.app misses or we prefer to host
+    const localMap: Record<string, string> = {
+        "anthropic": "/model-logos/base.svg",
+        "claude": "/model-logos/base.svg",
+        "deepseek": "/model-logos/deepseek.svg",
+        "zhipu": "/model-logos/zai.svg",
+        "zhipuai": "/model-logos/zai.svg",
+        "z.ai": "/model-logos/zai.svg",
+        "glm": "/model-logos/zai.svg",
+        "mimo": "/model-logos/minimax.svg",
+        "minimax": "/model-logos/minimax.svg"
+    }
+
+    if (localMap[provider]) {
+        return localMap[provider]
+    }
+
     const known = new Set([
-        "gemini", "google", "deepseek", "openai", "groq", "meta", "perplexity", "cohere"
+        "gemini", "google", "openai", "groq", "meta", "perplexity", "cohere"
     ])
     if (known.has(provider)) {
         return `https://svgl.app/library/${provider}.svg`
