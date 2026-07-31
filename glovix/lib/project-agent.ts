@@ -27,10 +27,13 @@ export type ProjectAgentEvent = {
         | 'session'
         | 'processing'
         | 'thinking'
+        | 'thinking_delta'
         | 'tool_started'
         | 'tool_finished'
         | 'delta'
+        | 'token_delta'
         | 'message'
+        | 'message_snapshot'
         | 'done'
         | 'error'
         | 'screenshot'
@@ -41,7 +44,21 @@ export type ProjectAgentEvent = {
         | 'subagent_started'
         | 'subagent_completed'
         | 'subagent_failed'
-        | 'subagent_scope';
+        | 'subagent_scope'
+        | 'status'
+        | 'request_started'
+        | 'agent_started'
+        | 'agent_stopped'
+        | 'agent_restarted'
+        | 'usage'
+        | 'file_created'
+        | 'file_modified'
+        | 'file_deleted'
+        | 'file_read'
+        | 'file_search'
+        | 'file_changed'
+        | 'command_run'
+        | 'command_output';
     session?: number;
     sessionAuthoritative?: boolean;
     eventId?: number;
@@ -63,6 +80,24 @@ export type ProjectAgentEvent = {
     subagentProfile?: string;
     /** True when this event came from the SSE hot path (may never hit Turso). */
     fromStream?: boolean;
+    /** For thinking_delta: the incremental delta */
+    delta?: string;
+    /** For token_delta: the incremental token delta */
+    tokenDelta?: string;
+    /** For message_snapshot: full message so far */
+    content?: string;
+    /** For usage events */
+    usage?: {
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+    };
+    /** File operation details */
+    filePath?: string;
+    /** Command details */
+    command?: string;
+    /** Stream sequence info */
+    sequence?: number;
 };
 
 export type AgentScreenshot = {
