@@ -36,7 +36,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Fast',
         modelType: 'mimo-v2-flash',
         apiModel: 'gemini-2.5-flash',
-        icon: '/model-logos/nano.svg',
+        icon: '/model-logos/gemini.svg',
         iconAlt: 'syra-nano',
     },
     {
@@ -45,7 +45,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Balanced',
         modelType: 'deepseek-v4-flash',
         apiModel: 'deepseek-v4-flash',
-        icon: '/model-logos/base.svg',
+        icon: '/model-logos/deepseek.svg',
         iconAlt: 'syra-base',
     },
     {
@@ -54,7 +54,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Advanced',
         modelType: 'gemini-3.1-pro',
         apiModel: 'gemini-2.5-pro',
-        icon: '/model-logos/pro.svg',
+        icon: '/model-logos/gemini.svg',
         iconAlt: 'syra-havy',
     },
     {
@@ -63,7 +63,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Ultra',
         modelType: 'glm-5.2',
         apiModel: 'glm-5.2',
-        icon: '/model-logos/ultra.svg',
+        icon: '/model-logos/zai.svg',
         iconAlt: 'syra-ultra',
     },
 ];
@@ -73,11 +73,12 @@ export function getModelChoice(modelType: ModelType): ModelChoice {
 }
 
 export function getProviderFromModel(model: string): string {
-    const lower = model.toLowerCase()
+    const lower = model.toLowerCase().trim()
     if (lower.startsWith("gemini")) return "gemini"
     if (lower.startsWith("deepseek")) return "deepseek"
-    if (lower.startsWith("glm")) return "glm"
+    if (lower.startsWith("glm") || lower.startsWith("z-ai/glm") || lower.startsWith("zhipu/glm")) return "zai"
     if (lower.startsWith("mimo")) return "mimo"
+    if (lower.startsWith("minimax")) return "minimax"
     if (lower.startsWith("gpt") || lower.startsWith("o1") || lower.startsWith("o3") || lower.includes("openai")) return "openai"
     if (lower.startsWith("claude")) return "claude"
     if (lower.startsWith("llama")) return "llama"
@@ -88,13 +89,15 @@ export function getProviderFromModel(model: string): string {
 
 export function getProviderIconUrl(model: string): string | null {
     const provider = getProviderFromModel(model)
-    const known = new Set([
-        "gemini", "google", "deepseek", "openai", "groq", "meta", "perplexity", "cohere"
-    ])
-    if (known.has(provider)) {
-        return `https://svgl.app/library/${provider}.svg`
+    const icons: Record<string, string> = {
+        gemini: '/model-logos/gemini.svg',
+        google: '/model-logos/gemini.svg',
+        deepseek: '/model-logos/deepseek.svg',
+        minimax: '/model-logos/minimax.svg',
+        zai: '/model-logos/zai.svg',
+        glm: '/model-logos/zai.svg',
     }
-    return null
+    return icons[provider] || null
 }
 
 export interface Message {

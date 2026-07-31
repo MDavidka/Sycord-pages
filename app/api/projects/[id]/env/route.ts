@@ -7,6 +7,8 @@ import {
   MAX_ENV_VALUE_LEN,
   MAX_ENV_VARS,
 } from "@/lib/security/payload-limits"
+import { syteSetEnv, useSyteWorkspace } from "@/lib/deploy/syte-client"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
 
 /**
@@ -150,6 +152,27 @@ export async function POST(
         },
       }
     )
+
+    // Keep the remote Syte workspace in sync immediately. The agent runtime
+    // reads MCP credentials from its workspace environment when an addon is
+    // connected; waiting until deploy would make a newly connected MCP appear
+    // saved in Pages but unusable to the agent.
+    if (useSyteWorkspace()) {
+      const workspace = await requireSyteWorkspaceUuid(updatedProject, projectId)
+      if (!("error" in workspace)) {
+        const synced = await syteSetEnv(workspace.uuid, { [key]: value || "" }, true)
+        if (!synced.ok) {
+          return NextResponse.json(
+            {
+              success: false,
+              savedLocally: true,
+              message: `Saved ${key} locally, but failed to sync it to the Syte workspace.`,
+            },
+            { status: synced.status || 502 },
+          )
+        }
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

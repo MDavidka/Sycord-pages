@@ -234,19 +234,18 @@ function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (p
     if (next) setGenerationPlan(next);
 }
 
-function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark, agentModel }: {
+function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
     selectedModel: ModelType
     onSelect: (choice: ModelChoice) => void
     showMenu: boolean
     onToggleMenu: () => void
     onCloseMenu: () => void
     isDark: boolean
-    agentModel?: string | null
 }) {
     const current = getModelChoice(selectedModel)
-    const displayModel = agentModel || current.apiModel
-    const displayIcon = agentModel ? getProviderIconUrl(agentModel) : current.icon
-    const displayLabel = agentModel || current.label
+    const displayModel = current.apiModel
+    const displayIcon = getProviderIconUrl(displayModel) || current.icon
+    const displayLabel = current.label
     const shortModel = displayModel.split('-').slice(0, 2).join('-')
 
     return (
@@ -361,8 +360,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const showModelLearn = useStore(s => s.showModelLearn);
     const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
-    const [agentStatusModel, setAgentStatusModel] = useState<string | null>(null);
-    const [agentStatusProfile, setAgentStatusProfile] = useState<string | null>(null);
 
     // Live execution actions. Remote project-agent actions are also copied onto
     // the current assistant message so completed and background runs survive a
@@ -497,38 +494,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
-
-    // Fetch agent status to get real-time model info
-    useEffect(() => {
-        const hostProjectId = getHostProjectId();
-        if (!hostProjectId) return;
-
-        let cancelled = false;
-        const fetchStatus = async () => {
-            try {
-                const res = await fetch(`/api/projects/${encodeURIComponent(hostProjectId)}/agent/status`, {
-                    credentials: 'same-origin',
-                    cache: 'no-store',
-                });
-                if (!res.ok) return;
-                const data = await res.json();
-                if (cancelled) return;
-                const model = typeof data?.agent_model?.model === 'string' ? data.agent_model.model : null;
-                const profile = typeof data?.agent_model?.profile === 'string' ? data.agent_model.profile : null;
-                if (model) setAgentStatusModel(model);
-                if (profile) setAgentStatusProfile(profile);
-            } catch {
-                // ignore agent status fetch errors
-            }
-        };
-
-        fetchStatus();
-        const interval = setInterval(fetchStatus, 30_000);
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
-    }, []);
 
     // Initialize base project when chat starts
     const projectInitializedRef = useRef<string | null>(null);
@@ -1711,7 +1676,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
-                modelProfile: agentStatusProfile || getModelChoice(selectedModel).label,
+                modelProfile: getModelChoice(selectedModel).label,
                 afterSession,
                 signal: controller.signal,
                 onEvent: applyEvent,
@@ -3375,7 +3340,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
                                     onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}
-                                    agentModel={agentStatusModel}
                                 />
 
                                 <div className="ml-auto flex items-center gap-1">
