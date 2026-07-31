@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Image from "next/image"
 import Link from "next/link"
+import { MCP_PROVIDERS, type McpProviderDef } from "@/lib/mcp-providers"
 import {
   AlertCircle,
   Users,
@@ -66,6 +67,9 @@ import {
   Wrench,
   CheckCircle2,
   XCircle,
+  Copy,
+  CheckCheck,
+  Webhook,
 } from "lucide-react"
 
 const availableIcons = [
@@ -102,9 +106,10 @@ const tabs = [
   { id: "deployer" as const, label: "Deployer", icon: Monitor },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
+  { id: "mcps" as const, label: "MCPs", icon: Webhook },
 ]
 
-type TabId = "overview" | "users" | "server" | "deployer" | "tickets" | "paptos"
+type TabId = "overview" | "users" | "server" | "deployer" | "tickets" | "paptos" | "mcps"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -134,6 +139,15 @@ export default function AdminPage() {
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [tunnelStatus, setTunnelStatus] = useState<string | null>(null)
   const [skipCloudflare, setSkipCloudflare] = useState(false)
+  const [mcpCopied, setMcpCopied] = useState<string | null>(null)
+
+  const mcpCallbackUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/mcp/oauth/callback` : '/api/mcp/oauth/callback'
+
+  const copyToClipboard = async (text: string, key: string) => {
+    await navigator.clipboard.writeText(text)
+    setMcpCopied(key)
+    setTimeout(() => setMcpCopied(null), 2000)
+  }
 
   useEffect(() => {
     if (session?.user?.email !== "dmarton336@gmail.com") {
@@ -1214,6 +1228,132 @@ export default function AdminPage() {
                   Save Changes
                 </Button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MCPs Tab */}
+        {activeTab === "mcps" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-lg font-semibold text-white">MCP OAuth Redirect URL</h2>
+              <p className="text-sm text-white/40">Configure this URL in your MCP provider dashboards for OAuth</p>
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-white/30 mb-1.5 uppercase tracking-wide">OAuth Callback URL</p>
+                  <code className="text-sm text-emerald-300 font-mono break-all">{mcpCallbackUrl}</code>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => copyToClipboard(mcpCallbackUrl, "callback")}
+                  className="h-8 text-xs bg-white/5 text-white/60 hover:bg-white/10 border border-white/[0.06] rounded-xl shrink-0"
+                >
+                  {mcpCopied === "callback" ? (
+                    <CheckCheck className="h-3.5 w-3.5 mr-1.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {mcpCopied === "callback" ? "Copied" : "Copy URL"}
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-3">Configured Providers</h3>
+              <p className="text-xs text-white/30 -mt-2 mb-4">OAuth credentials set via server environment variables</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              {MCP_PROVIDERS.map((provider: McpProviderDef) => (
+                <div
+                  key={provider.id}
+                  className="rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]">
+                      <img
+                        src={provider.logo}
+                        alt={provider.name}
+                        className="size-5 object-contain opacity-70"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-white">{provider.name}</span>
+                        <Badge
+                          className={`text-[10px] px-1.5 py-0 h-5 ${
+                            provider.authType === 'oauth'
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              : provider.authType === 'api_key'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          }`}
+                          variant="outline"
+                        >
+                          {provider.authType === 'oauth' ? 'OAuth 2.0' : provider.authType === 'api_key' ? 'API Key' : 'Built-in'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-white/40 leading-relaxed">{provider.description}</p>
+                      {provider.authType === 'oauth' && (
+                        <div className="space-y-1.5 pt-1">
+                          {provider.oauthClientIdEnv && (
+                            <div className="flex items-center justify-between gap-2">
+                              <code className="text-[11px] text-white/30 font-mono">{provider.oauthClientIdEnv}</code>
+                              <button
+                                onClick={() => copyToClipboard(provider.oauthClientIdEnv || '', `${provider.id}-id`)}
+                                className="text-white/20 hover:text-white/40 transition-colors"
+                              >
+                                {mcpCopied === `${provider.id}-id` ? (
+                                  <CheckCheck className="size-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {provider.oauthClientSecretEnv && (
+                            <div className="flex items-center justify-between gap-2">
+                              <code className="text-[11px] text-white/30 font-mono">{provider.oauthClientSecretEnv}</code>
+                              <button
+                                onClick={() => copyToClipboard(provider.oauthClientSecretEnv || '', `${provider.id}-secret`)}
+                                className="text-white/20 hover:text-white/40 transition-colors"
+                              >
+                                {mcpCopied === `${provider.id}-secret` ? (
+                                  <CheckCheck className="size-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {provider.oauthScopes && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {provider.oauthScopes.map((scope) => (
+                                <code key={scope} className="text-[10px] text-white/25 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded">{scope}</code>
+                              ))}
+                            </div>
+                          )}
+                          {provider.authorizeUrl && (
+                            <p className="text-[11px] text-white/20 font-mono truncate">
+                              Auth: {provider.authorizeUrl}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {provider.authType === 'api_key' && provider.envKeys && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {provider.envKeys.map((key) => (
+                            <code key={key} className="text-[10px] text-white/25 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded">{key}</code>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
