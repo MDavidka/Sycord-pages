@@ -241,11 +241,24 @@ export function McpLibrary({
   const markConnected = (addonId: string, connected: boolean) => {
     setAddons((prev) => {
       const next = mergeMcpCatalog(
-        prev.map((a) => (a.id === addonId ? { ...a, connected } : a)),
+        prev.map((a) => (a.id === addonId ? { ...a, connected, status: connected ? 'connected' : 'available' } : a)),
       )
       onMcpChange?.(next)
       return next
     })
+  }
+
+  const persistConnectedState = async (addonId: string, connected: boolean): Promise<void> => {
+    if (!projectId) return
+    try {
+      await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ action: connected ? 'connect' : 'disconnect', addon: addonId }),
+      })
+    } catch {
+      // Silently fail — local state is already updated
+    }
   }
 
   const handleDisconnect = async (addon: SyraSlashMcpAddon) => {
@@ -259,6 +272,7 @@ export function McpLibrary({
       onMcpChange?.(result.addons)
     } else {
       markConnected(addon.id, false)
+      void persistConnectedState(addon.id, false)
     }
     setBusyId(null)
   }
@@ -309,6 +323,7 @@ export function McpLibrary({
       onMcpChange?.(result.addons)
     } else {
       markConnected(addon.id, true)
+      void persistConnectedState(addon.id, true)
     }
     setBusyId(null)
   }
@@ -346,6 +361,7 @@ export function McpLibrary({
         onMcpChange?.(result.addons)
       } else {
         markConnected(apiKeyAddon.id, true)
+        void persistConnectedState(apiKeyAddon.id, true)
       }
       setApiKeyAddon(null)
       setApiKeyValues({})

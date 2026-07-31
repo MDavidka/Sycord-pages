@@ -1703,6 +1703,36 @@ All components are imported from "@heroui/react". No CLI install required — ju
                 required: ['component'],
             },
         },
+        {
+            type: 'function',
+            function: {
+                name: 'sycordMcp',
+                description: `Interact with the Sycord MCP API (https://sycord.site/api) to manage MCP addons for the current project. Use this to list, connect, disconnect, or get credentials for MCP providers.
+
+Actions:
+- list: List all available MCP addons and their connection status
+- connect: Connect an MCP addon by name (e.g. "github", "slack", "google-drive")
+- disconnect: Disconnect an MCP addon by name
+- credentials: Get the credentials needed to connect an MCP addon (API keys, OAuth URLs, etc.)
+
+The sycord.site API is the backend for MCP management. Use this tool when the user wants to manage MCP connections or when the AI needs MCP credentials to proceed.`,
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        action: {
+                            type: 'string',
+                            enum: ['list', 'connect', 'disconnect', 'credentials'],
+                            description: 'The MCP action to perform (required)',
+                        },
+                        addon: {
+                            type: 'string',
+                            description: 'The MCP addon name or id (e.g. "github", "slack", "google-drive"). Required for connect, disconnect, and credentials actions.',
+                        },
+                    },
+                    required: ['action'],
+                },
+            },
+        },
     },
 ];
 
@@ -2735,6 +2765,97 @@ export async function handleHeroUiDocs(args: Record<string, unknown>): Promise<s
 }
 
 
+export async function handleSycordMcp(args: Record<string, unknown>): Promise<string> {
+    const action = typeof args.action === 'string' ? args.action.trim().toLowerCase() : '';
+    if (!action) return '[SYSTEM] ❌ sycordMcp requires an action: list, connect, disconnect, or credentials.';
+
+    const addon = typeof args.addon === 'string' ? args.addon.trim() : '';
+    const projectId = getHostProjectId();
+
+    try {
+        if (action === 'list') {
+            if (!projectId) return '[SYSTEM] ❌ No project open. Open a project to manage MCP addons.';
+            const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+                signal: AbortSignal.timeout(15000),
+            });
+            if (!res.ok) {
+                const text = await res.text().catch(() => `HTTP ${res.status}`);
+                return `[SYSTEM] ❌ Failed to list MCP addons: ${text}`;
+            }
+            const data = await res.json().catch(() => null);
+            const addons = Array.isArray(data?.addons) ? data.addons : [];
+            if (addons.length === 0) {
+                return '[SYSTEM] No MCP addons configured for this project.';
+            }
+            const lines = addons.map((a: any) => {
+                const status = a.connected ? '✅ Connected' : '⚪ Available';
+                const auth = a.authType ? ` (${a.authType})` : '';
+                return `- ${status} ${a.name || a.id}${auth}: ${a.description || ''}`;
+            });
+            return '[System] MCP Addons:\n' + lines.join('\n');
+        }
+
+        if (action === 'connect' || action === 'disconnect') {
+            if (!projectId) return '[SYSTEM] ❌ No project open. Open a project to manage MCP addons.';
+            if (!addon) return '[SYSTEM] ❌ sycordMcp connect/disconnect requires an "addon" name (e.g. "github", "slack").';
+            const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ action, addon }),
+                signal: AbortSignal.timeout(15000),
+            });
+            if (!res.ok) {
+                const text = await res.text().catch(() => `HTTP ${res.status}`);
+                return `[SYSTEM] ❌ Failed to ${action} MCP addon "${addon}": ${text}`;
+            }
+            const data = await res.json().catch(() => null);
+            if (data?.ok) {
+                return `[System] ✅ MCP addon "${addon}" ${action === 'connect' ? 'connected' : 'disconnected'} successfully.`;
+            }
+            return `[System] ⚠️ MCP addon "${addon}" ${action} returned: ${JSON.stringify(data)}`;
+        }
+
+        if (action === 'credentials') {
+            if (!addon) return '[SYSTEM] ❌ sycordMcp credentials requires an "addon" name.';
+            if (!projectId) return '[SYSTEM] ❌ No project open. Open a project to manage MCP addons.';
+            const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+                signal: AbortSignal.timeout(15000),
+            });
+            if (!res.ok) {
+                return '[SYSTEM] ❌ Failed to fetch MCP addon list for credentials.';
+            }
+            const data = await res.json().catch(() => null);
+            const addons = Array.isArray(data?.addons) ? data.addons : [];
+            const found = addons.find((a: any) => (a.id || '').toLowerCase() === addon.toLowerCase() || (a.name || '').toLowerCase() === addon.toLowerCase());
+            if (!found) {
+                return `[SYSTEM] ❌ MCP addon "${addon}" not found. Use sycordMcp({ action: "list" }) to see available addons.`;
+            }
+            const envKeys = found.envKeys || found.env_keys || [];
+            const authType = found.authType || found.auth_type || 'unknown';
+            const lines = [`MCP addon "${found.name || found.id}" credentials:`];
+            lines.push(`Auth type: ${authType}`);
+            if (envKeys.length > 0) {
+                lines.push(`Required env keys: ${envKeys.join(', ')}`);
+            }
+            if (authType === 'oauth') {
+                lines.push('OAuth flow: Use the MCP library UI to initiate OAuth connect, or call the OAuth start endpoint.');
+            }
+            if (authType === 'api_key') {
+                lines.push('Save API keys via the project env endpoint: POST /api/projects/{uuid}/env');
+            }
+            return '[System] ' + lines.join('\n');
+        }
+
+        return `[SYSTEM] ❌ Unknown sycordMcp action "${action}". Use: list, connect, disconnect, credentials.`;
+    } catch (e: any) {
+        return `[System] ⚠️ sycordMcp call failed: ${e.message}`;
+    }
+}
+
 export async function handleSaveKnowledge(args: { title: string; content: string }): Promise<string> {
     const { title, content } = args;
     if (!title || !content) return 'Error: title and content are required.';
@@ -2800,6 +2921,7 @@ const PARALLEL_SAFE_TOOLS = new Set([
     'shadcnDocs',
     'listShadcnComponents',
     'listDokployResources',
+    'sycordMcp',
 ]);
 
 export function isParallelSafeTool(name: string): boolean {
@@ -2956,11 +3078,14 @@ async function _executeToolInternal(
                 case 'heroUiDocs':
                     result = await handleHeroUiDocs(args);
                     break;
+                case 'sycordMcp':
+                    result = await handleSycordMcp(args);
+                    break;
                 case 'planning':
                     result = await handlePlanning(args as any);
                     break;
                 default:
-                    result = `Unknown tool: "${name}". Available: planning, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, getErrors, save, startPreview, setDomain, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, heroUiDocs, saveKnowledge, listKnowledge, callKnowledge`;
+                    result = `Unknown tool: "${name}". Available: planning, createFile, write_file, editFile, readFile, readMultipleFiles, deleteFile, renameFile, listFiles, grep, searchInFiles, executeCommand, typeCheck, lintCheck, drawDiagram, getErrors, save, startPreview, setDomain, integration, coolifyMcp, coolifyCommand, createDokployProject, createDokployEnvironment, listDokployResources, manageContainer, generateDomain, heroUiDocs, saveKnowledge, listKnowledge, callKnowledge, sycordMcp`;
             }
         } catch (e: any) {
             result = `[SYSTEM] ❌ Tool "${name}" crashed: ${e.message}. Try again or use a different approach.`;

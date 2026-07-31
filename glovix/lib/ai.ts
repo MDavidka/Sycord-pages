@@ -83,13 +83,17 @@ export function getProviderFromModel(model: string): string {
     if (lower.startsWith("llama")) return "llama"
     if (lower.startsWith("qwen")) return "qwen"
     if (lower.includes("@") || lower.includes("/")) return lower.split(/[\/@]/)[0]
-    return lower.split("-")[0] || lower.split("_")[0] || model
+    const firstPart = lower.split("-")[0] || lower.split("_")[0] || lower
+    if (firstPart.length <= 2) return firstPart
+    return firstPart
 }
 
 export function getProviderIconUrl(model: string): string | null {
     const provider = getProviderFromModel(model)
     const known = new Set([
-        "gemini", "google", "deepseek", "openai", "groq", "meta", "perplexity", "cohere"
+        "gemini", "google", "deepseek", "openai", "groq", "meta", "perplexity", "cohere",
+        "claude", "glm", "mimo", "qwen", "llama", "anthropic", "mistral", "fireworks",
+        "together", "replicate", "cerebras", "nvidia", "databricks", "snowflake",
     ])
     if (known.has(provider)) {
         return `https://svgl.app/library/${provider}.svg`
