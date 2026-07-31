@@ -299,7 +299,7 @@ export async function toggleProjectMcp(
   projectId: string,
   addon: SyraSlashMcpAddon,
   connect: boolean,
-): Promise<{ addons: SyraSlashMcpAddon[]; error?: string }> {
+): Promise<{ addons: SyraSlashMcpAddon[]; hasRemoteState: boolean; error?: string }> {
   try {
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
       method: 'POST',
@@ -313,11 +313,16 @@ export async function toggleProjectMcp(
     if (!res.ok) {
       return {
         addons: [],
+        hasRemoteState: false,
         error: data?.message || `Failed to ${connect ? 'connect' : 'disconnect'} MCP`,
       }
     }
-    return { addons: mergeMcpCatalog(normalizeMcpAddons(data?.addons)) }
+    const hasRemoteState = Array.isArray(data?.addons)
+    return {
+      addons: hasRemoteState ? mergeMcpCatalog(normalizeMcpAddons(data.addons)) : [],
+      hasRemoteState,
+    }
   } catch (err: any) {
-    return { addons: [], error: err?.message || 'Failed to update MCP' }
+    return { addons: [], hasRemoteState: false, error: err?.message || 'Failed to update MCP' }
   }
 }

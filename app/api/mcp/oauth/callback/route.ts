@@ -13,7 +13,7 @@ import {
   verifyMcpOAuthState,
 } from '@/lib/mcp-oauth'
 import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace'
-import { syteAgentMcpConnect } from '@/lib/deploy/syte-client'
+import { syteAgentMcpConnect, syteSetEnv, useSyteWorkspace } from '@/lib/deploy/syte-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -156,21 +156,33 @@ export async function GET(request: Request) {
 
   await upsertProjectEnvVars(session.user.id, state.projectId, exchanged.tokens, provider.id)
 
-  // Best-effort enable on Syte runtime
+  // The agent runtime reads MCP credentials from the workspace environment,
+  // so sync OAuth tokens before enabling the addon. Storing them only in the
+  // Pages project document makes OAuth look complete while the agent still
+  // cannot authenticate its MCP tools.
   let connectError: string | undefined
-  const workspace = await requireSyteWorkspaceUuid(project, state.projectId)
-  if (!('error' in workspace)) {
-    const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
-    if (!connected.ok) {
-      connectError = connected.error || 'Failed to enable MCP addon on Syte.'
-    }
+  if (!useSyteWorkspace()) {
+    connectError = 'Syte workspace is not configured.'
   } else {
-    connectError = workspace.error
+    const workspace = await requireSyteWorkspaceUuid(project, state.projectId)
+    if (!('error' in workspace)) {
+      const synced = await syteSetEnv(workspace.uuid, exchanged.tokens, true)
+      if (!synced.ok) {
+        connectError = synced.error || 'Failed to sync MCP credentials to Syte.'
+      } else {
+        const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
+        if (!connected.ok) {
+          connectError = connected.error || 'Failed to enable MCP addon on Syte.'
+        }
+      }
+    } else {
+      connectError = workspace.error
+    }
   }
 
   return new Response(
     popupHtml({
-      ok: true,
+      ok: !connectError,
       addon: provider.id,
       projectId: state.projectId,
       connectError,

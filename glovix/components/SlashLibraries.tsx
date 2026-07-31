@@ -254,10 +254,10 @@ export function McpLibrary({
     setError(null)
     const result = await toggleProjectMcp(projectId, addon, false)
     if (result.error) setError(result.error)
-    if (result.addons.length > 0) {
+    if (!result.error && result.hasRemoteState) {
       setAddons(result.addons)
       onMcpChange?.(result.addons)
-    } else {
+    } else if (!result.error) {
       markConnected(addon.id, false)
     }
     setBusyId(null)
@@ -304,7 +304,11 @@ export function McpLibrary({
     setBusyId(addon.id)
     const result = await toggleProjectMcp(projectId, addon, true)
     if (result.error) setError(result.error)
-    if (result.addons.length > 0) {
+    if (result.error) {
+      setBusyId(null)
+      return
+    }
+    if (result.hasRemoteState) {
       setAddons(result.addons)
       onMcpChange?.(result.addons)
     } else {
@@ -340,8 +344,8 @@ export function McpLibrary({
         }
       }
       const result = await toggleProjectMcp(projectId, apiKeyAddon, true)
-      if (result.error) setError(result.error)
-      if (result.addons.length > 0) {
+      if (result.error) throw new Error(result.error)
+      if (result.hasRemoteState) {
         setAddons(result.addons)
         onMcpChange?.(result.addons)
       } else {
