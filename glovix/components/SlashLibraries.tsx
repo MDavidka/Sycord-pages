@@ -224,12 +224,24 @@ export function McpLibrary({
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return
+      console.log('[v0] Received postMessage:', event.data)
+      if (event.origin !== window.location.origin) {
+        console.warn('[v0] postMessage origin mismatch:', event.origin, 'vs', window.location.origin)
+        return
+      }
       const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string; connectError?: string } | null
-      if (!data || data.type !== 'sycord-mcp-oauth') return
+      if (!data || data.type !== 'sycord-mcp-oauth') {
+        console.warn('[v0] Invalid postMessage type:', data?.type)
+        return
+      }
       if (!data.ok) {
         const errorMsg = data.connectError || data.error || 'OAuth connection failed'
-        console.error('[v0] MCP OAuth failed:', errorMsg)
+        console.error('[v0] MCP OAuth failed:', {
+          error: errorMsg,
+          addon: data.addon,
+          connectError: data.connectError,
+          rawError: data.error
+        })
         setError(errorMsg)
         setBusyId(null)
         return
@@ -407,7 +419,32 @@ export function McpLibrary({
             Open a project chat to manage MCP addons.
           </p>
         )}
-        {error && <p className="mb-3 text-[12px] text-amber-400">{error}</p>}
+        {error && (
+          <div className={cn('mb-4 rounded-lg border p-3', isDark ? 'border-red-900/40 bg-red-950/20' : 'border-red-200 bg-red-50')}>
+            <div className={cn('text-[12px] font-medium', isDark ? 'text-red-400' : 'text-red-700')}>
+              MCP Connection Error
+            </div>
+            <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-red-300/90' : 'text-red-600')}>
+              {error}
+            </p>
+            <details className={cn('mt-2 text-[11px]', isDark ? 'text-red-400/70' : 'text-red-600/70')}>
+              <summary className="cursor-pointer hover:underline">Debug Info</summary>
+              <div className={cn('mt-2 rounded border p-2 font-mono', isDark ? 'border-red-900/50 bg-black/30' : 'border-red-200 bg-white/50')}>
+                <div>Check browser console for detailed logs</div>
+                <div className={cn('mt-1', isDark ? 'text-red-500/60' : 'text-red-500/40')}>
+                  Press F12 → Console to see request ID and error details
+                </div>
+              </div>
+            </details>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className={cn('mt-2 text-[11px] underline', isDark ? 'text-red-400/70 hover:text-red-300' : 'text-red-600/70 hover:text-red-700')}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <ul className="space-y-2">
           {addons.map((addon) => {
             const busy = busyId === addon.id
