@@ -38,11 +38,16 @@ function isAllowedPreviewUrl(raw: string): boolean {
       )
     ) {
       if (parsed.protocol === "http:") {
-        return hostname === "localhost" || hostname === "127.0.0.1"
+        if (hostname === "localhost" || hostname === "127.0.0.1") {
+          return process.env.NODE_ENV !== "production"
+        }
+        return false
       }
       return true
     }
-    if (hostname === "localhost" || hostname === "127.0.0.1") return true
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return process.env.NODE_ENV !== "production"
+    }
     return false
   } catch {
     return false
