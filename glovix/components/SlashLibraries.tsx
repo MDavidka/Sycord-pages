@@ -181,9 +181,11 @@ function openMcpOAuthPopup(projectId: string, addonId: string): Window | null {
   const height = 720
   const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2))
   const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2))
+  // Use unique window name to prevent conflicts with other popups
+  const windowName = `sycord-mcp-oauth-${Date.now()}-${Math.random().toString(36).slice(2)}`
   return window.open(
     url,
-    'sycord-mcp-oauth',
+    windowName,
     `popup=yes,width=${width},height=${height},left=${left},top=${top}`,
   )
 }
@@ -223,13 +225,16 @@ export function McpLibrary({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
-      const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string } | null
+      const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string; connectError?: string } | null
       if (!data || data.type !== 'sycord-mcp-oauth') return
       if (!data.ok) {
-        setError(data.error || 'OAuth connection failed')
+        const errorMsg = data.connectError || data.error || 'OAuth connection failed'
+        console.error('[v0] MCP OAuth failed:', errorMsg)
+        setError(errorMsg)
         setBusyId(null)
         return
       }
+      console.log('[v0] MCP OAuth succeeded for addon:', data.addon)
       setBusyId(null)
       void refresh()
     }
