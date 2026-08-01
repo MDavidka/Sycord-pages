@@ -224,29 +224,22 @@ export function McpLibrary({
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      console.log('[v0] Received postMessage:', event.data)
-      if (event.origin !== window.location.origin) {
-        console.warn('[v0] postMessage origin mismatch:', event.origin, 'vs', window.location.origin)
-        return
-      }
       const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string; connectError?: string } | null
-      if (!data || data.type !== 'sycord-mcp-oauth') {
-        console.warn('[v0] Invalid postMessage type:', data?.type)
-        return
+      if (!data || data.type !== 'sycord-mcp-oauth') return
+
+      // Send ack back to popup so it knows to close
+      try {
+        ;(event.source as Window | null)?.postMessage({ type: 'sycord-mcp-oauth-ack' }, event.origin || '*')
+      } catch {
+        // ack is best-effort
       }
+
       if (!data.ok) {
         const errorMsg = data.connectError || data.error || 'OAuth connection failed'
-        console.error('[v0] MCP OAuth failed:', {
-          error: errorMsg,
-          addon: data.addon,
-          connectError: data.connectError,
-          rawError: data.error
-        })
         setError(errorMsg)
         setBusyId(null)
         return
       }
-      console.log('[v0] MCP OAuth succeeded for addon:', data.addon)
       setBusyId(null)
       void refresh()
     }
@@ -299,14 +292,24 @@ export function McpLibrary({
         setBusyId(null)
         return
       }
-      // Keep busy until postMessage / timeout
-      const timer = window.setInterval(() => {
-        if (popup.closed) {
-          window.clearInterval(timer)
-          setBusyId(null)
-          void refresh()
+      // Poll until popup closes; if postMessage already arrived the timer is cleared by ack handler
+      let messageReceived = false
+      const markReceived = () => { messageReceived = true }
+      window.addEventListener('message', function onceMsg(e) {
+        if (e.data?.type === 'sycord-mcp-oauth') {
+          markReceived()
+          window.removeEventListener('message', onceMsg)
         }
-      }, 700)
+      })
+      const timer = window.setInterval(() => {
+        if (!popup.closed) return
+        window.clearInterval(timer)
+        if (!messageReceived) {
+          // Popup closed without a postMessage — refresh to detect if connection actually succeeded
+          void refresh()
+          setBusyId(null)
+        }
+      }, 400)
       return
     }
 

@@ -147,31 +147,57 @@ function popupHtml(payload: Record<string, unknown>, openerOrigin?: string) {
     (function () {
       var payload = ${json};
       var targetOrigin = ${targetOrigin};
-      var counter = 2;
-      
-      // Update counter
-      var counterEl = document.getElementById('counter');
-      setInterval(function() {
-        counter--;
-        if (counterEl) counterEl.textContent = Math.max(0, counter);
-      }, 1000);
-      
-      // Send message to opener
-      try {
-        if (window.opener && !window.opener.closed) {
-          console.log('[v0-popup] Sending message:', payload);
-          window.opener.postMessage({ type: 'sycord-mcp-oauth', ...payload }, targetOrigin);
-        } else {
-          console.warn('[v0-popup] No opener or opener is closed');
+      var acked = false;
+      var attempts = 0;
+      var MAX_ATTEMPTS = 10;
+
+      function sendMessage() {
+        if (acked) return;
+        if (attempts >= MAX_ATTEMPTS) {
+          console.warn('[v0-popup] No ack received after ' + MAX_ATTEMPTS + ' attempts, closing anyway');
+          window.close();
+          return;
         }
-      } catch (e) {
-        console.error('[v0-popup] postMessage failed:', e.message);
+        attempts++;
+        try {
+          if (window.opener && !window.opener.closed) {
+            console.log('[v0-popup] Sending message (attempt ' + attempts + '):', payload);
+            // Send to specific origin AND '*' to handle all cases
+            window.opener.postMessage({ type: 'sycord-mcp-oauth', ...payload }, targetOrigin);
+            if (targetOrigin !== '*') {
+              window.opener.postMessage({ type: 'sycord-mcp-oauth', ...payload }, '*');
+            }
+          } else {
+            console.warn('[v0-popup] No opener or opener is closed');
+            window.close();
+            return;
+          }
+        } catch (e) {
+          console.error('[v0-popup] postMessage failed:', e.message);
+        }
       }
-      
-      // Close after 2 seconds
+
+      // Listen for ack from parent
+      window.addEventListener('message', function(e) {
+        if (e.data && e.data.type === 'sycord-mcp-oauth-ack') {
+          console.log('[v0-popup] Ack received, closing');
+          acked = true;
+          window.close();
+        }
+      });
+
+      // Send immediately, then retry every 300ms until acked
+      sendMessage();
+      var retryInterval = setInterval(function() {
+        if (acked) { clearInterval(retryInterval); return; }
+        sendMessage();
+      }, 300);
+
+      // Hard close after 8 seconds regardless
       setTimeout(function () {
+        clearInterval(retryInterval);
         window.close();
-      }, 2000);
+      }, 8000);
     })();
   </script>
 </body></html>`
