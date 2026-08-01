@@ -2897,8 +2897,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
                                             return (
-                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words rounded-2xl px-3 py-2 ${isDark ? 'text-white/80 bg-white/[0.02] border border-white/[0.03]' : 'text-gray-700 bg-gray-50/60 border border-gray-200/30'}`}>
+                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-[420px] sm:max-w-[380px]">
+                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words rounded-2xl px-3.5 py-2.5 ${isDark ? 'text-white/80 bg-white/[0.02] border border-white/[0.03]' : 'text-gray-700 bg-gray-50/60 border border-gray-200/30'}`}>
                                                         {renderAssistantMarkdown(textContent)}
                                                     </div>
                                                 </div>
@@ -2954,11 +2954,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             className={`text-[14px] leading-relaxed ${
                                                 group.role === 'user'
                                                     ? isDark
-                                                        ? 'bg-white/[0.04] text-white/85 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.04]'
-                                                        : 'bg-gray-100/80 text-gray-800 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-gray-200/50'
+                                                        ? 'bg-white/[0.04] text-white/85 rounded-2xl px-4 py-2.5 max-w-[420px] sm:max-w-[380px] border border-white/[0.04]'
+                                                        : 'bg-gray-100/80 text-gray-800 rounded-2xl px-4 py-2.5 max-w-[420px] sm:max-w-[380px] border border-gray-200/50'
                                                     : isDark
-                                                        ? 'text-white/80 max-w-full bg-white/[0.02] rounded-2xl px-3 py-2 border border-white/[0.03]'
-                                                        : 'text-gray-700 max-w-full bg-gray-50/60 rounded-2xl px-3 py-2 border border-gray-200/30'
+                                                        ? 'text-white/80 max-w-[420px] sm:max-w-[380px] bg-white/[0.02] rounded-2xl px-3.5 py-2.5 border border-white/[0.03]'
+                                                        : 'text-gray-700 max-w-[420px] sm:max-w-[380px] bg-gray-50/60 rounded-2xl px-3.5 py-2.5 border border-gray-200/30'
                                             }`}
                                         >
 

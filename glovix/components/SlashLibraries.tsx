@@ -403,77 +403,94 @@ export function McpLibrary({
           </p>
         )}
         {error && <p className="mb-3 text-[12px] text-amber-400">{error}</p>}
-        <ul className="space-y-2">
-          {addons.map((addon) => {
-            const busy = busyId === addon.id
-            return (
-              <li key={addon.id}>
-                <button
-                  type="button"
-                  disabled={!projectId || busy}
-                  onClick={() => void handleConnect(addon)}
-                  className={cn(
-                    'flex w-full items-start gap-3 rounded-2xl border px-3.5 py-3 text-left transition-colors',
-                    isDark
-                      ? 'border-[#2a2b2e] bg-[#1c1d1f] hover:bg-[#222326]'
-                      : 'border-gray-200 bg-gray-50 hover:bg-gray-100',
-                    (!projectId || busy) && 'opacity-60',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl',
-                      isDark ? 'bg-[#2a2b2e]' : 'bg-gray-200',
-                    )}
-                  >
-                    {busy ? (
-                      <Loader2 className="h-4 w-4 animate-spin opacity-70" />
-                    ) : (
-                      <McpBrandIcon
-                        id={addon.id}
-                        name={addon.name}
-                        className="h-5 w-5"
-                      />
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center gap-2 text-[14px] font-medium">
-                      {addon.name}
-                      {addon.connected && (
-                        <span className="rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-400">
-                          Connected
-                        </span>
-                      )}
-                      {!addon.connected && addon.authType === 'oauth' && (
-                        <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-200 text-gray-600')}>
-                          OAuth
-                        </span>
-                      )}
-                      {!addon.connected && addon.authType === 'api_key' && (
-                        <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-200 text-gray-600')}>
-                          API key
-                        </span>
-                      )}
-                    </span>
-                    <span
-                      className={cn(
-                        'mt-0.5 block text-[12px] leading-snug',
-                        isDark ? 'text-[#6b6c6f]' : 'text-gray-500',
-                      )}
-                    >
-                      {addon.description || authHint(addon)}
-                      {typeof addon.toolsCount === 'number' && addon.toolsCount > 0
-                        ? ` · ${addon.toolsCount} tools`
-                        : ''}
-                    </span>
-                    <span className={cn('mt-1 block text-[11px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-400')}>
-                      {authHint(addon)}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            )
-          })}
+<ul className="space-y-2">
+           {addons.map((addon) => {
+             const busy = busyId === addon.id
+             const isConnected = addon.connected
+             return (
+               <li key={addon.id}>
+                 <button
+                   type="button"
+                   disabled={!projectId || busy}
+                   onClick={() => void handleConnect(addon)}
+                   className={cn(
+                     'flex w-full items-start gap-3 rounded-2xl border px-3.5 py-3 text-left transition-colors',
+                     isDark
+                       ? 'border-[#2a2b2e] bg-[#1c1d1f] hover:bg-[#222326]'
+                       : 'border-gray-200 bg-gray-50 hover:bg-gray-100',
+                     isConnected
+                       ? isDark
+                         ? 'border-emerald-500/20 bg-emerald-500/5'
+                         : 'border-emerald-200 bg-emerald-50/50'
+                       : '',
+                     (!projectId || busy) && 'opacity-60',
+                   )}
+                 >
+                   <span
+                     className={cn(
+                       'mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl relative',
+                       isDark ? 'bg-[#2a2b2e]' : 'bg-gray-200',
+                     )}
+                   >
+                     {busy ? (
+                       <Loader2 className="h-4 w-4 animate-spin opacity-70" />
+                     ) : (
+                       <McpBrandIcon
+                         id={addon.id}
+                         name={addon.name}
+                         className="h-5 w-5"
+                       />
+                     )}
+                     {isConnected && (
+                       <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 border-2 border-[#1c1d1f] dark:border-[#2a2b2e]">
+                         <Check className="h-2.5 w-2.5 text-white" />
+                       </span>
+                     )}
+                   </span>
+                   <span className="min-w-0 flex-1">
+                     <span className="flex flex-wrap items-center gap-2 text-[14px] font-medium">
+                       {addon.name}
+                       {isConnected ? (
+                         <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+                           <Check className="h-3 w-3" />
+                           Connected
+                         </span>
+                       ) : (
+                         <>
+                           {addon.authType === 'oauth' && (
+                             <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-200 text-gray-600')}>
+                               OAuth
+                             </span>
+                           )}
+                           {addon.authType === 'api_key' && (
+                             <span className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide', isDark ? 'bg-[#2a2b2e] text-[#9a9b9e]' : 'bg-gray-200 text-gray-600')}>
+                               API key
+                             </span>
+                           )}
+                         </>
+                       )}
+                     </span>
+                     <span
+                       className={cn(
+                         'mt-0.5 block text-[12px] leading-snug',
+                         isDark ? 'text-[#6b6c6f]' : 'text-gray-500',
+                       )}
+                     >
+                       {isConnected
+                         ? 'This MCP is active and ready to use'
+                         : addon.description || authHint(addon)}
+                       {typeof addon.toolsCount === 'number' && addon.toolsCount > 0
+                         ? ` · ${addon.toolsCount} tools`
+                         : ''}
+                     </span>
+                     <span className={cn('mt-1 block text-[11px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-400')}>
+                       {isConnected ? 'Tap to disconnect' : authHint(addon)}
+                     </span>
+                   </span>
+                 </button>
+               </li>
+             )
+           })}
         </ul>
       </div>
 
