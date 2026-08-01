@@ -314,6 +314,32 @@ export async function GET(request: Request) {
   let connectError: string | undefined
   console.log(`[MCP-OAuth-${requestId}] Starting Sycord sync... useSyteWorkspace=${useSyteWorkspace()}`)
   
+  // Map OAuth token field names to MCP provider env var names
+  const envVarsToSync: Record<string, string> = {}
+  const expectedEnvKeys = provider.envKeys || []
+  console.log(`[MCP-OAuth-${requestId}] Expected env keys for ${provider.id}: ${expectedEnvKeys.join(', ')}`)
+  
+  // For GitHub and similar providers, map 'access_token' or 'token' to the expected env var
+  for (const expectedKey of expectedEnvKeys) {
+    // Try to find matching token from exchanged.tokens
+    const tokenValue = exchanged.tokens[expectedKey] || exchanged.tokens.access_token || exchanged.tokens.token
+    if (tokenValue) {
+      envVarsToSync[expectedKey] = tokenValue
+      console.log(`[MCP-OAuth-${requestId}] Mapped token to: ${expectedKey}`)
+    } else {
+      console.warn(`[MCP-OAuth-${requestId}] No token found for expected env key: ${expectedKey}`)
+    }
+  }
+  
+  // Also include any additional tokens that might be needed
+  for (const [key, value] of Object.entries(exchanged.tokens)) {
+    if (!envVarsToSync[key]) {
+      envVarsToSync[key] = value
+    }
+  }
+  
+  console.log(`[MCP-OAuth-${requestId}] Final env vars to sync: ${Object.keys(envVarsToSync).join(', ')}`)
+  
   if (!useSyteWorkspace()) {
     connectError = 'Syte workspace is not configured. Check SYTE_WORKSPACE_ID or DEPLOYER_API_KEY.'
     console.error(`[MCP-OAuth-${requestId}] ${connectError}`)
@@ -323,16 +349,27 @@ export async function GET(request: Request) {
     if (!('error' in workspace)) {
       console.log(`[MCP-OAuth-${requestId}] Got workspace UUID: ${workspace.uuid}`)
       console.log(`[MCP-OAuth-${requestId}] Syncing environment variables to Sycord...`)
-      const synced = await syteSetEnv(workspace.uuid, exchanged.tokens, true)
+      
+      // Retry logic for transient Sycord API errors (502, 503, etc.)
+      let synced = await syteSetEnv(workspace.uuid, envVarsToSync, true)
+      
+      if (!synced.ok && (synced.status === 502 || synced.status === 503 || synced.status === 504)) {
+        console.warn(`[MCP-OAuth-${requestId}] Sycord API returned ${synced.status}, retrying in 1 second...`)
+        // Wait 1 second and retry
+        await new Promise(r => setTimeout(r, 1000))
+        synced = await syteSetEnv(workspace.uuid, envVarsToSync, true)
+        console.log(`[MCP-OAuth-${requestId}] Retry result: ok=${synced.ok}, status=${synced.status}`)
+      }
+      
       if (!synced.ok) {
-        connectError = `Failed to sync to Sycord: ${synced.error || 'unknown error'}`
-        console.error(`[MCP-OAuth-${requestId}] ${connectError}`)
+        connectError = `Failed to sync to Sycord: ${synced.error || `status ${synced.status}`}`
+        console.error(`[MCP-OAuth-${requestId}] ${connectError} (endpoint: ${synced.endpoint})`)
       } else {
         console.log(`[MCP-OAuth-${requestId}] Env synced successfully. Enabling MCP addon: ${provider.id}`)
         const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
         if (!connected.ok) {
-          connectError = `Failed to enable addon on Sycord: ${connected.error || 'unknown error'}`
-          console.error(`[MCP-OAuth-${requestId}] ${connectError}`)
+          connectError = `Failed to enable addon on Sycord: ${connected.error || `status ${connected.status}`}`
+          console.error(`[MCP-OAuth-${requestId}] ${connectError} (endpoint: ${connected.endpoint})`)
         } else {
           console.log(`[MCP-OAuth-${requestId}] MCP addon connected successfully!`)
         }
