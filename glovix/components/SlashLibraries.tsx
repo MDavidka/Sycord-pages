@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Check, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -201,19 +201,28 @@ export function McpLibrary({
   const [apiKeyAddon, setApiKeyAddon] = useState<SyraSlashMcpAddon | null>(null)
   const [apiKeyValues, setApiKeyValues] = useState<Record<string, string>>({})
   const [apiKeySaving, setApiKeySaving] = useState(false)
+  const refreshingRef = useRef(false)
+  const popupTimerRef = useRef<number | null>(null)
+  const oauthHandledRef = useRef(false)
 
-  const refresh = async () => {
-    if (!projectId) {
-      setAddons(mergeMcpCatalog([]))
-      return
+  const refresh = useCallback(async () => {
+    if (refreshingRef.current) return
+    refreshingRef.current = true
+    try {
+      if (!projectId) {
+        setAddons(mergeMcpCatalog([]))
+        return
+      }
+      setLoading(true)
+      const res = await fetchProjectMcp(projectId)
+      setAddons(res.addons.length ? res.addons : mergeMcpCatalog([]))
+      setError(res.error || null)
+      onMcpChange?.(res.addons.length ? res.addons : mergeMcpCatalog([]))
+      setLoading(false)
+    } finally {
+      refreshingRef.current = false
     }
-    setLoading(true)
-    const res = await fetchProjectMcp(projectId)
-    setAddons(res.addons.length ? res.addons : mergeMcpCatalog([]))
-    setError(res.error || null)
-    onMcpChange?.(res.addons.length ? res.addons : mergeMcpCatalog([]))
-    setLoading(false)
-  }
+  }, [projectId, onMcpChange])
 
   useEffect(() => {
     void refresh()
@@ -221,16 +230,32 @@ export function McpLibrary({
   }, [projectId])
 
   useEffect(() => {
+    return () => {
+      if (popupTimerRef.current !== null) {
+        window.clearInterval(popupTimerRef.current)
+        popupTimerRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
       const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string } | null
       if (!data || data.type !== 'sycord-mcp-oauth') return
+      oauthHandledRef.current = true
+      if (popupTimerRef.current !== null) {
+        window.clearInterval(popupTimerRef.current)
+        popupTimerRef.current = null
+      }
       if (!data.ok) {
         setError(data.error || 'OAuth connection failed')
         setBusyId(null)
+        void refresh()
         return
       }
       setBusyId(null)
+      setError(null)
       void refresh()
     }
     window.addEventListener('message', onMessage)
@@ -252,12 +277,18 @@ export function McpLibrary({
     if (!projectId || busyId) return
     setBusyId(addon.id)
     setError(null)
+    setApiKeyAddon(null)
+    setApiKeyValues({})
     const result = await toggleProjectMcp(projectId, addon, false)
-    if (result.error) setError(result.error)
-    if (!result.error && result.hasRemoteState) {
+    if (result.error) {
+      setError(result.error)
+      setBusyId(null)
+      return
+    }
+    if (result.hasRemoteState) {
       setAddons(result.addons)
       onMcpChange?.(result.addons)
-    } else if (!result.error) {
+    } else {
       markConnected(addon.id, false)
     }
     setBusyId(null)
@@ -276,18 +307,26 @@ export function McpLibrary({
 
     if (authType === 'oauth') {
       setBusyId(addon.id)
+      oauthHandledRef.current = false
+      if (popupTimerRef.current !== null) {
+        window.clearInterval(popupTimerRef.current)
+      }
       const popup = openMcpOAuthPopup(projectId, addon.id)
       if (!popup) {
         setError('Popup blocked — allow popups to complete OAuth.')
         setBusyId(null)
         return
       }
-      // Keep busy until postMessage / timeout
-      const timer = window.setInterval(() => {
+      popupTimerRef.current = window.setInterval(() => {
         if (popup.closed) {
-          window.clearInterval(timer)
+          if (popupTimerRef.current !== null) {
+            window.clearInterval(popupTimerRef.current)
+            popupTimerRef.current = null
+          }
           setBusyId(null)
-          void refresh()
+          if (!oauthHandledRef.current) {
+            void refresh()
+          }
         }
       }, 700)
       return
@@ -303,8 +342,8 @@ export function McpLibrary({
     // builtin (Syte web search) — direct connect
     setBusyId(addon.id)
     const result = await toggleProjectMcp(projectId, addon, true)
-    if (result.error) setError(result.error)
     if (result.error) {
+      setError(result.error)
       setBusyId(null)
       return
     }
@@ -366,6 +405,12 @@ export function McpLibrary({
     if (addon.authType === 'api_key') return 'Connect with API key'
     if (addon.id === 'syte') return 'Enable Syte web search'
     return 'Available — tap to connect'
+  }
+
+  const handleCancelApiKey = () => {
+    setApiKeyAddon(null)
+    setApiKeyValues({})
+    setBusyId(null)
   }
 
   return (
@@ -523,10 +568,7 @@ export function McpLibrary({
                 type="button"
                 variant="ghost"
                 disabled={apiKeySaving}
-                onClick={() => {
-                  setApiKeyAddon(null)
-                  setApiKeyValues({})
-                }}
+                onClick={handleCancelApiKey}
               >
                 Cancel
               </Button>
