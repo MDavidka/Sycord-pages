@@ -24,7 +24,14 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
-const ALLOWED_HOST_SUFFIXES = ["sycord.site", "sycord.com"]
+const EXACT_ALLOWED_DOMAINS = [
+  "sycord.site",
+  "www.sycord.site",
+  "sycord.com",
+  "www.sycord.com",
+  "app.sycord.com"
+]
+const ALLOWED_DOMAIN_SUFFIX = ".sycord.site"
 const MAX_REDIRECTS = 5
 
 function isAllowedPreviewUrl(raw: string): boolean {
@@ -32,11 +39,12 @@ function isAllowedPreviewUrl(raw: string): boolean {
     const parsed = new URL(raw)
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false
     const hostname = parsed.hostname.toLowerCase()
-    if (
-      ALLOWED_HOST_SUFFIXES.some(
-        (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
-      )
-    ) {
+
+    const isAllowed =
+      EXACT_ALLOWED_DOMAINS.includes(hostname) ||
+      hostname.endsWith(ALLOWED_DOMAIN_SUFFIX)
+
+    if (isAllowed) {
       if (parsed.protocol === "http:") {
         return hostname === "localhost" || hostname === "127.0.0.1"
       }
