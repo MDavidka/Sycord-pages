@@ -2,7 +2,14 @@
 
 export const CANOPYWAVE_API_URL = '/api/ai/chat';
 
-export type ModelType = 'mimo-v2-flash' | 'deepseek-v4-flash' | 'glm-5.2' | 'gemini-3.1-pro';
+// Model ids are supplied by Sycord at runtime. Keep the known ids in the
+// autocomplete union while allowing newer models from /api/models.
+export type ModelType =
+    | 'mimo-v2-flash'
+    | 'deepseek-v4-flash'
+    | 'glm-5.2'
+    | 'gemini-3.1-pro'
+    | (string & {})
 
 export const MODEL_NAMES: Record<ModelType, string> = {
     'mimo-v2-flash': 'MiMo V2 Flash',
@@ -68,8 +75,53 @@ export const MODEL_CHOICES: ModelChoice[] = [
     },
 ];
 
-export function getModelChoice(modelType: ModelType): ModelChoice {
-    return MODEL_CHOICES.find(c => c.modelType === modelType) ?? MODEL_CHOICES[0]
+export function getModelChoice(modelType: ModelType, choices: ModelChoice[] = MODEL_CHOICES): ModelChoice {
+    return choices.find(c => c.modelType === modelType) ?? choices[0] ?? MODEL_CHOICES[0]
+}
+
+export type AvailableSycordModel = {
+    id: string
+    profile: string
+    name: string
+}
+
+export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
+    const response = await fetch('/api/ai/models', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal,
+    })
+
+    let body: { models?: AvailableSycordModel[]; message?: string } | null = null
+    try {
+        body = await response.json()
+    } catch {
+        // The status below is more useful than a JSON parse error for callers.
+    }
+
+    if (!response.ok) {
+        throw new Error(body?.message || `Unable to load models (${response.status})`)
+    }
+
+    if (!Array.isArray(body?.models)) {
+        throw new Error('Sycord returned an invalid model list.')
+    }
+
+    return body.models.map((model) => {
+        const apiModel = model.name || model.profile
+        return {
+            id: model.id || model.profile,
+            // The profile is what the Sycord agent API expects, while the model
+            // name is what the local chat bridge sends as its model id.
+            label: model.profile,
+            subtitle: model.profile,
+            modelType: model.profile,
+            apiModel,
+            icon: getProviderIconUrl(apiModel) || '/model-logos/gemini.svg',
+            iconAlt: model.name || model.profile,
+        }
+    })
 }
 
 export function getProviderFromModel(model: string): string {
