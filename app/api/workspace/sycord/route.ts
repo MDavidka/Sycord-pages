@@ -19,6 +19,7 @@ import {
   isSyteConfigured,
 } from "@/lib/deploy/syte-client"
 import { getStoredSyteUuid } from "@/lib/deploy/syte-workspace"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -37,6 +38,17 @@ export async function POST(req: Request): Promise<Response> {
   const session = await getServerSession(authOptions)
   const userId = (session?.user as any)?.id
   if (!userId) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+
+  const rate = checkRateLimit(`sycord-action:${userId}`, { limit: 100, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "Too many requests. Please wait and try again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      }
+    )
+  }
 
   if (!isSyteConfigured()) {
     return NextResponse.json(

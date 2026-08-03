@@ -23,6 +23,7 @@ import {
 } from "@/lib/deploy/syte-workspace"
 import { getProjectEnvVars } from "@/lib/deploy/runner-client"
 import { isValidProjectId, projectFiles } from "@/lib/workspace/sandbox"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -66,6 +67,17 @@ export async function POST(req: Request): Promise<Response> {
   const userId = (session?.user as { id?: string } | undefined)?.id
   if (!userId) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
+
+  const rate = checkRateLimit(`workspace-action:${userId}`, { limit: 100, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { ok: false, error: "Too many requests. Please wait and try again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      }
+    )
   }
 
   if (!useSyteWorkspace()) {
@@ -203,6 +215,9 @@ export async function POST(req: Request): Promise<Response> {
       if (!path) {
         return NextResponse.json({ ok: false, error: "Missing path" }, { status: 400 })
       }
+      if (path.includes("..") || path.startsWith("/")) {
+        return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
+      }
       const result = await syteReadFile(uuid, path)
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
@@ -216,6 +231,9 @@ export async function POST(req: Request): Promise<Response> {
       if (!path) {
         return NextResponse.json({ ok: false, error: "Missing path" }, { status: 400 })
       }
+      if (path.includes("..") || path.startsWith("/")) {
+        return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
+      }
       const result = await syteWriteFile(uuid, path, content)
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
@@ -225,6 +243,9 @@ export async function POST(req: Request): Promise<Response> {
 
     case "list_files": {
       const path = typeof body.path === "string" ? body.path : ""
+      if (path.includes("..") || path.startsWith("/")) {
+        return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
+      }
       const result = await syteListFiles(uuid, path)
       if (!result.ok) {
         return NextResponse.json({ ok: false, error: result.error }, { status: result.status || 502 })
