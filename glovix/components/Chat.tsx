@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, MODEL_CHOICES, getModelChoice, getProviderIconUrl, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -234,30 +234,37 @@ function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (p
     if (next) setGenerationPlan(next);
 }
 
-function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onCloseMenu, isDark }: {
+function ModelSelector({ selectedModel, choices, loading, error, onSelect, showMenu, onToggleMenu, onCloseMenu, onRetry, isDark }: {
     selectedModel: ModelType
+    choices: ModelChoice[]
+    loading: boolean
+    error: string | null
     onSelect: (choice: ModelChoice) => void
     showMenu: boolean
     onToggleMenu: () => void
     onCloseMenu: () => void
+    onRetry: () => void
     isDark: boolean
 }) {
-    const current = getModelChoice(selectedModel)
-    const displayModel = current.apiModel
-    const displayIcon = getProviderIconUrl(displayModel) || current.icon
-    const displayLabel = current.label
+    const current = choices.find(choice => choice.modelType === selectedModel) || choices[0]
+    const displayModel = loading ? 'Loading models…' : error ? 'Models unavailable' : current?.apiModel || 'No models available'
+    const displayIcon = current && (getProviderIconUrl(current.apiModel) || current.icon)
     const shortModel = displayModel.split('-').slice(0, 2).join('-')
+    const canOpen = !loading && (choices.length > 0 || Boolean(error))
 
     return (
         <div className="relative">
             <button
                 type="button"
-                onClick={onToggleMenu}
-                aria-label={`Select model (${displayLabel})`}
-                title={displayLabel}
-                className={`flex h-9 sm:h-8 items-center gap-1.5 rounded-xl px-2 sm:px-2.5 transition-colors active:scale-95 ${isDark ? 'hover:bg-white/[0.06] border border-white/[0.06]' : 'hover:bg-gray-50 border border-gray-200/50'}`}
+                onClick={error ? onRetry : onToggleMenu}
+                disabled={!canOpen}
+                aria-label={loading ? 'Loading models' : error ? 'Retry loading models' : `Select model (${displayModel})`}
+                title={error || displayModel}
+                className={`flex h-9 sm:h-8 items-center gap-1.5 rounded-xl px-2 sm:px-2.5 transition-colors active:scale-95 disabled:cursor-wait disabled:opacity-60 ${isDark ? 'hover:bg-white/[0.06] border border-white/[0.06]' : 'hover:bg-gray-50 border border-gray-200/50'}`}
             >
-                {displayIcon ? (
+                {loading ? (
+                    <Loader2 className={`h-4 w-4 animate-spin ${isDark ? 'text-white/50' : 'text-gray-400'}`} />
+                ) : displayIcon ? (
                     <img
                         src={displayIcon}
                         alt={displayModel}
@@ -269,62 +276,73 @@ function ModelSelector({ selectedModel, onSelect, showMenu, onToggleMenu, onClos
                         {displayModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
                     </span>
                 )}
-                <span className={`text-[12px] sm:text-[13px] font-medium hidden sm:inline max-w-[100px] truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
+                <span className={`text-[12px] sm:text-[13px] font-medium hidden sm:inline max-w-[120px] truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
                     {displayModel}
                 </span>
                 <span className={`text-[12px] font-medium sm:hidden ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
                     {shortModel}
                 </span>
-                <ChevronDown className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-white/30' : 'text-gray-400'}`} />
+                {!loading && !error && <ChevronDown className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-white/30' : 'text-gray-400'}`} />}
             </button>
 
             {showMenu && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
-                    <div className={`absolute bottom-full left-0 mb-2 rounded-2xl overflow-hidden z-20 w-[220px] ${isDark ? 'bg-[#1a1a1b] border border-white/[0.08] shadow-2xl shadow-black/40' : 'bg-white border border-gray-200 shadow-xl shadow-black/5'}`}>
+                    <div className={`absolute bottom-full left-0 mb-2 rounded-2xl overflow-hidden z-20 w-[250px] ${isDark ? 'bg-[#1a1a1b] border border-white/[0.08] shadow-2xl shadow-black/40' : 'bg-white border border-gray-200 shadow-xl shadow-black/5'}`}>
                         <div className="px-2 pt-1.5 pb-0.5">
-                            <p className={`text-[10px] font-medium uppercase tracking-wider px-2 py-1 ${isDark ? 'text-white/20' : 'text-gray-400'}`}>Models</p>
+                            <p className={`text-[10px] font-medium uppercase tracking-wider px-2 py-1 ${isDark ? 'text-white/20' : 'text-gray-400'}`}>Available models</p>
                         </div>
-                        <div className="p-1.5 space-y-0.5">
-                            {MODEL_CHOICES.map((choice) => {
-                                const isActive = choice.modelType === selectedModel
-                                const choiceIcon = getProviderIconUrl(choice.apiModel) || choice.icon
-                                return (
-                                    <button
-                                        key={choice.id}
-                                        type="button"
-                                        onClick={() => onSelect(choice)}
-                                        title={choice.apiModel}
-                                        aria-label={choice.apiModel}
-                                        className={`w-full text-left px-2.5 py-2.5 sm:py-2 rounded-xl flex items-center gap-3 transition-colors active:scale-[0.98] ${
-                                            isActive
-                                                ? isDark ? 'bg-white/[0.08]' : 'bg-gray-100'
-                                                : isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {choiceIcon ? (
-                                            <img
-                                                src={choiceIcon}
-                                                alt={choice.apiModel}
-                                                className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg ${isDark ? 'brightness-150' : ''}`}
-                                                draggable={false}
-                                            />
-                                        ) : (
-                                            <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'}`}>
-                                                {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
-                                            </span>
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                            <div className={`text-[13px] sm:text-[13px] font-medium truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{choice.apiModel}</div>
-                                            <div className={`text-[11px] ${isDark ? 'text-white/30' : 'text-gray-400'}`}>{choice.subtitle}</div>
-                                        </div>
-                                        {isActive && (
-                                            <Check className={`h-4 w-4 shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                                        )}
+                        {choices.length > 0 ? (
+                            <div className="p-1.5 space-y-0.5">
+                                {choices.map((choice) => {
+                                    const isActive = choice.modelType === selectedModel
+                                    const choiceIcon = getProviderIconUrl(choice.apiModel) || choice.icon
+                                    return (
+                                        <button
+                                            key={choice.id}
+                                            type="button"
+                                            onClick={() => onSelect(choice)}
+                                            title={choice.apiModel}
+                                            aria-label={choice.apiModel}
+                                            className={`w-full text-left px-2.5 py-2.5 sm:py-2 rounded-xl flex items-center gap-3 transition-colors active:scale-[0.98] ${
+                                                isActive
+                                                    ? isDark ? 'bg-white/[0.08]' : 'bg-gray-100'
+                                                    : isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {choiceIcon ? (
+                                                <img
+                                                    src={choiceIcon}
+                                                    alt={choice.apiModel}
+                                                    className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg ${isDark ? 'brightness-150' : ''}`}
+                                                    draggable={false}
+                                                />
+                                            ) : (
+                                                <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'}`}>
+                                                    {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
+                                                </span>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className={`text-[13px] sm:text-[13px] font-medium truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{choice.apiModel}</div>
+                                                <div className={`text-[11px] truncate ${isDark ? 'text-white/30' : 'text-gray-400'}`}>{choice.subtitle}</div>
+                                            </div>
+                                            {isActive && (
+                                                <Check className={`h-4 w-4 shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
+                                            )}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        ) : (
+                            <div className={`px-3 pb-3 text-xs ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
+                                {error || 'No models are currently available.'}
+                                {error && (
+                                    <button type="button" onClick={onRetry} className="mt-2 block font-medium text-blue-500 hover:underline">
+                                        Retry
                                     </button>
-                                )
-                            })}
-                        </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </>
             )}
@@ -360,6 +378,42 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const showModelLearn = useStore(s => s.showModelLearn);
     const setShowModelLearn = useStore(s => s.setShowModelLearn);
     const [profileImgError, setProfileImgError] = useState(false);
+    const [availableModelChoices, setAvailableModelChoices] = useState<ModelChoice[] | null>(null);
+    const [modelsLoading, setModelsLoading] = useState(true);
+    const [modelsError, setModelsError] = useState<string | null>(null);
+    const modelsRequestRef = useRef<AbortController | null>(null);
+
+    const loadAvailableModels = React.useCallback(async () => {
+        modelsRequestRef.current?.abort();
+        const controller = new AbortController();
+        modelsRequestRef.current = controller;
+        setModelsLoading(true);
+        setModelsError(null);
+        setAvailableModelChoices(null);
+
+        try {
+            const choices = await fetchAvailableModelChoices(controller.signal);
+            if (controller.signal.aborted) return;
+            setAvailableModelChoices(choices);
+        } catch (error: any) {
+            if (controller.signal.aborted) return;
+            setModelsError(error?.message || 'Unable to load models from Sycord.');
+        } finally {
+            if (!controller.signal.aborted) setModelsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void loadAvailableModels();
+        return () => modelsRequestRef.current?.abort();
+    }, [loadAvailableModels]);
+
+    useEffect(() => {
+        if (!availableModelChoices?.length) return;
+        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || availableModelChoices[0];
+        if (selected.modelType !== selectedModel) setSelectedModel(selected.modelType);
+        setAiModel(selected.apiModel);
+    }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
 
     // Live execution actions. Remote project-agent actions are also copied onto
     // the current assistant message so completed and background runs survive a
@@ -1676,7 +1730,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
-                modelProfile: getModelChoice(selectedModel).label,
+                modelProfile: availableModelChoices?.find(choice => choice.modelType === selectedModel)?.label || 'syra-base',
                 afterSession,
                 signal: controller.signal,
                 onEvent: applyEvent,
@@ -3331,12 +3385,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                                 <ModelSelector
                                     selectedModel={selectedModel}
+                                    choices={availableModelChoices || []}
+                                    loading={modelsLoading}
+                                    error={modelsError}
+                                    onRetry={() => { void loadAvailableModels(); }}
                                     onSelect={(choice) => {
                                         setSelectedModel(choice.modelType)
                                         setAiModel(choice.apiModel)
                                         setShowModelMenu(false)
                                     }}
-                                    showMenu={showModelMenu}
+                                    showMenu={showModelMenu && !modelsLoading}
                                     onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
                                     onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}

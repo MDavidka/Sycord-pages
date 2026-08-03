@@ -14,6 +14,10 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 const MODEL_PROFILES = new Set(["syra-nano", "syra-base", "syra-havy", "syra-ultra"])
+// Sycord's /api/models endpoint can expose provider-qualified profiles such as
+// `9router:<model-id>`. Keep the accepted shape narrow while allowing those
+// runtime profiles through to the upstream agent API.
+const DYNAMIC_MODEL_PROFILE = /^[a-z0-9][a-z0-9._:/-]{0,127}$/i
 
 /**
  * GET /api/projects/[id]/agent
@@ -125,7 +129,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const message = typeof body?.message === "string" ? body.message.trim() : ""
   const requestedProfile = typeof body?.modelProfile === "string" ? body.modelProfile : ""
-  const modelProfile = MODEL_PROFILES.has(requestedProfile) ? requestedProfile : "syra-base"
+  const modelProfile = MODEL_PROFILES.has(requestedProfile) || DYNAMIC_MODEL_PROFILE.test(requestedProfile)
+    ? requestedProfile
+    : "syra-base"
   const afterSession = Math.max(0, Math.floor(Number(body?.afterSession) || 0))
 
   if (!projectId || !message) {
