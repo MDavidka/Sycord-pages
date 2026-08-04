@@ -43,7 +43,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Fast',
         modelType: 'mimo-v2-flash',
         apiModel: 'gemini-2.5-flash',
-        icon: '/model-logos/gemini.svg',
+        icon: 'https://svgl.app/library/gemini.svg',
         iconAlt: 'syra-nano',
     },
     {
@@ -52,7 +52,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Balanced',
         modelType: 'deepseek-v4-flash',
         apiModel: 'deepseek-v4-flash',
-        icon: '/model-logos/deepseek.svg',
+        icon: 'https://svgl.app/library/deepseek.svg',
         iconAlt: 'syra-base',
     },
     {
@@ -61,7 +61,7 @@ export const MODEL_CHOICES: ModelChoice[] = [
         subtitle: 'Advanced',
         modelType: 'gemini-3.1-pro',
         apiModel: 'gemini-2.5-pro',
-        icon: '/model-logos/gemini.svg',
+        icon: 'https://svgl.app/library/gemini.svg',
         iconAlt: 'syra-havy',
     },
     {
@@ -139,17 +139,33 @@ export function getProviderFromModel(model: string): string {
     return lower.split("-")[0] || lower.split("_")[0] || model
 }
 
-export function getProviderIconUrl(model: string): string | null {
+export function getProviderIconUrl(model: string, isDark: boolean = true): string | null {
+    const lower = model.toLowerCase().trim()
+
+    // Resolve provider logo from svgl.app (https://svgl.app/library/<slug>.svg)
+    // by matching the model name against regex patterns for each provider.
+    const svglIconMap: Array<{ regex: RegExp; dark: string; light: string }> = [
+        { regex: /^gemini|^google/i,            dark: 'https://svgl.app/library/gemini.svg',            light: 'https://svgl.app/library/gemini.svg' },
+        { regex: /^deepseek/i,                   dark: 'https://svgl.app/library/deepseek.svg',           light: 'https://svgl.app/library/deepseek.svg' },
+        { regex: /^(gpt|o[13])|^openai/i,        dark: 'https://svgl.app/library/openai.svg',             light: 'https://svgl.app/library/openai.svg' },
+        { regex: /^claude/i,                    dark: 'https://svgl.app/library/anthropic_white.svg',    light: 'https://svgl.app/library/anthropic_black.svg' },
+        { regex: /^qwen/i,                      dark: 'https://svgl.app/library/qwen_dark.svg',          light: 'https://svgl.app/library/qwen_light.svg' },
+        { regex: /^grok/i,                      dark: 'https://svgl.app/library/xai_dark.svg',           light: 'https://svgl.app/library/xai_light.svg' },
+    ]
+
+    for (const { regex, dark, light } of svglIconMap) {
+        if (regex.test(lower)) return isDark ? dark : light
+    }
+
+    // Fallback to vendored local icons for providers without svgl.app counterparts.
     const provider = getProviderFromModel(model)
-    const icons: Record<string, string> = {
-        gemini: '/model-logos/gemini.svg',
-        google: '/model-logos/gemini.svg',
-        deepseek: '/model-logos/deepseek.svg',
+    const localIcons: Record<string, string> = {
         minimax: '/model-logos/minimax.svg',
         zai: '/model-logos/zai.svg',
         glm: '/model-logos/zai.svg',
+        mimo: '/model-logos/nano.svg',
     }
-    return icons[provider] || null
+    return localIcons[provider] || null
 }
 
 export interface Message {
@@ -345,7 +361,7 @@ export async function sendMessage(
                 await sleep(delay);
             }
 
-            return await _sendMessageInternal(messages, onChunk, signal, onToolCallStream);
+            return await _sendMessageInternal(messages, _model, onChunk, signal, onToolCallStream);
         } catch (error: any) {
             lastError = error;
             console.error(`[AI] Error on attempt ${attempt}:`, error.message);
@@ -380,6 +396,7 @@ export async function sendMessage(
 
 async function _sendMessageInternal(
     messages: Message[],
+    model: ModelType,
     onChunk: (content: string | null, toolCalls: ToolCall[] | null, thinking?: string | null) => void,
     signal?: AbortSignal,
     onToolCallStream?: (toolName: string, partialArgs: string, toolCallId: string) => void
@@ -393,8 +410,15 @@ async function _sendMessageInternal(
         'Content-Type': 'application/json',
     };
 
-    // Use env model or fallback (model id is not a secret)
-    const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
+    // Resolve the actual model to send to the provider. The `model` parameter
+    // (selectedModel forwarded through sendMessage from the UI) is authoritative.
+    // For built-in model types, map to the provider API model id via MODEL_CHOICES.
+    // Dynamic Sycord model types (type === apiModel) are used directly.
+    // Fall back to the store's aiModel, then 'gpt-4'. We intentionally do NOT
+    // consult NEXT_PUBLIC_AI_MODEL — that env var would always override the
+    // user's explicit model selection.
+    const mappedChoice = getModelChoice(model);
+    const actualModelId = (mappedChoice.modelType === model ? mappedChoice.apiModel : model) || aiModel || 'gpt-4';
 
     // Model context limits (approximate input token windows)
     const MODEL_CONTEXT_LIMITS: Record<string, number> = {

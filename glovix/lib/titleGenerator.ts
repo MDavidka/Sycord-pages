@@ -3,6 +3,7 @@
 
 import { useStore } from '../store';
 import { updateChatTitle } from './api';
+import { getModelChoice } from './ai';
 
 // Very explicit prompt that works well with Gemini and other models
 const TITLE_PROMPT = `Generate a short project title (2-5 words) based on the user's request.
@@ -84,7 +85,8 @@ export async function generateAndSaveTitle(userText: string, chatId: string): Pr
 async function generateTitleWithAI(userText: string): Promise<string | null> {
     try {
         const { aiModel } = useStore.getState();
-        const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
+        const mappedChoice = getModelChoice(aiModel);
+        const actualModelId = (mappedChoice.modelType === aiModel ? mappedChoice.apiModel : aiModel) || 'gpt-4';
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
