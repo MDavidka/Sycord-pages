@@ -3,6 +3,7 @@
 
 import { useStore } from '../store';
 import { createChat, saveProject } from './api';
+import { getModelChoice } from './ai';
 
 const SUMMARIZE_PROMPT = `You are a context compression assistant. Your job is to summarize a conversation between a user and an AI developer into a compact context document.
 
@@ -95,7 +96,8 @@ function extractConversationText(messages: any[]): string {
 // Generate context summary using AI
 async function generateContextSummary(conversationText: string): Promise<string> {
     const { aiModel } = useStore.getState();
-    const actualModelId = process.env.NEXT_PUBLIC_AI_MODEL || aiModel || 'gpt-4';
+    const mappedChoice = getModelChoice(aiModel);
+    const actualModelId = (mappedChoice.modelType === aiModel ? mappedChoice.apiModel : aiModel) || 'gpt-4';
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);

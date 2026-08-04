@@ -248,7 +248,7 @@ function ModelSelector({ selectedModel, choices, loading, error, onSelect, showM
 }) {
     const current = choices.find(choice => choice.modelType === selectedModel) || choices[0]
     const displayModel = loading ? 'Loading models…' : error ? 'Models unavailable' : current?.apiModel || 'No models available'
-    const displayIcon = current && (getProviderIconUrl(current.apiModel) || current.icon)
+    const displayIcon = current && (getProviderIconUrl(current.apiModel, isDark) || current.icon)
     const shortModel = displayModel.split('-').slice(0, 2).join('-')
     const canOpen = !loading && (choices.length > 0 || Boolean(error))
 
@@ -296,7 +296,7 @@ function ModelSelector({ selectedModel, choices, loading, error, onSelect, showM
                             <div className="p-1.5 space-y-0.5">
                                 {choices.map((choice) => {
                                     const isActive = choice.modelType === selectedModel
-                                    const choiceIcon = getProviderIconUrl(choice.apiModel) || choice.icon
+                                    const choiceIcon = getProviderIconUrl(choice.apiModel, isDark) || choice.icon
                                     return (
                                         <button
                                             key={choice.id}
@@ -314,11 +314,11 @@ function ModelSelector({ selectedModel, choices, loading, error, onSelect, showM
                                                 <img
                                                     src={choiceIcon}
                                                     alt={choice.apiModel}
-                                                    className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg ${isDark ? 'brightness-150' : ''}`}
+                                                    className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg transition-all ${isDark ? 'brightness-150' : ''} ${showMenu && isActive ? 'opacity-70 grayscale' : ''}`}
                                                     draggable={false}
                                                 />
                                             ) : (
-                                                <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'}`}>
+                                                <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'} ${showMenu && isActive ? 'opacity-70 grayscale' : ''}`}>
                                                     {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
                                                 </span>
                                             )}
@@ -496,6 +496,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [questionError, setQuestionError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
+    const [isListening, setIsListening] = useState(false);
+    const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
 
     const beginRun = (controller: AbortController) => {
         abortControllerRef.current = controller;
@@ -530,6 +532,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 state.setAbortCurrentRun(null);
             }
             abortControllerRef.current = null;
+            speechRecognitionRef.current?.stop();
+            speechRecognitionRef.current = null;
         };
     }, []);
 
@@ -1034,7 +1038,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
     };
 
-    const handleDrop = (e: React.DragEvent) => {
+     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         const files = Array.from(e.dataTransfer.files);
         files.forEach(file => {
@@ -1046,6 +1050,62 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 reader.readAsDataURL(file);
             }
         });
+    };
+
+    const handleVoiceInput = () => {
+        if (isListening) {
+            speechRecognitionRef.current?.stop();
+            setIsListening(false);
+            return;
+        }
+
+        const SpeechRecognitionCtor =
+            (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (!SpeechRecognitionCtor) {
+            console.warn('[Voice] Web Speech API is not supported in this browser.');
+            return;
+        }
+
+        const recognition = new SpeechRecognitionCtor() as SpeechRecognition;
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+            let interim = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    setInput(prev => (prev ? prev + ' ' : '') + transcript);
+                } else {
+                    interim += transcript;
+                }
+            }
+            // Show interim results live while listening
+            if (interim) {
+                const el = textareaRef.current;
+                if (el) {
+                    el.value = interim;
+                    const rect = el.getBoundingClientRect();
+                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
+                    el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
+                }
+            }
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+            speechRecognitionRef.current = null;
+        };
+
+        recognition.onerror = () => {
+            setIsListening(false);
+        };
+
+        speechRecognitionRef.current = recognition;
+        setIsListening(true);
+        recognition.start();
     };
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -3404,9 +3464,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <button
                                         type="button"
                                         aria-label="Voice input"
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
+                                        aria-pressed={isListening}
+                                        onClick={handleVoiceInput}
+                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
-                                        <Mic className="h-5 w-5" />
+                                        <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
                                     </button>
                                     <button
                                         type="button"
