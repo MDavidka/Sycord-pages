@@ -1262,6 +1262,95 @@ export default function AdminPage() {
 
             <div className="grid grid-cols-1 gap-3">
               {CONNECTION_PROVIDERS.map((provider: ConnectionProviderDef) => (
+                <div
+                  key={provider.id}
+                  className="rounded-xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04]">
+                      <img
+                        src={provider.logo}
+                        alt={provider.name}
+                        className="size-5 object-contain opacity-70"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-white">{provider.name}</span>
+                        <Badge
+                          className={`text-[10px] px-1.5 py-0 h-5 ${
+                            provider.authType === 'oauth'
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                              : provider.authType === 'api_key'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          }`}
+                          variant="outline"
+                        >
+                          {provider.authType === 'oauth' ? 'OAuth 2.0' : provider.authType === 'api_key' ? 'API Key' : 'Built-in'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-white/40 leading-relaxed">{provider.description}</p>
+                      {provider.authType === 'oauth' && (
+                        <div className="space-y-1.5 pt-1">
+                          {provider.oauthClientIdEnv && (
+                            <div className="flex items-center justify-between gap-2">
+                              <code className="text-[11px] text-white/30 font-mono">{provider.oauthClientIdEnv}</code>
+                              <button
+                                onClick={() => copyToClipboard(provider.oauthClientIdEnv || '', `${provider.id}-id`)}
+                                className="text-white/20 hover:text-white/40 transition-colors"
+                              >
+                                {connectionCopied === `${provider.id}-id` ? (
+                                  <CheckCheck className="size-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {provider.oauthClientSecretEnv && (
+                            <div className="flex items-center justify-between gap-2">
+                              <code className="text-[11px] text-white/30 font-mono">{provider.oauthClientSecretEnv}</code>
+                              <button
+                                onClick={() => copyToClipboard(provider.oauthClientSecretEnv || '', `${provider.id}-secret`)}
+                                className="text-white/20 hover:text-white/40 transition-colors"
+                              >
+                                {connectionCopied === `${provider.id}-secret` ? (
+                                  <CheckCheck className="size-3 text-emerald-400" />
+                                ) : (
+                                  <Copy className="size-3" />
+                                )}
+                              </button>
+                            </div>
+                          )}
+                          {provider.oauthScopes && (
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {provider.oauthScopes.map((scope) => (
+                                <code key={scope} className="text-[10px] text-white/25 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded">{scope}</code>
+                              ))}
+                            </div>
+                          )}
+                          {provider.authorizeUrl && (
+                            <p className="text-[11px] text-white/20 font-mono truncate">
+                              Auth: {provider.authorizeUrl}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {provider.authType === 'api_key' && provider.envKeys && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {provider.envKeys.map((key) => (
+                            <code key={key} className="text-[10px] text-white/25 font-mono bg-white/[0.03] px-1.5 py-0.5 rounded">{key}</code>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </main>
     </div>

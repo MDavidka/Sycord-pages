@@ -2785,7 +2785,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             fetchProjectConnections(projectId),
         ]);
         setSlashSkills(skillsRes.skills);
-        setSlashConnections(connectionsRes.connections);
+        setSlashConnections(connectionsRes.addons);
         slashLoadedForRef.current = projectId;
     };
 
@@ -3280,7 +3280,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         )}
 
                         {/* Connected MCP pill — dashed status chip above composer */}
-                        {connectedMcps.length > 0 && (
+                        {connectedConnections.length > 0 && (
                             <div className="flex justify-start px-1">
                                 <button
                                     type="button"
@@ -3293,7 +3293,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     aria-label="Connected MCP"
                                 >
                                     <span className="flex items-center -space-x-1">
-                                        {connectedMcps.map((addon) => (
+                                        {connectedConnections.map((addon) => (
                                             <span
                                                 key={addon.id}
                                                 className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${

@@ -7,9 +7,11 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { ConnectionBrandIcon } from './ConnectionBrandIcons'
 import {
+  BUILTIN_CONNECTION_FALLBACK,
   BUILTIN_SKILL_FALLBACK,
   fetchProjectConnections,
   fetchProjectSkills,
+  mergeConnectionCatalog,
   toggleProjectConnection,
   toggleProjectSkill,
   type SyraSlashConnection,
@@ -301,7 +303,8 @@ export function ConnectionLibrary({
   }
 
   const handleApiKeyConnect = async (addon: SyraSlashConnection) => {
-    if (!projectId || !apiKeyValues[addon.envKeys?.[0]]) return
+    const firstKey = addon.envKeys?.[0]
+    if (!projectId || !firstKey || !apiKeyValues[firstKey]) return
     setBusyId(addon.id)
     const result = await toggleProjectConnection(projectId, addon, true)
     setBusyId(null)
@@ -320,41 +323,9 @@ export function ConnectionLibrary({
     if (addon.authType === 'api_key') return 'API Key'
     return 'Built-in'
   }
-}
-
-export function CreditsPanel({ isDark = true, onBack }: CreditsPanelProps) {
-  const [credits, setCredits] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    void fetch('/api/user/credits', { headers: { Accept: 'application/json' } })
-      .then(async (res) => {
-        const data = await res.json().catch(() => null)
-        if (cancelled) return
-        if (!res.ok) {
-          setError(data?.message || `Failed to load credits (${res.status})`)
-          setCredits(null)
-        } else {
-          setCredits(typeof data?.credits === 'number' ? data.credits : 0)
-          setError(null)
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err?.message || 'Failed to load credits')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   return (
-    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+    <div className={cn('relative flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
       <header
         className={cn(
           'flex items-center gap-3 border-b px-4 py-3',
@@ -364,112 +335,6 @@ export function CreditsPanel({ isDark = true, onBack }: CreditsPanelProps) {
       >
         <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Back" className="h-9 w-9 rounded-xl">
           <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-semibold tracking-tight">Credits</h1>
-          <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Your AI generation balance
-          </p>
-        </div>
-      </header>
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-        {loading ? (
-          <Loader2 className="h-6 w-6 animate-spin opacity-50" />
-        ) : error ? (
-          <p className="text-[13px] text-amber-400">{error}</p>
-        ) : (
-          <>
-            <p className="text-4xl font-semibold tabular-nums tracking-tight">{credits ?? 0}</p>
-            <p className={cn('text-[13px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>credits remaining</p>
-            <Button
-              type="button"
-              variant="secondary"
-              className="mt-2 rounded-xl"
-              onClick={() => {
-                window.open('/subscriptions', '_blank', 'noopener,noreferrer')
-              }}
-            >
-              View plans
-            </Button>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-type HelpPanelProps = {
-  isDark?: boolean
-  onBack: () => void
-}
-
-export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
-  return (
-    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
-      <header
-        className={cn(
-          'flex items-center gap-3 border-b px-4 py-3',
-          isDark ? 'border-[#2a2b2e]' : 'border-gray-200',
-        )}
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
-      >
-        <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Back" className="h-9 w-9 rounded-xl">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-semibold tracking-tight">Help & support</h1>
-          <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Get help with Syra and Sycord
-          </p>
-        </div>
-      </header>
-      <div className="flex flex-1 flex-col gap-3 px-4 py-6">
-        <button
-          type="button"
-          onClick={() => window.open('/contact', '_blank', 'noopener,noreferrer')}
-          className={cn(
-            'rounded-2xl border px-4 py-3.5 text-left transition-colors',
-            isDark
-              ? 'border-[#2a2b2e] bg-[#1c1d1f] hover:bg-[#222326]'
-              : 'border-gray-200 bg-gray-50 hover:bg-gray-100',
-          )}
-        >
-          <p className="text-[14px] font-medium">Contact support</p>
-          <p className={cn('mt-0.5 text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Reach the Sycord team
-          </p>
-        </button>
-        <button
-          type="button"
-          onClick={() => window.open('/tos', '_blank', 'noopener,noreferrer')}
-          className={cn(
-            'rounded-2xl border px-4 py-3.5 text-left transition-colors',
-            isDark
-              ? 'border-[#2a2b2e] bg-[#1c1d1f] hover:bg-[#222326]'
-              : 'border-gray-200 bg-gray-50 hover:bg-gray-100',
-          )}
-        >
-          <p className="text-[14px] font-medium">Terms of service</p>
-          <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Review product terms
-          </p>
-        </button>
-        <div
-          className={cn(
-            'rounded-2xl border px-4 py-3.5',
-            isDark ? 'border-[#2a2b2e] bg-[#1c1d1f]' : 'border-gray-200 bg-gray-50',
-          )}
-        >
-          <p className="text-[14px] font-medium">Slash shortcuts</p>
-          <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Type <code className="rounded bg-black/20 px-1">/</code> for image &amp; file upload, skills,
-            Connection, help, and credits.
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
         </Button>
         <div className="min-w-0 flex-1">
           <h1 className="text-[15px] font-semibold tracking-tight">Connection library</h1>
@@ -614,7 +479,7 @@ export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
               >
                 Cancel
               </Button>
-              <Button type="button" disabled={apiKeySaving} onClick={() => void saveApiKeysAndConnect()}>
+              <Button type="button" disabled={apiKeySaving} onClick={() => void handleApiKeySave()}>
                 {apiKeySaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Connect'}
               </Button>
             </div>
@@ -758,7 +623,7 @@ export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
           )}
         >
           <p className="text-[14px] font-medium">Terms of service</p>
-          <p className={cn('mt-0.5 text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
+          <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
             Review product terms
           </p>
         </button>

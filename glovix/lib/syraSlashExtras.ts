@@ -146,6 +146,62 @@ function humanizeId(id: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+export function normalizeSkills(raw: unknown): SyraSlashSkill[] {
+  if (!Array.isArray(raw)) return []
+  const skills: SyraSlashSkill[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const obj = item as Record<string, unknown>
+    const id = typeof obj.id === 'string' ? obj.id : ''
+    if (!id) continue
+    const name =
+      (typeof obj.name === 'string' && obj.name.trim()) ||
+      humanizeId(id)
+    const description =
+      typeof obj.description === 'string'
+        ? obj.description
+        : typeof obj.content === 'string'
+          ? obj.content.slice(0, 120)
+          : undefined
+    skills.push({
+      id,
+      name,
+      description,
+      active: obj.active === true,
+      builtin: obj.builtin === true,
+      custom: obj.custom === true,
+    })
+  }
+  return skills
+}
+
+export async function toggleProjectConnection(
+  projectId: string,
+  addon: SyraSlashConnection,
+  connect: boolean,
+): Promise<{ connections: SyraSlashConnection[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/connection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        action: connect ? 'connect' : 'disconnect',
+        addon: addon.id,
+      }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      return {
+        connections: [],
+        error: data?.message || `Failed to ${connect ? 'connect' : 'disconnect'} connection`,
+      }
+    }
+    return { connections: data?.addons || [] }
+  } catch (err: any) {
+    return { connections: [], error: err?.message || 'Failed to update connection' }
+  }
+}
+
 export async function fetchProjectSkills(projectId: string): Promise<{
   skills: SyraSlashSkill[]
   error?: string
@@ -167,6 +223,30 @@ export async function fetchProjectSkills(projectId: string): Promise<{
     return {
       skills: BUILTIN_SKILL_FALLBACK,
       error: err?.message || 'Failed to load skills',
+    }
+  }
+}
+
+export async function fetchProjectConnections(projectId: string): Promise<{
+  addons: SyraSlashConnection[]
+  error?: string
+}> {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/connection`, {
+      headers: { Accept: 'application/json' },
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      return {
+        addons: mergeConnectionCatalog([]),
+        error: data?.message || `Failed to load connections (${res.status})`,
+      }
+    }
+    return { addons: mergeConnectionCatalog(data?.addons || []) }
+  } catch (err: any) {
+    return {
+      addons: mergeConnectionCatalog([]),
+      error: err?.message || 'Failed to load connections',
     }
   }
 }
