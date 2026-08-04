@@ -13,7 +13,7 @@ import {
   verifyMcpOAuthState,
 } from '@/lib/mcp-oauth'
 import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace'
-import { syteAgentMcpConnect, syteAgentMcpRegister, syteSetEnv, useSyteWorkspace } from '@/lib/deploy/syte-client'
+import { syteAgentMcpConnect, syteSetEnv, useSyteWorkspace } from '@/lib/deploy/syte-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -174,33 +174,9 @@ export async function GET(request: Request) {
       if (!synced.ok) {
         connectError = synced.error || 'Failed to sync MCP credentials to Syte.'
       } else {
-        // OAuth providers are not Syte built-ins — register as a custom stdio
-        // addon first, then connect. Without registration Syte returns
-        // "MCP addon not found: <id>".
-        const spec = provider.mcpRegisterSpec
-        if (spec) {
-          // Build per-workspace env snapshot from the tokens we just synced.
-          const envForAddon: Record<string, string> = {}
-          for (const key of spec.envKeys) {
-            if (exchanged.tokens[key]) envForAddon[key] = exchanged.tokens[key]
-          }
-          const registered = await syteAgentMcpRegister(workspace.uuid, {
-            name: provider.id,
-            command: spec.command,
-            args: spec.args,
-            env: Object.keys(envForAddon).length ? envForAddon : undefined,
-            description: provider.description,
-          })
-          if (!registered.ok) {
-            connectError = registered.error || 'Failed to register MCP addon on Syte.'
-          }
-        }
-
-        if (!connectError) {
-          const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
-          if (!connected.ok) {
-            connectError = connected.error || 'Failed to enable MCP addon on Syte.'
-          }
+        const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
+        if (!connected.ok) {
+          connectError = connected.error || 'Failed to mark connection in Syte.'
         }
       }
     } else {
