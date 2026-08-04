@@ -1,9 +1,9 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { getMcpProvider } from '@/lib/mcp-providers'
+import { getConnectionProvider } from '@/lib/connection-providers'
 
-export function McpBrandIcon({
+export function ConnectionBrandIcon({
   id,
   name,
   className,
@@ -12,7 +12,7 @@ export function McpBrandIcon({
   name?: string
   className?: string
 }) {
-  const provider = getMcpProvider(id) || (name ? getMcpProvider(name) : undefined)
+  const provider = getConnectionProvider(id) || (name ? getConnectionProvider(name) : undefined)
   const src = provider?.logo
   const label = provider?.name || name || id
 

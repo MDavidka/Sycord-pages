@@ -1,9 +1,9 @@
 /**
- * Syra slash-menu helpers for agent Skills + MCP.
- * Backed by https://sycord.site/api/#agent (`/api/agent_skills*`, `/api/agent_mcp*`).
+ * Syra slash-menu helpers for agent Skills + Connections.
+ * Backed by https://sycord.site/api/#agent (`/api/agent_skills*`, `/api/agent_connection*`).
  */
 
-import { MCP_PROVIDERS } from '@/lib/mcp-providers'
+import { CONNECTION_PROVIDERS } from '@/lib/connection-providers'
 
 export type SyraSlashSkill = {
   id: string
@@ -14,7 +14,7 @@ export type SyraSlashSkill = {
   custom?: boolean
 }
 
-export type SyraSlashMcpAddon = {
+export type SyraSlashConnection = {
   id: string
   name: string
   description?: string
@@ -73,7 +73,7 @@ export const BUILTIN_SKILL_FALLBACK: SyraSlashSkill[] = [
   },
 ]
 
-export const BUILTIN_MCP_FALLBACK: SyraSlashMcpAddon[] = MCP_PROVIDERS.map((p) => ({
+export const BUILTIN_CONNECTION_FALLBACK: SyraSlashConnection[] = CONNECTION_PROVIDERS.map((p) => ({
   id: p.id,
   name: p.name,
   description: p.description,
@@ -85,7 +85,7 @@ export const BUILTIN_MCP_FALLBACK: SyraSlashMcpAddon[] = MCP_PROVIDERS.map((p) =
   envKeys: p.envKeys,
 }))
 
-function mcpCatalogKey(idOrName: string): string {
+function connectionCatalogKey(idOrName: string): string {
   let key = idOrName
     .toLowerCase()
     .replace(/^.*:/, '')
@@ -98,18 +98,18 @@ function mcpCatalogKey(idOrName: string): string {
   return key
 }
 
-/** Merge API MCP addons onto the known connectable catalog (keep catalog order + icons). */
-export function mergeMcpCatalog(remote: SyraSlashMcpAddon[]): SyraSlashMcpAddon[] {
-  const remoteByKey = new Map<string, SyraSlashMcpAddon>()
+/** Merge API connection addons onto the known connectable catalog (keep catalog order + icons). */
+export function mergeConnectionCatalog(remote: SyraSlashConnection[]): SyraSlashConnection[] {
+  const remoteByKey = new Map<string, SyraSlashConnection>()
   for (const item of remote) {
-    remoteByKey.set(mcpCatalogKey(item.id), item)
-    if (item.name) remoteByKey.set(mcpCatalogKey(item.name), item)
+    remoteByKey.set(connectionCatalogKey(item.id), item)
+    if (item.name) remoteByKey.set(connectionCatalogKey(item.name), item)
   }
 
-  const merged = BUILTIN_MCP_FALLBACK.map((catalogItem) => {
+  const merged = BUILTIN_CONNECTION_FALLBACK.map((catalogItem) => {
     const remoteItem =
-      remoteByKey.get(mcpCatalogKey(catalogItem.id)) ||
-      remoteByKey.get(mcpCatalogKey(catalogItem.name))
+      remoteByKey.get(connectionCatalogKey(catalogItem.id)) ||
+      remoteByKey.get(connectionCatalogKey(catalogItem.name))
     if (!remoteItem) return { ...catalogItem }
     return {
       ...catalogItem,
@@ -128,9 +128,9 @@ export function mergeMcpCatalog(remote: SyraSlashMcpAddon[]): SyraSlashMcpAddon[
   })
 
   // Append unknown remotes that are not in the catalog
-  const known = new Set(merged.map((m) => mcpCatalogKey(m.id)))
+  const known = new Set(merged.map((m) => connectionCatalogKey(m.id)))
   for (const item of remote) {
-    const key = mcpCatalogKey(item.id)
+    const key = connectionCatalogKey(item.id)
     if (!known.has(key)) {
       known.add(key)
       merged.push(item)
@@ -144,85 +144,6 @@ function humanizeId(id: string): string {
   return bare
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-function isMcpConnected(addon: {
-  status?: string
-  connected?: boolean
-  enabled?: boolean
-}): boolean {
-  if (addon.connected === true || addon.enabled === true) return true
-  const status = (addon.status || '').toLowerCase()
-  return status === 'connected' || status === 'enabled' || status === 'active' || status === 'running'
-}
-
-export function normalizeSkills(raw: unknown): SyraSlashSkill[] {
-  if (!Array.isArray(raw)) return []
-  const skills: SyraSlashSkill[] = []
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue
-    const obj = item as Record<string, unknown>
-    const id = typeof obj.id === 'string' ? obj.id : ''
-    if (!id) continue
-    const name =
-      (typeof obj.name === 'string' && obj.name.trim()) ||
-      humanizeId(id)
-    const description =
-      typeof obj.description === 'string'
-        ? obj.description
-        : typeof obj.content === 'string'
-          ? obj.content.slice(0, 120)
-          : undefined
-    skills.push({
-      id,
-      name,
-      description,
-      active: obj.active === true,
-      builtin: obj.builtin === true,
-      custom: obj.custom === true,
-    })
-  }
-  return skills
-}
-
-export function normalizeMcpAddons(raw: unknown): SyraSlashMcpAddon[] {
-  if (!Array.isArray(raw)) return []
-  const addons: SyraSlashMcpAddon[] = []
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue
-    const obj = item as Record<string, unknown>
-    const id =
-      (typeof obj.id === 'string' && obj.id) ||
-      (typeof obj.name === 'string' && obj.name) ||
-      ''
-    if (!id) continue
-    const name =
-      (typeof obj.name === 'string' && obj.name.trim()) ||
-      humanizeId(id)
-    const tools = Array.isArray(obj.tools) ? obj.tools : []
-    addons.push({
-      id,
-      name,
-      description: typeof obj.description === 'string' ? obj.description : undefined,
-      connected: isMcpConnected({
-        status: typeof obj.status === 'string' ? obj.status : undefined,
-        connected: typeof obj.connected === 'boolean' ? obj.connected : undefined,
-        enabled: typeof obj.enabled === 'boolean' ? obj.enabled : undefined,
-      }),
-      builtin: obj.builtin === true,
-      status: typeof obj.status === 'string' ? obj.status : undefined,
-      toolsCount: tools.length,
-    })
-  }
-  return addons
-}
-
-/** Prefer stable catalog id for connect/disconnect body. */
-export function mcpAddonKey(addon: Pick<SyraSlashMcpAddon, 'id' | 'name'>): string {
-  const bare = addon.id.includes(':') ? addon.id.split(':').pop() || addon.id : addon.id
-  if (bare?.trim()) return bare.trim()
-  if (addon.name?.trim()) return addon.name.trim()
-  return addon.id
 }
 
 export async function fetchProjectSkills(projectId: string): Promise<{
@@ -268,61 +189,5 @@ export async function toggleProjectSkill(
     return { skills: normalizeSkills(data?.skills) }
   } catch (err: any) {
     return { skills: [], error: err?.message || 'Failed to update skill' }
-  }
-}
-
-export async function fetchProjectMcp(projectId: string): Promise<{
-  addons: SyraSlashMcpAddon[]
-  error?: string
-}> {
-  try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
-      headers: { Accept: 'application/json' },
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      return {
-        addons: mergeMcpCatalog([]),
-        error: data?.message || `Failed to load MCP (${res.status})`,
-      }
-    }
-    return { addons: mergeMcpCatalog(normalizeMcpAddons(data?.addons)) }
-  } catch (err: any) {
-    return {
-      addons: mergeMcpCatalog([]),
-      error: err?.message || 'Failed to load MCP',
-    }
-  }
-}
-
-export async function toggleProjectMcp(
-  projectId: string,
-  addon: SyraSlashMcpAddon,
-  connect: boolean,
-): Promise<{ addons: SyraSlashMcpAddon[]; hasRemoteState: boolean; error?: string }> {
-  try {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        action: connect ? 'connect' : 'disconnect',
-        addon: mcpAddonKey(addon),
-      }),
-    })
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      return {
-        addons: [],
-        hasRemoteState: false,
-        error: data?.message || `Failed to ${connect ? 'connect' : 'disconnect'} MCP`,
-      }
-    }
-    const hasRemoteState = Array.isArray(data?.addons)
-    return {
-      addons: hasRemoteState ? mergeMcpCatalog(normalizeMcpAddons(data.addons)) : [],
-      hasRemoteState,
-    }
-  } catch (err: any) {
-    return { addons: [], hasRemoteState: false, error: err?.message || 'Failed to update MCP' }
   }
 }

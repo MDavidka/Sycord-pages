@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'crypto'
-import type { McpProviderDef } from '@/lib/mcp-providers'
+import type { ConnectionProviderDef } from '@/lib/connection-providers'
 
 const STATE_TTL_MS = 15 * 60 * 1000
 
@@ -7,12 +7,12 @@ function stateSecret(): string {
   return (
     process.env.AUTH_SECRET ||
     process.env.NEXTAUTH_SECRET ||
-    process.env.MCP_OAUTH_STATE_SECRET ||
-    'sycord-mcp-oauth-dev'
+    process.env.CONNECTION_OAUTH_STATE_SECRET ||
+    'sycord-connection-oauth-dev'
   )
 }
 
-export type McpOAuthState = {
+export type ConnectionOAuthState = {
   v: 1
   projectId: string
   addon: string
@@ -20,8 +20,8 @@ export type McpOAuthState = {
   exp: number
 }
 
-export function signMcpOAuthState(payload: Omit<McpOAuthState, 'v' | 'exp'>): string {
-  const body: McpOAuthState = {
+export function signConnectionOAuthState(payload: Omit<ConnectionOAuthState, 'v' | 'exp'>): string {
+  const body: ConnectionOAuthState = {
     v: 1,
     ...payload,
     exp: Date.now() + STATE_TTL_MS,
@@ -31,7 +31,7 @@ export function signMcpOAuthState(payload: Omit<McpOAuthState, 'v' | 'exp'>): st
   return `${json}.${sig}`
 }
 
-export function verifyMcpOAuthState(state: string): McpOAuthState | null {
+export function verifyConnectionOAuthState(state: string): ConnectionOAuthState | null {
   const [json, sig] = state.split('.')
   if (!json || !sig) return null
   const expected = createHmac('sha256', stateSecret()).update(json).digest('base64url')
@@ -43,7 +43,7 @@ export function verifyMcpOAuthState(state: string): McpOAuthState | null {
     return null
   }
   try {
-    const parsed = JSON.parse(Buffer.from(json, 'base64url').toString('utf8')) as McpOAuthState
+    const parsed = JSON.parse(Buffer.from(json, 'base64url').toString('utf8')) as ConnectionOAuthState
     if (parsed?.v !== 1 || !parsed.projectId || !parsed.addon || !parsed.userId) return null
     if (typeof parsed.exp !== 'number' || parsed.exp < Date.now()) return null
     return parsed
@@ -52,12 +52,12 @@ export function verifyMcpOAuthState(state: string): McpOAuthState | null {
   }
 }
 
-export function mcpOAuthCallbackUrl(origin: string): string {
-  return `${origin.replace(/\/$/, '')}/api/mcp/oauth/callback`
+export function connectionOAuthCallbackUrl(origin: string): string {
+  return `${origin.replace(/\/$/, '')}/api/connection/oauth/callback`
 }
 
 export function buildAuthorizeUrl(opts: {
-  provider: McpProviderDef
+  provider: ConnectionProviderDef
   clientId: string
   redirectUri: string
   state: string
@@ -101,7 +101,7 @@ export function buildAuthorizeUrl(opts: {
 }
 
 export async function exchangeOAuthCode(opts: {
-  provider: McpProviderDef
+  provider: ConnectionProviderDef
   code: string
   redirectUri: string
   clientId: string

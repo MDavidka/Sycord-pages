@@ -5,15 +5,14 @@ import { ArrowLeft, Check, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { McpBrandIcon } from './McpBrandIcons'
+import { ConnectionBrandIcon } from './ConnectionBrandIcons'
 import {
   BUILTIN_SKILL_FALLBACK,
-  fetchProjectMcp,
+  fetchProjectConnections,
   fetchProjectSkills,
-  mergeMcpCatalog,
-  toggleProjectMcp,
+  toggleProjectConnection,
   toggleProjectSkill,
-  type SyraSlashMcpAddon,
+  type SyraSlashConnection,
   type SyraSlashSkill,
 } from '../lib/syraSlashExtras'
 
@@ -168,50 +167,50 @@ export function SkillsLibrary({
   )
 }
 
-type McpLibraryProps = {
+type ConnectionLibraryProps = {
   projectId: string | null
   isDark?: boolean
   onBack: () => void
-  onMcpChange?: (addons: SyraSlashMcpAddon[]) => void
+  onConnectionChange?: (addons: SyraSlashConnection[]) => void
 }
 
-function openMcpOAuthPopup(projectId: string, addonId: string): Window | null {
-  const url = `/api/mcp/oauth/start?projectId=${encodeURIComponent(projectId)}&addon=${encodeURIComponent(addonId)}`
+function openConnectionOAuthPopup(projectId: string, addonId: string): Window | null {
+  const url = `/api/connection/oauth/start?projectId=${encodeURIComponent(projectId)}&addon=${encodeURIComponent(addonId)}`
   const width = 520
   const height = 720
   const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2))
   const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2))
   return window.open(
     url,
-    'sycord-mcp-oauth',
+    'sycord-connection-oauth',
     `popup=yes,width=${width},height=${height},left=${left},top=${top}`,
   )
 }
 
-export function McpLibrary({
+export function ConnectionLibrary({
   projectId,
   isDark = true,
   onBack,
-  onMcpChange,
-}: McpLibraryProps) {
-  const [addons, setAddons] = useState<SyraSlashMcpAddon[]>(() => mergeMcpCatalog([]))
+  onConnectionChange,
+}: ConnectionLibraryProps) {
+  const [addons, setAddons] = useState<SyraSlashConnection[]>(() => mergeConnectionCatalog([]))
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [apiKeyAddon, setApiKeyAddon] = useState<SyraSlashMcpAddon | null>(null)
+  const [apiKeyAddon, setApiKeyAddon] = useState<SyraSlashConnection | null>(null)
   const [apiKeyValues, setApiKeyValues] = useState<Record<string, string>>({})
   const [apiKeySaving, setApiKeySaving] = useState(false)
 
   const refresh = async () => {
     if (!projectId) {
-      setAddons(mergeMcpCatalog([]))
+      setAddons(mergeConnectionCatalog([]))
       return
     }
     setLoading(true)
-    const res = await fetchProjectMcp(projectId)
-    setAddons(res.addons.length ? res.addons : mergeMcpCatalog([]))
+    const res = await fetchProjectConnections(projectId)
+    setAddons(res.addons.length ? res.addons : mergeConnectionCatalog([]))
     setError(res.error || null)
-    onMcpChange?.(res.addons.length ? res.addons : mergeMcpCatalog([]))
+    onConnectionChange?.(res.addons.length ? res.addons : mergeConnectionCatalog([]))
     setLoading(false)
   }
 
@@ -224,7 +223,7 @@ export function McpLibrary({
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
       const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string; connectError?: string } | null
-      if (!data || data.type !== 'sycord-mcp-oauth') return
+      if (!data || data.type !== 'sycord-connection-oauth') return
       if (!data.ok) {
         setError(data.connectError || data.error || 'OAuth connection failed')
         setBusyId(null)
@@ -238,138 +237,124 @@ export function McpLibrary({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
-  const markConnected = (addonId: string, connected: boolean) => {
-    setAddons((prev) => {
-      const next = mergeMcpCatalog(
-        prev.map((a) => (a.id === addonId ? { ...a, connected } : a)),
-      )
-      onMcpChange?.(next)
-      return next
-    })
-  }
-
-  const handleDisconnect = async (addon: SyraSlashMcpAddon) => {
-    if (!projectId || busyId) return
-    setBusyId(addon.id)
-    setError(null)
-    const result = await toggleProjectMcp(projectId, addon, false)
-    if (result.error) setError(result.error)
-    if (!result.error && result.hasRemoteState) {
-      setAddons(result.addons)
-      onMcpChange?.(result.addons)
-    } else if (!result.error) {
-      markConnected(addon.id, false)
-    }
-    setBusyId(null)
-  }
-
-  const handleConnect = async (addon: SyraSlashMcpAddon) => {
-    if (!projectId || busyId) return
-    setError(null)
-
-    if (addon.connected) {
-      await handleDisconnect(addon)
-      return
-    }
-
-    const authType = addon.authType || 'builtin'
-
-    if (authType === 'oauth') {
-      setBusyId(addon.id)
-      const popup = openMcpOAuthPopup(projectId, addon.id)
-      if (!popup) {
-        setError('Popup blocked — allow popups to complete OAuth.')
-        setBusyId(null)
-        return
-      }
-      // Keep busy until postMessage / timeout
-      const timer = window.setInterval(() => {
-        if (popup.closed) {
-          window.clearInterval(timer)
-          setBusyId(null)
-          void refresh()
-        }
-      }, 700)
-      return
-    }
-
-    if (authType === 'api_key') {
-      const keys = addon.envKeys?.length ? addon.envKeys : ['API_KEY']
-      setApiKeyAddon(addon)
-      setApiKeyValues(Object.fromEntries(keys.map((k) => [k, ''])))
-      return
-    }
-
-    // builtin (Syte web search) — direct connect
-    setBusyId(addon.id)
-    const result = await toggleProjectMcp(projectId, addon, true)
-    if (result.error) setError(result.error)
-    if (result.error) {
-      setBusyId(null)
-      return
-    }
-    if (result.hasRemoteState) {
-      setAddons(result.addons)
-      onMcpChange?.(result.addons)
-    } else {
-      markConnected(addon.id, true)
-    }
-    setBusyId(null)
-  }
-
-  const saveApiKeysAndConnect = async () => {
-    if (!projectId || !apiKeyAddon) return
-    const keys = apiKeyAddon.envKeys || []
-    const missing = keys.find((k) => !(apiKeyValues[k] || '').trim())
-    if (missing) {
-      setError(`Enter a value for ${missing}.`)
-      return
-    }
+  const handleApiKeySave = async () => {
+    if (!apiKeyAddon || !projectId) return
     setApiKeySaving(true)
-    setError(null)
     try {
-      for (const key of keys) {
-        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/env`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            key,
-            value: apiKeyValues[key].trim(),
-            integration: apiKeyAddon.id,
-          }),
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => null)
-          throw new Error(body?.message || `Failed to save ${key}`)
-        }
+      const envVars: Record<string, string> = {}
+      for (const key of apiKeyAddon.envKeys || []) {
+        const value = apiKeyValues[key]
+        if (value) envVars[key] = value
       }
-      const result = await toggleProjectMcp(projectId, apiKeyAddon, true)
-      if (result.error) throw new Error(result.error)
-      if (result.hasRemoteState) {
-        setAddons(result.addons)
-        onMcpChange?.(result.addons)
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/connection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          action: 'register',
+          name: apiKeyAddon.name,
+          command: '',
+          env: envVars,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(data?.message || 'Failed to save API key')
       } else {
-        markConnected(apiKeyAddon.id, true)
+        setApiKeyAddon(null)
+        setApiKeyValues({})
+        void refresh()
       }
+    } catch {
+      setError('Failed to save API key')
+    }
+    setApiKeySaving(false)
+  }
+
+  const handleDisconnect = async (addon: SyraSlashConnection) => {
+    if (!projectId) return
+    setBusyId(addon.id)
+    const result = await toggleProjectConnection(projectId, addon, false)
+    setBusyId(null)
+    if (result.error) {
+      setError(result.error)
+    } else {
+      setAddons(result.connections)
+      onConnectionChange?.(result.connections)
+    }
+  }
+
+  const handleConnect = async (addon: SyraSlashConnection) => {
+    if (!projectId) return
+    if (addon.authType === 'oauth') {
+      openConnectionOAuthPopup(projectId, addon.id)
+      return
+    }
+    setBusyId(addon.id)
+    const result = await toggleProjectConnection(projectId, addon, true)
+    setBusyId(null)
+    if (result.error) {
+      setError(result.error)
+    } else {
+      setAddons(result.connections)
+      onConnectionChange?.(result.connections)
+    }
+  }
+
+  const handleApiKeyConnect = async (addon: SyraSlashConnection) => {
+    if (!projectId || !apiKeyValues[addon.envKeys?.[0]]) return
+    setBusyId(addon.id)
+    const result = await toggleProjectConnection(projectId, addon, true)
+    setBusyId(null)
+    if (result.error) {
+      setError(result.error)
+    } else {
       setApiKeyAddon(null)
       setApiKeyValues({})
-    } catch (err: any) {
-      setError(err?.message || 'Failed to save credentials')
-    } finally {
-      setApiKeySaving(false)
+      setAddons(result.connections)
+      onConnectionChange?.(result.connections)
     }
   }
 
-  const authHint = (addon: SyraSlashMcpAddon) => {
-    if (addon.connected) return 'Connected — tap to disconnect'
-    if (addon.authType === 'oauth') return 'Connect with OAuth'
-    if (addon.authType === 'api_key') return 'Connect with API key'
-    if (addon.id === 'syte') return 'Enable Syte web search'
-    return 'Available — tap to connect'
+  const authHint = (addon: SyraSlashConnection) => {
+    if (addon.authType === 'oauth') return 'OAuth'
+    if (addon.authType === 'api_key') return 'API Key'
+    return 'Built-in'
   }
+}
+
+export function CreditsPanel({ isDark = true, onBack }: CreditsPanelProps) {
+  const [credits, setCredits] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    void fetch('/api/user/credits', { headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null)
+        if (cancelled) return
+        if (!res.ok) {
+          setError(data?.message || `Failed to load credits (${res.status})`)
+          setCredits(null)
+        } else {
+          setCredits(typeof data?.credits === 'number' ? data.credits : 0)
+          setError(null)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err?.message || 'Failed to load credits')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
-    <div className={cn('relative flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
       <header
         className={cn(
           'flex items-center gap-3 border-b px-4 py-3',
@@ -377,18 +362,117 @@ export function McpLibrary({
         )}
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
       >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onBack}
-          aria-label="Back"
-          className="h-9 w-9 rounded-xl"
-        >
+        <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Back" className="h-9 w-9 rounded-xl">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-semibold tracking-tight">MCP library</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">Credits</h1>
+          <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
+            Your AI generation balance
+          </p>
+        </div>
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        {loading ? (
+          <Loader2 className="h-6 w-6 animate-spin opacity-50" />
+        ) : error ? (
+          <p className="text-[13px] text-amber-400">{error}</p>
+        ) : (
+          <>
+            <p className="text-4xl font-semibold tabular-nums tracking-tight">{credits ?? 0}</p>
+            <p className={cn('text-[13px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>credits remaining</p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-2 rounded-xl"
+              onClick={() => {
+                window.open('/subscriptions', '_blank', 'noopener,noreferrer')
+              }}
+            >
+              View plans
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type HelpPanelProps = {
+  isDark?: boolean
+  onBack: () => void
+}
+
+export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
+  return (
+    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+      <header
+        className={cn(
+          'flex items-center gap-3 border-b px-4 py-3',
+          isDark ? 'border-[#2a2b2e]' : 'border-gray-200',
+        )}
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+      >
+        <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Back" className="h-9 w-9 rounded-xl">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[15px] font-semibold tracking-tight">Help & support</h1>
+          <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
+            Get help with Syra and Sycord
+          </p>
+        </div>
+      </header>
+      <div className="flex flex-1 flex-col gap-3 px-4 py-6">
+        <button
+          type="button"
+          onClick={() => window.open('/contact', '_blank', 'noopener,noreferrer')}
+          className={cn(
+            'rounded-2xl border px-4 py-3.5 text-left transition-colors',
+            isDark
+              ? 'border-[#2a2b2e] bg-[#1c1d1f] hover:bg-[#222326]'
+              : 'border-gray-200 bg-gray-50 hover:bg-gray-100',
+          )}
+        >
+          <p className="text-[14px] font-medium">Contact support</p>
+          <p className={cn('mt-0.5 text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
+            Reach the Sycord team
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => window.open('/tos', '_blank', 'noopener,noreferrer')}
+          className={cn(
+            'rounded-2xl border px-4 py-3.5 text-left transition-colors',
+            isDark
+              ? 'border-[#2a2b2e] bg-[#1c1d1f] hover:bg-[#222326]'
+              : 'border-gray-200 bg-gray-50 hover:bg-gray-100',
+          )}
+        >
+          <p className="text-[14px] font-medium">Terms of service</p>
+          <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
+            Review product terms
+          </p>
+        </button>
+        <div
+          className={cn(
+            'rounded-2xl border px-4 py-3.5',
+            isDark ? 'border-[#2a2b2e] bg-[#1c1d1f]' : 'border-gray-200 bg-gray-50',
+          )}
+        >
+          <p className="text-[14px] font-medium">Slash shortcuts</p>
+          <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
+            Type <code className="rounded bg-black/20 px-1">/</code> for image &amp; file upload, skills,
+            Connection, help, and credits.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+        </Button>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[15px] font-semibold tracking-tight">Connection library</h1>
           <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
             Connect with real OAuth or API keys
           </p>
@@ -399,7 +483,7 @@ export function McpLibrary({
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {!projectId && (
           <p className={cn('text-[13px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Open a project chat to manage MCP addons.
+            Open a project chat to manage connection addons.
           </p>
         )}
         {error && <p className="mb-3 text-[12px] text-amber-400">{error}</p>}
@@ -429,7 +513,7 @@ export function McpLibrary({
                     {busy ? (
                       <Loader2 className="h-4 w-4 animate-spin opacity-70" />
                     ) : (
-                      <McpBrandIcon
+                      <ConnectionBrandIcon
                         id={addon.id}
                         name={addon.name}
                         className="h-5 w-5"
@@ -487,12 +571,12 @@ export function McpLibrary({
           >
             <div className="mb-3 flex items-center gap-3">
               <span className={cn('flex h-9 w-9 items-center justify-center rounded-xl', isDark ? 'bg-[#2a2b2e]' : 'bg-gray-100')}>
-                <McpBrandIcon id={apiKeyAddon.id} name={apiKeyAddon.name} className="h-5 w-5" />
+                <ConnectionBrandIcon id={apiKeyAddon.id} name={apiKeyAddon.name} className="h-5 w-5" />
               </span>
               <div>
                 <p className="text-[14px] font-semibold">Connect {apiKeyAddon.name}</p>
                 <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-                  Enter API credentials to authorize this MCP
+                  Enter API credentials to authorize this connection
                 </p>
               </div>
             </div>
@@ -687,7 +771,7 @@ export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
           <p className="text-[14px] font-medium">Slash shortcuts</p>
           <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
             Type <code className="rounded bg-black/20 px-1">/</code> for image &amp; file upload, skills,
-            MCP, help, and credits.
+            Connection, help, and credits.
           </p>
         </div>
       </div>

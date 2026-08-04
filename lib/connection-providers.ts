@@ -1,17 +1,17 @@
 /**
- * MCP provider catalog — logos from https://svgl.app (vendored under /public/mcp-logos)
+ * Connection provider catalog — logos from https://svgl.app (vendored under /public/mcp-logos)
  * plus auth flow metadata for connect/disconnect.
  */
 
-export type McpAuthType = 'oauth' | 'api_key' | 'builtin'
+export type ConnectionAuthType = 'oauth' | 'api_key' | 'builtin'
 
-export type McpProviderDef = {
+export type ConnectionProviderDef = {
   id: string
   name: string
   description: string
   /** Path under /public — SVGL logos except syte (custom). */
   logo: string
-  authType: McpAuthType
+  authType: ConnectionAuthType
   /** OAuth authorize scopes when authType === 'oauth' */
   oauthScopes?: string[]
   /** Env keys required / collected for api_key or after OAuth */
@@ -26,7 +26,7 @@ export type McpProviderDef = {
   brandColor?: string
 }
 
-export const MCP_PROVIDERS: McpProviderDef[] = [
+export const CONNECTION_PROVIDERS: ConnectionProviderDef[] = [
   {
     id: 'syte',
     name: 'Web Search (Syte)',
@@ -141,9 +141,9 @@ export const MCP_PROVIDERS: McpProviderDef[] = [
   },
 ]
 
-export function getMcpProvider(id: string): McpProviderDef | undefined {
+export function getConnectionProvider(id: string): ConnectionProviderDef | undefined {
   const key = id.toLowerCase().replace(/^.*:/, '')
-  return MCP_PROVIDERS.find(
+  return CONNECTION_PROVIDERS.find(
     (p) =>
       p.id === key ||
       p.id === key.replace(/_/g, '-') ||
@@ -154,7 +154,7 @@ export function getMcpProvider(id: string): McpProviderDef | undefined {
 }
 
 /** Resolve OAuth client id, falling back to shared Google / GitHub app envs. */
-export function resolveOAuthClientId(provider: McpProviderDef): string | null {
+export function resolveOAuthClientId(provider: ConnectionProviderDef): string | null {
   const primary = provider.oauthClientIdEnv ? process.env[provider.oauthClientIdEnv] : undefined
   if (primary?.trim()) return primary.trim()
   if (provider.id === 'github') {
@@ -166,7 +166,7 @@ export function resolveOAuthClientId(provider: McpProviderDef): string | null {
   return null
 }
 
-export function resolveOAuthClientSecret(provider: McpProviderDef): string | null {
+export function resolveOAuthClientSecret(provider: ConnectionProviderDef): string | null {
   const primary = provider.oauthClientSecretEnv
     ? process.env[provider.oauthClientSecretEnv]
     : undefined

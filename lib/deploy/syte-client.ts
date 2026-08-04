@@ -950,9 +950,9 @@ export async function syteAgentScreenshotImage(
   }
 }
 
-// ─── Agent MCP addons + skills (https://sycord.site/api/#agent) ───────────────
+// ─── Agent Connection addons + skills (https://sycord.site/api/#agent) ───────────────
 
-export type SyteAgentMcpAddon = {
+export type SyteAgentConnectionAddon = {
   id: string
   name: string
   status?: string
@@ -965,9 +965,9 @@ export type SyteAgentMcpAddon = {
   enabled?: boolean
 }
 
-export type SyteAgentMcpListResponse = {
+export type SyteAgentConnectionListResponse = {
   ok?: boolean
-  addons?: SyteAgentMcpAddon[]
+  addons?: SyteAgentConnectionAddon[]
 }
 
 export type SyteAgentSkill = {
@@ -986,37 +986,37 @@ export type SyteAgentSkillsListResponse = {
   skills?: SyteAgentSkill[]
 }
 
-/** GET /api/agent_mcp?uuid= — list built-in + registered MCP addons. */
-export async function syteAgentMcpList(
+/** GET /api/agent_connection?uuid= — list built-in + registered connection addons. */
+export async function syteAgentConnectionList(
   uuid: string,
-): Promise<SyteResult<SyteAgentMcpListResponse>> {
-  return syteWorkspaceRequest<SyteAgentMcpListResponse>("GET", "agent_mcp", {
+): Promise<SyteResult<SyteAgentConnectionListResponse>> {
+  return syteWorkspaceRequest<SyteAgentConnectionListResponse>("GET", "agent_connection", {
     query: { uuid },
   })
 }
 
-/** POST /api/agent_mcp_connect — enable an MCP addon. */
-export async function syteAgentMcpConnect(
+/** POST /api/agent_connection_connect — enable a connection addon. */
+export async function syteAgentConnectionConnect(
   uuid: string,
   addon: string,
 ): Promise<SyteResult<{ ok?: boolean }>> {
-  return syteWorkspaceRequest("POST", "agent_mcp_connect", {
+  return syteWorkspaceRequest("POST", "agent_connection_connect", {
     body: { uuid, addon },
   })
 }
 
-/** POST /api/agent_mcp_disconnect — disable an MCP addon (keep registration). */
-export async function syteAgentMcpDisconnect(
+/** POST /api/agent_connection_disconnect — disable a connection addon (keep registration). */
+export async function syteAgentConnectionDisconnect(
   uuid: string,
   addon: string,
 ): Promise<SyteResult<{ ok?: boolean }>> {
-  return syteWorkspaceRequest("POST", "agent_mcp_disconnect", {
+  return syteWorkspaceRequest("POST", "agent_connection_disconnect", {
     body: { uuid, addon },
   })
 }
 
-/** POST /api/agent_mcp_register — register a custom MCP stdio provider. */
-export async function syteAgentMcpRegister(
+/** POST /api/agent_connection_register — register a custom connection stdio provider. */
+export async function syteAgentConnectionRegister(
   uuid: string,
   input: {
     name: string
@@ -1025,8 +1025,8 @@ export async function syteAgentMcpRegister(
     env?: Record<string, string>
     description?: string
   },
-): Promise<SyteResult<{ ok?: boolean; addon?: SyteAgentMcpAddon }>> {
-  return syteWorkspaceRequest("POST", "agent_mcp_register", {
+): Promise<SyteResult<{ ok?: boolean; addon?: SyteAgentConnectionAddon }>> {
+  return syteWorkspaceRequest("POST", "agent_connection_register", {
     body: {
       uuid,
       name: input.name,

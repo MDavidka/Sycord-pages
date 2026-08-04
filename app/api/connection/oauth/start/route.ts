@@ -1,22 +1,22 @@
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import {
-  getMcpProvider,
+  getConnectionProvider,
   resolveOAuthClientId,
   resolveOAuthClientSecret,
-} from '@/lib/mcp-providers'
+} from '@/lib/connection-providers'
 import {
   buildAuthorizeUrl,
-  mcpOAuthCallbackUrl,
-  signMcpOAuthState,
-} from '@/lib/mcp-oauth'
+  connectionOAuthCallbackUrl,
+  signConnectionOAuthState,
+} from '@/lib/connection-oauth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 /**
- * GET /api/mcp/oauth/start?projectId=&addon=
- * Starts the real OAuth authorize redirect for an MCP provider.
+ * GET /api/connection/oauth/start?projectId=&addon=
+ * Starts the real OAuth authorize redirect for a connection provider.
  */
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
@@ -31,9 +31,9 @@ export async function GET(request: Request) {
     return Response.json({ message: 'projectId and addon are required.' }, { status: 400 })
   }
 
-  const provider = getMcpProvider(addon)
+  const provider = getConnectionProvider(addon)
   if (!provider || provider.authType !== 'oauth') {
-    return Response.json({ message: 'This MCP does not use OAuth.' }, { status: 400 })
+    return Response.json({ message: 'This connection does not use OAuth.' }, { status: 400 })
   }
 
   const clientId = resolveOAuthClientId(provider)
@@ -50,8 +50,8 @@ export async function GET(request: Request) {
   }
 
   const origin = new URL(request.url).origin
-  const redirectUri = mcpOAuthCallbackUrl(origin)
-  const state = signMcpOAuthState({
+  const redirectUri = connectionOAuthCallbackUrl(origin)
+  const state = signConnectionOAuthState({
     projectId,
     addon: provider.id,
     userId: session.user.id,

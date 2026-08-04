@@ -3,17 +3,17 @@ import { authOptions } from '@/lib/auth'
 import clientPromise from '@/lib/torso'
 import { getOwnedProject } from '@/lib/project-chat-session'
 import {
-  getMcpProvider,
+  getConnectionProvider,
   resolveOAuthClientId,
   resolveOAuthClientSecret,
-} from '@/lib/mcp-providers'
+} from '@/lib/connection-providers'
 import {
   exchangeOAuthCode,
-  mcpOAuthCallbackUrl,
-  verifyMcpOAuthState,
-} from '@/lib/mcp-oauth'
+  connectionOAuthCallbackUrl,
+  verifyConnectionOAuthState,
+} from '@/lib/connection-oauth'
 import { requireSyteWorkspaceUuid } from '@/lib/deploy/syte-workspace'
-import { syteAgentMcpConnect, syteSetEnv, useSyteWorkspace } from '@/lib/deploy/syte-client'
+import { syteAgentConnectionConnect, syteSetEnv, useSyteWorkspace } from '@/lib/deploy/syte-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,7 +25,7 @@ function popupHtml(payload: Record<string, unknown>) {
     ? 'Connected — you can close this window.'
     : `Connection failed.${errorDetail ? `<br><small style="opacity:.7;word-break:break-word">${String(errorDetail).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</small>` : ''}`
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>MCP connected</title></head>
+<html><head><meta charset="utf-8"><title>Connection connected</title></head>
 <body style="background:#111;color:#eee;font:14px system-ui;display:grid;place-items:center;height:100vh;margin:0;padding:1rem">
   <p style="text-align:center;max-width:360px">${statusHtml}</p>
   <script>
@@ -33,7 +33,7 @@ function popupHtml(payload: Record<string, unknown>) {
       var payload = ${json};
       try {
         if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: 'sycord-mcp-oauth', ...payload }, window.location.origin);
+          window.opener.postMessage({ type: 'sycord-connection-oauth', ...payload }, window.location.origin);
         }
       } catch (e) {}
       setTimeout(function () { window.close(); }, ${payload.ok ? 600 : 3000});
@@ -73,8 +73,9 @@ async function upsertProjectEnvVars(
 }
 
 /**
- * GET /api/mcp/oauth/callback?code=&state=
- * Completes MCP OAuth, stores tokens on the project, and enables the Syte MCP addon.
+ * GET /api/connection/oauth/callback?code=&state=
+ * Completes connection OAuth, stores tokens on the project, and enables the Syte connection addon.
+ * Returns credentials back to the opener via postMessage.
  */
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
@@ -101,7 +102,7 @@ export async function GET(request: Request) {
     })
   }
 
-  const state = verifyMcpOAuthState(stateRaw)
+  const state = verifyConnectionOAuthState(stateRaw)
   if (!state || state.userId !== session.user.id) {
     return new Response(popupHtml({ ok: false, error: 'invalid_state' }), {
       status: 400,
@@ -116,7 +117,7 @@ export async function GET(request: Request) {
     })
   }
 
-  const provider = getMcpProvider(state.addon)
+  const provider = getConnectionProvider(state.addon)
   if (!provider || provider.authType !== 'oauth') {
     return new Response(popupHtml({ ok: false, error: 'unknown_provider' }), {
       status: 400,
@@ -143,7 +144,7 @@ export async function GET(request: Request) {
     })
   }
 
-  const redirectUri = mcpOAuthCallbackUrl(url.origin)
+  const redirectUri = connectionOAuthCallbackUrl(url.origin)
   const exchanged = await exchangeOAuthCode({
     provider,
     code,
@@ -160,10 +161,10 @@ export async function GET(request: Request) {
 
   await upsertProjectEnvVars(session.user.id, state.projectId, exchanged.tokens, provider.id)
 
-  // The agent runtime reads MCP credentials from the workspace environment,
+  // The agent runtime reads connection credentials from the workspace environment,
   // so sync OAuth tokens before enabling the addon. Storing them only in the
   // Pages project document makes OAuth look complete while the agent still
-  // cannot authenticate its MCP tools.
+  // cannot authenticate its connection tools.
   let connectError: string | undefined
   if (!useSyteWorkspace()) {
     connectError = 'Syte workspace is not configured.'
@@ -172,9 +173,9 @@ export async function GET(request: Request) {
     if (!('error' in workspace)) {
       const synced = await syteSetEnv(workspace.uuid, exchanged.tokens, true)
       if (!synced.ok) {
-        connectError = synced.error || 'Failed to sync MCP credentials to Syte.'
+        connectError = synced.error || 'Failed to sync connection credentials to Syte.'
       } else {
-        const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
+        const connected = await syteAgentConnectionConnect(workspace.uuid, provider.id)
         if (!connected.ok) {
           connectError = connected.error || 'Failed to mark connection in Syte.'
         }
@@ -190,6 +191,8 @@ export async function GET(request: Request) {
       addon: provider.id,
       projectId: state.projectId,
       connectError,
+      // Return credentials back to the opener so it can use them directly.
+      tokens: exchanged.tokens,
       // Expose under both keys so listeners that check `error` also get the detail.
       ...(connectError ? { error: connectError } : {}),
     }),

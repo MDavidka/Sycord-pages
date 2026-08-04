@@ -27,12 +27,12 @@ import {
     type AgentQuestionAnswerValue,
 } from './AgentQuestionCard';
 import {
+    ConnectionLibrary,
     CreditsPanel,
     HelpSupportPanel,
-    McpLibrary,
     SkillsLibrary,
 } from './SlashLibraries';
-import { McpBrandIcon } from './McpBrandIcons';
+import { ConnectionBrandIcon } from './ConnectionBrandIcons';
 import { buildModelLearnContext, recordToolLearnEntry } from '../lib/model-learn';
 import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
@@ -53,11 +53,11 @@ import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
 import {
-    BUILTIN_MCP_FALLBACK,
+    BUILTIN_CONNECTION_FALLBACK,
     BUILTIN_SKILL_FALLBACK,
-    fetchProjectMcp,
+    fetchProjectConnections,
     fetchProjectSkills,
-    type SyraSlashMcpAddon,
+    type SyraSlashConnection,
     type SyraSlashSkill,
 } from '../lib/syraSlashExtras';
 
@@ -1790,7 +1790,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
-                modelProfile: availableModelChoices?.find(choice => choice.modelType === selectedModel)?.label || 'syra-base',
+                modelProfile: availableModelChoices?.find(choice => choice.modelType === selectedModel)?.apiModel || 'gemini-2.5-flash',
                 afterSession,
                 signal: controller.signal,
                 onEvent: applyEvent,
@@ -2641,10 +2641,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         // Slash commands — attach / libraries / help (do not send as chat)
         const slashCmd = input.trim().toLowerCase();
-        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
+        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/connection' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
             setShowSlashMenu(true);
             if (slashCmd === '/skills') setLibraryView('skills');
-            else if (slashCmd === '/mcp') setLibraryView('mcp');
+            else if (slashCmd === '/connection') setLibraryView('connection');
             else if (slashCmd === '/help') setLibraryView('help');
             else if (slashCmd === '/credit' || slashCmd === '/credits') setLibraryView('credits');
             setInput('');
@@ -2771,21 +2771,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [showModelMenu, setShowModelMenu] = useState(false);
     const [showDeepMemory, setShowDeepMemory] = useState(false);
     const [showSlashMenu, setShowSlashMenu] = useState(false);
-    const [libraryView, setLibraryView] = useState<'skills' | 'mcp' | 'help' | 'credits' | null>(null);
+    const [libraryView, setLibraryView] = useState<'skills' | 'connection' | 'help' | 'credits' | null>(null);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
-    const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
+    const [slashConnections, setSlashConnections] = useState<SyraSlashConnection[]>(BUILTIN_CONNECTION_FALLBACK);
     const [debugInfo, setDebugInfo] = useState<any>(null);
     const [debugLoading, setDebugLoading] = useState(false);
     const slashLoadedForRef = useRef<string | null>(null);
 
     const loadSlashExtras = async (projectId: string, force = false) => {
         if (!force && slashLoadedForRef.current === projectId) return;
-        const [skillsRes, mcpRes] = await Promise.all([
+        const [skillsRes, connectionsRes] = await Promise.all([
             fetchProjectSkills(projectId),
-            fetchProjectMcp(projectId),
+            fetchProjectConnections(projectId),
         ]);
         setSlashSkills(skillsRes.skills);
-        setSlashMcp(mcpRes.addons);
+        setSlashConnections(connectionsRes.connections);
         slashLoadedForRef.current = projectId;
     };
 
@@ -2796,9 +2796,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     }, []);
 
     const hostProjectIdForSlash = typeof window !== 'undefined' ? getHostProjectId() : null;
-    const connectedMcps = useMemo(
-        () => slashMcp.filter((a) => a.connected).slice(0, 4),
-        [slashMcp],
+    const connectedConnections = useMemo(
+        () => slashConnections.filter((a) => a.connected).slice(0, 4),
+        [slashConnections],
     );
 
     const closeLibraryView = () => setLibraryView(null);
@@ -2864,14 +2864,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     />
                 </div>
             )}
-            {libraryView === 'mcp' && (
-                <div className="absolute inset-0 z-40">
-                    <McpLibrary
-                        projectId={hostProjectIdForSlash}
-                        isDark={isDark}
-                        onBack={closeLibraryView}
-                        onMcpChange={setSlashMcp}
-                    />
+{libraryView === 'connection' && (
+                 <div className="absolute inset-0 z-40">
+                     <ConnectionLibrary
+                         projectId={hostProjectIdForSlash}
+                         isDark={isDark}
+                         onBack={closeLibraryView}
+                         onConnectionChange={setSlashConnections}
+                     />
                 </div>
             )}
             {libraryView === 'help' && (
@@ -3284,7 +3284,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             <div className="flex justify-start px-1">
                                 <button
                                     type="button"
-                                    onClick={() => setLibraryView('mcp')}
+                                    onClick={() => setLibraryView('connection')}
                                     className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
                                         isDark
                                             ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
@@ -3300,7 +3300,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     isDark ? 'border-[#18191B] bg-[#1c1d1f]' : 'border-white bg-white'
                                                 }`}
                                             >
-                                                <McpBrandIcon
+                                                <ConnectionBrandIcon
                                                     id={addon.id}
                                                     name={addon.name}
                                                     className="h-3.5 w-3.5 text-[#e5e5e5]"
@@ -3411,13 +3411,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {
-                                                setLibraryView('mcp');
+                                                setLibraryView('connection');
                                                 if (input.startsWith('/')) setInput('');
                                             }}
                                         >
                                             <Puzzle className="h-4 w-4 opacity-70" />
                                             MCP
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/mcp</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/connection</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
                                         <DropdownMenuItem
