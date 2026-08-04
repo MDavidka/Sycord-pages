@@ -5,6 +5,20 @@
 
 export type McpAuthType = 'oauth' | 'api_key' | 'builtin'
 
+/**
+ * Syte MCP stdio registration spec — used when the provider must be registered
+ * as a custom addon via POST /api/agent_mcp_register before it can be connected.
+ * OAuth providers need this because Syte has no built-in addon for them.
+ * The command/args run inside the Syte workspace container (npx is available).
+ */
+export type McpRegisterSpec = {
+  /** MCP server npm package (passed to npx). */
+  command: string
+  args?: string[]
+  /** Subset of `envKeys` that must be injected for the server to authenticate. */
+  envKeys: string[]
+}
+
 export type McpProviderDef = {
   id: string
   name: string
@@ -24,6 +38,11 @@ export type McpProviderDef = {
   tokenUrl?: string
   /** Optional brand color for fallback */
   brandColor?: string
+  /**
+   * When set, the OAuth callback will call agent_mcp_register with this spec
+   * before agent_mcp_connect. Required for providers that are not Syte builtins.
+   */
+  mcpRegisterSpec?: McpRegisterSpec
 }
 
 export const MCP_PROVIDERS: McpProviderDef[] = [
@@ -48,6 +67,11 @@ export const MCP_PROVIDERS: McpProviderDef[] = [
     oauthClientSecretEnv: 'MCP_GITHUB_CLIENT_SECRET',
     envKeys: ['GITHUB_TOKEN'],
     brandColor: '#E6EDF3',
+    mcpRegisterSpec: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      envKeys: ['GITHUB_TOKEN'],
+    },
   },
   {
     id: 'linear',
@@ -62,6 +86,11 @@ export const MCP_PROVIDERS: McpProviderDef[] = [
     oauthClientSecretEnv: 'MCP_LINEAR_CLIENT_SECRET',
     envKeys: ['LINEAR_API_KEY'],
     brandColor: '#5E6AD2',
+    mcpRegisterSpec: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-linear'],
+      envKeys: ['LINEAR_API_KEY'],
+    },
   },
   {
     id: 'supabase',
@@ -97,6 +126,11 @@ export const MCP_PROVIDERS: McpProviderDef[] = [
     oauthClientSecretEnv: 'MCP_GOOGLE_CLIENT_SECRET',
     envKeys: ['GOOGLE_DRIVE_ACCESS_TOKEN', 'GOOGLE_DRIVE_REFRESH_TOKEN'],
     brandColor: '#4285F4',
+    mcpRegisterSpec: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-gdrive'],
+      envKeys: ['GOOGLE_DRIVE_ACCESS_TOKEN', 'GOOGLE_DRIVE_REFRESH_TOKEN'],
+    },
   },
   {
     id: 'slack',
@@ -111,6 +145,11 @@ export const MCP_PROVIDERS: McpProviderDef[] = [
     oauthClientSecretEnv: 'MCP_SLACK_CLIENT_SECRET',
     envKeys: ['SLACK_BOT_TOKEN'],
     brandColor: '#E01E5A',
+    mcpRegisterSpec: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-slack'],
+      envKeys: ['SLACK_BOT_TOKEN'],
+    },
   },
   {
     id: 'gmail',
@@ -129,6 +168,11 @@ export const MCP_PROVIDERS: McpProviderDef[] = [
     oauthClientSecretEnv: 'MCP_GOOGLE_CLIENT_SECRET',
     envKeys: ['GMAIL_ACCESS_TOKEN', 'GMAIL_REFRESH_TOKEN'],
     brandColor: '#EA4335',
+    mcpRegisterSpec: {
+      command: 'npx',
+      args: ['-y', '@gptscript-ai/gmail-mcp-server'],
+      envKeys: ['GMAIL_ACCESS_TOKEN', 'GMAIL_REFRESH_TOKEN'],
+    },
   },
   {
     id: 'openai',
