@@ -20,10 +20,14 @@ export const dynamic = 'force-dynamic'
 
 function popupHtml(payload: Record<string, unknown>) {
   const json = JSON.stringify(payload).replace(/</g, '\\u003c')
+  const errorDetail = payload.connectError || payload.errorDescription || payload.error || ''
+  const statusHtml = payload.ok
+    ? 'Connected — you can close this window.'
+    : `Connection failed.${errorDetail ? `<br><small style="opacity:.7;word-break:break-word">${String(errorDetail).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</small>` : ''}`
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>MCP connected</title></head>
-<body style="background:#111;color:#eee;font:14px system-ui;display:grid;place-items:center;height:100vh;margin:0">
-  <p>${payload.ok ? 'Connected — you can close this window.' : 'Connection failed.'}</p>
+<body style="background:#111;color:#eee;font:14px system-ui;display:grid;place-items:center;height:100vh;margin:0;padding:1rem">
+  <p style="text-align:center;max-width:360px">${statusHtml}</p>
   <script>
     (function () {
       var payload = ${json};
@@ -32,7 +36,7 @@ function popupHtml(payload: Record<string, unknown>) {
           window.opener.postMessage({ type: 'sycord-mcp-oauth', ...payload }, window.location.origin);
         }
       } catch (e) {}
-      setTimeout(function () { window.close(); }, 600);
+      setTimeout(function () { window.close(); }, ${payload.ok ? 600 : 3000});
     })();
   </script>
 </body></html>`
@@ -172,7 +176,7 @@ export async function GET(request: Request) {
       } else {
         const connected = await syteAgentMcpConnect(workspace.uuid, provider.id)
         if (!connected.ok) {
-          connectError = connected.error || 'Failed to enable MCP addon on Syte.'
+          connectError = connected.error || 'Failed to mark connection in Syte.'
         }
       }
     } else {
@@ -186,6 +190,8 @@ export async function GET(request: Request) {
       addon: provider.id,
       projectId: state.projectId,
       connectError,
+      // Expose under both keys so listeners that check `error` also get the detail.
+      ...(connectError ? { error: connectError } : {}),
     }),
     { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
   )

@@ -223,10 +223,10 @@ export function McpLibrary({
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
-      const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string } | null
+      const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string; connectError?: string } | null
       if (!data || data.type !== 'sycord-mcp-oauth') return
       if (!data.ok) {
-        setError(data.error || 'OAuth connection failed')
+        setError(data.connectError || data.error || 'OAuth connection failed')
         setBusyId(null)
         return
       }
