@@ -440,13 +440,13 @@ export async function sytePreviewStatus(uuid: string) {
 
 /**
  * Fetch live agent runtime status + model.
- * GET /sycord/api/agent_status?uuid=
+ * GET /api/agent_status?uuid=
  * Docs: https://sycord.site/api/#agent/agent-status
  */
 export async function syteAgentStatus(
   uuid: string,
 ): Promise<SyteResult<SyteAgentStatusResponse>> {
-  return syteSycordRequest<SyteAgentStatusResponse>("GET", "agent_status", {
+  return syteWorkspaceRequest<SyteAgentStatusResponse>("GET", "agent_status", {
     query: { uuid },
   })
 }
@@ -712,16 +712,16 @@ export async function syteSycordDomain(
 
 // ─── Durable Syte agent API ──────────────────────────────────────────────────
 // Docs: https://sycord.site/api/#agent
-// Turns are saved to Turso. Poll GET /sycord/api/agent_session/{turso_session_id}
+// Turns are saved to Turso. Poll GET /api/agent_session/{turso_session_id}
 // — the old activity SSE stream is no longer the source of truth.
 
 export type SyteAgentChangeResponse = {
   ok?: boolean
   request_id?: string
   status?: string
-  /** Durable Turso session UUID — fetch via GET /sycord/api/agent_session/{id} */
+  /** Durable Turso session UUID — fetch via GET /api/agent_session/{id} */
   turso_session_id?: string
-  /** Relative path to the Turso session document (e.g. /sycord/api/agent_session/…) */
+  /** Relative path to the Turso session document (e.g. /api/agent_session/…) */
   session_url?: string
   /** @deprecated Prefer turso_session_id + polling agent_session */
   stream_url?: string
@@ -731,14 +731,14 @@ export type SyteAgentChangeResponse = {
 /**
  * Submit one durable project-agent turn (async).
  * Returns request_id + turso_session_id immediately.
- * Poll GET /sycord/api/agent_session/{turso_session_id} until status != "open".
+ * Poll GET /api/agent_session/{turso_session_id} until status != "open".
  */
 export async function syteAgentChange(
   uuid: string,
   message: string,
   modelProfile?: string,
 ): Promise<SyteResult<SyteAgentChangeResponse>> {
-  return syteSycordRequest<SyteAgentChangeResponse>("POST", "agent_change", {
+  return syteWorkspaceRequest<SyteAgentChangeResponse>("POST", "agent_change", {
     body: {
       uuid,
       message,
@@ -791,13 +791,13 @@ export type SyteAgentSessionResponse = {
 
 /**
  * List durable Turso agent-session UUIDs for a project (newest first).
- * GET /sycord/api/agent_sessions?uuid=&limit=
+ * GET /api/agent_sessions?uuid=&limit=
  */
 export async function syteAgentSessions(
   uuid: string,
   options?: { limit?: number },
 ): Promise<SyteResult<SyteAgentSessionsResponse>> {
-  return syteSycordRequest<SyteAgentSessionsResponse>("GET", "agent_sessions", {
+  return syteWorkspaceRequest<SyteAgentSessionsResponse>("GET", "agent_sessions", {
     query: {
       uuid,
       limit: options?.limit ?? 50,
@@ -807,7 +807,7 @@ export async function syteAgentSessions(
 
 /**
  * Fetch a durable Turso agent session by UUID.
- * GET /sycord/api/agent_session/{session_id}?since_id=
+ * GET /api/agent_session/{session_id}?since_id=
  *
  * Poll with since_id while status === "open" to observe an in-progress turn.
  */
@@ -816,7 +816,7 @@ export async function syteAgentSession(
   options?: { sinceId?: number },
 ): Promise<SyteResult<SyteAgentSessionResponse>> {
   const path = `agent_session/${encodeURIComponent(sessionId)}`
-  return syteSycordRequest<SyteAgentSessionResponse>("GET", path, {
+  return syteWorkspaceRequest<SyteAgentSessionResponse>("GET", path, {
     query: {
       since_id: options?.sinceId ?? 0,
     },
@@ -849,13 +849,13 @@ export type SyteAgentActivityResponse = {
 /**
  * Local SQLite activity snapshot (not durable across DB moves).
  * Prefer syteAgentSession / syteAgentSessions when Turso is configured.
- * GET /sycord/api/agent_activity?uuid=&since_id=&limit=&session=
+ * GET /api/agent_activity?uuid=&since_id=&limit=&session=
  */
 export async function syteAgentActivity(
   uuid: string,
   options?: { sinceId?: number; limit?: number; session?: string },
 ): Promise<SyteResult<SyteAgentActivityResponse>> {
-  return syteSycordRequest<SyteAgentActivityResponse>("GET", "agent_activity", {
+  return syteWorkspaceRequest<SyteAgentActivityResponse>("GET", "agent_activity", {
     query: {
       uuid,
       since_id: options?.sinceId ?? 0,
