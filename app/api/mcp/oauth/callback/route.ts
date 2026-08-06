@@ -94,15 +94,22 @@ export async function GET(request: Request) {
     )
   }
 
-  if (!session?.user?.id) {
-    return new Response(popupHtml({ ok: false, error: 'unauthorized' }), {
-      status: 401,
+  // The OAuth state is HMAC-signed with the server secret (see lib/mcp-oauth),
+  // so its userId is authoritative. In the popup/OAuth redirect the session
+  // cookie is sometimes not forwarded back into this route (the request comes
+  // from the provider's cross-origin callback), which made MCP OAuth fail with
+  // "Unauthorized" even though the user was authenticated. Trust the signed
+  // state instead of requiring a live NextAuth session for the callback, and
+  // only use the session as a shared-account consistency check when present.
+  const state = verifyMcpOAuthState(stateRaw)
+  if (!state) {
+    return new Response(popupHtml({ ok: false, error: 'invalid_state' }), {
+      status: 400,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
     })
   }
 
-  const state = verifyMcpOAuthState(stateRaw)
-  if (!state || state.userId !== session.user.id) {
+  if (session?.user?.id && state.userId !== session.user.id) {
     return new Response(popupHtml({ ok: false, error: 'invalid_state' }), {
       status: 400,
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -135,7 +142,8 @@ export async function GET(request: Request) {
 
   const client = await clientPromise
   const db = client.db()
-  const project = await getOwnedProject(db, session.user.id, state.projectId)
+  const userId = state.userId
+  const project = await getOwnedProject(db, userId, state.projectId)
   if (!project) {
     return new Response(popupHtml({ ok: false, error: 'project_not_found' }), {
       status: 404,
@@ -158,7 +166,7 @@ export async function GET(request: Request) {
     )
   }
 
-  await upsertProjectEnvVars(session.user.id, state.projectId, exchanged.tokens, provider.id)
+  await upsertProjectEnvVars(userId, state.projectId, exchanged.tokens, provider.id)
 
   // The agent runtime reads MCP credentials from the workspace environment,
   // so sync OAuth tokens before enabling the addon. Storing them only in the
