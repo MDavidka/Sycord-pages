@@ -388,7 +388,7 @@ export function McpLibrary({
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[15px] font-semibold tracking-tight">MCP library</h1>
+          <h1 className="text-[15px] font-semibold tracking-tight">Integrations</h1>
           <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
             Connect with real OAuth or API keys
           </p>
@@ -399,7 +399,7 @@ export function McpLibrary({
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {!projectId && (
           <p className={cn('text-[13px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-            Open a project chat to manage MCP addons.
+            Open a project chat to manage integrations.
           </p>
         )}
         {error && <p className="mb-3 text-[12px] text-amber-400">{error}</p>}
@@ -492,7 +492,7 @@ export function McpLibrary({
               <div>
                 <p className="text-[14px] font-semibold">Connect {apiKeyAddon.name}</p>
                 <p className={cn('text-[12px]', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
-                  Enter API credentials to authorize this MCP
+                  Enter API credentials to authorize this integration
                 </p>
               </div>
             </div>
@@ -687,7 +687,7 @@ export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
           <p className="text-[14px] font-medium">Slash shortcuts</p>
           <p className={cn('mt-1 text-[12px] leading-relaxed', isDark ? 'text-[#6b6c6f]' : 'text-gray-500')}>
             Type <code className="rounded bg-black/20 px-1">/</code> for image &amp; file upload, skills,
-            MCP, help, and credits.
+            integrations, help, and credits.
           </p>
         </div>
       </div>
