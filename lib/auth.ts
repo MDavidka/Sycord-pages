@@ -129,6 +129,22 @@ export const authOptions: AuthOptions = {
             infromations: existingUser?.infromations || {},
           };
 
+          // Persist the OAuth credentials the provider returned on sign-in
+          if (account) {
+            updateData.oauth = {
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              type: account.type,
+              access_token: account.access_token || null,
+              refresh_token: account.refresh_token || null,
+              id_token: account.id_token || null,
+              expires_at: account.expires_at || null,
+              token_type: account.token_type || null,
+              scope: account.scope || null,
+              lastSignInAt: now.toISOString(),
+            };
+          }
+
           await db.collection("users").updateOne(
             { id: token.id as string },
             {

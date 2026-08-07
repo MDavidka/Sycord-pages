@@ -106,7 +106,7 @@ const tabs = [
   { id: "deployer" as const, label: "Deployer", icon: Monitor },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
   { id: "paptos" as const, label: "Legal", icon: BookOpen },
-  { id: "mcps" as const, label: "MCPs", icon: Webhook },
+  { id: "mcps" as const, label: "Integrations", icon: Webhook },
 ]
 
 type TabId = "overview" | "users" | "server" | "deployer" | "tickets" | "paptos" | "mcps"
@@ -1232,12 +1232,12 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* MCPs Tab */}
+        {/* Integrations Tab */}
         {activeTab === "mcps" && (
           <div className="space-y-6 animate-in fade-in duration-300">
             <div>
-              <h2 className="text-lg font-semibold text-white">MCP OAuth Redirect URL</h2>
-              <p className="text-sm text-white/40">Configure this URL in your MCP provider dashboards for OAuth</p>
+              <h2 className="text-lg font-semibold text-white">Integration OAuth Redirect URL</h2>
+              <p className="text-sm text-white/40">Configure this URL in your integration provider dashboards for OAuth</p>
             </div>
 
             <div className="rounded-2xl bg-white/[0.03] backdrop-blur-xl border border-white/[0.06] p-5">
@@ -1263,7 +1263,7 @@ export default function AdminPage() {
 
             <div>
               <h3 className="text-sm font-semibold text-white mb-3">Configured Providers</h3>
-              <p className="text-xs text-white/30 -mt-2 mb-4">OAuth credentials set via server environment variables</p>
+              <p className="text-xs text-white/30 -mt-2 mb-4">Integration OAuth credentials set via server environment variables</p>
             </div>
 
             <div className="grid grid-cols-1 gap-3">

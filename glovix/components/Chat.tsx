@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, AudioLines, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -2641,10 +2641,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         // Slash commands — attach / libraries / help (do not send as chat)
         const slashCmd = input.trim().toLowerCase();
-        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
+        if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
             setShowSlashMenu(true);
             if (slashCmd === '/skills') setLibraryView('skills');
-            else if (slashCmd === '/mcp') setLibraryView('mcp');
+            else if (slashCmd === '/mcp' || slashCmd === '/integrations') setLibraryView('mcp');
             else if (slashCmd === '/help') setLibraryView('help');
             else if (slashCmd === '/credit' || slashCmd === '/credits') setLibraryView('credits');
             setInput('');
@@ -3012,7 +3012,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             if (!textContent) return null;
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words rounded-2xl px-3 py-2 ${isDark ? 'text-white/80 bg-white/[0.02] border border-white/[0.03]' : 'text-gray-700 bg-gray-50/60 border border-gray-200/30'}`}>
+                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
                                                         {renderAssistantMarkdown(textContent)}
                                                     </div>
                                                 </div>
@@ -3068,11 +3068,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             className={`text-[14px] leading-relaxed ${
                                                 group.role === 'user'
                                                     ? isDark
-                                                        ? 'bg-white/[0.04] text-white/85 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.04]'
-                                                        : 'bg-gray-100/80 text-gray-800 rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-gray-200/50'
+                                                        ? 'bg-gradient-to-br from-white/[0.14] to-white/[0.05] text-white/95 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.08] shadow-lg shadow-black/10'
+                                                        : 'bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-md shadow-black/10'
                                                     : isDark
-                                                        ? 'text-white/80 max-w-full bg-white/[0.02] rounded-2xl px-3 py-2 border border-white/[0.03]'
-                                                        : 'text-gray-700 max-w-full bg-gray-50/60 rounded-2xl px-3 py-2 border border-gray-200/30'
+                                                        ? 'text-white/85 max-w-full'
+                                                        : 'text-gray-800 max-w-full'
                                             }`}
                                         >
 
@@ -3279,7 +3279,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             </div>
                         )}
 
-                        {/* Connected MCP pill — dashed status chip above composer */}
+                        {/* Connected integrations pill — dashed status chip above composer */}
                         {connectedMcps.length > 0 && (
                             <div className="flex justify-start px-1">
                                 <button
@@ -3290,7 +3290,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
                                             : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
                                     }`}
-                                    aria-label="Connected MCP"
+                                    aria-label="Connected integrations"
                                 >
                                     <span className="flex items-center -space-x-1">
                                         {connectedMcps.map((addon) => (
@@ -3333,7 +3333,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
                                         target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                     }}
-                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & MCP."
+                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
                                     className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
                                     style={{ height: 'auto', minHeight: '76px' }}
                                     onKeyDown={(e) => {
@@ -3416,8 +3416,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             }}
                                         >
                                             <Puzzle className="h-4 w-4 opacity-70" />
-                                            MCP
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/mcp</span>
+                                            Integrations
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/integrations</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
                                         <DropdownMenuItem
@@ -3469,13 +3469,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
                                     >
                                         <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        aria-label="Voice mode"
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-                                    >
-                                        <AudioLines className="h-5 w-5" />
                                     </button>
 
                                     {isRunning ? (
