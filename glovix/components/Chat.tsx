@@ -3068,8 +3068,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             className={`text-[14px] leading-relaxed ${
                                                 group.role === 'user'
                                                     ? isDark
-                                                        ? 'bg-gradient-to-br from-white/[0.14] to-white/[0.05] text-white/95 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.08] shadow-lg shadow-black/10'
-                                                        : 'bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-md shadow-black/10'
+                                                        ? 'bg-[#2f2f31] text-white/95 rounded-[22px] rounded-br-[8px] px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-sm'
+                                                        : 'bg-gray-100 text-gray-900 rounded-[22px] rounded-br-[8px] px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-sm'
                                                     : isDark
                                                         ? 'text-white/85 max-w-full'
                                                         : 'text-gray-800 max-w-full'
