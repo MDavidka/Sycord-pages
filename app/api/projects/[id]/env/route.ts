@@ -9,9 +9,9 @@ import {
 } from "@/lib/security/payload-limits"
 import { syteSetEnv, useSyteWorkspace } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
+import { isMcpCredentialKey } from "@/lib/mcp-connections"
 
 
-/**
  * Project Environment Variables API
  * Manages env vars that get passed to the deployer.
  *
@@ -44,12 +44,14 @@ export async function GET(
     }
 
     // Return env vars with fully masked values (no plaintext prefix leak)
-    const envVars = (project.envVars || []).map((v: any) => ({
-      key: v.key,
-      value: v.value ? "••••••••" : "",
-      hasValue: Boolean(v.value),
-      integration: v.integration || null,
-    }))
+    const envVars = (project.envVars || [])
+      .filter((v: any) => !isMcpCredentialKey(String(v?.key || "")))
+      .map((v: any) => ({
+        key: v.key,
+        value: v.value ? "••••••••" : "",
+        hasValue: Boolean(v.value),
+        integration: v.integration || null,
+      }))
 
     return NextResponse.json({ envVars })
   } catch (error: any) {
@@ -76,6 +78,12 @@ export async function POST(
     }
     if (key.length > MAX_ENV_KEY_LEN || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
       return NextResponse.json({ message: "Invalid env var key" }, { status: 400 })
+    }
+    if (isMcpCredentialKey(key)) {
+      return NextResponse.json(
+        { message: "MCP credentials must be created through the MCP connection flow." },
+        { status: 409 },
+      )
     }
     if (value != null && typeof value !== "string") {
       return NextResponse.json({ message: "Env var value must be a string" }, { status: 400 })
@@ -198,7 +206,12 @@ export async function DELETE(
     if (!key) {
       return NextResponse.json({ message: "Missing key param" }, { status: 400 })
     }
-
+    if (isMcpCredentialKey(key)) {
+      return NextResponse.json(
+        { message: "MCP credentials are managed by the MCP connection flow." },
+        { status: 409 },
+      )
+    }
     const client = await clientPromise
     const db = client.db()
 

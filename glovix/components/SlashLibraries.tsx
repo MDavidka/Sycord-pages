@@ -328,29 +328,24 @@ export function McpLibrary({
     setApiKeySaving(true)
     setError(null)
     try {
-      for (const key of keys) {
-        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/env`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            key,
-            value: apiKeyValues[key].trim(),
-            integration: apiKeyAddon.id,
-          }),
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => null)
-          throw new Error(body?.message || `Failed to save ${key}`)
-        }
-      }
-      const result = await toggleProjectMcp(projectId, apiKeyAddon, true)
-      if (result.error) throw new Error(result.error)
-      if (result.hasRemoteState) {
-        setAddons(result.addons)
-        onMcpChange?.(result.addons)
-      } else {
-        markConnected(apiKeyAddon.id, true)
-      }
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          action: 'connect',
+          addon: apiKeyAddon.id,
+          credentials: Object.fromEntries(keys.map((key) => [key, apiKeyValues[key].trim()])),
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.message || 'Failed to connect MCP')
+      setAddons((current) => {
+        const next = mergeMcpCatalog(current.map((item) =>
+          item.id === apiKeyAddon.id ? { ...item, connected: true, status: 'connected' } : item,
+        ))
+        onMcpChange?.(next)
+        return next
+      })
       setApiKeyAddon(null)
       setApiKeyValues({})
     } catch (err: any) {
