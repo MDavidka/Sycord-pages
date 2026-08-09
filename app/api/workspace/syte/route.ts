@@ -22,7 +22,7 @@ import {
   requireSyteWorkspaceUuid,
 } from "@/lib/deploy/syte-workspace"
 import { getProjectEnvVars } from "@/lib/deploy/runner-client"
-import { isValidProjectId, projectFiles } from "@/lib/workspace/sandbox"
+import { isValidProjectId, projectFiles, validateSafePath } from "@/lib/workspace/sandbox"
 import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
@@ -212,10 +212,7 @@ export async function POST(req: Request): Promise<Response> {
 
     case "read_file": {
       const path = typeof body.path === "string" ? body.path : ""
-      if (!path) {
-        return NextResponse.json({ ok: false, error: "Missing path" }, { status: 400 })
-      }
-      if (path.includes("..") || path.startsWith("/")) {
+      if (!validateSafePath(path)) {
         return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
       }
       const result = await syteReadFile(uuid, path)
@@ -228,10 +225,7 @@ export async function POST(req: Request): Promise<Response> {
     case "write_file": {
       const path = typeof body.path === "string" ? body.path : ""
       const content = typeof body.content === "string" ? body.content : ""
-      if (!path) {
-        return NextResponse.json({ ok: false, error: "Missing path" }, { status: 400 })
-      }
-      if (path.includes("..") || path.startsWith("/")) {
+      if (!validateSafePath(path)) {
         return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
       }
       const result = await syteWriteFile(uuid, path, content)
@@ -243,7 +237,7 @@ export async function POST(req: Request): Promise<Response> {
 
     case "list_files": {
       const path = typeof body.path === "string" ? body.path : ""
-      if (path.includes("..") || path.startsWith("/")) {
+      if (!validateSafePath(path) && path !== "") {
         return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
       }
       const result = await syteListFiles(uuid, path)

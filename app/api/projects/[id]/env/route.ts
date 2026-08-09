@@ -11,7 +11,7 @@ import { syteSetEnv, useSyteWorkspace } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 import { isMcpCredentialKey } from "@/lib/mcp-connections"
 
-
+/**
  * Project Environment Variables API
  * Manages env vars that get passed to the deployer.
  *

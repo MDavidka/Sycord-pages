@@ -30,6 +30,18 @@ export async function requireUserId(): Promise<string | null> {
   return (session?.user as { id?: string } | undefined)?.id ?? null
 }
 
+/**
+ * Validate that a path is safe for reading or writing within the sandbox.
+ * Rejects paths containing '..' or starting with '/'.
+ */
+export function validateSafePath(path: string): boolean {
+  if (!path || typeof path !== 'string') return false;
+  if (path.includes('..') || path.includes('\0') || path.startsWith('/')) {
+    return false;
+  }
+  return true;
+}
+
 /** A non-empty string id used as project identifier in Torso. */
 export function isValidProjectId(projectId: string): boolean {
   return Boolean(projectId && typeof projectId === "string" && projectId.trim().length > 0)

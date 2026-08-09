@@ -18,7 +18,8 @@ import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-id"
 import { syteWriteFile, isSyteConfigured } from "@/lib/deploy/syte-client"
 import { getStoredSyteUuid } from "@/lib/deploy/syte-workspace"
-import { isValidProjectId } from "@/lib/workspace/sandbox"
+import { isValidProjectId, validateSafePath } from "@/lib/workspace/sandbox"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -43,6 +44,13 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
+  const ip = req.headers.get("x-forwarded-for") || "anonymous"
+  const rateLimitKey = `workspace-file:${userId || ip}`
+  const rl = checkRateLimit(rateLimitKey, { limit: 100, windowMs: 60000 })
+  if (!rl.allowed) {
+    return NextResponse.json({ ok: false, error: "Too many requests" }, { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } })
+  }
+
   if (!isSyteConfigured()) {
     // Not an error — silently skip when Syte isn't configured (standalone mode)
     return NextResponse.json({ ok: true, skipped: true, reason: "syte_not_configured" })
@@ -60,10 +68,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!isValidProjectId(String(projectId || ""))) {
     return NextResponse.json({ ok: false, error: "Invalid project ID" }, { status: 400 })
   }
-  if (!path || typeof path !== "string") {
-    return NextResponse.json({ ok: false, error: "Missing 'path'" }, { status: 400 })
-  }
-  if (path.includes("..") || path.includes("\0")) {
+  if (!validateSafePath(path)) {
     return NextResponse.json({ ok: false, error: "Invalid path" }, { status: 400 })
   }
   if (typeof content !== "string") {
