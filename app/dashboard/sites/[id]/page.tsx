@@ -99,6 +99,7 @@ import {
   ProjectIntegrationsDialog,
   type IntegrationRequestPayload,
 } from "@/components/project-integrations-dialog"
+import { getMcpProvider } from "@/lib/mcp-providers"
 import { ProjectSyraSessionCard } from "@/components/project-syra-session-card"
 import type { ProjectChatSessionSummary } from "@/lib/types"
 
@@ -767,6 +768,19 @@ const SidebarContent = ({
   )
 }
 
+function openIntegrationOAuthPopup(projectId: string, addonId: string): Window | null {
+  const url = `/api/mcp/oauth/start?projectId=${encodeURIComponent(projectId)}&addon=${encodeURIComponent(addonId)}&integrationMode=true`
+  const width = 520
+  const height = 720
+  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2))
+  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2))
+  return window.open(
+    url,
+    'sycord-mcp-oauth',
+    `popup=yes,width=${width},height=${height},left=${left},top=${top}`,
+  )
+}
+
 export default function SiteSettingsPage() {
   const params = useParams()
   const router = useRouter()
@@ -1211,6 +1225,27 @@ export default function SiteSettingsPage() {
       })
       .catch((err) => { console.error("[Integrations] Failed to load connected integrations:", err) })
   }, [activeTab, project?._id])
+
+  useEffect(() => {
+    const onMcpOAuthMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      const data = event.data as { type?: string; ok?: boolean; addon?: string; error?: string; connectError?: string } | null
+      if (!data || data.type !== 'sycord-integration-oauth') return
+
+      if (!data.ok) {
+        setIntegrationSaveError(data.connectError || data.error || 'OAuth connection failed')
+        return
+      }
+
+      if (data.addon) {
+        setConnectedIntegrations((prev) => new Set([...prev, data.addon as string]))
+        setExpandedIntegration(null)
+      }
+    }
+
+    window.addEventListener('message', onMcpOAuthMessage)
+    return () => window.removeEventListener('message', onMcpOAuthMessage)
+  }, [])
 
   useEffect(() => {
     const handleIntegrationRequest = (event: Event) => {
@@ -2936,6 +2971,28 @@ export default function SiteSettingsPage() {
                             Connected
                           </div>
                         ) : expandedIntegration === integration.id ? (
+                          getMcpProvider(integration.id)?.authType === 'oauth' ? (
+                            <div className="space-y-2 mt-auto animate-in fade-in duration-150">
+                              <Button
+                                size="sm"
+                                className="w-full h-8 text-[11px] rounded-lg"
+                                onClick={() => openIntegrationOAuthPopup(project?._id || "", integration.id)}
+                              >
+                                Connect {integration.name} (OAuth)
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full h-8 text-[11px] rounded-lg text-zinc-400 hover:text-zinc-200"
+                                onClick={() => { setExpandedIntegration(null); setIntegrationSaveError(null) }}
+                              >
+                                Cancel
+                              </Button>
+                              {integrationSaveError && (
+                                <p className="text-[10px] text-red-400 mt-2">{integrationSaveError}</p>
+                              )}
+                            </div>
+                          ) : (
                           <div className="space-y-2 mt-auto animate-in fade-in duration-150">
                             <div className="relative">
                               <Input
@@ -2999,7 +3056,7 @@ export default function SiteSettingsPage() {
                               </Button>
                             </div>
                           </div>
-                        ) : (
+                        )) : (
                           <button
                             onClick={() => { setExpandedIntegration(integration.id); setIntegrationEnvValue(""); setShowIntegrationToken(false); setIntegrationSaveError(null) }}
                             className="mt-auto w-full py-1.5 rounded-lg text-[11px] font-medium bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-zinc-200 transition-colors border border-white/[0.06]"
