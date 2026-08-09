@@ -19,6 +19,7 @@ export type McpOAuthState = {
   userId: string
   nonce: string
   exp: number
+  integrationMode?: boolean
 }
 
 export function createMcpOAuthNonce(): string {

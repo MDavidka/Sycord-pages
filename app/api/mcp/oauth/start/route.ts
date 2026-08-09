@@ -31,6 +31,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const projectId = (searchParams.get("projectId") || "").trim()
   const addon = (searchParams.get("addon") || "").trim()
+  const integrationMode = searchParams.get("integrationMode") === "true"
   if (!projectId || !addon) {
     return Response.json({ message: "projectId and addon are required." }, { status: 400 })
   }
@@ -63,24 +64,30 @@ export async function GET(request: Request) {
 
   const nonce = createMcpOAuthNonce()
   const expiresAt = Date.now() + 15 * 60 * 1000
-  const connection = await prepareOAuthConnection(
-    db,
-    session.user.id,
-    projectId,
-    provider,
-    nonce,
-    expiresAt,
-  )
+
+  let connectionId = "env-mode"
+  if (!integrationMode) {
+    const connection = await prepareOAuthConnection(
+      db,
+      session.user.id,
+      projectId,
+      provider,
+      nonce,
+      expiresAt,
+    )
+    connectionId = connection.connectionId
+  }
 
   const origin = new URL(request.url).origin
   const redirectUri = mcpOAuthCallbackUrl(origin)
   const state = signMcpOAuthState({
-    connectionId: connection.connectionId,
+    connectionId,
     projectId,
     providerId: provider.id,
     addon: provider.id,
     userId: session.user.id,
     nonce,
+    integrationMode: integrationMode || undefined,
   })
   const authorizeUrl = buildAuthorizeUrl({ provider, clientId, redirectUri, state })
   if (!authorizeUrl) return Response.json({ message: "Failed to build authorize URL." }, { status: 500 })
@@ -91,7 +98,7 @@ export async function GET(request: Request) {
       authorizeUrl,
       redirectUri,
       provider: provider.id,
-      connectionId: connection.connectionId,
+      connectionId,
     })
   }
   return Response.redirect(authorizeUrl, 302)

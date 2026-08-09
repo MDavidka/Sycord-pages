@@ -35,7 +35,8 @@ function popupHtml(payload: Record<string, unknown>) {
       var payload = ${json};
       try {
         if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: 'sycord-mcp-oauth', ...payload }, window.location.origin);
+          const type = payload.integrationMode ? 'sycord-integration-oauth' : 'sycord-mcp-oauth';
+          window.opener.postMessage({ type, ...payload }, window.location.origin);
         }
       } catch (e) {}
       setTimeout(function () { window.close(); }, ${payload.ok ? 600 : 3000});
@@ -102,8 +103,8 @@ export async function GET(request: Request) {
     return htmlResponse({ ok: false, error: "project_owner_required" }, 403)
   }
 
-  const connection = await consumeOAuthConnectionState(db, state, state.nonce)
-  if (!connection) return htmlResponse({ ok: false, error: "oauth_state_consumed_or_expired" }, 400)
+  const connection = state.integrationMode ? null : await consumeOAuthConnectionState(db, state, state.nonce)
+  if (!state.integrationMode && !connection) return htmlResponse({ ok: false, error: "oauth_state_consumed_or_expired" }, 400)
 
   let exchanged
   try {
@@ -115,16 +116,70 @@ export async function GET(request: Request) {
       clientSecret,
     })
   } catch (error: any) {
-    return htmlResponse({ ok: false, addon: provider.id, error: error?.message || "token_exchange_failed" }, 502)
+    return htmlResponse({ ok: false, addon: provider.id, error: error?.message || "token_exchange_failed", integrationMode: state.integrationMode }, 502)
   }
   if (!exchanged.credentials) {
-    return htmlResponse({ ok: false, error: exchanged.error || "token_exchange_failed", addon: provider.id }, 400)
+    return htmlResponse({ ok: false, error: exchanged.error || "token_exchange_failed", addon: provider.id, integrationMode: state.integrationMode }, 400)
+  }
+
+  if (state.integrationMode) {
+    // Skip MCP connection creation entirely; directly save token as env var
+    const envKey = provider.envKeys?.[0]
+    if (!envKey) {
+      return htmlResponse({ ok: false, error: "provider_missing_env_key", addon: provider.id, integrationMode: true }, 500)
+    }
+
+    const value = exchanged.credentials.accessToken
+    if (!value) {
+      return htmlResponse({ ok: false, error: "missing_access_token", addon: provider.id, integrationMode: true }, 400)
+    }
+
+    try {
+      // Add or update the env var in the user's project
+      await db.collection("users").updateOne(
+        { id: session.user.id, "projects._id": state.projectId },
+        { $pull: { "projects.$.envVars": { key: envKey } } as any }
+      )
+
+      await db.collection("users").updateOne(
+        { id: session.user.id, "projects._id": state.projectId },
+        {
+          $push: {
+            "projects.$.envVars": {
+              key: envKey,
+              value,
+              integration: provider.id,
+              addedAt: new Date(),
+            },
+          } as any,
+        }
+      )
+
+      // Sync it immediately to Syte if configured
+      const { useSyteWorkspace, syteSetEnv } = await import("@/lib/deploy/syte-client");
+      const { requireSyteWorkspaceUuid } = await import("@/lib/deploy/syte-workspace");
+      if (useSyteWorkspace()) {
+        const workspace = await requireSyteWorkspaceUuid(project, state.projectId)
+        if (!("error" in workspace)) {
+          await syteSetEnv(workspace.uuid, { [envKey]: value }, true)
+        }
+      }
+
+      return htmlResponse({
+        ok: true,
+        addon: provider.id,
+        projectId: state.projectId,
+        integrationMode: true,
+      }, 200)
+    } catch (error: any) {
+      return htmlResponse({ ok: false, addon: provider.id, error: error?.message || "failed_to_save_env", integrationMode: true }, 500)
+    }
   }
 
   try {
     const result = await completeMcpConnection({
       db,
-      connection,
+      connection: connection!,
       project,
       credentials: exchanged.credentials,
     })
