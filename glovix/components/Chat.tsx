@@ -1462,6 +1462,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (resumed.status !== 'open') {
                         clearPendingQuestion();
                     }
+                    // SSE can disconnect after a durable session changes state.
+                    // Treat the authoritative session status as the terminal
+                    // fallback so a missed final event does not leave the UI
+                    // streaming forever or render a false interruption error.
+                    if (!completed && resumed.status === 'completed') {
+                        completed = true;
+                        assistantContent ||= 'Done.';
+                        if (!replayHistoryOnly) updateLastMessage(assistantContent);
+                        markAgentTimelineLoaded();
+                    } else if (!completed && resumed.status === 'stopped') {
+                        completed = true;
+                        if (!replayHistoryOnly && !assistantContent) updateLastMessage('Stopped.');
+                        markAgentTimelineLoaded();
+                    }
 
                     if (errorText && !completed) {
                         if (!replayHistoryOnly) updateLastMessage(`Error: ${errorText}`);
@@ -1800,6 +1814,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             highestEventId = Math.max(highestEventId, result.eventId);
             if (result.tursoSessionId) tursoSessionId = result.tursoSessionId;
             persistCursor();
+
+            // A proxy/mobile transport may drop immediately after Syte has
+            // committed the terminal session state. Reconcile that durable
+            // status before declaring the response incomplete.
+            if (!completed && result.status === 'completed') {
+                completed = true;
+                assistantContent ||= 'Done.';
+                updateLastMessage(assistantContent);
+                clearPendingQuestion();
+                markAgentTimelineLoaded();
+            } else if (!completed && result.status === 'stopped') {
+                completed = true;
+                if (!assistantContent) updateLastMessage('Stopped.');
+                clearPendingQuestion();
+                markAgentTimelineLoaded();
+            }
 
             if (controller.signal.aborted) {
                 updateLastMessage(assistantContent || 'Stopped.');
