@@ -1117,6 +1117,8 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
     eventId: number;
     tursoSessionId: string;
     requestId: string;
+    /** Durable session state after the stream/poll observer reconciles. */
+    status: string;
 }> {
     const text = messageToText(options.message);
     if (!text) throw new Error('The agent message is empty.');
@@ -1153,6 +1155,7 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
                     eventId: resumed.eventId,
                     tursoSessionId: resumed.tursoSessionId,
                     requestId: '',
+                    status: resumed.status,
                 };
             }
         }
@@ -1188,6 +1191,7 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
         eventId: polled.eventId,
         tursoSessionId,
         requestId,
+        status: polled.status,
     };
 }
 
