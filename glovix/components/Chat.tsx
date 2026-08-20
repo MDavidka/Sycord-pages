@@ -3012,7 +3012,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             if (!textContent) return null;
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                                    <div className={`text-[15px] leading-7 sm:text-[16px] w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/88' : 'text-gray-800'}`}>
                                                         {renderAssistantMarkdown(textContent)}
                                                     </div>
                                                 </div>
@@ -3065,14 +3065,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     {/* Fallback: user messages or assistant without segments */}
                                     <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                         <div
-                                            className={`text-[14px] leading-relaxed ${
+                                            className={`${
                                                 group.role === 'user'
                                                     ? isDark
-                                                        ? 'bg-gradient-to-br from-white/[0.14] to-white/[0.05] text-white/95 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.08] shadow-lg shadow-black/10'
-                                                        : 'bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-md shadow-black/10'
+                                                        ? 'bg-white/[0.055] text-white/95 rounded-[2rem] rounded-br-xl px-4 py-2.5 text-[15px] leading-6 max-w-[85%] sm:max-w-[75%] border border-white/[0.035] shadow-sm shadow-black/15 backdrop-blur-[1px]'
+                                                        : 'bg-gray-900/[0.88] text-white rounded-[2rem] rounded-br-xl px-4 py-2.5 text-[15px] leading-6 max-w-[85%] sm:max-w-[75%] border border-gray-900/5 shadow-sm shadow-black/10'
                                                     : isDark
-                                                        ? 'text-white/85 max-w-full'
-                                                        : 'text-gray-800 max-w-full'
+                                                        ? 'text-[15px] leading-7 sm:text-[16px] text-white/88 max-w-full'
+                                                        : 'text-[15px] leading-7 sm:text-[16px] text-gray-800 max-w-full'
                                             }`}
                                         >
 
