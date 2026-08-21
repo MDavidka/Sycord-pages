@@ -72,7 +72,7 @@ export function ModelProviderIcon({
   const provider = providerFor(model)
   if (!provider) {
     return (
-      <span className={cn('inline-flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/[0.07] text-foreground/60', className)} aria-label="AI model">
+      <span className={cn('inline-flex size-5 shrink-0 items-center justify-center text-foreground/75', className)} aria-label="AI model">
         <GenericModelMark />
       </span>
     )
@@ -80,7 +80,7 @@ export function ModelProviderIcon({
 
   const src = isDark && provider.dark ? provider.dark : provider.light
   return (
-    <span className={cn('inline-flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground/[0.06] p-1', className)} aria-label={provider.label}>
+    <span className={cn('inline-flex size-5 shrink-0 items-center justify-center', className)} aria-label={provider.label}>
       <img src={src} alt="" draggable={false} className="size-full object-contain" />
     </span>
   )

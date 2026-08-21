@@ -7,7 +7,6 @@ import { FeedbackDialog } from '@/components/elements/feedback-dialog'
 import { MessageActions, type Reaction } from '@/components/elements/message-actions'
 import { MessageBranches } from '@/components/elements/message-branches'
 import { MessagePair } from '@/components/elements/message-pair'
-import { QuoteReply } from '@/components/elements/quote-reply'
 import { cn } from '@/lib/utils'
 
 interface AssistantMessageElementsProps {
@@ -44,11 +43,9 @@ export function AssistantMessageElements({
   const [selectedReasons, setSelectedReasons] = useState<string[]>([])
   const [note, setNote] = useState('')
   const [feedbackSent, setFeedbackSent] = useState(false)
-  const [showQuote, setShowQuote] = useState(false)
   const [branchIndex, setBranchIndex] = useState(0)
 
   const normalizedVariants = useMemo(() => variants.length > 0 ? variants : [text], [text, variants])
-  const quoteSelection = text.length > 160 ? `${text.slice(0, 157)}…` : text
 
   if (!text.trim()) return null
 
@@ -123,32 +120,6 @@ export function AssistantMessageElements({
         />
       </div>
 
-      {showQuote && (
-        <QuoteReply
-          before=""
-          selection={quoteSelection}
-          after=""
-          toolbarVisible
-          quoted={quoteSelection}
-          actions={[
-            { key: 'quote', label: 'Quote', icon: 'quote' },
-            { key: 'explain', label: 'Explain', icon: 'explain' },
-            { key: 'rewrite', label: 'Rewrite', icon: 'rewrite' },
-          ]}
-          onAction={(action) => {
-            if (action === 'rewrite') onRegenerate?.()
-            if (action === 'quote') void copyResponse()
-          }}
-        />
-      )}
-
-      <button
-        type="button"
-        onClick={() => setShowQuote((current) => !current)}
-        className="w-fit text-xs text-foreground/45 transition-colors hover:text-foreground/80"
-      >
-        {showQuote ? 'Hide quoted reply' : 'Quote part of this reply'}
-      </button>
 
       {showFeedback && (
         <FeedbackDialog

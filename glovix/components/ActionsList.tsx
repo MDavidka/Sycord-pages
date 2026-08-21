@@ -19,7 +19,6 @@ import { SubagentTool } from '@/components/agent-elements/tools/subagent-tool';
 import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { Markdown } from '@/components/agent-elements/markdown';
-import { AgentActivityElements } from './AgentActivityElements';
 import type { GenerationPlan } from '../lib/generation-plan';
 import { useStore } from '../store';
 
@@ -581,7 +580,6 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
         return (
             <Collapsible open={phaseOpen} onOpenChange={setPhaseOpen}>
                 <section className={cn('agent-feed my-3 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
-                    <AgentActivityElements actions={actions} isLive={false} />
                     <CollapsibleTrigger asChild>
                         <button
                             type="button"
@@ -616,7 +614,6 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
 
     return (
         <section className={cn('agent-feed my-2 font-[family-name:var(--font-agent-sans)]', isDark ? 'text-white' : 'text-gray-900')}>
-            <AgentActivityElements actions={actions} isLive={isLive} />
             <div className={cn('flex items-center gap-2 px-1 py-1 text-sm', isDark ? 'text-white/55' : 'text-gray-500')}>
                 {running ? <SpiralLoader size={14} /> : <span className="size-3.5" aria-hidden="true" />}
                 <span className={cn('font-medium', isDark ? 'text-white/75' : 'text-gray-700')}>{phase.title}</span>

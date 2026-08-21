@@ -335,7 +335,7 @@ export function AgentComposer({
             }
             if (event.key === 'Escape') closeMenu()
           }}
-          placeholder="Ask Syra to build, debug, or ship. Use / for actions and @ for agent mentions."
+          placeholder="Send a message… (@ to mention)"
           className={cn(
             'min-h-12 px-3 py-2 text-[15px]',
             isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400',
@@ -344,24 +344,19 @@ export function AgentComposer({
 
         <ComposerToolbar>
           <ComposerActions>
-            <ComposerAttachButton onClick={() => setMenu(menu === 'attachments' ? null : 'attachments')} />
-            <button
-              type="button"
-              aria-label="Slash commands"
-              onClick={() => setMenu(menu === 'commands' ? null : 'commands')}
+            <ComposerAttachButton
+              onClick={() => setMenu(menu === 'attachments' ? null : 'attachments')}
               className={cn(
-                'flex size-8 items-center justify-center rounded-full text-[14px] transition-colors',
-                isDark ? 'text-white/55 hover:bg-white/[0.08] hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900',
+                'size-10 rounded-full border transition-colors',
+                isDark ? 'border-white/20 text-white/85 hover:border-white/35 hover:bg-white/[0.06] hover:text-white' : 'border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-100',
               )}
-            >
-              /
-            </button>
+            />
             <ComposerModelTrigger
               model={modelLabel}
               icon={<ModelProviderIcon model={`${selectedModelEntry?.apiModel || modelLabel} ${selectedModelEntry?.modelType || selectedModel}`} isDark={isDark} />}
               open={menu === 'models'}
               onClick={() => setMenu(menu === 'models' ? null : 'models')}
-              className={isDark ? 'text-white/65 hover:bg-white/[0.08] hover:text-white' : undefined}
+              className={isDark ? 'text-white/90 hover:bg-white/[0.08] hover:text-white' : 'text-gray-800'}
             />
           </ComposerActions>
 
