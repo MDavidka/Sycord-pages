@@ -22,6 +22,8 @@ import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { ModelLearnPanel } from './ModelLearnPanel';
 import { AgentComposer } from './AgentComposer';
+import { AgentActivityElements } from './AgentActivityElements';
+import { AssistantMessageElements } from './AssistantMessageElements';
 import {
     AgentQuestionCard,
     answerProjectAgentQuestion,
@@ -39,6 +41,10 @@ import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
+import { InlineCitation, type Source as CitationSource } from '@/components/elements/inline-citation';
+import { MessagePair } from '@/components/elements/message-pair';
+import { ScrollAnchor } from '@/components/elements/scroll-anchor';
+import { ReasoningPanel } from '@/components/elements/reasoning-panel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Markdown } from '@/components/agent-elements/markdown';
@@ -78,6 +84,7 @@ interface AssistantSegment {
 
 interface MessageGroup {
     role: 'user' | 'assistant';
+    sourceMessageIndex?: number;
     content: ContentType; // For user messages and backward compat
     thinking?: string;
     thinkingDuration?: number;
@@ -119,6 +126,32 @@ const shortFilePath = (path: string): string => {
         return `${parts[parts.length - 2]}/${base}`;
     }
     return base;
+};
+
+const contentToText = (content: ContentType): string => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) return content.filter((part): part is { type: 'text'; text: string } => part.type === 'text').map((part) => part.text).join('\n');
+    return '';
+};
+
+const citationSourcesFromText = (content: ContentType): CitationSource[] => {
+    const text = contentToText(content);
+    const urls = Array.from(text.matchAll(/https?:\/\/[^\s)\]]+/g)).map((match) => match[0]);
+    const seen = new Set<string>();
+    return urls.flatMap((url) => {
+        try {
+            const parsed = new URL(url);
+            if (seen.has(parsed.href)) return [];
+            seen.add(parsed.href);
+            return [{
+                domain: parsed.hostname.replace(/^www\./, ''),
+                title: parsed.hostname.replace(/^www\./, ''),
+                snippet: url,
+            }];
+        } catch {
+            return [];
+        }
+    }).slice(0, 2);
 };
 
 const getActionDisplayName = (toolName: string, args: string): string => {
@@ -372,6 +405,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [pendingQuestion, setPendingQuestion] = useState<AgentQuestion | null>(null);
     const [questionSubmitting, setQuestionSubmitting] = useState(false);
     const [questionError, setQuestionError] = useState<string | null>(null);
+    const [stoppedRunReason, setStoppedRunReason] = useState<string | null>(null);
+    const [citationOpenIndex, setCitationOpenIndex] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isListening, setIsListening] = useState(false);
@@ -379,6 +414,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const beginRun = (controller: AbortController) => {
         abortControllerRef.current = controller;
+        setStoppedRunReason(null);
         setIsRunning(true);
         setAbortCurrentRun(() => {
             controller.abort();
@@ -603,14 +639,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         const groups: MessageGroup[] = [];
         let currentGroup: MessageGroup | null = null;
 
-        for (const msg of messages) {
+        for (const [sourceMessageIndex, msg] of messages.entries()) {
             if (msg.role === 'user') {
                 if (currentGroup) groups.push(currentGroup);
                 currentGroup = {
                     role: 'user',
                     content: msg.content,
                     attachments: (msg as any).attachments,
-                    pickedElement: (msg as any).pickedElement
+                    pickedElement: (msg as any).pickedElement,
+                    sourceMessageIndex
                 } as any;
             } else if (msg.role === 'assistant') {
                 if (currentGroup && currentGroup.role === 'assistant') {
@@ -673,7 +710,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         agentActions: Array.isArray((msg as any).agentActions) ? (msg as any).agentActions : undefined,
                         createdAt: (msg as any).createdAt,
                         toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
-                        segments
+                        segments,
+                        sourceMessageIndex
                     };
                 }
             } else if (msg.role === 'tool') {
@@ -733,6 +771,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             ? () => abortControllerRef.current?.abort()
             : null);
         if (abort) {
+            setStoppedRunReason('Stopped by you');
             abort();
             setCurrentThinking('');
             setThinkingStartTime(null);
@@ -1287,6 +1326,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 markAgentTimelineLoaded();
                                 break;
                             case 'stopped':
+                                setStoppedRunReason(event.text || 'The agent stopped before finishing the response.');
                                 if (!replayHistoryOnly && !assistantContent) {
                                     updateLastMessage(event.text || 'Stopped.');
                                 }
@@ -1616,6 +1656,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     markAgentTimelineLoaded();
                     break;
                 case 'stopped':
+                    setStoppedRunReason(event.text || 'The agent stopped before finishing the response.');
                     if (!assistantContent) updateLastMessage(event.text || 'Stopped.');
                     completed = true;
                     clearPendingQuestion();
@@ -2485,6 +2526,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     // Form submit handler
+    const handleEditSentMessage = async (sourceMessageIndex: number, value: string) => {
+        if (isRunning) return;
+        const currentMessages = useStore.getState().messages;
+        const original = currentMessages[sourceMessageIndex];
+        if (!original || original.role !== 'user') return;
+
+        const editedMessage: Message = { ...original, content: value };
+        const nextMessages = [...currentMessages.slice(0, sourceMessageIndex), editedMessage];
+        setMessages(nextMessages);
+        await triggerAIResponse(editedMessage, currentChatId || undefined);
+    };
+
+    const handleRegenerateAssistantMessage = async (assistantSourceIndex: number) => {
+        if (isRunning) return;
+        const currentMessages = useStore.getState().messages;
+        const precedingMessages = currentMessages.slice(0, assistantSourceIndex);
+        const userMessage = [...precedingMessages].reverse().find((message) => message.role === 'user');
+        if (!userMessage) return;
+        setMessages(precedingMessages);
+        await triggerAIResponse(userMessage, currentChatId || undefined);
+    };
+
     const handleSubmit = async (e?: React.FormEvent) => {
         e?.preventDefault();
         if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isRunning) return;
@@ -2869,10 +2932,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (seg.type === 'text' && seg.content) {
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
+                                            const citations = citationSourcesFromText(textContent);
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
                                                     <div className={`text-[15px] leading-7 sm:text-[16px] w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/88' : 'text-gray-800'}`}>
                                                         {renderAssistantMarkdown(textContent)}
+                                                        {citations.length > 0 && (
+                                                            <InlineCitation
+                                                                sources={citations}
+                                                                openIndex={citationOpenIndex}
+                                                                onOpenIndexChange={setCitationOpenIndex}
+                                                                className="mt-3 max-w-none text-xs"
+                                                            >
+                                                                Sources referenced in this response
+                                                            </InlineCitation>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -2918,39 +2992,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         isDark={isDark}
                                         hide={idx === groupedMessages.length - 1 && isRunning}
                                     />
+                                    <AssistantMessageElements
+                                        role="assistant"
+                                        text={contentToText(group.content)}
+                                        onRegenerate={() => void handleRegenerateAssistantMessage(group.sourceMessageIndex ?? messages.length)}
+                                    />
                                 </>
                             ) : (
                                 <>
                                     {/* Fallback: user messages or assistant without segments */}
-                                    <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    {group.role === 'user' ? (
+                                        <AssistantMessageElements
+                                            role="user"
+                                            text={contentToText(group.content)}
+                                            discardedReplies={Math.max(0, messages.length - (group.sourceMessageIndex ?? messages.length - 1) - 1)}
+                                            onEdit={(value) => void handleEditSentMessage(group.sourceMessageIndex ?? 0, value)}
+                                        />
+                                    ) : (
+                                    <div className={`flex justify-start`}>
                                         <div
-                                            className={`${
-                                                group.role === 'user'
-                                                    ? isDark
-                                                        ? 'bg-white/[0.045] text-white/95 rounded-[2.25rem] px-4 py-2.5 text-[15px] leading-6 max-w-[85%] sm:max-w-[75%]'
-                                                        : 'bg-gray-200 text-gray-900 rounded-[2.25rem] px-4 py-2.5 text-[15px] leading-6 max-w-[85%] sm:max-w-[75%]'
-                                                    : isDark
-                                                        ? 'text-[15px] leading-7 sm:text-[16px] text-white/88 max-w-full'
-                                                        : 'text-[15px] leading-7 sm:text-[16px] text-gray-800 max-w-full'
-                                            }`}
+                                            className={`text-[15px] leading-7 sm:text-[16px] max-w-full ${isDark ? 'text-white/88' : 'text-gray-800'}`}
                                         >
-
-                                            {/* Picked element indicator */}
-                                            {group.role === 'user' && (group as any).pickedElement && (
-                                                <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                    <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="font-medium">
-                                                        {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                    </span>
-                                                    {(group as any).pickedElement.text && (
-                                                        <span className="truncate opacity-70">
-                                                            {(group as any).pickedElement.text.length > 30
-                                                                ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                : (group as any).pickedElement.text}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
                                             {group.content && (
                                                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>                                                    {Array.isArray(group.content) ? (
                                                         <div className="space-y-2">
@@ -2968,17 +3030,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             )}
                                         </div>
                                     </div>
+                                    )}
                                     {/* Live actions for assistant without segments */}
                                     {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                     {group.role === 'assistant' && (
-                                        <MessageMetaFooter
-                                            content={group.content}
-                                            createdAt={group.createdAt}
-                                            isDark={isDark}
-                                            hide={idx === groupedMessages.length - 1 && isRunning}
-                                        />
+                                        <>
+                                            <MessageMetaFooter
+                                                content={group.content}
+                                                createdAt={group.createdAt}
+                                                isDark={isDark}
+                                                hide={idx === groupedMessages.length - 1 && isRunning}
+                                            />
+                                            <AssistantMessageElements
+                                                role="assistant"
+                                                text={contentToText(group.content)}
+                                                onRegenerate={() => void handleRegenerateAssistantMessage(group.sourceMessageIndex ?? messages.length)}
+                                            />
+                                        </>
                                     )}
                                 </>
                             )}
@@ -2995,6 +3065,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                     )}
 
+                    {stoppedRunReason && (
+                        <AgentActivityElements
+                            actions={[]}
+                            isLive={false}
+                            stoppedReason={stoppedRunReason}
+                            partialResponse={contentToText(groupedMessages[groupedMessages.length - 1]?.content || null)}
+                            onContinue={() => {
+                                const lastAssistantIndex = [...messages].map((message, index) => ({ message, index })).reverse().find((entry) => entry.message.role === 'assistant')?.index;
+                                if (lastAssistantIndex !== undefined) void handleRegenerateAssistantMessage(lastAssistantIndex);
+                            }}
+                            onDiscard={() => setStoppedRunReason(null)}
+                        />
+                    )}
+
                     {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
                     {isRunning && (!currentThinking || isSystemProcessingText(currentThinking)) && actions.length === 0 && (
                         !groupedMessages.length ||
@@ -3006,6 +3090,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         </Marker>
                     )}
 
+                    {groupedMessages.length > 1 && (
+                        <details className="mt-4 border-t border-foreground/[0.08] pt-3">
+                            <summary className="cursor-pointer text-xs font-medium text-foreground/45 transition-colors hover:text-foreground/75">
+                                Thread scroll anchor
+                            </summary>
+                            <ScrollAnchor
+                                messages={groupedMessages.slice(-12).map((group) => ({ role: group.role, text: contentToText(group.content) || 'Agent activity' }))}
+                                paused={!isRunning}
+                                className="mt-3 h-44 max-w-none"
+                            />
+                        </details>
+                    )}
                     <div ref={messagesEndRef} />
                 </div>
             </div>
@@ -3057,13 +3153,29 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 <div className="max-w-[720px] mx-auto">
                     {pendingQuestion && (
                         <div className="mb-2.5">
-                            <AgentQuestionCard
-                                question={pendingQuestion}
-                                isDark={isDark}
-                                submitting={questionSubmitting}
-                                error={questionError}
-                                onSubmit={handleAgentQuestionSubmit}
-                            />
+                            {/permission|allow|access|grant|authori[sz]e/i.test(pendingQuestion.prompt) ? (
+                                <AgentActivityElements
+                                    actions={[]}
+                                    isLive={false}
+                                    permissionRequest={{
+                                        capability: pendingQuestion.prompt,
+                                        requester: 'Syra agent',
+                                        reach: pendingQuestion.options?.map((option) => option.label) || ['Grant the requested capability for this agent turn.'],
+                                        onGrant: (scope) => {
+                                            const matchingOption = pendingQuestion.options?.find((option) => new RegExp(scope, 'i').test(`${option.label} ${option.value}`));
+                                            handleAgentQuestionSubmit(matchingOption?.value || scope);
+                                        },
+                                    }}
+                                />
+                            ) : (
+                                <AgentQuestionCard
+                                    question={pendingQuestion}
+                                    isDark={isDark}
+                                    submitting={questionSubmitting}
+                                    error={questionError}
+                                    onSubmit={handleAgentQuestionSubmit}
+                                />
+                            )}
                         </div>
                     )}
                     <form
@@ -3203,67 +3315,38 @@ function isSystemProcessingText(text: string): boolean {
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [isExpanded, setIsExpanded] = useState(false);
+function ThinkingBlock({ thinking, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
+    const [open, setOpen] = useState(Boolean(startTime && thinkingTime === undefined));
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
+        if (!startTime || thinkingTime !== undefined) return;
+        const refresh = () => setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
+        refresh();
+        const interval = window.setInterval(refresh, 1000);
+        return () => window.clearInterval(interval);
     }, [startTime, thinkingTime]);
 
     if (!thinking || isSystemProcessingText(thinking)) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
-    const isLive = Boolean(startTime) && thinkingTime === undefined;
-    const thoughtCount = Math.max(1, thinking.split(/\n{2,}/).filter(part => part.trim()).length);
-    const title = isLive
-        ? 'Thinking'
-        : thoughtCount === 1
-            ? 'Thought 1 time'
-            : `Thought ${thoughtCount} times`;
-
-    if (isLive) {
-        return (
-            <Marker role="status" className="mb-3 animate-fade-in px-1">
-                <span className="inline-flex items-center gap-2">
-                    <SpiralLoader size={14} />
-                    <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                </span>
-            </Marker>
-        );
-    }
+    const streaming = Boolean(startTime) && thinkingTime === undefined;
+    const steps = thinking.split(/\n{2,}/).map((body, index, all) => ({
+        title: streaming && index === all.length - 1 ? 'Current reasoning' : `Reasoning step ${index + 1}`,
+        body: body.trim(),
+    })).filter((step) => step.body);
 
     return (
         <div className="mb-3 animate-fade-in px-1">
-            <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                aria-expanded={isExpanded}
-                className={`group flex min-h-11 w-full items-start gap-3 rounded-lg py-2 text-left transition-colors ${isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]'}`}
-            >
-                <span className="flex size-7 shrink-0 items-center justify-center">
-                    <Brain className={`size-4 ${isDark ? 'text-white/65' : 'text-gray-500'}`} strokeWidth={1.8} />
-                </span>
-                <span className="min-w-0 flex-1">
-                    <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
-                        {title}
-                        {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
-                    </span>
-                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                        {thinking}
-                    </span>
-                </span>
-                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
-            </button>
+            <ReasoningPanel
+                steps={steps}
+                visibleSteps={steps.length}
+                streaming={streaming}
+                open={open}
+                onOpenChange={setOpen}
+                restingLabel={thinkingTime ? `Reasoned for ${thinkingTime}s` : `Reasoned through ${steps.length} step${steps.length === 1 ? '' : 's'}`}
+                elapsed={streaming ? `${elapsed}s` : undefined}
+                className="max-w-none"
+            />
         </div>
     );
 }
