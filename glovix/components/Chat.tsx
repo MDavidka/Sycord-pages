@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, FileCode, X, ChevronRight, ChevronDown, MousePointer2, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, fetchAvailableModelChoices, type ModelChoice } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -21,6 +21,7 @@ import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbedde
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { ModelLearnPanel } from './ModelLearnPanel';
+import { AgentComposer } from './AgentComposer';
 import {
     AgentQuestionCard,
     answerProjectAgentQuestion,
@@ -38,13 +39,6 @@ import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Markdown } from '@/components/agent-elements/markdown';
@@ -232,122 +226,6 @@ function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (p
     if (name !== 'update_plan' && name !== 'planning' && name !== 'plan') return;
     const next = planFromAgentUpdate(args, useStore.getState().generationPlan);
     if (next) setGenerationPlan(next);
-}
-
-function ModelSelector({ selectedModel, choices, loading, error, onSelect, showMenu, onToggleMenu, onCloseMenu, onRetry, isDark }: {
-    selectedModel: ModelType
-    choices: ModelChoice[]
-    loading: boolean
-    error: string | null
-    onSelect: (choice: ModelChoice) => void
-    showMenu: boolean
-    onToggleMenu: () => void
-    onCloseMenu: () => void
-    onRetry: () => void
-    isDark: boolean
-}) {
-    const current = choices.find(choice => choice.modelType === selectedModel) || choices[0]
-    const displayModel = loading ? 'Loading models…' : error ? 'Models unavailable' : current?.apiModel || 'No models available'
-    const displayIcon = current && (getProviderIconUrl(current.apiModel, isDark) || current.icon)
-    const shortModel = displayModel.split('-').slice(0, 2).join('-')
-    const canOpen = !loading && (choices.length > 0 || Boolean(error))
-
-    return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={error ? onRetry : onToggleMenu}
-                disabled={!canOpen}
-                aria-label={loading ? 'Loading models' : error ? 'Retry loading models' : `Select model (${displayModel})`}
-                title={error || displayModel}
-                className={`flex h-9 sm:h-8 items-center gap-1.5 rounded-xl px-2 sm:px-2.5 transition-colors active:scale-95 disabled:cursor-wait disabled:opacity-60 ${isDark ? 'hover:bg-white/[0.06] border border-white/[0.06]' : 'hover:bg-gray-50 border border-gray-200/50'}`}
-            >
-                {loading ? (
-                    <Loader2 className={`h-4 w-4 animate-spin ${isDark ? 'text-white/50' : 'text-gray-400'}`} />
-                ) : displayIcon ? (
-                    <img
-                        src={displayIcon}
-                        alt={displayModel}
-                        className={`h-5 w-5 sm:h-4.5 sm:w-4.5 object-contain shrink-0 ${isDark ? 'brightness-150' : ''}`}
-                        draggable={false}
-                    />
-                ) : (
-                    <span className={`text-[12px] font-semibold ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
-                        {displayModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
-                    </span>
-                )}
-                <span className={`text-[12px] sm:text-[13px] font-medium hidden sm:inline max-w-[120px] truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
-                    {displayModel}
-                </span>
-                <span className={`text-[12px] font-medium sm:hidden ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
-                    {shortModel}
-                </span>
-                {!loading && !error && <ChevronDown className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-white/30' : 'text-gray-400'}`} />}
-            </button>
-
-            {showMenu && (
-                <>
-                    <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
-                    <div className={`absolute bottom-full left-0 mb-2 rounded-2xl overflow-hidden z-20 w-[250px] ${isDark ? 'bg-[#1a1a1b] border border-white/[0.08] shadow-2xl shadow-black/40' : 'bg-white border border-gray-200 shadow-xl shadow-black/5'}`}>
-                        <div className="px-2 pt-1.5 pb-0.5">
-                            <p className={`text-[10px] font-medium uppercase tracking-wider px-2 py-1 ${isDark ? 'text-white/20' : 'text-gray-400'}`}>Available models</p>
-                        </div>
-                        {choices.length > 0 ? (
-                            <div className="p-1.5 space-y-0.5">
-                                {choices.map((choice) => {
-                                    const isActive = choice.modelType === selectedModel
-                                    const choiceIcon = getProviderIconUrl(choice.apiModel, isDark) || choice.icon
-                                    return (
-                                        <button
-                                            key={choice.id}
-                                            type="button"
-                                            onClick={() => onSelect(choice)}
-                                            title={choice.apiModel}
-                                            aria-label={choice.apiModel}
-                                            className={`w-full text-left px-2.5 py-2.5 sm:py-2 rounded-xl flex items-center gap-3 transition-colors active:scale-[0.98] ${
-                                                isActive
-                                                    ? isDark ? 'bg-white/[0.08]' : 'bg-gray-100'
-                                                    : isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-gray-50'
-                                            }`}
-                                        >
-                                            {choiceIcon ? (
-                                                <img
-                                                    src={choiceIcon}
-                                                    alt={choice.apiModel}
-                                                    className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg transition-all ${isDark ? 'brightness-150' : ''} ${showMenu && isActive ? 'opacity-70 grayscale' : ''}`}
-                                                    draggable={false}
-                                                />
-                                            ) : (
-                                                <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'} ${showMenu && isActive ? 'opacity-70 grayscale' : ''}`}>
-                                                    {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
-                                                </span>
-                                            )}
-                                            <div className="flex-1 min-w-0">
-                                                <div className={`text-[13px] sm:text-[13px] font-medium truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{choice.apiModel}</div>
-                                                <div className={`text-[11px] truncate ${isDark ? 'text-white/30' : 'text-gray-400'}`}>{choice.subtitle}</div>
-                                            </div>
-                                            {isActive && (
-                                                <Check className={`h-4 w-4 shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                                            )}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        ) : (
-                            <div className={`px-3 pb-3 text-xs ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
-                                {error || 'No models are currently available.'}
-                                {error && (
-                                    <button type="button" onClick={onRetry} className="mt-2 block font-medium text-blue-500 hover:underline">
-                                        Retry
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </>
-            )}
-        </div>
-    )
 }
 
 export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
@@ -1082,16 +960,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     interim += transcript;
                 }
             }
-            // Show interim results live while listening
-            if (interim) {
-                const el = textareaRef.current;
-                if (el) {
-                    el.value = interim;
-                    const rect = el.getBoundingClientRect();
-                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
-                    el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
-                }
-            }
         };
 
         recognition.onend = () => {
@@ -1108,7 +976,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         recognition.start();
     };
 
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // When returning to a host project chat, resume any open Turso agent turn
     // so previous activity is reloaded from the durable database.
@@ -2618,8 +2485,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     // Form submit handler
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = async (e?: React.FormEvent) => {
+        e?.preventDefault();
         if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isRunning) return;
 
         // Handle /debug command - fetch VM connection debug info
@@ -2639,10 +2506,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             return;
         }
 
-        // Slash commands — attach / libraries / help (do not send as chat)
+        // Slash commands remain available through the Assistant UI Composer command menu.
         const slashCmd = input.trim().toLowerCase();
         if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
-            setShowSlashMenu(true);
             if (slashCmd === '/skills') setLibraryView('skills');
             else if (slashCmd === '/mcp' || slashCmd === '/integrations') setLibraryView('mcp');
             else if (slashCmd === '/help') setLibraryView('help');
@@ -2652,13 +2518,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
         if (slashCmd === '/image') {
             setInput('');
-            setShowSlashMenu(false);
             fileInputRef.current?.click();
             return;
         }
         if (slashCmd === '/document' || slashCmd === '/doc' || slashCmd === '/file') {
             setInput('');
-            setShowSlashMenu(false);
             documentInputRef.current?.click();
             return;
         }
@@ -2760,17 +2624,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setInput('');
         setSelectedImages([]);
         setSelectedDocuments([]);
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-        }
 
         // Send AI message (with full file contents) to AI
         await triggerAIResponse(aiMessage, chatId || undefined);
     };
 
-    const [showModelMenu, setShowModelMenu] = useState(false);
     const [showDeepMemory, setShowDeepMemory] = useState(false);
-    const [showSlashMenu, setShowSlashMenu] = useState(false);
     const [libraryView, setLibraryView] = useState<'skills' | 'mcp' | 'help' | 'credits' | null>(null);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
@@ -3231,272 +3090,49 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             onChange={handleDocumentSelect}
                         />
 
-                        {(selectedImages.length > 0 || selectedDocuments.length > 0) && (
-                            <div className={`flex gap-2 px-3 py-2 overflow-x-auto rounded-2xl border ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e]' : 'bg-white border-gray-200'}`}>
-                                {selectedImages.map((img, i) => (
-                                    <div key={`img-${i}`} className="relative flex-shrink-0 group">
-                                        <img src={img} alt="" className="h-10 w-10 object-cover rounded-lg" />
-                                        <button type="button" onClick={() => setSelectedImages(prev => prev.filter((_, idx) => idx !== i))}
-                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <X className="w-2.5 h-2.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                                {selectedDocuments.map((doc, i) => (
-                                    <div key={`doc-${i}`} className={`relative flex-shrink-0 group h-10 px-2 rounded-lg flex items-center gap-1.5 ${isDark ? 'bg-[#1f1f1f]' : 'bg-gray-100'}`}>
-                                        <FileCode className="w-3.5 h-3.5 text-[#555]" />
-                                        <span className={`text-[11px] truncate max-w-[60px] ${isDark ? 'text-[#999]' : 'text-gray-600'}`}>{doc.name}</span>
-                                        <button type="button" onClick={() => setSelectedDocuments(prev => prev.filter((_, idx) => idx !== i))}
-                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <X className="w-2.5 h-2.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Selected element from preview picker */}
-                        {selectedElement && (
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl border ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e]' : 'bg-white border-gray-200'}`}>
-                                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs max-w-full overflow-hidden ${isDark ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'}`}>
-                                    <MousePointer2 className={`w-3 h-3 flex-shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                                    <span className={`font-medium flex-shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                                        {selectedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                    </span>
-                                    {selectedElement.text && (
-                                        <span className={`truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                            {selectedElement.text.length > 40 ? selectedElement.text.slice(0, 40) + '…' : selectedElement.text}
-                                        </span>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedElement(null)}
-                                        className={`ml-auto flex-shrink-0 p-0.5 rounded hover:bg-red-500/20 ${isDark ? 'text-zinc-500 hover:text-red-400' : 'text-gray-400 hover:text-red-500'}`}
-                                    >
-                                        <X className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Connected integrations pill — dashed status chip above composer */}
-                        {connectedMcps.length > 0 && (
-                            <div className="flex justify-start px-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setLibraryView('mcp')}
-                                    className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
-                                        isDark
-                                            ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
-                                            : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
-                                    }`}
-                                    aria-label="Connected integrations"
-                                >
-                                    <span className="flex items-center -space-x-1">
-                                        {connectedMcps.map((addon) => (
-                                            <span
-                                                key={addon.id}
-                                                className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#18191B] bg-[#1c1d1f]' : 'border-white bg-white'
-                                                }`}
-                                            >
-                                                <McpBrandIcon
-                                                    id={addon.id}
-                                                    name={addon.name}
-                                                    className="h-3.5 w-3.5 text-[#e5e5e5]"
-                                                />
-                                            </span>
-                                        ))}
-                                    </span>
-                                    <span className="text-[12px] leading-none tracking-tight">connected</span>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-2 transition-colors ${
-                            pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
-                            {!pendingQuestion && (
-                                <textarea
-                                    ref={textareaRef}
-                                    value={input}
-                                    onChange={(e) => {
-                                        const value = e.target.value;
-                                        setInput(value);
-                                        if (value === '/') {
-                                            setShowSlashMenu(true);
-                                            setShowModelMenu(false);
-                                        }
-                                        const target = e.target as HTMLTextAreaElement;
-                                        target.style.height = 'auto';
-                                        const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
-                                        target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
-                                    }}
-                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
-                                    className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                    style={{ height: 'auto', minHeight: '76px' }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Escape' && showSlashMenu) {
-                                            e.preventDefault();
-                                            setShowSlashMenu(false);
-                                            return;
-                                        }
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            handleSubmit(e);
-                                        }
-                                    }}
-                                />
-                            )}
-
-                            {/* Toolbar */}
-                            <div className={`flex items-center gap-2 ${pendingQuestion ? 'px-0.5' : 'px-1'}`}>
-                                <DropdownMenu open={showSlashMenu} onOpenChange={(open) => {
-                                    setShowSlashMenu(open);
-                                    if (open) {
-                                        setShowModelMenu(false);
-                                        const projectId = getHostProjectId();
-                                        if (projectId) void loadSlashExtras(projectId, true);
-                                    }
-                                }}>
-                                    <DropdownMenuTrigger asChild>
-                                        <button
-                                            type="button"
-                                            aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
-                                        >
-                                            <Slash className="h-3.5 w-3.5" />
-                                        </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        side="top"
-                                        align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#e5e5e5]' : ''}`}
-                                    >
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                fileInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <ImageIcon className="h-4 w-4 opacity-70" />
-                                            Image upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/image</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                documentInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <FileUp className="h-4 w-4 opacity-70" />
-                                            File upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/file</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('skills');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <Sparkles className="h-4 w-4 opacity-70" />
-                                            Skills
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/skills</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('mcp');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <Puzzle className="h-4 w-4 opacity-70" />
-                                            Integrations
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/integrations</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('help');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <HelpCircle className="h-4 w-4 opacity-70" />
-                                            Help and support
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('credits');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <CreditCard className="h-4 w-4 opacity-70" />
-                                            Credit
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-
-                                <ModelSelector
-                                    selectedModel={selectedModel}
-                                    choices={availableModelChoices || []}
-                                    loading={modelsLoading}
-                                    error={modelsError}
-                                    onRetry={() => { void loadAvailableModels(); }}
-                                    onSelect={(choice) => {
-                                        setSelectedModel(choice.modelType)
-                                        setAiModel(choice.apiModel)
-                                        setShowModelMenu(false)
-                                    }}
-                                    showMenu={showModelMenu && !modelsLoading}
-                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
-                                    onCloseMenu={() => setShowModelMenu(false)}
-                                    isDark={isDark}
-                                />
-
-                                <div className="ml-auto flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        aria-label="Voice input"
-                                        aria-pressed={isListening}
-                                        onClick={handleVoiceInput}
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-                                    >
-                                        <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
-                                    </button>
-
-                                    {isRunning ? (
-                                        <button
-                                            type="button"
-                                            onClick={handleStop}
-                                            aria-label="Stop"
-                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
-                                        >
-                                            <div className="h-3 w-3 rounded-sm bg-black" />
-                                        </button>
-                                    ) : (
-                                        <button
-                                            type="submit"
-                                            disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
-                                            aria-label="Send"
-                                            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${
-                                                !pendingQuestion && (input.trim() || selectedImages.length > 0)
-                                                    ? 'bg-white text-black hover:bg-gray-200'
-                                                    : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'
-                                            }`}
-                                        >
-                                            <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                        <AgentComposer
+                            value={input}
+                            onValueChange={setInput}
+                            onSend={() => void handleSubmit()}
+                            onStop={handleStop}
+                            isRunning={isRunning}
+                            isListening={isListening}
+                            onToggleVoice={handleVoiceInput}
+                            isDark={isDark}
+                            disabled={Boolean(pendingQuestion)}
+                            selectedImages={selectedImages}
+                            selectedDocuments={selectedDocuments.map((document) => ({ name: document.name, size: document.content.length }))}
+                            onRemoveImage={(index) => setSelectedImages((current) => current.filter((_, currentIndex) => currentIndex !== index))}
+                            onRemoveDocument={(index) => setSelectedDocuments((current) => current.filter((_, currentIndex) => currentIndex !== index))}
+                            onPickImage={() => fileInputRef.current?.click()}
+                            onPickDocument={() => documentInputRef.current?.click()}
+                            selectedContext={selectedElement ? {
+                                label: selectedElement.selector.split('.')[0].split('#')[0].toUpperCase(),
+                                text: selectedElement.text && (selectedElement.text.length > 40 ? `${selectedElement.text.slice(0, 40)}…` : selectedElement.text),
+                            } : null}
+                            onClearSelectedContext={() => setSelectedElement(null)}
+                            models={availableModelChoices || []}
+                            selectedModel={selectedModel}
+                            modelsLoading={modelsLoading}
+                            modelsError={modelsError}
+                            onRetryModels={() => void loadAvailableModels()}
+                            onSelectModel={(choice) => {
+                                setSelectedModel(choice.modelType)
+                                setAiModel(choice.apiModel)
+                            }}
+                            connectedIntegrationCount={connectedMcps.length}
+                            onOpenIntegrations={() => setLibraryView('mcp')}
+                            onOpenSkills={() => setLibraryView('skills')}
+                            onOpenHelp={() => setLibraryView('help')}
+                            onOpenCredits={() => setLibraryView('credits')}
+                            contextUsage={{
+                                system: Math.min(12, Math.max(1, Math.round(tokenCount * 0.15 / 1000))),
+                                tools: Math.min(8, Math.max(0, Math.round(tokenCount * 0.1 / 1000))),
+                                messages: Math.max(0, Math.round(tokenCount * 0.75 / 1000)),
+                                total: Math.max(1, Math.round(modelContextLimit / 1000)),
+                            }}
+                            draftKey={currentChatId || 'new-chat'}
+                        />
                     </form>
                 </div>
             </div>
