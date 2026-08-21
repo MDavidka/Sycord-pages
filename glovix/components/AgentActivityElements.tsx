@@ -12,8 +12,6 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-import { Chart } from '@/components/elements/chart'
-import { DataTable } from '@/components/elements/data-table'
 import { GuardrailNotice } from '@/components/elements/guardrail-notice'
 import { PermissionGrant, type GrantScope } from '@/components/elements/permission-grant'
 import { ReasoningPanel } from '@/components/elements/reasoning-panel'
@@ -38,9 +36,6 @@ interface AgentActivityElementsProps {
   thinkingTime?: number
   isLive: boolean
   elapsedSeconds?: number
-  selectedModel?: string
-  contextTokens?: number
-  contextLimit?: number
   stoppedReason?: string | null
   partialResponse?: string
   onContinue?: () => void
@@ -140,9 +135,6 @@ export function AgentActivityElements({
   thinkingTime,
   isLive,
   elapsedSeconds,
-  selectedModel = 'Syra',
-  contextTokens = 0,
-  contextLimit = 0,
   stoppedReason,
   partialResponse,
   onContinue,
@@ -166,7 +158,6 @@ export function AgentActivityElements({
   const terminal = useMemo(() => terminalFrom(actions), [actions])
   const search = useMemo(() => searchesFrom(actions), [actions])
   const guardrail = useMemo(() => actions.find((action) => action.status === 'error' && guardrailPattern.test(`${action.displayName} ${action.result || ''}`)), [actions])
-  const activityPoints = useMemo(() => actions.slice(-12).map((action) => Math.max(1, Math.round(actionDuration(action) / 1000))), [actions])
   const visibleActions = actions.length
   const totalElapsed = elapsedSeconds ?? Math.max(0, ...actions.map(actionDuration).map((value) => Math.round(value / 1000)))
 
@@ -255,29 +246,6 @@ export function AgentActivityElements({
           onDiscard={onDiscard}
           className="max-w-none"
         />
-      )}
-
-      {actions.length > 0 && !isLive && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <DataTable
-            rows={[{
-              name: selectedModel,
-              context: contextLimit > 0 ? `${Math.round((contextTokens / contextLimit) * 100)}%` : '—',
-              cost: `${actions.length} steps`,
-            }]}
-            cycle={actions.length}
-            className="max-w-none"
-          />
-          <Chart
-            label="Agent step duration"
-            value={`${actions.length} steps`}
-            delta={activityPoints.length > 1 ? `${activityPoints.at(-1)}s latest` : undefined}
-            points={activityPoints.length > 0 ? activityPoints : [0]}
-            visibleCount={activityPoints.length || 1}
-            variant="bars"
-            className="max-w-none"
-          />
-        </div>
       )}
 
       <p className={cn('sr-only', isLive && 'not-sr-only text-xs text-foreground/40')}> 

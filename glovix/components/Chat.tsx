@@ -43,7 +43,6 @@ import { DeepMemoryModal } from './DeepMemoryModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
 import { InlineCitation, type Source as CitationSource } from '@/components/elements/inline-citation';
 import { MessagePair } from '@/components/elements/message-pair';
-import { ScrollAnchor } from '@/components/elements/scroll-anchor';
 import { ReasoningPanel } from '@/components/elements/reasoning-panel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -277,8 +276,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const theme = useStore(s => s.theme);
     const setSelectedFile = useStore(s => s.setSelectedFile);
     const setTokenCount = useStore(s => s.setTokenCount);
-    const tokenCount = useStore(s => s.tokenCount);
-    const modelContextLimit = useStore(s => s.modelContextLimit);
     const setSystemPrompt = useStore(s => s.setSystemPrompt);
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
@@ -3090,18 +3087,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         </Marker>
                     )}
 
-                    {groupedMessages.length > 1 && (
-                        <details className="mt-4 border-t border-foreground/[0.08] pt-3">
-                            <summary className="cursor-pointer text-xs font-medium text-foreground/45 transition-colors hover:text-foreground/75">
-                                Thread scroll anchor
-                            </summary>
-                            <ScrollAnchor
-                                messages={groupedMessages.slice(-12).map((group) => ({ role: group.role, text: contentToText(group.content) || 'Agent activity' }))}
-                                paused={!isRunning}
-                                className="mt-3 h-44 max-w-none"
-                            />
-                        </details>
-                    )}
                     <div ref={messagesEndRef} />
                 </div>
             </div>
@@ -3237,12 +3222,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             onOpenSkills={() => setLibraryView('skills')}
                             onOpenHelp={() => setLibraryView('help')}
                             onOpenCredits={() => setLibraryView('credits')}
-                            contextUsage={{
-                                system: Math.min(12, Math.max(1, Math.round(tokenCount * 0.15 / 1000))),
-                                tools: Math.min(8, Math.max(0, Math.round(tokenCount * 0.1 / 1000))),
-                                messages: Math.max(0, Math.round(tokenCount * 0.75 / 1000)),
-                                total: Math.max(1, Math.round(modelContextLimit / 1000)),
-                            }}
                             draftKey={currentChatId || 'new-chat'}
                         />
                     </form>

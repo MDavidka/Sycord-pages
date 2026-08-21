@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, type ReactNode, useMemo } from "react";
 import {
   ArrowUpIcon,
   CheckIcon,
@@ -52,6 +52,7 @@ export interface ComposerPerson {
 export interface ComposerModel {
   name: string;
   meta: string;
+  icon?: ReactNode;
 }
 
 export interface ComposerUsage {
@@ -430,11 +431,13 @@ export function ComposerAttachButton({
 export function ComposerModelTrigger({
   model,
   open,
+  icon,
   className,
   ...props
-}: Omit<ComponentProps<"button">, "children"> & {
+} : Omit<ComponentProps<"button">, "children"> & {
   model: string;
   open: boolean;
+  icon?: ReactNode;
 }) {
   return (
     <button
@@ -447,6 +450,7 @@ export function ComposerModelTrigger({
       )}
       {...props}
     >
+      {icon}
       {model}
       <ChevronDownIcon className="size-3 opacity-60" />
     </button>
@@ -463,6 +467,7 @@ export function ComposerModelItem({
 }) {
   return (
     <ComposerMenuItem active={selected} {...props}>
+      {entry.icon}
       <span className="flex-1 text-start">{entry.name}</span>
       <span className={cn(mono, "text-foreground/35 tabular-nums")}>
         {entry.meta}

@@ -21,7 +21,6 @@ import {
   ComposerAttachButton,
   ComposerBar,
   ComposerCommandItem,
-  ComposerContext,
   ComposerInput,
   ComposerMenu,
   ComposerMenuItem,
@@ -40,6 +39,7 @@ import {
 import { cn } from '@/lib/utils'
 
 import type { ModelChoice, ModelType } from '../lib/ai'
+import { ModelProviderIcon } from './ModelProviderIcon'
 
 interface SelectedContext {
   label: string
@@ -75,7 +75,6 @@ interface AgentComposerProps {
   onOpenSkills: () => void
   onOpenHelp: () => void
   onOpenCredits: () => void
-  contextUsage: { system: number; tools: number; messages: number; total: number }
   draftKey: string
 }
 
@@ -114,7 +113,6 @@ export function AgentComposer({
   onOpenSkills,
   onOpenHelp,
   onOpenCredits,
-  contextUsage,
   draftKey,
 }: AgentComposerProps) {
   const [menu, setMenu] = useState<'attachments' | 'commands' | 'models' | null>(null)
@@ -269,7 +267,11 @@ export function AgentComposer({
           models.map((model) => (
             <ComposerModelItem
               key={model.id}
-              entry={{ name: model.apiModel, meta: model.subtitle || model.modelType }}
+              entry={{
+                name: model.apiModel,
+                meta: model.subtitle || model.modelType,
+                icon: <ModelProviderIcon model={`${model.apiModel} ${model.modelType} ${model.label || ''}`} isDark={isDark} />,
+              }}
               selected={model.modelType === selectedModel}
               onClick={() => {
                 onSelectModel(model)
@@ -356,11 +358,11 @@ export function AgentComposer({
             </button>
             <ComposerModelTrigger
               model={modelLabel}
+              icon={<ModelProviderIcon model={`${selectedModelEntry?.apiModel || modelLabel} ${selectedModelEntry?.modelType || selectedModel}`} isDark={isDark} />}
               open={menu === 'models'}
               onClick={() => setMenu(menu === 'models' ? null : 'models')}
               className={isDark ? 'text-white/65 hover:bg-white/[0.08] hover:text-white' : undefined}
             />
-            <ComposerContext usage={contextUsage} className={isDark ? 'text-white/60' : undefined} />
           </ComposerActions>
 
           <ComposerActions>
