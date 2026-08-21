@@ -761,16 +761,24 @@ export async function streamAgentActivitySse(options: {
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
 
-            let splitAt = buffer.indexOf('\n\n');
-            while (splitAt !== -1) {
-                const block = buffer.slice(0, splitAt);
-                buffer = buffer.slice(splitAt + 2);
+            let separator = /\r?\n\r?\n/.exec(buffer);
+            while (separator && separator.index >= 0) {
+                const block = buffer.slice(0, separator.index);
+                buffer = buffer.slice(separator.index + separator[0].length);
                 const parsed = parseSseBlock(block);
                 if (parsed) emit(parsed);
                 if (terminal) break;
-                splitAt = buffer.indexOf('\n\n');
+                separator = /\r?\n\r?\n/.exec(buffer);
             }
             if (terminal) break;
+        }
+
+        // Some proxies close a valid SSE stream immediately after the final
+        // data line without its trailing blank separator. Consume that final
+        // frame rather than dropping a completed response or terminal event.
+        if (!terminal && buffer.trim()) {
+            const parsed = parseSseBlock(buffer);
+            if (parsed) emit(parsed);
         }
     } finally {
         try {

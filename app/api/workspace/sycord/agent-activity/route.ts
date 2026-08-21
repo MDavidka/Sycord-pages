@@ -76,6 +76,75 @@ async function openUpstreamStream(
   throw lastError || new Error("Failed to connect to Syte agent activity stream")
 }
 
+const SSE_HEADERS = {
+  "Content-Type": "text/event-stream; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
+  "X-Accel-Buffering": "no",
+  Vary: "Accept-Encoding",
+}
+
+/**
+ * Create an explicit byte-for-byte SSE bridge instead of returning a buffered
+ * upstream body directly. The immediate comment commits response headers to
+ * the client; following bytes are forwarded unchanged as they arrive from Syte.
+ */
+function bridgeUpstreamSse(
+  open: () => Promise<Response>,
+  requestSignal: AbortSignal,
+): Response {
+  const encoder = new TextEncoder()
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const abortUpstream = () => {
+        void reader?.cancel().catch(() => undefined)
+      }
+      requestSignal.addEventListener("abort", abortUpstream, { once: true })
+
+      // Establish a real SSE response immediately. This prevents CDN/function
+      // buffering from withholding the connection until the first model token.
+      controller.enqueue(encoder.encode(": sycord-agent-stream-ready\n\n"))
+
+      try {
+        const upstream = await open()
+        if (!upstream.body) {
+          throw new Error("Syte stream opened without a response body")
+        }
+        reader = upstream.body.getReader()
+        while (!requestSignal.aborted) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value?.byteLength) controller.enqueue(value)
+        }
+      } catch (error: any) {
+        if (!requestSignal.aborted) {
+          const message = error?.message || "Failed to connect to upstream Syte stream"
+          controller.enqueue(
+            encoder.encode(
+              `event: error\ndata: ${JSON.stringify({ event_type: "error", error: "stream_unavailable", message })}\n\n`,
+            ),
+          )
+        }
+      } finally {
+        requestSignal.removeEventListener("abort", abortUpstream)
+        try {
+          reader?.releaseLock()
+        } catch {
+          // Reader may already have been cancelled by the client.
+        }
+        controller.close()
+      }
+    },
+    async cancel() {
+      await reader?.cancel().catch(() => undefined)
+    },
+  })
+
+  return new Response(body, { status: 200, headers: SSE_HEADERS })
+}
+
 export async function GET(req: Request): Promise<Response> {
   const session = await getServerSession(authOptions)
   const userId = (session?.user as any)?.id
@@ -120,26 +189,10 @@ export async function GET(req: Request): Promise<Response> {
   // https://sycord.site/api/#stream/ — token_delta / thinking_delta are SSE-only.
   if (live) {
     const config = getSyteConfig()
-    try {
-      const upstream = await openUpstreamStream(config, uuid, sinceId, session_, req.signal)
-      return new Response(upstream.body, {
-        status: 200,
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache, no-transform",
-          Connection: "keep-alive",
-          "X-Accel-Buffering": "no",
-        },
-      })
-    } catch (err: any) {
-      if (err?.name === "AbortError") {
-        return new Response(null, { status: 499 })
-      }
-      return NextResponse.json(
-        { ok: false, error: err?.message || "Failed to connect to upstream Syte stream" },
-        { status: 502 },
-      )
-    }
+    return bridgeUpstreamSse(
+      () => openUpstreamStream(config, uuid, sinceId, session_, req.signal),
+      req.signal,
+    )
   }
 
   // ── Snapshot (polling) ───────────────────────────────────────────────────────

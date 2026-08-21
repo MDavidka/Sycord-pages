@@ -1,6 +1,13 @@
 {
   "headers": [
     {
+      "source": "/api/workspace/sycord/agent-activity",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-transform" },
+        { "key": "X-Accel-Buffering", "value": "no" }
+      ]
+    },
+    {
       "source": "/dashboard/sites/(.*)/syra",
       "headers": [
         { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
