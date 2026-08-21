@@ -1,3 +1,27 @@
+/* beUI-inspired workspace polish */
+.syra-workspace {
+  --syra-panel-shadow: 0 18px 60px rgba(15, 23, 42, 0.08);
+}
+.syra-chat-panel { transition: width 220ms ease; }
+.syra-chat-surface { box-shadow: var(--syra-panel-shadow); }
+.syra-message-scroller { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.syra-message-column { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+.syra-activity { animation: syra-rise 220ms ease-out both; }
+.syra-activity > div { border-color: color-mix(in srgb, var(--an-border-color) 75%, transparent); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04); }
+.syra-composer { box-shadow: 0 10px 34px rgba(15, 23, 42, 0.09); backdrop-filter: blur(18px); }
+@keyframes syra-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 767px) {
+  .syra-workspace { --syra-panel-shadow: none; }
+  .syra-chat-panel { padding: 0; gap: 0; }
+  .syra-chat-surface { border-radius: 0.95rem 0.95rem 0 0; border-bottom: 0; box-shadow: none; }
+  .syra-message-column { padding-top: 1.25rem; padding-left: 1rem; padding-right: 1rem; }
+  .syra-composer { margin-inline: -0.25rem; border-radius: 1.25rem; }
+  .syra-workbench { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .syra-activity, .syra-chat-panel { animation: none; transition: none; }
+}
+
 /* Agent Elements tokens + utilities */
 
 /*

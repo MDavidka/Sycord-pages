@@ -196,7 +196,7 @@ export function Layout() {
 
     return (
         <div className={cn(
-            "h-screen w-screen flex flex-col overflow-hidden",
+            "syra-workspace h-screen w-screen flex flex-col overflow-hidden",
             isDark ? 'bg-background text-[#e5e5e5]' : 'bg-gray-100 text-gray-900'
         )}>
             {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
@@ -206,7 +206,7 @@ export function Layout() {
 
             {/* Chat Panel */}
             <div className={cn(
-                "h-full flex-col pl-2 pt-2 pb-2 gap-1.5 w-full md:w-[30%] md:min-w-[280px] md:max-w-[450px]",
+                "syra-chat-panel h-full flex-col pl-2 pt-2 pb-2 gap-1.5 w-full md:w-[34%] md:min-w-[320px] md:max-w-[520px]",
                 mobileTab === 'chat' ? 'flex' : 'hidden md:flex'
             )}>
                 {/* Top bar with project dropdown */}
@@ -353,7 +353,7 @@ export function Layout() {
 
                 {/* Chat content block */}
                 <div className={cn(
-                    "flex-1 flex flex-col overflow-hidden rounded-xl border",
+                    "syra-chat-surface flex-1 flex flex-col overflow-hidden rounded-2xl border",
                     isDark ? 'bg-background border-border' : 'bg-white border-gray-200'
                 )}>
                     <ErrorBoundary>
@@ -409,7 +409,7 @@ export function Layout() {
 
             {/* Workbench */}
             <div className={cn(
-                "flex-1 min-w-0 h-full",
+                "syra-workbench flex-1 min-w-0 h-full",
                 mobileTab === 'workbench' ? 'block' : 'hidden md:block'
             )}>
                 <ErrorBoundary>

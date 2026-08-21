@@ -338,7 +338,7 @@ const ScreenshotCard = memo(function ScreenshotCard({
     const src = shot?.imageBase64 || shot?.imageUrl;
 
     return (
-        <div className="px-1 py-1.5">
+        <div className="syra-activity px-1 py-1.5">
             <div
                 className={cn(
                     'relative overflow-hidden rounded-an-tool-border-radius border',

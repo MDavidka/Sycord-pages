@@ -2998,10 +2998,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             <div
                 ref={scrollRef}
                 onScroll={onScroll}
-                className="flex-1 overflow-y-auto scrollbar-hide"
+                className="syra-message-scroller flex-1 overflow-y-auto scrollbar-hide"
             >
                 <div
-                    className={`mx-auto w-full max-w-[760px] ${embedded ? 'px-4 sm:px-6 lg:px-8' : 'px-4 sm:px-6 lg:px-8'} py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-7 lg:space-y-8`}
+                    className={`syra-message-column mx-auto w-full max-w-[820px] ${embedded ? 'px-4 sm:px-6 lg:px-8' : 'px-4 sm:px-6 lg:px-8'} py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-7 lg:space-y-8`}
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
                     {groupedMessages.map((group, idx) => (
@@ -3344,7 +3344,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         )}
 
                         {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-2 transition-colors ${
+                        <div className={`syra-composer rounded-[28px] border px-2 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
                         } ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
