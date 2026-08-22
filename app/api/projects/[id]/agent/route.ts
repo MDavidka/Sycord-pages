@@ -125,6 +125,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = bodyResult.body as {
     message?: unknown
     modelProfile?: unknown
+    planMode?: unknown
+    agentMode?: unknown
     afterSession?: unknown
   }
   const message = typeof body?.message === "string" ? body.message.trim() : ""
@@ -133,6 +135,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? requestedProfile
     : "syra-base"
   const afterSession = Math.max(0, Math.floor(Number(body?.afterSession) || 0))
+  const agentMode = body?.agentMode === "plan" ? "plan" : "build"
+  const planMode = body?.planMode === "auto" || body?.planMode === "always" || body?.planMode === "off"
+    ? body.planMode
+    : agentMode === "plan"
+      ? "always"
+      : "off"
 
   if (!projectId || !message) {
     return Response.json({ message: "Project ID and message are required." }, { status: 400 })
@@ -153,7 +161,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // Start the agent immediately — do not block on a sessions list round-trip.
   // Session numbers from the client (`afterSession`) are authoritative enough
   // for UI correlation; Turso poll events overwrite with the durable number.
-  const change = await syteAgentChange(workspace.uuid, message, modelProfile)
+  const change = await syteAgentChange(workspace.uuid, message, modelProfile, {
+    planMode,
+    agentMode,
+  })
   const requestId = change.data?.request_id
   const tursoSessionId = change.data?.turso_session_id
   if (!change.ok || !requestId) {

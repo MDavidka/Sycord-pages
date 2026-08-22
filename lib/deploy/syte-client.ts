@@ -715,6 +715,13 @@ export async function syteSycordDomain(
 // Turns are saved to Turso. Poll GET /api/agent_session/{turso_session_id}
 // — the old activity SSE stream is no longer the source of truth.
 
+export type SyteAgentExecutionOptions = {
+  /** Planning stays opt-in for ordinary Sycord Pages coding turns. */
+  planMode?: "auto" | "always" | "off"
+  /** Explicit plan mode remains available to callers that request it. */
+  agentMode?: "build" | "plan"
+}
+
 export type SyteAgentChangeResponse = {
   ok?: boolean
   request_id?: string
@@ -737,12 +744,17 @@ export async function syteAgentChange(
   uuid: string,
   message: string,
   modelProfile?: string,
+  execution: SyteAgentExecutionOptions = {},
 ): Promise<SyteResult<SyteAgentChangeResponse>> {
+  const agentMode = execution.agentMode === "plan" ? "plan" : "build"
+  const planMode = execution.planMode ?? (agentMode === "plan" ? "always" : "off")
   return syteWorkspaceRequest<SyteAgentChangeResponse>("POST", "agent_change", {
     body: {
       uuid,
       message,
       ...(modelProfile ? { model_profile: modelProfile } : {}),
+      plan_mode: planMode,
+      agent_mode: agentMode,
     },
   })
 }
