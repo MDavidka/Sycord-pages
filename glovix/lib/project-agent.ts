@@ -112,6 +112,9 @@ export type StreamProjectAgentOptions = {
     projectId: string;
     message: Message;
     modelProfile: string;
+    /** Normal coding turns build directly; callers may explicitly request a plan. */
+    planMode?: 'auto' | 'always' | 'off';
+    agentMode?: 'build' | 'plan';
     afterSession: number;
     signal?: AbortSignal;
     onEvent: (event: ProjectAgentEvent) => void;
@@ -1144,6 +1147,8 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
                 body: JSON.stringify({
                     message: text,
                     modelProfile: options.modelProfile,
+                    planMode: options.planMode,
+                    agentMode: options.agentMode,
                     afterSession: options.afterSession,
                 }),
                 signal: options.signal,
