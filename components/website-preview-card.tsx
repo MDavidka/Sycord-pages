@@ -77,13 +77,13 @@ export function WebsitePreviewCard({
   const gitTimeAgo = formatTimeAgo(githubSavedAt || createdAt)
 
   return (
-    <Card className="relative overflow-hidden bg-[#0e0e10] border-[#232328] text-white rounded-2xl transition-all duration-200 hover:border-zinc-700/80 hover:shadow-lg shadow-md">
-      <CardContent className="p-4 sm:p-5 flex flex-col gap-3.5">
+    <Card className="relative overflow-hidden bg-[#0e0e10] border-[#232328] text-white rounded-[16px] transition-all duration-200 hover:border-zinc-700/50 hover:bg-[#121214] shadow-sm">
+      <CardContent className="p-4 sm:p-5 flex flex-col gap-4">
         {/* Top Header Row */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {/* Project Avatar / Icon */}
-            <div className="h-10 w-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-zinc-200 font-semibold text-base shadow-inner">
+            <div className="h-10 w-10 rounded-[12px] bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-zinc-200 font-semibold text-sm shadow-sm">
               {profileImage ? (
                 <img src={profileImage} alt={businessName} className="h-full w-full object-cover" />
               ) : (
@@ -93,7 +93,7 @@ export function WebsitePreviewCard({
 
             <div className="flex flex-col min-w-0">
               <Link href={`/dashboard/sites/${projectId}`} className="group/title flex items-center gap-1.5">
-                <h3 className="text-base font-semibold text-zinc-100 truncate group-hover/title:text-primary transition-colors leading-tight">
+                <h3 className="text-[15px] font-semibold text-zinc-100 truncate group-hover/title:text-primary transition-colors leading-tight">
                   {businessName}
                 </h3>
               </Link>
@@ -109,17 +109,17 @@ export function WebsitePreviewCard({
           </div>
 
           {/* Top Right Action & Status Indicator */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="relative flex items-center justify-center h-8 w-8 rounded-full bg-zinc-900/80 border border-zinc-800" title={isLive ? "Live" : "Building"}>
-              <span className="relative flex h-2.5 w-2.5">
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center justify-center" title={isLive ? "Live" : "Building"}>
+              <span className="relative flex h-2 w-2">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isLive ? "bg-emerald-400" : "bg-amber-400"} opacity-75`} />
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isLive ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${isLive ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"}`} />
               </span>
             </div>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800/80">
+                <Button variant="ghost" size="icon" className="h-8 w-8 min-h-[32px] min-w-[32px] rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors">
                   <ChevronsUpDown className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -144,60 +144,54 @@ export function WebsitePreviewCard({
           </div>
         </div>
 
-        {/* Middle Row: Branch / Commit / Date */}
-        {isGitConnected ? (
-          <div className="flex items-center gap-2 text-xs font-medium text-zinc-200 pt-0.5">
-            {/* Git Branch / Commit -o- Icon */}
-            <span className="text-zinc-400 shrink-0 flex items-center">
-              <svg className="w-4 h-4 text-zinc-400" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="4" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M6 8H10" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            </span>
-            <span className="truncate text-zinc-200 font-normal">
-              {githubCommitMessage || (githubBranch ? `Branch: ${githubBranch}` : "Latest commit")}
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-xs text-zinc-400 pt-0.5">
-            <span className="text-zinc-400 shrink-0 flex items-center">
-              <svg className="w-4 h-4 text-zinc-500" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="4" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M6 8H10" stroke="currentColor" strokeWidth="1.5" />
-                <circle cx="12" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            </span>
-            <span className="truncate text-zinc-400">Not connected to Git</span>
-          </div>
-        )}
-
-        {/* Bottom Row: GitHub SVGL logo + Real Git name + date */}
-        {isGitConnected ? (
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            {/* Real svgl.app GitHub icon */}
-            <img
-              src="https://svgl.app/library/github_dark.svg"
-              alt="GitHub"
-              className="w-4 h-4 shrink-0 filter invert dark:invert-0"
-            />
-            <span className="font-mono text-zinc-300 truncate">
-              {fullGitName}
-            </span>
-            {gitTimeAgo && (
-              <>
-                <span className="text-zinc-600">·</span>
-                <span className="text-zinc-400 shrink-0">{gitTimeAgo}</span>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-xs text-zinc-400">
-            <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-            <span>Marked date:</span>
-            <span className="text-zinc-300 font-medium">{createdTimeAgo || formattedCreatedDate}</span>
-          </div>
-        )}
+        {/* Bottom Metadata Rows */}
+        <div className="flex flex-col gap-1.5 mt-1 border-t border-zinc-800/50 pt-3">
+          {isGitConnected ? (
+            <>
+              <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                <svg className="w-3.5 h-3.5 shrink-0 text-zinc-500" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="4" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M6 8H10" stroke="currentColor" strokeWidth="1.5" />
+                  <circle cx="12" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+                <span className="truncate text-zinc-300 font-medium max-w-[200px]">
+                  {githubCommitMessage || (githubBranch ? `Branch: ${githubBranch}` : "Latest commit")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                <img
+                  src="https://svgl.app/library/github_dark.svg"
+                  alt="GitHub"
+                  className="w-3.5 h-3.5 shrink-0 filter invert dark:invert-0 opacity-70"
+                />
+                <span className="font-mono text-zinc-400 truncate">
+                  {fullGitName}
+                </span>
+                {gitTimeAgo && (
+                  <>
+                    <span className="text-zinc-600">·</span>
+                    <span className="shrink-0">{gitTimeAgo}</span>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="4" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M6 8H10" stroke="currentColor" strokeWidth="1.5" />
+                  <circle cx="12" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+                <span className="truncate">Not connected to Git</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                <Calendar className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Created {createdTimeAgo || formattedCreatedDate}</span>
+              </div>
+            </>
+          )}
+        </div>
       </CardContent>
     </Card>
   )
