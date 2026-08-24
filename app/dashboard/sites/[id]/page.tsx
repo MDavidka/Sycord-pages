@@ -1687,8 +1687,7 @@ export default function SiteSettingsPage() {
 
   return (
     <div 
-      className="flex h-[100dvh] overflow-hidden relative"
-      style={{ backgroundColor: "#18191B" }}
+      className="flex h-[100dvh] overflow-hidden relative bg-background"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -1747,11 +1746,11 @@ export default function SiteSettingsPage() {
 
       {/* Main Content — slides right on mobile to reveal sidebar */}
       <motion.div
-        className={cn("flex-1 flex flex-col min-w-0 relative z-10 main-content-panel", isSidebarOpen && "sidebar-open")}
+        className={cn("flex-1 flex flex-col min-w-0 relative z-10 main-content-panel bg-background", isSidebarOpen && "sidebar-open")}
         animate={{ x: isSidebarOpen ? "70%" : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.9 }}
         style={{
-          backgroundColor: "#18191B",
+          backgroundColor: "",
           overflow: "hidden",
         }}
       >
@@ -1843,7 +1842,7 @@ export default function SiteSettingsPage() {
                 transition={{ type: "spring", bounce: 0.2, duration: 0.35 }}
                 className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2"
               >
-                <div className="rounded-3xl bg-[#1c1c1e] p-6 shadow-2xl">
+                <div className="rounded-3xl bg-background p-6 shadow-2xl">
                   {/* Header */}
                   <div className="flex items-center gap-2 mb-6">
                     <BookOpen className="h-5 w-5 text-muted-foreground" />
@@ -1867,11 +1866,11 @@ export default function SiteSettingsPage() {
                       {/* Two avatar circles */}
                       <div className="flex items-center justify-center gap-6 mb-6">
                         {/* Current user — filled purple */}
-                        <div className="h-16 w-16 rounded-full bg-purple-500 ring-4 ring-[#3a3a3c] flex items-center justify-center text-xl font-bold text-white shrink-0">
+                        <div className="h-16 w-16 rounded-full bg-purple-500 ring-4 ring-muted flex items-center justify-center text-xl font-bold text-white shrink-0">
                           {userInitials.charAt(0)}
                         </div>
                         {/* Invitee — empty placeholder */}
-                        <div className="h-16 w-16 rounded-full bg-[#3a3a3c] ring-4 ring-[#2a2a2c]" />
+                        <div className="h-16 w-16 rounded-full bg-muted ring-4 ring-background" />
                       </div>
 
                       {/* Email input */}
@@ -1920,7 +1919,7 @@ export default function SiteSettingsPage() {
                             setIsSendingInvite(false)
                           }
                         }}
-                        className="w-full py-3 rounded-full bg-[#3a3a3c] hover:bg-[#4a4a4c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm font-medium text-foreground"
+                        className="w-full py-3 rounded-full bg-muted hover:bg-muted-foreground/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm font-medium text-foreground"
                       >
                         {isSendingInvite ? "Sending..." : "Send invite"}
                       </button>
@@ -2033,8 +2032,8 @@ export default function SiteSettingsPage() {
 
                     {/* Preview box */}
                     <div
-                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px] group/preview"
-                      style={{ background: "#252527", aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
+                      className="lg:col-span-7 relative w-full overflow-hidden rounded-[22px] group/preview bg-background"
+                      style={{ aspectRatio: "16/10", border: "1px solid rgba(255,255,255,0.08)" }}
                     >
                       {previewUrl ? (
                         <iframe
@@ -2052,7 +2051,7 @@ export default function SiteSettingsPage() {
                         />
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "#2e2e30" }}>
+                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-muted">
                             <Globe className="h-6 w-6 text-zinc-500" />
                           </div>
                           <p className="text-sm font-semibold text-zinc-300">No deployment yet</p>
@@ -2126,7 +2125,7 @@ export default function SiteSettingsPage() {
                           {previewUrl && (
                             <span
                               aria-hidden="true"
-                              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#1C1C1E]"
+                              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-background"
                             />
                           )}
                         </div>
@@ -2173,7 +2172,7 @@ export default function SiteSettingsPage() {
                           <DropdownMenuContent
                             align="end"
                             sideOffset={8}
-                            className="bg-[#1c1c1c] border border-white/[0.08] rounded-2xl p-1.5 min-w-[180px] max-h-[260px] overflow-y-auto custom-scrollbar"
+                            className="bg-background border border-white/[0.08] rounded-2xl p-1.5 min-w-[180px] max-h-[260px] overflow-y-auto custom-scrollbar"
                           >
                             {/* live */}
                             <DropdownMenuItem
@@ -2401,7 +2400,7 @@ export default function SiteSettingsPage() {
                           >
                             <Avatar className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 border border-white/[0.08]">
                               {authorImage && <AvatarImage src={authorImage} alt={authorName} />}
-                              <AvatarFallback className="bg-[#2e2e30] text-zinc-300 text-[12px] sm:text-[13px] font-bold">
+                              <AvatarFallback className="bg-muted text-zinc-300 text-[12px] sm:text-[13px] font-bold">
                                 {authorInitial}
                               </AvatarFallback>
                             </Avatar>
@@ -2429,8 +2428,8 @@ export default function SiteSettingsPage() {
                     ) : (
                       <div className="flex items-center gap-3 py-4 px-4 rounded-2xl" style={{ border: "1px dashed rgba(255,255,255,0.1)" }}>
                         <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                          style={{ background: "#2e2e30", border: "1px solid rgba(255,255,255,0.08)" }}
+                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-muted"
+                          style={{ border: "1px solid rgba(255,255,255,0.08)" }}
                         >
                           <History className="h-4 w-4 text-zinc-500" />
                         </div>
@@ -2467,7 +2466,7 @@ export default function SiteSettingsPage() {
                   {/* Included free subdomain */}
                   <div className="space-y-2.5">
                     <p className="text-[11px] font-semibold text-white/40 uppercase tracking-widest px-1">Included with your plan</p>
-                    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]">
+                    <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-background border border-white/[0.06]">
                       <Globe className="h-5 w-5 text-zinc-400 shrink-0" />
                       <span className="flex-1 text-sm font-mono text-white truncate tracking-tight">
                         {displayUrl || `${project?.businessName?.toLowerCase().replace(/[^a-z0-9]/g, "") || "yoursite"}.sycord.com`}
@@ -2499,7 +2498,7 @@ export default function SiteSettingsPage() {
                           if (e.key === "Enter" && slug) checkAllDomains(slug)
                         }}
                         placeholder="Search for a domain name…"
-                        className="w-full h-12 pl-11 pr-28 rounded-2xl bg-[#1F1F23] border border-white/[0.08] text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/40 transition-all font-[Inter,system-ui,sans-serif] tracking-tight"
+                        className="w-full h-12 pl-11 pr-28 rounded-2xl bg-background border border-white/[0.08] text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/40 transition-all font-[Inter,system-ui,sans-serif] tracking-tight"
                       />
                       <button
                         onClick={() => slug && checkAllDomains(slug)}
@@ -2547,12 +2546,12 @@ export default function SiteSettingsPage() {
                             className={cn(
                               "flex items-center gap-2.5 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 rounded-2xl border transition-all",
                               isUnavailable
-                                ? "bg-[#1C1C1E] border-red-500/20 opacity-60"
+                                ? "bg-background border-red-500/20 opacity-60"
                                 : isBestMatch
-                                  ? "bg-[#1C1C1E] border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
+                                  ? "bg-background border-emerald-500/40 hover:border-emerald-500/60 cursor-pointer shadow-[0_0_0_3px_rgba(16,185,129,0.06)]"
                                   : isAvailable
-                                    ? "bg-[#1C1C1E] border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
-                                    : "bg-[#1C1C1E] border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
+                                    ? "bg-background border-emerald-500/20 hover:border-emerald-500/40 cursor-pointer"
+                                    : "bg-background border-white/[0.06] hover:border-white/[0.14] cursor-pointer"
                             )}
                             onClick={() => {
                               if (!isUnavailable) {
@@ -2584,7 +2583,7 @@ export default function SiteSettingsPage() {
                     })() : effectiveTldOptions.map(({ tld }) => (
                       <div
                         key={tld}
-                        className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[#1C1C1E] border border-white/[0.06]"
+                        className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-background border border-white/[0.06]"
                       >
                         <div className="h-6 w-6 rounded-md bg-white/[0.06] shrink-0 animate-pulse" />
                         <div className="flex-1 h-3.5 rounded-full bg-white/[0.06] animate-pulse" />
@@ -2749,7 +2748,7 @@ export default function SiteSettingsPage() {
                     <iframe
                       key={id}
                       src={`/dashboard/sites/${id}/syra`}
-                      className="absolute inset-0 h-full w-full border-0 bg-[#18191B]"
+                      className="absolute inset-0 h-full w-full border-0 bg-background"
                       title="Syra AI Builder"
                       allow="cross-origin-isolated; clipboard-read; clipboard-write"
                     />
@@ -2941,7 +2940,7 @@ export default function SiteSettingsPage() {
                     {filtered.map((integration) => (
                       <div
                         key={integration.id}
-                        className="rounded-2xl bg-[#1C1C1E] border border-white/[0.06] p-4 flex flex-col hover:border-white/[0.14] transition-colors"
+                        className="rounded-2xl bg-background border border-white/[0.06] p-4 flex flex-col hover:border-white/[0.14] transition-colors"
                       >
                         {/* Icon */}
                         <div

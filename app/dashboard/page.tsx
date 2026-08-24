@@ -30,7 +30,7 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: "#1c1c1e" }}>
+    <div className="rounded-2xl overflow-hidden bg-background">
       <Skeleton className="w-full" style={{ aspectRatio: "16/10" }} />
       <div className="flex items-center gap-3 px-4 py-3" style={{ borderTop: "1px solid #2e2e30" }}>
         <Skeleton className="h-8 w-8 rounded-xl shrink-0" />

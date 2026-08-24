@@ -28,7 +28,7 @@ export default function SyraEmbedPage() {
   }, [id, router])
 
   return (
-    <div className="h-[100dvh] w-full overflow-hidden bg-[#18191B]">
+    <div className="h-[100dvh] w-full overflow-hidden bg-background">
       <GlovixBuilder projectId={id} onBack={onBack} />
     </div>
   )

@@ -579,7 +579,7 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-[#18191B] overflow-hidden">
+    <div className="fixed inset-0 bg-background overflow-hidden">
       {/* Minimalist gradient - subtle blue glow at bottom, matching mockup */}
       <div className="absolute bottom-0 left-0 right-0 h-[250px] bg-gradient-to-t from-[#0a1628]/40 via-[#0a1225]/15 to-transparent pointer-events-none" />
       <div className="absolute bottom-0 right-1/3 w-[500px] h-[150px] bg-blue-600/[0.03] rounded-full blur-[120px] pointer-events-none" />

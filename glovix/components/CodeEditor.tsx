@@ -65,14 +65,14 @@ export const CodeEditor = memo(function CodeEditor() {
 
     if (!selectedFile) {
         return (
-            <div className={`h-full flex items-center justify-center ${isDark ? 'bg-[#18191B] text-[#525252]' : 'bg-white text-gray-400'}`}>
+            <div className={`h-full flex items-center justify-center ${isDark ? 'bg-background text-[#525252]' : 'bg-white text-gray-400'}`}>
                 <p>Select a file to edit</p>
             </div>
         );
     }
 
     return (
-        <div className={`h-full w-full relative ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+        <div className={`h-full w-full relative ${isDark ? 'bg-background' : 'bg-white'}`}>
             <Editor
                 height="100%"
                 language={getLanguage(selectedFile)}

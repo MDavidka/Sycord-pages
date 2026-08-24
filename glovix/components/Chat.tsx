@@ -2883,7 +2883,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-background' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary

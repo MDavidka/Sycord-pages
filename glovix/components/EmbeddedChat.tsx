@@ -480,7 +480,7 @@ export function EmbeddedChat() {
 
             if (!embedInline) {
                 return (
-                    <div className={`flex h-full flex-col items-center justify-center gap-4 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
+                    <div className={`flex h-full flex-col items-center justify-center gap-4 px-6 text-center ${isDark ? 'bg-background text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
                         <ExternalLink className="h-8 w-8 text-blue-500" />
                         <p className="text-sm font-medium">Open your site in the browser</p>
                         <p className="text-xs opacity-80">
@@ -514,14 +514,14 @@ export function EmbeddedChat() {
             return (
                 <>
                     {previewSource === 'deployed' && (
-                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
+                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] ${isDark ? 'border-border bg-background/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
                             {pendingDeploy
                                 ? 'New deployment available — deploy to update the live site.'
                                 : 'Showing deployed site — deploy after changes to update.'}
                         </div>
                     )}
                     {previewSource === 'syte' && (
-                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex items-center justify-center gap-1.5 ${isDark ? 'border-[#2a2b2e] bg-[#18191B]/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
+                        <div className={`absolute left-0 right-0 top-0 z-10 border-b px-3 py-1.5 text-center text-[11px] flex items-center justify-center gap-1.5 ${isDark ? 'border-border bg-background/90 text-[#9a9b9e]' : 'border-gray-200 bg-gray-50/95 text-gray-500'}`}>
                             <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
                             Live preview — updates on every file save
                         </div>
@@ -540,7 +540,7 @@ export function EmbeddedChat() {
 
         if (previewStatus === 'starting') {
             return (
-                <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
+                <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-background text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
                     <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
                     <p className="text-sm font-medium">Starting preview…</p>
                     <p className="text-xs opacity-70">Syncing files and booting the dev server.</p>
@@ -550,7 +550,7 @@ export function EmbeddedChat() {
 
         if (previewStatus === 'blocked' || previewStatus === 'error') {
             return (
-                <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
+                <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-background text-[#9a9b9e]' : 'bg-gray-50 text-gray-500'}`}>
                     <AlertTriangle className="h-7 w-7 text-amber-500" />
                     <p className="text-sm font-medium">{previewStatus === 'blocked' ? 'Preview unavailable' : 'Preview failed'}</p>
                     <p className="text-xs opacity-80 max-w-xs">{previewError}</p>
@@ -565,7 +565,7 @@ export function EmbeddedChat() {
         }
 
         return (
-            <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-[#18191B] text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
+            <div className={`flex h-full flex-col items-center justify-center gap-3 px-6 text-center ${isDark ? 'bg-background text-[#9a9b9e]' : 'bg-gray-50 text-gray-400'}`}>
                 <Eye className="h-7 w-7 opacity-40" />
                 <p className="text-sm font-medium">No preview yet</p>
                 <p className="text-xs opacity-70 max-w-xs">
@@ -587,7 +587,7 @@ export function EmbeddedChat() {
 
     // Preview pane header
     const renderPreviewHeader = () => (
-        <div className={`flex h-11 flex-shrink-0 items-center gap-1.5 border-b px-2 ${isDark ? 'border-[#2a2b2e] bg-[#1a1b1e]' : 'border-gray-200 bg-white'}`}>
+        <div className={`flex h-11 flex-shrink-0 items-center gap-1.5 border-b px-2 ${isDark ? 'border-border bg-background' : 'border-gray-200 bg-white'}`}>
             {/* Back to chat */}
             <button
                 onClick={() => goToPane(0)}
@@ -602,7 +602,7 @@ export function EmbeddedChat() {
                 <button
                     onClick={copyPreviewUrl}
                     title={previewUrl || ''}
-                    className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-colors ${isDark ? 'bg-[#2a2b2e] text-[#c5c6c9] hover:bg-[#333436]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] transition-colors ${isDark ? 'bg-muted text-[#c5c6c9] hover:bg-[#333436]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                 >
                     <Globe className="h-3 w-3 flex-shrink-0 text-green-500" />
                     <span className="truncate font-mono">{previewHost}</span>
@@ -612,7 +612,7 @@ export function EmbeddedChat() {
                     }
                 </button>
             ) : (
-                <div className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${isDark ? 'bg-[#2a2b2e] text-[#666]' : 'bg-gray-100 text-gray-400'}`}>
+                <div className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${isDark ? 'bg-muted text-[#666]' : 'bg-gray-100 text-gray-400'}`}>
                     {workspaceStatus === 'creating' ? (
                         <>
                             <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
@@ -684,7 +684,7 @@ export function EmbeddedChat() {
     );
 
     return (
-        <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-[#18191B] text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
+        <div className={`relative h-full w-full overflow-hidden ${isDark ? 'bg-background text-[#e5e5e5]' : 'bg-white text-gray-900'}`}>
             <div
                 ref={scrollerRef}
                 onScroll={handleScroll}
