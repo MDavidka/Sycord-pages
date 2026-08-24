@@ -30,16 +30,19 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: "#1c1c1e" }}>
-      <Skeleton className="w-full" style={{ aspectRatio: "16/10" }} />
-      <div className="flex items-center gap-3 px-4 py-3" style={{ borderTop: "1px solid #2e2e30" }}>
-        <Skeleton className="h-8 w-8 rounded-xl shrink-0" />
-        <div className="flex-1 space-y-1.5">
-          <Skeleton className="h-3 w-32" />
-          <Skeleton className="h-2.5 w-20" />
+    <div className="rounded-2xl p-4 sm:p-5 flex flex-col gap-3.5 bg-[#0e0e10] border border-[#232328]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-1">
+          <Skeleton className="h-10 w-10 rounded-full shrink-0 bg-zinc-800" />
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <Skeleton className="h-4 w-28 bg-zinc-800" />
+            <Skeleton className="h-3 w-20 bg-zinc-800" />
+          </div>
         </div>
-        <Skeleton className="h-8 w-20 rounded-full shrink-0" />
+        <Skeleton className="h-8 w-8 rounded-full shrink-0 bg-zinc-800" />
       </div>
+      <Skeleton className="h-3.5 w-44 bg-zinc-800" />
+      <Skeleton className="h-3.5 w-36 bg-zinc-800" />
     </div>
   )
 }
@@ -271,36 +274,29 @@ function DashboardContent() {
                 const liveUrl = getValidProjectUrl(project)
                 const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
                 const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
-                const shouldShowPreview = Boolean(liveUrl || fallbackHtml)
+                const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
+                const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
                 return (
-                  <div key={project._id} className="group relative border border-border/50 bg-card/30 backdrop-blur-sm rounded-2xl overflow-hidden flex flex-col hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200">
-                    {shouldShowPreview ? (
-                      <WebsitePreviewCard
-                        domain={liveUrl || project.cloudflareUrl || project.domain || "example.com"}
-                        isLive={Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)}
-                        deploymentId={deploymentKey}
-                        projectId={project._id}
-                        businessName={project.businessName}
-                        createdAt={project.createdAt}
-                        chatSession={project.chatSession}
-                        style={project.style || "default"}
-                        fallbackHtml={fallbackHtml}
-                        onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
-                      />
-                    ) : (
-                      <div className="w-full bg-gradient-to-br from-muted/50 to-muted/10 flex flex-col items-center justify-center p-6 text-center group-hover:bg-muted/30 transition-colors relative" style={{ aspectRatio: "16/10" }}>
-                        <button onClick={e => { e.stopPropagation(); setProjectToDelete({ id: project._id, name: project.businessName }) }} className="absolute top-3 right-3 h-8 w-8 rounded-lg flex items-center justify-center text-zinc-500 hover:text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <div className="h-14 w-14 rounded-full bg-background/50 flex items-center justify-center mb-3 shadow-sm border border-border/50">
-                          <LayoutTemplate className="h-7 w-7 text-muted-foreground/50" />
-                        </div>
-                        <h3 className="text-sm font-medium mb-1">{project.businessName}</h3>
-                        <p className="text-xs text-muted-foreground mb-3">Not published yet</p>
-                        <Button variant="outline" size="sm" className="rounded-xl" onClick={() => router.push(`/dashboard/sites/${project._id}`)}>Edit</Button>
-                      </div>
-                    )}
-                  </div>
+                  <WebsitePreviewCard
+                    key={project._id}
+                    domain={projectDomain}
+                    isLive={isLive}
+                    deploymentId={deploymentKey}
+                    projectId={project._id}
+                    businessName={project.businessName}
+                    createdAt={project.createdAt}
+                    chatSession={project.chatSession}
+                    style={project.style || "default"}
+                    fallbackHtml={fallbackHtml}
+                    githubOwner={project.githubOwner}
+                    githubRepo={project.githubRepo}
+                    githubBranch={project.githubBranch}
+                    githubUrl={project.githubUrl}
+                    githubSavedAt={project.githubSavedAt}
+                    githubCommitMessage={project.githubCommitMessage}
+                    profileImage={project.profileImage}
+                    onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
+                  />
                 )
               })}
             </div>

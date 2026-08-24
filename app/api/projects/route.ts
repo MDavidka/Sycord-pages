@@ -340,6 +340,12 @@ export async function GET(request: Request) {
         previewImage: project.previewImage,
         profileImage: project.profileImage,
         chatSession,
+        githubOwner: project.githubOwner || null,
+        githubRepo: project.githubRepo || null,
+        githubBranch: project.githubBranch || null,
+        githubUrl: project.githubUrl || null,
+        githubSavedAt: project.githubSavedAt || null,
+        githubCommitMessage: project.githubCommitMessage || project.latestCommitMessage || null,
         deploymentRuntime: project.deploymentRuntime
           ? {
               status: project.deploymentRuntime.status,
