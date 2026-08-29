@@ -53,28 +53,28 @@ export function Markdown({ content, className }: MarkdownProps) {
   );
   const components: Components = {
     h1: ({ children, ...props }) => (
-      <h1 className="an-md-h1 text-base font-semibold mt-3 mb-1.5" {...props}>
+      <h1 className="an-md-h1 text-[18px] leading-7 font-semibold mt-4 mb-2" {...props}>
         {children}
       </h1>
     ),
     h2: ({ children, ...props }) => (
-      <h2 className="an-md-h2 text-base font-semibold mt-3 mb-1.5" {...props}>
+      <h2 className="an-md-h2 text-[17px] leading-7 font-semibold mt-4 mb-2" {...props}>
         {children}
       </h2>
     ),
     h3: ({ children, ...props }) => (
-      <h3 className="an-md-h3 text-sm font-semibold mt-2 mb-1" {...props}>
+      <h3 className="an-md-h3 text-[16px] leading-6 font-semibold mt-3 mb-1.5" {...props}>
         {children}
       </h3>
     ),
     h4: ({ children, ...props }) => (
-      <h4 className="an-md-h4 text-sm font-medium mt-2 mb-1" {...props}>
+      <h4 className="an-md-h4 text-[15px] leading-6 font-medium mt-3 mb-1.5" {...props}>
         {children}
       </h4>
     ),
     p: ({ children, ...props }) => (
       <p
-        className="an-md-p text-sm leading-relaxed text-an-foreground/80"
+        className="an-md-p text-[15px] leading-7 text-an-foreground/85 sm:text-[16px]"
         {...props}
       >
         {children}
@@ -82,7 +82,7 @@ export function Markdown({ content, className }: MarkdownProps) {
     ),
     ul: ({ children, ...props }) => (
       <ul
-        className="an-md-ul list-disc list-outside space-y-0.5 text-sm mb-2 pl-4 text-an-foreground/80"
+        className="an-md-ul list-disc list-outside space-y-1 text-[15px] leading-7 mb-3 pl-5 text-an-foreground/85 sm:text-[16px]"
         {...props}
       >
         {children}
@@ -90,14 +90,14 @@ export function Markdown({ content, className }: MarkdownProps) {
     ),
     ol: ({ children, ...props }) => (
       <ol
-        className="an-md-ol list-decimal list-outside space-y-0.5 text-sm mb-2 pl-5 text-an-foreground/80"
+        className="an-md-ol list-decimal list-outside space-y-1 text-[15px] leading-7 mb-3 pl-5 text-an-foreground/85 sm:text-[16px]"
         {...props}
       >
         {children}
       </ol>
     ),
     li: ({ children, ...props }) => (
-      <li className="an-md-li text-sm pl-0.5 text-an-foreground/80" {...props}>
+      <li className="an-md-li pl-0.5 text-an-foreground/85" {...props}>
         {children}
       </li>
     ),
@@ -123,7 +123,7 @@ export function Markdown({ content, className }: MarkdownProps) {
     },
     blockquote: ({ children, ...props }) => (
       <blockquote
-        className="an-md-blockquote pl-3 italic mb-2 text-sm border-l-2 border-an-border-color text-an-foreground/70"
+        className="an-md-blockquote pl-3 italic mb-3 text-[15px] leading-7 border-l-2 border-an-border-color text-an-foreground/75 sm:text-[16px]"
         {...props}
       >
         {children}
@@ -135,7 +135,7 @@ export function Markdown({ content, className }: MarkdownProps) {
     table: ({ children, ...props }) => (
       <div className="overflow-x-auto my-3 border border-an-border-color rounded-an-tool-border-radius">
         <table
-          className="an-md-table w-full text-sm [&>thead]:bg-an-tool-background [&>thead>tr>th]:bg-an-tool-background"
+          className="an-md-table w-full text-[15px] sm:text-[16px] [&>thead]:bg-an-tool-background [&>thead>tr>th]:bg-an-tool-background"
           {...props}
         >
           {children}

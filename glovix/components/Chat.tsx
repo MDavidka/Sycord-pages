@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, FileCode, X, ChevronRight, ChevronDown, MousePointer2, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, fetchAvailableModelChoices, type ModelChoice } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -21,6 +21,9 @@ import { saveChatMessages, saveProject, createChat, getHostProjectId, getEmbedde
 import { generateAndSaveTitle } from '../lib/titleGenerator';
 import { ActionsList, StreamingAction } from './ActionsList';
 import { ModelLearnPanel } from './ModelLearnPanel';
+import { AgentComposer } from './AgentComposer';
+import { AgentActivityElements } from './AgentActivityElements';
+import { AssistantMessageElements } from './AssistantMessageElements';
 import {
     AgentQuestionCard,
     answerProjectAgentQuestion,
@@ -38,13 +41,9 @@ import { MermaidBlock } from './MermaidBlock';
 import { ImageViewer } from './ImageViewer';
 import { DeepMemoryModal } from './DeepMemoryModal';
 import { Marker, MarkerContent } from '@/components/ui/marker';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { InlineCitation, type Source as CitationSource } from '@/components/elements/inline-citation';
+import { MessagePair } from '@/components/elements/message-pair';
+import { ReasoningPanel } from '@/components/elements/reasoning-panel';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Markdown } from '@/components/agent-elements/markdown';
@@ -84,6 +83,7 @@ interface AssistantSegment {
 
 interface MessageGroup {
     role: 'user' | 'assistant';
+    sourceMessageIndex?: number;
     content: ContentType; // For user messages and backward compat
     thinking?: string;
     thinkingDuration?: number;
@@ -125,6 +125,32 @@ const shortFilePath = (path: string): string => {
         return `${parts[parts.length - 2]}/${base}`;
     }
     return base;
+};
+
+const contentToText = (content: ContentType): string => {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) return content.filter((part): part is { type: 'text'; text: string } => part.type === 'text').map((part) => part.text).join('\n');
+    return '';
+};
+
+const citationSourcesFromText = (content: ContentType): CitationSource[] => {
+    const text = contentToText(content);
+    const urls = Array.from(text.matchAll(/https?:\/\/[^\s)\]]+/g)).map((match) => match[0]);
+    const seen = new Set<string>();
+    return urls.flatMap((url) => {
+        try {
+            const parsed = new URL(url);
+            if (seen.has(parsed.href)) return [];
+            seen.add(parsed.href);
+            return [{
+                domain: parsed.hostname.replace(/^www\./, ''),
+                title: parsed.hostname.replace(/^www\./, ''),
+                snippet: url,
+            }];
+        } catch {
+            return [];
+        }
+    }).slice(0, 2);
 };
 
 const getActionDisplayName = (toolName: string, args: string): string => {
@@ -234,122 +260,6 @@ function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (p
     if (next) setGenerationPlan(next);
 }
 
-function ModelSelector({ selectedModel, choices, loading, error, onSelect, showMenu, onToggleMenu, onCloseMenu, onRetry, isDark }: {
-    selectedModel: ModelType
-    choices: ModelChoice[]
-    loading: boolean
-    error: string | null
-    onSelect: (choice: ModelChoice) => void
-    showMenu: boolean
-    onToggleMenu: () => void
-    onCloseMenu: () => void
-    onRetry: () => void
-    isDark: boolean
-}) {
-    const current = choices.find(choice => choice.modelType === selectedModel) || choices[0]
-    const displayModel = loading ? 'Loading models…' : error ? 'Models unavailable' : current?.apiModel || 'No models available'
-    const displayIcon = current && (getProviderIconUrl(current.apiModel, isDark) || current.icon)
-    const shortModel = displayModel.split('-').slice(0, 2).join('-')
-    const canOpen = !loading && (choices.length > 0 || Boolean(error))
-
-    return (
-        <div className="relative">
-            <button
-                type="button"
-                onClick={error ? onRetry : onToggleMenu}
-                disabled={!canOpen}
-                aria-label={loading ? 'Loading models' : error ? 'Retry loading models' : `Select model (${displayModel})`}
-                title={error || displayModel}
-                className={`flex h-9 sm:h-8 items-center gap-1.5 rounded-xl px-2 sm:px-2.5 transition-colors active:scale-95 disabled:cursor-wait disabled:opacity-60 ${isDark ? 'hover:bg-white/[0.06] border border-white/[0.06]' : 'hover:bg-gray-50 border border-gray-200/50'}`}
-            >
-                {loading ? (
-                    <Loader2 className={`h-4 w-4 animate-spin ${isDark ? 'text-white/50' : 'text-gray-400'}`} />
-                ) : displayIcon ? (
-                    <img
-                        src={displayIcon}
-                        alt={displayModel}
-                        className={`h-5 w-5 sm:h-4.5 sm:w-4.5 object-contain shrink-0 ${isDark ? 'brightness-150' : ''}`}
-                        draggable={false}
-                    />
-                ) : (
-                    <span className={`text-[12px] font-semibold ${isDark ? 'text-[#9a9b9e]' : 'text-gray-500'}`}>
-                        {displayModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
-                    </span>
-                )}
-                <span className={`text-[12px] sm:text-[13px] font-medium hidden sm:inline max-w-[120px] truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
-                    {displayModel}
-                </span>
-                <span className={`text-[12px] font-medium sm:hidden ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
-                    {shortModel}
-                </span>
-                {!loading && !error && <ChevronDown className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-white/30' : 'text-gray-400'}`} />}
-            </button>
-
-            {showMenu && (
-                <>
-                    <div className="fixed inset-0 z-10" onClick={onCloseMenu} />
-                    <div className={`absolute bottom-full left-0 mb-2 rounded-2xl overflow-hidden z-20 w-[250px] ${isDark ? 'bg-[#1a1a1b] border border-white/[0.08] shadow-2xl shadow-black/40' : 'bg-white border border-gray-200 shadow-xl shadow-black/5'}`}>
-                        <div className="px-2 pt-1.5 pb-0.5">
-                            <p className={`text-[10px] font-medium uppercase tracking-wider px-2 py-1 ${isDark ? 'text-white/20' : 'text-gray-400'}`}>Available models</p>
-                        </div>
-                        {choices.length > 0 ? (
-                            <div className="p-1.5 space-y-0.5">
-                                {choices.map((choice) => {
-                                    const isActive = choice.modelType === selectedModel
-                                    const choiceIcon = getProviderIconUrl(choice.apiModel, isDark) || choice.icon
-                                    return (
-                                        <button
-                                            key={choice.id}
-                                            type="button"
-                                            onClick={() => onSelect(choice)}
-                                            title={choice.apiModel}
-                                            aria-label={choice.apiModel}
-                                            className={`w-full text-left px-2.5 py-2.5 sm:py-2 rounded-xl flex items-center gap-3 transition-colors active:scale-[0.98] ${
-                                                isActive
-                                                    ? isDark ? 'bg-white/[0.08]' : 'bg-gray-100'
-                                                    : isDark ? 'hover:bg-white/[0.04]' : 'hover:bg-gray-50'
-                                            }`}
-                                        >
-                                            {choiceIcon ? (
-                                                <img
-                                                    src={choiceIcon}
-                                                    alt={choice.apiModel}
-                                                    className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 object-contain rounded-lg transition-all ${isDark ? 'brightness-150' : ''} ${showMenu && isActive ? 'opacity-70 grayscale' : ''}`}
-                                                    draggable={false}
-                                                />
-                                            ) : (
-                                                <span className={`h-8 w-8 sm:h-7 sm:w-7 shrink-0 flex items-center justify-center rounded-lg text-[11px] font-bold transition-all ${isDark ? 'bg-white/[0.06] text-white/40' : 'bg-gray-100 text-gray-400'} ${showMenu && isActive ? 'opacity-70 grayscale' : ''}`}>
-                                                    {choice.apiModel.split('-')[0]?.toUpperCase().slice(0, 2) || 'AI'}
-                                                </span>
-                                            )}
-                                            <div className="flex-1 min-w-0">
-                                                <div className={`text-[13px] sm:text-[13px] font-medium truncate ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{choice.apiModel}</div>
-                                                <div className={`text-[11px] truncate ${isDark ? 'text-white/30' : 'text-gray-400'}`}>{choice.subtitle}</div>
-                                            </div>
-                                            {isActive && (
-                                                <Check className={`h-4 w-4 shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                                            )}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        ) : (
-                            <div className={`px-3 pb-3 text-xs ${isDark ? 'text-white/45' : 'text-gray-500'}`}>
-                                {error || 'No models are currently available.'}
-                                {error && (
-                                    <button type="button" onClick={onRetry} className="mt-2 block font-medium text-blue-500 hover:underline">
-                                        Retry
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </>
-            )}
-        </div>
-    )
-}
-
 export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = false, onAiComplete }: ChatProps) {
     const navigate = useNavigate();
     const messages = useStore(s => s.messages);
@@ -366,8 +276,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const theme = useStore(s => s.theme);
     const setSelectedFile = useStore(s => s.setSelectedFile);
     const setTokenCount = useStore(s => s.setTokenCount);
-    const tokenCount = useStore(s => s.tokenCount);
-    const modelContextLimit = useStore(s => s.modelContextLimit);
     const setSystemPrompt = useStore(s => s.setSystemPrompt);
     const selectedElement = useStore(s => s.selectedElement);
     const setSelectedElement = useStore(s => s.setSelectedElement);
@@ -494,6 +402,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [pendingQuestion, setPendingQuestion] = useState<AgentQuestion | null>(null);
     const [questionSubmitting, setQuestionSubmitting] = useState(false);
     const [questionError, setQuestionError] = useState<string | null>(null);
+    const [stoppedRunReason, setStoppedRunReason] = useState<string | null>(null);
+    const [citationOpenIndex, setCitationOpenIndex] = useState<number | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
     const [isListening, setIsListening] = useState(false);
@@ -501,6 +411,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const beginRun = (controller: AbortController) => {
         abortControllerRef.current = controller;
+        setStoppedRunReason(null);
         setIsRunning(true);
         setAbortCurrentRun(() => {
             controller.abort();
@@ -725,14 +636,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         const groups: MessageGroup[] = [];
         let currentGroup: MessageGroup | null = null;
 
-        for (const msg of messages) {
+        for (const [sourceMessageIndex, msg] of messages.entries()) {
             if (msg.role === 'user') {
                 if (currentGroup) groups.push(currentGroup);
                 currentGroup = {
                     role: 'user',
                     content: msg.content,
                     attachments: (msg as any).attachments,
-                    pickedElement: (msg as any).pickedElement
+                    pickedElement: (msg as any).pickedElement,
+                    sourceMessageIndex
                 } as any;
             } else if (msg.role === 'assistant') {
                 if (currentGroup && currentGroup.role === 'assistant') {
@@ -795,7 +707,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         agentActions: Array.isArray((msg as any).agentActions) ? (msg as any).agentActions : undefined,
                         createdAt: (msg as any).createdAt,
                         toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
-                        segments
+                        segments,
+                        sourceMessageIndex
                     };
                 }
             } else if (msg.role === 'tool') {
@@ -855,6 +768,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             ? () => abortControllerRef.current?.abort()
             : null);
         if (abort) {
+            setStoppedRunReason('Stopped by you');
             abort();
             setCurrentThinking('');
             setThinkingStartTime(null);
@@ -1082,16 +996,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     interim += transcript;
                 }
             }
-            // Show interim results live while listening
-            if (interim) {
-                const el = textareaRef.current;
-                if (el) {
-                    el.value = interim;
-                    const rect = el.getBoundingClientRect();
-                    const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
-                    el.style.height = `${Math.min(el.scrollHeight, maxH)}px`;
-                }
-            }
         };
 
         recognition.onend = () => {
@@ -1108,7 +1012,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         recognition.start();
     };
 
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // When returning to a host project chat, resume any open Turso agent turn
     // so previous activity is reloaded from the durable database.
@@ -1420,6 +1323,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 markAgentTimelineLoaded();
                                 break;
                             case 'stopped':
+                                setStoppedRunReason(event.text || 'The agent stopped before finishing the response.');
                                 if (!replayHistoryOnly && !assistantContent) {
                                     updateLastMessage(event.text || 'Stopped.');
                                 }
@@ -1763,6 +1667,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     markAgentTimelineLoaded();
                     break;
                 case 'stopped':
+                    setStoppedRunReason(event.text || 'The agent stopped before finishing the response.');
                     if (!assistantContent) updateLastMessage(event.text || 'Stopped.');
                     completed = true;
                     clearPendingQuestion();
@@ -2648,8 +2553,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     // Form submit handler
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleEditSentMessage = async (sourceMessageIndex: number, value: string) => {
+        if (isRunning) return;
+        const currentMessages = useStore.getState().messages;
+        const original = currentMessages[sourceMessageIndex];
+        if (!original || original.role !== 'user') return;
+
+        const editedMessage: Message = { ...original, content: value };
+        const nextMessages = [...currentMessages.slice(0, sourceMessageIndex), editedMessage];
+        setMessages(nextMessages);
+        await triggerAIResponse(editedMessage, currentChatId || undefined);
+    };
+
+    const handleRegenerateAssistantMessage = async (assistantSourceIndex: number) => {
+        if (isRunning) return;
+        const currentMessages = useStore.getState().messages;
+        const precedingMessages = currentMessages.slice(0, assistantSourceIndex);
+        const userMessage = [...precedingMessages].reverse().find((message) => message.role === 'user');
+        if (!userMessage) return;
+        setMessages(precedingMessages);
+        await triggerAIResponse(userMessage, currentChatId || undefined);
+    };
+
+    const handleSubmit = async (e?: React.FormEvent) => {
+        e?.preventDefault();
         if ((!input.trim() && selectedImages.length === 0 && selectedDocuments.length === 0) || isRunning) return;
 
         // Handle /debug command - fetch VM connection debug info
@@ -2669,10 +2596,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             return;
         }
 
-        // Slash commands — attach / libraries / help (do not send as chat)
+        // Slash commands remain available through the Assistant UI Composer command menu.
         const slashCmd = input.trim().toLowerCase();
         if (slashCmd === '/' || slashCmd === '/skills' || slashCmd === '/mcp' || slashCmd === '/integrations' || slashCmd === '/help' || slashCmd === '/credit' || slashCmd === '/credits') {
-            setShowSlashMenu(true);
             if (slashCmd === '/skills') setLibraryView('skills');
             else if (slashCmd === '/mcp' || slashCmd === '/integrations') setLibraryView('mcp');
             else if (slashCmd === '/help') setLibraryView('help');
@@ -2682,13 +2608,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         }
         if (slashCmd === '/image') {
             setInput('');
-            setShowSlashMenu(false);
             fileInputRef.current?.click();
             return;
         }
         if (slashCmd === '/document' || slashCmd === '/doc' || slashCmd === '/file') {
             setInput('');
-            setShowSlashMenu(false);
             documentInputRef.current?.click();
             return;
         }
@@ -2790,17 +2714,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setInput('');
         setSelectedImages([]);
         setSelectedDocuments([]);
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-        }
 
         // Send AI message (with full file contents) to AI
         await triggerAIResponse(aiMessage, chatId || undefined);
     };
 
-    const [showModelMenu, setShowModelMenu] = useState(false);
     const [showDeepMemory, setShowDeepMemory] = useState(false);
-    const [showSlashMenu, setShowSlashMenu] = useState(false);
     const [libraryView, setLibraryView] = useState<'skills' | 'mcp' | 'help' | 'credits' | null>(null);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
@@ -3040,10 +2959,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (seg.type === 'text' && seg.content) {
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
+                                            const citations = citationSourcesFromText(textContent);
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                                    <div className={`text-[15px] leading-7 sm:text-[16px] w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/88' : 'text-gray-800'}`}>
                                                         {renderAssistantMarkdown(textContent)}
+                                                        {citations.length > 0 && (
+                                                            <InlineCitation
+                                                                sources={citations}
+                                                                openIndex={citationOpenIndex}
+                                                                onOpenIndexChange={setCitationOpenIndex}
+                                                                className="mt-3 max-w-none text-xs"
+                                                            >
+                                                                Sources referenced in this response
+                                                            </InlineCitation>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -3089,39 +3019,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         isDark={isDark}
                                         hide={idx === groupedMessages.length - 1 && isRunning}
                                     />
+                                    <AssistantMessageElements
+                                        role="assistant"
+                                        text={contentToText(group.content)}
+                                        onRegenerate={() => void handleRegenerateAssistantMessage(group.sourceMessageIndex ?? messages.length)}
+                                    />
                                 </>
                             ) : (
                                 <>
                                     {/* Fallback: user messages or assistant without segments */}
-                                    <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    {group.role === 'user' ? (
+                                        <AssistantMessageElements
+                                            role="user"
+                                            text={contentToText(group.content)}
+                                            discardedReplies={Math.max(0, messages.length - (group.sourceMessageIndex ?? messages.length - 1) - 1)}
+                                            onEdit={(value) => void handleEditSentMessage(group.sourceMessageIndex ?? 0, value)}
+                                        />
+                                    ) : (
+                                    <div className={`flex justify-start`}>
                                         <div
-                                            className={`text-[14px] leading-relaxed ${
-                                                group.role === 'user'
-                                                    ? isDark
-                                                        ? 'bg-gradient-to-br from-white/[0.14] to-white/[0.05] text-white/95 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.08] shadow-lg shadow-black/10'
-                                                        : 'bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-md shadow-black/10'
-                                                    : isDark
-                                                        ? 'text-white/85 max-w-full'
-                                                        : 'text-gray-800 max-w-full'
-                                            }`}
+                                            className={`text-[15px] leading-7 sm:text-[16px] max-w-full ${isDark ? 'text-white/88' : 'text-gray-800'}`}
                                         >
-
-                                            {/* Picked element indicator */}
-                                            {group.role === 'user' && (group as any).pickedElement && (
-                                                <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                    <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="font-medium">
-                                                        {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                    </span>
-                                                    {(group as any).pickedElement.text && (
-                                                        <span className="truncate opacity-70">
-                                                            {(group as any).pickedElement.text.length > 30
-                                                                ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                : (group as any).pickedElement.text}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
                                             {group.content && (
                                                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>                                                    {Array.isArray(group.content) ? (
                                                         <div className="space-y-2">
@@ -3139,17 +3057,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             )}
                                         </div>
                                     </div>
+                                    )}
                                     {/* Live actions for assistant without segments */}
                                     {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                     {group.role === 'assistant' && (
-                                        <MessageMetaFooter
-                                            content={group.content}
-                                            createdAt={group.createdAt}
-                                            isDark={isDark}
-                                            hide={idx === groupedMessages.length - 1 && isRunning}
-                                        />
+                                        <>
+                                            <MessageMetaFooter
+                                                content={group.content}
+                                                createdAt={group.createdAt}
+                                                isDark={isDark}
+                                                hide={idx === groupedMessages.length - 1 && isRunning}
+                                            />
+                                            <AssistantMessageElements
+                                                role="assistant"
+                                                text={contentToText(group.content)}
+                                                onRegenerate={() => void handleRegenerateAssistantMessage(group.sourceMessageIndex ?? messages.length)}
+                                            />
+                                        </>
                                     )}
                                 </>
                             )}
@@ -3164,6 +3090,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     {/* Live Actions - only show here if there's no assistant message group yet */}
                     {isRunning && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                    )}
+
+                    {stoppedRunReason && (
+                        <AgentActivityElements
+                            actions={[]}
+                            isLive={false}
+                            stoppedReason={stoppedRunReason}
+                            partialResponse={contentToText(groupedMessages[groupedMessages.length - 1]?.content || null)}
+                            onContinue={() => {
+                                const lastAssistantIndex = [...messages].map((message, index) => ({ message, index })).reverse().find((entry) => entry.message.role === 'assistant')?.index;
+                                if (lastAssistantIndex !== undefined) void handleRegenerateAssistantMessage(lastAssistantIndex);
+                            }}
+                            onDiscard={() => setStoppedRunReason(null)}
+                        />
                     )}
 
                     {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
@@ -3228,13 +3168,29 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 <div className="max-w-[720px] mx-auto">
                     {pendingQuestion && (
                         <div className="mb-2.5">
-                            <AgentQuestionCard
-                                question={pendingQuestion}
-                                isDark={isDark}
-                                submitting={questionSubmitting}
-                                error={questionError}
-                                onSubmit={handleAgentQuestionSubmit}
-                            />
+                            {/permission|allow|access|grant|authori[sz]e/i.test(pendingQuestion.prompt) ? (
+                                <AgentActivityElements
+                                    actions={[]}
+                                    isLive={false}
+                                    permissionRequest={{
+                                        capability: pendingQuestion.prompt,
+                                        requester: 'Syra agent',
+                                        reach: pendingQuestion.options?.map((option) => option.label) || ['Grant the requested capability for this agent turn.'],
+                                        onGrant: (scope) => {
+                                            const matchingOption = pendingQuestion.options?.find((option) => new RegExp(scope, 'i').test(`${option.label} ${option.value}`));
+                                            handleAgentQuestionSubmit(matchingOption?.value || scope);
+                                        },
+                                    }}
+                                />
+                            ) : (
+                                <AgentQuestionCard
+                                    question={pendingQuestion}
+                                    isDark={isDark}
+                                    submitting={questionSubmitting}
+                                    error={questionError}
+                                    onSubmit={handleAgentQuestionSubmit}
+                                />
+                            )}
                         </div>
                     )}
                     <form
@@ -3261,272 +3217,43 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             onChange={handleDocumentSelect}
                         />
 
-                        {(selectedImages.length > 0 || selectedDocuments.length > 0) && (
-                            <div className={`flex gap-2 px-3 py-2 overflow-x-auto rounded-2xl border ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e]' : 'bg-white border-gray-200'}`}>
-                                {selectedImages.map((img, i) => (
-                                    <div key={`img-${i}`} className="relative flex-shrink-0 group">
-                                        <img src={img} alt="" className="h-10 w-10 object-cover rounded-lg" />
-                                        <button type="button" onClick={() => setSelectedImages(prev => prev.filter((_, idx) => idx !== i))}
-                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <X className="w-2.5 h-2.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                                {selectedDocuments.map((doc, i) => (
-                                    <div key={`doc-${i}`} className={`relative flex-shrink-0 group h-10 px-2 rounded-lg flex items-center gap-1.5 ${isDark ? 'bg-[#1f1f1f]' : 'bg-gray-100'}`}>
-                                        <FileCode className="w-3.5 h-3.5 text-[#555]" />
-                                        <span className={`text-[11px] truncate max-w-[60px] ${isDark ? 'text-[#999]' : 'text-gray-600'}`}>{doc.name}</span>
-                                        <button type="button" onClick={() => setSelectedDocuments(prev => prev.filter((_, idx) => idx !== i))}
-                                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <X className="w-2.5 h-2.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Selected element from preview picker */}
-                        {selectedElement && (
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl border ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e]' : 'bg-white border-gray-200'}`}>
-                                <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs max-w-full overflow-hidden ${isDark ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-200'}`}>
-                                    <MousePointer2 className={`w-3 h-3 flex-shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-500'}`} />
-                                    <span className={`font-medium flex-shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                                        {selectedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                    </span>
-                                    {selectedElement.text && (
-                                        <span className={`truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                            {selectedElement.text.length > 40 ? selectedElement.text.slice(0, 40) + '…' : selectedElement.text}
-                                        </span>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedElement(null)}
-                                        className={`ml-auto flex-shrink-0 p-0.5 rounded hover:bg-red-500/20 ${isDark ? 'text-zinc-500 hover:text-red-400' : 'text-gray-400 hover:text-red-500'}`}
-                                    >
-                                        <X className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Connected integrations pill — dashed status chip above composer */}
-                        {connectedMcps.length > 0 && (
-                            <div className="flex justify-start px-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setLibraryView('mcp')}
-                                    className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
-                                        isDark
-                                            ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
-                                            : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
-                                    }`}
-                                    aria-label="Connected integrations"
-                                >
-                                    <span className="flex items-center -space-x-1">
-                                        {connectedMcps.map((addon) => (
-                                            <span
-                                                key={addon.id}
-                                                className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#18191B] bg-[#1c1d1f]' : 'border-white bg-white'
-                                                }`}
-                                            >
-                                                <McpBrandIcon
-                                                    id={addon.id}
-                                                    name={addon.name}
-                                                    className="h-3.5 w-3.5 text-[#e5e5e5]"
-                                                />
-                                            </span>
-                                        ))}
-                                    </span>
-                                    <span className="text-[12px] leading-none tracking-tight">connected</span>
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-2 transition-colors ${
-                            pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1c1d1f] border-[#2a2b2e] focus-within:border-[#3a3b3e]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
-                            {!pendingQuestion && (
-                                <textarea
-                                    ref={textareaRef}
-                                    value={input}
-                                    onChange={(e) => {
-                                        const value = e.target.value;
-                                        setInput(value);
-                                        if (value === '/') {
-                                            setShowSlashMenu(true);
-                                            setShowModelMenu(false);
-                                        }
-                                        const target = e.target as HTMLTextAreaElement;
-                                        target.style.height = 'auto';
-                                        const maxH = typeof window !== 'undefined' && window.innerWidth < 768 ? 120 : 200;
-                                        target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
-                                    }}
-                                    placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
-                                    className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
-                                    style={{ height: 'auto', minHeight: '76px' }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Escape' && showSlashMenu) {
-                                            e.preventDefault();
-                                            setShowSlashMenu(false);
-                                            return;
-                                        }
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            handleSubmit(e);
-                                        }
-                                    }}
-                                />
-                            )}
-
-                            {/* Toolbar */}
-                            <div className={`flex items-center gap-2 ${pendingQuestion ? 'px-0.5' : 'px-1'}`}>
-                                <DropdownMenu open={showSlashMenu} onOpenChange={(open) => {
-                                    setShowSlashMenu(open);
-                                    if (open) {
-                                        setShowModelMenu(false);
-                                        const projectId = getHostProjectId();
-                                        if (projectId) void loadSlashExtras(projectId, true);
-                                    }
-                                }}>
-                                    <DropdownMenuTrigger asChild>
-                                        <button
-                                            type="button"
-                                            aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
-                                        >
-                                            <Slash className="h-3.5 w-3.5" />
-                                        </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        side="top"
-                                        align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#e5e5e5]' : ''}`}
-                                    >
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                fileInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <ImageIcon className="h-4 w-4 opacity-70" />
-                                            Image upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/image</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                documentInputRef.current?.click();
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <FileUp className="h-4 w-4 opacity-70" />
-                                            File upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/file</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('skills');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <Sparkles className="h-4 w-4 opacity-70" />
-                                            Skills
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/skills</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('mcp');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <Puzzle className="h-4 w-4 opacity-70" />
-                                            Integrations
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/integrations</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('help');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <HelpCircle className="h-4 w-4 opacity-70" />
-                                            Help and support
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            className="gap-2.5 text-[13px]"
-                                            onSelect={() => {
-                                                setLibraryView('credits');
-                                                if (input.startsWith('/')) setInput('');
-                                            }}
-                                        >
-                                            <CreditCard className="h-4 w-4 opacity-70" />
-                                            Credit
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-
-                                <ModelSelector
-                                    selectedModel={selectedModel}
-                                    choices={availableModelChoices || []}
-                                    loading={modelsLoading}
-                                    error={modelsError}
-                                    onRetry={() => { void loadAvailableModels(); }}
-                                    onSelect={(choice) => {
-                                        setSelectedModel(choice.modelType)
-                                        setAiModel(choice.apiModel)
-                                        setShowModelMenu(false)
-                                    }}
-                                    showMenu={showModelMenu && !modelsLoading}
-                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
-                                    onCloseMenu={() => setShowModelMenu(false)}
-                                    isDark={isDark}
-                                />
-
-                                <div className="ml-auto flex items-center gap-1">
-                                    <button
-                                        type="button"
-                                        aria-label="Voice input"
-                                        aria-pressed={isListening}
-                                        onClick={handleVoiceInput}
-                                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95 ${isListening ? 'text-red-400 bg-red-500/10' : isDark ? 'text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-                                    >
-                                        <Mic className={`h-5 w-5 ${isListening ? 'text-red-500 animate-pulse' : ''}`} />
-                                    </button>
-
-                                    {isRunning ? (
-                                        <button
-                                            type="button"
-                                            onClick={handleStop}
-                                            aria-label="Stop"
-                                            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white text-black transition-all active:scale-95 hover:bg-gray-200"
-                                        >
-                                            <div className="h-3 w-3 rounded-sm bg-black" />
-                                        </button>
-                                    ) : (
-                                        <button
-                                            type="submit"
-                                            disabled={Boolean(pendingQuestion) || (!input.trim() && selectedImages.length === 0)}
-                                            aria-label="Send"
-                                            className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-all active:scale-95 disabled:cursor-not-allowed ${
-                                                !pendingQuestion && (input.trim() || selectedImages.length > 0)
-                                                    ? 'bg-white text-black hover:bg-gray-200'
-                                                    : isDark ? 'bg-white/15 text-white/40' : 'bg-gray-200 text-gray-400'
-                                            }`}
-                                        >
-                                            <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                        <AgentComposer
+                            value={input}
+                            onValueChange={setInput}
+                            onSend={() => void handleSubmit()}
+                            onStop={handleStop}
+                            isRunning={isRunning}
+                            isListening={isListening}
+                            onToggleVoice={handleVoiceInput}
+                            isDark={isDark}
+                            disabled={Boolean(pendingQuestion)}
+                            selectedImages={selectedImages}
+                            selectedDocuments={selectedDocuments.map((document) => ({ name: document.name, size: document.content.length }))}
+                            onRemoveImage={(index) => setSelectedImages((current) => current.filter((_, currentIndex) => currentIndex !== index))}
+                            onRemoveDocument={(index) => setSelectedDocuments((current) => current.filter((_, currentIndex) => currentIndex !== index))}
+                            onPickImage={() => fileInputRef.current?.click()}
+                            onPickDocument={() => documentInputRef.current?.click()}
+                            selectedContext={selectedElement ? {
+                                label: selectedElement.selector.split('.')[0].split('#')[0].toUpperCase(),
+                                text: selectedElement.text && (selectedElement.text.length > 40 ? `${selectedElement.text.slice(0, 40)}…` : selectedElement.text),
+                            } : null}
+                            onClearSelectedContext={() => setSelectedElement(null)}
+                            models={availableModelChoices || []}
+                            selectedModel={selectedModel}
+                            modelsLoading={modelsLoading}
+                            modelsError={modelsError}
+                            onRetryModels={() => void loadAvailableModels()}
+                            onSelectModel={(choice) => {
+                                setSelectedModel(choice.modelType)
+                                setAiModel(choice.apiModel)
+                            }}
+                            connectedIntegrationCount={connectedMcps.length}
+                            onOpenIntegrations={() => setLibraryView('mcp')}
+                            onOpenSkills={() => setLibraryView('skills')}
+                            onOpenHelp={() => setLibraryView('help')}
+                            onOpenCredits={() => setLibraryView('credits')}
+                            draftKey={currentChatId || 'new-chat'}
+                        />
                     </form>
                 </div>
             </div>
@@ -3597,67 +3324,38 @@ function isSystemProcessingText(text: string): boolean {
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [isExpanded, setIsExpanded] = useState(false);
+function ThinkingBlock({ thinking, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
+    const [open, setOpen] = useState(Boolean(startTime && thinkingTime === undefined));
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
+        if (!startTime || thinkingTime !== undefined) return;
+        const refresh = () => setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
+        refresh();
+        const interval = window.setInterval(refresh, 1000);
+        return () => window.clearInterval(interval);
     }, [startTime, thinkingTime]);
 
     if (!thinking || isSystemProcessingText(thinking)) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
-    const isLive = Boolean(startTime) && thinkingTime === undefined;
-    const thoughtCount = Math.max(1, thinking.split(/\n{2,}/).filter(part => part.trim()).length);
-    const title = isLive
-        ? 'Thinking'
-        : thoughtCount === 1
-            ? 'Thought 1 time'
-            : `Thought ${thoughtCount} times`;
-
-    if (isLive) {
-        return (
-            <Marker role="status" className="mb-3 animate-fade-in px-1">
-                <span className="inline-flex items-center gap-2">
-                    <SpiralLoader size={14} />
-                    <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                </span>
-            </Marker>
-        );
-    }
+    const streaming = Boolean(startTime) && thinkingTime === undefined;
+    const steps = thinking.split(/\n{2,}/).map((body, index, all) => ({
+        title: streaming && index === all.length - 1 ? 'Current reasoning' : `Reasoning step ${index + 1}`,
+        body: body.trim(),
+    })).filter((step) => step.body);
 
     return (
         <div className="mb-3 animate-fade-in px-1">
-            <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                aria-expanded={isExpanded}
-                className={`group flex min-h-11 w-full items-start gap-3 rounded-lg py-2 text-left transition-colors ${isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]'}`}
-            >
-                <span className="flex size-7 shrink-0 items-center justify-center">
-                    <Brain className={`size-4 ${isDark ? 'text-white/65' : 'text-gray-500'}`} strokeWidth={1.8} />
-                </span>
-                <span className="min-w-0 flex-1">
-                    <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
-                        {title}
-                        {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
-                    </span>
-                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                        {thinking}
-                    </span>
-                </span>
-                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
-            </button>
+            <ReasoningPanel
+                steps={steps}
+                visibleSteps={steps.length}
+                streaming={streaming}
+                open={open}
+                onOpenChange={setOpen}
+                restingLabel={thinkingTime ? `Reasoned for ${thinkingTime}s` : `Reasoned through ${steps.length} step${steps.length === 1 ? '' : 's'}`}
+                elapsed={streaming ? `${elapsed}s` : undefined}
+                className="max-w-none"
+            />
         </div>
     );
 }
