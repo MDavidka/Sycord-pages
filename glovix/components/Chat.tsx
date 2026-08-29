@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { Markdown } from '@/components/agent-elements/markdown';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { getSystemPrompt } from '../lib/systemPrompts';
@@ -2859,7 +2860,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (/```mermaid/.test(content)) {
             return (
                 <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert' : ''}`}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]} components={markdownComponents}>
                         {content}
                     </ReactMarkdown>
                 </div>
