@@ -215,6 +215,7 @@ export async function bootstrapContainer(container: ContainerInfo): Promise<{ su
 
     const deployScriptPath = `/srv/sycord/deploy/${container.containerName}/sycord-deploy.sh`
     const deployScript = `#!/bin/bash
+export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo "")/bin
 set -e
 # Sycord Deploy Script for container: ${container.containerName}
 WORKSPACE="${container.workspaceName}"
@@ -489,10 +490,10 @@ async function startPm2Site(
   }
 
   // Stop existing instance if any
-  await ssh.execCommand(`pm2 delete "${pm2Name}" 2>&1 || true`)
+  await ssh.execCommand(`export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo "")/bin && pm2 delete "${pm2Name}" 2>&1 || true`)
 
   // Start with explicit PORT environment — env vars go BEFORE pm2 command
-  const startCmd = `cd ${workspaceName} && PORT=${port} NODE_ENV=production pm2 start npm --name "${pm2Name}" -- run start 2>&1`
+  const startCmd = `cd ${workspaceName} && export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo "")/bin && PORT=${port} NODE_ENV=production pm2 start npm --name "${pm2Name}" -- run start 2>&1`
   const result = await ssh.execCommand(startCmd)
   const output = result.stdout + result.stderr
 
@@ -500,11 +501,11 @@ async function startPm2Site(
   await new Promise((r) => setTimeout(r, 3000))
 
   // Verify process is online by checking pm2 list
-  const status = await ssh.execCommand("pm2 jlist 2>&1")
+  const status = await ssh.execCommand("export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo \"\")/bin && pm2 jlist 2>&1")
   const online = output.includes("online") || status.stdout.includes(`"name":"${pm2Name}"`)
 
   // Save pm2 process list for restart on reboot
-  await ssh.execCommand("pm2 save 2>&1 || true")
+  await ssh.execCommand("export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo \"\")/bin && pm2 save 2>&1 || true")
 
   // Quick health check on local port
   const health = await ssh.execCommand(`curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${port} 2>&1 || echo "000"`)
@@ -514,8 +515,8 @@ async function startPm2Site(
 }
 
 async function ensurePm2Startup(ssh: NodeSSH): Promise<void> {
-  await ssh.execCommand("pm2 startup systemd -u root --hp /root 2>&1 || true")
-  await ssh.execCommand("pm2 save 2>&1 || true")
+  await ssh.execCommand("export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo \"\")/bin && pm2 startup systemd -u root --hp /root 2>&1 || true")
+  await ssh.execCommand("export PATH=$PATH:/usr/local/bin:/usr/bin:/bin:/opt/node/bin:~/.npm-global/bin:\$(find ~/.nvm/versions/node -maxdepth 1 -mindepth 1 2>/dev/null | sort -V | tail -n 1 || echo \"\")/bin && pm2 save 2>&1 || true")
 }
 
 /**
