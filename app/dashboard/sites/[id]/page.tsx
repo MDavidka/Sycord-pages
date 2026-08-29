@@ -67,6 +67,7 @@ import {
   Check,
   Clock,
   TrendingDown,
+  Wrench,
 } from "lucide-react"
 import { currencySymbols } from "@/lib/webshop-types"
 import { Switch } from "@/components/ui/switch"
@@ -102,6 +103,8 @@ import {
 import { getMcpProvider } from "@/lib/mcp-providers"
 import { ProjectSyraSessionCard } from "@/components/project-syra-session-card"
 import type { ProjectChatSessionSummary } from "@/lib/types"
+
+import { INTEGRATION_CATALOG, type IntegrationCategory, type IntegrationDefinition } from "@/lib/integrations"
 
 // ─── Deployment Settings Card ─────────────────────────────────────────────────
 // Shown in the Settings tab. Displays the Syte workspace UUID, domain, live URL,
@@ -2819,29 +2822,20 @@ export default function SiteSettingsPage() {
 
             {/* TAB CONTENT: INTEGRATIONS */}
             {activeTab === "integrations" && (() => {
-              const allIntegrations = [
-                // Database
-                { id: "mongodb", name: "MongoDB", envKey: "MONGODB_URI", placeholder: "mongodb+srv://user:pass@cluster.mongodb.net/db", category: "Database", free: true, description: "With login you receive 500mb of database", iconColor: "#00ED64", iconBg: "#00684A33" },
-                { id: "supabase", name: "Supabase", envKey: "SUPABASE_URL", placeholder: "https://abc.supabase.co", category: "Database", free: true, description: "Free Postgres database with realtime & auth", iconColor: "#3ECF8E", iconBg: "#3ECF8E22" },
-                { id: "firebase", name: "Firebase", envKey: "FIREBASE_API_KEY", placeholder: "AIzaSy...", category: "Database", free: true, description: "Google cloud database with free Spark plan", iconColor: "#FFCA28", iconBg: "#FFCA2822" },
-                { id: "upstash", name: "Upstash Redis", envKey: "UPSTASH_REDIS_REST_URL", placeholder: "https://...-upstash.io", category: "Database", free: true, description: "Serverless Redis with 10K requests/day free", iconColor: "#00E9A3", iconBg: "#00E9A322" },
-                // Auth
-                { id: "nextauth", name: "NextAuth.js", envKey: "NEXTAUTH_SECRET", placeholder: "your-nextauth-secret", category: "Auth", free: true, description: "Complete authentication solution for Next.js", iconColor: "#8B5CF6", iconBg: "#8B5CF622" },
-                { id: "clerk", name: "Clerk", envKey: "CLERK_SECRET_KEY", placeholder: "sk_live_...", category: "Auth", free: true, description: "Drop-in auth with up to 10K monthly users free", iconColor: "#6C47FF", iconBg: "#6C47FF22" },
-                { id: "supabase-auth", name: "Supabase Auth", envKey: "SUPABASE_ANON_KEY", placeholder: "eyJhbGciOi...", category: "Auth", free: true, description: "Secure authentication built on Postgres", iconColor: "#3ECF8E", iconBg: "#3ECF8E22" },
-                // Payments
-                { id: "stripe", name: "Stripe", envKey: "STRIPE_SECRET_KEY", placeholder: "sk_live_...", category: "Payments", free: false, description: "The world's most powerful payments platform", iconColor: "#635BFF", iconBg: "#635BFF22" },
-                { id: "paypal", name: "PayPal", envKey: "PAYPAL_CLIENT_SECRET", placeholder: "your-paypal-client-secret", category: "Payments", free: false, description: "Accept PayPal and major credit cards globally", iconColor: "#009CDE", iconBg: "#00308722" },
-                // Services
-                { id: "openai", name: "OpenAI", envKey: "OPENAI_API_KEY", placeholder: "sk-...", category: "Services", free: false, description: "Access GPT-4, DALL·E and Whisper APIs", iconColor: "#10A37F", iconBg: "#10A37F22" },
-                { id: "resend", name: "Resend", envKey: "RESEND_API_KEY", placeholder: "re_...", category: "Services", free: true, description: "3,000 free emails/month with a modern API", iconColor: "#FFFFFF", iconBg: "#FFFFFF11" },
-                { id: "github", name: "GitHub", envKey: "GITHUB_TOKEN", placeholder: "ghp_...", category: "Services", free: true, description: "Automate workflows and connect repositories", iconColor: "#FFFFFF", iconBg: "#FFFFFF11" },
-              ]
+              const iconByCategory: Record<IntegrationCategory, React.ElementType> = {
+                Database: Database,
+                Auth: Lock,
+                Payments: Wallet,
+                Email: Mail,
+                AI: Sparkles,
+                Storage: Database,
+                Services: Wrench,
+              }
 
-              const filtered = integrationCategory === "All" ? allIntegrations : allIntegrations.filter((i) => i.category === integrationCategory)
+              const filtered = integrationCategory === "All" ? INTEGRATION_CATALOG : INTEGRATION_CATALOG.filter((i) => i.category === integrationCategory)
 
-              const renderIntegrationIcon = (id: string, color: string) => {
-                switch (id) {
+              const renderIntegrationIcon = (integration: IntegrationDefinition, color: string) => {
+                switch (integration.id) {
                   case "mongodb":
                     return (
                       <svg viewBox="0 0 24 24" className="w-5 h-5" fill={color}>
@@ -2887,16 +2881,9 @@ export default function SiteSettingsPage() {
                         <path d="M7.076 21.337H2.47a.641.641 0 01-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 00-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 00-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 00.554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 01.923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z" />
                       </svg>
                     )
-                  case "resend":
-                    return <Mail className="h-5 w-5" style={{ color }} />
-                  case "nextauth":
-                    return <Key className="h-5 w-5" style={{ color }} />
-                  case "clerk":
-                    return <Lock className="h-5 w-5" style={{ color }} />
-                  case "upstash":
-                    return <Database className="h-5 w-5" style={{ color }} />
                   default:
-                    return <Zap className="h-5 w-5" style={{ color }} />
+                    const IconComponent = iconByCategory[integration.category]
+                    return IconComponent ? <IconComponent className="w-5 h-5" style={{ color }} /> : null
                 }
               }
 
@@ -2948,7 +2935,7 @@ export default function SiteSettingsPage() {
                           className="h-12 w-12 rounded-xl flex items-center justify-center mb-3"
                           style={{ backgroundColor: integration.iconBg }}
                         >
-                          {renderIntegrationIcon(integration.id, integration.iconColor)}
+                          {renderIntegrationIcon(integration, integration.iconColor || "currentColor")}
                         </div>
 
                         {/* Name + badge */}
@@ -2996,7 +2983,7 @@ export default function SiteSettingsPage() {
                           <div className="space-y-2 mt-auto animate-in fade-in duration-150">
                             <div className="relative">
                               <Input
-                                placeholder={integration.placeholder}
+                                placeholder={integration.placeholders?.[integration.envKeys[0]] || "Enter value..."}
                                 type={showIntegrationToken ? "text" : "password"}
                                 value={integrationEnvValue}
                                 onChange={(e) => { setIntegrationEnvValue(e.target.value); setIntegrationSaveError(null) }}
@@ -3026,7 +3013,7 @@ export default function SiteSettingsPage() {
                                       method: "POST",
                                       headers: { "Content-Type": "application/json" },
                                       body: JSON.stringify({
-                                        key: integration.envKey,
+                                        key: integration.envKeys[0],
                                         value: integrationEnvValue.trim(),
                                         integration: integration.id,
                                       }),
