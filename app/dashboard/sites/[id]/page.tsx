@@ -1210,18 +1210,31 @@ export default function SiteSettingsPage() {
     }
   }, [activeTab, id])
 
-  // Fetch already-connected integrations when the integrations tab becomes active
+  // Fetch both legacy env-backed integrations and durable OAuth connections.
+  // OAuth credentials are encrypted in mcp_connections and may not have a
+  // matching remote MCP addon, so the connection store is authoritative here.
   useEffect(() => {
     if (activeTab !== "integrations" || !project?._id) return
-    fetch(`/api/projects/${project._id}/env`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data.envVars)) {
-          const ids = data.envVars
-            .filter((v: any) => v.integration)
-            .map((v: any) => v.integration as string)
-          setConnectedIntegrations(new Set(ids))
+    const projectId = project._id as string
+    Promise.all([
+      fetch(`/api/projects/${projectId}/env`).then((r) => r.json()),
+      fetch(`/api/projects/${projectId}/agent/mcp`).then((r) => r.json()),
+    ])
+      .then(([envData, mcpData]) => {
+        const ids = new Set<string>()
+        if (Array.isArray(envData?.envVars)) {
+          for (const value of envData.envVars) {
+            if (value?.integration) ids.add(String(value.integration))
+          }
         }
+        if (Array.isArray(mcpData?.connections)) {
+          for (const connection of mcpData.connections) {
+            if (connection?.providerId && connection.status === "connected") {
+              ids.add(String(connection.providerId))
+            }
+          }
+        }
+        setConnectedIntegrations(ids)
       })
       .catch((err) => { console.error("[Integrations] Failed to load connected integrations:", err) })
   }, [activeTab, project?._id])
@@ -1240,6 +1253,8 @@ export default function SiteSettingsPage() {
       if (data.addon) {
         setConnectedIntegrations((prev) => new Set([...prev, data.addon as string]))
         setExpandedIntegration(null)
+        // The callback has already persisted encrypted credentials and tools;
+        // mark the provider connected without requiring a remote MCP addon.
       }
     }
 

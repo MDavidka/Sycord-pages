@@ -127,53 +127,78 @@ async function syteRequest<T = unknown>(
   path: string,
   options?: { query?: Record<string, unknown>; body?: unknown; base?: "workspace" | "docs" },
 ): Promise<SyteResult<T>> {
-  const config = getSyteConfig()
-  const base = options?.base === "docs" ? config.docsBase : config.workspaceBase
-  const endpoint = buildUrl(base, path, options?.query)
-
+  let config: SyteConfig
+  let endpoint = ""
   try {
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-    }
-    if (options?.body !== undefined) {
-      headers["Content-Type"] = "application/json"
-    }
-    const normalizedPath = normalizeSytePath(path)
-    const isPublicDocs =
-      options?.base === "docs" &&
-      (normalizedPath === "health" || normalizedPath === "tokens")
-    if (!isPublicDocs) {
-      headers["X-API-Key"] = config.apiKey
-      headers.Authorization = `Bearer ${config.apiKey}`
-    }
-
-    const res = await fetch(endpoint, {
-      method,
-      headers,
-      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
-    })
-
-    const data = (await parseBody(res)) as T | null
-    if (!res.ok) {
-      return {
-        ok: false,
-        status: res.status,
-        data,
-        error: extractError(res.status, data, endpoint),
-        endpoint,
-      }
-    }
-
-    return { ok: true, status: res.status, data, error: null, endpoint }
+    config = getSyteConfig()
+    const base = options?.base === "docs" ? config.docsBase : config.workspaceBase
+    endpoint = buildUrl(base, path, options?.query)
   } catch (err: any) {
     return {
       ok: false,
       status: 0,
       data: null,
-      error: err?.message || "Network error reaching Syte API",
+      error: err?.message || "Syte API is not configured",
       endpoint,
     }
   }
+
+  const headers: Record<string, string> = { Accept: "application/json" }
+  if (options?.body !== undefined) headers["Content-Type"] = "application/json"
+  const normalizedPath = normalizeSytePath(path)
+  const isPublicDocs =
+    options?.base === "docs" &&
+    (normalizedPath === "health" || normalizedPath === "tokens")
+  if (!isPublicDocs) {
+    headers["X-API-Key"] = config.apiKey
+    headers.Authorization = `Bearer ${config.apiKey}`
+  }
+
+  // GET/HEAD requests are safe to retry; POST agent changes are deliberately not,
+  // because retrying them could submit the same user turn twice.
+  const retryable = method === "GET" || method === "HEAD"
+  const attempts = retryable ? 3 : 1
+  let lastError = "Network error reaching Syte API"
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20_000)
+    try {
+      const res = await fetch(endpoint, {
+        method,
+        headers,
+        body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+        cache: "no-store",
+      })
+      const data = (await parseBody(res)) as T | null
+      if (!res.ok) {
+        const retryableStatus = res.status === 408 || res.status === 429 || res.status >= 500
+        if (retryable && retryableStatus && attempt < attempts - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+          continue
+        }
+        return {
+          ok: false,
+          status: res.status,
+          data,
+          error: extractError(res.status, data, endpoint),
+          endpoint,
+        }
+      }
+      return { ok: true, status: res.status, data, error: null, endpoint }
+    } catch (err: any) {
+      lastError = err?.name === "AbortError"
+        ? "Syte API request timed out after 20 seconds"
+        : err?.message || lastError
+      if (!retryable || attempt >= attempts - 1) break
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt))
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  return { ok: false, status: 0, data: null, error: lastError, endpoint }
 }
 
 async function syteWorkspaceRequest<T = unknown>(
@@ -619,8 +644,20 @@ async function syteSycordRequest<T = unknown>(
   path: string,
   options?: { query?: Record<string, unknown>; body?: unknown },
 ): Promise<SyteResult<T>> {
-  const config = getSyteConfig()
-  const endpoint = buildSycordUrl(config.baseUrl, path, options?.query)
+  let config: SyteConfig
+  let endpoint = ""
+  try {
+    config = getSyteConfig()
+    endpoint = buildSycordUrl(config.baseUrl, path, options?.query)
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Sycord API is not configured",
+      endpoint,
+    }
+  }
 
   try {
     const headers: Record<string, string> = {
@@ -632,11 +669,20 @@ async function syteSycordRequest<T = unknown>(
       headers["Content-Type"] = "application/json"
     }
 
-    const res = await fetch(endpoint, {
-      method,
-      headers,
-      body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 20_000)
+    let res: Response
+    try {
+      res = await fetch(endpoint, {
+        method,
+        headers,
+        body: options?.body !== undefined ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+        cache: "no-store",
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
 
     const data = (await parseBody(res)) as T | null
     if (!res.ok) {

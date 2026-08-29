@@ -47,6 +47,8 @@ export type McpConnection = {
   scope?: string
   expiresAt?: number
   hasCredentials: boolean
+  /** Callable functions discovered from the remote integration, kept metadata-only. */
+  tools?: unknown[]
   lastError?: string
   createdAt: string
   updatedAt: string
@@ -340,7 +342,9 @@ async function syncRemoteConnection(
   projectId: string,
   providerId: string,
   credentials: McpCredentialSet,
+  options?: { connectRemote?: boolean; syncRemote?: boolean },
 ): Promise<{ ok: boolean; error?: string }> {
+  if (options?.syncRemote === false) return { ok: true }
   if (!useSyteWorkspace()) return { ok: false, error: "Syte workspace is not configured" }
   const workspace = await requireSyteWorkspaceUuid(project, projectId)
   if ("error" in workspace) return { ok: false, error: workspace.error }
@@ -350,6 +354,7 @@ async function syncRemoteConnection(
     const synced = await syteSetEnv(workspace.uuid, env, true)
     if (!synced.ok) return { ok: false, error: synced.error || "Failed to sync MCP credentials" }
   }
+  if (options?.connectRemote === false) return { ok: true }
   const connected = await syteAgentMcpConnect(workspace.uuid, providerId)
   return connected.ok
     ? { ok: true }
@@ -361,6 +366,11 @@ export async function completeMcpConnection(input: {
   connection: StoredMcpConnection
   project: any
   credentials: McpCredentialSet
+  /** Save credentials without requiring the provider to exist as a remote MCP addon. */
+  connectRemote?: boolean
+  /** Skip remote env synchronization when the local credential store is authoritative. */
+  syncRemote?: boolean
+  tools?: unknown[]
 }): Promise<{ ok: boolean; connection: McpConnection; error?: string }> {
   const { db, connection, project, credentials } = input
   const provider = getMcpProvider(connection.providerId)
@@ -377,9 +387,13 @@ export async function completeMcpConnection(input: {
     scope: credentials.scope || null,
     expiresAt: credentials.expiresAt || null,
     lastError: null,
+    ...(Array.isArray(input.tools) ? { tools: input.tools } : {}),
   })
 
-  const synced = await syncRemoteConnection(project, connection.projectId, provider.id, credentials)
+  const synced = await syncRemoteConnection(project, connection.projectId, provider.id, credentials, {
+    connectRemote: input.connectRemote,
+    syncRemote: input.syncRemote,
+  })
   if (!synced.ok) {
     await updateConnection(db, connection.connectionId, {
       status: "error",
