@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { config } from "./config.js";
 import { appendLog, ensureBaseDirectories, resetProjectLogs } from "./logs.js";
 import { getEnvFilePath, getProcessName, getProjectRoot, getProxyConfigPath, validateDeployPath, validateProjectId, validateSubdomain } from "./paths.js";
@@ -89,11 +89,11 @@ export async function deployProject(projectId, payload, stream = null) {
     let nodeVersion = "";
     let npmVersion = "";
     try {
-        nodeVersion = execSync("node --version", { encoding: "utf8" }).trim();
+        nodeVersion = execFileSync("node", ["--version"], { encoding: "utf8" }).trim();
     }
     catch { }
     try {
-        npmVersion = execSync("npm --version", { encoding: "utf8" }).trim();
+        npmVersion = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
     }
     catch { }
     debug.nodeVersion = nodeVersion;
