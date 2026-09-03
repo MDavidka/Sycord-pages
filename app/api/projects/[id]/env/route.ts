@@ -10,6 +10,7 @@ import {
 import { syteSetEnv, useSyteWorkspace } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 import { isMcpCredentialKey } from "@/lib/mcp-connections"
+import { getOwnedProject, ownedProjectMutationFilter } from "@/lib/project-id"
 
 /**
 
@@ -35,11 +36,7 @@ export async function GET(
   try {
     const client = await clientPromise
     const db = client.db()
-    const user = await db.collection("users").findOne(
-      { id: session.user.id, "projects._id": projectId },
-      { projection: { "projects.$": 1 } }
-    )
-    const project = user?.projects?.[0]
+    const project = await getOwnedProject(db, session.user.id, projectId)
     if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
@@ -99,11 +96,7 @@ export async function POST(
     const client = await clientPromise
     const db = client.db()
 
-    const existing = await db.collection("users").findOne(
-      { id: session.user.id, "projects._id": projectId },
-      { projection: { "projects.$": 1 } },
-    )
-    const project = existing?.projects?.[0]
+    const project = await getOwnedProject(db, session.user.id, projectId)
     if (!project) {
       return NextResponse.json({ message: "Project not found" }, { status: 404 })
     }
@@ -115,12 +108,12 @@ export async function POST(
 
     // Remove existing var with same key, then add new one
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": projectId },
+      ownedProjectMutationFilter(session.user.id, project),
       { $pull: { "projects.$.envVars": { key } } as any }
     )
 
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": projectId },
+      ownedProjectMutationFilter(session.user.id, project),
       {
         $push: {
           "projects.$.envVars": {
@@ -134,7 +127,7 @@ export async function POST(
     )
 
     const projectDoc = await db.collection("users").findOne(
-      { id: session.user.id, "projects._id": projectId },
+      ownedProjectMutationFilter(session.user.id, project),
       { projection: { "projects.$": 1 } }
     )
     const updatedProject = projectDoc?.projects?.[0]
@@ -152,7 +145,7 @@ export async function POST(
         : currentRequiredIntegrationIds
 
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": projectId },
+      ownedProjectMutationFilter(session.user.id, project),
       {
         $set: {
           "projects.$.requiredEnvKeys": nextRequiredEnvKeys,
@@ -216,8 +209,13 @@ export async function DELETE(
     const client = await clientPromise
     const db = client.db()
 
+    const project = await getOwnedProject(db, session.user.id, projectId)
+    if (!project) {
+      return NextResponse.json({ message: "Project not found" }, { status: 404 })
+    }
+
     await db.collection("users").updateOne(
-      { id: session.user.id, "projects._id": projectId },
+      ownedProjectMutationFilter(session.user.id, project),
       { $pull: { "projects.$.envVars": { key } } as any }
     )
 
