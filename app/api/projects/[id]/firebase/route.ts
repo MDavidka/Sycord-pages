@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
-
+import { getOwnedProject, ownedProjectMutationFilter } from "@/lib/project-id"
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -26,19 +26,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const db = client.db()
 
   // Verify ownership before update
-  const owner = await db.collection("users").findOne(
-    { id: session.user.id, "projects._id": id },
-    { projection: { _id: 1 } }
-  )
-  if (!owner) {
+  const project = await getOwnedProject(db, session.user.id, id)
+  if (!project) {
     return NextResponse.json({ message: "Project not found" }, { status: 404 })
   }
 
   const result = await db.collection("users").updateOne(
-    {
-      id: session.user.id,
-      "projects._id": id,
-    },
+    ownedProjectMutationFilter(session.user.id, project),
     {
       $set: {
         "projects.$.firebaseConnected": true,
@@ -72,16 +66,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const client = await clientPromise
   const db = client.db()
 
-  const user = await db.collection("users").findOne(
-    { id: session.user.id },
-    { projection: { projects: 1 } }
-  )
+  const project = await getOwnedProject(db, session.user.id, id)
 
-  if (!user?.projects) {
-    return NextResponse.json({ message: "Project not found" }, { status: 404 })
-  }
-
-  const project = user.projects.find((p: any) => p._id.toString() === id)
   if (!project) {
     return NextResponse.json({ message: "Project not found" }, { status: 404 })
   }
