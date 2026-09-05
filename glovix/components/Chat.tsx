@@ -49,6 +49,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Markdown } from '@/components/agent-elements/markdown';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
+import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent-activity';
+import { StreamingResponse } from '@/components/agents/streaming-response';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -1439,11 +1441,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 break;
                             case 'message':
-                                assistantContent = event.text || assistantContent;
-                                if (!replayHistoryOnly) updateLastMessage(assistantContent);
+                                if (!assistantContent) {
+                                    assistantContent = event.text || '';
+                                    if (!replayHistoryOnly) updateLastMessage(assistantContent);
+                                }
                                 break;
                             case 'done':
-                                assistantContent = event.text || assistantContent || 'Done.';
+                                if (!assistantContent && event.text) {
+                                    assistantContent = event.text;
+                                }
+                                assistantContent = assistantContent || 'Done.';
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
                                 clearPendingQuestion();
@@ -1782,11 +1789,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     updateLastMessage(assistantContent);
                     break;
                 case 'message':
-                    assistantContent = event.text || assistantContent;
-                    updateLastMessage(assistantContent);
+                    if (!assistantContent) {
+                        assistantContent = event.text || '';
+                        updateLastMessage(assistantContent);
+                    }
                     break;
                 case 'done':
-                    assistantContent = event.text || assistantContent || 'Done.';
+                    if (!assistantContent && event.text) {
+                        assistantContent = event.text;
+                    }
+                    assistantContent = assistantContent || 'Done.';
                     updateLastMessage(assistantContent);
                     completed = true;
                     clearPendingQuestion();
@@ -3075,11 +3087,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (seg.type === 'text' && seg.content) {
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
+                                            const isLiveSeg = isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1;
                                             return (
                                                 <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
-                                                        {renderAssistantMarkdown(textContent)}
-                                                    </div>
+                                                    <StreamingResponse
+                                                        status={isLiveSeg ? 'streaming' : 'complete'}
+                                                        copyText={textContent}
+                                                        showActions={!isLiveSeg}
+                                                        className="w-full"
+                                                    >
+                                                        <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                                            {renderAssistantMarkdown(textContent)}
+                                                        </div>
+                                                    </StreamingResponse>
                                                 </div>
                                             );
                                         }
@@ -3129,50 +3149,74 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 <>
                                     {/* Fallback: user messages or assistant without segments */}
                                     <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        <div
-                                            className={`text-[14px] leading-relaxed ${
-                                                group.role === 'user'
-                                                    ? isDark
+                                        {group.role === 'assistant' ? (
+                                            <StreamingResponse
+                                                status={idx === groupedMessages.length - 1 && isRunning ? 'streaming' : 'complete'}
+                                                copyText={typeof group.content === 'string' ? group.content : ''}
+                                                showActions={!(idx === groupedMessages.length - 1 && isRunning)}
+                                                className="w-full"
+                                            >
+                                                <div className={`text-[14px] leading-relaxed max-w-full ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                                    {group.content && (
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                            {Array.isArray(group.content) ? (
+                                                                <div className="space-y-2">
+                                                                    {group.content.map((part, i) => {
+                                                                        if (part.type === 'image_url') {
+                                                                            return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
+                                                                        }
+                                                                        return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
+                                                                    })}
+                                                                </div>
+                                                            ) : (
+                                                                renderAssistantMarkdown(String(group.content || ''))
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </StreamingResponse>
+                                        ) : (
+                                            <div
+                                                className={`text-[14px] leading-relaxed ${
+                                                    isDark
                                                         ? 'bg-gradient-to-br from-white/[0.14] to-white/[0.05] text-white/95 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.08] shadow-lg shadow-black/10'
                                                         : 'bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-md shadow-black/10'
-                                                    : isDark
-                                                        ? 'text-white/85 max-w-full'
-                                                        : 'text-gray-800 max-w-full'
-                                            }`}
-                                        >
-
-                                            {/* Picked element indicator */}
-                                            {group.role === 'user' && (group as any).pickedElement && (
-                                                <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                    <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                    <span className="font-medium">
-                                                        {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                    </span>
-                                                    {(group as any).pickedElement.text && (
-                                                        <span className="truncate opacity-70">
-                                                            {(group as any).pickedElement.text.length > 30
-                                                                ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                : (group as any).pickedElement.text}
+                                                }`}
+                                            >
+                                                {/* Picked element indicator */}
+                                                {(group as any).pickedElement && (
+                                                    <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
+                                                        <MousePointer2 className="w-3 h-3 flex-shrink-0" />
+                                                        <span className="font-medium">
+                                                            {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
                                                         </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                            {group.content && (
-                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>                                                    {Array.isArray(group.content) ? (
-                                                        <div className="space-y-2">
-                                                            {group.content.map((part, i) => {
-                                                                if (part.type === 'image_url') {
-                                                                    return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
-                                                                }
-                                                                return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
-                                                            })}
-                                                        </div>
-                                                    ) : (
-                                                        renderAssistantMarkdown(String(group.content || ''))
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
+                                                        {(group as any).pickedElement.text && (
+                                                            <span className="truncate opacity-70">
+                                                                {(group as any).pickedElement.text.length > 30
+                                                                    ? (group as any).pickedElement.text.slice(0, 30) + '…'
+                                                                    : (group as any).pickedElement.text}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {group.content && (
+                                                    <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                        {Array.isArray(group.content) ? (
+                                                            <div className="space-y-2">
+                                                                {group.content.map((part, i) => {
+                                                                    if (part.type === 'image_url') {
+                                                                        return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
+                                                                    }
+                                                                    return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
+                                                                })}
+                                                            </div>
+                                                        ) : (
+                                                            renderAssistantMarkdown(String(group.content || ''))
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                     {/* Live actions for assistant without segments */}
                                     {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
@@ -3633,7 +3677,6 @@ function isSystemProcessingText(text: string): boolean {
 }
 
 function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [isExpanded, setIsExpanded] = useState(false);
     const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
@@ -3653,46 +3696,23 @@ function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking
     // Use finalized time if available, otherwise live elapsed time
     const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
     const isLive = Boolean(startTime) && thinkingTime === undefined;
-    const thoughtCount = Math.max(1, thinking.split(/\n{2,}/).filter(part => part.trim()).length);
-    const title = isLive
-        ? 'Thinking'
-        : thoughtCount === 1
-            ? 'Thought 1 time'
-            : `Thought ${thoughtCount} times`;
 
-    if (isLive) {
-        return (
-            <Marker role="status" className="mb-3 animate-fade-in px-1">
-                <span className="inline-flex items-center gap-2">
-                    <SpiralLoader size={14} />
-                    <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                </span>
-            </Marker>
-        );
-    }
+    const activityItems: AgentActivityItem[] = [
+        {
+            id: 'thinking-stream',
+            type: 'text',
+            content: thinking,
+        },
+    ];
 
     return (
         <div className="mb-3 animate-fade-in px-1">
-            <button
-                type="button"
-                onClick={() => setIsExpanded(!isExpanded)}
-                aria-expanded={isExpanded}
-                className={`group flex min-h-11 w-full items-start gap-3 rounded-lg py-2 text-left transition-colors ${isDark ? 'hover:bg-white/[0.035]' : 'hover:bg-black/[0.035]'}`}
-            >
-                <span className="flex size-7 shrink-0 items-center justify-center">
-                    <Brain className={`size-4 ${isDark ? 'text-white/65' : 'text-gray-500'}`} strokeWidth={1.8} />
-                </span>
-                <span className="min-w-0 flex-1">
-                    <span className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-white/80' : 'text-gray-800'}`}>
-                        {title}
-                        {displayTime > 0 && <span className={`text-xs font-normal ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{displayTime}s</span>}
-                    </span>
-                    <span className={`mt-1 block whitespace-pre-wrap text-sm leading-6 ${isExpanded ? '' : 'line-clamp-3'} ${isDark ? 'text-white/60' : 'text-gray-600'}`}>
-                        {thinking}
-                    </span>
-                </span>
-                <ChevronRight className={`mt-1 size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isDark ? 'text-white/35' : 'text-gray-400'}`} />
-            </button>
+            <AgentActivity
+                items={activityItems}
+                status={isLive ? 'working' : 'complete'}
+                duration={displayTime}
+                activeLabel="Reasoning…"
+            />
         </div>
     );
 }
