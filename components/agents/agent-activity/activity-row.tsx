@@ -67,7 +67,7 @@ function StepRow({ item }: { item: AgentActivityStep }) {
 
 function TextRow({ item }: { item: AgentActivityText }) {
   return (
-    <div className="rounded-lg bg-black/20 dark:bg-white/[0.03] border border-black/5 dark:border-white/5 p-3 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300 font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
+    <div className="pl-3 py-1 border-l-2 border-white/10 dark:border-white/10 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400 font-sans whitespace-pre-wrap max-h-72 overflow-y-auto">
       {item.content}
     </div>
   );

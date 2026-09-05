@@ -541,7 +541,7 @@ function normalizeTursoEvent(
                 ...common,
                 tool: typeof payload.tool === 'string' ? payload.tool : (typeof payload.tool_name === 'string' ? payload.tool_name : event.title),
                 arguments: payload.arguments ?? payload,
-                ok: event.event_type === 'tool_error' ? false : payload.ok !== false && (!payload.result || payload.result.ok !== false),
+                ok: event.event_type === 'tool_error' ? false : payload.ok !== false && (!payload.result || (payload.result as Record<string, any>).ok !== false),
             };
         case 'file_created':
         case 'file_modified':
