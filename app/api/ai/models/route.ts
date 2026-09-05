@@ -51,7 +51,7 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
   return models
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return Response.json({ message: "Unauthorized" }, { status: 401 })
@@ -81,7 +81,8 @@ export async function GET() {
     }
 
     // Detect streaming request via query param or Accept header
-    const wantsStream = (request?.query?.stream === "true" || request?.headers?.get?.("accept")?.includes("text/event-stream"))
+    const url = new URL(request.url);
+    const wantsStream = (url.searchParams.get("stream") === "true" || request.headers.get("accept")?.includes("text/event-stream"));
     if (wantsStream) {
       const encoder = new TextEncoder()
       const stream = new ReadableStream({
@@ -94,7 +95,13 @@ export async function GET() {
           controller.close()
         },
       })
-      return new StreamingResponse(stream, { headers: { "Content-Type": "text/event-stream" } })
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      })
     }
 
     return Response.json({ models: normalizeModels(payload) })

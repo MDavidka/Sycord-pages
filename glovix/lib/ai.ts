@@ -108,6 +108,10 @@ export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<
         throw new Error('Sycord returned an invalid model list.')
     }
 
+    if (body.models.length === 0) {
+        return MODEL_CHOICES
+    }
+
     return body.models.map((model) => {
         const apiModel = model.name || model.profile
         return {
