@@ -1801,10 +1801,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
         try {
             void syncPendingQuestions(projectId, controller.signal);
+            const activeModelProfile = availableModelChoices?.find(choice => choice.modelType === selectedModel)?.apiModel
+                || availableModelChoices?.find(choice => choice.modelType === selectedModel)?.label
+                || selectedModel
+                || 'syra-base';
+
             const result = await streamProjectAgent({
                 projectId,
                 message: userMessage,
-                modelProfile: availableModelChoices?.find(choice => choice.modelType === selectedModel)?.label || 'syra-base',
+                modelProfile: activeModelProfile,
                 afterSession,
                 signal: controller.signal,
                 onEvent: applyEvent,
