@@ -137,6 +137,18 @@ export function EffortSlider({
     }
   };
 
+  const handleKeyDownOnTrack = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const nextIndex = Math.min(EFFORT_STEPS.length - 1, currentIndex + 1);
+      onChange(EFFORT_STEPS[nextIndex].id);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const prevIndex = Math.max(0, currentIndex - 1);
+      onChange(EFFORT_STEPS[prevIndex].id);
+    }
+  };
+
   // Step percentage: 0%, 33.33%, 66.67%, 100%
   const stepPercentage = (currentIndex / (EFFORT_STEPS.length - 1)) * 100;
 
@@ -208,11 +220,19 @@ export function EffortSlider({
           <div className="px-1 py-1">
             <div
               ref={trackRef}
+              role="slider"
+              tabIndex={0}
+              aria-label="Effort level"
+              aria-valuenow={currentIndex}
+              aria-valuemin={0}
+              aria-valuemax={EFFORT_STEPS.length - 1}
+              aria-valuetext={`${currentStep.label} effort (${currentStep.speedLabel})`}
+              onKeyDown={handleKeyDownOnTrack}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className="relative h-4 w-full rounded-full bg-zinc-700/60 cursor-pointer select-none touch-none flex items-center"
+              className="relative h-4 w-full rounded-full bg-zinc-700/60 cursor-pointer select-none touch-none flex items-center outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
             >
               {/* Active Glowing Track (0 to thumb) */}
               <div
