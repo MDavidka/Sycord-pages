@@ -10,12 +10,17 @@ type SycordModel = {
   id?: unknown
   profile?: unknown
   name?: unknown
+  model?: unknown
   enabled?: unknown
+  active?: unknown
+  provider?: unknown
 }
 
 type SycordModelsResponse = {
   available_models?: unknown
   models?: unknown
+  ai_tab_models?: unknown
+  saved_providers?: unknown
 }
 
 function getSycordModelsUrl(): string {
@@ -25,23 +30,32 @@ function getSycordModelsUrl(): string {
 }
 
 function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; profile: string; name: string }> {
-  // available_models is the server's explicit enabled-model list. The models
-  // fallback keeps this route compatible with older Sycord API responses.
+  // Check available_models, models, ai_tab_models, or saved_providers from Sycord VM
   const source = Array.isArray(payload.available_models)
     ? payload.available_models
     : Array.isArray(payload.models)
       ? payload.models
-      : []
+      : Array.isArray(payload.ai_tab_models)
+        ? payload.ai_tab_models
+        : Array.isArray(payload.saved_providers)
+          ? payload.saved_providers
+          : []
 
   const seen = new Set<string>()
   const models: Array<{ id: string; profile: string; name: string }> = []
 
   for (const candidate of source as SycordModel[]) {
-    if (!candidate || candidate.enabled === false) continue
+    if (!candidate || candidate.enabled === false || candidate.active === false) continue
 
-    const profile = typeof candidate.profile === "string" ? candidate.profile.trim() : ""
-    const name = typeof candidate.name === "string" ? candidate.name.trim() : ""
-    const id = typeof candidate.id === "string" ? candidate.id.trim() : profile
+    const rawId = typeof candidate.id === "string" ? candidate.id.trim() : ""
+    const rawModel = typeof candidate.model === "string" ? candidate.model.trim() : ""
+    const rawProfile = typeof candidate.profile === "string" ? candidate.profile.trim() : ""
+    const rawName = typeof candidate.name === "string" ? candidate.name.trim() : ""
+
+    const profile = rawModel || rawProfile || rawId
+    const name = rawName || rawModel || rawProfile || rawId
+    const id = rawId || profile
+
     if (!profile || !name || !id || seen.has(profile)) continue
 
     seen.add(profile)
