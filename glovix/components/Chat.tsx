@@ -51,6 +51,7 @@ import { Markdown } from '@/components/agent-elements/markdown';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent-activity';
 import { StreamingResponse } from '@/components/agents/streaming-response';
+import { EffortSlider, type EffortLevel } from '@/components/agents/effort-slider';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -523,6 +524,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [currentThinking, setCurrentThinking] = useState<string>('');
     const [thinkingDuration, setThinkingDuration] = useState<number>(0);
     const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
+    const [effortLevel, setEffortLevel] = useState<EffortLevel>('extra_high');
+
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('syra_effort_level');
+            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high') {
+                setEffortLevel(saved);
+            }
+        } catch {}
+    }, []);
+
+    const handleEffortChange = useCallback((level: EffortLevel) => {
+        setEffortLevel(level);
+        try {
+            localStorage.setItem('syra_effort_level', level);
+        } catch {}
+    }, []);
+
     const [pendingQuestion, setPendingQuestion] = useState<AgentQuestion | null>(null);
     const [questionSubmitting, setQuestionSubmitting] = useState(false);
     const [questionError, setQuestionError] = useState<string | null>(null);
@@ -794,10 +813,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         currentGroup.toolCalls.push(...newCalls);
                     }
 
-                    if (!currentGroup.thinking && (msg as any).thinking) {
+                    if ((msg as any).thinking) {
                         currentGroup.thinking = (msg as any).thinking;
                     }
-                    if (!currentGroup.thinkingDuration && (msg as any).thinkingDuration) {
+                    if ((msg as any).thinkingDuration) {
                         currentGroup.thinkingDuration = (msg as any).thinkingDuration;
                     }
                     if (Array.isArray((msg as any).agentActions) && (msg as any).agentActions.length > 0) {
@@ -1620,19 +1639,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         thinkingStartedAt = Date.now();
                         setThinkingStartTime(thinkingStartedAt);
                     }
-                    const chunk = event.text || '';
-                    setCurrentThinking(prev =>
-                        event.fromStream && prev && chunk && !chunk.startsWith(prev)
-                            ? prev + chunk
-                            : chunk || prev,
-                    );
-                    if (event.fromStream && chunk) {
+                    const chunk = event.text || event.delta || '';
+                    if (chunk) {
+                        setCurrentThinking(prev => {
+                            if (!prev) return chunk;
+                            if (chunk.startsWith(prev)) return chunk;
+                            return prev + chunk;
+                        });
                         const state = useStore.getState();
                         const last = state.messages[state.messages.length - 1] as any;
-                        const nextThinking = `${last?.thinking || ''}${chunk}`;
+                        const prevThinking = last?.thinking || '';
+                        const nextThinking = prevThinking && chunk.startsWith(prevThinking)
+                            ? chunk
+                            : `${prevThinking}${chunk}`;
                         updateLastMessage(assistantContent, undefined, nextThinking);
-                    } else {
-                        updateLastMessage(assistantContent, undefined, chunk);
                     }
                     break;
                 }
@@ -1852,6 +1872,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 projectId,
                 message: userMessage,
                 modelProfile: activeModelProfile,
+                thinkingLevel: effortLevel,
+                executionSpeed: effortLevel === 'low' ? 'ultra_fast' : effortLevel === 'extra_high' ? 'deep_reasoning' : 'balanced',
                 afterSession,
                 signal: controller.signal,
                 onEvent: applyEvent,
@@ -3177,10 +3199,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             </StreamingResponse>
                                         ) : (
                                             <div
-                                                className={`text-[14px] leading-relaxed ${
+                                                className={`text-[14px] leading-relaxed break-words ${
                                                     isDark
-                                                        ? 'bg-gradient-to-br from-white/[0.14] to-white/[0.05] text-white/95 rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-white/[0.08] shadow-lg shadow-black/10'
-                                                        : 'bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl rounded-br-md px-4 py-2.5 max-w-[85%] sm:max-w-[75%] shadow-md shadow-black/10'
+                                                        ? 'bg-zinc-800/90 text-zinc-100 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-700/50 shadow-sm'
+                                                        : 'bg-zinc-100 text-zinc-900 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-200/80 shadow-sm'
                                                 }`}
                                             >
                                                 {/* Picked element indicator */}
@@ -3200,7 +3222,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     </div>
                                                 )}
                                                 {group.content && (
-                                                    <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                    <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                         {Array.isArray(group.content) ? (
                                                             <div className="space-y-2">
                                                                 {group.content.map((part, i) => {
@@ -3569,7 +3591,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     isDark={isDark}
                                 />
 
-                                <div className="ml-auto flex items-center gap-1">
+                                <div className="ml-auto flex items-center gap-1.5">
+                                    <EffortSlider
+                                        value={effortLevel}
+                                        onChange={handleEffortChange}
+                                        isDark={isDark}
+                                    />
+
                                     <button
                                         type="button"
                                         aria-label="Voice input"

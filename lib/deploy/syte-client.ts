@@ -720,6 +720,10 @@ export type SyteAgentExecutionOptions = {
   planMode?: "auto" | "always" | "off"
   /** Explicit plan mode remains available to callers that request it. */
   agentMode?: "build" | "plan"
+  /** Thinking effort / reasoning depth: low, medium, high, extra_high */
+  thinkingLevel?: "low" | "medium" | "high" | "extra_high" | string
+  /** Execution speed profile: ultra_fast, balanced, deep_reasoning */
+  executionSpeed?: string
 }
 
 export type SyteAgentChangeResponse = {
@@ -755,6 +759,8 @@ export async function syteAgentChange(
       ...(modelProfile ? { model_profile: modelProfile } : {}),
       plan_mode: planMode,
       agent_mode: agentMode,
+      ...(execution.thinkingLevel ? { thinking_level: execution.thinkingLevel } : {}),
+      ...(execution.executionSpeed ? { execution_speed: execution.executionSpeed } : {}),
     },
   })
 }

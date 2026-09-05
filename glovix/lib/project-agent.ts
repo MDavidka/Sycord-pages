@@ -115,6 +115,8 @@ export type StreamProjectAgentOptions = {
     /** Normal coding turns build directly; callers may explicitly request a plan. */
     planMode?: 'auto' | 'always' | 'off';
     agentMode?: 'build' | 'plan';
+    thinkingLevel?: 'low' | 'medium' | 'high' | 'extra_high' | string;
+    executionSpeed?: string;
     afterSession: number;
     signal?: AbortSignal;
     onEvent: (event: ProjectAgentEvent) => void;
@@ -1166,6 +1168,8 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
                     planMode: options.planMode,
                     agentMode: options.agentMode,
                     afterSession: options.afterSession,
+                    thinkingLevel: options.thinkingLevel,
+                    executionSpeed: options.executionSpeed,
                 }),
                 signal: options.signal,
             },
