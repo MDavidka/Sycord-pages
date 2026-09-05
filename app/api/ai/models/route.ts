@@ -80,9 +80,27 @@ export async function GET() {
       )
     }
 
+    // Detect streaming request via query param or Accept header
+    const wantsStream = (request?.query?.stream === "true" || request?.headers?.get?.("accept")?.includes("text/event-stream"))
+    if (wantsStream) {
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          for (const model of normalizeModels(payload)) {
+            const data = JSON.stringify({ model })
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+          }
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`))
+          controller.close()
+        },
+      })
+      return new StreamingResponse(stream, { headers: { "Content-Type": "text/event-stream" } })
+    }
+
     return Response.json({ models: normalizeModels(payload) })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to reach Sycord model API."
     return Response.json({ message }, { status: 502 })
   }
 }
+
