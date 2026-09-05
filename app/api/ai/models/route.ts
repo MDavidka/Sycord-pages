@@ -1,5 +1,8 @@
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import clientPromise from "@/lib/torso"
+import { getOwnedProject } from "@/lib/project-chat-session"
+import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -62,19 +65,39 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
 }
 
 export async function GET(request: Request) {
-  const projectUuid = new URL(request.url).searchParams.get("project_uuid")?.trim()
-  console.log('[v0] models: server request', {
-    projectUuid,
-    hasApiKey: Boolean(process.env.DEPLOYER_API_KEY),
-  })
-  if (!projectUuid) {
-    console.error('[v0] models: missing project_uuid')
-    return Response.json({ message: "A Sycord project UUID is required." }, { status: 400 })
-  }
+  const searchParams = new URL(request.url).searchParams
+  const projectId = searchParams.get("project_id")?.trim()
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return Response.json({ message: "Unauthorized" }, { status: 401 })
   }
+
+  if (!projectId) {
+    console.error('[v0] models: missing project_id')
+    return Response.json({ message: "A project ID is required." }, { status: 400 })
+  }
+
+  // Always resolve the Sycord UUID from the authenticated project settings.
+  // The browser may send the local project id, but it must not choose an
+  // arbitrary Sycord workspace UUID for model discovery.
+  let projectUuid = ""
+  if (projectId) {
+    const client = await clientPromise
+    const project = await getOwnedProject(client.db(), session.user.id, projectId)
+    if (!project) return Response.json({ message: "Project not found" }, { status: 404 })
+    const workspace = await requireSyteWorkspaceUuid(project, projectId)
+    if ("error" in workspace) {
+      return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
+    }
+    projectUuid = workspace.uuid
+  }
+
+  console.log('[v0] models: server request', {
+    projectId,
+    projectUuid,
+    resolvedFromProjectSettings: Boolean(projectId),
+    hasApiKey: Boolean(process.env.DEPLOYER_API_KEY),
+  })
 
   const apiKey = process.env.DEPLOYER_API_KEY || ""
   const headers: Record<string, string> = { Accept: "application/json" }

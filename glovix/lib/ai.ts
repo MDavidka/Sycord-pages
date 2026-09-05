@@ -86,7 +86,7 @@ export type AvailableSycordModel = {
 }
 
 export async function fetchAvailableModelChoices(projectUuid: string, signal?: AbortSignal): Promise<ModelChoice[]> {
-    const requestUrl = `/api/ai/models?project_uuid=${encodeURIComponent(projectUuid)}`
+    const requestUrl = `/api/ai/models?project_id=${encodeURIComponent(projectUuid)}`
     console.log('[v0] models: requesting browser proxy', { projectUuid, requestUrl })
     const response = await fetch(requestUrl, {
         method: 'GET',
