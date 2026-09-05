@@ -147,89 +147,119 @@ const getActionDisplayName = (toolName: string, args: string): string => {
     try {
         const parsed = JSON.parse(args);
         switch (toolName) {
-            case 'createFile': return shortFilePath(parsed.path || '');
-            case 'write_file': return shortFilePath(parsed.path || '');
-            case 'editFile': return shortFilePath(parsed.path || '');
-            case 'edit_file': return shortFilePath(parsed.path || '');
-            case 'apply_patch': return shortFilePath(parsed.path || parsed.file || '');
-            case 'readFile': return shortFilePath(parsed.path || '');
-            case 'read_file': return shortFilePath(parsed.path || '');
-            case 'readMultipleFiles': return `${(parsed.paths || []).length} files`;
+            case 'createFile':
+            case 'write_file':
+            case 'syte_write_file': return shortFilePath(parsed.path || parsed.file_path || '');
+            case 'editFile':
+            case 'edit_file':
+            case 'syte_edit_file': return shortFilePath(parsed.path || parsed.file_path || '');
+            case 'apply_patch':
+            case 'syte_apply_patch': return shortFilePath(parsed.path || parsed.file || parsed.file_path || '');
+            case 'readFile':
+            case 'read_file':
+            case 'syte_read_file': return shortFilePath(parsed.path || parsed.file_path || '');
+            case 'syte_read_file_lines': return `${shortFilePath(parsed.path || '')} (${parsed.start_line || 1}-${parsed.end_line || ''})`;
+            case 'readMultipleFiles':
             case 'read_multiple_files': return `${(parsed.paths || []).length} files`;
             case 'file_created':
             case 'file_modified':
             case 'file_deleted': return shortFilePath(parsed.path || parsed.file || parsed.file_path || '');
-            case 'deleteFile': return shortFilePath(parsed.path || '');
-            case 'renameFile': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : '';
+            case 'deleteFile':
+            case 'syte_delete_file': return shortFilePath(parsed.path || '');
+            case 'renameFile':
+            case 'syte_rename_file': return parsed.oldPath ? `${shortFilePath(parsed.oldPath)} → ${shortFilePath(parsed.newPath)}` : (parsed.source_path ? `${shortFilePath(parsed.source_path)} → ${shortFilePath(parsed.destination_path)}` : '');
             case 'grep':
-            case 'searchInFiles': return decodeHtml(parsed.pattern || parsed.query || '');
+            case 'searchInFiles':
+            case 'syte_search_files': return decodeHtml(parsed.pattern || parsed.query || '');
             case 'createWorkspace': return 'Syte API';
-            case 'setDomain': return decodeHtml(parsed.domain || '');
-            case 'startPreview': return 'sycord.site preview';
+            case 'setDomain':
+            case 'syte_set_domain': return decodeHtml(parsed.domain || '');
+            case 'startPreview':
+            case 'syte_start_preview': return 'sycord.site preview';
             case 'typeCheck': return 'Workspace';
-            case 'executeCommand': return decodeHtml(parsed.command || 'shell');
-            case 'execute_command': return decodeHtml(parsed.command || 'shell');
+            case 'executeCommand':
+            case 'execute_command':
+            case 'syte_run_command':
             case 'command_run': return decodeHtml(parsed.command || parsed.cmd || 'shell');
-            case 'lintCheck': return parsed.path || 'src/';
-            case 'listFiles': return 'Workspace';
+            case 'lintCheck':
+            case 'syte_security_lint_scan': return parsed.path || 'Workspace scan';
+            case 'listFiles':
+            case 'syte_list_files':
+            case 'syte_list_workspace_files': return 'Workspace';
             case 'getErrors': return 'Workspace';
             case 'batchCreateFiles': return `${(parsed.files || []).length} files`;
             case 'planning':
+            case 'syte_create_plan':
                 if (parsed.action === 'updateStep' && parsed.stepId) return String(parsed.stepId).replace(/-/g, ' ');
                 if (parsed.action === 'create') return parsed.title || parsed.appType || 'new plan';
-                return parsed.action || 'pipeline';
+                return parsed.title || parsed.action || 'plan';
             case 'update_plan':
-                return Array.isArray(parsed.steps) ? `${parsed.steps.length} steps` : (parsed.title || 'plan');
+            case 'syte_update_plan_step':
+                return parsed.step_id ? `Step ${parsed.step_id} → ${parsed.status || 'in progress'}` : (Array.isArray(parsed.steps) ? `${parsed.steps.length} steps` : (parsed.title || 'plan'));
             case 'screenshot_preview':
-            case 'screenshot':
-                return parsed.route || parsed.viewport || 'preview';
+            case 'screenshot': return parsed.route || parsed.viewport || 'preview';
             case 'service':
-                return parsed.action || parsed.name || 'service';
+            case 'syte_create_deployment': return 'sycord.site deploy';
+            case 'syte_get_deployment_logs': return 'Deployment logs';
+            case 'syte_discover_skills': return `Skills: ${parsed.category || 'all'}`;
+            case 'syte_load_skill': return `Skill: ${parsed.skill_name || 'blueprint'}`;
             case 'deploy': return 'sycord.site';
-            default: return '';
+            default: return toolName.replace(/^syte_/, '').replace(/_/g, ' ');
         }
     } catch {
         switch (toolName) {
             case 'createFile':
             case 'write_file':
+            case 'syte_write_file':
             case 'editFile':
             case 'edit_file':
+            case 'syte_edit_file':
             case 'apply_patch':
+            case 'syte_apply_patch':
             case 'readFile':
             case 'read_file':
+            case 'syte_read_file':
             case 'file_created':
             case 'file_modified':
             case 'file_deleted':
             case 'deleteFile':
+            case 'syte_delete_file':
                 return shortFilePath(extract('path') || extract('file') || extract('file_path'));
             case 'lintCheck':
-                return extract('path');
+            case 'syte_security_lint_scan':
+                return extract('path') || 'Workspace scan';
             case 'readMultipleFiles':
                 return 'Multiple files';
             case 'renameFile':
-                const oldP = extract('oldPath');
-                const newP = extract('newPath');
+            case 'syte_rename_file':
+                const oldP = extract('oldPath') || extract('source_path');
+                const newP = extract('newPath') || extract('destination_path');
                 return oldP ? `${oldP} → ${newP}` : oldP;
             case 'grep':
             case 'searchInFiles':
+            case 'syte_search_files':
                 return extract('pattern') || extract('query');
             case 'batchCreateFiles': return 'Multiple files';
-            case 'planning': return extract('title') || extract('stepId') || extract('action') || 'pipeline';
-            case 'update_plan': return 'plan';
+            case 'planning':
+            case 'syte_create_plan': return extract('title') || extract('stepId') || extract('action') || 'plan';
+            case 'update_plan':
+            case 'syte_update_plan_step': return 'plan';
             case 'screenshot_preview':
             case 'screenshot': return extract('route') || 'preview';
             case 'getErrors': return 'Workspace';
             case 'setDomain': return extract('domain') || 'domain';
-            case 'startPreview': return 'preview';
-            case 'deploy': return 'sycord.site';
-            default: return '';
+            case 'startPreview':
+            case 'syte_start_preview': return 'preview';
+            case 'deploy':
+            case 'syte_create_deployment': return 'sycord.site';
+            default: return toolName.replace(/^syte_/, '').replace(/_/g, ' ');
         }
     }
 };
 
 function syncPlanFromTool(toolName: string, args: unknown, setGenerationPlan: (plan: any) => void) {
     const name = toolName.toLowerCase();
-    if (name !== 'update_plan' && name !== 'planning' && name !== 'plan') return;
+    if (name !== 'update_plan' && name !== 'planning' && name !== 'plan' && name !== 'syte_create_plan' && name !== 'syte_update_plan_step') return;
     const next = planFromAgentUpdate(args, useStore.getState().generationPlan);
     if (next) setGenerationPlan(next);
 }
