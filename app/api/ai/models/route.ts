@@ -61,7 +61,12 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
 
 export async function GET(request: Request) {
   const projectUuid = new URL(request.url).searchParams.get("project_uuid")?.trim()
+  console.log('[v0] models: server request', {
+    projectUuid,
+    hasApiKey: Boolean(process.env.DEPLOYER_API_KEY),
+  })
   if (!projectUuid) {
+    console.error('[v0] models: missing project_uuid')
     return Response.json({ message: "A Sycord project UUID is required." }, { status: 400 })
   }
   const session = await getServerSession(authOptions)
@@ -85,7 +90,14 @@ export async function GET(request: Request) {
     })
 
     const payload = (await response.json().catch(() => null)) as SycordModelsResponse | null
+    console.log('[v0] models: Sycord response', {
+      projectUuid,
+      status: response.status,
+      ok: response.ok,
+      payload,
+    })
     if (!response.ok || !payload) {
+      console.error('[v0] models: Sycord request failed', { projectUuid, status: response.status, payload })
       return Response.json(
         { message: `Sycord model API returned ${response.status || 502}.` },
         { status: response.status >= 400 && response.status < 600 ? response.status : 502 },

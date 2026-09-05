@@ -392,12 +392,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setAvailableModelChoices(null);
 
         try {
+            console.log('[v0] models: chat loader start', {
+                currentChatId,
+                selectedModel,
+                aborted: controller.signal.aborted,
+            })
             if (!currentChatId) throw new Error('A project must be selected before loading models.')
             const choices = await fetchAvailableModelChoices(currentChatId, controller.signal);
             if (controller.signal.aborted) return;
+            console.log('[v0] models: chat loader success', {
+                currentChatId,
+                count: choices.length,
+                choices,
+            })
             setAvailableModelChoices(choices);
         } catch (error: any) {
             if (controller.signal.aborted) return;
+            console.error('[v0] models: chat loader failed', {
+                currentChatId,
+                name: error?.name,
+                message: error?.message,
+                error,
+            });
             setModelsError(error?.message || 'Unable to load models from Sycord.');
         } finally {
             if (!controller.signal.aborted) setModelsLoading(false);

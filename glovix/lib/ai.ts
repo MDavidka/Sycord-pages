@@ -86,7 +86,9 @@ export type AvailableSycordModel = {
 }
 
 export async function fetchAvailableModelChoices(projectUuid: string, signal?: AbortSignal): Promise<ModelChoice[]> {
-    const response = await fetch(`/api/ai/models?project_uuid=${encodeURIComponent(projectUuid)}`, {
+    const requestUrl = `/api/ai/models?project_uuid=${encodeURIComponent(projectUuid)}`
+    console.log('[v0] models: requesting browser proxy', { projectUuid, requestUrl })
+    const response = await fetch(requestUrl, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',
@@ -100,6 +102,12 @@ export async function fetchAvailableModelChoices(projectUuid: string, signal?: A
         // The status below is more useful than a JSON parse error for callers.
     }
 
+    console.log('[v0] models: browser proxy response', {
+        status: response.status,
+        ok: response.ok,
+        body,
+    })
+
     if (!response.ok) {
         throw new Error(body?.message || `Unable to load models (${response.status})`)
     }
@@ -108,7 +116,7 @@ export async function fetchAvailableModelChoices(projectUuid: string, signal?: A
         throw new Error('Sycord returned an invalid model list.')
     }
 
-    return body.models.map((model) => {
+    const choices = body.models.map((model) => {
         const apiModel = model.name || model.profile
         return {
             id: model.id || model.profile,
@@ -122,6 +130,8 @@ export async function fetchAvailableModelChoices(projectUuid: string, signal?: A
             iconAlt: model.name || model.profile,
         }
     })
+    console.log('[v0] models: normalized choices', { projectUuid, count: choices.length, choices })
+    return choices
 }
 
 export function getProviderFromModel(model: string): string {
