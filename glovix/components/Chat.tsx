@@ -247,7 +247,7 @@ function ModelSelector({ selectedModel, choices, loading, error, onSelect, showM
     isDark: boolean
 }) {
     const current = choices.find(choice => choice.modelType === selectedModel) || choices[0]
-    const displayModel = loading ? 'Loading models…' : error ? 'Models unavailable' : current?.apiModel || 'No models available'
+    const displayModel = loading ? 'Loading models…' : error ? 'Models unavailable' : current?.label || current?.apiModel || 'No models available'
     const displayIcon = current && (getProviderIconUrl(current.apiModel, isDark) || current.icon)
     const shortModel = displayModel.split('-').slice(0, 2).join('-')
     const canOpen = !loading && (choices.length > 0 || Boolean(error))
