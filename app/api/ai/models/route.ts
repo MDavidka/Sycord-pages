@@ -14,10 +14,12 @@ type SycordModel = {
 }
 
 type SycordModelsResponse = {
-  available_models?: unknown
+  ok?: unknown
   models?: unknown
+  available_models?: unknown
   current_model?: unknown
   provider?: unknown
+  count?: unknown
 }
 
 function getSycordModelsUrl(projectUuid: string): string {
@@ -27,12 +29,12 @@ function getSycordModelsUrl(projectUuid: string): string {
 }
 
 function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; profile: string; name: string }> {
-  // available_models is the server's explicit enabled-model list. The models
-  // fallback keeps this route compatible with older Sycord API responses.
-  const source = Array.isArray(payload.available_models)
-    ? payload.available_models
-    : Array.isArray(payload.models)
-      ? payload.models
+  // Sycord's documented response is { ok, provider, current_model, models }.
+  // Keep the legacy field only as a compatibility fallback.
+  const source = Array.isArray(payload.models)
+    ? payload.models
+    : Array.isArray(payload.available_models)
+      ? payload.available_models
       : []
 
   const seen = new Set<string>()

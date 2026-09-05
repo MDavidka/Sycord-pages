@@ -116,20 +116,24 @@ export async function fetchAvailableModelChoices(projectUuid: string, signal?: A
         throw new Error('Sycord returned an invalid model list.')
     }
 
-    const choices = body.models.map((model) => {
-        const apiModel = model.name || model.profile
-        return {
-            id: model.id || model.profile,
-            // The profile is what the Sycord agent API expects, while the model
-            // name is what the local chat bridge sends as its model id.
-            label: model.profile,
-            subtitle: model.profile,
-            modelType: model.profile,
-            apiModel,
-            icon: getProviderIconUrl(apiModel) || '/model-logos/gemini.svg',
-            iconAlt: model.name || model.profile,
-        }
-    })
+    const choices = body.models
+        .filter((model) => Boolean(model?.id || model?.profile || model?.name))
+        .map((model) => {
+            // Sycord's documented model contract is { id, name, context_window }.
+            // The id is the value accepted by the stream endpoint; profile is
+            // retained only for older proxy responses.
+            const apiModel = model.id || model.name || model.profile
+            const label = model.name || model.id || model.profile
+            return {
+                id: apiModel,
+                label,
+                subtitle: model.id && model.name && model.id !== model.name ? model.id : 'Available',
+                modelType: apiModel,
+                apiModel,
+                icon: getProviderIconUrl(apiModel) || '/model-logos/gemini.svg',
+                iconAlt: label,
+            }
+        })
     console.log('[v0] models: normalized choices', { projectUuid, count: choices.length, choices })
     return choices
 }
