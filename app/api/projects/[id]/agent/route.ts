@@ -128,6 +128,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     planMode?: unknown
     agentMode?: unknown
     afterSession?: unknown
+    thinkingLevel?: unknown
+    executionSpeed?: unknown
   }
   const message = typeof body?.message === "string" ? body.message.trim() : ""
   const requestedProfile = typeof body?.modelProfile === "string" ? body.modelProfile : ""
@@ -141,6 +143,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : agentMode === "plan"
       ? "always"
       : "off"
+  const thinkingLevel = typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined
+  const executionSpeed = typeof body?.executionSpeed === "string" ? body.executionSpeed : undefined
 
   if (!projectId || !message) {
     return Response.json({ message: "Project ID and message are required." }, { status: 400 })
@@ -164,6 +168,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const change = await syteAgentChange(workspace.uuid, message, modelProfile, {
     planMode,
     agentMode,
+    thinkingLevel,
+    executionSpeed,
   })
   const requestId = change.data?.request_id
   const tursoSessionId = change.data?.turso_session_id
