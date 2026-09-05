@@ -109,6 +109,7 @@ async function fetchRegistryItem(component: string): Promise<RegistryItem | null
 }
 
 async function readLocalComponent(component: string): Promise<RegistryItem | null> {
+  if (!/^[a-z0-9-]+$/i.test(component)) return null
   const localPath = path.join(WORKSPACE_ROOT, "components", "ui", `${component}.tsx`)
   try {
     const content = await fs.readFile(localPath, "utf8")
