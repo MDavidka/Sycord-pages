@@ -20,10 +20,10 @@ type SycordModelsResponse = {
   provider?: unknown
 }
 
-function getSycordModelsUrl(): string {
+function getSycordModelsUrl(projectUuid: string): string {
   const configuredBase = (process.env.DEPLOYER_API_URL || DEFAULT_SYCORD_BASE).replace(/\/+$/, "")
   const base = configuredBase.replace(/\/api\/?$/, "")
-  return `${base}/api/models`
+  return `${base}/api/projects/${encodeURIComponent(projectUuid)}/ai/models`
 }
 
 function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; profile: string; name: string }> {
@@ -59,7 +59,11 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
   return models
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const projectUuid = new URL(request.url).searchParams.get("project_uuid")?.trim()
+  if (!projectUuid) {
+    return Response.json({ message: "A Sycord project UUID is required." }, { status: 400 })
+  }
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return Response.json({ message: "Unauthorized" }, { status: 401 })
@@ -73,7 +77,7 @@ export async function GET() {
   }
 
   try {
-    const response = await fetch(getSycordModelsUrl(), {
+    const response = await fetch(getSycordModelsUrl(projectUuid), {
       method: "GET",
       headers,
       cache: "no-store",

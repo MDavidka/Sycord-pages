@@ -13,8 +13,8 @@ import {
 } from "@/lib/project-id"
 import { toDeployAppName } from "@/lib/deploy/coolify-client"
 import {
-  syteCreateProject,
-  syteWorkspaceGet,
+    syteProjectConnect,
+    syteWorkspaceGet,
   type SyteResult,
 } from "@/lib/deploy/syte-client"
 import { getProjectEnvVars } from "@/lib/deploy/runner-client"
@@ -64,11 +64,21 @@ function parseCreateProjectResponse(data: unknown): Omit<SyteWorkspaceInfo, "sta
   }
 }
 
+type SyteProjectPayload = {
+  name: string
+  uuid?: string
+  env_vars?: Record<string, string>
+  domain?: string
+  git_url?: string
+  branch?: string
+  deploy?: boolean
+}
+
 function buildCreateProjectPayload(
   project: any,
   projectId: string,
   options?: { domain?: string },
-): Parameters<typeof syteCreateProject>[0] {
+  ): SyteProjectPayload {
   const name =
     project?.businessName ||
     project?.name ||
@@ -180,7 +190,10 @@ export async function createSyteWorkspaceForProject(
   }
 
   const payload = buildCreateProjectPayload(project, projectId, options)
-  const created = await syteCreateProject(payload)
+  const created = await syteProjectConnect({
+    name: payload.name,
+    env_vars: payload.env_vars,
+  })
 
   if (!created.ok) {
     return {

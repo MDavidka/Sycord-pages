@@ -392,7 +392,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setAvailableModelChoices(null);
 
         try {
-            const choices = await fetchAvailableModelChoices(controller.signal);
+            if (!currentChatId) throw new Error('A project must be selected before loading models.')
+            const choices = await fetchAvailableModelChoices(currentChatId, controller.signal);
             if (controller.signal.aborted) return;
             setAvailableModelChoices(choices);
         } catch (error: any) {
@@ -401,7 +402,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         } finally {
             if (!controller.signal.aborted) setModelsLoading(false);
         }
-    }, []);
+    }, [currentChatId]);
 
     useEffect(() => {
         void loadAvailableModels();

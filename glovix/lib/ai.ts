@@ -85,8 +85,8 @@ export type AvailableSycordModel = {
     name: string
 }
 
-export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
-    const response = await fetch('/api/ai/models', {
+export async function fetchAvailableModelChoices(projectUuid: string, signal?: AbortSignal): Promise<ModelChoice[]> {
+    const response = await fetch(`/api/ai/models?project_uuid=${encodeURIComponent(projectUuid)}`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',

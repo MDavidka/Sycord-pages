@@ -601,10 +601,11 @@ export type SycordIssueDeploymentResponse = {
 }
 
 function buildSycordUrl(base: string, path: string, query?: Record<string, unknown>): string {
-  // Build URL under the /sycord/api/ path
-  const baseClean = base.replace(/\/+$/, "").replace(/\/sycord\/api\/?$/, "")
-  const pathClean = path.replace(/^\/+/, "").replace(/^sycord\/api\//, "")
-  const url = new URL(`${baseClean}/sycord/api/${pathClean}`)
+  // Raw API routes are served under /api/. The legacy /sycord/api namespace
+  // returns 405 for project creation and is not used by the current platform.
+  const baseClean = base.replace(/\/+$/, "").replace(/\/sycord\/api\/?$/, "").replace(/\/api\/?$/, "")
+  const pathClean = path.replace(/^\/+/, "").replace(/^sycord\/api\//, "").replace(/^api\//, "")
+  const url = new URL(`${baseClean}/api/${pathClean}`) 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null) continue
@@ -672,11 +673,9 @@ export async function syteProjectConnect(input: {
   uuid?: string
   env_vars?: Record<string, string>
 }): Promise<SyteResult<SycordProjectConnectResponse>> {
-  return syteSycordRequest<SycordProjectConnectResponse>("POST", "project_connect", {
+  return syteSycordRequest<SycordProjectConnectResponse>("POST", "projects", {
     body: {
       name: input.name,
-      stack: input.stack ?? "nextjs",
-      ...(input.uuid ? { uuid: input.uuid } : {}),
       ...(input.env_vars ? { env_vars: input.env_vars } : {}),
     },
   })
