@@ -753,7 +753,11 @@ export async function syteAgentStream(options: SyteAgentStreamOptions): Promise<
   const config = getSyteConfig()
   const agentMode = options.agentMode === "plan" ? "plan" : "build"
   const planMode = options.planMode ?? (agentMode === "plan" ? "always" : "off")
-  const endpoint = `${config.baseUrl}/api/projects/${encodeURIComponent(options.projectId)}/ai/stream`
+  // The documented stream route is keyed by Sycord's project UUID, not the
+  // local Torso project id. The UUID is the workspace identity used by the
+  // project_connect API and is also the source of the project's model config.
+  const sycordProjectId = options.workspaceUuid || options.projectId
+  const endpoint = `${config.baseUrl}/api/projects/${encodeURIComponent(sycordProjectId)}/ai/stream`
   return fetch(endpoint, {
     method: "POST",
     headers: {
@@ -765,10 +769,9 @@ export async function syteAgentStream(options: SyteAgentStreamOptions): Promise<
     },
     body: JSON.stringify({
       message: options.message,
-      model_profile: options.modelProfile,
-      plan_mode: planMode,
-      agent_mode: agentMode,
-      workspace_uuid: options.workspaceUuid,
+      ...(options.modelProfile ? { model: options.modelProfile } : {}),
+      session_id: crypto.randomUUID(),
+      execution_speed: planMode === "always" || agentMode === "plan" ? "deep_reasoning" : "balanced",
     }),
     signal: options.signal,
   })

@@ -16,6 +16,8 @@ type SycordModel = {
 type SycordModelsResponse = {
   available_models?: unknown
   models?: unknown
+  current_model?: unknown
+  provider?: unknown
 }
 
 function getSycordModelsUrl(): string {
@@ -39,9 +41,15 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
   for (const candidate of source as SycordModel[]) {
     if (!candidate || candidate.enabled === false) continue
 
-    const profile = typeof candidate.profile === "string" ? candidate.profile.trim() : ""
-    const name = typeof candidate.name === "string" ? candidate.name.trim() : ""
-    const id = typeof candidate.id === "string" ? candidate.id.trim() : profile
+    // The current API returns { id, name } and does not include the legacy
+    // `profile` field. Use the model id as the stream model/profile fallback.
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : ""
+    const profile = typeof candidate.profile === "string"
+      ? candidate.profile.trim()
+      : id
+    const name = typeof candidate.name === "string"
+      ? candidate.name.trim()
+      : id
     if (!profile || !name || !id || seen.has(profile)) continue
 
     seen.add(profile)
