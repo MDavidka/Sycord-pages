@@ -46,11 +46,11 @@ function isAllowedPreviewUrl(raw: string): boolean {
 
     if (isAllowed) {
       if (parsed.protocol === "http:") {
-        return hostname === "localhost" || hostname === "127.0.0.1"
+        return process.env.NODE_ENV !== "production" && (hostname === "localhost" || hostname === "127.0.0.1")
       }
       return true
     }
-    if (hostname === "localhost" || hostname === "127.0.0.1") return true
+    if (process.env.NODE_ENV !== "production" && (hostname === "localhost" || hostname === "127.0.0.1")) return true
     return false
   } catch {
     return false
