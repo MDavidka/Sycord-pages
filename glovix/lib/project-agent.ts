@@ -240,7 +240,7 @@ function isTransientNetworkError(error: unknown): boolean {
 function eventText(event: TursoSessionEvent): string {
     const payload = event.payload || {};
     const preferred =
-        payload.reply ?? payload.error ?? payload.delta ?? payload.text ?? event.detail ?? '';
+        payload.reply ?? payload.error ?? payload.delta ?? payload.content ?? payload.text ?? payload.message ?? event.detail ?? '';
     return typeof preferred === 'string' ? preferred : JSON.stringify(preferred);
 }
 
@@ -302,15 +302,18 @@ export function normalizeAgentQuestion(
     const nested =
         payload.question && typeof payload.question === 'object'
             ? (payload.question as Record<string, unknown>)
-            : null;
+            : payload.question_data && typeof payload.question_data === 'object'
+                ? (payload.question_data as Record<string, unknown>)
+                : null;
     const source = nested || payload;
 
     const idRaw =
         source.question_id ??
         source.id ??
         payload.question_id ??
-        payload.id;
-    const id = typeof idRaw === 'string' || typeof idRaw === 'number' ? String(idRaw).trim() : '';
+        payload.id ??
+        'question_1';
+    const id = typeof idRaw === 'string' || typeof idRaw === 'number' ? String(idRaw).trim() : 'question_1';
     if (!id) return null;
 
     const typeRaw = String(
@@ -467,8 +470,11 @@ function normalizeTursoEvent(
             return { type: 'processing', ...common };
         case 'thinking':
         case 'thinking_delta':
+        case 'thought':
+        case 'thought_delta':
             return { type: 'thinking', ...common };
         case 'plan':
+        case 'plan_approval_required':
             return {
                 type: 'plan',
                 ...common,
@@ -485,7 +491,8 @@ function normalizeTursoEvent(
                 text: event.detail || event.title || 'made a screenshot',
             };
         }
-        case 'question': {
+        case 'question':
+        case 'user_input_required': {
             const question = normalizeAgentQuestion(payload, {
                 title: event.title,
                 detail: event.detail,
@@ -514,25 +521,27 @@ function normalizeTursoEvent(
             return {
                 type: payload.phase === 'finished' ? 'tool_finished' : 'tool_started',
                 ...common,
-                tool: typeof payload.tool === 'string' ? payload.tool : event.title,
+                tool: typeof payload.tool === 'string' ? payload.tool : (typeof payload.tool_name === 'string' ? payload.tool_name : event.title),
                 arguments: payload.arguments ?? payload,
                 ok: payload.ok === true,
             };
         case 'tool_call_started':
+        case 'tool_call_start':
             return {
                 type: 'tool_started',
                 ...common,
-                tool: typeof payload.tool === 'string' ? payload.tool : event.title,
+                tool: typeof payload.tool === 'string' ? payload.tool : (typeof payload.tool_name === 'string' ? payload.tool_name : event.title),
                 arguments: payload.arguments ?? payload,
             };
         case 'tool_call_finished':
+        case 'tool_call_result':
         case 'tool_error':
             return {
                 type: 'tool_finished',
                 ...common,
-                tool: typeof payload.tool === 'string' ? payload.tool : event.title,
+                tool: typeof payload.tool === 'string' ? payload.tool : (typeof payload.tool_name === 'string' ? payload.tool_name : event.title),
                 arguments: payload.arguments ?? payload,
-                ok: event.event_type === 'tool_error' ? false : payload.ok !== false,
+                ok: event.event_type === 'tool_error' ? false : payload.ok !== false && (!payload.result || payload.result.ok !== false),
             };
         case 'file_created':
         case 'file_modified':
@@ -544,9 +553,7 @@ function normalizeTursoEvent(
         case 'command_output':
             // Semantic activity events — preserve payload for file/search/command UI.
             return {
-                type: event.event_type === 'file_search' || event.event_type === 'file_read'
-                    ? 'tool_finished'
-                    : 'tool_finished',
+                type: 'tool_finished',
                 ...common,
                 tool: event.event_type,
                 arguments: {
@@ -598,28 +605,36 @@ function normalizeTursoEvent(
                 text: event.detail || event.title || 'Subagent scope',
             };
         case 'token_delta':
+        case 'delta':
             return { type: 'delta', ...common };
         case 'message_snapshot':
         case 'assistant_message':
             return { type: 'message', ...common };
         case 'user_message':
+        case 'user_message_received':
             return null;
         case 'request_completed':
+        case 'done':
             return { type: 'done', ...common };
         case 'request_failed':
+        case 'error':
             return { type: 'error', ...common };
         case 'session_stopped':
         case 'agent_stopped':
+        case 'stopped':
+        case 'cancelled':
             return {
                 type: 'stopped',
                 ...common,
                 text: event.detail || (typeof payload.reason === 'string' ? payload.reason : 'Agent stopped.'),
             };
         case 'heartbeat':
+        case 'ping':
         case 'usage':
         case 'service_action':
         case 'agent_started':
         case 'agent_restarted':
+        case 'session_idle':
             return null;
         default:
             return null;
@@ -647,18 +662,19 @@ function parseSseBlock(block: string): TursoSessionEvent | null {
         const parsed = JSON.parse(data) as Record<string, unknown>;
         const eventType =
             (typeof parsed.event_type === 'string' && parsed.event_type) ||
+            (typeof parsed.event === 'string' && parsed.event) ||
             eventName ||
             'status';
         const payload =
             parsed.payload && typeof parsed.payload === 'object'
                 ? (parsed.payload as Record<string, unknown>)
-                : {};
+                : parsed;
         return {
             id: Number(parsed.id) || id || 0,
             event_type: eventType,
             role: typeof parsed.role === 'string' ? parsed.role : undefined,
-            title: typeof parsed.title === 'string' ? parsed.title : undefined,
-            detail: typeof parsed.detail === 'string' ? parsed.detail : undefined,
+            title: typeof parsed.title === 'string' ? parsed.title : (typeof parsed.tool_name === 'string' ? parsed.tool_name : undefined),
+            detail: typeof parsed.detail === 'string' ? parsed.detail : (typeof parsed.message === 'string' ? parsed.message : undefined),
             payload,
         };
     } catch {
