@@ -3,8 +3,8 @@ import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-chat-session"
 import {
-  syteAgentChange,
   syteAgentSessions,
+  syteAgentStream,
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 import { checkRateLimit } from "@/lib/security/rate-limit"
@@ -134,7 +134,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const modelProfile = MODEL_PROFILES.has(requestedProfile) || DYNAMIC_MODEL_PROFILE.test(requestedProfile)
     ? requestedProfile
     : "syra-base"
-  const afterSession = Math.max(0, Math.floor(Number(body?.afterSession) || 0))
   const agentMode = body?.agentMode === "plan" ? "plan" : "build"
   const planMode = body?.planMode === "auto" || body?.planMode === "always" || body?.planMode === "off"
     ? body.planMode
@@ -158,44 +157,38 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
   }
 
-  // Start the agent immediately — do not block on a sessions list round-trip.
-  // Session numbers from the client (`afterSession`) are authoritative enough
-  // for UI correlation; Turso poll events overwrite with the durable number.
-  const change = await syteAgentChange(workspace.uuid, message, modelProfile, {
-    planMode,
-    agentMode,
-  })
-  const requestId = change.data?.request_id
-  const tursoSessionId = change.data?.turso_session_id
-  if (!change.ok || !requestId) {
+  let upstream: Response
+  try {
+    upstream = await syteAgentStream({
+      projectId,
+      message,
+      modelProfile,
+      planMode,
+      agentMode,
+      workspaceUuid: workspace.uuid,
+    })
+  } catch (error) {
     return Response.json(
-      { message: change.error || "Syte agent did not accept the request." },
-      { status: change.status || 502 },
+      { message: error instanceof Error ? error.message : "Failed to connect to Syte agent." },
+      { status: 502 },
     )
   }
 
-  if (!tursoSessionId) {
+  if (!upstream.ok || !upstream.body) {
+    const detail = await upstream.text().catch(() => "")
     return Response.json(
-      {
-        message:
-          "Syte agent accepted the request but did not return turso_session_id. " +
-          "Configure turso_database_url in the Syte AI tab, or upgrade the deployer.",
-        request_id: requestId,
-        status: change.data?.status ?? "accepted",
-      },
-      { status: 503 },
+      { message: detail || `Syte agent stream failed (${upstream.status}).` },
+      { status: upstream.status || 502 },
     )
   }
 
-  const sessionNumber = afterSession + 1
-
-  return Response.json({
-    ok: true,
-    request_id: requestId,
-    status: change.data?.status ?? "accepted",
-    turso_session_id: tursoSessionId,
-    session_number: sessionNumber,
-    session_url: `/api/workspace/sycord/agent-session?sessionId=${encodeURIComponent(tursoSessionId)}&projectId=${encodeURIComponent(projectId)}`,
-    sessions_url: `/api/projects/${encodeURIComponent(projectId)}/agent?resume=1`,
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
   })
 }

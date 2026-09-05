@@ -1134,78 +1134,62 @@ export async function streamProjectAgent(options: StreamProjectAgentOptions): Pr
     const text = messageToText(options.message);
     if (!text) throw new Error('The agent message is empty.');
 
-    let submit: SubmitAgentResponse;
-    try {
-        submit = await fetchJson<SubmitAgentResponse>(
-            `/api/projects/${encodeURIComponent(options.projectId)}/agent`,
-            {
-                method: 'POST',
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: text,
-                    modelProfile: options.modelProfile,
-                    planMode: options.planMode,
-                    agentMode: options.agentMode,
-                    afterSession: options.afterSession,
-                }),
-                signal: options.signal,
-            },
-        );
-    } catch (error) {
-        if (isTransientNetworkError(error)) {
-            // Submit may have succeeded on the server — try to attach to the open Turso session.
-            const resumed = await resumeProjectAgent({
-                projectId: options.projectId,
-                signal: options.signal,
-                onEvent: options.onEvent,
-            }).catch(() => null);
-            if (resumed) {
-                return {
-                    session: resumed.session,
-                    eventId: resumed.eventId,
-                    tursoSessionId: resumed.tursoSessionId,
-                    requestId: '',
-                    status: resumed.status,
-                };
-            }
-        }
-        throw error;
-    }
-
-    const tursoSessionId = submit.turso_session_id;
-    const requestId = submit.request_id || '';
-    if (!tursoSessionId) {
-        throw new Error(submit.message || 'Agent did not return a Turso session id.');
-    }
-
-    const sessionNumber = Number(submit.session_number) || options.afterSession + 1;
-    options.onEvent({
-        type: 'session',
-        session: sessionNumber,
-        sessionAuthoritative: false,
-        tursoSessionId,
-        requestId,
-    });
-
-    const polled = await pollTursoAgentSession({
-        projectId: options.projectId,
-        tursoSessionId,
-        requestId: requestId || undefined,
-        sessionNumber,
+    const response = await fetch(`/api/projects/${encodeURIComponent(options.projectId)}/agent`, {
+        method: 'POST',
+        headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: text,
+            modelProfile: options.modelProfile,
+            planMode: options.planMode,
+            agentMode: options.agentMode,
+            afterSession: options.afterSession,
+        }),
         signal: options.signal,
-        onEvent: options.onEvent,
+        credentials: 'same-origin',
     });
+    if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(detail || `Agent stream failed (${response.status}).`);
+    }
+    if (!response.body) throw new Error('Agent stream returned no body.');
 
-    return {
-        session: polled.session,
-        eventId: polled.eventId,
-        tursoSessionId,
-        requestId,
-        status: polled.status,
+    let session = options.afterSession + 1;
+    let eventId = 0;
+    let status = 'completed';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const emit = (raw: string) => {
+        const data = raw.split(/\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).join('\n');
+        if (!data || data === '[DONE]') return;
+        let payload: any;
+        try { payload = JSON.parse(data); } catch { payload = { type: 'message', text: data }; }
+        const type = String(payload.type || payload.event || payload.kind || 'message');
+        const textValue = typeof payload.text === 'string' ? payload.text : typeof payload.content === 'string' ? payload.content : typeof payload.delta === 'string' ? payload.delta : '';
+        eventId = Number(payload.event_id || payload.id || eventId) || eventId;
+        if (payload.session || payload.session_number) session = Number(payload.session || payload.session_number) || session;
+        if (type === 'error') status = 'failed';
+        if (type === 'done' || type === 'completed' || type === 'complete') status = 'completed';
+        options.onEvent({
+            ...payload,
+            type: (type === 'completed' || type === 'complete' ? 'done' : type === 'token' ? 'delta' : type) as ProjectAgentEvent['type'],
+            text: textValue,
+            session,
+            eventId,
+            fromStream: true,
+            sessionAuthoritative: true,
+        });
     };
+    while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const frames = buffer.split(/\n\n/);
+        buffer = frames.pop() || '';
+        for (const frame of frames) emit(frame);
+    }
+    if (buffer.trim()) emit(buffer);
+    return { session, eventId, tursoSessionId: '', requestId: '', status };
 }
 
 /**

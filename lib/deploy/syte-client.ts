@@ -740,12 +740,46 @@ export type SyteAgentChangeResponse = {
  * Returns request_id + turso_session_id immediately.
  * Poll GET /api/agent_session/{turso_session_id} until status != "open".
  */
+export type SyteAgentStreamOptions = SyteAgentExecutionOptions & {
+  projectId: string
+  message: string
+  modelProfile?: string
+  workspaceUuid?: string
+  signal?: AbortSignal
+}
+
+/** Proxy the AI Builder SSE stream without exposing DEPLOYER_API_KEY to clients. */
+export async function syteAgentStream(options: SyteAgentStreamOptions): Promise<Response> {
+  const config = getSyteConfig()
+  const agentMode = options.agentMode === "plan" ? "plan" : "build"
+  const planMode = options.planMode ?? (agentMode === "plan" ? "always" : "off")
+  const endpoint = `${config.baseUrl}/api/projects/${encodeURIComponent(options.projectId)}/ai/stream`
+  return fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Accept: "text/event-stream",
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+      "X-API-Key": config.apiKey,
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      message: options.message,
+      model_profile: options.modelProfile,
+      plan_mode: planMode,
+      agent_mode: agentMode,
+      workspace_uuid: options.workspaceUuid,
+    }),
+    signal: options.signal,
+  })
+}
+
 export async function syteAgentChange(
   uuid: string,
   message: string,
   modelProfile?: string,
   execution: SyteAgentExecutionOptions = {},
-): Promise<SyteResult<SyteAgentChangeResponse>> {
+  ): Promise<SyteResult<SyteAgentChangeResponse>> {
   const agentMode = execution.agentMode === "plan" ? "plan" : "build"
   const planMode = execution.planMode ?? (agentMode === "plan" ? "always" : "off")
   return syteWorkspaceRequest<SyteAgentChangeResponse>("POST", "agent_change", {
