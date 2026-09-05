@@ -109,16 +109,18 @@ export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<
     }
 
     return body.models.map((model) => {
-        const apiModel = model.name || model.profile
-        const labelName = model.name || model.profile
+        // model.profile carries the actual model identifier (e.g. "glm-5.3-flash")
+        // model.name carries the provider/display name (e.g. "B.ai" or "glm-5.3-flash")
+        const actualModel = model.profile || model.name
+        const displayName = model.name || model.profile
         return {
-            id: model.id || model.profile,
-            label: labelName,
-            subtitle: model.profile,
-            modelType: model.profile,
-            apiModel,
-            icon: getProviderIconUrl(apiModel) || '/model-logos/gemini.svg',
-            iconAlt: labelName,
+            id: model.id || actualModel,
+            label: actualModel,
+            subtitle: displayName,
+            modelType: actualModel,
+            apiModel: actualModel,
+            icon: getProviderIconUrl(actualModel) || getProviderIconUrl(displayName) || '/model-logos/gemini.svg',
+            iconAlt: displayName,
         }
     })
 }
