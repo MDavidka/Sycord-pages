@@ -51,7 +51,7 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
   return models
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return Response.json({ message: "Unauthorized" }, { status: 401 })
