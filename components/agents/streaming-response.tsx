@@ -182,7 +182,7 @@ export function StreamingResponse({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: reduce ? 0.12 : 0.22, ease: EASE_OUT }}
-            className="mt-3 pt-1 border-t border-border/30"
+            className="mt-2 pt-0.5"
           >
             <div className={cn("flex items-center gap-0.5", actionsClassName)}>
               {canCopy ? (
