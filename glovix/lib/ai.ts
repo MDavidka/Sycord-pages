@@ -108,22 +108,17 @@ export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<
         throw new Error('Sycord returned an invalid model list.')
     }
 
-    if (body.models.length === 0) {
-        return MODEL_CHOICES
-    }
-
     return body.models.map((model) => {
         const apiModel = model.name || model.profile
+        const labelName = model.name || model.profile
         return {
             id: model.id || model.profile,
-            // The profile is what the Sycord agent API expects, while the model
-            // name is what the local chat bridge sends as its model id.
-            label: model.profile,
+            label: labelName,
             subtitle: model.profile,
             modelType: model.profile,
             apiModel,
             icon: getProviderIconUrl(apiModel) || '/model-logos/gemini.svg',
-            iconAlt: model.name || model.profile,
+            iconAlt: labelName,
         }
     })
 }
