@@ -185,6 +185,12 @@ export interface Message {
     agentTimelineLoaded?: boolean;
     /** Client timestamp for message footer (HH:MM + copy). */
     createdAt?: number;
+    /** Raw or multi-step reasoning text for thinking block */
+    thinking?: string;
+    /** Thinking duration in seconds */
+    thinkingDuration?: number;
+    /** Chronological interleaved segments (thinking, text, actions, plan, question) */
+    segments?: any[];
     /** Normalized execution feed saved with the assistant turn for durable history. */
     agentActions?: Array<{
         id: string;

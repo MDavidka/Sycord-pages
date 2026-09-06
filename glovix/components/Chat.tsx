@@ -52,6 +52,14 @@ import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent-activity';
 import { StreamingResponse } from '@/components/agents/streaming-response';
 import { ModelEffortSelector, type EffortLevel } from '@/components/agents/model-effort-selector';
+import {
+    ActionRowItem,
+    CompactActionsItem,
+    ImplementationPlanCard,
+    ThinkingTimelineItem,
+    type StreamActionItem,
+    type StreamPlan,
+} from '@/components/agents/chronological-stream';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -79,10 +87,17 @@ interface FileAttachment {
 // Helper to group messages for UI
 type ContentType = string | null | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
 
-interface AssistantSegment {
-    type: 'text' | 'tools';
+export interface AssistantSegment {
+    type: 'text' | 'tools' | 'thinking' | 'action' | 'compact_actions' | 'plan' | 'question';
     content?: ContentType;
     toolCalls?: { call: ToolCall; result?: string }[];
+    id?: string;
+    duration?: number;
+    isLive?: boolean;
+    action?: StreamActionItem;
+    actions?: StreamActionItem[];
+    plan?: StreamPlan;
+    question?: AgentQuestion;
 }
 
 interface MessageGroup {
@@ -787,30 +802,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 } as any;
             } else if (msg.role === 'assistant') {
                 if (currentGroup && currentGroup.role === 'assistant') {
-                    if (!currentGroup.segments) currentGroup.segments = [];
+                    if (Array.isArray((msg as any).segments) && (msg as any).segments.length > 0) {
+                        currentGroup.segments = [...(msg as any).segments];
+                    } else {
+                        if (!currentGroup.segments) currentGroup.segments = [];
 
-                    if (msg.content) {
-                        const textContent = typeof msg.content === 'string' ? msg.content : '';
-                        if (textContent) {
-                            const lastSeg = currentGroup.segments[currentGroup.segments.length - 1];
-                            if (lastSeg && lastSeg.type === 'text' && typeof lastSeg.content === 'string') {
-                                lastSeg.content += '\n\n' + textContent;
-                            } else {
-                                currentGroup.segments.push({ type: 'text', content: textContent });
+                        if (msg.content) {
+                            const textContent = typeof msg.content === 'string' ? msg.content : '';
+                            if (textContent) {
+                                const lastSeg = currentGroup.segments[currentGroup.segments.length - 1];
+                                if (lastSeg && lastSeg.type === 'text' && typeof lastSeg.content === 'string') {
+                                    lastSeg.content += '\n\n' + textContent;
+                                } else {
+                                    currentGroup.segments.push({ type: 'text', content: textContent });
+                                }
                             }
                         }
-                    }
 
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        const newCalls = msg.tool_calls.map(tc => ({ call: tc }));
-                        const lastSeg = currentGroup.segments[currentGroup.segments.length - 1];
-                        if (lastSeg && lastSeg.type === 'tools') {
-                            lastSeg.toolCalls!.push(...newCalls);
-                        } else {
-                            currentGroup.segments.push({ type: 'tools', toolCalls: newCalls });
+                        if (msg.tool_calls && msg.tool_calls.length > 0) {
+                            const newCalls = msg.tool_calls.map(tc => ({ call: tc }));
+                            const lastSeg = currentGroup.segments[currentGroup.segments.length - 1];
+                            if (lastSeg && lastSeg.type === 'tools') {
+                                lastSeg.toolCalls!.push(...newCalls);
+                            } else {
+                                currentGroup.segments.push({ type: 'tools', toolCalls: newCalls });
+                            }
+                            if (!currentGroup.toolCalls) currentGroup.toolCalls = [];
+                            currentGroup.toolCalls.push(...newCalls);
                         }
-                        if (!currentGroup.toolCalls) currentGroup.toolCalls = [];
-                        currentGroup.toolCalls.push(...newCalls);
                     }
 
                     if ((msg as any).thinking) {
@@ -830,12 +849,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 } else {
                     if (currentGroup) groups.push(currentGroup);
 
-                    const segments: AssistantSegment[] = [];
-                    if (msg.content) {
-                        segments.push({ type: 'text', content: msg.content });
-                    }
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        segments.push({ type: 'tools', toolCalls: msg.tool_calls.map(tc => ({ call: tc })) });
+                    let segments: AssistantSegment[] = [];
+                    if (Array.isArray((msg as any).segments) && (msg as any).segments.length > 0) {
+                        segments = [...(msg as any).segments];
+                    } else {
+                        if ((msg as any).thinking) {
+                            segments.push({
+                                type: 'thinking',
+                                id: 'think_0',
+                                content: (msg as any).thinking,
+                                duration: (msg as any).thinkingDuration || 1,
+                            });
+                        }
+                        if (msg.content) {
+                            segments.push({ type: 'text', content: msg.content });
+                        }
+                        if (msg.tool_calls && msg.tool_calls.length > 0) {
+                            segments.push({ type: 'tools', toolCalls: msg.tool_calls.map(tc => ({ call: tc })) });
+                        }
                     }
 
                     currentGroup = {
@@ -1244,14 +1275,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     let thinkingStartedAt: number | null = null;
                     let tursoSessionId = knownTursoId || '';
                     let addedBubble = false;
+                    const segments: AssistantSegment[] = Array.isArray(last?.segments) ? [...last.segments] : [];
+
+                    const syncHistMessage = (nextText?: string, nextThinking?: string, dur?: number) => {
+                        if (!replayHistoryOnly) {
+                            updateLastMessage(nextText ?? assistantContent, undefined, nextThinking, dur, [...segments]);
+                        }
+                    };
 
                     const ensureAssistantBubble = () => {
                         if (addedBubble) return;
                         if ((lastLooksIncomplete || replayHistoryOnly) && last?.role === 'assistant') {
+                            if (!last.segments && segments.length > 0) last.segments = segments;
                             addedBubble = true;
                             return;
                         }
-                        addMessage({ role: 'assistant', content: '' });
+                        addMessage({ role: 'assistant', content: '', segments });
                         addedBubble = true;
                     };
 
@@ -1272,6 +1311,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             if (activeSession) lastMessage.agentSession = activeSession;
                             if (highestEventId) lastMessage.agentEventId = highestEventId;
                             if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
+                            if (segments.length > 0) lastMessage.segments = [...segments];
                             setMessages([...state.messages]);
                         }
 
@@ -1285,28 +1325,56 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     thinkingStartedAt = Date.now();
                                     if (!replayHistoryOnly) setThinkingStartTime(thinkingStartedAt);
                                 }
+                                const chunk = event.text || '';
                                 if (!replayHistoryOnly) {
-                                    const chunk = event.text || '';
                                     setCurrentThinking(prev =>
                                         event.fromStream && prev && chunk && !chunk.startsWith(prev)
                                             ? prev + chunk
                                             : chunk || prev,
                                     );
-                                    if (event.fromStream && chunk) {
-                                        const state = useStore.getState();
-                                        const last = state.messages[state.messages.length - 1] as any;
-                                        updateLastMessage(
-                                            assistantContent,
-                                            undefined,
-                                            `${last?.thinking || ''}${chunk}`,
-                                        );
-                                    } else {
-                                        updateLastMessage(assistantContent, undefined, chunk);
-                                    }
                                 }
+                                let thinkSeg = segments.find(s => s.type === 'thinking');
+                                if (!thinkSeg) {
+                                    thinkSeg = {
+                                        type: 'thinking',
+                                        id: `think_${Date.now()}`,
+                                        content: chunk,
+                                        isLive: !replayHistoryOnly,
+                                        duration: 1,
+                                    };
+                                    segments.unshift(thinkSeg);
+                                } else if (chunk) {
+                                    thinkSeg.content = event.fromStream && thinkSeg.content && !chunk.startsWith(String(thinkSeg.content))
+                                        ? String(thinkSeg.content) + chunk
+                                        : chunk;
+                                }
+                                syncHistMessage(assistantContent, typeof thinkSeg.content === 'string' ? thinkSeg.content : undefined);
                                 break;
                             }
                             case 'plan': {
+                                const planData = planFromAgentUpdate(event.plan ?? event.arguments ?? {});
+                                if (planData) {
+                                    const steps: StreamPlanStep[] = (planData.steps || []).map((s: any) => ({
+                                        id: s.id,
+                                        title: s.title,
+                                        status: s.status === 'completed' ? 'completed' : s.status === 'in_progress' ? 'in_progress' : 'pending',
+                                        progress: s.progress ?? (s.status === 'in_progress' ? 75 : undefined),
+                                    }));
+                                    const planPayload: StreamPlan = {
+                                        id: planData.id || `plan_${Date.now()}`,
+                                        title: planData.title || 'Implementation plan',
+                                        steps,
+                                        totalSteps: steps.length,
+                                        completedSteps: steps.filter(s => s.status === 'completed').length,
+                                    };
+                                    let planSeg = segments.find(s => s.type === 'plan');
+                                    if (planSeg) {
+                                        planSeg.plan = planPayload;
+                                    } else {
+                                        segments.push({ type: 'plan', id: `plan_${Date.now()}`, plan: planPayload });
+                                    }
+                                    syncHistMessage();
+                                }
                                 syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
                                 const args = typeof event.arguments === 'string'
                                     ? event.arguments
@@ -1423,6 +1491,29 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     eventId: event.eventId,
                                     completedAt: Date.now(),
                                 });
+
+                                const parsed = parseArgs(args);
+                                const filePath = parsed.path || parsed.file || parsed.file_path || (FILE_TOOL_NAMES.has(tool.toLowerCase()) ? getActionDisplayName(tool, args) : undefined);
+                                const command = parsed.command || parsed.cmd || (tool.includes('command') ? getActionDisplayName(tool, args) : undefined);
+                                const actionItem: StreamActionItem = {
+                                    id: actionId,
+                                    toolName: tool,
+                                    displayName: getActionDisplayName(tool, args) || event.title || tool,
+                                    status: event.ok === false ? 'error' : 'done',
+                                    result: event.text,
+                                    args: parsed,
+                                    filePath,
+                                    command,
+                                    additions: parsed.additions,
+                                    deletions: parsed.deletions,
+                                };
+                                const existingIdx = segments.findIndex(s => s.type === 'action' && s.action?.id === actionId);
+                                if (existingIdx >= 0) {
+                                    segments[existingIdx] = { type: 'action', id: `action_${actionId}`, action: actionItem };
+                                } else {
+                                    segments.push({ type: 'action', id: `action_${actionId}`, action: actionItem });
+                                }
+                                syncHistMessage();
                                 break;
                             }
                             case 'screenshot': {
@@ -1455,25 +1546,39 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 setQuestionError(null);
                                 break;
                             }
-                            case 'delta':
+                            case 'delta': {
                                 assistantContent += event.text || '';
-                                if (!replayHistoryOnly) updateLastMessage(assistantContent);
+                                const lastSeg = segments[segments.length - 1];
+                                if (lastSeg && lastSeg.type === 'text') {
+                                    lastSeg.content = (typeof lastSeg.content === 'string' ? lastSeg.content : '') + (event.text || '');
+                                } else {
+                                    segments.push({ type: 'text', id: `text_${Date.now()}_${segments.length}`, content: event.text || '' });
+                                }
+                                syncHistMessage();
                                 break;
-                            case 'message':
-                                if (!assistantContent) {
-                                    assistantContent = event.text || '';
-                                    if (!replayHistoryOnly) updateLastMessage(assistantContent);
+                            }
+                            case 'message': {
+                                if (event.text) {
+                                    if (!assistantContent) assistantContent = event.text;
+                                    const lastSeg = segments[segments.length - 1];
+                                    if (lastSeg && lastSeg.type === 'text') {
+                                        lastSeg.content = event.text;
+                                    } else {
+                                        segments.push({ type: 'text', id: `text_${Date.now()}_${segments.length}`, content: event.text });
+                                    }
+                                    syncHistMessage();
                                 }
                                 break;
+                            }
                             case 'done':
                                 if (!assistantContent && event.text) {
                                     assistantContent = event.text;
                                 }
                                 assistantContent = assistantContent || 'Done.';
-                                if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
                                 clearPendingQuestion();
                                 markAgentTimelineLoaded();
+                                syncHistMessage();
                                 break;
                             case 'stopped':
                                 if (!replayHistoryOnly && !assistantContent) {
@@ -1607,7 +1712,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         let thinkingStartedAt: number | null = null;
         let tursoSessionId = '';
 
-        addMessage({ role: 'assistant', content: '' });
+        const segments: AssistantSegment[] = [];
+        addMessage({ role: 'assistant', content: '', segments });
+
+        const syncLastMessage = (nextText?: string, nextThinking?: string, dur?: number) => {
+            updateLastMessage(nextText ?? assistantContent, undefined, nextThinking, dur, [...segments]);
+        };
 
         const persistCursor = () => {
             const state = useStore.getState();
@@ -1616,6 +1726,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 if (activeSession) lastMessage.agentSession = activeSession;
                 if (highestEventId) lastMessage.agentEventId = highestEventId;
                 if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
+                if (segments.length > 0) lastMessage.segments = [...segments];
                 setMessages([...state.messages]);
             }
         };
@@ -1647,6 +1758,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             args: typeof event.arguments === 'string' ? event.arguments : JSON.stringify(event.arguments || {}),
                         });
                         updateAction(actionId, { status: 'running' });
+                        const actionItem: StreamActionItem = {
+                            id: actionId,
+                            toolName,
+                            displayName: statusMsg,
+                            status: 'running',
+                            args: event.arguments,
+                        };
+                        segments.push({ type: 'action', id: `action_${actionId}`, action: actionItem });
+                        syncLastMessage();
                     }
                     break;
                 }
@@ -1671,12 +1791,54 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             : prevThinking.endsWith(chunk)
                             ? prevThinking
                             : `${prevThinking}${chunk}`;
-                        updateLastMessage(assistantContent, undefined, nextThinking);
+                        
+                        let thinkSeg = segments.find(s => s.type === 'thinking');
+                        if (!thinkSeg) {
+                            thinkSeg = {
+                                type: 'thinking',
+                                id: `think_${Date.now()}`,
+                                content: nextThinking,
+                                isLive: true,
+                                duration: 1,
+                            };
+                            segments.unshift(thinkSeg);
+                        } else {
+                            thinkSeg.content = nextThinking;
+                            thinkSeg.isLive = true;
+                        }
+                        syncLastMessage(assistantContent, nextThinking);
                     }
                     break;
                 }
                 case 'plan': {
                     syncPlanFromTool('plan', event.plan ?? event.arguments ?? {}, setGenerationPlan);
+                    const planData = planFromAgentUpdate(event.plan ?? event.arguments ?? {});
+                    if (planData) {
+                        const steps: StreamPlanStep[] = (planData.steps || []).map((s: any) => ({
+                            id: s.id,
+                            title: s.title,
+                            status: s.status === 'completed' ? 'completed' : s.status === 'in_progress' ? 'in_progress' : 'pending',
+                            progress: s.progress ?? (s.status === 'in_progress' ? 75 : undefined),
+                        }));
+                        const planPayload: StreamPlan = {
+                            id: planData.id || `plan_${Date.now()}`,
+                            title: planData.title || 'Implementation plan',
+                            steps,
+                            totalSteps: steps.length,
+                            completedSteps: steps.filter(s => s.status === 'completed').length,
+                        };
+                        let planSeg = segments.find(s => s.type === 'plan');
+                        if (planSeg) {
+                            planSeg.plan = planPayload;
+                        } else {
+                            segments.push({
+                                type: 'plan',
+                                id: `plan_${Date.now()}`,
+                                plan: planPayload,
+                            });
+                        }
+                        syncLastMessage();
+                    }
                     const args = typeof event.arguments === 'string'
                         ? event.arguments
                         : JSON.stringify((event.plan ?? event.arguments) || {});
@@ -1705,6 +1867,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         subagentTaskId: event.subagentTaskId,
                     });
                     updateAction(actionId, { status: 'running', args });
+                    const actionItem: StreamActionItem = {
+                        id: actionId,
+                        toolName: 'subagent',
+                        displayName: event.text || event.title || 'Subagent',
+                        status: 'running',
+                        args: event.arguments,
+                    };
+                    segments.push({ type: 'action', id: `action_${actionId}`, action: actionItem });
+                    syncLastMessage();
                     break;
                 }
                 case 'subagent_scope': {
@@ -1741,6 +1912,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             subagentTaskId: event.subagentTaskId,
                         });
                     }
+                    const subSeg = segments.find(s => s.type === 'action' && (s.action?.id === key || s.action?.toolName === 'subagent'));
+                    if (subSeg && subSeg.type === 'action' && subSeg.action) {
+                        subSeg.action.status = event.type === 'subagent_failed' ? 'error' : 'done';
+                        subSeg.action.result = event.text;
+                    }
+                    syncLastMessage();
                     break;
                 }
                 case 'tool_started': {
@@ -1762,6 +1939,29 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!pendingActions.includes(actionId)) pendingActions.push(actionId);
                     actionByCall.set(key, pendingActions);
                     updateAction(actionId, { status: 'running', args });
+
+                    const parsed = parseArgs(args);
+                    const filePath = parsed.path || parsed.file || parsed.file_path || (FILE_TOOL_NAMES.has(tool.toLowerCase()) ? getActionDisplayName(tool, args) : undefined);
+                    const command = parsed.command || parsed.cmd || (tool.includes('command') ? getActionDisplayName(tool, args) : undefined);
+                    const actionItem: StreamActionItem = {
+                        id: actionId,
+                        toolName: tool,
+                        displayName: getActionDisplayName(tool, args) || event.title || tool,
+                        status: 'running',
+                        args: parsed,
+                        filePath,
+                        command,
+                        additions: parsed.additions,
+                        deletions: parsed.deletions,
+                        badges: Array.isArray(parsed.badges) ? parsed.badges : undefined,
+                    };
+                    const existingIdx = segments.findIndex(s => s.type === 'action' && s.action?.id === actionId);
+                    if (existingIdx >= 0) {
+                        segments[existingIdx] = { type: 'action', id: `action_${actionId}`, action: actionItem };
+                    } else {
+                        segments.push({ type: 'action', id: `action_${actionId}`, action: actionItem });
+                    }
+                    syncLastMessage();
                     break;
                 }
                 case 'tool_finished': {
@@ -1792,6 +1992,30 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         eventId: event.eventId,
                         completedAt: Date.now(),
                     });
+
+                    const parsed = parseArgs(args);
+                    const filePath = parsed.path || parsed.file || parsed.file_path || (FILE_TOOL_NAMES.has(tool.toLowerCase()) ? getActionDisplayName(tool, args) : undefined);
+                    const command = parsed.command || parsed.cmd || (tool.includes('command') ? getActionDisplayName(tool, args) : undefined);
+                    const actionItem: StreamActionItem = {
+                        id: actionId,
+                        toolName: tool,
+                        displayName: getActionDisplayName(tool, args) || event.title || tool,
+                        status: event.ok === false ? 'error' : 'done',
+                        result: event.text,
+                        args: parsed,
+                        filePath,
+                        command,
+                        additions: parsed.additions,
+                        deletions: parsed.deletions,
+                        badges: Array.isArray(parsed.badges) ? parsed.badges : undefined,
+                    };
+                    const existingIdx = segments.findIndex(s => s.type === 'action' && s.action?.id === actionId);
+                    if (existingIdx >= 0) {
+                        segments[existingIdx] = { type: 'action', id: `action_${actionId}`, action: actionItem };
+                    } else {
+                        segments.push({ type: 'action', id: `action_${actionId}`, action: actionItem });
+                    }
+                    syncLastMessage();
                     break;
                 }
                 case 'screenshot': {
@@ -1811,6 +2035,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         setPendingQuestion(event.question);
                         setQuestionError(null);
                         setQuestionSubmitting(false);
+                        const existingQ = segments.find(s => s.type === 'question' && s.question?.id === event.question?.id);
+                        if (!existingQ) {
+                            segments.push({
+                                type: 'question',
+                                id: `question_${event.question.id}`,
+                                question: event.question,
+                            });
+                        }
+                        syncLastMessage();
                     }
                     break;
                 }
@@ -1823,26 +2056,68 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setQuestionError(null);
                     break;
                 }
-                case 'delta':
-                    assistantContent += event.text || '';
-                    updateLastMessage(assistantContent);
-                    break;
-                case 'message':
-                    if (!assistantContent) {
-                        assistantContent = event.text || '';
-                        updateLastMessage(assistantContent);
+                case 'delta': {
+                    const textChunk = event.text || '';
+                    if (textChunk) {
+                        assistantContent += textChunk;
+                        const lastSeg = segments[segments.length - 1];
+                        if (lastSeg && lastSeg.type === 'text') {
+                            lastSeg.content = (typeof lastSeg.content === 'string' ? lastSeg.content : '') + textChunk;
+                            lastSeg.isLive = true;
+                        } else {
+                            segments.push({
+                                type: 'text',
+                                id: `text_${Date.now()}_${segments.length}`,
+                                content: textChunk,
+                                isLive: true,
+                            });
+                        }
+                        syncLastMessage();
                     }
                     break;
-                case 'done':
+                }
+                case 'message': {
+                    if (event.text) {
+                        if (!assistantContent) {
+                            assistantContent = event.text;
+                        }
+                        const lastSeg = segments[segments.length - 1];
+                        if (lastSeg && lastSeg.type === 'text') {
+                            lastSeg.content = event.text;
+                            lastSeg.isLive = false;
+                        } else {
+                            segments.push({
+                                type: 'text',
+                                id: `text_${Date.now()}_${segments.length}`,
+                                content: event.text,
+                                isLive: false,
+                            });
+                        }
+                        syncLastMessage();
+                    }
+                    break;
+                }
+                case 'done': {
                     if (!assistantContent && event.text) {
                         assistantContent = event.text;
                     }
                     assistantContent = assistantContent || 'Done.';
-                    updateLastMessage(assistantContent);
                     completed = true;
                     clearPendingQuestion();
                     markAgentTimelineLoaded();
+                    const duration = thinkingStartedAt ? Math.max(1, Math.round((Date.now() - thinkingStartedAt) / 1000)) : 1;
+                    setThinkingDuration(duration);
+                    const thinkSeg = segments.find(s => s.type === 'thinking');
+                    if (thinkSeg) {
+                        thinkSeg.isLive = false;
+                        thinkSeg.duration = duration;
+                    }
+                    for (const seg of segments) {
+                        if (seg.type === 'text') seg.isLive = false;
+                    }
+                    updateLastMessage(assistantContent, undefined, undefined, duration, [...segments]);
                     break;
+                }
                 case 'stopped':
                     if (!assistantContent) updateLastMessage(event.text || 'Stopped.');
                     completed = true;
@@ -3094,7 +3369,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && (
+                            {group.role === 'assistant' && (!group.segments || group.segments.length === 0) && group.thinking && (
                                 <ThinkingBlock
                                     thinking={group.thinking}
                                     isDark={isDark}
@@ -3103,7 +3378,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 />
                             )}
 
-                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && (
+                            {group.role === 'assistant' && (!group.segments || group.segments.length === 0) && group.agentActions && group.agentActions.length > 0 && (
                                 <ActionsList
                                     actions={idx === groupedMessages.length - 1 && isRunning && actions.length > 0 ? actions : group.agentActions}
                                     isLive={idx === groupedMessages.length - 1 && isRunning}
@@ -3125,6 +3400,56 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
                                 <>
                                     {group.segments.map((seg, segIdx) => {
+                                        if (seg.type === 'thinking') {
+                                            const textThinking = typeof seg.content === 'string' ? seg.content : '';
+                                            if (!textThinking) return null;
+                                            return (
+                                                <ThinkingTimelineItem
+                                                    key={`seg-${segIdx}`}
+                                                    content={textThinking}
+                                                    duration={seg.duration || group.thinkingDuration || 1}
+                                                    isLive={Boolean(seg.isLive && isRunning && idx === groupedMessages.length - 1)}
+                                                />
+                                            );
+                                        }
+                                        if (seg.type === 'action' && seg.action) {
+                                            return (
+                                                <ActionRowItem
+                                                    key={`seg-${segIdx}`}
+                                                    action={seg.action}
+                                                    isDark={isDark}
+                                                />
+                                            );
+                                        }
+                                        if (seg.type === 'compact_actions' && seg.actions && seg.actions.length > 0) {
+                                            return (
+                                                <CompactActionsItem
+                                                    key={`seg-${segIdx}`}
+                                                    actions={seg.actions}
+                                                    isDark={isDark}
+                                                />
+                                            );
+                                        }
+                                        if (seg.type === 'plan' && seg.plan) {
+                                            return (
+                                                <ImplementationPlanCard
+                                                    key={`seg-${segIdx}`}
+                                                    plan={seg.plan}
+                                                    isDark={isDark}
+                                                />
+                                            );
+                                        }
+                                        if (seg.type === 'question' && seg.question) {
+                                            return (
+                                                <AgentQuestionCard
+                                                    key={`seg-${segIdx}`}
+                                                    question={seg.question}
+                                                    isSubmitting={questionSubmitting}
+                                                    error={questionError}
+                                                    onSubmit={handleAnswerQuestion}
+                                                />
+                                            );
+                                        }
                                         if (seg.type === 'text' && seg.content) {
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
@@ -3145,7 +3470,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             );
                                         }
                                         if (seg.type === 'tools' && seg.toolCalls && seg.toolCalls.length > 0) {
-                                            // If this is the last segment and we're live, show live actions
                                             const isLastSegment = segIdx === group.segments!.length - 1;
                                             const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length;
 
@@ -3158,25 +3482,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             }
                                             return (
                                                 <div key={`seg-${segIdx}`}>
-                                                <ActionsList
-                                                    key={`seg-${segIdx}`}
-                                                    actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                        id: `completed_${idx}_${segIdx}_${i}`,
-                                                        toolName: tc.call.function.name,
-                                                        displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                        status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                        result: tc.result,
-                                                        args: tc.call.function.arguments || ''
-                                                    }))}
-                                                    isDark={isDark}
-                                                />
+                                                    <ActionsList
+                                                        key={`seg-${segIdx}`}
+                                                        actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
+                                                            id: `completed_${idx}_${segIdx}_${i}`,
+                                                            toolName: tc.call.function.name,
+                                                            displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
+                                                            status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
+                                                            result: tc.result,
+                                                            args: tc.call.function.arguments || ''
+                                                        }))}
+                                                        isDark={isDark}
+                                                    />
                                                 </div>
                                             );
                                         }
                                         return null;
                                     })}
                                     {/* Live actions if no segments have tools yet */}
-                                    {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
+                                    {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools' || s.type === 'action') && (
                                         <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
                                     )}
                                     <MessageMetaFooter
@@ -3220,8 +3544,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             <div
                                                 className={`text-[14px] leading-relaxed break-words ${
                                                     isDark
-                                                        ? 'bg-zinc-800/90 text-zinc-100 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-700/50 shadow-sm'
-                                                        : 'bg-zinc-100 text-zinc-900 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-200/80 shadow-sm'
+                                                        ? 'bg-zinc-800/80 hover:bg-zinc-800 text-zinc-100 rounded-3xl px-5 py-3 max-w-[85%] sm:max-w-[75%] border border-zinc-700/40 shadow-sm backdrop-blur-sm'
+                                                        : 'bg-zinc-100 hover:bg-zinc-100/90 text-zinc-900 rounded-3xl px-5 py-3 max-w-[85%] sm:max-w-[75%] border border-zinc-200/80 shadow-sm'
                                                 }`}
                                             >
                                                 {/* Picked element indicator */}

@@ -498,12 +498,36 @@ function normalizeTursoEvent(
             };
         case 'plan':
         case 'plan_approval_required':
+        case 'update_plan':
+        case 'step_update':
+        case 'update_plan_step':
+        case 'plan_step':
             return {
                 type: 'plan',
                 ...common,
                 plan: payload.plan ?? payload,
                 arguments: payload,
                 tool: 'update_plan',
+            };
+        case 'machine_action':
+        case 'machine_action_start':
+        case 'machine_action_finish':
+            return {
+                type: event.event_type === 'machine_action_start' ? 'tool_started' : 'tool_finished',
+                ...common,
+                tool: typeof payload.tool === 'string' ? payload.tool : 'machine_action',
+                arguments: payload,
+                text: event.detail || event.title || (typeof payload.command === 'string' ? payload.command : 'Machine action'),
+                ok: payload.ok !== false,
+            };
+        case 'activity':
+        case 'activity_step':
+            return {
+                type: 'status',
+                ...common,
+                text: event.detail || (typeof payload.message === 'string' ? payload.message : eventText(event)),
+                tool: typeof payload.tool_name === 'string' ? payload.tool_name : 'activity',
+                arguments: payload,
             };
         case 'screenshot': {
             const screenshots = normalizeScreenshots(payload, projectId);
@@ -514,6 +538,7 @@ function normalizeTursoEvent(
                 text: event.detail || event.title || 'made a screenshot',
             };
         }
+        case 'ask_question':
         case 'question':
         case 'user_input_required': {
             const question = normalizeAgentQuestion(payload, {
