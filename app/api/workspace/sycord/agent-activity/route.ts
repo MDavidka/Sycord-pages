@@ -19,6 +19,8 @@ import { isSyteConfigured, getSyteConfig, syteAgentActivity } from "@/lib/deploy
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
+export const revalidate = 0
 // Allow long-lived SSE connections — Vercel/Next max is 300 s on Pro.
 export const maxDuration = 300
 
@@ -50,7 +52,7 @@ async function openUpstreamStream(
       const upstream = await fetch(upstreamUrl.toString(), {
         headers: {
           Accept: "text/event-stream",
-          "Cache-Control": "no-cache",
+          "Cache-Control": "no-cache, no-transform",
           "Accept-Encoding": "identity",
           "X-API-Key": config.apiKey,
           Authorization: `Bearer ${config.apiKey}`,
@@ -78,16 +80,17 @@ async function openUpstreamStream(
 
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream; charset=utf-8",
-  "Cache-Control": "no-cache, no-transform",
+  "Cache-Control": "no-cache, no-transform, no-store, must-revalidate",
   Connection: "keep-alive",
   "X-Accel-Buffering": "no",
+  "Content-Encoding": "none",
   Vary: "Accept-Encoding",
 }
 
 /**
- * Create an explicit byte-for-byte SSE bridge instead of returning a buffered
- * upstream body directly. The immediate comment commits response headers to
- * the client; following bytes are forwarded unchanged as they arrive from Syte.
+ * Create an explicit byte-for-byte SSE bridge with 0ms TTFT.
+ * The immediate comment commits response headers to the client;
+ * following bytes are forwarded unchanged as they arrive from Syte.
  */
 function bridgeUpstreamSse(
   open: () => Promise<Response>,
@@ -95,6 +98,7 @@ function bridgeUpstreamSse(
 ): Response {
   const encoder = new TextEncoder()
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let pingInterval: NodeJS.Timeout | undefined
 
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -106,6 +110,17 @@ function bridgeUpstreamSse(
       // Establish a real SSE response immediately. This prevents CDN/function
       // buffering from withholding the connection until the first model token.
       controller.enqueue(encoder.encode(": sycord-agent-stream-ready\n\n"))
+
+      // Periodic heartbeat comment to keep connection alive through any intermediate proxies
+      pingInterval = setInterval(() => {
+        if (!requestSignal.aborted) {
+          try {
+            controller.enqueue(encoder.encode(": ping\n\n"))
+          } catch {
+            // Stream might be closed
+          }
+        }
+      }, 10000)
 
       try {
         const upstream = await open()
@@ -128,6 +143,7 @@ function bridgeUpstreamSse(
           )
         }
       } finally {
+        if (pingInterval) clearInterval(pingInterval)
         requestSignal.removeEventListener("abort", abortUpstream)
         try {
           reader?.releaseLock()
@@ -138,6 +154,7 @@ function bridgeUpstreamSse(
       }
     },
     async cancel() {
+      if (pingInterval) clearInterval(pingInterval)
       await reader?.cancel().catch(() => undefined)
     },
   })

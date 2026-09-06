@@ -1632,18 +1632,35 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
             switch (event.type) {
                 case 'processing':
-                    // Accepted/queued system noise — Marker shimmer covers this state.
+                    // Initial connection handshake
                     break;
+                case 'status': {
+                    const statusMsg = event.text || event.title || '';
+                    if (statusMsg) {
+                        const toolName = event.tool || 'status';
+                        const actionId = addAction(toolName, statusMsg, {
+                            id: event.toolCallId
+                                ? `agent_${tursoSessionId}_${event.toolCallId}`
+                                : `agent_${tursoSessionId}_status_${event.eventId || Date.now()}`,
+                            eventId: event.eventId,
+                            toolCallId: event.toolCallId,
+                            args: typeof event.arguments === 'string' ? event.arguments : JSON.stringify(event.arguments || {}),
+                        });
+                        updateAction(actionId, { status: 'running' });
+                    }
+                    break;
+                }
                 case 'thinking': {
                     if (!thinkingStartedAt) {
                         thinkingStartedAt = Date.now();
                         setThinkingStartTime(thinkingStartedAt);
                     }
-                    const chunk = event.text || event.delta || '';
+                    const chunk = event.delta || event.text || '';
                     if (chunk) {
                         setCurrentThinking(prev => {
                             if (!prev) return chunk;
                             if (chunk.startsWith(prev)) return chunk;
+                            if (prev.endsWith(chunk)) return prev;
                             return prev + chunk;
                         });
                         const state = useStore.getState();
@@ -1651,6 +1668,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         const prevThinking = last?.thinking || '';
                         const nextThinking = prevThinking && chunk.startsWith(prevThinking)
                             ? chunk
+                            : prevThinking.endsWith(chunk)
+                            ? prevThinking
                             : `${prevThinking}${chunk}`;
                         updateLastMessage(assistantContent, undefined, nextThinking);
                     }
