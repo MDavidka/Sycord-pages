@@ -3574,30 +3574,31 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     </DropdownMenuContent>
                                 </DropdownMenu>
 
+                                <ModelEffortSelector
+                                    effort={effortLevel}
+                                    onEffortChange={handleEffortChange}
+                                    selectedModel={selectedModel}
+                                    modelChoices={(availableModelChoices || []).map(c => ({
+                                        id: c.modelType,
+                                        label: c.label || c.apiModel,
+                                        apiModel: c.apiModel,
+                                        subtitle: c.subtitle,
+                                        iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                    }))}
+                                    onModelSelect={(modelId) => {
+                                        const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
+                                        if (choice) {
+                                            setSelectedModel(choice.modelType);
+                                            setAiModel(choice.apiModel);
+                                        }
+                                    }}
+                                    onAddModelsClick={() => {
+                                        setLibraryView('skills');
+                                    }}
+                                    isDark={isDark}
+                                />
+
                                 <div className="ml-auto flex items-center gap-1.5">
-                                    <ModelEffortSelector
-                                        effort={effortLevel}
-                                        onEffortChange={handleEffortChange}
-                                        selectedModel={selectedModel}
-                                        modelChoices={(availableModelChoices || []).map(c => ({
-                                            id: c.modelType,
-                                            label: c.label || c.apiModel,
-                                            apiModel: c.apiModel,
-                                            subtitle: c.subtitle,
-                                            iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
-                                        }))}
-                                        onModelSelect={(modelId) => {
-                                            const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
-                                            if (choice) {
-                                                setSelectedModel(choice.modelType);
-                                                setAiModel(choice.apiModel);
-                                            }
-                                        }}
-                                        onAddModelsClick={() => {
-                                            setLibraryView('skills');
-                                        }}
-                                        isDark={isDark}
-                                    />
 
                                     <button
                                         type="button"
