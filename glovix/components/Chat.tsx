@@ -51,7 +51,7 @@ import { Markdown } from '@/components/agent-elements/markdown';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent-activity';
 import { StreamingResponse } from '@/components/agents/streaming-response';
-import { EffortSlider, type EffortLevel } from '@/components/agents/effort-slider';
+import { EffortDropdown, type EffortLevel } from '@/components/agents/effort-dropdown';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -529,8 +529,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     useEffect(() => {
         try {
             const saved = localStorage.getItem('syra_effort_level');
-            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high') {
-                setEffortLevel(saved);
+            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high' || saved === 'max') {
+                setEffortLevel(saved as EffortLevel);
             }
         } catch {}
     }, []);
@@ -3574,29 +3574,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     </DropdownMenuContent>
                                 </DropdownMenu>
 
-                                <ModelSelector
+                                <EffortDropdown
+                                    effort={effortLevel}
+                                    onEffortChange={handleEffortChange}
                                     selectedModel={selectedModel}
-                                    choices={availableModelChoices || []}
-                                    loading={modelsLoading}
-                                    error={modelsError}
-                                    onRetry={() => { void loadAvailableModels(); }}
-                                    onSelect={(choice) => {
-                                        setSelectedModel(choice.modelType)
-                                        setAiModel(choice.apiModel)
-                                        setShowModelMenu(false)
+                                    modelChoices={(availableModelChoices || []).map(c => ({
+                                        id: c.modelType,
+                                        label: c.label || c.apiModel,
+                                        apiModel: c.apiModel,
+                                        subtitle: c.subtitle,
+                                        iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                    }))}
+                                    onModelSelect={(modelId) => {
+                                        const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
+                                        if (choice) {
+                                            setSelectedModel(choice.modelType);
+                                            setAiModel(choice.apiModel);
+                                        }
                                     }}
-                                    showMenu={showModelMenu && !modelsLoading}
-                                    onToggleMenu={() => { setShowModelMenu(!showModelMenu); setShowSlashMenu(false); }}
-                                    onCloseMenu={() => setShowModelMenu(false)}
                                     isDark={isDark}
                                 />
 
                                 <div className="ml-auto flex items-center gap-1.5">
-                                    <EffortSlider
-                                        value={effortLevel}
-                                        onChange={handleEffortChange}
-                                        isDark={isDark}
-                                    />
 
                                     <button
                                         type="button"
