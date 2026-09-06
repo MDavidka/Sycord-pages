@@ -133,17 +133,23 @@ export function ModelEffortSelector({
   return (
     <div ref={containerRef} className={cn("relative inline-block", className)}>
       <style jsx>{`
-        @keyframes shimmer-blue-anim {
+        @keyframes shimmer-blue-cooldown {
           0% {
             background-position: 200% 0;
+          }
+          26% {
+            background-position: -200% 0;
           }
           100% {
             background-position: -200% 0;
           }
         }
-        @keyframes shimmer-yellow-anim {
+        @keyframes shimmer-yellow-cooldown {
           0% {
             background-position: 200% 0;
+          }
+          20% {
+            background-position: -200% 0;
           }
           100% {
             background-position: -200% 0;
@@ -161,7 +167,7 @@ export function ModelEffortSelector({
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          animation: shimmer-blue-anim 1.8s linear infinite;
+          animation: shimmer-blue-cooldown 6.5s ease-in-out infinite;
         }
         .shimmer-max {
           background: linear-gradient(
@@ -175,7 +181,7 @@ export function ModelEffortSelector({
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          animation: shimmer-yellow-anim 0.8s linear infinite;
+          animation: shimmer-yellow-cooldown 4s ease-in-out infinite;
         }
       `}</style>
 
