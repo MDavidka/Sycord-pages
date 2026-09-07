@@ -910,10 +910,17 @@ export async function pollTursoAgentSession(options: {
     const onParentAbort = () => streamAbort.abort();
     options.signal?.addEventListener('abort', onParentAbort, { once: true });
 
+    // `sessionNumber` immediately after agent_change is a client-side hint
+    // (`afterSession + 1`), not the durable Turso session number. Passing that
+    // hint as the stream's `session` query can make Sycord filter out every
+    // live event when another session was created in the meantime. Keep the
+    // stream unfiltered until the server has supplied an authoritative number;
+    // requestId still scopes a newly submitted turn on the client.
+    const streamSession = sessionAuthoritative ? session : undefined;
     const streamPromise = streamAgentActivitySse({
         projectId: options.projectId,
         sinceId,
-        session: session || undefined,
+        session: streamSession,
         requestId: options.requestId,
         tursoSessionId: options.tursoSessionId,
         signal: streamAbort.signal,
