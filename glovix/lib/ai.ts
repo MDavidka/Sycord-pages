@@ -85,44 +85,97 @@ export type AvailableSycordModel = {
     name: string
 }
 
-export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
-    const response = await fetch('/api/ai/models', {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-        signal,
-    })
-
-    let body: { models?: AvailableSycordModel[]; message?: string } | null = null
-    try {
-        body = await response.json()
-    } catch {
-        // The status below is more useful than a JSON parse error for callers.
+function modelToChoice(model: AvailableSycordModel): ModelChoice {
+    // model.profile carries the actual model identifier (e.g. "glm-5.3-flash")
+    // model.name carries the provider/display name (e.g. "B.ai" or "glm-5.3-flash")
+    const actualModel = model.profile || model.name
+    const displayName = model.name || model.profile
+    return {
+        id: model.id || actualModel,
+        label: actualModel,
+        subtitle: displayName,
+        modelType: actualModel,
+        apiModel: actualModel,
+        icon: getProviderIconUrl(actualModel) || getProviderIconUrl(displayName) || '/model-logos/gemini.svg',
+        iconAlt: displayName,
     }
+}
+
+/**
+ * Read Sycord's available-model SSE response as models arrive so consumers can
+ * render the picker immediately instead of waiting for the complete list.
+ */
+export async function streamAvailableModelChoices(options: {
+    signal?: AbortSignal
+    onModel: (choice: ModelChoice) => void
+}): Promise<ModelChoice[]> {
+    const response = await fetch('/api/ai/models?stream=true', {
+        method: 'GET',
+        headers: { Accept: 'text/event-stream' },
+        cache: 'no-store',
+        signal: options.signal,
+    })
 
     if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null
         throw new Error(body?.message || `Unable to load models (${response.status})`)
     }
-
-    if (!Array.isArray(body?.models)) {
-        throw new Error('Sycord returned an invalid model list.')
+    if (!response.body) {
+        throw new Error('Sycord returned an empty model stream.')
     }
 
-    return body.models.map((model) => {
-        // model.profile carries the actual model identifier (e.g. "glm-5.3-flash")
-        // model.name carries the provider/display name (e.g. "B.ai" or "glm-5.3-flash")
-        const actualModel = model.profile || model.name
-        const displayName = model.name || model.profile
-        return {
-            id: model.id || actualModel,
-            label: actualModel,
-            subtitle: displayName,
-            modelType: actualModel,
-            apiModel: actualModel,
-            icon: getProviderIconUrl(actualModel) || getProviderIconUrl(displayName) || '/model-logos/gemini.svg',
-            iconAlt: displayName,
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    const choices: ModelChoice[] = []
+    const seen = new Set<string>()
+    let buffer = ''
+
+    const consume = (block: string) => {
+        const data = block
+            .split(/\r?\n/)
+            .filter(line => line.startsWith('data:'))
+            .map(line => line.slice(5).trimStart())
+            .join('\n')
+        if (!data || data === '[DONE]') return
+        try {
+            const event = JSON.parse(data) as { model?: AvailableSycordModel }
+            if (!event.model?.profile && !event.model?.name) return
+            const choice = modelToChoice(event.model)
+            if (!choice.modelType || seen.has(choice.modelType)) return
+            seen.add(choice.modelType)
+            choices.push(choice)
+            options.onModel(choice)
+        } catch {
+            // Ignore malformed individual SSE frames; a later frame can still
+            // provide a valid model without hiding the model picker entirely.
         }
-    })
+    }
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            let separator = /\r?\n\r?\n/.exec(buffer)
+            while (separator && separator.index >= 0) {
+                consume(buffer.slice(0, separator.index))
+                buffer = buffer.slice(separator.index + separator[0].length)
+                separator = /\r?\n\r?\n/.exec(buffer)
+            }
+        }
+        buffer += decoder.decode()
+        if (buffer.trim()) consume(buffer)
+    } finally {
+        reader.releaseLock()
+    }
+
+    if (!choices.length) throw new Error('Sycord returned an empty model list.')
+    return choices
+}
+
+/** Load all available choices for callers that do not need incremental updates. */
+export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
+    return streamAvailableModelChoices({ signal, onModel: () => undefined })
 }
 
 export function getProviderFromModel(model: string): string {

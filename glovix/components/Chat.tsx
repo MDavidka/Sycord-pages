@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } f
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
 import { useStore } from '../store';
-import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
+import { sendMessage, Message, ToolCall, getProviderIconUrl, streamAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
     fetchPendingAgentQuestions,
     getLatestAgentSession,
@@ -425,7 +425,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         setAvailableModelChoices(null);
 
         try {
-            const choices = await fetchAvailableModelChoices(controller.signal);
+            const choices = await streamAvailableModelChoices({
+                signal: controller.signal,
+                onModel: (choice) => {
+                    if (controller.signal.aborted) return;
+                    // The API emits a model per SSE frame. Keep already received
+                    // choices visible while Sycord continues sending the list.
+                    setAvailableModelChoices(current => {
+                        const existing = current || [];
+                        return existing.some(model => model.modelType === choice.modelType)
+                            ? existing
+                            : [...existing, choice];
+                    });
+                },
+            });
             if (controller.signal.aborted) return;
             setAvailableModelChoices(choices);
         } catch (error: any) {
