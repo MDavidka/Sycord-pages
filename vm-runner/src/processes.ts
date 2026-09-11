@@ -59,6 +59,7 @@ async function loadEnvFile(envFile: string): Promise<Record<string, string>> {
 }
 
 export async function pm2Describe(processName: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(processName)) throw new Error("Invalid processName");
   return runCommand(config.pm2Binary, ["jlist"])
     .then(({ stdout }) => {
       const json = JSON.parse(stdout.join("\n") || "[]") as Array<any>
@@ -68,6 +69,7 @@ export async function pm2Describe(processName: string) {
 }
 
 export async function startOrRestartProcess(projectId: string, processName: string, port: number, cwd: string, envFile: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(processName)) throw new Error("Invalid processName");
   const envFileVars = await loadEnvFile(envFile)
   const existing = await pm2Describe(processName)
   const env: NodeJS.ProcessEnv = {
@@ -93,9 +95,11 @@ export async function startOrRestartProcess(projectId: string, processName: stri
 }
 
 export async function stopProcess(processName: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(processName)) throw new Error("Invalid processName");
   return runCommand(config.pm2Binary, ["stop", processName])
 }
 
 export async function deleteProcess(processName: string) {
+  if (!/^[A-Za-z0-9_-]+$/.test(processName)) throw new Error("Invalid processName");
   return runCommand(config.pm2Binary, ["delete", processName])
 }
