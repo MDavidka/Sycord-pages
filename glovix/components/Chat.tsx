@@ -1514,7 +1514,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 markAgentTimelineLoaded();
                                 break;
                             case 'error':
-                                errorText = event.text || 'The project agent request failed.';
+                                errorText = (typeof event.text === 'string' && event.text.trim()) ? event.text.trim() : 'The project agent request failed.';
                                 clearPendingQuestion();
                                 replaceActions(actionsRef.current.map(action =>
                                     action.status === 'running' || action.status === 'pending'
@@ -1861,7 +1861,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     markAgentTimelineLoaded();
                     break;
                 case 'error':
-                    errorText = event.text || 'The project agent request failed.';
+                    errorText = (typeof event.text === 'string' && event.text.trim()) ? event.text.trim() : 'The project agent request failed.';
                     clearPendingQuestion();
                     replaceActions(actionsRef.current.map(action =>
                         action.status === 'running' || action.status === 'pending'
