@@ -71,54 +71,89 @@ export async function GET(request: Request) {
     return Response.json({ message: "Unauthorized" }, { status: 401 })
   }
 
+  const url = new URL(request.url)
+  const wantsStream =
+    url.searchParams.get("stream") === "true" ||
+    request.headers.get("accept")?.includes("text/event-stream")
+
   const apiKey = process.env.DEPLOYER_API_KEY || ""
-  const headers: Record<string, string> = { Accept: "application/json" }
+  const headers: Record<string, string> = {
+    Accept: wantsStream ? "text/event-stream, application/json" : "application/json",
+  }
   if (apiKey) {
     headers["X-API-Key"] = apiKey
     headers.Authorization = `Bearer ${apiKey}`
   }
 
   try {
-    const response = await fetch(getSycordModelsUrl(), {
+    const upstreamUrl = wantsStream
+      ? `${getSycordModelsUrl()}?stream=true`
+      : getSycordModelsUrl()
+
+    const response = await fetch(upstreamUrl, {
       method: "GET",
       headers,
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(15_000),
     })
 
-    const payload = (await response.json().catch(() => null)) as SycordModelsResponse | null
-    if (!response.ok || !payload) {
+    if (!response.ok) {
       return Response.json(
         { message: `Sycord model API returned ${response.status || 502}.` },
         { status: response.status >= 400 && response.status < 600 ? response.status : 502 },
       )
     }
 
-    // Detect streaming request via query param or Accept header
-    const url = new URL(request.url);
-    const wantsStream = (url.searchParams.get("stream") === "true" || request.headers.get("accept")?.includes("text/event-stream"));
+    const contentType = response.headers.get("content-type") || ""
+
+    // If client requested stream and upstream returned SSE, pipe directly
+    if (wantsStream && contentType.includes("text/event-stream") && response.body) {
+      return new Response(response.body, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      })
+    }
+
+    const payload = (await response.json().catch(() => null)) as SycordModelsResponse | null
+    if (!payload) {
+      return Response.json(
+        { message: "Sycord model API returned empty or invalid payload." },
+        { status: 502 },
+      )
+    }
+
     if (wantsStream) {
       const encoder = new TextEncoder()
       const stream = new ReadableStream({
         async start(controller) {
+          controller.enqueue(encoder.encode("retry: 2000\n\n"))
           for (const model of normalizeModels(payload)) {
             const data = JSON.stringify({ model })
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`))
+            controller.enqueue(encoder.encode(`event: model_stream\ndata: ${data}\n\n`))
           }
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`))
+          controller.enqueue(encoder.encode("event: done\ndata: [DONE]\n\n"))
           controller.close()
         },
       })
       return new Response(stream, {
         headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
         },
       })
     }
 
-    return Response.json({ models: normalizeModels(payload) })
+    return Response.json({
+      models: normalizeModels(payload),
+      available_models: payload.available_models || normalizeModels(payload),
+      saved_providers: payload.saved_providers || [],
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to reach Sycord model API."
     return Response.json({ message }, { status: 502 })
