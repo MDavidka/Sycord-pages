@@ -1381,3 +1381,57 @@ export async function syteStreamStatus(
     }
   }
 }
+
+/**
+ * Upload real files (zip, csv, code, pdf, docs) to the project workspace and parse for AI understanding.
+ * POST /api/projects/{uuid}/ai/upload
+ */
+export async function syteUploadFiles(
+  uuid: string,
+  formData: FormData,
+  options?: { extractToWorkspace?: boolean; signal?: AbortSignal },
+): Promise<
+  SyteResult<{
+    ok: boolean
+    total_files: number
+    total_bytes: number
+    files: Array<{ filename: string; extension: string; summary: string; parsed_content: string }>
+    combined_prompt_context?: string
+    extraction_results?: unknown
+    message?: string
+  }>
+> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/ai/upload`
+  if (options?.extractToWorkspace) {
+    formData.set("extract_to_workspace", "true")
+  }
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: formData,
+      signal: options?.signal,
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error uploading files to Syte",
+      endpoint,
+    }
+  }
+}
