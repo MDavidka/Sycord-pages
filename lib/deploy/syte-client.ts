@@ -1163,3 +1163,221 @@ export async function syteAgentAnswerQuestion(
     },
   })
 }
+
+// ─── Better-SSE Real-Time Streaming APIs ─────────────────────────────────────
+// Dedicated SSE window under /api/stream with monotonic IDs, reconnect replay,
+// backpressure drop hints, and delta coalescing.
+
+export type SyteStreamOptions = {
+  sinceId?: number
+  lastEventId?: string
+  replay?: boolean
+  signal?: AbortSignal
+}
+
+/**
+ * Open a live Better-SSE connection to an agent turn.
+ * POST /api/stream/projects/{uuid}/chat
+ */
+export async function syteStreamChat(
+  uuid: string,
+  message: string,
+  options?: SyteAgentExecutionOptions & SyteStreamOptions,
+): Promise<Response> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/chat`
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+    "X-API-Key": config.apiKey,
+    Authorization: `Bearer ${config.apiKey}`,
+  }
+  if (options?.lastEventId) {
+    headers["Last-Event-ID"] = options.lastEventId
+  }
+
+  return fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      message,
+      ...(options?.agentMode ? { agent_mode: options.agentMode } : {}),
+      ...(options?.planMode ? { plan_mode: options.planMode } : {}),
+      ...(options?.thinkingLevel ? { thinking_level: options.thinkingLevel } : {}),
+      ...(options?.executionSpeed ? { execution_speed: options.executionSpeed } : {}),
+    }),
+    signal: options?.signal,
+    cache: "no-store",
+  })
+}
+
+/**
+ * Subscribe / reconnect to the agent event stream over Better-SSE.
+ * GET /api/stream/projects/{uuid}/events?since_id=
+ */
+export async function syteStreamEvents(
+  uuid: string,
+  options?: SyteStreamOptions,
+): Promise<Response> {
+  const config = getSyteConfig()
+  const url = new URL(`${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/events`)
+  if (options?.sinceId != null) url.searchParams.set("since_id", String(options.sinceId))
+  if (options?.replay) url.searchParams.set("replay", "true")
+
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream",
+    "X-API-Key": config.apiKey,
+    Authorization: `Bearer ${config.apiKey}`,
+  }
+  if (options?.lastEventId) {
+    headers["Last-Event-ID"] = options.lastEventId
+  }
+
+  return fetch(url.toString(), {
+    method: "GET",
+    headers,
+    signal: options?.signal,
+    cache: "no-store",
+  })
+}
+
+/**
+ * Stream shell command stdout/stderr live over Better-SSE.
+ * POST /api/stream/projects/{uuid}/command
+ */
+export async function syteStreamCommand(
+  uuid: string,
+  command: string,
+  options?: { cwd?: string; signal?: AbortSignal },
+): Promise<Response> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/command`
+  return fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "X-API-Key": config.apiKey,
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      command,
+      cwd: options?.cwd || "app",
+    }),
+    signal: options?.signal,
+    cache: "no-store",
+  })
+}
+
+/**
+ * Subscribe to real-time subtab channel over Better-SSE.
+ * GET /api/stream/projects/{uuid}/subtabs/{subtab}/stream
+ */
+export async function syteStreamSubtab(
+  uuid: string,
+  subtab: string,
+  options?: SyteStreamOptions,
+): Promise<Response> {
+  const config = getSyteConfig()
+  const url = new URL(
+    `${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/subtabs/${encodeURIComponent(subtab)}/stream`,
+  )
+  if (options?.sinceId != null) url.searchParams.set("since_id", String(options.sinceId))
+  if (options?.replay) url.searchParams.set("replay", "true")
+
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream",
+    "X-API-Key": config.apiKey,
+    Authorization: `Bearer ${config.apiKey}`,
+  }
+  if (options?.lastEventId) {
+    headers["Last-Event-ID"] = options.lastEventId
+  }
+
+  return fetch(url.toString(), {
+    method: "GET",
+    headers,
+    signal: options?.signal,
+    cache: "no-store",
+  })
+}
+
+/**
+ * Broadcast an event to a subtab channel.
+ * POST /api/stream/projects/{uuid}/subtabs/{subtab}/broadcast
+ */
+export async function syteBroadcastSubtab(
+  uuid: string,
+  subtab: string,
+  payload: Record<string, unknown>,
+  event: string = "update",
+): Promise<SyteResult<{ ok: boolean; broadcast?: boolean; subtab?: string }>> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/subtabs/${encodeURIComponent(subtab)}/broadcast`
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({ payload, event }),
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error broadcasting to subtab",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * Get detailed live session status snapshot.
+ * GET /api/stream/projects/{uuid}/status
+ */
+export async function syteStreamStatus(
+  uuid: string,
+): Promise<SyteResult<{ ok: boolean; session?: Record<string, unknown> }>> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/status`
+  try {
+    const res = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      cache: "no-store",
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error fetching stream status",
+      endpoint,
+    }
+  }
+}
