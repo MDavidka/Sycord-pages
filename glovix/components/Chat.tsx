@@ -448,7 +448,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         if (!availableModelChoices?.length) return;
-        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || availableModelChoices[0];
+        const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active);
+        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || activeAiTabChoice || availableModelChoices[0];
         if (selected.modelType !== selectedModel) setSelectedModel(selected.modelType);
         setAiModel(selected.apiModel);
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
@@ -1042,19 +1043,56 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            const files = Array.from(e.target.files);
-            for (const file of files) {
-                try {
-                    const content = await readDocumentContent(file);
-                    setSelectedDocuments(prev => [...prev, {
+        if (!e.target.files) return;
+        const files = Array.from(e.target.files);
+        const projectId = getHostProjectId();
+
+        const hasArchiveOrBinary = files.some(f => /\.(zip|pdf|docx|xlsx|tar|gz)$/i.test(f.name));
+
+        if (projectId && (hasArchiveOrBinary || files.length > 2)) {
+            try {
+                const formData = new FormData();
+                for (const f of files) {
+                    formData.append('files', f);
+                }
+                const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ai/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data.files)) {
+                        for (const item of data.files) {
+                            setSelectedDocuments(prev => [
+                                ...prev,
+                                {
+                                    name: item.filename || 'uploaded_file',
+                                    content: item.parsed_content || item.summary || '',
+                                    type: getFileType(item.filename || ''),
+                                },
+                            ]);
+                        }
+                        return;
+                    }
+                }
+            } catch (uploadErr) {
+                console.warn('[Upload] Server upload fallback to client reading:', uploadErr);
+            }
+        }
+
+        for (const file of files) {
+            try {
+                const content = await readDocumentContent(file);
+                setSelectedDocuments(prev => [
+                    ...prev,
+                    {
                         name: file.name,
                         content,
-                        type: file.type || getFileType(file.name)
-                    }]);
-                } catch (err) {
-                    console.error('Error reading file:', err);
-                }
+                        type: file.type || getFileType(file.name),
+                    },
+                ]);
+            } catch (err) {
+                console.error('Error reading file:', err);
             }
         }
     };
@@ -1082,12 +1120,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             'yml': 'text/yaml',
             'xml': 'text/xml',
             'csv': 'text/csv',
+            'zip': 'application/zip',
+            'pdf': 'application/pdf',
         };
         return typeMap[ext] || 'text/plain';
     };
 
     const readDocumentContent = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
+            if (/\.(zip|pdf|docx|xlsx|tar|gz)$/i.test(file.name)) {
+                resolve(`[Attached binary file: ${file.name} (${Math.round(file.size / 1024)} KB)]`);
+                return;
+            }
             const reader = new FileReader();
             reader.onload = () => {
                 const content = reader.result as string;
@@ -3392,7 +3436,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             type="file"
                             ref={documentInputRef}
                             className="hidden"
-                            accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.css,.html,.py,.java,.c,.cpp,.rs,.go,.sql,.yaml,.yml,.xml,.csv,.log,.sh,.bat,.env,.gitignore"
+                            accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.css,.html,.py,.java,.c,.cpp,.rs,.go,.sql,.yaml,.yml,.xml,.csv,.log,.sh,.bat,.env,.gitignore,.zip,.pdf,.docx,.xlsx"
                             multiple
                             onChange={handleDocumentSelect}
                         />
@@ -3619,6 +3663,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         apiModel: c.apiModel,
                                         subtitle: c.subtitle,
                                         iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                        active: c.active,
+                                        isAiTabActive: c.isAiTabActive,
                                     }))}
                                     onModelSelect={(modelId) => {
                                         const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);

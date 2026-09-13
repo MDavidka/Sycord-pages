@@ -32,6 +32,8 @@ export interface ModelChoiceItem {
   apiModel: string;
   subtitle?: string;
   iconUrl?: string;
+  active?: boolean;
+  isAiTabActive?: boolean;
 }
 
 interface ModelEffortSelectorProps {
@@ -73,13 +75,16 @@ export function ModelEffortSelector({
 
   const effectiveModels = modelChoices.length > 0 ? modelChoices : defaultModels;
 
-  // Find active model and effort objects
-  const activeModelObj = effectiveModels.find(
-    (m) =>
-      m.id === selectedModel ||
-      m.label === selectedModel ||
-      m.apiModel === selectedModel
-  ) || effectiveModels[0];
+  // Find active model and effort objects - prefer selectedModel, then isAiTabActive model, then first
+  const activeModelObj =
+    effectiveModels.find(
+      (m) =>
+        m.id === selectedModel ||
+        m.label === selectedModel ||
+        m.apiModel === selectedModel
+    ) ||
+    effectiveModels.find((m) => m.isAiTabActive || m.active) ||
+    effectiveModels[0];
 
   const currentEffortObj =
     EFFORT_LIST.find((e) => e.id === effort) || EFFORT_LIST[3];
@@ -380,9 +385,16 @@ export function ModelEffortSelector({
                               : "text-zinc-700 hover:bg-zinc-100"
                           )}
                         >
-                          <span className="truncate">{model.label}</span>
+                          <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                            <span className="truncate">{model.label}</span>
+                            {(model.isAiTabActive || model.active) && (
+                              <span className="shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                AI Tab
+                              </span>
+                            )}
+                          </div>
                           {isSelected && (
-                            <Check className="size-3.5 text-blue-500 shrink-0" />
+                            <Check className="size-3.5 text-blue-500 shrink-0 ml-1" />
                           )}
                         </button>
                       );

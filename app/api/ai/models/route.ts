@@ -29,7 +29,7 @@ function getSycordModelsUrl(): string {
   return `${base}/api/models`
 }
 
-function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; profile: string; name: string }> {
+function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; profile: string; name: string; active: boolean; is_active_in_ai_tab: boolean }> {
   // Check available_models, models, ai_tab_models, or saved_providers from Sycord VM
   const source = Array.isArray(payload.available_models)
     ? payload.available_models
@@ -41,11 +41,14 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
           ? payload.saved_providers
           : []
 
+  const activeModel = typeof (payload as any).active_model === "string" ? (payload as any).active_model.trim() : ""
+  const currentModel = typeof (payload as any).current_model === "string" ? (payload as any).current_model.trim() : ""
+
   const seen = new Set<string>()
-  const models: Array<{ id: string; profile: string; name: string }> = []
+  const models: Array<{ id: string; profile: string; name: string; active: boolean; is_active_in_ai_tab: boolean }> = []
 
   for (const candidate of source as SycordModel[]) {
-    if (!candidate || candidate.enabled === false || candidate.active === false) continue
+    if (!candidate || candidate.enabled === false) continue
 
     const rawId = typeof candidate.id === "string" ? candidate.id.trim() : ""
     const rawModel = typeof candidate.model === "string" ? candidate.model.trim() : ""
@@ -58,8 +61,16 @@ function normalizeModels(payload: SycordModelsResponse): Array<{ id: string; pro
 
     if (!profile || !name || !id || seen.has(profile)) continue
 
+    const isAiTabActive = Boolean(
+      (candidate as any).is_active_in_ai_tab ||
+      candidate.active ||
+      profile === activeModel ||
+      profile === currentModel ||
+      id === activeModel
+    )
+
     seen.add(profile)
-    models.push({ id, profile, name })
+    models.push({ id, profile, name, active: isAiTabActive, is_active_in_ai_tab: isAiTabActive })
   }
 
   return models
@@ -153,6 +164,8 @@ export async function GET(request: Request) {
       models: normalizeModels(payload),
       available_models: payload.available_models || normalizeModels(payload),
       saved_providers: payload.saved_providers || [],
+      active_model: (payload as any).active_model || (payload as any).current_model || null,
+      current_model: (payload as any).current_model || (payload as any).active_model || null,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to reach Sycord model API."

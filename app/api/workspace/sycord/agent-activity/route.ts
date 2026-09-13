@@ -29,9 +29,10 @@ async function openUpstreamStream(
   sessionFilter: string,
   signal: AbortSignal,
 ): Promise<Response> {
-  // Prefer the token API hot path from https://sycord.site/api/#stream/
+  // Prefer the Better-SSE stream and token API hot path from https://sycord.site/api/#stream/
   // Fall back to session-auth + sycord mirrors if the primary path is unavailable.
   const candidates = [
+    `${config.baseUrl}/api/stream/projects/${encodeURIComponent(uuid)}/events`,
     `${config.baseUrl}/api/agent_activity/stream?uuid=${encodeURIComponent(uuid)}`,
     `${config.baseUrl}/sycord/api/agent_activity/stream?uuid=${encodeURIComponent(uuid)}`,
     `${config.baseUrl}/api/projects/${encodeURIComponent(uuid)}/agent/activity/stream`,
