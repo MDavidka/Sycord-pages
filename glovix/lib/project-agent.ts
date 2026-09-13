@@ -643,6 +643,15 @@ function normalizeTursoEvent(
     }
 }
 
+function isMatchingRequestId(expected?: string, actual?: unknown): boolean {
+    if (!expected) return true;
+    if (!actual || typeof actual !== 'string') return true;
+    if (actual === expected) return true;
+    const cleanActual = actual.replace(/[-_]/g, '').toLowerCase();
+    const cleanExpected = expected.replace(/[-_]/g, '').toLowerCase();
+    return cleanActual === cleanExpected || cleanActual.includes(cleanExpected) || cleanExpected.includes(cleanActual);
+}
+
 /** Parse one SSE chunk block into an activity event (or null for heartbeats). */
 function parseSseBlock(block: string): TursoSessionEvent | null {
     const lines = block.split(/\r?\n/);
@@ -743,7 +752,7 @@ export async function streamAgentActivitySse(options: {
             options.requestId &&
             typeof eventRequestId === 'string' &&
             eventRequestId &&
-            eventRequestId !== options.requestId
+            !isMatchingRequestId(options.requestId, eventRequestId)
         ) {
             return;
         }
@@ -996,7 +1005,7 @@ export async function pollTursoAgentSession(options: {
                     options.requestId &&
                     typeof eventRequestId === 'string' &&
                     eventRequestId &&
-                    eventRequestId !== options.requestId
+                    !isMatchingRequestId(options.requestId, eventRequestId)
                 ) {
                     if (id) sinceId = Math.max(sinceId, id);
                     continue;
@@ -1027,12 +1036,23 @@ export async function pollTursoAgentSession(options: {
 
             status = doc.status || status;
             if (status && status !== 'open') {
+                let latestError = '';
+                let latestReply = '';
+                for (const ev of (doc.events || []).slice().reverse()) {
+                    const txt = eventText(ev);
+                    if (!latestError && (ev.event_type === 'error' || ev.event_type === 'error_log' || (ev.payload && (ev.payload as any).error))) {
+                        latestError = txt || String((ev.payload as any)?.error || '');
+                    }
+                    if (!latestReply && (ev.event_type === 'done' || ev.event_type === 'assistant_message')) {
+                        latestReply = txt;
+                    }
+                }
                 if (status === 'failed' || status === 'cancelled') {
                     emitNormalized({
                         type: 'error',
                         session: session || undefined,
                         eventId: eventId || undefined,
-                        text: `Agent session ${status}.`,
+                        text: latestError || `Agent session ${status}.`,
                         tursoSessionId: options.tursoSessionId,
                         requestId: options.requestId,
                     });
@@ -1050,7 +1070,7 @@ export async function pollTursoAgentSession(options: {
                         type: 'done',
                         session: session || undefined,
                         eventId: eventId || undefined,
-                        text: '',
+                        text: latestReply,
                         tursoSessionId: options.tursoSessionId,
                         requestId: options.requestId,
                     });

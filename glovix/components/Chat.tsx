@@ -1558,7 +1558,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 markAgentTimelineLoaded();
                                 break;
                             case 'error':
-                                errorText = (typeof event.text === 'string' && event.text.trim()) ? event.text.trim() : 'The project agent request failed.';
+                                errorText = (typeof event.text === 'string' && event.text.trim()) ||
+                                    (typeof (event as any).error === 'string' && (event as any).error.trim()) ||
+                                    'The project agent request failed.';
                                 clearPendingQuestion();
                                 replaceActions(actionsRef.current.map(action =>
                                     action.status === 'running' || action.status === 'pending'
@@ -1873,19 +1875,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setQuestionError(null);
                     break;
                 }
-                case 'delta':
-                    assistantContent += event.text || '';
-                    updateLastMessage(assistantContent);
-                    break;
-                case 'message':
-                    if (!assistantContent) {
-                        assistantContent = event.text || '';
+                case 'delta': {
+                    const deltaPiece = event.delta || event.tokenDelta || event.text || '';
+                    if (deltaPiece) {
+                        assistantContent += deltaPiece;
                         updateLastMessage(assistantContent);
                     }
                     break;
-                case 'done':
-                    if (!assistantContent && event.text) {
-                        assistantContent = event.text;
+                }
+                case 'message':
+                    if (!assistantContent) {
+                        assistantContent = event.content || event.text || '';
+                        updateLastMessage(assistantContent);
+                    }
+                    break;
+                case 'done': {
+                    const doneText = event.text || event.content || '';
+                    if (!assistantContent && doneText) {
+                        assistantContent = doneText;
                     }
                     assistantContent = assistantContent || 'Done.';
                     updateLastMessage(assistantContent);
@@ -1893,6 +1900,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     clearPendingQuestion();
                     markAgentTimelineLoaded();
                     break;
+                }
                 case 'stopped':
                     if (!assistantContent) updateLastMessage(event.text || 'Stopped.');
                     completed = true;
@@ -1905,7 +1913,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     markAgentTimelineLoaded();
                     break;
                 case 'error':
-                    errorText = (typeof event.text === 'string' && event.text.trim()) ? event.text.trim() : 'The project agent request failed.';
+                    errorText = (typeof event.text === 'string' && event.text.trim()) ||
+                        (typeof (event as any).error === 'string' && (event as any).error.trim()) ||
+                        'The project agent request failed.';
                     clearPendingQuestion();
                     replaceActions(actionsRef.current.map(action =>
                         action.status === 'running' || action.status === 'pending'
