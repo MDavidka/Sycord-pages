@@ -34,6 +34,8 @@ export interface ModelChoice {
     /** Model icon under /public/model-logos, matched by profile name */
     icon: string
     iconAlt: string
+    active?: boolean
+    isAiTabActive?: boolean
 }
 
 export const MODEL_CHOICES: ModelChoice[] = [
@@ -83,6 +85,8 @@ export type AvailableSycordModel = {
     id: string
     profile: string
     name: string
+    active?: boolean
+    is_active_in_ai_tab?: boolean
 }
 
 export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
@@ -93,7 +97,7 @@ export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<
         signal,
     })
 
-    let body: { models?: AvailableSycordModel[]; message?: string } | null = null
+    let body: { models?: AvailableSycordModel[]; active_model?: string; message?: string } | null = null
     try {
         body = await response.json()
     } catch {
@@ -108,11 +112,18 @@ export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<
         throw new Error('Sycord returned an invalid model list.')
     }
 
+    const activeModelId = body?.active_model || ""
+
     return body.models.map((model) => {
         // model.profile carries the actual model identifier (e.g. "glm-5.3-flash")
         // model.name carries the provider/display name (e.g. "B.ai" or "glm-5.3-flash")
         const actualModel = model.profile || model.name
         const displayName = model.name || model.profile
+        const isAiTabActive = Boolean(
+            model.is_active_in_ai_tab ||
+            model.active ||
+            (activeModelId && (actualModel === activeModelId || model.id === activeModelId))
+        )
         return {
             id: model.id || actualModel,
             label: actualModel,
@@ -121,6 +132,8 @@ export async function fetchAvailableModelChoices(signal?: AbortSignal): Promise<
             apiModel: actualModel,
             icon: getProviderIconUrl(actualModel) || getProviderIconUrl(displayName) || '/model-logos/gemini.svg',
             iconAlt: displayName,
+            active: isAiTabActive,
+            isAiTabActive,
         }
     })
 }

@@ -12,6 +12,10 @@ import {
   IconFilePlus as FilePlus,
   IconChecklist as ListTodo,
   IconLogout as LogOut,
+  IconTrash as Trash,
+  IconPackage as Package,
+  IconDeviceDesktop as Screen,
+  IconFolderPlus as FolderPlus,
 } from "@tabler/icons-react";
 
 export type ToolVariant = "simple" | "collapsible";
@@ -356,7 +360,302 @@ export const toolRegistry: Record<string, ToolMeta> = {
     },
     variant: "collapsible",
   },
+  // --- tools.md / Sycord Agent Toolkit ---
+  "tool-read_file": {
+    icon: Eye,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Reading file" : "Read file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-readFile": {
+    icon: Eye,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Reading file" : "Read file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-syte_read_file": {
+    icon: Eye,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Reading file" : "Read file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-write_file": {
+    icon: FilePlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Creating file" : "Created file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-writeFile": {
+    icon: FilePlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Creating file" : "Created file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-createFile": {
+    icon: FilePlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Creating file" : "Created file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-syte_write_file": {
+    icon: FilePlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Creating file" : "Created file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-edit_file": {
+    icon: FileCode2,
+    title: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "Edit" : "Edit";
+    },
+    subtitle: (part) => {
+      const isPending = part.state !== "output-available" && part.state !== "output-error";
+      if (isPending) return "";
+      const oldString = part.input?.old_text || part.input?.old_string || "";
+      const newString = part.input?.new_text || part.input?.new_string || "";
+      if (!oldString && !newString) return "";
+      if (oldString !== newString) {
+        const { addedLines, removedLines } = calculateDiffStats(oldString, newString);
+        return `+${addedLines} -${removedLines}`;
+      }
+      return "";
+    },
+    variant: "simple",
+  },
+  "tool-editFile": {
+    icon: FileCode2,
+    title: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "Edit" : "Edit";
+    },
+    subtitle: (part) => {
+      const isPending = part.state !== "output-available" && part.state !== "output-error";
+      if (isPending) return "";
+      const oldString = part.input?.old_text || part.input?.old_string || "";
+      const newString = part.input?.new_text || part.input?.new_string || "";
+      if (!oldString && !newString) return "";
+      if (oldString !== newString) {
+        const { addedLines, removedLines } = calculateDiffStats(oldString, newString);
+        return `+${addedLines} -${removedLines}`;
+      }
+      return "";
+    },
+    variant: "simple",
+  },
+  "tool-syte_edit_file": {
+    icon: FileCode2,
+    title: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "Edit" : "Edit";
+    },
+    subtitle: (part) => {
+      const isPending = part.state !== "output-available" && part.state !== "output-error";
+      if (isPending) return "";
+      const oldString = part.input?.old_text || part.input?.old_string || "";
+      const newString = part.input?.new_text || part.input?.new_string || "";
+      if (!oldString && !newString) return "";
+      if (oldString !== newString) {
+        const { addedLines, removedLines } = calculateDiffStats(oldString, newString);
+        return `+${addedLines} -${removedLines}`;
+      }
+      return "";
+    },
+    variant: "simple",
+  },
+  "tool-apply_patch": {
+    icon: FileCode2,
+    title: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "Patch" : "Patch";
+    },
+    subtitle: () => "Applied patch",
+    variant: "simple",
+  },
+  "tool-delete_file": {
+    icon: Trash,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Deleting file" : "Deleted file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-deleteFile": {
+    icon: Trash,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Deleting file" : "Deleted file"),
+    subtitle: (part) => {
+      const p = part.input?.path || part.input?.file_path || "";
+      return p ? p.split("/").pop() || "" : "";
+    },
+    variant: "simple",
+  },
+  "tool-create_folder": {
+    icon: FolderPlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Creating folder" : "Created folder"),
+    subtitle: (part) => part.input?.path || "",
+    variant: "simple",
+  },
+  "tool-rename_file": {
+    icon: GitBranch,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Moving file" : "Moved file"),
+    subtitle: (part) => {
+      const oldP = (part.input?.old_path || part.input?.from || "").split("/").pop() || "";
+      const newP = (part.input?.new_path || part.input?.to || "").split("/").pop() || "";
+      return oldP && newP ? `${oldP} → ${newP}` : oldP || newP;
+    },
+    variant: "simple",
+  },
+  "tool-move_file": {
+    icon: GitBranch,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Moving file" : "Moved file"),
+    subtitle: (part) => {
+      const oldP = (part.input?.from || part.input?.source_path || "").split("/").pop() || "";
+      const newP = (part.input?.to || part.input?.destination_path || "").split("/").pop() || "";
+      return oldP && newP ? `${oldP} → ${newP}` : oldP || newP;
+    },
+    variant: "simple",
+  },
+  "tool-run_command": {
+    icon: Terminal,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Running command" : "Ran command"),
+    subtitle: (part) => {
+      const command = part.input?.command || part.input?.cmd || "";
+      if (!command) return "";
+      let normalized = command.replace(/\\\s*\n\s*/g, " ").trim();
+      return normalized.length > 50 ? normalized.slice(0, 47) + "..." : normalized;
+    },
+    variant: "simple",
+  },
+  "tool-executeCommand": {
+    icon: Terminal,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Running command" : "Ran command"),
+    subtitle: (part) => {
+      const command = part.input?.command || part.input?.cmd || "";
+      if (!command) return "";
+      let normalized = command.replace(/\\\s*\n\s*/g, " ").trim();
+      return normalized.length > 50 ? normalized.slice(0, 47) + "..." : normalized;
+    },
+    variant: "simple",
+  },
+  "tool-syte_run_command": {
+    icon: Terminal,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Running command" : "Ran command"),
+    subtitle: (part) => {
+      const command = part.input?.command || part.input?.cmd || "";
+      if (!command) return "";
+      let normalized = command.replace(/\\\s*\n\s*/g, " ").trim();
+      return normalized.length > 50 ? normalized.slice(0, 47) + "..." : normalized;
+    },
+    variant: "simple",
+  },
+  "tool-install_package": {
+    icon: Package,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Installing package" : "Installed package"),
+    subtitle: (part) => part.input?.package_name || part.input?.package || "",
+    variant: "simple",
+  },
+  "tool-list_files": {
+    icon: FolderSearch,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Listing files" : "Listed files"),
+    subtitle: (part) => part.input?.path || part.input?.directory || "Workspace",
+    variant: "simple",
+  },
+  "tool-start_preview": {
+    icon: Sparkles,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Starting preview" : "Preview ready"),
+    subtitle: (part) => part.output?.previewUrl || "sycord.site preview",
+    variant: "simple",
+  },
+  "tool-take_screenshot": {
+    icon: Screen,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Taking screenshot" : "Screenshot captured"),
+    subtitle: (part) => part.input?.route || part.input?.url || "preview",
+    variant: "simple",
+  },
+  "tool-check_types": {
+    icon: ListTodo,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Checking types" : "Types verified"),
+    subtitle: () => "TypeScript",
+    variant: "simple",
+  },
+  "tool-typeCheck": {
+    icon: ListTodo,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Checking types" : "Types verified"),
+    subtitle: () => "TypeScript",
+    variant: "simple",
+  },
+  "tool-run_lint": {
+    icon: ListTodo,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Running linter" : "Lint check passed"),
+    subtitle: () => "Code hygiene",
+    variant: "simple",
+  },
+  "tool-lintCheck": {
+    icon: ListTodo,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Running linter" : "Lint check passed"),
+    subtitle: () => "Code hygiene",
+    variant: "simple",
+  },
+  "tool-planning": {
+    icon: Sparkles,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Updating plan" : "Plan ready"),
+    subtitle: (part) => part.input?.title || part.input?.action || "Architecture",
+    variant: "simple",
+  },
+  "tool-upload_asset": {
+    icon: FilePlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Uploading asset" : "Asset uploaded"),
+    subtitle: (part) => part.input?.file || part.input?.path || "",
+    variant: "simple",
+  },
+  "tool-upload_file": {
+    icon: FilePlus,
+    title: (part) => (part.state !== "output-available" && part.state !== "output-error" ? "Uploading file" : "File uploaded"),
+    subtitle: (part) => part.input?.file || part.input?.path || "",
+    variant: "simple",
+  },
 };
+
+// Auto-populate unprefixed and lower-cased aliases for robust matching across SDKs
+for (const [key, value] of Object.entries(toolRegistry)) {
+  if (key.startsWith("tool-")) {
+    const raw = key.slice(5);
+    if (!toolRegistry[raw]) toolRegistry[raw] = value;
+    if (!toolRegistry[raw.toLowerCase()]) toolRegistry[raw.toLowerCase()] = value;
+  }
+}
+
+export function getToolMeta(toolType: string): ToolMeta | undefined {
+  if (!toolType) return undefined;
+  if (toolRegistry[toolType]) return toolRegistry[toolType];
+  const stripped = toolType.replace(/^tool-/, "");
+  if (toolRegistry[stripped]) return toolRegistry[stripped];
+  if (toolRegistry[stripped.toLowerCase()]) return toolRegistry[stripped.toLowerCase()];
+  if (toolRegistry[`tool-${stripped}`]) return toolRegistry[`tool-${stripped}`];
+  return undefined;
+}
 
 // MCP tool parsing
 const MCP_TOOL_PREFIX = "tool-mcp__";

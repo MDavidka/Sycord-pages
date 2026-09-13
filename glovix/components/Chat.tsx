@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -93,6 +93,11 @@ interface MessageGroup {
     agentActions?: StreamingAction[];
     attachments?: FileAttachment[];
     createdAt?: number;
+    agentSession?: number;
+    agentEventId?: number;
+    tursoSessionId?: string;
+    modelProfile?: string;
+    thinkingLevel?: string;
     toolCalls?: {
         call: ToolCall;
         result?: string;
@@ -443,7 +448,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     useEffect(() => {
         if (!availableModelChoices?.length) return;
-        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || availableModelChoices[0];
+        const activeAiTabChoice = availableModelChoices.find(c => c.isAiTabActive || c.active);
+        const selected = availableModelChoices.find(choice => choice.modelType === selectedModel) || activeAiTabChoice || availableModelChoices[0];
         if (selected.modelType !== selectedModel) setSelectedModel(selected.modelType);
         setAiModel(selected.apiModel);
     }, [availableModelChoices, selectedModel, setAiModel, setSelectedModel]);
@@ -819,6 +825,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if ((msg as any).thinkingDuration) {
                         currentGroup.thinkingDuration = (msg as any).thinkingDuration;
                     }
+                    if ((msg as any).agentSession) {
+                        currentGroup.agentSession = (msg as any).agentSession;
+                    }
+                    if ((msg as any).agentEventId) {
+                        currentGroup.agentEventId = (msg as any).agentEventId;
+                    }
+                    if ((msg as any).tursoSessionId) {
+                        currentGroup.tursoSessionId = (msg as any).tursoSessionId;
+                    }
+                    if ((msg as any).modelProfile) {
+                        currentGroup.modelProfile = (msg as any).modelProfile;
+                    }
+                    if ((msg as any).thinkingLevel) {
+                        currentGroup.thinkingLevel = (msg as any).thinkingLevel;
+                    }
                     if (Array.isArray((msg as any).agentActions) && (msg as any).agentActions.length > 0) {
                         const byId = new Map((currentGroup.agentActions || []).map(action => [action.id, action]));
                         for (const action of (msg as any).agentActions as StreamingAction[]) byId.set(action.id, action);
@@ -845,6 +866,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         thinkingDuration: (msg as any).thinkingDuration,
                         agentActions: Array.isArray((msg as any).agentActions) ? (msg as any).agentActions : undefined,
                         createdAt: (msg as any).createdAt,
+                        agentSession: (msg as any).agentSession,
+                        agentEventId: (msg as any).agentEventId,
+                        tursoSessionId: (msg as any).tursoSessionId,
+                        modelProfile: (msg as any).modelProfile,
+                        thinkingLevel: (msg as any).thinkingLevel,
                         toolCalls: msg.tool_calls?.map(tc => ({ call: tc })),
                         segments
                     };
@@ -1017,19 +1043,56 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            const files = Array.from(e.target.files);
-            for (const file of files) {
-                try {
-                    const content = await readDocumentContent(file);
-                    setSelectedDocuments(prev => [...prev, {
+        if (!e.target.files) return;
+        const files = Array.from(e.target.files);
+        const projectId = getHostProjectId();
+
+        const hasArchiveOrBinary = files.some(f => /\.(zip|pdf|docx|xlsx|tar|gz)$/i.test(f.name));
+
+        if (projectId && (hasArchiveOrBinary || files.length > 2)) {
+            try {
+                const formData = new FormData();
+                for (const f of files) {
+                    formData.append('files', f);
+                }
+                const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/ai/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data.files)) {
+                        for (const item of data.files) {
+                            setSelectedDocuments(prev => [
+                                ...prev,
+                                {
+                                    name: item.filename || 'uploaded_file',
+                                    content: item.parsed_content || item.summary || '',
+                                    type: getFileType(item.filename || ''),
+                                },
+                            ]);
+                        }
+                        return;
+                    }
+                }
+            } catch (uploadErr) {
+                console.warn('[Upload] Server upload fallback to client reading:', uploadErr);
+            }
+        }
+
+        for (const file of files) {
+            try {
+                const content = await readDocumentContent(file);
+                setSelectedDocuments(prev => [
+                    ...prev,
+                    {
                         name: file.name,
                         content,
-                        type: file.type || getFileType(file.name)
-                    }]);
-                } catch (err) {
-                    console.error('Error reading file:', err);
-                }
+                        type: file.type || getFileType(file.name),
+                    },
+                ]);
+            } catch (err) {
+                console.error('Error reading file:', err);
             }
         }
     };
@@ -1057,12 +1120,18 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             'yml': 'text/yaml',
             'xml': 'text/xml',
             'csv': 'text/csv',
+            'zip': 'application/zip',
+            'pdf': 'application/pdf',
         };
         return typeMap[ext] || 'text/plain';
     };
 
     const readDocumentContent = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
+            if (/\.(zip|pdf|docx|xlsx|tar|gz)$/i.test(file.name)) {
+                resolve(`[Attached binary file: ${file.name} (${Math.round(file.size / 1024)} KB)]`);
+                return;
+            }
             const reader = new FileReader();
             reader.onload = () => {
                 const content = reader.result as string;
@@ -1489,7 +1558,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 markAgentTimelineLoaded();
                                 break;
                             case 'error':
-                                errorText = event.text || 'The project agent request failed.';
+                                errorText = (typeof event.text === 'string' && event.text.trim()) ? event.text.trim() : 'The project agent request failed.';
                                 clearPendingQuestion();
                                 replaceActions(actionsRef.current.map(action =>
                                     action.status === 'running' || action.status === 'pending'
@@ -1836,7 +1905,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     markAgentTimelineLoaded();
                     break;
                 case 'error':
-                    errorText = event.text || 'The project agent request failed.';
+                    errorText = (typeof event.text === 'string' && event.text.trim()) ? event.text.trim() : 'The project agent request failed.';
                     clearPendingQuestion();
                     replaceActions(actionsRef.current.map(action =>
                         action.status === 'running' || action.status === 'pending'
@@ -3165,6 +3234,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         createdAt={group.createdAt}
                                         isDark={isDark}
                                         hide={idx === groupedMessages.length - 1 && isRunning}
+                                        group={group}
+                                        projectId={hostProjectIdForSlash || undefined}
+                                        chatId={currentChatId || undefined}
+                                        selectedModel={selectedModel}
+                                        effortLevel={effortLevel}
                                     />
                                 </>
                             ) : (
@@ -3250,6 +3324,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             createdAt={group.createdAt}
                                             isDark={isDark}
                                             hide={idx === groupedMessages.length - 1 && isRunning}
+                                            group={group}
+                                            projectId={hostProjectIdForSlash || undefined}
+                                            chatId={currentChatId || undefined}
+                                            selectedModel={selectedModel}
+                                            effortLevel={effortLevel}
                                         />
                                     )}
                                 </>
@@ -3357,7 +3436,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             type="file"
                             ref={documentInputRef}
                             className="hidden"
-                            accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.css,.html,.py,.java,.c,.cpp,.rs,.go,.sql,.yaml,.yml,.xml,.csv,.log,.sh,.bat,.env,.gitignore"
+                            accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.css,.html,.py,.java,.c,.cpp,.rs,.go,.sql,.yaml,.yml,.xml,.csv,.log,.sh,.bat,.env,.gitignore,.zip,.pdf,.docx,.xlsx"
                             multiple
                             onChange={handleDocumentSelect}
                         />
@@ -3584,6 +3663,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         apiModel: c.apiModel,
                                         subtitle: c.subtitle,
                                         iconUrl: getProviderIconUrl(c.apiModel, isDark) || c.icon,
+                                        active: c.active,
+                                        isAiTabActive: c.isAiTabActive,
                                     }))}
                                     onModelSelect={(modelId) => {
                                         const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
@@ -3643,16 +3724,69 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     );
 }
 
+function downloadErrorDiagnostics(details: {
+    error: string;
+    projectId?: string;
+    chatId?: string;
+    model?: string;
+    thinkingLevel?: string;
+    tursoSessionId?: string;
+    agentSession?: number;
+    agentEventId?: number;
+    recentActions?: any[];
+    status?: string;
+}) {
+    const report = {
+        timestamp: new Date().toISOString(),
+        status: details.status || 'failed_or_incomplete',
+        error_message: details.error,
+        project_id: details.projectId || 'unknown',
+        chat_id: details.chatId || 'unknown',
+        model_profile: details.model || 'unknown',
+        thinking_level: details.thinkingLevel || 'unknown',
+        turso_session_id: details.tursoSessionId || null,
+        agent_session: details.agentSession || null,
+        agent_event_id: details.agentEventId || null,
+        recent_timeline_actions: details.recentActions || [],
+        client_url: typeof window !== 'undefined' ? window.location.href : '',
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    };
+    try {
+        const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        a.download = `sycord-error-diagnostics-${details.projectId || 'debug'}-${ts}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error('[Diagnostics] Failed to trigger download:', e);
+    }
+}
+
 function MessageMetaFooter({
     content,
     createdAt,
     isDark,
     hide,
+    group,
+    projectId,
+    chatId,
+    selectedModel,
+    effortLevel,
 }: {
     content: ContentType;
     createdAt?: number;
     isDark: boolean;
     hide?: boolean;
+    group?: MessageGroup;
+    projectId?: string;
+    chatId?: string;
+    selectedModel?: string;
+    effortLevel?: string;
 }) {
     const [copied, setCopied] = useState(false);
     const text = typeof content === 'string'
@@ -3662,6 +3796,21 @@ function MessageMetaFooter({
             : '';
 
     if (hide || !text.trim()) return null;
+
+    const isError =
+        text.startsWith('Error:') ||
+        text.includes('request failed') ||
+        text.includes('Connection interrupted') ||
+        text.includes('stopped before completing') ||
+        text.includes('Load failed') ||
+        text.includes('Failed to fetch');
+
+    const isNoResponseDone =
+        text === 'Stopped.' ||
+        text.startsWith('[Error:') ||
+        text.includes('stopped before completing its response');
+
+    const showDebug = isError || isNoResponseDone;
 
     const timeLabel = new Date(createdAt || Date.now()).toLocaleTimeString([], {
         hour: '2-digit',
@@ -3679,8 +3828,39 @@ function MessageMetaFooter({
         }
     };
 
+    const handleDownloadDebug = () => {
+        downloadErrorDiagnostics({
+            error: text,
+            projectId: projectId || (typeof window !== 'undefined' ? getHostProjectId() : undefined) || 'unknown',
+            chatId: chatId || undefined,
+            model: group?.modelProfile || selectedModel,
+            thinkingLevel: group?.thinkingLevel || effortLevel,
+            tursoSessionId: group?.tursoSessionId,
+            agentSession: group?.agentSession,
+            agentEventId: group?.agentEventId,
+            recentActions: group?.agentActions,
+            status: isError ? 'error' : 'incomplete_no_done',
+        });
+    };
+
     return (
-        <div className="mt-2 flex items-center justify-end gap-2 px-1">
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2 px-1">
+            {showDebug && (
+                <button
+                    type="button"
+                    onClick={handleDownloadDebug}
+                    title="Download debug diagnostics JSON"
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-md border transition-all active:scale-95 ${
+                        isDark
+                            ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'
+                            : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700'
+                    }`}
+                >
+                    <Bug className="size-3" />
+                    <Download className="size-3" />
+                    <span>Debug JSON</span>
+                </button>
+            )}
             <span className={`text-xs tabular-nums ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{timeLabel}</span>
             <button
                 type="button"
