@@ -1,40 +1,3 @@
-// AI endpoint for the Glovix builder — backed by Google Gemini on Vertex AI,
-// DeepSeek, MiniMax, and GLM / Z.ai (OpenAI-compatible).
-//
-// The Glovix client posts OpenAI-compatible chat-completion requests (streaming,
-// with `tools` / `tool_calls`) to `/api/ai/chat`. This handler routes to the
-// appropriate provider based on the requested model name:
-//
-//   - Models starting with "deepseek" → DeepSeek API (api.deepseek.com)
-//   - Models matching GLM (glm-* / z-ai/glm-*) → Z.ai API (api.z.ai)
-//   - Models matching MiniMax (minimax-m3 / MiniMax-*) → MiniMax API (api.minimax.io)
-//   - Everything else → Gemini on Vertex AI (aiplatform.googleapis.com)
-//
-// Providers stream responses back in OpenAI-compatible SSE so the client
-// is unchanged regardless of which backend is used.
-//
-// Configure via env:
-//   Gemini:
-//     GOOGLE_VERTEX_PROJECT  / GOOGLE_VERTEX_LOCATION  → full Vertex AI (ADC)
-//     GOOGLE_AIAGENT_API                              → API key (express/dev API)
-//     GOOGLE_AIAGENT_MODEL                            → model (default gemini-3.5-flash)
-//
-//   DeepSeek:
-//     DEEPSEEK_API_KEY                                 → API key (required)
-//     DEEPSEEK_MODEL                                   → model (default deepseek-chat)
-//
-//   GLM / Z.ai (syra-ultra → glm-5.2):
-//     ZAI_API_KEY (or GLM_API_KEY)                     → API key (required)
-//     GLM_MODEL                                        → model (default glm-5.2)
-//
-//   MiniMax:
-//     MINIMAX_API_KEY                                  → API key (required)
-//     MINIMAX_MODEL                                    → model (default MiniMax-M3)
-
-import { isConfigured, streamOpenAICompatible } from "@/lib/glovix-gemini"
-import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-deepseek"
-import { isGlmConfigured, streamGlmCompatible } from "@/lib/glovix-glm"
-import { isMiniMaxConfigured, streamMiniMaxCompatible } from "@/lib/glovix-minimax"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkRateLimit } from "@/lib/security/rate-limit"
@@ -43,144 +6,81 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-function isDeepSeekModel(model: string | undefined): boolean {
-  if (!model) return false
-  return model.toLowerCase().startsWith("deepseek")
+const DEFAULT_SYCORD_BASE = "https://sycord.site"
+
+function getSycordChatUrl() {
+  const configuredBase = (process.env.DEPLOYER_API_URL || DEFAULT_SYCORD_BASE).replace(/\/+$/, "")
+  const base = configuredBase.replace(/\/api\/?$/, "")
+  const path = process.env.SYCORD_AI_CHAT_PATH || "/api/ai/chat"
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`
 }
 
-function isGlmModel(model: string | undefined): boolean {
-  if (!model) return false
-  const id = model.toLowerCase()
-  return id.startsWith("glm") || id.startsWith("z-ai/glm") || id.startsWith("zhipu/glm")
-}
-
-function isMiniMaxModel(model: string | undefined): boolean {
-  if (!model) return false
-  const id = model.toLowerCase()
-  return id.startsWith("minimax") || id.startsWith("minimax/")
+function buildSycordHeaders() {
+  const headers: Record<string, string> = {
+    Accept: "text/event-stream, application/json",
+    "Content-Type": "application/json",
+  }
+  const apiKey = process.env.DEPLOYER_API_KEY
+  if (apiKey) {
+    headers["X-API-Key"] = apiKey
+    headers.Authorization = `Bearer ${apiKey}`
+  }
+  return headers
 }
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   const userId = (session?.user as { id?: string } | undefined)?.id
-  if (!userId) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
+  if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const rate = checkRateLimit(`ai-chat:${userId}`, { limit: 40, windowMs: 60_000 })
   if (!rate.allowed) {
-    return new Response(JSON.stringify({ error: "Too many AI requests. Please wait and try again." }), {
-      status: 429,
-      headers: {
-        "Content-Type": "application/json",
-        "Retry-After": String(rate.retryAfterSec),
-      },
-    })
-  }
-
-  let body: any
-  try {
-    body = await req.json()
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-
-  const messages = Array.isArray(body?.messages) ? body.messages : null
-  if (!messages) {
-    return new Response(JSON.stringify({ error: "Missing 'messages' array" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-
-  const model = typeof body?.model === "string" ? body.model : undefined
-
-  // Route to DeepSeek for deepseek-* models.
-  if (isDeepSeekModel(model)) {
-    if (!isDeepSeekConfigured()) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "DeepSeek is not configured. Set DEEPSEEK_API_KEY in your environment.",
-        }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      )
-    }
-    return streamDeepSeekCompatible({
-      messages,
-      tools: body?.tools,
-      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
-      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
-      model: model || undefined,
-      signal: req.signal,
-    })
-  }
-
-  // Route to GLM / Z.ai for glm-* models (syra-ultra → glm-5.2).
-  if (isGlmModel(model)) {
-    if (!isGlmConfigured()) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "GLM is not configured. Set ZAI_API_KEY (or GLM_API_KEY) in your environment.",
-        }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      )
-    }
-    return streamGlmCompatible({
-      messages,
-      tools: body?.tools,
-      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
-      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
-      model: model || undefined,
-      signal: req.signal,
-    })
-  }
-
-  // Route to MiniMax for minimax-* / MiniMax-* models.
-  if (isMiniMaxModel(model)) {
-    if (!isMiniMaxConfigured()) {
-      return new Response(
-        JSON.stringify({
-          error:
-            "MiniMax is not configured. Set MINIMAX_API_KEY in your environment.",
-        }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      )
-    }
-    return streamMiniMaxCompatible({
-      messages,
-      tools: body?.tools,
-      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
-      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
-      model: model || undefined,
-      signal: req.signal,
-    })
-  }
-
-  // Default: Gemini on Vertex AI.
-  if (!isConfigured()) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "No AI provider is configured. Set DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
-      }),
-      { status: 503, headers: { "Content-Type": "application/json" } },
+    return Response.json(
+      { error: "Too many AI requests. Please wait and try again." },
+      { status: 429, headers: { "Retry-After": String(rate.retryAfterSec) } },
     )
   }
 
-  return streamOpenAICompatible({
-    messages,
-    tools: body?.tools,
-    temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
-    maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
-    model: model || undefined,
-    signal: req.signal,
-  })
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
+  }
+
+  if (!body || typeof body !== "object" || !Array.isArray((body as { messages?: unknown }).messages)) {
+    return Response.json({ error: "Missing 'messages' array" }, { status: 400 })
+  }
+
+  if (!process.env.DEPLOYER_API_KEY) {
+    return Response.json({ error: "Sycord API is not configured. Set DEPLOYER_API_KEY." }, { status: 503 })
+  }
+
+  try {
+    const upstream = await fetch(getSycordChatUrl(), {
+      method: "POST",
+      headers: buildSycordHeaders(),
+      body: JSON.stringify(body),
+      signal: req.signal,
+      cache: "no-store",
+    })
+
+    if (!upstream.ok) {
+      const text = await upstream.text()
+      let detail: unknown = text
+      try { detail = JSON.parse(text) } catch { /* keep upstream text */ }
+      return Response.json(
+        { error: typeof detail === "object" && detail !== null ? (detail as { error?: string; message?: string }).error || (detail as { message?: string }).message || "Sycord AI request failed" : String(detail || "Sycord AI request failed") },
+        { status: upstream.status },
+      )
+    }
+
+    const headers = new Headers(upstream.headers)
+    headers.set("Cache-Control", "no-cache, no-transform")
+    headers.set("X-Accel-Buffering", "no")
+    return new Response(upstream.body, { status: upstream.status, headers })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return new Response(null, { status: 499 })
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to reach Sycord AI." }, { status: 502 })
+  }
 }
