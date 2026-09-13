@@ -638,6 +638,25 @@ export const toolRegistry: Record<string, ToolMeta> = {
   },
 };
 
+// Auto-populate unprefixed and lower-cased aliases for robust matching across SDKs
+for (const [key, value] of Object.entries(toolRegistry)) {
+  if (key.startsWith("tool-")) {
+    const raw = key.slice(5);
+    if (!toolRegistry[raw]) toolRegistry[raw] = value;
+    if (!toolRegistry[raw.toLowerCase()]) toolRegistry[raw.toLowerCase()] = value;
+  }
+}
+
+export function getToolMeta(toolType: string): ToolMeta | undefined {
+  if (!toolType) return undefined;
+  if (toolRegistry[toolType]) return toolRegistry[toolType];
+  const stripped = toolType.replace(/^tool-/, "");
+  if (toolRegistry[stripped]) return toolRegistry[stripped];
+  if (toolRegistry[stripped.toLowerCase()]) return toolRegistry[stripped.toLowerCase()];
+  if (toolRegistry[`tool-${stripped}`]) return toolRegistry[`tool-${stripped}`];
+  return undefined;
+}
+
 // MCP tool parsing
 const MCP_TOOL_PREFIX = "tool-mcp__";
 

@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { toolRegistry } from "./tool-registry";
+import { toolRegistry, getToolMeta } from "./tool-registry";
 import { GenericTool } from "./generic-tool";
 import { getToolStatus } from "../utils/format-tool";
 import { cn } from "../utils/cn";
@@ -265,7 +265,7 @@ export const ToolGroup = memo(function ToolGroup({
                       : "output-available",
                 }
               : nestedPart;
-            const nestedMeta = toolRegistry[derivedPart.type];
+            const nestedMeta = getToolMeta(derivedPart.type) || toolRegistry[derivedPart.type];
             if (!nestedMeta) return null;
             const { isPending: nestedIsPending, isError: nestedIsError } =
               getToolStatus(derivedPart, chatStatus);

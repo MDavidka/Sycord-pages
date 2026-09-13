@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { toolRegistry } from "./tool-registry";
+import { toolRegistry, getToolMeta } from "./tool-registry";
 import { GenericTool } from "./generic-tool";
 import { getToolStatus } from "../utils/format-tool";
 import { cn } from "../utils/cn";
@@ -53,7 +53,7 @@ export const SubagentTool = memo(function SubagentTool({
   const subtitle = (() => {
     if (isPending && hasNestedTools) {
       const lastTool = nestedTools[nestedTools.length - 1];
-      const meta = lastTool ? toolRegistry[lastTool.type] : null;
+      const meta = lastTool ? (getToolMeta(lastTool.type) || toolRegistry[lastTool.type]) : null;
       if (meta) {
         const title = meta.title(lastTool);
         const subtitle = meta.subtitle?.(lastTool);
@@ -105,7 +105,7 @@ export const SubagentTool = memo(function SubagentTool({
             )}
           >
             {nestedTools.map((nestedPart, idx) => {
-              const nestedMeta = toolRegistry[nestedPart.type];
+              const nestedMeta = getToolMeta(nestedPart.type) || toolRegistry[nestedPart.type];
               if (!nestedMeta) {
                 return (
                   <ToolRowBase
