@@ -724,6 +724,8 @@ export type SyteAgentExecutionOptions = {
   thinkingLevel?: "low" | "medium" | "high" | "extra_high" | string
   /** Execution speed profile: ultra_fast, balanced, deep_reasoning */
   executionSpeed?: string
+  /** User credentials (GitHub token, author info, etc.) forwarded to agent */
+  credentials?: Record<string, unknown>
 }
 
 export type SyteAgentChangeResponse = {
@@ -761,6 +763,7 @@ export async function syteAgentChange(
       agent_mode: agentMode,
       ...(execution.thinkingLevel ? { thinking_level: execution.thinkingLevel } : {}),
       ...(execution.executionSpeed ? { execution_speed: execution.executionSpeed } : {}),
+      ...(execution.credentials ? { credentials: execution.credentials } : {}),
     },
   })
 }
@@ -1086,6 +1089,41 @@ export async function syteAgentSkillsDisable(
   skillId: string,
 ): Promise<SyteResult<{ ok?: boolean }>> {
   return syteWorkspaceRequest("POST", "agent_skills_disable", {
+    body: { uuid, skill_id: skillId },
+  })
+}
+
+/** POST /api/agent_skills_add or /api/agent_skills_upload — save/upload a custom skill. */
+export async function syteAgentSkillsUpload(
+  uuid: string,
+  skill: {
+    name: string
+    responsibility?: string
+    description?: string
+    content: string
+    parameters?: Record<string, unknown>
+    active?: boolean
+  },
+): Promise<SyteResult<{ ok?: boolean; skill?: any }>> {
+  return syteWorkspaceRequest("POST", "agent_skills_add", {
+    body: {
+      uuid,
+      name: skill.name,
+      responsibility: skill.responsibility || "general",
+      description: skill.description || "",
+      content: skill.content,
+      parameters: skill.parameters || {},
+      enable: skill.active !== false,
+    },
+  })
+}
+
+/** POST /api/agent_skills_delete — delete a custom project skill. */
+export async function syteAgentSkillsDelete(
+  uuid: string,
+  skillId: string,
+): Promise<SyteResult<{ ok?: boolean }>> {
+  return syteWorkspaceRequest("POST", "agent_skills_delete", {
     body: { uuid, skill_id: skillId },
   })
 }

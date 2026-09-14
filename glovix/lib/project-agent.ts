@@ -475,6 +475,8 @@ function normalizeTursoEvent(
         case 'thought':
         case 'thought_delta':
             return { type: 'thinking', ...common };
+        case 'thinking_finished':
+            return { type: 'message', ...common };
         case 'plan':
         case 'plan_approval_required':
             return {
@@ -494,6 +496,7 @@ function normalizeTursoEvent(
             };
         }
         case 'question':
+        case 'ask_question':
         case 'user_input_required': {
             const question = normalizeAgentQuestion(payload, {
                 title: event.title,

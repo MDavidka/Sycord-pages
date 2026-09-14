@@ -5,13 +5,24 @@
 
 import { MCP_PROVIDERS } from '@/lib/mcp-providers'
 
+export type SkillResponsibility =
+  | 'designing'
+  | 'integrating'
+  | 'building'
+  | 'testing'
+  | 'security'
+  | 'general'
+
 export type SyraSlashSkill = {
   id: string
   name: string
+  responsibility?: SkillResponsibility
   description?: string
+  content?: string
   active: boolean
   builtin?: boolean
   custom?: boolean
+  created_at?: string
 }
 
 export type SyraSlashMcpAddon = {
@@ -173,13 +184,22 @@ export function normalizeSkills(raw: unknown): SyraSlashSkill[] {
         : typeof obj.content === 'string'
           ? obj.content.slice(0, 120)
           : undefined
+    const responsibility = (
+      typeof obj.responsibility === 'string' && obj.responsibility
+        ? obj.responsibility.toLowerCase()
+        : 'general'
+    ) as SkillResponsibility
+    const content = typeof obj.content === 'string' ? obj.content : undefined
     skills.push({
       id,
       name,
+      responsibility,
       description,
+      content,
       active: obj.active === true,
       builtin: obj.builtin === true,
-      custom: obj.custom === true,
+      custom: obj.custom === true || !obj.builtin,
+      created_at: typeof obj.created_at === 'string' ? obj.created_at : undefined,
     })
   }
   return skills
@@ -236,15 +256,15 @@ export async function fetchProjectSkills(projectId: string): Promise<{
     const data = await res.json().catch(() => null)
     if (!res.ok) {
       return {
-        skills: BUILTIN_SKILL_FALLBACK,
+        skills: [],
         error: data?.message || `Failed to load skills (${res.status})`,
       }
     }
     const skills = normalizeSkills(data?.skills)
-    return { skills: skills.length > 0 ? skills : BUILTIN_SKILL_FALLBACK }
+    return { skills }
   } catch (err: any) {
     return {
-      skills: BUILTIN_SKILL_FALLBACK,
+      skills: [],
       error: err?.message || 'Failed to load skills',
     }
   }
@@ -268,6 +288,53 @@ export async function toggleProjectSkill(
     return { skills: normalizeSkills(data?.skills) }
   } catch (err: any) {
     return { skills: [], error: err?.message || 'Failed to update skill' }
+  }
+}
+
+export async function uploadProjectSkill(
+  projectId: string,
+  skill: {
+    name: string
+    responsibility?: SkillResponsibility
+    description?: string
+    content: string
+    parameters?: Record<string, unknown>
+    active?: boolean
+  },
+): Promise<{ ok: boolean; skills: SyraSlashSkill[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ action: 'upload', ...skill }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || data?.ok === false) {
+      return { ok: false, skills: [], error: data?.message || 'Failed to save skill' }
+    }
+    return { ok: true, skills: normalizeSkills(data?.skills) }
+  } catch (err: any) {
+    return { ok: false, skills: [], error: err?.message || 'Failed to upload skill' }
+  }
+}
+
+export async function deleteProjectSkill(
+  projectId: string,
+  skillId: string,
+): Promise<{ ok: boolean; skills: SyraSlashSkill[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/agent/skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ action: 'delete', skillId }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || data?.ok === false) {
+      return { ok: false, skills: [], error: data?.message || 'Failed to delete skill' }
+    }
+    return { ok: true, skills: normalizeSkills(data?.skills) }
+  } catch (err: any) {
+    return { ok: false, skills: [], error: err?.message || 'Failed to delete skill' }
   }
 }
 
