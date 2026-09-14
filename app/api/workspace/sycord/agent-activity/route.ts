@@ -146,41 +146,59 @@ function bridgeUpstreamSse(
   return new Response(body, { status: 200, headers: SSE_HEADERS })
 }
 
+function sseErrorResponse(error: string, status: number): Response {
+  return new Response(`event: error\ndata: ${JSON.stringify({ event_type: "error", error: "validation_failed", message: error })}\n\n`, {
+    status,
+    headers: SSE_HEADERS,
+  })
+}
+
 export async function GET(req: Request): Promise<Response> {
+  const { searchParams } = new URL(req.url)
+  const live = searchParams.get("live") === "1"
+
   const session = await getServerSession(authOptions)
   const userId = (session?.user as any)?.id
   if (!userId) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+    return live
+      ? sseErrorResponse("Unauthorized", 401)
+      : NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
   }
 
   if (!isSyteConfigured()) {
-    return NextResponse.json(
+    return live
+      ? sseErrorResponse("Syte deployer is not configured (DEPLOYER_API_KEY missing).", 503)
+      : NextResponse.json(
       { ok: false, error: "Syte deployer is not configured (DEPLOYER_API_KEY missing)." },
       { status: 503 },
     )
   }
 
-  const { searchParams } = new URL(req.url)
   const projectId = (searchParams.get("projectId") || "").trim()
-  const live = searchParams.get("live") === "1"
   const sinceId = parseInt(searchParams.get("since_id") || "0", 10) || 0
   const limit = Math.min(parseInt(searchParams.get("limit") || "200", 10) || 200, 2000)
   const session_ = searchParams.get("session") || ""
 
   if (!projectId) {
-    return NextResponse.json({ ok: false, error: "Missing 'projectId'" }, { status: 400 })
+    return live
+      ? sseErrorResponse("Missing 'projectId'", 400)
+      : NextResponse.json({ ok: false, error: "Missing 'projectId'" }, { status: 400 })
   }
 
   const client = await clientPromise
   const db = client.db()
   const project = await getOwnedProject(db, userId, projectId)
   if (!project) {
-    return NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
+    return live
+      ? sseErrorResponse("Project not found", 404)
+      : NextResponse.json({ ok: false, error: "Project not found" }, { status: 404 })
   }
 
   const uuid = getStoredSyteUuid(project)
   if (!uuid) {
-    return NextResponse.json(
+    return live
+      ? sseErrorResponse("No Syte workspace UUID for this project.", 409)
+      : NextResponse.json(
       { ok: false, error: "No Syte workspace UUID for this project." },
       { status: 409 },
     )

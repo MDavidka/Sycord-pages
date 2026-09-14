@@ -12,6 +12,7 @@ import {
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { cn } from '@/lib/utils';
 
 interface DeepMemoryModalProps {
@@ -103,7 +104,7 @@ export function DeepMemoryModal({ onClose }: DeepMemoryModalProps) {
                                     "p-5 rounded-2xl border prose dark:prose-invert max-w-none text-sm leading-relaxed",
                                     isDark ? "bg-white/[0.03] border-white/[0.05]" : "bg-gray-50 border-gray-100"
                                 )}>
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                                         {deepMemory || ''}
                                     </ReactMarkdown>
                                 </div>
@@ -120,7 +121,7 @@ export function DeepMemoryModal({ onClose }: DeepMemoryModalProps) {
                                         "p-5 rounded-2xl border prose dark:prose-invert max-w-none text-sm leading-relaxed",
                                         isDark ? "bg-white/[0.03] border-white/[0.05]" : "bg-gray-50 border-gray-100"
                                     )}>
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                                             {glovixMd}
                                         </ReactMarkdown>
                                     </div>
@@ -154,7 +155,7 @@ export function DeepMemoryModal({ onClose }: DeepMemoryModalProps) {
                                                     "px-4 py-4 border-t prose dark:prose-invert max-w-none text-sm",
                                                     isDark ? "border-white/[0.05]" : "border-gray-100"
                                                 )}>
-                                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                                                         {block.content}
                                                     </ReactMarkdown>
                                                 </AccordionContent>

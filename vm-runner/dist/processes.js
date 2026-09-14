@@ -62,9 +62,11 @@ export async function startOrRestartProcess(projectId, processName, port, cwd, e
     const env = {
         PORT: String(port),
         HOSTNAME: "0.0.0.0",
-        NODE_ENV: "production",
         ENV_FILE: envFile,
         ...envFileVars,
+        NODE_ENV: envFileVars.NODE_ENV === "development" || envFileVars.NODE_ENV === "test"
+            ? envFileVars.NODE_ENV
+            : "production",
     };
     if (existing) {
         return runCommand(config.pm2Binary, ["restart", processName, "--update-env"], { cwd, env });
