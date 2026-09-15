@@ -200,10 +200,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           }
           resolvedCredentials[`${conn.providerId}_token`] = creds.accessToken
         }
-        if (creds?.values) {
-          for (const [k, v] of Object.entries(creds.values)) {
+        if (creds?.apiKeys) {
+          for (const [k, v] of Object.entries(creds.apiKeys)) {
             if (v && !resolvedCredentials[k]) {
               resolvedCredentials[k] = v
+            }
+          }
+        } else if ((creds as any)?.values) {
+          for (const [k, v] of Object.entries((creds as any).values)) {
+            if (v && !resolvedCredentials[k]) {
+              resolvedCredentials[k] = String(v)
             }
           }
         }
