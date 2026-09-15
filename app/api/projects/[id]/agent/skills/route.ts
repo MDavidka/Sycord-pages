@@ -6,6 +6,8 @@ import {
   syteAgentSkillsDisable,
   syteAgentSkillsEnable,
   syteAgentSkillsList,
+  syteAgentSkillsUpload,
+  syteAgentSkillsDelete,
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
@@ -17,8 +19,8 @@ export const dynamic = "force-dynamic"
  * → GET /api/agent_skills?uuid=
  *
  * POST /api/projects/[id]/agent/skills
- * body: { action: "enable"|"disable", skillId, parameters? }
- * → POST /api/agent_skills_enable | /api/agent_skills_disable
+ * body: { action: "enable"|"disable"|"upload"|"add"|"delete", skillId?, name?, content?, responsibility?, description?, parameters?, active? }
+ * → POST /api/agent_skills_enable | /api/agent_skills_disable | /api/agent_skills_add | /api/agent_skills_delete
  *
  * Docs: https://sycord.site/api/#agent
  */
@@ -77,7 +79,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     action?: unknown
     skillId?: unknown
     skill_id?: unknown
+    name?: unknown
+    content?: unknown
+    responsibility?: unknown
+    description?: unknown
     parameters?: unknown
+    active?: unknown
   } | null = null
   try {
     body = await request.json()
@@ -95,9 +102,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? (body.parameters as Record<string, unknown>)
       : undefined
 
-  if (!projectId || !skillId || (action !== "enable" && action !== "disable")) {
+  if (!projectId || !action) {
     return Response.json(
-      { message: 'Project ID, skillId, and action ("enable"|"disable") are required.' },
+      { message: 'Project ID and action ("enable"|"disable"|"upload"|"add"|"delete") are required.' },
       { status: 400 },
     )
   }
@@ -105,10 +112,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const loaded = await loadOwnedWorkspace(projectId, session.user.id)
   if ("error" in loaded) return loaded.error
 
-  const result =
-    action === "enable"
-      ? await syteAgentSkillsEnable(loaded.uuid, skillId, parameters)
-      : await syteAgentSkillsDisable(loaded.uuid, skillId)
+  let result: { ok?: boolean; error?: string; status?: number }
+
+  if (action === "upload" || action === "add") {
+    const name = typeof body?.name === "string" ? body.name.trim() : ""
+    const content = typeof body?.content === "string" ? body.content.trim() : ""
+    const responsibility =
+      typeof body?.responsibility === "string" ? body.responsibility.trim().toLowerCase() : "general"
+    const description = typeof body?.description === "string" ? body.description.trim() : ""
+    const active = body?.active !== false
+
+    if (!name || !content) {
+      return Response.json({ message: "Skill name and content are required." }, { status: 400 })
+    }
+
+    result = await syteAgentSkillsUpload(loaded.uuid, {
+      name,
+      responsibility,
+      description,
+      content,
+      parameters,
+      active,
+    })
+  } else if (action === "delete") {
+    if (!skillId) {
+      return Response.json({ message: "skillId is required to delete a skill." }, { status: 400 })
+    }
+    result = await syteAgentSkillsDelete(loaded.uuid, skillId)
+  } else if (action === "enable") {
+    if (!skillId) {
+      return Response.json({ message: "skillId is required to enable a skill." }, { status: 400 })
+    }
+    result = await syteAgentSkillsEnable(loaded.uuid, skillId, parameters)
+  } else if (action === "disable") {
+    if (!skillId) {
+      return Response.json({ message: "skillId is required to disable a skill." }, { status: 400 })
+    }
+    result = await syteAgentSkillsDisable(loaded.uuid, skillId)
+  } else {
+    return Response.json({ message: `Unsupported action: ${action}` }, { status: 400 })
+  }
 
   if (!result.ok) {
     return Response.json(
@@ -122,7 +165,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ok: true,
     uuid: loaded.uuid,
     action,
-    skill_id: skillId,
+    skill_id: skillId || undefined,
     skills: listed.ok ? listed.data?.skills || [] : undefined,
   })
 }

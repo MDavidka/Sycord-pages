@@ -2,6 +2,8 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import clientPromise from "@/lib/torso"
 import { getOwnedProject } from "@/lib/project-chat-session"
+import { getProjectOwnerUserId } from "@/lib/project-id"
+import { listMcpConnections, resolveMcpCredentials } from "@/lib/mcp-connections"
 import {
   syteAgentChange,
   syteAgentSessions,
@@ -130,6 +132,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     afterSession?: unknown
     thinkingLevel?: unknown
     executionSpeed?: unknown
+    credentials?: unknown
   }
   const message = typeof body?.message === "string" ? body.message.trim() : ""
   const requestedProfile = typeof body?.modelProfile === "string" ? body.modelProfile : ""
@@ -162,6 +165,54 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ message: workspace.error, needsCreate: true }, { status: 409 })
   }
 
+  const explicitCreds =
+    body?.credentials && typeof body.credentials === "object" && !Array.isArray(body.credentials)
+      ? (body.credentials as Record<string, unknown>)
+      : {}
+  const resolvedCredentials: Record<string, unknown> = {
+    git_name: session.user.name || undefined,
+    git_email: session.user.email || undefined,
+    ...explicitCreds,
+  }
+
+  // Check project fields for GitHub tokens
+  if (!resolvedCredentials.github_token && !resolvedCredentials.GITHUB_TOKEN) {
+    if (typeof (project as any).githubToken === "string" && (project as any).githubToken) {
+      resolvedCredentials.github_token = (project as any).githubToken
+      resolvedCredentials.GITHUB_TOKEN = (project as any).githubToken
+    } else if (typeof (project as any).githubAccessToken === "string" && (project as any).githubAccessToken) {
+      resolvedCredentials.github_token = (project as any).githubAccessToken
+      resolvedCredentials.GITHUB_TOKEN = (project as any).githubAccessToken
+    }
+  }
+
+  // Check MCP connections for GitHub and other tool tokens
+  try {
+    const ownerId = getProjectOwnerUserId(project, session.user.id)
+    const connections = await listMcpConnections(db, ownerId, projectId)
+    for (const conn of connections) {
+      if (conn.status === "connected") {
+        const creds = await resolveMcpCredentials(db, conn)
+        if (creds?.accessToken) {
+          if (conn.providerId === "github" && !resolvedCredentials.github_token && !resolvedCredentials.GITHUB_TOKEN) {
+            resolvedCredentials.github_token = creds.accessToken
+            resolvedCredentials.GITHUB_TOKEN = creds.accessToken
+          }
+          resolvedCredentials[`${conn.providerId}_token`] = creds.accessToken
+        }
+        if (creds?.values) {
+          for (const [k, v] of Object.entries(creds.values)) {
+            if (v && !resolvedCredentials[k]) {
+              resolvedCredentials[k] = v
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[Agent] Failed to resolve MCP connections for agent turn:", err)
+  }
+
   // Start the agent immediately — do not block on a sessions list round-trip.
   // Session numbers from the client (`afterSession`) are authoritative enough
   // for UI correlation; Turso poll events overwrite with the durable number.
@@ -170,6 +221,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     agentMode,
     thinkingLevel,
     executionSpeed,
+    credentials: resolvedCredentials,
   })
   const requestId = change.data?.request_id
   const tursoSessionId = change.data?.turso_session_id
