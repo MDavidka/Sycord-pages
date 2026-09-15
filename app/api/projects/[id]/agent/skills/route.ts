@@ -8,6 +8,7 @@ import {
   syteAgentSkillsList,
   syteAgentSkillsUpload,
   syteAgentSkillsDelete,
+  type SyteResult,
 } from "@/lib/deploy/syte-client"
 import { requireSyteWorkspaceUuid } from "@/lib/deploy/syte-workspace"
 
@@ -112,7 +113,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const loaded = await loadOwnedWorkspace(projectId, session.user.id)
   if ("error" in loaded) return loaded.error
 
-  let result: { ok?: boolean; error?: string; status?: number }
+  let result: SyteResult<any>
 
   if (action === "upload" || action === "add") {
     const name = typeof body?.name === "string" ? body.name.trim() : ""
