@@ -118,13 +118,48 @@ export function AgentQuestionCard({
     </Button>
   )
 
+  const isAnswered = question.status === 'answered' || (question.answer !== undefined && question.answer !== null);
+
+  if (isAnswered) {
+    const answerDisplay = Array.isArray(question.answer)
+      ? question.answer.join(', ')
+      : String(question.answer ?? '');
+    return (
+      <div
+        className={cn('animate-fade-in-up w-full rounded-[18px] border px-4 py-3.5', cardClass)}
+        role="group"
+        aria-label={question.prompt}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[14px] font-medium leading-snug">{question.prompt}</p>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+            <Check className="size-3" /> Answered
+          </span>
+        </div>
+        {answerDisplay && (
+          <div className={cn(
+            'mt-2.5 px-3 py-2 rounded-xl text-[13px] font-mono border',
+            isDark ? 'bg-black/30 border-white/5 text-zinc-200' : 'bg-gray-50 border-gray-200 text-gray-800'
+          )}>
+            {answerDisplay}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn('animate-fade-in-up w-full rounded-[22px] border px-4 py-4', cardClass)}
       role="group"
       aria-label={question.prompt}
     >
-      <p className="text-[15px] font-semibold leading-snug tracking-tight">{question.prompt}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[15px] font-semibold leading-snug tracking-tight">{question.prompt}</p>
+        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+          <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" /> Waiting
+        </span>
+      </div>
 
       {question.questionType === 'answer' && (
         <div className="mt-3">

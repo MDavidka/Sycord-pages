@@ -6,6 +6,17 @@ import {
     Download,
     Expand,
     SquareTerminal,
+    Terminal,
+    Globe,
+    Cloud,
+    Server,
+    MousePointer,
+    FileText,
+    CheckCircle2,
+    Check,
+    Ban,
+    AlertTriangle,
+    Loader2,
 } from 'lucide-react';
 import {
     Collapsible,
@@ -20,6 +31,7 @@ import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { Markdown } from '@/components/agent-elements/markdown';
 import type { GenerationPlan } from '../lib/generation-plan';
+import type { ActionMarkData } from '../lib/project-agent';
 import { useStore } from '../store';
 
 export interface StreamingAction {
@@ -33,6 +45,7 @@ export interface StreamingAction {
     toolCallId?: string;
     startedAt?: number;
     completedAt?: number;
+    actionMark?: ActionMarkData;
     screenshots?: Array<{
         id?: string;
         viewport?: string;
@@ -62,7 +75,8 @@ type ActionKind =
     | 'service'
     | 'screenshot'
     | 'plan'
-    | 'subagent';
+    | 'subagent'
+    | 'action_mark';
 
 interface ActionGroup {
     kind: ActionKind;
@@ -76,7 +90,241 @@ const FILE_TOOL_NAMES = new Set([
     'file_created', 'file_modified', 'file_deleted', 'file_read', 'file_changed',
 ]);
 
-const GROUPABLE_KINDS: ActionKind[] = ['thinking', 'read', 'edit', 'command', 'install', 'validate', 'search'];
+const GROUPABLE_KINDS: ActionKind[] = ['thinking', 'read', 'edit', 'command', 'install', 'validate', 'search', 'action_mark'];
+
+function GithubIcon({ className }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+            <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+        </svg>
+    );
+}
+
+export function resolveActionMark(action: StreamingAction): ActionMarkData | null {
+    if (action.actionMark) return action.actionMark;
+    const name = action.toolName.toLowerCase();
+    const args = parseArgs(action.args);
+    const cmd = String(args.command || args.cmd || action.displayName || '').trim();
+    const path = String(args.path || args.file || args.filePath || '').trim();
+    const url = String(args.url || args.query || '').trim();
+
+    // 1. Security risk check
+    const riskPatterns = ['rm -rf /', 'chmod 777', 'curl | bash', 'wget | bash', 'mkfs', '> /dev/sda'];
+    if (riskPatterns.some(p => cmd.includes(p)) || name.includes('risk') || action.result?.toLowerCase().includes('security risk')) {
+        return {
+            kind: 'security_risk',
+            label: 'security risk!',
+            detail: cmd || action.result || 'Dangerous command flagged',
+            badge: null,
+            status: 'warning',
+            is_risk: true,
+        };
+    }
+
+    // 2. Connecting to github
+    if (name.includes('git') || cmd.startsWith('git ') || cmd.includes('git clone') || cmd.includes('git commit') || cmd.includes('git push')) {
+        return {
+            kind: 'github',
+            label: 'connecting to github',
+            detail: cmd.startsWith('git') ? cmd : (args.branch ? `branch: ${args.branch}` : 'GitHub repository sync'),
+            badge: 'github',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 3. Starting server
+    if (name.includes('start_preview') || /\b(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start)\b/.test(cmd)) {
+        return {
+            kind: 'server',
+            label: 'starting server',
+            detail: cmd || 'local preview server',
+            badge: 'starting',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 4. Using browser
+    if (name.includes('browser') || name.includes('preview')) {
+        return {
+            kind: 'browser',
+            label: 'using browser',
+            detail: url || path || 'preview viewport',
+            badge: 'browser',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 5. Using cloud servers
+    if (name.includes('cloud') || name.includes('deploy') || name.includes('mcp')) {
+        return {
+            kind: 'cloud',
+            label: 'using cloud servers',
+            detail: String(args.addon || args.service || 'cloud cluster'),
+            badge: 'cloud',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 6. Scraping web
+    if (name.includes('scrape') || name.includes('fetch') || cmd.startsWith('curl ') || cmd.startsWith('wget ')) {
+        let domain = 'web.app';
+        if (url.startsWith('http')) {
+            try {
+                domain = new URL(url).hostname.replace('www.', '');
+            } catch {}
+        }
+        return {
+            kind: 'scrape',
+            label: 'scraping web',
+            detail: url || cmd || 'querying web',
+            badge: domain,
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 7. Type checking
+    if (name.includes('typecheck') || name.includes('check_types') || /\b(tsc|typecheck|eslint)\b/.test(cmd)) {
+        return {
+            kind: 'typecheck',
+            label: 'type checking',
+            detail: path || 'TypeScript & AST verification',
+            badge: 'tsc',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 8. Opening file
+    if (name.includes('read_file') || name === 'file_read') {
+        return {
+            kind: 'file',
+            label: 'opening file',
+            detail: path || action.displayName,
+            badge: path ? path.split('/').pop() : null,
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    // 9. Running command
+    if (cmd && (name.includes('command') || name === 'command_run' || name === 'syte_run_command')) {
+        return {
+            kind: 'command',
+            label: 'running command',
+            detail: cmd,
+            badge: null,
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+
+    return null;
+}
+
+export const ActionMarkRow = memo(function ActionMarkRow({
+    action,
+    isDark = true,
+}: {
+    action: StreamingAction;
+    isDark?: boolean;
+}) {
+    const mark = action.actionMark || resolveActionMark(action);
+    if (!mark) return null;
+
+    const isRunning = action.status === 'running' || mark.status === 'running';
+    const isError = action.status === 'error' || mark.status === 'error';
+    const isRisk = Boolean(mark.is_risk || mark.kind === 'security_risk');
+
+    return (
+        <div
+            className={cn(
+                'group flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-[13px] transition-all border select-none',
+                isRisk
+                    ? 'border-red-500/30 bg-red-500/10 text-red-400 font-medium'
+                    : isDark
+                        ? 'border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05] text-zinc-300'
+                        : 'border-black/[0.08] bg-black/[0.02] hover:bg-black/[0.04] text-zinc-700',
+            )}
+        >
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                {/* Visual Icon matching the exact kind */}
+                <div className="shrink-0 flex items-center justify-center">
+                    {isRisk ? (
+                        <Ban className="size-4 text-red-500 shrink-0" />
+                    ) : mark.kind === 'github' ? (
+                        <GithubIcon className="size-4 text-zinc-300 shrink-0" />
+                    ) : mark.kind === 'server' ? (
+                        <Server className="size-4 text-amber-400 shrink-0" />
+                    ) : mark.kind === 'browser' ? (
+                        <MousePointer className="size-4 text-sky-400 shrink-0" />
+                    ) : mark.kind === 'cloud' ? (
+                        <Cloud className="size-4 text-indigo-400 shrink-0" />
+                    ) : mark.kind === 'scrape' ? (
+                        <Globe className="size-4 text-emerald-400 shrink-0" />
+                    ) : mark.kind === 'typecheck' ? (
+                        <CheckCircle2 className="size-4 text-emerald-400 shrink-0" />
+                    ) : mark.kind === 'file' ? (
+                        <FileText className="size-4 text-zinc-400 shrink-0" />
+                    ) : (
+                        <SquareTerminal className="size-4 text-zinc-400 shrink-0" />
+                    )}
+                </div>
+
+                {/* Mark Label */}
+                <span className={cn(
+                    'shrink-0 font-medium tracking-tight',
+                    isRisk ? 'text-red-400 font-semibold' : (isDark ? 'text-zinc-200' : 'text-zinc-800')
+                )}>
+                    {mark.label}
+                </span>
+
+                {/* Optional Detail string */}
+                {mark.detail && (
+                    <span className={cn(
+                        'truncate text-[12px] font-mono',
+                        isRisk ? 'text-red-400/90' : (isDark ? 'text-zinc-400' : 'text-zinc-500')
+                    )}>
+                        {mark.detail}
+                    </span>
+                )}
+            </div>
+
+            {/* Right side: Badge and Status indicator */}
+            <div className="flex items-center gap-2 shrink-0">
+                {mark.badge && (
+                    mark.badge === 'starting' ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                            <span className="size-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            starting
+                        </span>
+                    ) : (
+                        <span className={cn(
+                            'px-2 py-0.5 rounded-md text-[11px] font-mono border',
+                            isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/60' : 'bg-zinc-100 text-zinc-700 border-zinc-200'
+                        )}>
+                            {mark.badge}
+                        </span>
+                    )
+                )}
+
+                {isRisk ? (
+                    <span className="flex items-center justify-center size-4 rounded-full bg-red-500/25 text-red-400 text-[10px] font-bold">!</span>
+                ) : isRunning ? (
+                    <Loader2 className="size-3.5 animate-spin text-zinc-400" />
+                ) : isError ? (
+                    <span className="size-1.5 rounded-full bg-red-400" />
+                ) : (
+                    <Check className="size-3.5 text-emerald-400" />
+                )}
+            </div>
+        </div>
+    );
+});
 
 function parseArgs(args: unknown): Record<string, any> {
     if (!args) return {};
@@ -91,14 +339,22 @@ function parseArgs(args: unknown): Record<string, any> {
 }
 
 function classifyAction(action: StreamingAction): ActionKind {
+    if (action.actionMark) return 'action_mark';
     const name = action.toolName.toLowerCase();
-    const args = parseArgs(action.args);
-    const command = String(args.command || action.displayName || '').toLowerCase();
-
     if (name.includes('screenshot') || (action.screenshots && action.screenshots.length > 0)) return 'screenshot';
     if (name === 'subagent' || name.includes('subagent') || action.subagentTaskId || action.nestedActions?.length) return 'subagent';
     if (name === 'planning' || name === 'update_plan' || name === 'plan' || name.includes('planwrite')) return 'plan';
     if (name.includes('think')) return 'thinking';
+
+    const resolved = resolveActionMark(action);
+    if (resolved && (resolved.kind === 'security_risk' || resolved.kind === 'github' || resolved.kind === 'server' || resolved.kind === 'browser' || resolved.kind === 'cloud' || resolved.kind === 'scrape' || resolved.kind === 'typecheck')) {
+        action.actionMark = resolved;
+        return 'action_mark';
+    }
+
+    const args = parseArgs(action.args);
+    const command = String(args.command || action.displayName || '').toLowerCase();
+
     if (name.includes('grep') || name.includes('search') || name === 'file_search' || name.includes('listfiles') || name.includes('list_files')) return 'search';
     if (name.includes('read') || name === 'file_read') return 'read';
     if (FILE_TOOL_NAMES.has(name) || name.includes('write') || name.includes('edit') || name.includes('patch') || name.startsWith('file_')) return 'edit';
@@ -425,6 +681,16 @@ const ToolStack = memo(function ToolStack({
     chatStatus: string;
     generationPlan: GenerationPlan | null;
 }) {
+    if (group.kind === 'action_mark') {
+        return (
+            <div className="space-y-1.5 my-1">
+                {group.actions.map(action => (
+                    <ActionMarkRow key={action.id} action={action} isDark={isDark} />
+                ))}
+            </div>
+        );
+    }
+
     if (group.kind === 'screenshot') {
         return (
             <div className="space-y-1.5">
