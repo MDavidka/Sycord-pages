@@ -80,9 +80,15 @@ interface FileAttachment {
 type ContentType = string | null | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
 
 interface AssistantSegment {
-    type: 'text' | 'tools';
+    type: 'text' | 'tools' | 'thinking' | 'question';
     content?: ContentType;
     toolCalls?: { call: ToolCall; result?: string }[];
+    actions?: StreamingAction[];
+    thinking?: string;
+    thinkingDuration?: number;
+    question?: AgentQuestion;
+    answered?: boolean;
+    answer?: unknown;
 }
 
 interface MessageGroup {
@@ -851,12 +857,21 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 } else {
                     if (currentGroup) groups.push(currentGroup);
 
-                    const segments: AssistantSegment[] = [];
-                    if (msg.content) {
-                        segments.push({ type: 'text', content: msg.content });
-                    }
-                    if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        segments.push({ type: 'tools', toolCalls: msg.tool_calls.map(tc => ({ call: tc })) });
+                    const segments: AssistantSegment[] = Array.isArray((msg as any).segments) && (msg as any).segments.length > 0
+                        ? [...(msg as any).segments]
+                        : [];
+                    if (segments.length === 0) {
+                        if ((msg as any).thinking) {
+                            segments.push({ type: 'thinking', thinking: (msg as any).thinking, thinkingDuration: (msg as any).thinkingDuration });
+                        }
+                        if (Array.isArray((msg as any).agentActions) && (msg as any).agentActions.length > 0) {
+                            segments.push({ type: 'tools', actions: (msg as any).agentActions });
+                        } else if (msg.tool_calls && msg.tool_calls.length > 0) {
+                            segments.push({ type: 'tools', toolCalls: msg.tool_calls.map(tc => ({ call: tc })) });
+                        }
+                        if (msg.content) {
+                            segments.push({ type: 'text', content: msg.content });
+                        }
                     }
 
                     currentGroup = {
@@ -980,7 +995,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 : prev,
         );
         setQuestionSubmitting(false);
-        // Prefer clearing immediately for snappy UI; a later question event can reopen.
+
+        // Also update the inline segment in messages so user sees the answered state right away
+        const state = useStore.getState();
+        const lastMsg = state.messages[state.messages.length - 1] as any;
+        if (lastMsg && lastMsg.role === 'assistant') {
+            const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
+            let updated = false;
+            for (const s of segs) {
+                if (s.type === 'question' && s.question?.id === question.id) {
+                    s.question = { ...s.question, status: 'answered', answer };
+                    s.answered = true;
+                    s.answer = answer;
+                    updated = true;
+                }
+            }
+            if (updated) {
+                updateLastMessage(lastMsg.content || '', undefined, undefined, undefined, segs);
+            }
+        }
+
+        // Prefer clearing bottom bar card immediately; inline question segment stays visible and answered
         setPendingQuestion(null);
     };
 
@@ -1705,6 +1740,67 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 case 'processing':
                     // Accepted/queued system noise — Marker shimmer covers this state.
                     break;
+                case 'action_mark': {
+                    const mark = event.actionMark;
+                    if (mark) {
+                        const markId = event.toolCallId
+                            ? `agent_${tursoSessionId}_${event.toolCallId}`
+                            : `agent_${tursoSessionId}_mark_${event.eventId || Date.now()}`;
+                        const actionId = addAction(mark.kind, mark.label, {
+                            id: markId,
+                            toolCallId: event.toolCallId,
+                            eventId: event.eventId,
+                            actionMark: mark,
+                            status: mark.status === 'warning' ? 'error' : (mark.status === 'completed' ? 'done' : 'running'),
+                            args: event.arguments,
+                            result: mark.detail,
+                        });
+                        updateAction(actionId, {
+                            actionMark: mark,
+                            status: mark.status === 'warning' ? 'error' : (mark.status === 'completed' ? 'done' : 'running'),
+                            result: mark.detail,
+                        });
+
+                        const state = useStore.getState();
+                        const lastMsg = state.messages[state.messages.length - 1] as any;
+                        if (lastMsg && lastMsg.role === 'assistant') {
+                            const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
+                            const lastSeg = segs[segs.length - 1];
+                            const newAct: StreamingAction = {
+                                id: actionId,
+                                toolName: mark.kind,
+                                displayName: mark.label,
+                                actionMark: mark,
+                                status: mark.status === 'warning' ? 'error' : (mark.status === 'completed' ? 'done' : 'running'),
+                                args: event.arguments,
+                                result: mark.detail,
+                                startedAt: Date.now(),
+                            };
+                            if (lastSeg && lastSeg.type === 'tools') {
+                                if (!lastSeg.actions) lastSeg.actions = [];
+                                const existingIdx = lastSeg.actions.findIndex(a => a.id === actionId);
+                                if (existingIdx !== -1) {
+                                    lastSeg.actions[existingIdx] = newAct;
+                                } else {
+                                    lastSeg.actions.push(newAct);
+                                }
+                            } else {
+                                segs.push({ type: 'tools', actions: [newAct] });
+                            }
+                            updateLastMessage(assistantContent, undefined, currentThinking || undefined, undefined, segs);
+                        }
+                    }
+                    break;
+                }
+                case 'waiting_for_user_input': {
+                    if (event.question) {
+                        setPendingQuestion(prev => ({
+                            ...(prev || event.question!),
+                            status: 'pending',
+                        }));
+                    }
+                    break;
+                }
                 case 'thinking': {
                     if (!thinkingStartedAt) {
                         thinkingStartedAt = Date.now();
@@ -1723,7 +1819,34 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         const nextThinking = prevThinking && chunk.startsWith(prevThinking)
                             ? chunk
                             : `${prevThinking}${chunk}`;
-                        updateLastMessage(assistantContent, undefined, nextThinking);
+
+                        const segs: AssistantSegment[] = Array.isArray(last?.segments) ? [...last.segments] : [];
+                        const lastSeg = segs[segs.length - 1];
+                        if (event.isNewThinking && lastSeg && lastSeg.type !== 'thinking') {
+                            segs.push({ type: 'thinking', thinking: chunk });
+                        } else if (lastSeg && lastSeg.type === 'thinking') {
+                            const cur = lastSeg.thinking || '';
+                            lastSeg.thinking = cur && chunk.startsWith(cur) ? chunk : `${cur}${chunk}`;
+                        } else {
+                            segs.push({ type: 'thinking', thinking: chunk });
+                        }
+
+                        updateLastMessage(assistantContent, undefined, nextThinking, undefined, segs);
+                    }
+                    break;
+                }
+                case 'thinking_finished': {
+                    if (thinkingStartedAt) {
+                        const dur = Math.max(1, Math.round((Date.now() - thinkingStartedAt) / 1000));
+                        setThinkingDuration(dur);
+                        const state = useStore.getState();
+                        const last = state.messages[state.messages.length - 1] as any;
+                        if (last && Array.isArray(last.segments)) {
+                            const lastThinkingSeg = [...last.segments].reverse().find(s => s.type === 'thinking');
+                            if (lastThinkingSeg && !lastThinkingSeg.thinkingDuration) {
+                                lastThinkingSeg.thinkingDuration = dur;
+                            }
+                        }
                     }
                     break;
                 }
@@ -1863,6 +1986,19 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         setPendingQuestion(event.question);
                         setQuestionError(null);
                         setQuestionSubmitting(false);
+
+                        const state = useStore.getState();
+                        const lastMsg = state.messages[state.messages.length - 1] as any;
+                        if (lastMsg && lastMsg.role === 'assistant') {
+                            const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
+                            const existingIdx = segs.findIndex(s => s.type === 'question' && s.question?.id === event.question!.id);
+                            if (existingIdx !== -1) {
+                                segs[existingIdx] = { type: 'question', question: event.question };
+                            } else {
+                                segs.push({ type: 'question', question: event.question });
+                            }
+                            updateLastMessage(assistantContent, undefined, currentThinking || undefined, undefined, segs);
+                        }
                     }
                     break;
                 }
@@ -1873,13 +2009,38 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     );
                     setQuestionSubmitting(false);
                     setQuestionError(null);
+
+                    const state = useStore.getState();
+                    const lastMsg = state.messages[state.messages.length - 1] as any;
+                    if (lastMsg && lastMsg.role === 'assistant') {
+                        const segs: AssistantSegment[] = Array.isArray(lastMsg.segments) ? [...lastMsg.segments] : [];
+                        for (const s of segs) {
+                            if (s.type === 'question' && (!answeredId || s.question?.id === answeredId)) {
+                                if (s.question) {
+                                    s.question = { ...s.question, status: 'answered', answer: event.question?.answer ?? event.text };
+                                }
+                                s.answered = true;
+                                s.answer = event.question?.answer ?? event.text;
+                            }
+                        }
+                        updateLastMessage(assistantContent, undefined, currentThinking || undefined, undefined, segs);
+                    }
                     break;
                 }
                 case 'delta': {
                     const deltaPiece = event.delta || event.tokenDelta || event.text || '';
                     if (deltaPiece) {
                         assistantContent += deltaPiece;
-                        updateLastMessage(assistantContent);
+                        const state = useStore.getState();
+                        const lastMsg = state.messages[state.messages.length - 1] as any;
+                        const segs: AssistantSegment[] = Array.isArray(lastMsg?.segments) ? [...lastMsg.segments] : [];
+                        const lastSeg = segs[segs.length - 1];
+                        if (lastSeg && lastSeg.type === 'text') {
+                            lastSeg.content = assistantContent;
+                        } else {
+                            segs.push({ type: 'text', content: assistantContent });
+                        }
+                        updateLastMessage(assistantContent, undefined, undefined, undefined, segs);
                     }
                     break;
                 }
@@ -3154,7 +3315,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 >
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && (
+                            {group.role === 'assistant' && group.thinking && !group.segments?.some(s => s.type === 'thinking') && (
                                 <ThinkingBlock
                                     thinking={group.thinking}
                                     isDark={isDark}
@@ -3163,7 +3324,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 />
                             )}
 
-                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && (
+                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && !group.segments?.some(s => s.type === 'tools') && (
                                 <ActionsList
                                     actions={idx === groupedMessages.length - 1 && isRunning && actions.length > 0 ? actions : group.agentActions}
                                     isLive={idx === groupedMessages.length - 1 && isRunning}
@@ -3185,6 +3346,31 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
                                 <>
                                     {group.segments.map((seg, segIdx) => {
+                                        if (seg.type === 'thinking') {
+                                            return (
+                                                <div key={`seg-thinking-${segIdx}`}>
+                                                    <ThinkingBlock
+                                                        thinking={seg.thinking || ''}
+                                                        isDark={isDark}
+                                                        thinkingTime={seg.thinkingDuration}
+                                                        startTime={isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1 ? thinkingStartTime : undefined}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+                                        if (seg.type === 'question' && seg.question) {
+                                            return (
+                                                <div key={`seg-q-${segIdx}`} className="my-2.5">
+                                                    <AgentQuestionCard
+                                                        question={seg.question}
+                                                        isDark={isDark}
+                                                        submitting={questionSubmitting}
+                                                        error={questionError}
+                                                        onSubmit={handleAgentQuestionSubmit}
+                                                    />
+                                                </div>
+                                            );
+                                        }
                                         if (seg.type === 'text' && seg.content) {
                                             const textContent = typeof seg.content === 'string' ? seg.content : '';
                                             if (!textContent) return null;
@@ -3204,32 +3390,32 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 </div>
                                             );
                                         }
-                                        if (seg.type === 'tools' && seg.toolCalls && seg.toolCalls.length > 0) {
-                                            // If this is the last segment and we're live, show live actions
+                                        if (seg.type === 'tools') {
                                             const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length;
+                                            const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
+                                            const segActions = showLive
+                                                ? actions.filter(a => a.toolName !== 'drawDiagram')
+                                                : (seg.actions && seg.actions.length > 0
+                                                    ? seg.actions.filter(a => a.toolName !== 'drawDiagram')
+                                                    : (seg.toolCalls && seg.toolCalls.length > 0
+                                                        ? seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
+                                                            id: `completed_${idx}_${segIdx}_${i}`,
+                                                            toolName: tc.call.function.name,
+                                                            displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
+                                                            status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
+                                                            result: tc.result,
+                                                            args: tc.call.function.arguments || ''
+                                                        }))
+                                                        : []));
 
-                                            if (showLive) {
-                                                return (
-                                                    <div key={`seg-${segIdx}`}>
-                                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                                    </div>
-                                                );
-                                            }
+                                            if (segActions.length === 0) return null;
                                             return (
                                                 <div key={`seg-${segIdx}`}>
-                                                <ActionsList
-                                                    key={`seg-${segIdx}`}
-                                                    actions={seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                        id: `completed_${idx}_${segIdx}_${i}`,
-                                                        toolName: tc.call.function.name,
-                                                        displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                        status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                        result: tc.result,
-                                                        args: tc.call.function.arguments || ''
-                                                    }))}
-                                                    isDark={isDark}
-                                                />
+                                                    <ActionsList
+                                                        actions={segActions}
+                                                        isLive={showLive}
+                                                        isDark={isDark}
+                                                    />
                                                 </div>
                                             );
                                         }

@@ -157,7 +157,7 @@ interface AppState {
     setCurrentChatId: (id: string | null) => void;
     setMessages: (messages: Message[]) => void;
     addMessage: (message: Message) => void;
-    updateLastMessage: (content: string, toolCalls?: any[], thinking?: string, thinkingDuration?: number) => void;
+    updateLastMessage: (content: string, toolCalls?: any[], thinking?: string, thinkingDuration?: number, segments?: any[]) => void;
     setTokenCount: (count: number) => void;
 
     // File actions
@@ -253,7 +253,7 @@ export const useStore = create<AppState>((set) => ({
     setCurrentChatId: (currentChatId) => set({ currentChatId }),
     setMessages: (messages) => set({ messages }),
     addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
-    updateLastMessage: (content, toolCalls, thinking, thinkingDuration) => set((state) => {
+    updateLastMessage: (content, toolCalls, thinking, thinkingDuration, segments) => set((state) => {
         const messages = state.messages;
         if (messages.length > 0) {
             const lastMsg = messages[messages.length - 1] as any;
@@ -261,6 +261,7 @@ export const useStore = create<AppState>((set) => ({
             if (toolCalls) lastMsg.tool_calls = toolCalls;
             if (thinking) lastMsg.thinking = thinking;
             if (thinkingDuration !== undefined) lastMsg.thinkingDuration = thinkingDuration;
+            if (segments) lastMsg.segments = segments;
         }
         // Return new array ref to trigger re-render
         return { messages: [...messages] };

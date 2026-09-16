@@ -22,12 +22,24 @@ export type AgentQuestion = {
     answer?: unknown;
 };
 
+export type ActionMarkData = {
+    kind: 'command' | 'github' | 'server' | 'browser' | 'cloud' | 'scrape' | 'typecheck' | 'file' | 'security_risk' | string;
+    label: string;
+    detail?: string;
+    badge?: string | null;
+    status?: 'running' | 'completed' | 'warning' | 'error' | string;
+    is_risk?: boolean;
+};
+
 export type ProjectAgentEvent = {
     type:
         | 'session'
         | 'processing'
         | 'thinking'
         | 'thinking_delta'
+        | 'thinking_finished'
+        | 'action_mark'
+        | 'waiting_for_user_input'
         | 'tool_started'
         | 'tool_finished'
         | 'delta'
@@ -96,6 +108,12 @@ export type ProjectAgentEvent = {
     filePath?: string;
     /** Command details */
     command?: string;
+    /** Action mark visual styling payload */
+    actionMark?: ActionMarkData;
+    /** For new thinking turns arriving after tools */
+    isNewThinking?: boolean;
+    /** For waiting_for_user_input heartbeat events */
+    elapsedSeconds?: number;
     /** Stream sequence info */
     sequence?: number;
 };
@@ -470,13 +488,57 @@ function normalizeTursoEvent(
         case 'processing':
         case 'status':
             return { type: 'processing', ...common };
+        case 'action_mark': {
+            const rawMark = (payload.action_mark && typeof payload.action_mark === 'object'
+                ? payload.action_mark
+                : payload) as Record<string, unknown>;
+            const actionMark: ActionMarkData = {
+                kind: String(rawMark.kind || 'command'),
+                label: String(rawMark.label || event.title || event.detail || 'Action'),
+                detail: typeof rawMark.detail === 'string' ? rawMark.detail : undefined,
+                badge: typeof rawMark.badge === 'string' ? rawMark.badge : null,
+                status: (typeof rawMark.status === 'string' ? rawMark.status : 'running') as any,
+                is_risk: Boolean(rawMark.is_risk),
+            };
+            return {
+                type: 'action_mark',
+                ...common,
+                actionMark,
+                tool: typeof payload.tool_name === 'string' ? payload.tool_name : undefined,
+                text: actionMark.label,
+                arguments: payload.arguments ?? payload,
+            };
+        }
+        case 'waiting_for_user_input': {
+            const question = normalizeAgentQuestion(payload, {
+                title: event.title,
+                detail: event.detail,
+            });
+            return {
+                type: 'waiting_for_user_input',
+                ...common,
+                question: question || undefined,
+                elapsedSeconds: typeof payload.elapsed_seconds === 'number' ? payload.elapsed_seconds : undefined,
+                text: event.detail || 'Waiting for your answer…',
+            };
+        }
         case 'thinking':
         case 'thinking_delta':
         case 'thought':
         case 'thought_delta':
-            return { type: 'thinking', ...common };
+            return {
+                type: 'thinking',
+                ...common,
+                isNewThinking: Boolean(payload.is_new_thinking),
+                delta: typeof payload.delta === 'string' ? payload.delta : undefined,
+            };
         case 'thinking_finished':
-            return { type: 'message', ...common };
+            return {
+                type: 'thinking_finished',
+                ...common,
+                isNewThinking: Boolean(payload.is_new_thinking),
+                text: typeof payload.thought === 'string' ? payload.thought : event.detail || '',
+            };
         case 'plan':
         case 'plan_approval_required':
             return {
