@@ -1473,3 +1473,304 @@ export async function syteUploadFiles(
     }
   }
 }
+
+/**
+ * Fetch the Sycord Omni AI Router model catalog and SWE benchmarks from the VM.
+ * GET /api/ai/omni/models
+ */
+export async function syteGetOmniModels(projectId = "global"): Promise<
+  SyteResult<{
+    ok: boolean
+    models: Array<{
+      id: string
+      name: string
+      provider: string
+      provider_display: string
+      icon: string
+      input_cost: number
+      output_cost: number
+      swe_score: number
+      image_support: boolean
+      tools_support: boolean
+      cache_support: boolean
+      context_window: number
+      is_top: boolean
+      is_global: boolean
+      description: string
+      is_active: boolean
+    }>
+    top_swe_models: Array<any>
+    total_count: number
+    active_model: string
+    active_provider: string
+    credits: {
+      balance: number
+      total_granted: number
+      total_used: number
+    }
+  }>
+> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/ai/omni/models?project_id=${encodeURIComponent(projectId)}`
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      cache: "no-store",
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error fetching Omni models from Syte",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * 1-click model selection / activation from the Omni Router on the VM.
+ * POST /api/ai/omni/select-model
+ */
+export async function syteSelectOmniModel(
+  modelId: string,
+  projectId = "global",
+  provider?: string,
+): Promise<SyteResult<{ ok: boolean; active_model: string; provider: string; message?: string }>> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/ai/omni/select-model`
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({ model_id: modelId, project_id: projectId, provider }),
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error selecting Omni model",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * Fetch user starter credits balance and metering logs from the VM.
+ * GET /api/ai/user/credits
+ */
+export async function syteGetUserCredits(userId = "default_user"): Promise<
+  SyteResult<{
+    ok: boolean
+    credits: {
+      user_id: string
+      balance: number
+      total_granted: number
+      total_used: number
+    }
+    history: Array<{
+      id: string
+      model: string
+      prompt_tokens: number
+      completion_tokens: number
+      cost_usd: number
+      created_at: string
+    }>
+  }>
+> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/ai/user/credits?user_id=${encodeURIComponent(userId)}`
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      cache: "no-store",
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error fetching user credits",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * Handshake Sync: Transfer custom & global providers or models to the VM.
+ * POST /api/ai/handshake/sync-providers
+ */
+export async function syteSyncHandshake(payload: {
+  providers?: Array<any>
+  models?: Array<any>
+  project_id?: string
+}): Promise<
+  SyteResult<{
+    ok: boolean
+    message: string
+    synced_providers_count: number
+    synced_models_count: number
+    timestamp: number
+  }>
+> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/ai/handshake/sync-providers`
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(payload),
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error executing VM handshake sync",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * Handshake Status: Check VM connectivity and list synced custom providers.
+ * GET /api/ai/handshake/status
+ */
+export async function syteGetHandshakeStatus(): Promise<
+  SyteResult<{
+    ok: boolean
+    status: string
+    vm_status: string
+    vm_id: string
+    custom_providers_count: number
+    custom_providers: Array<any>
+    total_omni_models: number
+    timestamp: string
+  }>
+> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/ai/handshake/status`
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      cache: "no-store",
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error fetching VM handshake status",
+      endpoint,
+    }
+  }
+}
+
+/**
+ * Admin Upsert Model: Add or update a model in the VM Omni Catalog.
+ * POST /api/ai/admin/models
+ */
+export async function syteAdminUpsertModel(modelData: any): Promise<
+  SyteResult<{
+    ok: boolean
+    message: string
+    model: any
+  }>
+> {
+  const config = getSyteConfig()
+  const endpoint = `${config.baseUrl}/api/ai/admin/models`
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": config.apiKey,
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify(modelData),
+    })
+    const data = (await parseBody(res)) as any
+    return {
+      ok: res.ok,
+      status: res.status,
+      data,
+      error: res.ok ? null : extractError(res.status, data, endpoint),
+      endpoint,
+    }
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: err?.message || "Network error upserting model to VM",
+      endpoint,
+    }
+  }
+}
