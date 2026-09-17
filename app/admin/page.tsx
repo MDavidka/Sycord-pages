@@ -70,7 +70,9 @@ import {
   Copy,
   CheckCheck,
   Webhook,
+  Sparkles,
 } from "lucide-react"
+import { AiOmniManager } from "@/components/ai-omni-manager"
 
 const availableIcons = [
   { name: "Server", icon: Server },
@@ -102,6 +104,7 @@ interface User {
 const tabs = [
   { id: "overview" as const, label: "Overview", icon: BarChart3 },
   { id: "users" as const, label: "Users", icon: Users },
+  { id: "omni-ai" as const, label: "AI & Omni Router", icon: Sparkles },
   { id: "server" as const, label: "Server", icon: Server },
   { id: "deployer" as const, label: "Deployer", icon: Monitor },
   { id: "tickets" as const, label: "Tickets", icon: AlertCircle },
@@ -109,7 +112,7 @@ const tabs = [
   { id: "mcps" as const, label: "Integrations", icon: Webhook },
 ]
 
-type TabId = "overview" | "users" | "server" | "deployer" | "tickets" | "paptos" | "mcps"
+type TabId = "overview" | "users" | "omni-ai" | "server" | "deployer" | "tickets" | "paptos" | "mcps"
 
 export default function AdminPage() {
   const router = useRouter()
@@ -1355,6 +1358,13 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* AI & Omni Router Tab */}
+        {activeTab === "omni-ai" && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            <AiOmniManager />
           </div>
         )}
 
