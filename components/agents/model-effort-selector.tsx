@@ -6,8 +6,10 @@ import {
   ChevronRight,
   Plus,
   Check,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SycordOmniRouterModal } from "@/components/sycord-omni-router-modal";
 
 export type EffortLevel = "low" | "medium" | "high" | "extra_high" | "max";
 
@@ -61,6 +63,7 @@ export function ModelEffortSelector({
 }: ModelEffortSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSubView, setActiveSubView] = useState<SubView>("none");
+  const [showOmniModal, setShowOmniModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Default models if choices are empty
@@ -401,11 +404,12 @@ export function ModelEffortSelector({
                     })}
                   </div>
 
-                  {/* Fresh space at bottom for + Add Models */}
+                  {/* Fresh space at bottom for + Add Models (Sycord Omni Route) */}
                   <div className="pt-1 mt-1 border-t border-zinc-200 dark:border-zinc-800">
                     <button
                       type="button"
                       onClick={() => {
+                        setShowOmniModal(true);
                         onAddModelsClick?.();
                         setActiveSubView("none");
                         setIsOpen(false);
@@ -421,7 +425,7 @@ export function ModelEffortSelector({
                         <Plus className="size-3.5 text-zinc-400" />
                         <span>Add Models</span>
                       </div>
-                      <ChevronRight className="size-3.5 text-zinc-400" />
+                      <span className="text-[9px] font-mono text-indigo-400 bg-indigo-500/10 px-1 py-0.2 rounded border border-indigo-500/20">Omni</span>
                     </button>
                   </div>
                 </div>
@@ -487,6 +491,16 @@ export function ModelEffortSelector({
           )}
         </div>
       )}
+      {/* Sycord Omni Route / Models Library Modal */}
+      <SycordOmniRouterModal
+        open={showOmniModal}
+        onOpenChange={setShowOmniModal}
+        selectedModel={selectedModel || activeModelObj.id || activeModelObj.apiModel}
+        onSelectModel={(modelId) => {
+          onModelSelect?.(modelId);
+        }}
+        isDark={isDark}
+      />
     </div>
   );
 }

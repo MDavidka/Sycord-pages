@@ -52,6 +52,7 @@ import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent-activity';
 import { StreamingResponse } from '@/components/agents/streaming-response';
 import { ModelEffortSelector, type EffortLevel } from '@/components/agents/model-effort-selector';
+import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -3111,6 +3112,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [showDeepMemory, setShowDeepMemory] = useState(false);
     const [showSlashMenu, setShowSlashMenu] = useState(false);
     const [libraryView, setLibraryView] = useState<'skills' | 'mcp' | 'help' | 'credits' | null>(null);
+    const [showOmniModal, setShowOmniModal] = useState(false);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
     const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -3231,6 +3233,24 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     onClose={() => setShowModelLearn(false)}
                 />
             )}
+            <SycordOmniRouterModal
+                open={showOmniModal}
+                onOpenChange={setShowOmniModal}
+                selectedModel={selectedModel}
+                projectId={hostProjectIdForSlash || 'global'}
+                isDark={isDark}
+                onSelectModel={(modelId) => {
+                    const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
+                    if (choice) {
+                        setSelectedModel(choice.modelType);
+                        setAiModel(choice.apiModel);
+                    } else {
+                        setSelectedModel(modelId as any);
+                        setAiModel(modelId);
+                    }
+                    void loadAvailableModels();
+                }}
+            />
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -3867,10 +3887,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (choice) {
                                             setSelectedModel(choice.modelType);
                                             setAiModel(choice.apiModel);
+                                        } else {
+                                            setSelectedModel(modelId as any);
+                                            setAiModel(modelId);
                                         }
                                     }}
                                     onAddModelsClick={() => {
-                                        setLibraryView('skills');
+                                        setShowOmniModal(true);
                                     }}
                                     isDark={isDark}
                                 />
