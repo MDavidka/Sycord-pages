@@ -14,12 +14,13 @@ import {
   ChevronRight,
   SlidersHorizontal,
   X,
-  Menu,
   Coins,
   FileText,
   Image as ImageIcon,
   Video,
   Layers,
+  Award,
+  TrendingUp,
 } from "lucide-react"
 
 // Model Interface strictly matching the Sycord AI Router
@@ -192,6 +193,8 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     output_cost: 7.5,
     context_window: 256600,
     supports_vision: true,
+    swe_bench_score: 58.5,
+    rank: 4,
   },
   {
     id: "llama-3-1-70b",
@@ -200,6 +203,8 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     input_cost: 0.7,
     output_cost: 0.9,
     context_window: 128000,
+    swe_bench_score: 54.0,
+    rank: 5,
   },
   {
     id: "command-r-plus",
@@ -209,6 +214,8 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     output_cost: 15.0,
     context_window: 128000,
     supports_vision: true,
+    swe_bench_score: 51.2,
+    rank: 6,
   },
   {
     id: "grok-2",
@@ -218,6 +225,7 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     output_cost: 15.0,
     context_window: 128000,
     supports_vision: true,
+    swe_bench_score: 50.8,
   },
   {
     id: "deepseek-v3",
@@ -226,6 +234,7 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     input_cost: 0.27,
     output_cost: 1.1,
     context_window: 128000,
+    swe_bench_score: 59.2,
   },
   {
     id: "qwen-2-5-72b",
@@ -235,6 +244,7 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     output_cost: 1.2,
     context_window: 128000,
     supports_vision: true,
+    swe_bench_score: 55.4,
   },
   {
     id: "phi-3-medium",
@@ -243,6 +253,7 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     input_cost: 0.15,
     output_cost: 0.6,
     context_window: 128000,
+    swe_bench_score: 44.0,
   },
   {
     id: "gemini-1-5-flash",
@@ -253,6 +264,7 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     context_window: 1000000,
     supports_vision: true,
     supports_video: true,
+    swe_bench_score: 56.2,
   },
   {
     id: "fable-5-1",
@@ -262,6 +274,7 @@ const DEFAULT_IMAGE_MODELS: OmniModelItem[] = [
     output_cost: 50.0,
     context_window: 1000000,
     supports_vision: true,
+    swe_bench_score: 48.0,
   },
 ]
 
@@ -286,8 +299,6 @@ export function SycordOmniRouterModal({
   const [userCredits, setUserCredits] = useState<number>(5.0)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProviderFilter, setSelectedProviderFilter] = useState<string>("All")
-  const [sortField, setSortField] = useState<"input" | "output" | null>(null)
-  const [sortAsc, setSortAsc] = useState<boolean>(true)
 
   // Fetch live models if available
   useEffect(() => {
@@ -299,7 +310,6 @@ export function SycordOmniRouterModal({
       .then((data) => {
         if (!active) return
         if (data?.models && Array.isArray(data.models) && data.models.length > 0) {
-          // Merge with default image accurate models
           setModels(data.models)
         }
         if (data?.active_model) {
@@ -374,19 +384,21 @@ export function SycordOmniRouterModal({
     })
   }, [models, searchQuery, selectedProviderFilter])
 
-  // Top 3 featured cards
-  const top3 = useMemo(() => {
-    return models.slice(0, 3)
+  // Top models for line-race stat bar
+  const topRaceModels = useMemo(() => {
+    return [...models]
+      .sort((a, b) => (b.swe_bench_score || b.swe_score || 0) - (a.swe_bench_score || a.swe_score || 0))
+      .slice(0, 6)
   }, [models])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-4xl p-0 gap-0 border border-[#232328] bg-[#0c0c0e] text-zinc-100 shadow-2xl rounded-[20px] sm:max-w-4xl max-h-[92vh] flex flex-col overflow-hidden font-sans"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-screen !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#181818] text-zinc-100 shadow-2xl flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
         {/* Top Navbar: Sycord | AI Router | Models Status Pricing | Dashboard button & Hamburger */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1c1c20] bg-[#0c0c0e]">
+        <header className="flex items-center justify-between px-4 sm:px-8 lg:px-12 py-3.5 border-b border-[#232328] bg-[#181818] shrink-0 z-10">
           {/* Logo & Section Title */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -401,17 +413,22 @@ export function SycordOmniRouterModal({
           </div>
 
           {/* Navigation Links */}
-          <div className="hidden md:flex items-center gap-6 text-xs text-zinc-400 font-medium">
+          <div className="hidden md:flex items-center gap-8 text-xs text-zinc-400 font-medium">
             <span className="text-white border-b-2 border-white pb-1 font-semibold cursor-pointer">Models</span>
             <span className="hover:text-white transition-colors cursor-pointer">Status</span>
             <span className="hover:text-white transition-colors cursor-pointer">Pricing</span>
           </div>
 
-          {/* Right Action: Dashboard link + Close */}
-          <div className="flex items-center gap-2">
+          {/* Right Action: Balance + Dashboard link + Close */}
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full border border-emerald-500/20 bg-emerald-950/20 text-emerald-400 text-xs font-mono font-medium">
+              <Coins className="h-3.5 w-3.5" />
+              <span>${Number(userCredits).toFixed(2)}</span>
+            </div>
+
             <button
               onClick={() => onOpenChange(false)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-800 bg-[#16161a] hover:bg-[#202026] text-xs font-medium text-zinc-200 transition-colors cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#2e2e34] bg-[#222226] hover:bg-[#2c2c32] text-xs font-medium text-zinc-200 transition-colors cursor-pointer"
             >
               <span>Dashboard</span>
               <ExternalLink className="h-3 w-3 text-zinc-400" />
@@ -419,282 +436,256 @@ export function SycordOmniRouterModal({
 
             <button
               onClick={() => onOpenChange(false)}
-              className="h-8 w-8 rounded-xl flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
+              className="h-8 w-8 rounded-xl flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Close"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Scrollable Main Area */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar">
-          {/* Header Title + Count */}
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Models</h1>
-              <p className="text-xs text-zinc-400 mt-1">
-                Browse and compare available AI models.
-              </p>
-            </div>
-            <span className="text-xs text-zinc-500 font-medium tabular-nums">
-              {models.length} models
-            </span>
-          </div>
-
-          {/* Top Models Row */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-amber-400 text-sm">★</span>
-                <span className="text-sm font-semibold text-white">Top models</span>
+        {/* Scrollable Main Area (Centered & Fully Responsive) */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-8 lg:px-12 py-6 space-y-6 custom-scrollbar bg-[#181818]">
+          <div className="max-w-6xl mx-auto space-y-6">
+            {/* Header Title + Count */}
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Models</h1>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                  Browse and compare available AI models with live upward performance telemetry.
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedProviderFilter("All")}
-                className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors"
-              >
-                <span>View all</span>
-                <span className="text-xs">→</span>
-              </button>
+              <span className="text-xs sm:text-sm text-zinc-500 font-medium tabular-nums pt-1">
+                {models.length} models
+              </span>
             </div>
 
-            {/* 3 Top Model Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {top3.map((model, idx) => {
-                const rankPillStyles = [
-                  "bg-[#3d3215] text-[#facc15] border-[#854d0e]",
-                  "bg-[#27272a] text-[#e4e4e7] border-[#3f3f46]",
-                  "bg-[#3b2314] text-[#fb923c] border-[#9a3412]",
-                ]
-
-                return (
-                  <div
-                    key={model.id}
-                    onClick={() => handleSelectModel(model)}
-                    className="relative flex flex-col justify-between p-4 rounded-[14px] border border-[#232328] bg-[#141416] hover:border-zinc-600 transition-all cursor-pointer group"
-                  >
-                    {/* Top Row: Rank badge */}
-                    <div className="flex items-center justify-between">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${rankPillStyles[idx] || rankPillStyles[1]}`}>
-                        <span>👑</span>
-                        <span>#{idx + 1}</span>
-                      </span>
-
-                      {/* Pricing right-aligned */}
-                      <div className="text-right text-[11px]">
-                        <div className="font-semibold text-white">
-                          ${model.input_cost ? model.input_cost.toFixed(2) : "0.00"}
-                        </div>
-                        <div className="text-[10px] text-zinc-500">input / 1M</div>
-                      </div>
-                    </div>
-
-                    {/* Middle: Icon + Model Name & Provider */}
-                    <div className="flex items-center gap-3 my-3">
-                      <div className="h-9 w-9 rounded-xl bg-[#1c1c20] flex items-center justify-center shrink-0">
-                        <BrandLogo brand={model.provider || model.id} size={20} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-semibold text-white truncate leading-tight group-hover:text-indigo-300 transition-colors">
-                          {model.name}
-                        </h4>
-                        <p className="text-[11px] text-zinc-500 truncate mt-0.5">
-                          {model.provider}
-                        </p>
-                      </div>
-
-                      <div className="text-right text-[11px]">
-                        <div className="font-semibold text-white">
-                          ${model.output_cost ? model.output_cost.toFixed(2) : "0.00"}
-                        </div>
-                        <div className="text-[10px] text-zinc-500">output / 1M</div>
-                      </div>
-                    </div>
-
-                    {/* Capabilities Tags */}
-                    <div className="flex items-center gap-1.5 pt-1">
-                      <span className="px-2 py-0.5 rounded-md bg-[#1f1f23] text-[10px] text-zinc-400 font-medium">
-                        Text
-                      </span>
-                      {model.supports_vision && (
-                        <span className="px-2 py-0.5 rounded-md bg-[#1f1f23] text-[10px] text-zinc-400 font-medium">
-                          Image
-                        </span>
-                      )}
-                      {model.supports_video && (
-                        <span className="px-2 py-0.5 rounded-md bg-[#1f1f23] text-[10px] text-zinc-400 font-medium">
-                          Video
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Search Bar (Only White) + Filter Button */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search models..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-12 py-2.5 rounded-xl border border-[#232328] bg-white text-zinc-950 placeholder:text-zinc-500 text-xs font-medium outline-none focus:ring-2 focus:ring-zinc-400 transition-all"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-400 font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 pointer-events-none">
-                <span>⌘</span>
-                <span>K</span>
-              </div>
-            </div>
-
-            {/* Filter Dropdown Button */}
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-[#232328] bg-[#141416] hover:bg-[#1a1a1e] text-xs font-medium text-white transition-colors cursor-pointer"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400" />
-              <span>Filter</span>
-              <span className="text-zinc-500 text-[10px]">▼</span>
-            </button>
-          </div>
-
-          {/* Provider Filter Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {[
-              { id: "All", label: "All" },
-              { id: "OpenAI", label: "OpenAI" },
-              { id: "Anthropic", label: "Anthropic" },
-              { id: "Google", label: "Google" },
-              { id: "Mistral", label: "Mistral" },
-              { id: "Meta", label: "Meta" },
-              { id: "Cohere", label: "Cohere" },
-              { id: "xAI", label: "xAI" },
-              { id: "Other", label: "Other" },
-            ].map((chip) => {
-              const isSelected = selectedProviderFilter === chip.id
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() => setSelectedProviderFilter(chip.id)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
-                    isSelected
-                      ? "bg-white text-black font-semibold"
-                      : "bg-[#141416] border border-[#232328] text-zinc-300 hover:text-white hover:bg-[#1a1a1e]"
-                  }`}
-                >
-                  {chip.id !== "All" && chip.id !== "Other" && (
-                    <BrandLogo brand={chip.id} size={14} />
-                  )}
-                  {chip.id === "Other" && <span className="text-[10px] text-zinc-400">•••</span>}
-                  <span>{chip.label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Models Table View */}
-          <div className="border border-[#1f1f24] rounded-xl overflow-hidden bg-[#0e0e11]">
-            {/* Table Header */}
-            <div className="grid grid-cols-12 px-4 py-2.5 text-[11px] font-medium text-zinc-500 border-b border-[#1f1f24] bg-[#121215]">
-              <div className="col-span-4">Model</div>
-              <div className="col-span-3">Modalities</div>
-              <div className="col-span-2">Context</div>
-              <div className="col-span-1.5 cursor-pointer hover:text-zinc-300">
-                Input (1M) ↓
-              </div>
-              <div className="col-span-1.5 text-right cursor-pointer hover:text-zinc-300">
-                Output (1M) ⇅
-              </div>
-            </div>
-
-            {/* Table Rows */}
-            <div className="divide-y divide-[#18181c]">
-              {filteredModels.length === 0 ? (
-                <div className="py-12 text-center text-xs text-zinc-500">
-                  No models found matching your search.
+            {/* Top Models: Stat Bar as Upward "Line Race" */}
+            <div className="space-y-3 p-4 sm:p-5 rounded-[16px] border border-[#28282e] bg-[#1e1e22]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-400 text-sm">★</span>
+                  <h3 className="text-sm font-semibold text-white">Top Models Upward Race (SWE-Bench Verified)</h3>
                 </div>
-              ) : (
-                filteredModels.map((m) => {
-                  const isCurrent = m.id === activeModelId
+                <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Ranked by autonomous capability</span>
+                </div>
+              </div>
+
+              {/* Vertical line race upward bars */}
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 pt-2">
+                {topRaceModels.map((model, idx) => {
+                  const score = model.swe_bench_score || model.swe_score || (75 - idx * 4)
+                  const heightPct = Math.max(30, Math.min(100, Math.round((score / 80) * 100)))
+                  const isCurrent = model.id === activeModelId
 
                   return (
                     <div
-                      key={m.id}
-                      onClick={() => handleSelectModel(m)}
-                      className={`grid grid-cols-12 items-center px-4 py-3 text-xs transition-colors cursor-pointer group ${
+                      key={model.id}
+                      onClick={() => handleSelectModel(model)}
+                      className={`group flex flex-col items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
                         isCurrent
-                          ? "bg-white/[0.04]"
-                          : "hover:bg-white/[0.02]"
+                          ? "border-emerald-500/60 bg-[#25252b] shadow-lg shadow-emerald-950/20"
+                          : "border-[#28282e] bg-[#161619] hover:border-zinc-500 hover:bg-[#222227]"
                       }`}
                     >
-                      {/* Model Icon + Name + Provider */}
-                      <div className="col-span-4 flex items-center gap-3 min-w-0 pr-2">
-                        <div className="h-8 w-8 rounded-lg bg-[#18181c] flex items-center justify-center shrink-0">
-                          <BrandLogo brand={m.provider || m.id} size={18} />
+                      {/* Score Tag */}
+                      <span className="text-xs font-bold text-emerald-400 font-mono">
+                        {score.toFixed(1)}%
+                      </span>
+
+                      {/* Race Track Bar - Direction Upward */}
+                      <div className="my-2.5 flex h-24 w-7 flex-col justify-end overflow-hidden rounded-full bg-[#0e0e10] p-1 border border-white/5">
+                        <div
+                          style={{ height: `${heightPct}%` }}
+                          className="flex w-full items-start justify-center rounded-full bg-gradient-to-t from-blue-600 via-indigo-500 to-emerald-400 p-1 shadow-md transition-all duration-700 ease-out group-hover:brightness-125"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                         </div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-white group-hover:text-indigo-300 transition-colors truncate">
-                            {m.name}
-                          </div>
-                          <div className="text-[11px] text-zinc-500 truncate">
-                            {m.provider}
-                          </div>
+                      </div>
+
+                      {/* Model Logo & Name */}
+                      <div className="flex flex-col items-center gap-1 w-full text-center">
+                        <div className="h-6 w-6 rounded-lg bg-[#222228] flex items-center justify-center shrink-0">
+                          <BrandLogo brand={model.provider || model.id} size={14} />
                         </div>
-                      </div>
-
-                      {/* Modalities (Text, Image, Video) */}
-                      <div className="col-span-3 flex items-center gap-2 text-zinc-400 text-[11px]">
-                        <span className="inline-flex items-center gap-1">
-                          <FileText className="h-3 w-3 text-zinc-500" />
-                          <span>Text</span>
+                        <span className="text-[11px] font-semibold text-white truncate max-w-[85px] leading-tight group-hover:text-emerald-300">
+                          {model.name}
                         </span>
-                        {m.supports_vision && (
-                          <span className="inline-flex items-center gap-1">
-                            <ImageIcon className="h-3 w-3 text-zinc-500" />
-                            <span>Image</span>
-                          </span>
-                        )}
-                        {m.supports_video && (
-                          <span className="inline-flex items-center gap-1">
-                            <Video className="h-3 w-3 text-zinc-500" />
-                            <span>Video</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Context Limit */}
-                      <div className="col-span-2 text-zinc-400 font-mono text-[11px] tabular-nums">
-                        {m.context_window ? m.context_window.toLocaleString() : "128,000"}
-                      </div>
-
-                      {/* Input Cost */}
-                      <div className="col-span-1.5 text-zinc-300 font-mono text-[11px] tabular-nums">
-                        ${m.input_cost !== undefined ? m.input_cost.toFixed(m.input_cost < 0.1 ? 3 : 2) : "0.00"}
-                      </div>
-
-                      {/* Output Cost + Chevron */}
-                      <div className="col-span-1.5 flex items-center justify-end gap-2 text-right">
-                        <span className="text-zinc-300 font-mono text-[11px] tabular-nums">
-                          ${m.output_cost !== undefined ? m.output_cost.toFixed(m.output_cost < 0.1 ? 3 : 2) : "0.00"}
+                        <span className="text-[9px] text-zinc-500 uppercase tracking-wider font-mono">
+                          #{idx + 1}
                         </span>
-                        <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
                       </div>
                     </div>
                   )
-                })
-              )}
+                })}
+              </div>
+            </div>
+
+            {/* Search Bar (Only White) + Filter Button */}
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search models..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-12 py-2.5 rounded-xl border border-[#2e2e34] bg-white text-zinc-950 placeholder:text-zinc-500 text-xs font-medium outline-none focus:ring-2 focus:ring-zinc-400 transition-all"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-400 font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 pointer-events-none">
+                  <span>⌘</span>
+                  <span>K</span>
+                </div>
+              </div>
+
+              {/* Filter Dropdown Button */}
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#2e2e34] bg-[#222226] hover:bg-[#2a2a30] text-xs font-medium text-white transition-colors cursor-pointer"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400" />
+                <span>Filter</span>
+                <span className="text-zinc-500 text-[10px]">▼</span>
+              </button>
+            </div>
+
+            {/* Provider Filter Chips */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {[
+                { id: "All", label: "All" },
+                { id: "OpenAI", label: "OpenAI" },
+                { id: "Anthropic", label: "Anthropic" },
+                { id: "Google", label: "Google" },
+                { id: "Mistral", label: "Mistral" },
+                { id: "Meta", label: "Meta" },
+                { id: "Cohere", label: "Cohere" },
+                { id: "xAI", label: "xAI" },
+                { id: "Other", label: "Other" },
+              ].map((chip) => {
+                const isSelected = selectedProviderFilter === chip.id
+                return (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => setSelectedProviderFilter(chip.id)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+                      isSelected
+                        ? "bg-white text-black font-semibold shadow-sm"
+                        : "bg-[#222226] border border-[#2e2e34] text-zinc-300 hover:text-white hover:bg-[#2a2a30]"
+                    }`}
+                  >
+                    {chip.id !== "All" && chip.id !== "Other" && (
+                      <BrandLogo brand={chip.id} size={14} />
+                    )}
+                    {chip.id === "Other" && <span className="text-[10px] text-zinc-400">•••</span>}
+                    <span>{chip.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Models Table View (Optimized for all screen sizes) */}
+            <div className="border border-[#28282e] rounded-xl overflow-hidden bg-[#1a1a1d] shadow-sm">
+              {/* Table Header */}
+              <div className="grid grid-cols-12 px-4 sm:px-6 py-3 text-[11px] font-medium text-zinc-400 border-b border-[#28282e] bg-[#202024]">
+                <div className="col-span-6 sm:col-span-4 font-semibold uppercase tracking-wider">Model</div>
+                <div className="hidden sm:block sm:col-span-3 font-semibold uppercase tracking-wider">Modalities</div>
+                <div className="hidden sm:block sm:col-span-2 font-semibold uppercase tracking-wider">Context</div>
+                <div className="col-span-3 sm:col-span-1.5 font-semibold uppercase tracking-wider text-right sm:text-left">
+                  Input (1M) ↓
+                </div>
+                <div className="col-span-3 sm:col-span-1.5 text-right font-semibold uppercase tracking-wider">
+                  Output (1M) ⇅
+                </div>
+              </div>
+
+              {/* Table Rows */}
+              <div className="divide-y divide-[#242428]">
+                {filteredModels.length === 0 ? (
+                  <div className="py-16 text-center text-xs text-zinc-500">
+                    No models found matching your search.
+                  </div>
+                ) : (
+                  filteredModels.map((m) => {
+                    const isCurrent = m.id === activeModelId
+
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => handleSelectModel(m)}
+                        className={`grid grid-cols-12 items-center px-4 sm:px-6 py-3.5 text-xs transition-colors cursor-pointer group ${
+                          isCurrent
+                            ? "bg-white/[0.06] border-l-2 border-emerald-400"
+                            : "hover:bg-white/[0.03]"
+                        }`}
+                      >
+                        {/* Model Icon + Name + Provider */}
+                        <div className="col-span-6 sm:col-span-4 flex items-center gap-3 min-w-0 pr-2">
+                          <div className="h-8 sm:h-9 w-8 sm:w-9 rounded-lg bg-[#24242a] flex items-center justify-center shrink-0 border border-white/5">
+                            <BrandLogo brand={m.provider || m.id} size={18} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white group-hover:text-emerald-300 transition-colors truncate text-xs sm:text-[13px]">
+                              {m.name}
+                            </div>
+                            <div className="text-[11px] text-zinc-500 truncate">
+                              {m.provider}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Modalities (Text, Image, Video) - hidden on small mobile */}
+                        <div className="hidden sm:flex col-span-3 items-center gap-2 text-zinc-400 text-[11px]">
+                          <span className="inline-flex items-center gap-1">
+                            <FileText className="h-3 w-3 text-zinc-500" />
+                            <span>Text</span>
+                          </span>
+                          {m.supports_vision && (
+                            <span className="inline-flex items-center gap-1">
+                              <ImageIcon className="h-3 w-3 text-zinc-500" />
+                              <span>Image</span>
+                            </span>
+                          )}
+                          {m.supports_video && (
+                            <span className="inline-flex items-center gap-1">
+                              <Video className="h-3 w-3 text-zinc-500" />
+                              <span>Video</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Context Limit - hidden on small mobile */}
+                        <div className="hidden sm:block col-span-2 text-zinc-400 font-mono text-[11px] tabular-nums">
+                          {m.context_window ? m.context_window.toLocaleString() : "128,000"}
+                        </div>
+
+                        {/* Input Cost */}
+                        <div className="col-span-3 sm:col-span-1.5 text-zinc-300 font-mono text-[11px] tabular-nums text-right sm:text-left">
+                          ${m.input_cost !== undefined ? m.input_cost.toFixed(m.input_cost < 0.1 ? 3 : 2) : "0.00"}
+                        </div>
+
+                        {/* Output Cost + Chevron */}
+                        <div className="col-span-3 sm:col-span-1.5 flex items-center justify-end gap-2 text-right">
+                          <span className="text-zinc-300 font-mono text-[11px] tabular-nums">
+                            ${m.output_cost !== undefined ? m.output_cost.toFixed(m.output_cost < 0.1 ? 3 : 2) : "0.00"}
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 text-zinc-600 group-hover:text-zinc-300 transition-colors shrink-0" />
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </main>
 
         {/* Footer: © 2026 Sycord | Status (green dot) Docs Pricing */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#1c1c20] bg-[#0c0c0e] text-[11px] text-zinc-500">
+        <footer className="flex items-center justify-between px-4 sm:px-8 lg:px-12 py-3.5 border-t border-[#232328] bg-[#181818] text-[11px] text-zinc-500 shrink-0 z-10">
           <div>© 2026 Sycord</div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <div className="flex items-center gap-1.5 text-zinc-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <span>Status</span>
@@ -702,7 +693,7 @@ export function SycordOmniRouterModal({
             <span className="hover:text-zinc-300 transition-colors cursor-pointer">Docs</span>
             <span className="hover:text-zinc-300 transition-colors cursor-pointer">Pricing</span>
           </div>
-        </div>
+        </footer>
       </DialogContent>
     </Dialog>
   )
