@@ -181,6 +181,7 @@ export async function POST(req: Request) {
     temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
     maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
     model: model || undefined,
+    thinkingLevel: typeof body?.thinking_level === "string" ? body.thinking_level : typeof body?.thinkingLevel === "string" ? body.thinkingLevel : undefined,
     signal: req.signal,
   })
 }

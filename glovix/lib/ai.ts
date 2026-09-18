@@ -500,6 +500,10 @@ async function _sendMessageInternal(
 
     console.log(`[AI] Model: ${actualModelId}, Input: ~${inputTokens} tokens, Max output: ${maxTokens}`);
 
+    // Read user effort / thinking level (fast = low / 0 thinking, extra_high = think more)
+    const savedEffort = typeof window !== "undefined" ? localStorage.getItem("syra_effort_level") : null;
+    const effectiveEffort = savedEffort || "extra_high";
+
     // Build request body
     const requestBody: any = {
         model: actualModelId,
@@ -508,6 +512,8 @@ async function _sendMessageInternal(
         tool_choice: 'auto',
         stream: true,
         max_tokens: maxTokens,
+        thinking_level: effectiveEffort,
+        reasoning_effort: effectiveEffort === 'low' ? 'low' : effectiveEffort === 'medium' ? 'medium' : 'high',
     };
 
     // Create abort controller that combines user signal + our timeout

@@ -76,7 +76,12 @@ export function ModelEffortSelector({
     []
   );
 
-  const effectiveModels = modelChoices.length > 0 ? modelChoices : defaultModels;
+  // Only show models that are turned on at model selector at Syra
+  const effectiveModels = useMemo(() => {
+    if (!modelChoices || modelChoices.length === 0) return defaultModels;
+    const activeOnly = modelChoices.filter((m: any) => m.active !== false && m.enabled !== false);
+    return activeOnly.length > 0 ? activeOnly : modelChoices;
+  }, [modelChoices, defaultModels]);
 
   // Find active model and effort objects - prefer selectedModel, then isAiTabActive model, then first
   const activeModelObj =
@@ -499,6 +504,7 @@ export function ModelEffortSelector({
         onSelectModel={(modelId) => {
           onModelSelect?.(modelId);
         }}
+        modelChoices={modelChoices}
         isDark={isDark}
       />
     </div>

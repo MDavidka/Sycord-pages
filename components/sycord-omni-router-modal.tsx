@@ -100,7 +100,14 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
   if (key.includes("google") || key.includes("gemini") || key.includes("vertex") || key.includes("gemma")) {
     return (
       <svg viewBox="0 0 24 24" width={size} height={size} className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
-        <path fill="#4285F4" d="M11.45 2.1c.2-.5 1-.5 1.2 0l1.9 4.8c.4 1 1.2 1.8 2.2 2.2l4.8 1.9c.5.2.5 1 0 1.2l-4.8 1.9c-1 .4-1.8 1.2-2.2 2.2l-1.9 4.8c-.2.5-1 .5-1.2 0l-1.9-4.8c-.4-1-1.2-1.8-2.2-2.2l-4.8-1.9c-.5-.2-.5-1 0-1.2l4.8-1.9c1-.4 1.8-1.2 2.2-2.2l1.9-4.8z" />
+        <defs>
+          <linearGradient id="gemini-svgl-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#4285F4" />
+            <stop offset="50%" stopColor="#9B72CF" />
+            <stop offset="100%" stopColor="#D96570" />
+          </linearGradient>
+        </defs>
+        <path fill="url(#gemini-svgl-grad)" d="M11.45 2.1c.2-.5 1-.5 1.2 0l1.9 4.8c.4 1 1.2 1.8 2.2 2.2l4.8 1.9c.5.2.5 1 0 1.2l-4.8 1.9c-1 .4-1.8 1.2-2.2 2.2l-1.9 4.8c-.2.5-1 .5-1.2 0l-1.9-4.8c-.4-1-1.2-1.8-2.2-2.2l-4.8-1.9c-.5-.2-.5-1 0-1.2l4.8-1.9c1-.4 1.8-1.2 2.2-2.2l1.9-4.8z" />
       </svg>
     )
   }
@@ -163,6 +170,74 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
   return <Sparkles className={`w-5 h-5 text-zinc-400 ${className}`} />
 }
 
+export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
+  {
+    id: "gemini-3.8-flash",
+    name: "Gemini 3.8 Flash",
+    provider: "google",
+    providerDisplay: "Google Vertex AI",
+    input_cost: 0.75,
+    output_cost: 3.75,
+    swe_score: 64.2,
+    context_window: 1000000,
+    description: "Frontier enterprise multimodal agent model with fast reasoning and tool execution",
+    is_active: false,
+    rank: 1,
+  },
+  {
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "google",
+    providerDisplay: "Google Vertex AI",
+    input_cost: 0.15,
+    output_cost: 0.60,
+    swe_score: 56.8,
+    context_window: 1000000,
+    description: "High-speed hybrid reasoning workhorse for agentic coding and automation",
+    is_active: false,
+    rank: 2,
+  },
+  {
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    provider: "google",
+    providerDisplay: "Google Vertex AI",
+    input_cost: 1.25,
+    output_cost: 5.00,
+    swe_score: 68.9,
+    context_window: 2000000,
+    description: "Deep reasoning enterprise foundation model with adaptive thinking budget",
+    is_active: true,
+    rank: 3,
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    name: "Gemini 2.5 Flash-Lite",
+    provider: "google",
+    providerDisplay: "Google Vertex AI",
+    input_cost: 0.075,
+    output_cost: 0.30,
+    swe_score: 48.5,
+    context_window: 1000000,
+    description: "Ultra-efficient lightweight model for high-frequency tool loops",
+    is_active: false,
+    rank: 4,
+  },
+  {
+    id: "gemini-2.5-computer-use",
+    name: "Gemini 2.5 Computer Use",
+    provider: "google",
+    providerDisplay: "Google Vertex AI",
+    input_cost: 1.25,
+    output_cost: 5.00,
+    swe_score: 60.4,
+    context_window: 1000000,
+    description: "Autonomous GUI navigation, screen understanding, and tool execution",
+    is_active: false,
+    rank: 5,
+  },
+]
+
 export interface SycordOmniRouterModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -170,6 +245,15 @@ export interface SycordOmniRouterModalProps {
   onSelectModel?: (modelId: string, modelObj?: OmniModelItem) => void
   projectId?: string
   isDark?: boolean
+  modelChoices?: Array<{
+    id: string
+    label?: string
+    apiModel?: string
+    active?: boolean
+    isAiTabActive?: boolean
+    enabled?: boolean
+  }>
+  onlyTurnedOn?: boolean
 }
 
 export function SycordOmniRouterModal({
@@ -178,11 +262,13 @@ export function SycordOmniRouterModal({
   selectedModel,
   onSelectModel,
   projectId = "global",
+  modelChoices,
+  onlyTurnedOn,
 }: SycordOmniRouterModalProps) {
-  // Empty initial list — no hardcoded seeds or fallbacks
-  const [models, setModels] = useState<OmniModelItem[]>([])
+  // Initial list seeded with Google Gemini Enterprise Agent Platform models
+  const [models, setModels] = useState<OmniModelItem[]>(GEMINI_ENTERPRISE_MODELS)
   const [loading, setLoading] = useState(false)
-  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "")
+  const [activeModelId, setActiveModelId] = useState<string>(selectedModel || "gemini-2.5-pro")
   const [userCredits, setUserCredits] = useState<number>(200)
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -205,17 +291,17 @@ export function SycordOmniRouterModal({
       .then((r) => r.json())
       .then((data) => {
         if (!active) return
-        if (data?.models && Array.isArray(data.models)) {
+        if (data?.models && Array.isArray(data.models) && data.models.length > 0) {
           setModels(data.models)
         } else {
-          setModels([])
+          setModels(GEMINI_ENTERPRISE_MODELS)
         }
         if (data?.active_model && !selectedModel) {
           setActiveModelId(data.active_model)
         }
       })
       .catch(() => {
-        if (active) setModels([])
+        if (active) setModels(GEMINI_ENTERPRISE_MODELS)
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -284,7 +370,7 @@ export function SycordOmniRouterModal({
         setNewApiKey("")
         // Refresh models
         const refreshed = await fetch(`/api/ai/omni?project_id=${encodeURIComponent(projectId)}`).then((r) => r.json())
-        if (refreshed?.models) setModels(refreshed.models)
+        if (refreshed?.models && refreshed.models.length > 0) setModels(refreshed.models)
       } else {
         toast.error(`Failed to add provider: ${data.error || "Unknown error"}`)
       }
@@ -295,23 +381,39 @@ export function SycordOmniRouterModal({
     }
   }
 
-  // Filter models by search query
+  // Filter models by search query and turned-on status if specified
   const filteredModels = useMemo(() => {
+    let list = models.length > 0 ? models : GEMINI_ENTERPRISE_MODELS
+
+    if (onlyTurnedOn && modelChoices && modelChoices.length > 0) {
+      const activeIds = new Set(
+        modelChoices
+          .filter((c: any) => c.active || c.isAiTabActive || c.enabled !== false)
+          .map((c: any) => (c.apiModel || c.id || "").toLowerCase())
+      )
+      list = list.filter((m) => {
+        const idLower = (m.id || "").toLowerCase()
+        return activeIds.has(idLower) || activeIds.has(idLower.replace(/^google\//, "")) || m.is_active
+      })
+    }
+
     const q = searchQuery.toLowerCase().trim()
-    if (!q) return models
-    return models.filter((m) => {
+    if (!q) return list
+    return list.filter((m) => {
       return (
         m.name.toLowerCase().includes(q) ||
         m.id.toLowerCase().includes(q) ||
-        (m.provider && m.provider.toLowerCase().includes(q))
+        (m.provider && m.provider.toLowerCase().includes(q)) ||
+        (m.description && m.description.toLowerCase().includes(q))
       )
     })
-  }, [models, searchQuery])
+  }, [models, searchQuery, onlyTurnedOn, modelChoices])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-screen !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#181818] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
+        overlayClassName="!bg-[#181818] data-[state=open]:!bg-[#181818]"
+        className="!fixed !inset-0 !top-0 !left-0 !translate-x-0 !translate-y-0 !w-screen !h-[100dvh] !min-h-[100dvh] !max-w-none !max-h-none !p-0 !gap-0 !rounded-none border-0 bg-[#181818] text-zinc-100 shadow-none flex flex-col overflow-hidden font-sans z-[9999]"
         showCloseButton={false}
       >
         {/* Uniform Header Bar — Exact match to media_1789746982556.png */}
@@ -350,7 +452,7 @@ export function SycordOmniRouterModal({
         </header>
 
         {/* Scrollable Center Body with Single Unified Background */}
-        <main className="flex-1 overflow-y-auto px-6 sm:px-10 py-8 bg-[#181818] custom-scrollbar">
+        <main className="flex-1 overflow-y-auto px-6 sm:px-10 pt-8 pb-[calc(2.5rem+env(safe-area-inset-bottom,2rem))] bg-[#181818] custom-scrollbar">
           <div className="max-w-xl mx-auto space-y-6">
             {/* Title & Subtitle */}
             <div className="space-y-1.5">
@@ -368,7 +470,7 @@ export function SycordOmniRouterModal({
               </div>
             </div>
 
-            {/* Search Input Bar (Pure White Background with ⌘ K) */}
+            {/* Search Input Bar (Pure White Background with ⌘ K, no clear x button) */}
             <div className="relative pt-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-700 pointer-events-none" />
               <input
@@ -376,7 +478,7 @@ export function SycordOmniRouterModal({
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-14 py-2.5 rounded-xl border-0 bg-white text-zinc-950 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-400 shadow-sm transition-all"
+                className="w-full pl-10 pr-14 py-2.5 rounded-xl border-0 bg-white text-zinc-950 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-400 shadow-sm transition-all [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-ms-clear]:hidden [&::-ms-reveal]:hidden"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-500 font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 pointer-events-none">
                 <span>⌘</span>
@@ -571,6 +673,9 @@ export function SycordOmniRouterModal({
             </div>
           </div>
         )}
+
+        {/* Non-safe area down layer solid guard */}
+        <div className="shrink-0 w-full h-[env(safe-area-inset-bottom,0px)] bg-[#181818]" />
       </DialogContent>
     </Dialog>
   )

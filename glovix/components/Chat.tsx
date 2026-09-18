@@ -542,8 +542,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     useEffect(() => {
         try {
             const saved = localStorage.getItem('syra_effort_level');
-            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high') {
-                setEffortLevel(saved);
+            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high' || saved === 'max') {
+                setEffortLevel(saved as EffortLevel);
             }
         } catch {}
     }, []);
@@ -3239,6 +3239,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 selectedModel={selectedModel}
                 projectId={hostProjectIdForSlash || 'global'}
                 isDark={isDark}
+                modelChoices={availableModelChoices || []}
                 onSelectModel={(modelId) => {
                     const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
                     if (choice) {
