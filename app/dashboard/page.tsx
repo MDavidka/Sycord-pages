@@ -13,6 +13,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { WebsitePreviewCard } from "@/components/website-preview-card"
+import { ProjectDashboardCard } from "@/components/project-dashboard-card"
+import { DashboardModeToggle, type DashboardMode } from "@/components/dashboard-mode-toggle"
+import { AstroDashboard } from "@/components/astro-dashboard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CollabInvitePopup, type CollabInvite } from "@/components/collab-invite-popup"
 
@@ -31,19 +34,21 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl p-4 sm:p-5 flex flex-col gap-3.5 bg-[#1c1d20] border border-[#2a2a30]">
+    <div className="rounded-[20px] p-5 flex flex-col justify-between min-h-[148px] bg-[#18181b]/80 border border-[#27272a]">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1">
-          <Skeleton className="h-10 w-10 rounded-full shrink-0 bg-zinc-800" />
-          <div className="space-y-1.5 flex-1 min-w-0">
+        <div className="flex items-center gap-3.5 flex-1 min-w-0">
+          <Skeleton className="h-11 w-11 rounded-[14px] shrink-0 bg-zinc-800" />
+          <div className="space-y-2 flex-1 min-w-0">
             <Skeleton className="h-4 w-28 bg-zinc-800" />
             <Skeleton className="h-3 w-20 bg-zinc-800" />
           </div>
         </div>
-        <Skeleton className="h-8 w-8 rounded-full shrink-0 bg-zinc-800" />
+        <Skeleton className="h-8 w-8 rounded-lg shrink-0 bg-zinc-800" />
       </div>
-      <Skeleton className="h-3.5 w-44 bg-zinc-800" />
-      <Skeleton className="h-3.5 w-36 bg-zinc-800" />
+      <div className="pt-3 border-t border-[#27272a]/70 flex items-center justify-between">
+        <Skeleton className="h-3 w-24 bg-zinc-800" />
+        <Skeleton className="h-3 w-16 bg-zinc-800" />
+      </div>
     </div>
   )
 }
@@ -59,47 +64,24 @@ function DashboardContent() {
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
   const [pendingInvites, setPendingInvites] = useState<CollabInvite[]>([])
-  const [activeTab, setActiveTab] = useState<"all" | "astro">("all")
+  const [activeMode, setActiveMode] = useState<DashboardMode>("projects")
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  const isAstroProject = (p: any) =>
-    p?.framework === "astro" ||
-    p?.style === "astro" ||
-    p?.type === "astro" ||
-    (p?.businessName || "").toLowerCase().includes("astro")
-
   const q = searchQuery.trim().toLowerCase()
-  const baseProjects = activeTab === "astro"
-    ? projects.filter(isAstroProject)
-    : projects
-
-  // If astro tab is active and user has no astro projects yet, provide an Astro project card matching the design
-  const displayedProjects = activeTab === "astro" && baseProjects.length === 0 && !q
-    ? [
-        {
-          _id: "astro-starter",
-          businessName: "sycord",
-          domain: "testproject.sycord.site",
-          cloudflareUrl: "testproject.sycord.site",
-          framework: "astro",
-          style: "astro",
-          profileImage: "/astro-icon.png",
-          createdAt: new Date().toISOString(),
-          isAstroPlaceholder: true,
-        },
-      ]
-    : baseProjects
-
   const filtered: any[] = q
-    ? displayedProjects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
-    : displayedProjects
+    ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
+    : projects
   const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
   const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
   useEffect(() => {
     const openCreate = searchParams.get("open_create_modal")
     const error = searchParams.get("error")
+    const mode = searchParams.get("mode")
+    if (mode === "astro" || mode === "projects") {
+      setActiveMode(mode)
+    }
     if (error) {
       setDebugError(error)
       const u = new URL(window.location.href); u.searchParams.delete("error"); window.history.replaceState({}, "", u.toString())
@@ -237,128 +219,145 @@ function DashboardContent() {
         </header>
 
         <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6">
-          <div className="flex flex-col gap-3 mb-5">
-            <div className="flex items-center justify-between">
-              <h1 className="text-base font-semibold text-foreground">Projects</h1>
-              <Button onClick={() => router.push("/dashboard/create")} size="sm" className="rounded-xl gap-1.5">
-                <Plus className="h-3.5 w-3.5" />New Project
-              </Button>
-            </div>
-            <div className="flex gap-2.5 items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search projects..."
-                  className="w-full pl-9 pr-4 py-2.5 border border-input rounded-xl bg-background/50 text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
-                />
-              </div>
-              <div className="px-3.5 py-2.5 border border-input rounded-xl bg-muted/50 text-sm font-medium whitespace-nowrap tabular-nums">
-                {ownedCount}/{MAX_FREE_PROJECTS}
-              </div>
-            </div>
+          {/* Top Row: Segmented Toggle & Create Action */}
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <DashboardModeToggle
+              activeMode={activeMode}
+              onChange={(mode) => {
+                setActiveMode(mode)
+                const u = new URL(window.location.href)
+                if (mode === "projects") {
+                  u.searchParams.delete("mode")
+                } else {
+                  u.searchParams.set("mode", mode)
+                }
+                window.history.replaceState({}, "", u.toString())
+              }}
+            />
 
-            {/* Filter Tabs: your projects / astro */}
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab("all")}
-                className={cn(
-                  "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 border",
-                  activeTab === "all"
-                    ? "bg-[#28282e] text-zinc-100 border-[#383840] shadow-sm"
-                    : "bg-[#161618]/60 text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-[#202024]"
-                )}
+            {activeMode === "projects" && (
+              <Button
+                onClick={() => router.push("/dashboard/create")}
+                size="sm"
+                className="h-10 px-4 rounded-xl gap-2 font-medium text-xs sm:text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm"
               >
-                <Folder className="h-3.5 w-3.5 text-zinc-400" />
-                <span>your projects</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("astro")}
-                className={cn(
-                  "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 border",
-                  activeTab === "astro"
-                    ? "bg-[#28282e] text-zinc-100 border-[#383840] shadow-sm"
-                    : "bg-[#161618]/60 text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-[#202024]"
-                )}
-              >
-                <img src="/astro-icon.png" alt="Astro" className="h-3.5 w-3.5 rounded-full object-cover shrink-0" />
-                <span>astro</span>
-              </button>
-            </div>
+                <Plus className="h-4 w-4" />
+                <span>New Project</span>
+              </Button>
+            )}
           </div>
 
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="border border-dashed border-border rounded-2xl p-12 text-center">
-              <div className="max-w-sm mx-auto">
-                <h3 className="text-base font-semibold mb-2">No projects yet</h3>
-                <p className="text-sm text-muted-foreground mb-5">Create your first project and get your site live in minutes.</p>
-                <Button onClick={() => router.push("/dashboard/create")} className="rounded-xl gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />Create First Project
-                </Button>
-              </div>
-            </div>
-          ) : q && filtered.length === 0 ? (
-            <div className="border border-dashed border-border rounded-2xl p-12 text-center">
-              <div className="max-w-sm mx-auto">
-                <Search className="h-5 w-5 text-muted-foreground mx-auto mb-3" />
-                <h3 className="text-base font-semibold mb-1">No results</h3>
-                <p className="text-sm text-muted-foreground">No project matches &quot;{searchQuery}&quot;.</p>
-              </div>
-            </div>
+          {activeMode === "astro" ? (
+            /* ASTRO MODE: Global Agentic AI Workspace */
+            <AstroDashboard />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {canCreateMore && !q && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard/create")}
-                  className="group h-full min-h-[220px] border border-dashed border-[#2a2a30] hover:border-zinc-500 rounded-2xl flex flex-col items-center justify-center p-6 text-center bg-[#1c1d20]/50 hover:bg-[#1c1d20] transition-all duration-200"
-                >
-                  <div className="h-12 w-12 rounded-full bg-[#26262c] border border-[#36363e] flex items-center justify-center mb-3 group-hover:border-zinc-400 group-hover:bg-zinc-700/30 transition-all">
-                    <Plus className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  </div>
-                  <h3 className="text-sm font-semibold mb-1">New Project</h3>
-                  <p className="text-xs text-muted-foreground max-w-[200px]">Create a new site in a few clicks</p>
-                  <span className="mt-2 text-[11px] text-muted-foreground/60 tabular-nums">{ownedCount}/{MAX_FREE_PROJECTS} used</span>
-                </button>
-              )}
-              {filtered.map((project: any) => {
-                const liveUrl = getValidProjectUrl(project)
-                const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
-                const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
-                const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
-                const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
-                return (
-                  <WebsitePreviewCard
-                    key={project._id}
-                    domain={projectDomain}
-                    isLive={isLive}
-                    deploymentId={deploymentKey}
-                    projectId={project._id}
-                    businessName={project.businessName}
-                    createdAt={project.createdAt}
-                    chatSession={project.chatSession}
-                    style={project.style || "default"}
-                    framework={project.framework}
-                    fallbackHtml={fallbackHtml}
-                    githubOwner={project.githubOwner}
-                    githubRepo={project.githubRepo}
-                    githubBranch={project.githubBranch}
-                    githubUrl={project.githubUrl}
-                    githubSavedAt={project.githubSavedAt}
-                    githubCommitMessage={project.githubCommitMessage}
-                    profileImage={project.profileImage}
-                    onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
+            /* PROJECTS MODE: Projects List & Search */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* Search Bar & Counter */}
+              <div className="flex gap-2.5 items-center">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search projects..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#18181b]/70 border border-[#27272a] text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                   />
-                )
-              })}
+                </div>
+                <div className="px-3.5 py-2.5 border border-[#27272a] rounded-xl bg-[#18181b]/70 text-sm font-medium text-zinc-400 tabular-nums whitespace-nowrap shadow-xs">
+                  {ownedCount}/{MAX_FREE_PROJECTS}
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {[1, 2, 3].map((i) => (
+                    <CardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : projects.length === 0 ? (
+                <div className="border border-dashed border-[#27272a] rounded-[22px] p-12 text-center bg-[#18181b]/30">
+                  <div className="max-w-sm mx-auto">
+                    <h3 className="text-base font-semibold mb-2 text-zinc-100">No projects yet</h3>
+                    <p className="text-sm text-muted-foreground mb-5">
+                      Create your first project and get your site live in minutes.
+                    </p>
+                    <Button
+                      onClick={() => router.push("/dashboard/create")}
+                      className="rounded-xl gap-1.5"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create First Project
+                    </Button>
+                  </div>
+                </div>
+              ) : q && filtered.length === 0 ? (
+                <div className="border border-dashed border-[#27272a] rounded-[22px] p-12 text-center bg-[#18181b]/30">
+                  <div className="max-w-sm mx-auto">
+                    <Search className="h-5 w-5 text-muted-foreground mx-auto mb-3" />
+                    <h3 className="text-base font-semibold mb-1 text-zinc-100">No results</h3>
+                    <p className="text-sm text-muted-foreground">
+                      No project matches &quot;{searchQuery}&quot;.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {/* Modern New Project Card */}
+                  {canCreateMore && !q && (
+                    <button
+                      type="button"
+                      onClick={() => router.push("/dashboard/create")}
+                      className="group relative flex flex-col items-center justify-center min-h-[148px] p-5 rounded-[20px] border border-dashed border-[#27272a] hover:border-zinc-500 bg-[#18181b]/30 hover:bg-[#18181b]/70 transition-all duration-200 text-center cursor-pointer select-none"
+                    >
+                      <div className="h-11 w-11 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center mb-2.5 group-hover:border-zinc-400 group-hover:scale-105 transition-all">
+                        <Plus className="h-5 w-5 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-zinc-200 group-hover:text-white transition-colors">
+                        New Project
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Create a new site in a few clicks
+                      </p>
+                      <span className="mt-2 text-[10px] text-zinc-500/70 font-mono">
+                        {ownedCount}/{MAX_FREE_PROJECTS} used
+                      </span>
+                    </button>
+                  )}
+
+                  {filtered.map((project: any) => {
+                    const liveUrl = getValidProjectUrl(project)
+                    const fallbackHtml = project.pages?.find((p: any) => p.name === "index.html")?.content
+                    const deploymentKey = String(project.deploymentId || project.githubRepoId || project._id)
+                    const isLive = Boolean(liveUrl) && !flaggedDeployments.has(deploymentKey)
+                    const projectDomain = liveUrl || project.cloudflareUrl || project.domain || (project.subdomain ? `${project.subdomain}.sycord.com` : "example.com")
+                    return (
+                      <ProjectDashboardCard
+                        key={project._id}
+                        domain={projectDomain}
+                        isLive={isLive}
+                        deploymentId={deploymentKey}
+                        projectId={project._id}
+                        businessName={project.businessName}
+                        createdAt={project.createdAt}
+                        chatSession={project.chatSession}
+                        style={project.style || "default"}
+                        framework={project.framework}
+                        fallbackHtml={fallbackHtml}
+                        githubOwner={project.githubOwner}
+                        githubRepo={project.githubRepo}
+                        githubBranch={project.githubBranch}
+                        githubUrl={project.githubUrl}
+                        githubSavedAt={project.githubSavedAt}
+                        githubCommitMessage={project.githubCommitMessage}
+                        profileImage={project.profileImage}
+                        onDelete={() => setProjectToDelete({ id: project._id, name: project.businessName })}
+                      />
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </main>
