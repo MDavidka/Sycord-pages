@@ -81,19 +81,19 @@ export function ProjectDashboardCard({
   const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : "/logo.png")
 
   return (
-    <div className="group relative flex flex-col justify-between rounded-[20px] bg-[#18181b]/80 hover:bg-[#1f1f23] border border-[#27272a] hover:border-[#3f3f46] text-white p-5 transition-all duration-200 shadow-sm hover:shadow-md">
+    <div className="group relative flex flex-col justify-between rounded-[18px] sm:rounded-[20px] bg-[#18181b]/80 hover:bg-[#1f1f23] border border-[#27272a] hover:border-[#3f3f46] text-white p-5 transition-all duration-200 shadow-sm hover:shadow-md min-h-[148px]">
       {/* Clickable primary area */}
       <Link
         href={`/dashboard/sites/${projectId}`}
-        className="absolute inset-0 z-0 rounded-[20px] focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className="absolute inset-0 z-0 rounded-[18px] sm:rounded-[20px] focus:outline-none focus:ring-2 focus:ring-primary/40"
         aria-label={`Open project ${businessName}`}
       />
 
       {/* Top Header Row */}
       <div className="relative z-10 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3.5 min-w-0">
-          {/* Project Icon container */}
-          <div className="h-11 w-11 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+          {/* Project Icon container (48-52px) */}
+          <div className="h-12 w-12 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
             {resolvedIcon ? (
               <img
                 src={resolvedIcon}
@@ -104,14 +104,14 @@ export function ProjectDashboardCard({
                 }}
               />
             ) : (
-              <span className="text-zinc-200 font-semibold text-sm">
+              <span className="text-zinc-200 font-semibold text-base">
                 {(businessName[0] || "P").toUpperCase()}
               </span>
             )}
           </div>
 
           <div className="flex flex-col min-w-0">
-            <h3 className="text-[15px] font-semibold text-zinc-100 truncate group-hover:text-primary transition-colors leading-snug">
+            <h3 className="text-[17px] sm:text-[18px] font-semibold text-zinc-100 truncate group-hover:text-primary transition-colors leading-snug">
               {businessName}
             </h3>
             <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
@@ -120,11 +120,11 @@ export function ProjectDashboardCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors truncate flex items-center gap-1 leading-snug z-20"
+                className="text-[13px] sm:text-[14px] text-zinc-400 hover:text-zinc-200 transition-colors truncate flex items-center gap-1 leading-snug z-20"
                 title={displayDomain}
               >
                 <span>{displayDomain}</span>
-                <ExternalLink className="h-2.5 w-2.5 opacity-60 shrink-0" />
+                <ExternalLink className="h-3 w-3 opacity-60 shrink-0" />
               </a>
             </div>
           </div>
@@ -161,14 +161,14 @@ export function ProjectDashboardCard({
                 className="h-8 w-8 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
-                <MoreVertical className="h-3.5 w-3.5" />
+                <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-40 bg-[#1c1d21] border-[#2c2d33] text-zinc-200 z-50">
               <DropdownMenuItem asChild>
                 <Link
                   href={`/dashboard/sites/${projectId}`}
-                  className="cursor-pointer flex items-center gap-2"
+                  className="cursor-pointer flex items-center gap-2 text-sm"
                 >
                   <Settings className="h-3.5 w-3.5" />
                   <span>Settings</span>
@@ -180,7 +180,7 @@ export function ProjectDashboardCard({
                     e.stopPropagation()
                     onDelete(projectId)
                   }}
-                  className="cursor-pointer text-red-400 focus:text-red-400 focus:bg-red-950/30 flex items-center gap-2"
+                  className="cursor-pointer text-red-400 focus:text-red-400 focus:bg-red-950/30 flex items-center gap-2 text-sm"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>Delete</span>
@@ -191,8 +191,8 @@ export function ProjectDashboardCard({
         </div>
       </div>
 
-      {/* Bottom Metadata */}
-      <div className="relative z-10 flex flex-col gap-1 mt-4 pt-3 border-t border-[#27272a]/70 text-[11px] text-zinc-400">
+      {/* Bottom Metadata Footer */}
+      <div className="relative z-10 flex flex-col gap-1 mt-4 pt-3.5 border-t border-[#27272a]/70 text-[13px] sm:text-[14px] text-zinc-400">
         {isGitConnected ? (
           <div className="flex items-center justify-between gap-2">
             <span className="font-mono text-zinc-300 truncate max-w-[180px]">
@@ -203,7 +203,7 @@ export function ProjectDashboardCard({
         ) : (
           <div className="flex items-center justify-between gap-2 text-zinc-500">
             <span className="flex items-center gap-1.5 truncate">
-              <Globe className="h-3 w-3 shrink-0 opacity-70" />
+              <Globe className="h-3.5 w-3.5 shrink-0 opacity-70" />
               <span>Sycord Hosted</span>
             </span>
             <span className="shrink-0">{createdTimeAgo || "Recently"}</span>

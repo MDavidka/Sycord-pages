@@ -34,10 +34,10 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[20px] p-5 flex flex-col justify-between min-h-[148px] bg-[#18181b]/80 border border-[#27272a]">
+    <div className="rounded-[18px] sm:rounded-[20px] p-5 flex flex-col justify-between min-h-[148px] bg-[#18181b]/80 border border-[#27272a]">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3.5 flex-1 min-w-0">
-          <Skeleton className="h-11 w-11 rounded-[14px] shrink-0 bg-zinc-800" />
+          <Skeleton className="h-12 w-12 rounded-[14px] shrink-0 bg-zinc-800" />
           <div className="space-y-2 flex-1 min-w-0">
             <Skeleton className="h-4 w-28 bg-zinc-800" />
             <Skeleton className="h-3 w-20 bg-zinc-800" />
@@ -45,7 +45,7 @@ function CardSkeleton() {
         </div>
         <Skeleton className="h-8 w-8 rounded-lg shrink-0 bg-zinc-800" />
       </div>
-      <div className="pt-3 border-t border-[#27272a]/70 flex items-center justify-between">
+      <div className="pt-3.5 border-t border-[#27272a]/70 flex items-center justify-between">
         <Skeleton className="h-3 w-24 bg-zinc-800" />
         <Skeleton className="h-3 w-16 bg-zinc-800" />
       </div>
@@ -219,32 +219,35 @@ function DashboardContent() {
         </header>
 
         <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6">
-          {/* Top Row: Segmented Toggle & Create Action */}
-          <div className="flex items-center justify-between gap-3 mb-6">
-            <DashboardModeToggle
-              activeMode={activeMode}
-              onChange={(mode) => {
-                setActiveMode(mode)
-                const u = new URL(window.location.href)
-                if (mode === "projects") {
-                  u.searchParams.delete("mode")
-                } else {
-                  u.searchParams.set("mode", mode)
-                }
-                window.history.replaceState({}, "", u.toString())
-              }}
-            />
-
-            {activeMode === "projects" && (
+          <div className="flex flex-col gap-3 mb-5">
+            <div className="flex items-center justify-between">
+              <h1 className="text-base font-semibold text-foreground">Projects</h1>
               <Button
                 onClick={() => router.push("/dashboard/create")}
                 size="sm"
-                className="h-10 px-4 rounded-xl gap-2 font-medium text-xs sm:text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-sm"
+                className="h-10 px-4 rounded-xl gap-1.5 text-sm font-medium"
               >
                 <Plus className="h-4 w-4" />
                 <span>New Project</span>
               </Button>
-            )}
+            </div>
+
+            {/* Segmented Projects / Astro Switch */}
+            <div className="flex items-center">
+              <DashboardModeToggle
+                activeMode={activeMode}
+                onChange={(mode) => {
+                  setActiveMode(mode)
+                  const u = new URL(window.location.href)
+                  if (mode === "projects") {
+                    u.searchParams.delete("mode")
+                  } else {
+                    u.searchParams.set("mode", mode)
+                  }
+                  window.history.replaceState({}, "", u.toString())
+                }}
+              />
+            </div>
           </div>
 
           {activeMode === "astro" ? (
@@ -309,9 +312,9 @@ function DashboardContent() {
                     <button
                       type="button"
                       onClick={() => router.push("/dashboard/create")}
-                      className="group relative flex flex-col items-center justify-center min-h-[148px] p-5 rounded-[20px] border border-dashed border-[#27272a] hover:border-zinc-500 bg-[#18181b]/30 hover:bg-[#18181b]/70 transition-all duration-200 text-center cursor-pointer select-none"
+                      className="group relative flex flex-col items-center justify-center min-h-[148px] p-5 rounded-[18px] sm:rounded-[20px] border border-dashed border-[#27272a] hover:border-zinc-500 bg-[#18181b]/30 hover:bg-[#18181b]/70 transition-all duration-200 text-center cursor-pointer select-none"
                     >
-                      <div className="h-11 w-11 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center mb-2.5 group-hover:border-zinc-400 group-hover:scale-105 transition-all">
+                      <div className="h-12 w-12 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center mb-2.5 group-hover:border-zinc-400 group-hover:scale-105 transition-all shadow-inner">
                         <Plus className="h-5 w-5 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
                       </div>
                       <h3 className="text-sm font-semibold text-zinc-200 group-hover:text-white transition-colors">
