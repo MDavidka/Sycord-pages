@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -3186,6 +3186,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
     const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
     const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
+    const hostProjectName = typeof window !== 'undefined' ? ((window as any).__glovixProjectName as string | undefined) : undefined;
     // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
     const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
     const handleBack = () => {
@@ -3193,8 +3194,14 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
         if (typeof fn === 'function') fn();
     };
 
+    const AstroAvatar = ({ className = "" }: { className?: string }) => (
+        <div className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full overflow-hidden shrink-0 bg-[#25252d] border border-white/10 shadow-sm flex items-center justify-center ${className}`}>
+            <img src="/astro-icon.png" alt="Astro" className="h-full w-full object-cover" />
+        </div>
+    );
+
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#181818]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#151515] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.08),rgba(255,255,255,0))]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3272,31 +3279,38 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     </div>
 
                     <div
-                        className="pointer-events-auto relative mx-auto flex h-14 max-w-[760px] items-center justify-between px-4 sm:px-6"
+                        className="pointer-events-auto relative mx-auto flex h-16 max-w-[760px] items-center justify-between px-4 sm:px-6"
                         style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
-                        <button
-                            type="button"
-                            onClick={handleBack}
-                            aria-label="Back"
-                            className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
-                        >
-                            <ArrowLeft className="size-5" strokeWidth={1.8} />
-                        </button>
+                        <div className="flex items-center gap-3 min-w-0">
+                            <button
+                                type="button"
+                                onClick={handleBack}
+                                aria-label="Back"
+                                className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/70 hover:bg-white/[0.08] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                            >
+                                <ArrowLeft className="size-5" strokeWidth={1.8} />
+                            </button>
 
-                        <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2">
-                            <span className={`text-[15px] font-semibold tracking-[-0.015em] ${isDark ? 'text-white/90' : 'text-gray-900'}`}>Syra</span>
-                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400" aria-label="Building" />}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={`flex size-9 items-center justify-center rounded-xl shrink-0 ${isDark ? 'bg-white/[0.08] text-white/90 border border-white/10' : 'bg-black/[0.05] text-gray-800'}`}>
+                                    <LayoutPanelLeft className="size-[18px]" strokeWidth={1.8} />
+                                </div>
+                                <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {hostProjectName || 'Test project'}
+                                </span>
+                                {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-2">
                             {showPreviewButton && onOpenPreview && (
                                 <button
                                     type="button"
                                     onClick={onOpenPreview}
                                     aria-label="Open preview"
                                     title="Open preview"
-                                    className={`flex size-10 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                                    className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
                                 >
                                     <Eye className="size-[18px]" strokeWidth={1.8} />
                                 </button>
@@ -3305,7 +3319,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 type="button"
                                 onClick={() => setShowDeepMemory(true)}
                                 aria-label="Profile"
-                                className={`flex size-9 items-center justify-center overflow-hidden rounded-xl transition-transform active:scale-95 ${isDark ? 'bg-white/[0.08] text-white' : 'bg-black/[0.05] text-gray-900'}`}
+                                className={`flex size-9 sm:size-10 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 border ${isDark ? 'border-white/15 bg-white/[0.08] text-white' : 'border-gray-300 bg-black/[0.05] text-gray-900'}`}
                             >
                                 {profileImage && !profileImgError ? (
                                     <img
@@ -3334,6 +3348,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     className={`mx-auto w-full max-w-[760px] ${embedded ? 'px-4 sm:px-6 lg:px-8' : 'px-4 sm:px-6 lg:px-8'} py-6 sm:py-8 lg:py-10 space-y-6 sm:space-y-7 lg:space-y-8`}
                     style={embedded ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4.75rem)' } : undefined}
                 >
+                    {groupedMessages.length === 0 && !isRunning && (
+                        <div className="flex items-center gap-3 pt-3 pb-2 animate-fade-in">
+                            <AstroAvatar className="h-8 w-8" />
+                            <span className={`text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
+                                Tell me how can i help you?
+                            </span>
+                        </div>
+                    )}
+
                     {groupedMessages.map((group, idx) => (
                         <div key={idx} className="space-y-3 animate-fade-in-up">
                             {group.role === 'assistant' && group.thinking && !group.segments?.some(s => s.type === 'thinking') && (
@@ -3365,30 +3388,36 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                             {/* Render segments in order for assistant messages */}
                             {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
-                                <>
+                                <div className="space-y-3">
                                     {group.segments.map((seg, segIdx) => {
                                         if (seg.type === 'thinking') {
                                             return (
-                                                <div key={`seg-thinking-${segIdx}`}>
-                                                    <ThinkingBlock
-                                                        thinking={seg.thinking || ''}
-                                                        isDark={isDark}
-                                                        thinkingTime={seg.thinkingDuration}
-                                                        startTime={isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1 ? thinkingStartTime : undefined}
-                                                    />
+                                                <div key={`seg-thinking-${segIdx}`} className="flex items-start gap-3">
+                                                    <AstroAvatar className="mt-1" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <ThinkingBlock
+                                                            thinking={seg.thinking || ''}
+                                                            isDark={isDark}
+                                                            thinkingTime={seg.thinkingDuration}
+                                                            startTime={isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1 ? thinkingStartTime : undefined}
+                                                        />
+                                                    </div>
                                                 </div>
                                             );
                                         }
                                         if (seg.type === 'question' && seg.question) {
                                             return (
-                                                <div key={`seg-q-${segIdx}`} className="my-2.5">
-                                                    <AgentQuestionCard
-                                                        question={seg.question}
-                                                        isDark={isDark}
-                                                        submitting={questionSubmitting}
-                                                        error={questionError}
-                                                        onSubmit={handleAgentQuestionSubmit}
-                                                    />
+                                                <div key={`seg-q-${segIdx}`} className="flex items-start gap-3 my-2.5">
+                                                    <AstroAvatar className="mt-1" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <AgentQuestionCard
+                                                            question={seg.question}
+                                                            isDark={isDark}
+                                                            submitting={questionSubmitting}
+                                                            error={questionError}
+                                                            onSubmit={handleAgentQuestionSubmit}
+                                                        />
+                                                    </div>
                                                 </div>
                                             );
                                         }
@@ -3397,17 +3426,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             if (!textContent) return null;
                                             const isLiveSeg = isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1;
                                             return (
-                                                <div key={`seg-${segIdx}`} className="flex justify-start max-w-full">
-                                                    <StreamingResponse
-                                                        status={isLiveSeg ? 'streaming' : 'complete'}
-                                                        copyText={textContent}
-                                                        showActions={!isLiveSeg}
-                                                        className="w-full"
-                                                    >
-                                                        <div className={`text-[14px] leading-relaxed w-full max-w-full overflow-hidden break-words ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
-                                                            {renderAssistantMarkdown(textContent)}
-                                                        </div>
-                                                    </StreamingResponse>
+                                                <div key={`seg-${segIdx}`} className="flex items-start gap-3 max-w-full">
+                                                    <AstroAvatar className="mt-0.5" />
+                                                    <div className="flex-1 min-w-0 max-w-[680px]">
+                                                        <StreamingResponse
+                                                            status={isLiveSeg ? 'streaming' : 'complete'}
+                                                            copyText={textContent}
+                                                            showActions={!isLiveSeg}
+                                                            className="w-full"
+                                                        >
+                                                            <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] w-full max-w-full overflow-hidden break-words font-normal ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                                                                {renderAssistantMarkdown(textContent)}
+                                                            </div>
+                                                        </StreamingResponse>
+                                                    </div>
                                                 </div>
                                             );
                                         }
@@ -3431,12 +3463,15 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                                             if (segActions.length === 0) return null;
                                             return (
-                                                <div key={`seg-${segIdx}`}>
-                                                    <ActionsList
-                                                        actions={segActions}
-                                                        isLive={showLive}
-                                                        isDark={isDark}
-                                                    />
+                                                <div key={`seg-${segIdx}`} className="flex items-start gap-3">
+                                                    <AstroAvatar className="mt-1" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <ActionsList
+                                                            actions={segActions}
+                                                            isLive={showLive}
+                                                            isDark={isDark}
+                                                        />
+                                                    </div>
                                                 </div>
                                             );
                                         }
@@ -3444,7 +3479,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     })}
                                     {/* Live actions if no segments have tools yet */}
                                     {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                        <div className="flex items-start gap-3">
+                                            <AstroAvatar className="mt-1" />
+                                            <div className="flex-1 min-w-0">
+                                                <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                            </div>
+                                        </div>
                                     )}
                                     <MessageMetaFooter
                                         content={group.content}
@@ -3457,21 +3497,69 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         selectedModel={selectedModel}
                                         effortLevel={effortLevel}
                                     />
-                                </>
+                                </div>
                             ) : (
                                 <>
                                     {/* Fallback: user messages or assistant without segments */}
                                     <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                         {group.role === 'assistant' ? (
-                                            <StreamingResponse
-                                                status={idx === groupedMessages.length - 1 && isRunning ? 'streaming' : 'complete'}
-                                                copyText={typeof group.content === 'string' ? group.content : ''}
-                                                showActions={!(idx === groupedMessages.length - 1 && isRunning)}
-                                                className="w-full"
-                                            >
-                                                <div className={`text-[14px] leading-relaxed max-w-full ${isDark ? 'text-white/85' : 'text-gray-800'}`}>
+                                            <div className="flex items-start gap-3 w-full">
+                                                <AstroAvatar className="mt-0.5" />
+                                                <div className="flex-1 min-w-0 max-w-[680px]">
+                                                    <StreamingResponse
+                                                        status={idx === groupedMessages.length - 1 && isRunning ? 'streaming' : 'complete'}
+                                                        copyText={typeof group.content === 'string' ? group.content : ''}
+                                                        showActions={!(idx === groupedMessages.length - 1 && isRunning)}
+                                                        className="w-full"
+                                                    >
+                                                        <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] max-w-full font-normal ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                                                            {group.content && (
+                                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                                    {Array.isArray(group.content) ? (
+                                                                        <div className="space-y-2">
+                                                                            {group.content.map((part, i) => {
+                                                                                if (part.type === 'image_url') {
+                                                                                    return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
+                                                                                }
+                                                                                return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
+                                                                            })}
+                                                                        </div>
+                                                                    ) : (
+                                                                        renderAssistantMarkdown(String(group.content || ''))
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </StreamingResponse>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
+                                                <div
+                                                    className={`text-[15px] leading-relaxed break-words ${
+                                                        isDark
+                                                            ? 'bg-[#222226] text-zinc-100 rounded-[20px] px-4 py-3 border border-[#2e2e34] shadow-sm'
+                                                            : 'bg-zinc-100 text-zinc-900 rounded-[20px] px-4 py-3 border border-zinc-200/80 shadow-sm'
+                                                    }`}
+                                                >
+                                                    {/* Picked element indicator */}
+                                                    {(group as any).pickedElement && (
+                                                        <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
+                                                            <MousePointer2 className="w-3 h-3 flex-shrink-0" />
+                                                            <span className="font-medium">
+                                                                {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
+                                                            </span>
+                                                            {(group as any).pickedElement.text && (
+                                                                <span className="truncate opacity-70">
+                                                                    {(group as any).pickedElement.text.length > 30
+                                                                        ? (group as any).pickedElement.text.slice(0, 30) + '…'
+                                                                        : (group as any).pickedElement.text}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     {group.content && (
-                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
+                                                        <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
                                                             {Array.isArray(group.content) ? (
                                                                 <div className="space-y-2">
                                                                     {group.content.map((part, i) => {
@@ -3487,53 +3575,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                         </div>
                                                     )}
                                                 </div>
-                                            </StreamingResponse>
-                                        ) : (
-                                            <div
-                                                className={`text-[14px] leading-relaxed break-words ${
-                                                    isDark
-                                                        ? 'bg-zinc-800/90 text-zinc-100 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-700/50 shadow-sm'
-                                                        : 'bg-zinc-100 text-zinc-900 rounded-2xl rounded-br-sm px-4 py-2.5 max-w-[85%] sm:max-w-[75%] border border-zinc-200/80 shadow-sm'
-                                                }`}
-                                            >
-                                                {/* Picked element indicator */}
-                                                {(group as any).pickedElement && (
-                                                    <div className={`flex items-center gap-1.5 mb-2 text-xs ${isDark ? 'text-blue-400/70' : 'text-blue-500/70'}`}>
-                                                        <MousePointer2 className="w-3 h-3 flex-shrink-0" />
-                                                        <span className="font-medium">
-                                                            {(group as any).pickedElement.selector.split('.')[0].split('#')[0].toUpperCase()}
-                                                        </span>
-                                                        {(group as any).pickedElement.text && (
-                                                            <span className="truncate opacity-70">
-                                                                {(group as any).pickedElement.text.length > 30
-                                                                    ? (group as any).pickedElement.text.slice(0, 30) + '…'
-                                                                    : (group as any).pickedElement.text}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {group.content && (
-                                                    <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden prose-p:my-1 prose-p:leading-relaxed ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                        {Array.isArray(group.content) ? (
-                                                            <div className="space-y-2">
-                                                                {group.content.map((part, i) => {
-                                                                    if (part.type === 'image_url') {
-                                                                        return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
-                                                                    }
-                                                                    return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
-                                                                })}
-                                                            </div>
-                                                        ) : (
-                                                            renderAssistantMarkdown(String(group.content || ''))
-                                                        )}
-                                                    </div>
+                                                {group.createdAt && (
+                                                    <span className="text-[11px] text-zinc-500 mt-1 px-1 tracking-tight font-mono">
+                                                        {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                                    </span>
                                                 )}
                                             </div>
                                         )}
                                     </div>
                                     {/* Live actions for assistant without segments */}
                                     {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
-                                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                        <div className="flex items-start gap-3">
+                                            <AstroAvatar className="mt-1" />
+                                            <div className="flex-1 min-w-0">
+                                                <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                                            </div>
+                                        </div>
                                     )}
                                     {group.role === 'assistant' && (
                                         <MessageMetaFooter
@@ -3555,12 +3612,22 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
                     {isRunning && currentThinking && !isSystemProcessingText(currentThinking) && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
-                        <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
+                        <div className="flex items-start gap-3">
+                            <AstroAvatar className="mt-1" />
+                            <div className="flex-1 min-w-0">
+                                <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
+                            </div>
+                        </div>
                     )}
 
                     {/* Live Actions - only show here if there's no assistant message group yet */}
                     {isRunning && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
-                        <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                        <div className="flex items-start gap-3">
+                            <AstroAvatar className="mt-1" />
+                            <div className="flex-1 min-w-0">
+                                <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                            </div>
+                        </div>
                     )}
 
                     {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
@@ -3569,9 +3636,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         groupedMessages[groupedMessages.length - 1].role === 'user' ||
                         (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content && !groupedMessages[groupedMessages.length - 1].thinking)
                     ) && (
-                        <Marker role="status" className="animate-fade-in-up px-1">
-                            <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                        </Marker>
+                        <div className="flex items-center gap-3 animate-fade-in-up">
+                            <AstroAvatar className="h-7 w-7" />
+                            <Marker role="status" className="px-1">
+                                <MarkerContent className="shimmer">Thinking...</MarkerContent>
+                            </Marker>
+                        </div>
                     )}
 
                     <div ref={messagesEndRef} />
@@ -3741,9 +3811,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         )}
 
                         {/* Composer — full size by default; minimized when AI asks a question */}
-                        <div className={`rounded-[28px] border px-2 transition-colors ${
+                        <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#181818] border-[#28282c] focus-within:border-[#3a3b40]' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#1a1a1d] border-[#2a2a2f] focus-within:border-[#3a3b42] shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}

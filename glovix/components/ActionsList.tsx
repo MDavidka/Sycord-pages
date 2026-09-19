@@ -681,22 +681,54 @@ const ToolStack = memo(function ToolStack({
     chatStatus: string;
     generationPlan: GenerationPlan | null;
 }) {
+    const [expandedAll, setExpandedAll] = useState(false);
+
     if (group.kind === 'action_mark') {
+        const visibleActions = expandedAll ? group.actions : group.actions.slice(0, 3);
+        const hiddenCount = Math.max(0, group.actions.length - 3);
+
         return (
             <div className="space-y-1.5 my-1">
-                {group.actions.map(action => (
+                {visibleActions.map(action => (
                     <ActionMarkRow key={action.id} action={action} isDark={isDark} />
                 ))}
+                {hiddenCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setExpandedAll(v => !v)}
+                        className={cn(
+                            'text-xs font-medium px-2 py-1 rounded-md transition-colors',
+                            isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                        )}
+                    >
+                        {expandedAll ? 'Show less' : `+${hiddenCount} more`}
+                    </button>
+                )}
             </div>
         );
     }
 
     if (group.kind === 'screenshot') {
+        const visibleActions = expandedAll ? group.actions : group.actions.slice(0, 3);
+        const hiddenCount = Math.max(0, group.actions.length - 3);
+
         return (
             <div className="space-y-1.5">
-                {group.actions.map(action => (
+                {visibleActions.map(action => (
                     <ScreenshotCard key={action.id} action={action} isDark={isDark} />
                 ))}
+                {hiddenCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setExpandedAll(v => !v)}
+                        className={cn(
+                            'text-xs font-medium px-2 py-1 rounded-md transition-colors',
+                            isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                        )}
+                    >
+                        {expandedAll ? 'Show less' : `+${hiddenCount} more`}
+                    </button>
+                )}
             </div>
         );
     }
@@ -825,6 +857,7 @@ const ToolStack = memo(function ToolStack({
 
 export const ActionsList = memo(function ActionsList({ actions, isLive = false, isDark = true }: ActionsListProps) {
     const [phaseOpen, setPhaseOpen] = useState(isLive);
+    const [showAllGroups, setShowAllGroups] = useState(false);
     const generationPlan = useStore(s => s.generationPlan);
     const groups = useMemo(() => groupActions(actions), [actions]);
     const phase = useMemo(() => phaseCopy(actions, isLive), [actions, isLive]);
@@ -841,6 +874,9 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
     }, [isLive]);
 
     if (actions.length === 0) return null;
+
+    const visibleGroups = showAllGroups ? groups : groups.slice(0, 3);
+    const hiddenGroupCount = Math.max(0, groups.length - 3);
 
     if (!isLive) {
         return (
@@ -862,7 +898,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                     <div className={cn('mt-1.5 h-px w-full', isDark ? 'bg-white/10' : 'bg-black/10')} />
                     <CollapsibleContent>
                         <div className="mt-1.5 space-y-1.5 pl-0.5 sm:pl-1">
-                            {groups.map((group, index) => (
+                            {visibleGroups.map((group, index) => (
                                 <ToolStack
                                     key={`${group.kind}-${group.actions[0].id}-${index}`}
                                     group={group}
@@ -871,6 +907,18 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                                     generationPlan={generationPlan}
                                 />
                             ))}
+                            {hiddenGroupCount > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllGroups(v => !v)}
+                                    className={cn(
+                                        'text-xs font-medium px-2 py-1 rounded-md transition-colors mt-1 inline-block',
+                                        isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                                    )}
+                                >
+                                    {showAllGroups ? 'Show less' : `+${hiddenGroupCount} more`}
+                                </button>
+                            )}
                         </div>
                     </CollapsibleContent>
                 </section>
@@ -889,7 +937,7 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                 data-active={running ? 'true' : 'false'}
                 className="mt-1 space-y-1.5 pl-0.5 sm:pl-1"
             >
-                {groups.map((group, index) => (
+                {visibleGroups.map((group, index) => (
                     <ToolStack
                         key={`${group.kind}-${group.actions[0].id}-${index}`}
                         group={group}
@@ -898,6 +946,18 @@ export const ActionsList = memo(function ActionsList({ actions, isLive = false, 
                         generationPlan={generationPlan}
                     />
                 ))}
+                {hiddenGroupCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setShowAllGroups(v => !v)}
+                        className={cn(
+                            'text-xs font-medium px-2 py-1 rounded-md transition-colors mt-1 inline-block',
+                            isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]' : 'text-zinc-500 hover:text-zinc-800 hover:bg-black/[0.04]'
+                        )}
+                    >
+                        {showAllGroups ? 'Show less' : `+${hiddenGroupCount} more`}
+                    </button>
+                )}
             </div>
         </section>
     );

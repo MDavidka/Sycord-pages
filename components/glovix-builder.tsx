@@ -17,6 +17,8 @@ interface GlovixBuilderProps {
    * created/edited files to the project's pages via the API instead of only
    * persisting them in localStorage. */
   projectId?: string
+  /** Project name to display in the header */
+  projectName?: string | null
   /** The signed-in user's avatar URL (e.g. Google profile picture) shown in the
    * embedded mobile header. */
   userImage?: string | null
@@ -26,7 +28,7 @@ interface GlovixBuilderProps {
   preset?: string
 }
 
-export default function GlovixBuilder({ projectId, userImage, onBack, preset }: GlovixBuilderProps) {
+export default function GlovixBuilder({ projectId, projectName, userImage, onBack, preset }: GlovixBuilderProps) {
   // Keep unstable callback props out of the projectId effect deps — an inline
   // onBack from the Syra page was re-running cleanup on every parent render and
   // briefly clearing window.__glovixProjectId, which made /api/workspace/preview
@@ -39,6 +41,7 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
   // effect, so a useEffect alone would be too late for embedded-mode detection).
   if (typeof window !== "undefined" && projectId) {
     ;(window as any).__glovixProjectId = projectId
+    ;(window as any).__glovixProjectName = projectName ?? undefined
     ;(window as any).__glovixChatId = `project_${projectId}`
     ;(window as any).__glovixUserImage = userImage ?? undefined
     ;(window as any).__glovixOnBack = () => onBackRef.current?.()
@@ -52,6 +55,7 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
   useEffect(() => {
     if (projectId) {
       ;(window as any).__glovixProjectId = projectId
+      ;(window as any).__glovixProjectName = projectName ?? undefined
       ;(window as any).__glovixChatId = `project_${projectId}`
     }
     ;(window as any).__glovixUserImage = userImage ?? undefined
@@ -66,6 +70,7 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
       // remount / Strict Mode re-run that already wrote the next project id.
       if ((window as any).__glovixProjectId === projectId) {
         ;(window as any).__glovixProjectId = undefined
+        ;(window as any).__glovixProjectName = undefined
         ;(window as any).__glovixChatId = undefined
       }
       ;(window as any).__glovixUserImage = undefined
@@ -74,7 +79,7 @@ export default function GlovixBuilder({ projectId, userImage, onBack, preset }: 
         ;(window as any).__glovixPreset = undefined
       }
     }
-  }, [projectId, userImage, preset])
+  }, [projectId, projectName, userImage, preset])
 
   return (
     <div className="glovix-root h-full w-full">
