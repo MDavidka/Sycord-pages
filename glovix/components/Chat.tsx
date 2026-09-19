@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, RefObject, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft } from 'lucide-react';
+import { ArrowLeft, Brain, Copy, CreditCard, FileCode, FileUp, HelpCircle, Image as ImageIcon, Puzzle, Sparkles, X, ChevronRight, ChevronDown, MousePointer2, Slash, Mic, ArrowUp, Eye, Check as CheckIcon, Check, Loader2, Download, Bug, LayoutPanelLeft, PanelLeft } from 'lucide-react';
 import { useStore } from '../store';
 import { sendMessage, Message, ToolCall, getProviderIconUrl, fetchAvailableModelChoices, type ModelChoice, type ModelType } from '../lib/ai';
 import {
@@ -3195,8 +3195,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     const AstroAvatar = ({ className = "" }: { className?: string }) => (
-        <div className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full overflow-hidden shrink-0 bg-[#25252d] border border-white/10 shadow-sm flex items-center justify-center ${className}`}>
-            <img src="/astro-icon.png" alt="Astro" className="h-full w-full object-cover" />
+        <div className={`h-6 w-6 shrink-0 flex items-center justify-center ${className}`}>
+            <img src="/astro-icon.png" alt="Astro" className="h-full w-full object-contain rounded-full" />
         </div>
     );
 
@@ -3282,25 +3282,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         className="pointer-events-auto relative mx-auto flex h-16 max-w-[760px] items-center justify-between px-4 sm:px-6"
                         style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <button
                                 type="button"
                                 onClick={handleBack}
-                                aria-label="Back"
-                                className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/70 hover:bg-white/[0.08] hover:text-white' : 'text-gray-500 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                                aria-label="Toggle Sidebar or Go Back"
+                                className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/80 hover:bg-white/[0.08] hover:text-white' : 'text-gray-700 hover:bg-black/[0.05] hover:text-gray-900'}`}
                             >
-                                <ArrowLeft className="size-5" strokeWidth={1.8} />
+                                <PanelLeft className="size-5" strokeWidth={1.8} />
                             </button>
 
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <div className={`flex size-9 items-center justify-center rounded-xl shrink-0 ${isDark ? 'bg-white/[0.08] text-white/90 border border-white/10' : 'bg-black/[0.05] text-gray-800'}`}>
-                                    <LayoutPanelLeft className="size-[18px]" strokeWidth={1.8} />
-                                </div>
-                                <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {hostProjectName || 'Test project'}
-                                </span>
-                                {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
-                            </div>
+                            <span className={`text-[17px] sm:text-[18px] font-semibold tracking-[-0.015em] truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                {hostProjectName || 'Test project'}
+                            </span>
+                            {isRunning && <span className="size-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" aria-label="Building" />}
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -3319,7 +3314,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 type="button"
                                 onClick={() => setShowDeepMemory(true)}
                                 aria-label="Profile"
-                                className={`flex size-9 sm:size-10 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 border ${isDark ? 'border-white/15 bg-white/[0.08] text-white' : 'border-gray-300 bg-black/[0.05] text-gray-900'}`}
+                                className={`flex size-9 sm:size-10 items-center justify-center overflow-hidden rounded-full transition-transform active:scale-95 ${isDark ? 'bg-[#523d35] text-white/90 shadow-sm' : 'border border-gray-300 bg-black/[0.05] text-gray-900'}`}
                             >
                                 {profileImage && !profileImgError ? (
                                     <img
@@ -3330,7 +3325,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         className="h-full w-full object-cover"
                                     />
                                 ) : (
-                                    <span className="text-sm font-semibold">M</span>
+                                    <span className="text-sm font-semibold">
+                                        {(user?.email?.[0] || 'M').toUpperCase()}
+                                    </span>
                                 )}
                             </button>
                         </div>
@@ -3350,7 +3347,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 >
                     {groupedMessages.length === 0 && !isRunning && (
                         <div className="flex items-center gap-3 pt-3 pb-2 animate-fade-in">
-                            <AstroAvatar className="h-8 w-8" />
+                            <AstroAvatar className="h-6 w-6 sm:h-7 sm:w-7" />
                             <span className={`text-[16px] font-medium tracking-tight ${isDark ? 'text-zinc-100' : 'text-zinc-900'}`}>
                                 Tell me how can i help you?
                             </span>
@@ -3813,7 +3810,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1a1a1d] border-[#2a2a2f] focus-within:border-[#3a3b42] shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#18181b] border-[#27272a] focus-within:border-[#3f3f46] shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -4135,22 +4132,6 @@ function MessageMetaFooter({
 
     return (
         <div className="mt-2 flex flex-wrap items-center justify-end gap-2 px-1">
-            {showDebug && (
-                <button
-                    type="button"
-                    onClick={handleDownloadDebug}
-                    title="Download debug diagnostics JSON"
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-md border transition-all active:scale-95 ${
-                        isDark
-                            ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20 hover:text-red-300'
-                            : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700'
-                    }`}
-                >
-                    <Bug className="size-3" />
-                    <Download className="size-3" />
-                    <span>Debug JSON</span>
-                </button>
-            )}
             <span className={`text-xs tabular-nums ${isDark ? 'text-white/35' : 'text-gray-400'}`}>{timeLabel}</span>
             <button
                 type="button"

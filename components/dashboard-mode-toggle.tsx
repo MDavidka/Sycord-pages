@@ -41,10 +41,10 @@ export function DashboardModeToggle({
         <Folder
           className={cn(
             "h-4 w-4 transition-colors shrink-0",
-            activeMode === "projects" ? "text-primary" : "text-zinc-400"
+            activeMode === "projects" ? "text-zinc-100" : "text-zinc-400"
           )}
         />
-        <span className="whitespace-nowrap">Your projects</span>
+        <span className="whitespace-nowrap">your projects</span>
       </button>
 
       <button
@@ -59,22 +59,15 @@ export function DashboardModeToggle({
             : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03] border border-transparent"
         )}
       >
-        <div className="relative flex items-center justify-center shrink-0">
-          <img
-            src="/astro-icon.png"
-            alt="Astro"
-            className={cn(
-              "h-4 w-4 rounded-full object-cover transition-transform",
-              activeMode === "astro" ? "scale-105" : "opacity-80"
-            )}
-            onError={(e) => {
-              // fallback if image not found
-              (e.currentTarget as HTMLElement).style.display = "none"
-            }}
-          />
-          <Sparkles className="h-4 w-4 text-purple-400 hidden" />
-        </div>
-        <span className="whitespace-nowrap">Astro</span>
+        <img
+          src="/astro-icon.png"
+          alt="Astro"
+          className={cn(
+            "h-5 w-5 rounded-full object-contain shrink-0 transition-opacity",
+            activeMode === "astro" ? "opacity-100" : "opacity-75"
+          )}
+        />
+        <span className="whitespace-nowrap">astro</span>
       </button>
     </div>
   )

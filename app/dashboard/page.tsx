@@ -219,40 +219,38 @@ function DashboardContent() {
         </header>
 
         <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6">
-          <div className="flex flex-col gap-3 mb-5">
-            <div className="flex items-center justify-between">
-              <h1 className="text-base font-semibold text-foreground">Projects</h1>
-              <Button
-                onClick={() => router.push("/dashboard/create")}
-                size="sm"
-                className="h-10 px-4 rounded-xl gap-1.5 text-sm font-medium"
-              >
-                <Plus className="h-4 w-4" />
-                <span>New Project</span>
-              </Button>
-            </div>
-
-            {/* Segmented Projects / Astro Switch */}
-            <div className="flex items-center">
-              <DashboardModeToggle
-                activeMode={activeMode}
-                onChange={(mode) => {
-                  setActiveMode(mode)
-                  const u = new URL(window.location.href)
-                  if (mode === "projects") {
-                    u.searchParams.delete("mode")
-                  } else {
-                    u.searchParams.set("mode", mode)
-                  }
-                  window.history.replaceState({}, "", u.toString())
-                }}
-              />
-            </div>
+          <div className="flex items-center justify-between mb-5">
+            <h1 className="text-base font-semibold text-foreground">Projects</h1>
+            <Button
+              onClick={() => router.push("/dashboard/create")}
+              size="sm"
+              className="h-10 px-4 rounded-xl gap-1.5 text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" />
+              <span>New Project</span>
+            </Button>
           </div>
 
           {activeMode === "astro" ? (
             /* ASTRO MODE: Global Agentic AI Workspace */
-            <AstroDashboard />
+            <div className="space-y-5 animate-in fade-in duration-200">
+              <div className="flex items-center">
+                <DashboardModeToggle
+                  activeMode={activeMode}
+                  onChange={(mode) => {
+                    setActiveMode(mode)
+                    const u = new URL(window.location.href)
+                    if (mode === "projects") {
+                      u.searchParams.delete("mode")
+                    } else {
+                      u.searchParams.set("mode", mode)
+                    }
+                    window.history.replaceState({}, "", u.toString())
+                  }}
+                />
+              </div>
+              <AstroDashboard />
+            </div>
           ) : (
             /* PROJECTS MODE: Projects List & Search */
             <div className="space-y-5 animate-in fade-in duration-200">
@@ -271,6 +269,23 @@ function DashboardContent() {
                 <div className="px-3.5 py-2.5 border border-[#27272a] rounded-xl bg-[#18181b]/70 text-sm font-medium text-zinc-400 tabular-nums whitespace-nowrap shadow-xs">
                   {ownedCount}/{MAX_FREE_PROJECTS}
                 </div>
+              </div>
+
+              {/* Segmented Projects / Astro Switch */}
+              <div className="flex items-center">
+                <DashboardModeToggle
+                  activeMode={activeMode}
+                  onChange={(mode) => {
+                    setActiveMode(mode)
+                    const u = new URL(window.location.href)
+                    if (mode === "projects") {
+                      u.searchParams.delete("mode")
+                    } else {
+                      u.searchParams.set("mode", mode)
+                    }
+                    window.history.replaceState({}, "", u.toString())
+                  }}
+                />
               </div>
 
               {isLoading ? (
