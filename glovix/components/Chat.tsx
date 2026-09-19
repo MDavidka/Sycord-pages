@@ -52,6 +52,7 @@ import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { AgentActivity, type AgentActivityItem } from '@/components/agents/agent-activity';
 import { StreamingResponse } from '@/components/agents/streaming-response';
 import { ModelEffortSelector, type EffortLevel } from '@/components/agents/model-effort-selector';
+import { SycordOmniRouterModal } from '@/components/sycord-omni-router-modal';
 import { getSystemPrompt } from '../lib/systemPrompts';
 import { buildInjectedProjectContext } from '../lib/project-context';
 import { planFromAgentUpdate } from '../lib/agent-plan';
@@ -541,8 +542,8 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     useEffect(() => {
         try {
             const saved = localStorage.getItem('syra_effort_level');
-            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high') {
-                setEffortLevel(saved);
+            if (saved === 'low' || saved === 'medium' || saved === 'high' || saved === 'extra_high' || saved === 'max') {
+                setEffortLevel(saved as EffortLevel);
             }
         } catch {}
     }, []);
@@ -3111,6 +3112,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     const [showDeepMemory, setShowDeepMemory] = useState(false);
     const [showSlashMenu, setShowSlashMenu] = useState(false);
     const [libraryView, setLibraryView] = useState<'skills' | 'mcp' | 'help' | 'credits' | null>(null);
+    const [showOmniModal, setShowOmniModal] = useState(false);
     const [slashSkills, setSlashSkills] = useState<SyraSlashSkill[]>(BUILTIN_SKILL_FALLBACK);
     const [slashMcp, setSlashMcp] = useState<SyraSlashMcpAddon[]>(BUILTIN_MCP_FALLBACK);
     const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -3192,7 +3194,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#181818]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3231,6 +3233,25 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     onClose={() => setShowModelLearn(false)}
                 />
             )}
+            <SycordOmniRouterModal
+                open={showOmniModal}
+                onOpenChange={setShowOmniModal}
+                selectedModel={selectedModel}
+                projectId={hostProjectIdForSlash || 'global'}
+                isDark={isDark}
+                modelChoices={availableModelChoices || []}
+                onSelectModel={(modelId) => {
+                    const choice = availableModelChoices?.find(c => c.modelType === modelId || c.apiModel === modelId);
+                    if (choice) {
+                        setSelectedModel(choice.modelType);
+                        setAiModel(choice.apiModel);
+                    } else {
+                        setSelectedModel(modelId as any);
+                        setAiModel(modelId);
+                    }
+                    void loadAvailableModels();
+                }}
+            />
             {/* Mobile header (embedded mode): progressive blur + back + title + avatar */}
             {embedded && (
                 <header className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
@@ -3246,7 +3267,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
                         />
                         <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#181818] via-[#181818]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
                         />
                     </div>
 
@@ -3703,7 +3724,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             <span
                                                 key={addon.id}
                                                 className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#18191B] bg-[#1c1d1f]' : 'border-white bg-white'
+                                                    isDark ? 'border-[#181818] bg-[#1c1d1f]' : 'border-white bg-white'
                                                 }`}
                                             >
                                                 <McpBrandIcon
@@ -3867,10 +3888,13 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         if (choice) {
                                             setSelectedModel(choice.modelType);
                                             setAiModel(choice.apiModel);
+                                        } else {
+                                            setSelectedModel(modelId as any);
+                                            setAiModel(modelId);
                                         }
                                     }}
                                     onAddModelsClick={() => {
-                                        setLibraryView('skills');
+                                        setShowOmniModal(true);
                                     }}
                                     isDark={isDark}
                                 />

@@ -1688,7 +1688,7 @@ export default function SiteSettingsPage() {
   return (
     <div 
       className="flex h-[100dvh] overflow-hidden relative"
-      style={{ backgroundColor: "#18191B" }}
+      style={{ backgroundColor: "#181818" }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
@@ -1751,7 +1751,7 @@ export default function SiteSettingsPage() {
         animate={{ x: isSidebarOpen ? "70%" : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.9 }}
         style={{
-          backgroundColor: "#18191B",
+          backgroundColor: "#181818",
           overflow: "hidden",
         }}
       >
@@ -2749,7 +2749,7 @@ export default function SiteSettingsPage() {
                     <iframe
                       key={id}
                       src={`/dashboard/sites/${id}/syra`}
-                      className="absolute inset-0 h-full w-full border-0 bg-[#18191B]"
+                      className="absolute inset-0 h-full w-full border-0 bg-[#181818]"
                       title="Syra AI Builder"
                       allow="cross-origin-isolated; clipboard-read; clipboard-write"
                     />

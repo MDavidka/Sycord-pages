@@ -366,6 +366,7 @@ export interface GenerateRequest {
   temperature?: number
   maxOutputTokens?: number
   model?: string
+  thinkingLevel?: string
   /** Stops emitting to a client that has disconnected. */
   signal?: AbortSignal
 }
@@ -383,21 +384,42 @@ function resolveGeminiModel(requested?: string): string {
 }
 
 /**
- * Thinking adds significant TTFT on Flash. Prefer a tiny budget (or off) for
- * flash/lite; keep full thought summaries for Pro.
+ * Configure thinking budget based on the user's active effort level:
+ * - low / fast: 0 thinking tokens (actual fast mode, no thinking delay)
+ * - medium: 4,096 tokens
+ * - high: 12,288 tokens
+ * - extra_high / xhigh: 24,576 tokens (think significantly more)
+ * - max: 32,768 tokens (maximum reasoning depth)
  */
-function thinkingConfigForModel(model: string): GenerateContentConfig["thinkingConfig"] | undefined {
+function thinkingConfigForModel(model: string, thinkingLevel?: string): GenerateContentConfig["thinkingConfig"] | undefined {
   const id = model.toLowerCase()
   const supportsThinking = /gemini-(2\.5|3)/.test(id)
   if (!supportsThinking) return undefined
 
+  if (thinkingLevel === "low" || thinkingLevel === "fast") {
+    // Fast mode: actually fast (0 thinking tokens, no thinking delay)
+    return { includeThoughts: false, thinkingBudget: 0 }
+  }
+  if (thinkingLevel === "medium") {
+    return { includeThoughts: true, thinkingBudget: 4096 }
+  }
+  if (thinkingLevel === "high") {
+    return { includeThoughts: true, thinkingBudget: 12288 }
+  }
+  if (thinkingLevel === "extra_high" || thinkingLevel === "xhigh") {
+    // Extra high: think significantly more
+    return { includeThoughts: true, thinkingBudget: 24576 }
+  }
+  if (thinkingLevel === "max") {
+    return { includeThoughts: true, thinkingBudget: 32768 }
+  }
+
+  // Fallback defaults if no thinkingLevel specified
   const isFlash = id.includes("flash") || id.includes("lite")
   if (isFlash) {
-    // Flash is marketed as the fast profile (syra-nano). Cap thinking tokens so
-    // TTFT stays low; Pro keeps dynamic/full reasoning.
-    return { includeThoughts: true, thinkingBudget: 256 }
+    return { includeThoughts: false, thinkingBudget: 0 }
   }
-  return { includeThoughts: true }
+  return { includeThoughts: true, thinkingBudget: 8192 }
 }
 
 export function streamOpenAICompatible(req: GenerateRequest): Response {
@@ -431,7 +453,7 @@ export function streamOpenAICompatible(req: GenerateRequest): Response {
           maxOutputTokens: Math.min(Math.max(req.maxOutputTokens ?? 16384, 1024), 65536),
         }
 
-        const thinking = thinkingConfigForModel(model)
+        const thinking = thinkingConfigForModel(model, req.thinkingLevel)
         if (thinking) config.thinkingConfig = thinking
         if (systemInstruction) config.systemInstruction = systemInstruction
         if (functionDeclarations) {

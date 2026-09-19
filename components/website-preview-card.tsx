@@ -77,13 +77,13 @@ export function WebsitePreviewCard({
   const gitTimeAgo = formatTimeAgo(githubSavedAt || createdAt)
 
   return (
-    <Card className="relative overflow-hidden bg-[#0e0e10] border-[#232328] text-white rounded-[16px] transition-all duration-200 hover:border-zinc-700/50 hover:bg-[#121214] shadow-sm">
+    <Card className="relative overflow-hidden bg-[#1c1d20] border-[#2a2a30] text-white rounded-[16px] transition-all duration-200 hover:border-zinc-600/60 hover:bg-[#222227] shadow-sm">
       <CardContent className="p-4 sm:p-5 flex flex-col gap-4">
         {/* Top Header Row */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {/* Project Avatar / Icon */}
-            <div className="h-10 w-10 rounded-[12px] bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-zinc-200 font-semibold text-sm shadow-sm">
+            <div className="h-10 w-10 rounded-[12px] bg-[#26262c] border border-[#36363e] flex items-center justify-center shrink-0 overflow-hidden text-zinc-200 font-semibold text-sm shadow-sm">
               {profileImage ? (
                 <img src={profileImage} alt={businessName} className="h-full w-full object-cover" />
               ) : (
@@ -123,7 +123,7 @@ export function WebsitePreviewCard({
                   <ChevronsUpDown className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40 bg-zinc-900 border-zinc-800 text-zinc-200">
+              <DropdownMenuContent align="end" className="w-40 bg-[#1c1d20] border-[#2a2a30] text-zinc-200">
                 <DropdownMenuItem asChild>
                   <Link href={`/dashboard/sites/${projectId}`} className="cursor-pointer flex items-center gap-2">
                     <Settings className="h-3.5 w-3.5" />
@@ -145,7 +145,7 @@ export function WebsitePreviewCard({
         </div>
 
         {/* Bottom Metadata Rows */}
-        <div className="flex flex-col gap-1.5 mt-1 border-t border-zinc-800/50 pt-3">
+        <div className="flex flex-col gap-1.5 mt-1 border-t border-[#2a2a30]/80 pt-3">
           {isGitConnected ? (
             <>
               <div className="flex items-center gap-2 text-[11px] text-zinc-400">

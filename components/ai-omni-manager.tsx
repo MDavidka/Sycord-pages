@@ -266,15 +266,22 @@ export function AiOmniManager() {
         {/* Left: Global Provider Setup */}
         <Card className="border-zinc-800 bg-zinc-950 text-zinc-100">
           <CardHeader>
-            <CardTitle className="text-base font-bold text-white">Add Global Provider</CardTitle>
-            <CardDescription className="text-xs text-zinc-400">
-              Configure root credentials (Google Vertex, Anthropic, OpenAI, DeepSeek) to broadcast to all projects.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-bold text-white">Save Global Provider</CardTitle>
+                <CardDescription className="text-xs text-zinc-400">
+                  Configure root provider credentials (Google Vertex AI, Anthropic, OpenAI, DeepSeek). Models belong purely to the central Omni Router catalog.
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="border-indigo-800/40 bg-indigo-950/30 text-[10px] text-indigo-400">
+                Credentials Only
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSaveGlobalProvider} className="space-y-4 text-xs">
               <div className="space-y-1.5">
-                <label className="font-semibold text-zinc-300">Provider</label>
+                <label className="font-semibold text-zinc-300">Provider Connection</label>
                 <select
                   value={globalProvider}
                   onChange={(e) => {
@@ -287,22 +294,12 @@ export function AiOmniManager() {
                   }}
                   className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-100 focus:border-indigo-500 focus:outline-none"
                 >
-                  <option value="vertex">Google Cloud Vertex AI (Primary Global)</option>
+                  <option value="vertex">Google Cloud Vertex AI (Primary Global Provider)</option>
                   <option value="anthropic">Anthropic Claude</option>
                   <option value="openai">OpenAI</option>
                   <option value="deepseek">DeepSeek</option>
                   <option value="custom">Custom Endpoint / Proxy</option>
                 </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-semibold text-zinc-300">Default Model</label>
-                <Input
-                  value={globalModel}
-                  onChange={(e) => setGlobalModel(e.target.value)}
-                  placeholder="e.g. gemini-2.5-flash, claude-3-7-sonnet"
-                  className="border-zinc-800 bg-zinc-900 text-zinc-100"
-                />
               </div>
 
               <div className="space-y-1.5">

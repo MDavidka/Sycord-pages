@@ -30,7 +30,7 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl p-4 sm:p-5 flex flex-col gap-3.5 bg-[#0e0e10] border border-[#232328]">
+    <div className="rounded-2xl p-4 sm:p-5 flex flex-col gap-3.5 bg-[#1c1d20] border border-[#2a2a30]">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-1">
           <Skeleton className="h-10 w-10 rounded-full shrink-0 bg-zinc-800" />
@@ -260,10 +260,10 @@ function DashboardContent() {
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard/create")}
-                  className="group h-full min-h-[220px] border border-dashed border-border/60 hover:border-primary/50 rounded-2xl flex flex-col items-center justify-center p-6 text-center bg-card/10 hover:bg-card/30 transition-all duration-200"
+                  className="group h-full min-h-[220px] border border-dashed border-[#2a2a30] hover:border-zinc-500 rounded-2xl flex flex-col items-center justify-center p-6 text-center bg-[#1c1d20]/50 hover:bg-[#1c1d20] transition-all duration-200"
                 >
-                  <div className="h-12 w-12 rounded-full bg-background/70 border border-border/50 flex items-center justify-center mb-3 group-hover:border-primary/40 group-hover:bg-primary/10 transition-all">
-                    <Plus className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                  <div className="h-12 w-12 rounded-full bg-[#26262c] border border-[#36363e] flex items-center justify-center mb-3 group-hover:border-zinc-400 group-hover:bg-zinc-700/30 transition-all">
+                    <Plus className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                   </div>
                   <h3 className="text-sm font-semibold mb-1">New Project</h3>
                   <p className="text-xs text-muted-foreground max-w-[200px]">Create a new site in a few clicks</p>

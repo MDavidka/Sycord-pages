@@ -68,7 +68,7 @@ export function DeepMemoryModal({ onClose }: DeepMemoryModalProps) {
             <DialogContent
                 className={cn(
                     "max-w-3xl w-[95vw] h-[85vh] md:h-[80vh] flex flex-col p-0 overflow-hidden border-0 shadow-2xl",
-                    isDark ? 'bg-[#18191b]/95 backdrop-blur-xl text-white ring-1 ring-white/10' : 'bg-white/95 backdrop-blur-xl ring-1 ring-black/5'
+                    isDark ? 'bg-[#181818]/95 backdrop-blur-xl text-white ring-1 ring-white/10' : 'bg-white/95 backdrop-blur-xl ring-1 ring-black/5'
                 )}
                 style={{
                     boxShadow: isDark ? '0 0 0 1px rgba(255,255,255,0.05), 0 30px 60px rgba(0,0,0,0.5)' : '0 30px 60px rgba(0,0,0,0.1)'

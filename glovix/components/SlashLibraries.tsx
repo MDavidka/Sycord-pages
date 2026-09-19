@@ -285,7 +285,7 @@ export function SkillsLibrary({
   })
 
   return (
-    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#181818] text-white' : 'bg-white text-gray-900')}>
       <header
         className={cn(
           'flex items-center gap-3 border-b px-4 py-3',
@@ -878,7 +878,7 @@ export function McpLibrary({
   }
 
   return (
-    <div className={cn('relative flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+    <div className={cn('relative flex h-full flex-col', isDark ? 'bg-[#181818] text-white' : 'bg-white text-gray-900')}>
       <header
         className={cn(
           'flex items-center gap-3 border-b px-4 py-3',
@@ -1087,7 +1087,7 @@ export function CreditsPanel({ isDark = true, onBack }: CreditsPanelProps) {
   }, [])
 
   return (
-    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#181818] text-white' : 'bg-white text-gray-900')}>
       <header
         className={cn(
           'flex items-center gap-3 border-b px-4 py-3',
@@ -1138,7 +1138,7 @@ type HelpPanelProps = {
 
 export function HelpSupportPanel({ isDark = true, onBack }: HelpPanelProps) {
   return (
-    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#18191B] text-white' : 'bg-white text-gray-900')}>
+    <div className={cn('flex h-full flex-col', isDark ? 'bg-[#181818] text-white' : 'bg-white text-gray-900')}>
       <header
         className={cn(
           'flex items-center gap-3 border-b px-4 py-3',
