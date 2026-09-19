@@ -5,8 +5,9 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2 } from "lucide-react"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder } from "lucide-react"
 import { useState, useEffect, Suspense, useCallback } from "react"
+import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -58,8 +59,43 @@ function DashboardContent() {
   const [debugError, setDebugError] = useState<string | null>(null)
   const [userStatus, setUserStatus] = useState<{ isBlocked: boolean; subscription: string; isPremium: boolean }>({ isBlocked: false, subscription: "Free", isPremium: false })
   const [pendingInvites, setPendingInvites] = useState<CollabInvite[]>([])
+  const [activeTab, setActiveTab] = useState<"all" | "astro">("all")
   const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  const isAstroProject = (p: any) =>
+    p?.framework === "astro" ||
+    p?.style === "astro" ||
+    p?.type === "astro" ||
+    (p?.businessName || "").toLowerCase().includes("astro")
+
+  const q = searchQuery.trim().toLowerCase()
+  const baseProjects = activeTab === "astro"
+    ? projects.filter(isAstroProject)
+    : projects
+
+  // If astro tab is active and user has no astro projects yet, provide an Astro project card matching the design
+  const displayedProjects = activeTab === "astro" && baseProjects.length === 0 && !q
+    ? [
+        {
+          _id: "astro-starter",
+          businessName: "sycord",
+          domain: "testproject.sycord.site",
+          cloudflareUrl: "testproject.sycord.site",
+          framework: "astro",
+          style: "astro",
+          profileImage: "/astro-icon.png",
+          createdAt: new Date().toISOString(),
+          isAstroPlaceholder: true,
+        },
+      ]
+    : baseProjects
+
+  const filtered: any[] = q
+    ? displayedProjects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
+    : displayedProjects
+  const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
+  const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
 
   useEffect(() => {
     const openCreate = searchParams.get("open_create_modal")
@@ -159,13 +195,6 @@ function DashboardContent() {
     )
   }
 
-  const q = searchQuery.trim().toLowerCase()
-  const filtered: any[] = q
-    ? projects.filter((p: any) => (p.businessName || "").toLowerCase().includes(q) || (p.cloudflareUrl || p.domain || "").toLowerCase().includes(q))
-    : projects
-  const canCreateMore = userStatus.isPremium || projects.filter((p: any) => !p?.isCollaborator).length < MAX_FREE_PROJECTS
-  const ownedCount = projects.filter((p: any) => !p?.isCollaborator).length
-
   return (
     <>
       <div className="min-h-screen bg-background md:ml-16">
@@ -230,6 +259,36 @@ function DashboardContent() {
                 {ownedCount}/{MAX_FREE_PROJECTS}
               </div>
             </div>
+
+            {/* Filter Tabs: your projects / astro */}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab("all")}
+                className={cn(
+                  "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 border",
+                  activeTab === "all"
+                    ? "bg-[#28282e] text-zinc-100 border-[#383840] shadow-sm"
+                    : "bg-[#161618]/60 text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-[#202024]"
+                )}
+              >
+                <Folder className="h-3.5 w-3.5 text-zinc-400" />
+                <span>your projects</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("astro")}
+                className={cn(
+                  "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 border",
+                  activeTab === "astro"
+                    ? "bg-[#28282e] text-zinc-100 border-[#383840] shadow-sm"
+                    : "bg-[#161618]/60 text-zinc-400 border-transparent hover:text-zinc-200 hover:bg-[#202024]"
+                )}
+              >
+                <img src="/astro-icon.png" alt="Astro" className="h-3.5 w-3.5 rounded-full object-cover shrink-0" />
+                <span>astro</span>
+              </button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -287,6 +346,7 @@ function DashboardContent() {
                     createdAt={project.createdAt}
                     chatSession={project.chatSession}
                     style={project.style || "default"}
+                    framework={project.framework}
                     fallbackHtml={fallbackHtml}
                     githubOwner={project.githubOwner}
                     githubRepo={project.githubRepo}
