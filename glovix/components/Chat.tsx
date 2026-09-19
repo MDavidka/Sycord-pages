@@ -3535,7 +3535,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                 <div
                                                     className={`text-[15px] leading-relaxed break-words ${
                                                         isDark
-                                                            ? 'bg-[#222226] text-zinc-100 rounded-[20px] px-4 py-3 border border-[#2e2e34] shadow-sm'
+                                                            ? 'bg-[#1e1f22] text-zinc-100 rounded-[20px] px-4 py-3 border border-[#2b2d31] shadow-sm'
                                                             : 'bg-zinc-100 text-zinc-900 rounded-[20px] px-4 py-3 border border-zinc-200/80 shadow-sm'
                                                     }`}
                                                 >
@@ -3810,7 +3810,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#18181b] border-[#27272a] focus-within:border-[#3f3f46] shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#1e1f22] border-[#2b2d31] focus-within:border-[#3b3e45] shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -3828,7 +3828,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         target.style.height = `${Math.min(target.scrollHeight, maxH)}px`;
                                     }}
                                     placeholder="Help you write code, debug and ship production-ready work. Type / for skills & integrations."
-                                    className={`w-full bg-transparent text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-[#e5e5e5] placeholder:text-[#6b6c6f]' : 'text-gray-900 placeholder:text-gray-400'}`}
+                                    className={`w-full bg-transparent text-[15.5px] sm:text-[16px] leading-relaxed px-3 pt-2.5 pb-2 focus:outline-none resize-none overflow-y-auto max-h-[120px] md:max-h-[200px] ${isDark ? 'text-zinc-100 placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
                                     style={{ height: 'auto', minHeight: '76px' }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Escape' && showSlashMenu) {
@@ -3858,7 +3858,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#3a3b3e] text-[#9a9b9e] hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#35373c] text-zinc-400 hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -3866,7 +3866,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2a2b2e] bg-[#1c1d1f] text-[#e5e5e5]' : ''}`}
+                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2b2d31] bg-[#1e1f22] text-[#e5e5e5]' : ''}`}
                                     >
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3877,7 +3877,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <ImageIcon className="h-4 w-4 opacity-70" />
                                             Image upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/image</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/image</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3888,9 +3888,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <FileUp className="h-4 w-4 opacity-70" />
                                             File upload
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/file</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/file</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
+                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2b2d31]' : undefined} />
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {
@@ -3900,7 +3900,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <Sparkles className="h-4 w-4 opacity-70" />
                                             Skills
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/skills</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/skills</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3911,9 +3911,9 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         >
                                             <Puzzle className="h-4 w-4 opacity-70" />
                                             Integrations
-                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-[#6b6c6f]' : 'text-gray-400'}`}>/integrations</span>
+                                            <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/integrations</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2a2b2e]' : undefined} />
+                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2b2d31]' : undefined} />
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {

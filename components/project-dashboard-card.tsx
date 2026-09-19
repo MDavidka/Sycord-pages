@@ -81,7 +81,7 @@ export function ProjectDashboardCard({
   const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : "/logo.png")
 
   return (
-    <div className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[20px] bg-[#18181b]/80 hover:bg-[#1f1f23] border border-[#27272a] hover:border-[#3f3f46] text-white p-5 transition-all duration-200 shadow-sm hover:shadow-md">
+    <div className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[20px] bg-[#1e1f22]/90 hover:bg-[#25272c] border border-[#2b2d31] hover:border-[#3b3e45] text-white p-5 transition-all duration-200 shadow-sm hover:shadow-md">
       {/* Clickable primary area */}
       <Link
         href={`/dashboard/sites/${projectId}`}
@@ -92,7 +92,7 @@ export function ProjectDashboardCard({
       {/* Main Content: Icon + Info */}
       <div className="relative z-10 flex items-center gap-3.5 min-w-0">
         {/* Project Icon container (48-52px) */}
-        <div className="h-12 w-12 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+        <div className="h-12 w-12 rounded-[14px] bg-[#18191c] border border-[#2e3035] flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
           {resolvedIcon ? (
             <img
               src={resolvedIcon}

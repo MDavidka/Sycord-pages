@@ -236,7 +236,7 @@ export function ModelEffortSelector({
             className={cn(
               "w-[210px] sm:w-[220px] rounded-2xl p-1.5 shadow-xl backdrop-blur-xl border",
               isDark
-                ? "bg-[#181818] border-[#26262a] text-[#e5e5e5]"
+                ? "bg-[#1e1f22] border-[#2b2d31] text-[#e5e5e5]"
                 : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-200/50"
             )}
           >
@@ -343,7 +343,7 @@ export function ModelEffortSelector({
               className={cn(
                 "w-[230px] sm:w-[240px] rounded-2xl p-1.5 shadow-xl backdrop-blur-xl border transition-all animate-in fade-in-0 slide-in-from-left-2 duration-150",
                 isDark
-                  ? "bg-[#181818] border-[#26262a] text-[#e5e5e5]"
+                  ? "bg-[#1e1f22] border-[#2b2d31] text-[#e5e5e5]"
                   : "bg-white border-zinc-200 text-zinc-900 shadow-zinc-200/50"
               )}
             >

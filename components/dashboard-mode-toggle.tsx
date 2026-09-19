@@ -22,7 +22,7 @@ export function DashboardModeToggle({
       role="tablist"
       aria-label="Dashboard navigation"
       className={cn(
-        "inline-flex items-center h-11 sm:h-12 p-1 rounded-[14px] sm:rounded-[16px] bg-[#18181b]/90 border border-[#27272a] shadow-inner backdrop-blur-sm",
+        "inline-flex items-center h-11 sm:h-12 p-1 rounded-[14px] sm:rounded-[16px] bg-[#1e1f22]/90 border border-[#2b2d31] shadow-inner backdrop-blur-sm",
         className
       )}
     >
@@ -34,7 +34,7 @@ export function DashboardModeToggle({
         className={cn(
           "flex items-center gap-2 h-full px-3.5 sm:px-4 rounded-[10px] sm:rounded-[12px] text-[14px] font-medium transition-all duration-200 select-none outline-none whitespace-nowrap focus-visible:ring-2 focus-visible:ring-primary/40",
           activeMode === "projects"
-            ? "bg-[#27272a] text-zinc-100 shadow-[0_1px_3px_rgba(0,0,0,0.35)] font-semibold border border-white/5"
+            ? "bg-[#2b2d31] text-zinc-100 shadow-[0_1px_3px_rgba(0,0,0,0.35)] font-semibold border border-white/5"
             : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03] border border-transparent"
         )}
       >
@@ -55,7 +55,7 @@ export function DashboardModeToggle({
         className={cn(
           "flex items-center gap-2 h-full px-3.5 sm:px-4 rounded-[10px] sm:rounded-[12px] text-[14px] font-medium transition-all duration-200 select-none outline-none whitespace-nowrap focus-visible:ring-2 focus-visible:ring-primary/40",
           activeMode === "astro"
-            ? "bg-[#27272a] text-zinc-100 shadow-[0_1px_3px_rgba(0,0,0,0.35)] font-semibold border border-white/5"
+            ? "bg-[#2b2d31] text-zinc-100 shadow-[0_1px_3px_rgba(0,0,0,0.35)] font-semibold border border-white/5"
             : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03] border border-transparent"
         )}
       >
