@@ -167,6 +167,16 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
+  // OpenRouter (svgl.app official logo)
+  if (key.includes("openrouter")) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} fill="none" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
+        <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#6366F1" />
+        <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="#818CF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+
   return <Sparkles className={`w-5 h-5 text-zinc-400 ${className}`} />
 }
 
@@ -211,6 +221,19 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     rank: 3,
   },
   {
+    id: "openrouter:free",
+    name: "OpenRouter Free",
+    provider: "openrouter",
+    providerDisplay: "OpenRouter (Auto Free)",
+    input_cost: 0.00,
+    output_cost: 0.00,
+    swe_score: 55.4,
+    context_window: 262144,
+    description: "Auto-routed across all discovered free OpenRouter models with zero latency fallback",
+    is_active: false,
+    rank: 4,
+  },
+  {
     id: "gemini-2.5-flash-lite",
     name: "Gemini 2.5 Flash-Lite",
     provider: "google",
@@ -221,7 +244,7 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     context_window: 1000000,
     description: "Ultra-efficient lightweight model for high-frequency tool loops",
     is_active: false,
-    rank: 4,
+    rank: 5,
   },
   {
     id: "gemini-2.5-computer-use",
@@ -234,7 +257,7 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     context_window: 1000000,
     description: "Autonomous GUI navigation, screen understanding, and tool execution",
     is_active: false,
-    rank: 5,
+    rank: 6,
   },
 ]
 
@@ -417,7 +440,7 @@ export function SycordOmniRouterModal({
         showCloseButton={false}
       >
         {/* Uniform Header Bar — Exact match to media_1789746982556.png */}
-        <header className="flex items-center justify-between px-6 sm:px-10 py-5 bg-[#181818] shrink-0 border-b border-[#222226]">
+        <header className="flex items-center justify-between px-6 sm:px-10 py-4 bg-[#181818] shrink-0 border-b border-[#222226]">
           {/* Left: Sycord Logo Icon + Sycord + Divider + AI Router */}
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -431,54 +454,46 @@ export function SycordOmniRouterModal({
             <span className="text-sm text-zinc-400 font-medium">AI Router</span>
           </div>
 
-          {/* Right: Add model button + Close button */}
+          {/* Right: Add model button (Closing 'X' removed per user requirement) */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setShowAddProviderModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-xl border border-[#2e2e34] bg-[#202024] hover:bg-[#28282e] text-xs sm:text-sm font-medium text-zinc-200 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-[#2e2e34] bg-[#202024] hover:bg-[#28282e] text-xs sm:text-sm font-medium text-zinc-200 transition-colors cursor-pointer"
             >
               <span>Add model</span>
-            </button>
-
-            <button
-              onClick={() => onOpenChange(false)}
-              className="h-8 w-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-              title="Close"
-            >
-              <X className="h-5 w-5" />
             </button>
           </div>
         </header>
 
         {/* Scrollable Center Body with Single Unified Background */}
-        <main className="flex-1 overflow-y-auto px-6 sm:px-10 pt-8 pb-[calc(2.5rem+env(safe-area-inset-bottom,2rem))] bg-[#181818] custom-scrollbar">
-          <div className="max-w-xl mx-auto space-y-6">
+        <main className="flex-1 overflow-y-auto px-4 sm:px-8 pt-5 pb-[calc(2rem+env(safe-area-inset-bottom,2rem))] bg-[#181818] custom-scrollbar">
+          <div className="max-w-xl mx-auto space-y-4">
             {/* Title & Subtitle */}
-            <div className="space-y-1.5">
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">Models</h1>
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed font-normal">
+            <div className="space-y-1">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Models</h1>
+              <p className="text-xs sm:text-[13px] text-zinc-400 leading-relaxed font-normal">
                 Browse and compare available AI models with live upward performance telemetry.
               </p>
             </div>
 
             {/* Credit Badge Pill [ ✦ 200 ] */}
-            <div className="pt-1">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-[#2e2e34] bg-[#1d1d21] text-zinc-200 text-xs font-semibold">
+            <div className="pt-0.5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl border border-[#2e2e34] bg-[#1d1d21] text-zinc-200 text-xs font-semibold">
                 <span className="text-zinc-400 text-xs">✦</span>
                 <span className="tabular-nums tracking-wide">{userCredits}</span>
               </div>
             </div>
 
             {/* Search Input Bar (Pure White Background with ⌘ K, no clear x button) */}
-            <div className="relative pt-1">
+            <div className="relative pt-0.5">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-700 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-14 py-2.5 rounded-xl border-0 bg-white text-zinc-950 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-400 shadow-sm transition-all [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-ms-clear]:hidden [&::-ms-reveal]:hidden"
+                className="w-full pl-10 pr-14 py-2 rounded-xl border-0 bg-white text-zinc-950 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-400 shadow-sm transition-all [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-ms-clear]:hidden [&::-ms-reveal]:hidden"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-500 font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 pointer-events-none">
                 <span>⌘</span>
@@ -486,14 +501,14 @@ export function SycordOmniRouterModal({
               </div>
             </div>
 
-            {/* Model List: Exact copy of rows in media_1789746982556.png */}
-            <div className="pt-2 space-y-3">
+            {/* Model List: Compacted rows with grey checkbox */}
+            <div className="pt-1 space-y-1.5">
               {loading && models.length === 0 ? (
-                <div className="py-16 text-center text-xs text-zinc-500 animate-pulse">
+                <div className="py-12 text-center text-xs text-zinc-500 animate-pulse">
                   Loading router models...
                 </div>
               ) : filteredModels.length === 0 ? (
-                <div className="py-16 text-center text-xs text-zinc-500 space-y-3">
+                <div className="py-12 text-center text-xs text-zinc-500 space-y-3">
                   <p>No models connected yet.</p>
                   <button
                     type="button"
@@ -514,30 +529,30 @@ export function SycordOmniRouterModal({
                     <div
                       key={model.id}
                       onClick={() => handleSelectModel(model)}
-                      className="group flex items-center justify-between py-3.5 px-2 rounded-xl transition-colors hover:bg-white/[0.03] cursor-pointer"
+                      className="group flex items-center justify-between py-2 px-3 rounded-xl transition-colors hover:bg-white/[0.04] cursor-pointer"
                     >
                       {/* Left: Brand Icon + Title/Subtitle + Divider + Pricing */}
-                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {/* Provider Brand Logo */}
                         <div className="shrink-0 flex items-center justify-center">
-                          <BrandLogo brand={model.provider || model.name} size={30} />
+                          <BrandLogo brand={model.provider || model.name} size={22} />
                         </div>
 
                         {/* Model Name & Provider Subtitle */}
-                        <div className="min-w-0 pr-2">
-                          <div className="text-[15px] font-semibold text-white truncate leading-tight">
+                        <div className="min-w-0 pr-1.5">
+                          <div className="text-[13px] sm:text-[14px] font-semibold text-white truncate leading-tight">
                             {model.name}
                           </div>
-                          <div className="text-[11px] text-zinc-400 capitalize truncate mt-0.5">
-                            {model.provider || "anthropic"}
+                          <div className="text-[10px] text-zinc-400 capitalize truncate mt-0.5">
+                            {model.providerDisplay || model.provider || "anthropic"}
                           </div>
                         </div>
 
                         {/* Vertical Separator | */}
-                        <div className="h-7 w-[1px] bg-[#333339] mx-3 shrink-0" />
+                        <div className="h-5 w-[1px] bg-[#333339] mx-2 shrink-0" />
 
                         {/* Pricing Block */}
-                        <div className="flex flex-col text-[11px] leading-tight font-medium shrink-0">
+                        <div className="flex flex-col text-[10px] sm:text-[11px] leading-tight font-medium shrink-0">
                           <span className="text-zinc-200">
                             <span className="font-semibold text-white">{inCredit}</span> in credit
                           </span>
@@ -547,16 +562,16 @@ export function SycordOmniRouterModal({
                         </div>
                       </div>
 
-                      {/* Right: Circular Radio Selection Indicator */}
-                      <div className="shrink-0 pl-4">
+                      {/* Right: Grey Checkbox Selection Indicator */}
+                      <div className="shrink-0 pl-3">
                         <div
-                          className={`w-6 h-6 rounded-full border transition-all flex items-center justify-center ${
+                          className={`w-5 h-5 rounded-md border transition-all flex items-center justify-center ${
                             isSelected
-                              ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
-                              : "border-[#383840] group-hover:border-zinc-500"
+                              ? "border-zinc-400 bg-zinc-600/30 text-zinc-200"
+                              : "border-[#383840] bg-transparent group-hover:border-zinc-500"
                           }`}
                         >
-                          {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-zinc-200 stroke-[2.5]" />}
                         </div>
                       </div>
                     </div>

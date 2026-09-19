@@ -3194,7 +3194,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     };
 
     return (
-        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#18191B]' : 'bg-white'}`}>
+        <div className={`relative flex flex-col h-full ${isDark ? 'bg-[#181818]' : 'bg-white'}`}>
             {libraryView === 'skills' && (
                 <div className="absolute inset-0 z-40">
                     <SkillsLibrary
@@ -3267,7 +3267,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                             style={{ WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)', maskImage: 'linear-gradient(to bottom, #000 0%, #000 35%, transparent 75%)' }}
                         />
                         <div
-                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#18191B] via-[#18191B]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
+                            className={`absolute inset-0 ${isDark ? 'bg-gradient-to-b from-[#181818] via-[#181818]/80 to-transparent' : 'bg-gradient-to-b from-white via-white/80 to-transparent'}`}
                         />
                     </div>
 
@@ -3724,7 +3724,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             <span
                                                 key={addon.id}
                                                 className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#18191B] bg-[#1c1d1f]' : 'border-white bg-white'
+                                                    isDark ? 'border-[#181818] bg-[#1c1d1f]' : 'border-white bg-white'
                                                 }`}
                                             >
                                                 <McpBrandIcon
