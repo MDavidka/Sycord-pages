@@ -485,17 +485,17 @@ export function SycordOmniRouterModal({
               </div>
             </div>
 
-            {/* Search Input Bar (Pure White Background with ⌘ K, no clear x button) */}
+            {/* Search Input Bar (Matching #181818 background palette with ⌘ K) */}
             <div className="relative pt-0.5">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-700 pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-14 py-2 rounded-xl border-0 bg-white text-zinc-950 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:ring-2 focus:ring-zinc-400 shadow-sm transition-all [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-ms-clear]:hidden [&::-ms-reveal]:hidden"
+                className="w-full pl-10 pr-14 py-2 rounded-xl border border-[#2e2e34] bg-[#202024] text-zinc-100 placeholder:text-zinc-500 text-xs sm:text-sm font-medium outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 shadow-sm transition-all [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none [&::-ms-clear]:hidden [&::-ms-reveal]:hidden"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-500 font-mono bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 pointer-events-none">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-zinc-400 font-mono bg-[#28282e] px-1.5 py-0.5 rounded border border-[#383840] pointer-events-none">
                 <span>⌘</span>
                 <span>K</span>
               </div>

@@ -118,7 +118,7 @@ export function HomeChat() {
                     onPaste={handlePaste}
                     className={cn(
                         "relative rounded-2xl border transition-colors",
-                        isDark ? 'bg-card border-border' : 'bg-white border-gray-300 shadow-sm'
+                        isDark ? 'bg-[#181818] border-[#28282c] focus-within:border-[#3a3b40]' : 'bg-white border-gray-300 shadow-sm'
                     )}
                 >
                     <input
