@@ -2008,18 +2008,20 @@ export async function handleEditFile(
     }
 
     const path = rawPath.replace(/^\/+/, '');
+    const oldStr = typeof oldContent === 'string' ? oldContent : String(oldContent);
+    const newStr = typeof newContent === 'string' ? newContent : String(newContent);
 
     try {
         const currentContent = await readFileResilient(path);
 
         // Exact match first
-        if (currentContent.includes(oldContent)) {
-            const matches = currentContent.split(oldContent).length - 1;
+        if (currentContent.includes(oldStr)) {
+            const matches = currentContent.split(oldStr).length - 1;
             if (matches > 1) {
                 return `Error editing ${path}: Found ${matches} matches for oldContent. Include more surrounding lines to make it unique.\n\nHint: Add 2-3 extra lines before and after the section you want to change.`;
             }
 
-            const newFileContent = currentContent.replace(oldContent, newContent);
+            const newFileContent = currentContent.replace(oldStr, newStr);
             const pageSync = await persistFile(path, newFileContent);
             if (pageSync.status === 'error') {
                 return `Error saving file ${path} to Pages: ${pageSync.message}`;
@@ -2028,13 +2030,13 @@ export async function handleEditFile(
         }
 
         // Fuzzy match: try trimming whitespace from each line
-        const normalizeWs = (s: string) => s.split('\n').map(l => l.trim()).join('\n');
+        const normalizeWs = (s: string) => s.split('\n').map((l: string) => l.trim()).join('\n');
         const normalizedContent = normalizeWs(currentContent);
-        const normalizedOld = normalizeWs(oldContent);
+        const normalizedOld = normalizeWs(oldStr);
 
         if (normalizedContent.includes(normalizedOld)) {
             // Find the actual content by matching line-by-line
-            const oldLines = oldContent.split('\n').map(l => l.trim());
+            const oldLines = oldStr.split('\n').map((l: string) => l.trim());
             const contentLines = currentContent.split('\n');
             let startIdx = -1;
 
@@ -2054,7 +2056,7 @@ export async function handleEditFile(
 
             if (startIdx !== -1) {
                 const actualOld = contentLines.slice(startIdx, startIdx + oldLines.length).join('\n');
-                const newFileContent = currentContent.replace(actualOld, newContent);
+                const newFileContent = currentContent.replace(actualOld, newStr);
                 const pageSync = await persistFile(path, newFileContent);
                 if (pageSync.status === 'error') {
                     return `Error saving file ${path} to Pages: ${pageSync.message}`;
