@@ -81,7 +81,7 @@ export function ProjectDashboardCard({
   const resolvedIcon = profileImage || (isAstro ? "/astro-icon.png" : "/logo.png")
 
   return (
-    <div className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[20px] bg-[#1e1f22]/90 hover:bg-[#25272c] border border-[#2b2d31] hover:border-[#3b3e45] text-white p-5 transition-all duration-200 shadow-sm hover:shadow-md">
+    <div className="group relative flex items-center justify-between rounded-[18px] sm:rounded-[20px] bg-[#17181b] hover:bg-[#1e1f22] border border-[#262830] hover:border-[#33363e] text-white p-5 transition-all duration-200 shadow-[0_1px_3px_rgba(0,0,0,0.4)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
       {/* Clickable primary area */}
       <Link
         href={`/dashboard/sites/${projectId}`}
@@ -92,7 +92,7 @@ export function ProjectDashboardCard({
       {/* Main Content: Icon + Info */}
       <div className="relative z-10 flex items-center gap-3.5 min-w-0">
         {/* Project Icon container (48-52px) */}
-        <div className="h-12 w-12 rounded-[14px] bg-[#18191c] border border-[#2e3035] flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+        <div className="h-12 w-12 rounded-[13px] bg-[#111214] border border-[#272930] flex items-center justify-center shrink-0 overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
           {resolvedIcon ? (
             <img
               src={resolvedIcon}
@@ -110,7 +110,7 @@ export function ProjectDashboardCard({
         </div>
 
         <div className="flex flex-col min-w-0">
-          <h3 className="text-[17px] sm:text-[18px] font-semibold text-zinc-100 truncate group-hover:text-primary transition-colors leading-snug">
+          <h3 className="text-[15px] sm:text-[16px] font-semibold text-zinc-100 truncate group-hover:text-white transition-colors leading-snug tracking-[-0.01em]">
             {businessName}
           </h3>
           <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
@@ -119,11 +119,11 @@ export function ProjectDashboardCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-[13px] sm:text-[14px] text-zinc-400 hover:text-zinc-200 transition-colors truncate flex items-center gap-1 leading-snug z-20"
+              className="text-[12.5px] text-zinc-500 hover:text-zinc-300 transition-colors truncate flex items-center gap-1 leading-snug z-20"
               title={displayDomain}
             >
               <span>{displayDomain}</span>
-              <ExternalLink className="h-3 w-3 opacity-60 shrink-0" />
+              <ExternalLink className="h-3 w-3 opacity-50 shrink-0" />
             </a>
           </div>
         </div>
@@ -136,17 +136,17 @@ export function ProjectDashboardCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors"
+              className="h-8 w-8 rounded-lg text-zinc-600 hover:text-zinc-200 hover:bg-[#2b2d31] transition-colors opacity-0 group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40 bg-[#1c1d21] border-[#2c2d33] text-zinc-200 z-50">
+          <DropdownMenuContent align="end" className="w-40 bg-[#17181b] border-[#2b2d31] text-zinc-200 z-50">
             <DropdownMenuItem asChild>
               <Link
                 href={`/dashboard/sites/${projectId}`}
-                className="cursor-pointer flex items-center gap-2 text-sm"
+                className="cursor-pointer flex items-center gap-2 text-sm hover:bg-[#2b2d31] focus:bg-[#2b2d31]"
               >
                 <Settings className="h-3.5 w-3.5" />
                 <span>Settings</span>
