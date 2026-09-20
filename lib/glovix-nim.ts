@@ -42,6 +42,13 @@ export function resolveNimModel(model?: string): string {
   let id = model.trim()
   if (id.startsWith("nim/")) {
     id = id.slice(4)
+  } else if (id.startsWith("nim:")) {
+    id = id.slice(4)
+  } else if (id.startsWith("nvidia:")) {
+    id = `nvidia/${id.slice(7)}`
+  }
+  if (id === "nemotron-3-super" || id === "nvidia/nemotron-3-super") {
+    id = "nvidia/nemotron-4-340b-instruct"
   }
   return id || NIM_DEFAULT_MODEL
 }
@@ -51,7 +58,10 @@ export function isNimModelId(model?: string): boolean {
   const lower = model.toLowerCase().trim()
   return (
     lower.startsWith("nim/") ||
+    lower.startsWith("nim:") ||
     lower.startsWith("nvidia/") ||
+    lower.startsWith("nvidia:") ||
+    lower.includes("nemotron") ||
     lower.startsWith("meta/llama-3") ||
     lower.startsWith("mistralai/mistral-large") ||
     lower.startsWith("deepseek-ai/deepseek-r1") ||
