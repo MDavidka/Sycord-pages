@@ -1610,11 +1610,27 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
                     void syncPendingQuestions(projectId, controller.signal);
 
+                    // Check sessionStorage for instant cursor before network lookup
+                    let cachedTursoId = knownTursoId;
+                    let cachedEventId = highestEventId;
+                    try {
+                        if (typeof window !== 'undefined' && projectId) {
+                            const raw = sessionStorage.getItem(`syra_session_${projectId}`);
+                            if (raw) {
+                                const parsed = JSON.parse(raw);
+                                if (parsed?.tursoSessionId) {
+                                    cachedTursoId = parsed.tursoSessionId;
+                                    cachedEventId = Math.max(cachedEventId, Number(parsed.highestEventId) || 0);
+                                }
+                            }
+                        }
+                    } catch {}
+
                     const resumed = await resumeProjectAgent({
                         projectId,
-                        tursoSessionId: knownTursoId || undefined,
-                        afterEventId: lastLooksIncomplete ? highestEventId : 0,
-                        allowCompleted: Boolean(knownTursoId),
+                        tursoSessionId: cachedTursoId || undefined,
+                        afterEventId: lastLooksIncomplete ? cachedEventId : 0,
+                        allowCompleted: Boolean(cachedTursoId),
                         signal: controller.signal,
                         onEvent: applyEvent,
                     });
@@ -1634,10 +1650,20 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         assistantContent ||= 'Done.';
                         if (!replayHistoryOnly) updateLastMessage(assistantContent);
                         markAgentTimelineLoaded();
+                        try {
+                            if (typeof window !== 'undefined' && projectId) {
+                                sessionStorage.removeItem(`syra_session_${projectId}`);
+                            }
+                        } catch {}
                     } else if (!completed && resumed.status === 'stopped') {
                         completed = true;
                         if (!replayHistoryOnly && !assistantContent) updateLastMessage('Stopped.');
                         markAgentTimelineLoaded();
+                        try {
+                            if (typeof window !== 'undefined' && projectId) {
+                                sessionStorage.removeItem(`syra_session_${projectId}`);
+                            }
+                        } catch {}
                     }
 
                     if (errorText && !completed) {
@@ -1672,11 +1698,11 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     setCurrentThinking('');
                     setThinkingStartTime(null);
                     if (!cancelled) {
-                        setTimeout(() => replaceActions([], false), 500);
+                        setTimeout(() => replaceActions([], false), 300);
                     }
                 }
             })();
-        }, 700);
+        }, 100);
 
         return () => {
             cancelled = true;
@@ -1725,6 +1751,16 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                 if (tursoSessionId) lastMessage.tursoSessionId = tursoSessionId;
                 setMessages([...state.messages]);
             }
+            try {
+                if (typeof window !== 'undefined' && projectId && tursoSessionId) {
+                    sessionStorage.setItem(`syra_session_${projectId}`, JSON.stringify({
+                        tursoSessionId,
+                        activeSession,
+                        highestEventId,
+                        updatedAt: Date.now(),
+                    }));
+                }
+            } catch {}
         };
 
         const applyEvent = (event: ProjectAgentEvent) => {
@@ -3354,188 +3390,47 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         </div>
                     )}
 
-                    {groupedMessages.map((group, idx) => (
-                        <div key={idx} className="space-y-3 animate-fade-in-up">
-                            {group.role === 'assistant' && group.thinking && !group.segments?.some(s => s.type === 'thinking') && (
-                                <ThinkingBlock
-                                    thinking={group.thinking}
-                                    isDark={isDark}
-                                    thinkingTime={group.thinkingDuration || undefined}
-                                    startTime={idx === groupedMessages.length - 1 && isRunning ? thinkingStartTime : undefined}
-                                />
-                            )}
+                    {groupedMessages.map((group, idx) => {
+                        const isLastGroup = idx === groupedMessages.length - 1;
+                        const isLiveTurn = isRunning && isLastGroup;
 
-                            {group.role === 'assistant' && group.agentActions && group.agentActions.length > 0 && !group.segments?.some(s => s.type === 'tools') && (
-                                <ActionsList
-                                    actions={idx === groupedMessages.length - 1 && isRunning && actions.length > 0 ? actions : group.agentActions}
-                                    isLive={idx === groupedMessages.length - 1 && isRunning}
-                                    isDark={isDark}
-                                />
-                            )}
+                        // For assistant messages, extract the latest text content across segments or direct content
+                        let assistantText = '';
+                        if (group.role === 'assistant') {
+                            if (group.segments && group.segments.length > 0) {
+                                // Gather all text segment content
+                                const textSegs = group.segments.filter(s => s.type === 'text' && s.content);
+                                if (textSegs.length > 0) {
+                                    assistantText = textSegs.map(s => typeof s.content === 'string' ? s.content : '').filter(Boolean).join('\n\n');
+                                }
+                            }
+                            if (!assistantText && group.content) {
+                                assistantText = typeof group.content === 'string' ? group.content : '';
+                            }
+                        }
 
-                            {group.role === 'user' && group.attachments && group.attachments.length > 0 && (
-                                <div className="flex justify-end mb-1">
-                                    <div className="flex flex-col gap-1.5">
-                                        {group.attachments.map((file, i) => (
-                                            <FileAttachmentBlock key={i} file={file} isDark={isDark} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                        const questionSeg = group.role === 'assistant' && group.segments?.find(s => s.type === 'question' && s.question);
+                        const question = questionSeg ? questionSeg.question : undefined;
 
-                            {/* Render segments in order for assistant messages */}
-                            {group.role === 'assistant' && group.segments && group.segments.length > 0 ? (
-                                <div className="space-y-3">
-                                    {group.segments.map((seg, segIdx) => {
-                                        if (seg.type === 'thinking') {
-                                            return (
-                                                <div key={`seg-thinking-${segIdx}`} className="flex items-start gap-3">
-                                                    <AstroAvatar className="mt-1" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <ThinkingBlock
-                                                            thinking={seg.thinking || ''}
-                                                            isDark={isDark}
-                                                            thinkingTime={seg.thinkingDuration}
-                                                            startTime={isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1 ? thinkingStartTime : undefined}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'question' && seg.question) {
-                                            return (
-                                                <div key={`seg-q-${segIdx}`} className="flex items-start gap-3 my-2.5">
-                                                    <AstroAvatar className="mt-1" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <AgentQuestionCard
-                                                            question={seg.question}
-                                                            isDark={isDark}
-                                                            submitting={questionSubmitting}
-                                                            error={questionError}
-                                                            onSubmit={handleAgentQuestionSubmit}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'text' && seg.content) {
-                                            const textContent = typeof seg.content === 'string' ? seg.content : '';
-                                            if (!textContent) return null;
-                                            const isLiveSeg = isRunning && idx === groupedMessages.length - 1 && segIdx === group.segments!.length - 1;
-                                            return (
-                                                <div key={`seg-${segIdx}`} className="flex items-start gap-3 max-w-full">
-                                                    <AstroAvatar className="mt-0.5" />
-                                                    <div className="flex-1 min-w-0 max-w-[680px]">
-                                                        <StreamingResponse
-                                                            status={isLiveSeg ? 'streaming' : 'complete'}
-                                                            copyText={textContent}
-                                                            showActions={!isLiveSeg}
-                                                            className="w-full"
-                                                        >
-                                                            <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] w-full max-w-full overflow-hidden break-words font-normal ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
-                                                                {renderAssistantMarkdown(textContent)}
-                                                            </div>
-                                                        </StreamingResponse>
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        if (seg.type === 'tools') {
-                                            const isLastSegment = segIdx === group.segments!.length - 1;
-                                            const showLive = isRunning && isLastSegment && idx === groupedMessages.length - 1 && actions.length > 0;
-                                            const segActions = showLive
-                                                ? actions.filter(a => a.toolName !== 'drawDiagram')
-                                                : (seg.actions && seg.actions.length > 0
-                                                    ? seg.actions.filter(a => a.toolName !== 'drawDiagram')
-                                                    : (seg.toolCalls && seg.toolCalls.length > 0
-                                                        ? seg.toolCalls.filter(tc => tc.call.function.name !== 'drawDiagram').map((tc, i) => ({
-                                                            id: `completed_${idx}_${segIdx}_${i}`,
-                                                            toolName: tc.call.function.name,
-                                                            displayName: getActionDisplayName(tc.call.function.name, tc.call.function.arguments || ''),
-                                                            status: tc.result?.startsWith('Error') ? 'error' as const : 'done' as const,
-                                                            result: tc.result,
-                                                            args: tc.call.function.arguments || ''
-                                                        }))
-                                                        : []));
-
-                                            if (segActions.length === 0) return null;
-                                            return (
-                                                <div key={`seg-${segIdx}`} className="flex items-start gap-3">
-                                                    <AstroAvatar className="mt-1" />
-                                                    <div className="flex-1 min-w-0">
-                                                        <ActionsList
-                                                            actions={segActions}
-                                                            isLive={showLive}
-                                                            isDark={isDark}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
-                                        return null;
-                                    })}
-                                    {/* Live actions if no segments have tools yet */}
-                                    {isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && !group.segments.some(s => s.type === 'tools') && (
-                                        <div className="flex items-start gap-3">
-                                            <AstroAvatar className="mt-1" />
-                                            <div className="flex-1 min-w-0">
-                                                <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <MessageMetaFooter
-                                        content={group.content}
-                                        createdAt={group.createdAt}
-                                        isDark={isDark}
-                                        hide={idx === groupedMessages.length - 1 && isRunning}
-                                        group={group}
-                                        projectId={hostProjectIdForSlash || undefined}
-                                        chatId={currentChatId || undefined}
-                                        selectedModel={selectedModel}
-                                        effortLevel={effortLevel}
-                                    />
-                                </div>
-                            ) : (
-                                <>
-                                    {/* Fallback: user messages or assistant without segments */}
-                                    <div className={`flex ${group.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        {group.role === 'assistant' ? (
-                                            <div className="flex items-start gap-3 w-full">
-                                                <AstroAvatar className="mt-0.5" />
-                                                <div className="flex-1 min-w-0 max-w-[680px]">
-                                                    <StreamingResponse
-                                                        status={idx === groupedMessages.length - 1 && isRunning ? 'streaming' : 'complete'}
-                                                        copyText={typeof group.content === 'string' ? group.content : ''}
-                                                        showActions={!(idx === groupedMessages.length - 1 && isRunning)}
-                                                        className="w-full"
-                                                    >
-                                                        <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] max-w-full font-normal ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
-                                                            {group.content && (
-                                                                <div className={`prose prose-sm max-w-none w-full break-words overflow-hidden ${isDark ? 'prose-invert prose-pre:bg-[#111] prose-pre:border prose-pre:border-white/[0.04] prose-pre:rounded-lg prose-code:text-[#e5e5e5]' : 'prose-pre:bg-gray-50 prose-pre:border prose-pre:border-gray-200 prose-pre:rounded-lg'}`}>
-                                                                    {Array.isArray(group.content) ? (
-                                                                        <div className="space-y-2">
-                                                                            {group.content.map((part, i) => {
-                                                                                if (part.type === 'image_url') {
-                                                                                    return <img key={i} src={part.image_url.url} alt="" className="max-w-full rounded-lg max-h-[250px] object-contain" />;
-                                                                                }
-                                                                                return <React.Fragment key={i}>{renderAssistantMarkdown(part.text)}</React.Fragment>;
-                                                                            })}
-                                                                        </div>
-                                                                    ) : (
-                                                                        renderAssistantMarkdown(String(group.content || ''))
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </StreamingResponse>
+                        return (
+                            <div key={idx} className="space-y-3 animate-fade-in-up">
+                                {group.role === 'user' && (
+                                    <>
+                                        {group.attachments && group.attachments.length > 0 && (
+                                            <div className="flex justify-end mb-1">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {group.attachments.map((file, i) => (
+                                                        <FileAttachmentBlock key={i} file={file} isDark={isDark} />
+                                                    ))}
                                                 </div>
                                             </div>
-                                        ) : (
+                                        )}
+                                        <div className="flex justify-end">
                                             <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
                                                 <div
                                                     className={`text-[15px] leading-relaxed break-words ${
                                                         isDark
-                                                            ? 'bg-[#1e1f22] text-zinc-100 rounded-[20px] px-4 py-3 border border-[#2b2d31] shadow-sm'
+                                                            ? 'bg-[#181818] text-zinc-100 rounded-[20px] px-4 py-3 border border-white/[0.08] shadow-sm'
                                                             : 'bg-zinc-100 text-zinc-900 rounded-[20px] px-4 py-3 border border-zinc-200/80 shadow-sm'
                                                     }`}
                                                 >
@@ -3578,66 +3473,110 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                                     </span>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
-                                    {/* Live actions for assistant without segments */}
-                                    {group.role === 'assistant' && isRunning && idx === groupedMessages.length - 1 && actions.length > 0 && !group.agentActions?.length && (
-                                        <div className="flex items-start gap-3">
-                                            <AstroAvatar className="mt-1" />
-                                            <div className="flex-1 min-w-0">
-                                                <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
-                                            </div>
                                         </div>
-                                    )}
-                                    {group.role === 'assistant' && (
-                                        <MessageMetaFooter
-                                            content={group.content}
-                                            createdAt={group.createdAt}
-                                            isDark={isDark}
-                                            hide={idx === groupedMessages.length - 1 && isRunning}
-                                            group={group}
-                                            projectId={hostProjectIdForSlash || undefined}
-                                            chatId={currentChatId || undefined}
-                                            selectedModel={selectedModel}
-                                            effortLevel={effortLevel}
-                                        />
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    ))}
+                                    </>
+                                )}
 
-                    {/* Live Thinking - only when there's no assistant message yet or its thinking isn't set */}
-                    {isRunning && currentThinking && !isSystemProcessingText(currentThinking) && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant' || !groupedMessages[groupedMessages.length - 1].thinking) && (
-                        <div className="flex items-start gap-3">
-                            <AstroAvatar className="mt-1" />
-                            <div className="flex-1 min-w-0">
-                                <ThinkingBlock thinking={currentThinking} isDark={isDark} thinkingTime={thinkingDuration || undefined} startTime={thinkingStartTime} />
+                                {group.role === 'assistant' && (
+                                    <div className="flex items-start gap-3 w-full">
+                                        <AstroAvatar className="mt-0.5 shrink-0" />
+                                        <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                            {/* Interactive question if present */}
+                                            {question && (
+                                                <div className="my-2">
+                                                    <AgentQuestionCard
+                                                        question={question}
+                                                        isDark={isDark}
+                                                        submitting={questionSubmitting}
+                                                        error={questionError}
+                                                        onSubmit={handleAgentQuestionSubmit}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Non-permanent live thinking indicator */}
+                                            {isLiveTurn && currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) && (
+                                                <ThinkingBlock
+                                                    thinking={currentThinking}
+                                                    isDark={isDark}
+                                                    startTime={thinkingStartTime}
+                                                    effortLevel={effortLevel}
+                                                />
+                                            )}
+
+                                            {/* Live single active tool indicator */}
+                                            {isLiveTurn && actions.length > 0 && (
+                                                <ActionsList
+                                                    actions={actions.filter(a => a.toolName !== 'drawDiagram')}
+                                                    isLive={true}
+                                                    isDark={isDark}
+                                                />
+                                            )}
+
+                                            {/* Unified permanent assistant text response */}
+                                            {assistantText ? (
+                                                <StreamingResponse
+                                                    status={isLiveTurn ? 'streaming' : 'complete'}
+                                                    copyText={assistantText}
+                                                    showActions={!isLiveTurn}
+                                                    className="w-full"
+                                                >
+                                                    <div className={`text-[15.5px] sm:text-[16px] leading-[1.6] max-w-full font-normal break-words overflow-hidden ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                                                        {renderAssistantMarkdown(assistantText)}
+                                                    </div>
+                                                </StreamingResponse>
+                                            ) : isLiveTurn && (!actions.length || actions.length === 0) && (!currentThinking || isSystemProcessingText(currentThinking)) ? (
+                                                <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                                    <Marker role="status" className="px-0">
+                                                        <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
+                                                    </Marker>
+                                                </div>
+                                            ) : null}
+
+                                            <MessageMetaFooter
+                                                content={assistantText || group.content}
+                                                createdAt={group.createdAt}
+                                                isDark={isDark}
+                                                hide={isLiveTurn}
+                                                group={group}
+                                                projectId={hostProjectIdForSlash || undefined}
+                                                chatId={currentChatId || undefined}
+                                                selectedModel={selectedModel}
+                                                effortLevel={effortLevel}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        );
+                    })}
 
-                    {/* Live Actions - only show here if there's no assistant message group yet */}
-                    {isRunning && actions.length > 0 && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
-                        <div className="flex items-start gap-3">
-                            <AstroAvatar className="mt-1" />
-                            <div className="flex-1 min-w-0">
-                                <ActionsList actions={actions.filter(a => a.toolName !== 'drawDiagram')} isLive={true} isDark={isDark} />
+                    {/* Live Thinking/Action fallback when no assistant message in list yet */}
+                    {isRunning && (!groupedMessages.length || groupedMessages[groupedMessages.length - 1].role !== 'assistant') && (
+                        <div className="flex items-start gap-3 w-full">
+                            <AstroAvatar className="mt-0.5 shrink-0" />
+                            <div className="flex-1 min-w-0 max-w-[680px] space-y-2">
+                                {currentThinking && effortLevel !== 'low' && !isSystemProcessingText(currentThinking) ? (
+                                    <ThinkingBlock
+                                        thinking={currentThinking}
+                                        isDark={isDark}
+                                        startTime={thinkingStartTime}
+                                        effortLevel={effortLevel}
+                                    />
+                                ) : actions.length > 0 ? (
+                                    <ActionsList
+                                        actions={actions.filter(a => a.toolName !== 'drawDiagram')}
+                                        isLive={true}
+                                        isDark={isDark}
+                                    />
+                                ) : (
+                                    <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-0.5">
+                                        <Marker role="status" className="px-0">
+                                            <MarkerContent className="shimmer text-zinc-400">Thinking...</MarkerContent>
+                                        </Marker>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Inline shimmer while waiting / after durable accept — replaces big system badge + bounce dots */}
-                    {isRunning && (!currentThinking || isSystemProcessingText(currentThinking)) && actions.length === 0 && (
-                        !groupedMessages.length ||
-                        groupedMessages[groupedMessages.length - 1].role === 'user' ||
-                        (groupedMessages[groupedMessages.length - 1].role === 'assistant' && !groupedMessages[groupedMessages.length - 1].content && !groupedMessages[groupedMessages.length - 1].thinking)
-                    ) && (
-                        <div className="flex items-center gap-3 animate-fade-in-up">
-                            <AstroAvatar className="h-7 w-7" />
-                            <Marker role="status" className="px-1">
-                                <MarkerContent className="shimmer">Thinking...</MarkerContent>
-                            </Marker>
                         </div>
                     )}
 
@@ -3810,7 +3749,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         {/* Composer — full size by default; minimized when AI asks a question */}
                         <div className={`rounded-[24px] border px-2.5 transition-colors ${
                             pendingQuestion ? 'py-1.5' : 'pt-1.5 pb-2'
-                        } ${isDark ? 'bg-[#1e1f22] border-[#2b2d31] focus-within:border-[#3b3e45] shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
+                        } ${isDark ? 'bg-[#151515] border-white/[0.08] focus-within:border-white/20 shadow-sm' : 'bg-white border-gray-200 shadow-sm focus-within:border-gray-300'}`}>
                             {!pendingQuestion && (
                                 <textarea
                                     ref={textareaRef}
@@ -3858,7 +3797,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <button
                                             type="button"
                                             aria-label="Slash commands"
-                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-[#35373c] text-zinc-400 hover:text-white hover:bg-white/5' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
+                                            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors active:scale-95 ${isDark ? 'border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.05]' : 'border-gray-300 text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}
                                         >
                                             <Slash className="h-3.5 w-3.5" />
                                         </button>
@@ -3866,7 +3805,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                     <DropdownMenuContent
                                         side="top"
                                         align="start"
-                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-[#2b2d31] bg-[#1e1f22] text-[#e5e5e5]' : ''}`}
+                                        className={`w-[min(92vw,17.5rem)] ${isDark ? 'border-white/[0.08] bg-[#181818] text-zinc-200' : ''}`}
                                     >
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
@@ -3890,7 +3829,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             File upload
                                             <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/file</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2b2d31]' : undefined} />
+                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {
@@ -3913,7 +3852,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                             Integrations
                                             <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>/integrations</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator className={isDark ? 'bg-[#2b2d31]' : undefined} />
+                                        <DropdownMenuSeparator className={isDark ? 'bg-white/[0.08]' : undefined} />
                                         <DropdownMenuItem
                                             className="gap-2.5 text-[13px]"
                                             onSelect={() => {
@@ -4157,45 +4096,22 @@ function isSystemProcessingText(text: string): boolean {
     );
 }
 
-function ThinkingBlock({ thinking, isDark, thinkingTime, startTime }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null }) {
-    const [elapsed, setElapsed] = useState(0);
-
-    useEffect(() => {
-        if (startTime && !thinkingTime) {
-            // Initial calc
-            setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-
-            const interval = setInterval(() => {
-                setElapsed(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
-            }, 1000);
-            return () => clearInterval(interval);
-        }
-    }, [startTime, thinkingTime]);
-
+function ThinkingBlock({ thinking, isDark, thinkingTime, startTime, effortLevel }: { thinking: string; isDark: boolean; thinkingTime?: number, startTime?: number | null; effortLevel?: string }) {
+    if (effortLevel === 'low') return null;
     if (!thinking || isSystemProcessingText(thinking)) return null;
 
-    // Use finalized time if available, otherwise live elapsed time
-    const displayTime = thinkingTime !== undefined ? thinkingTime : (startTime ? elapsed : 0);
     const isLive = Boolean(startTime) && thinkingTime === undefined;
 
-    const activityItems: AgentActivityItem[] = [
-        {
-            id: 'thinking-stream',
-            type: 'text',
-            content: thinking,
-        },
-    ];
+    if (isLive) {
+        return (
+            <div className="flex items-center gap-2 text-[13.5px] text-zinc-400 select-none py-1 animate-fade-in">
+                <Brain className="size-4 text-zinc-400 shrink-0 animate-pulse" />
+                <span className="font-normal text-zinc-400">Thinking…</span>
+            </div>
+        );
+    }
 
-    return (
-        <div className="mb-3 animate-fade-in px-1">
-            <AgentActivity
-                items={activityItems}
-                status={isLive ? 'working' : 'complete'}
-                duration={displayTime}
-                activeLabel="Reasoning…"
-            />
-        </div>
-    );
+    return null;
 }
 
 function FileAttachmentBlock({ file, isDark }: { file: FileAttachment; isDark: boolean }) {
