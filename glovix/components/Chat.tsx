@@ -1266,6 +1266,28 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // Fallback resolution when the agent finishes without a direct assistant text message
+    const resolveFallbackAssistantContent = (actions: StreamingAction[], currentContent: string): string => {
+        if (currentContent && currentContent.trim() && currentContent.trim() !== 'Done.') {
+            return currentContent;
+        }
+        // Look for rich results from completed actions
+        for (let i = actions.length - 1; i >= 0; i--) {
+            const action = actions[i];
+            const res = action?.result;
+            if (typeof res === 'string' && res.trim() && res.trim() !== 'Done.') {
+                // If it's a JSON array or object, or long text (e.g. repo list, search result)
+                return res.trim();
+            }
+        }
+        // Check if there was an action displayName / label describing what was performed
+        const lastAction = actions[actions.length - 1];
+        if (lastAction?.displayName && lastAction.displayName !== 'Agent tool' && lastAction.displayName !== 'Action') {
+            return `Completed ${lastAction.displayName}.`;
+        }
+        return 'Done.';
+    };
+
     // When returning to a host project chat, resume any open Turso agent turn
     // so previous activity is reloaded from the durable database.
     const agentResumeKeyRef = useRef<string | null>(null);
@@ -1574,7 +1596,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                 if (!assistantContent && event.text) {
                                     assistantContent = event.text;
                                 }
-                                assistantContent = assistantContent || 'Done.';
+                                assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                                 if (!replayHistoryOnly) updateLastMessage(assistantContent);
                                 completed = true;
                                 clearPendingQuestion();
@@ -1647,7 +1669,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     // streaming forever or render a false interruption error.
                     if (!completed && resumed.status === 'completed') {
                         completed = true;
-                        assistantContent ||= 'Done.';
+                        assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                         if (!replayHistoryOnly) updateLastMessage(assistantContent);
                         markAgentTimelineLoaded();
                         try {
@@ -2092,7 +2114,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                     if (!assistantContent && doneText) {
                         assistantContent = doneText;
                     }
-                    assistantContent = assistantContent || 'Done.';
+                    assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                     updateLastMessage(assistantContent);
                     completed = true;
                     clearPendingQuestion();
@@ -2166,7 +2188,7 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
             // status before declaring the response incomplete.
             if (!completed && result.status === 'completed') {
                 completed = true;
-                assistantContent ||= 'Done.';
+                assistantContent = resolveFallbackAssistantContent(actionsRef.current, assistantContent);
                 updateLastMessage(assistantContent);
                 clearPendingQuestion();
                 markAgentTimelineLoaded();
@@ -3220,11 +3242,10 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
     // safe-area aware spacing. The host injects the real Google avatar + a back
     // handler via window globals (see GlovixBuilder).
     const embedded = typeof window !== 'undefined' && !!getHostProjectId();
-    const onSyraIsolatedShell = typeof window !== 'undefined' && window.location.pathname.includes('/syra');
     const hostUserImage = typeof window !== 'undefined' ? ((window as any).__glovixUserImage as string | undefined) : undefined;
     const hostProjectName = typeof window !== 'undefined' ? ((window as any).__glovixProjectName as string | undefined) : undefined;
-    // External avatar URLs break require-corp isolation on Safari — use initials on /syra.
-    const profileImage = onSyraIsolatedShell ? undefined : (hostUserImage || user?.photoURL);
+    // Prefer host-injected user avatar (Google profile picture) or user photoURL
+    const profileImage = hostUserImage || user?.photoURL;
     const handleBack = () => {
         const fn = typeof window !== 'undefined' ? (window as any).__glovixOnBack : undefined;
         if (typeof fn === 'function') fn();
@@ -3318,12 +3339,12 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                         className="pointer-events-auto relative mx-auto flex h-16 max-w-[760px] items-center justify-between px-4 sm:px-6"
                         style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}
                     >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0 z-10 relative">
                             <button
                                 type="button"
                                 onClick={handleBack}
                                 aria-label="Toggle Sidebar or Go Back"
-                                className={`flex size-9 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'text-white/80 hover:bg-white/[0.08] hover:text-white' : 'text-gray-700 hover:bg-black/[0.05] hover:text-gray-900'}`}
+                                className={`relative z-10 flex size-9 items-center justify-center rounded-xl transition-all active:scale-95 ${isDark ? 'text-white/80 hover:bg-white/10 hover:text-white backdrop-blur-sm' : 'text-gray-700 hover:bg-black/[0.08] hover:text-gray-900 backdrop-blur-sm'}`}
                             >
                                 <PanelLeft className="size-5" strokeWidth={1.8} />
                             </button>
@@ -3709,40 +3730,6 @@ export function Chat({ scrollRef, onScroll, onOpenPreview, showPreviewButton = f
                                         <X className="w-3 h-3" />
                                     </button>
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Connected integrations pill — dashed status chip above composer */}
-                        {connectedMcps.length > 0 && (
-                            <div className="flex justify-start px-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setLibraryView('mcp')}
-                                    className={`inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 transition-colors ${
-                                        isDark
-                                            ? 'border-[#4a4b4e] bg-transparent text-[#9a9b9e] hover:border-[#6b6c6f] hover:text-[#c5c6c9]'
-                                            : 'border-gray-300 bg-transparent text-gray-500 hover:border-gray-400 hover:text-gray-700'
-                                    }`}
-                                    aria-label="Connected integrations"
-                                >
-                                    <span className="flex items-center -space-x-1">
-                                        {connectedMcps.map((addon) => (
-                                            <span
-                                                key={addon.id}
-                                                className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                                                    isDark ? 'border-[#181818] bg-[#1c1d1f]' : 'border-white bg-white'
-                                                }`}
-                                            >
-                                                <McpBrandIcon
-                                                    id={addon.id}
-                                                    name={addon.name}
-                                                    className="h-3.5 w-3.5 text-[#e5e5e5]"
-                                                />
-                                            </span>
-                                        ))}
-                                    </span>
-                                    <span className="text-[12px] leading-none tracking-tight">connected</span>
-                                </button>
                             </div>
                         )}
 

@@ -213,7 +213,7 @@ const SidebarBottom = ({
   onClose,
 }: {
   userInitials: string
-  session?: { user?: { name?: string } }
+  session?: { user?: { name?: string; image?: string } }
   subscription?: string
   planCredit?: number
   onManageAccess?: () => void
@@ -225,16 +225,34 @@ const SidebarBottom = ({
         onClick={() => { onClose(); onManageAccess() }}
         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.09] transition-colors"
       >
-        <span className="h-7 w-7 rounded-full bg-purple-500 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
-          {userInitials.charAt(0)}
+        <span className="h-7 w-7 rounded-full bg-purple-500 flex items-center justify-center text-[11px] font-bold text-white shrink-0 overflow-hidden">
+          {session?.user?.image ? (
+            <img
+              src={session.user.image}
+              alt={session.user.name || "User"}
+              referrerPolicy="no-referrer"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            userInitials.charAt(0)
+          )}
         </span>
         <span className="text-sm font-medium text-white/80">Manage access</span>
       </button>
     )}
 
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04] transition-colors">
-      <div className="h-8 w-8 rounded-lg bg-white/[0.08] flex items-center justify-center text-[11px] font-bold text-white/70 shrink-0">
-        {userInitials}
+      <div className="h-8 w-8 rounded-lg bg-white/[0.08] flex items-center justify-center text-[11px] font-bold text-white/70 shrink-0 overflow-hidden">
+        {session?.user?.image ? (
+          <img
+            src={session.user.image}
+            alt={session.user.name || "User"}
+            referrerPolicy="no-referrer"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          userInitials
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white/90 truncate leading-tight">
@@ -423,8 +441,17 @@ export function AnimatedRollingSidebarDesktop({
             transition={{ duration: 0.15 }}
             className="p-3 flex justify-center border-t border-white/[0.06]"
           >
-            <div className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white">
-              {userInitials}
+            <div className="h-9 w-9 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white overflow-hidden">
+              {session?.user?.image ? (
+                <img
+                  src={session.user.image}
+                  alt={session.user.name || "User"}
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                userInitials
+              )}
             </div>
           </motion.div>
         )}

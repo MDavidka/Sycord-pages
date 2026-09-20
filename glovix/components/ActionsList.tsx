@@ -30,6 +30,7 @@ import { SubagentTool } from '@/components/agent-elements/tools/subagent-tool';
 import { PlanTool } from '@/components/agent-elements/tools/plan-tool';
 import { SpiralLoader } from '@/components/agent-elements/spiral-loader';
 import { Markdown } from '@/components/agent-elements/markdown';
+import { McpBrandIcon } from './McpBrandIcons';
 import type { GenerationPlan } from '../lib/generation-plan';
 import type { ActionMarkData } from '../lib/project-agent';
 import { useStore } from '../store';
@@ -121,13 +122,65 @@ export function resolveActionMark(action: StreamingAction): ActionMarkData | nul
         };
     }
 
-    // 2. Connecting to github
-    if (name.includes('git') || cmd.startsWith('git ') || cmd.includes('git clone') || cmd.includes('git commit') || cmd.includes('git push')) {
+    // 2. Integration / MCP tools
+    if (name.includes('gmail') || cmd.includes('gmail') || name.includes('email') || name.includes('mail')) {
+        const isDraftOrSend = name.includes('send') || name.includes('draft') || cmd.includes('send') || cmd.includes('draft');
+        return {
+            kind: 'gmail',
+            label: isDraftOrSend ? 'drafting email' : 'checking your emails',
+            detail: String(args.query || args.subject || args.to || 'Gmail'),
+            badge: 'gmail',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('git') || cmd.startsWith('git ') || cmd.includes('git clone') || cmd.includes('git commit') || cmd.includes('git push') || name.includes('github')) {
+        const isRepoList = name.includes('repo') || cmd.includes('repo') || name.includes('list');
         return {
             kind: 'github',
-            label: 'connecting to github',
-            detail: cmd.startsWith('git') ? cmd : (args.branch ? `branch: ${args.branch}` : 'GitHub repository sync'),
+            label: isRepoList ? 'fetching github repositories' : 'connecting to github',
+            detail: cmd.startsWith('git') ? cmd : (args.branch ? `branch: ${args.branch}` : (args.repo ? String(args.repo) : 'GitHub repository sync')),
             badge: 'github',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('linear')) {
+        return {
+            kind: 'linear',
+            label: 'syncing linear issues',
+            detail: String(args.issue || args.query || args.project || 'Linear'),
+            badge: 'linear',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('slack')) {
+        return {
+            kind: 'slack',
+            label: 'reading slack messages',
+            detail: String(args.channel || args.query || 'Slack'),
+            badge: 'slack',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('supabase')) {
+        return {
+            kind: 'supabase',
+            label: 'connecting to supabase',
+            detail: String(args.table || args.query || 'Supabase DB'),
+            badge: 'supabase',
+            status: action.status === 'running' ? 'running' : 'completed',
+            is_risk: false,
+        };
+    }
+    if (name.includes('drive') || name.includes('google_drive')) {
+        return {
+            kind: 'google-drive',
+            label: 'searching google drive',
+            detail: String(args.query || args.name || 'Google Drive'),
+            badge: 'google-drive',
             status: action.status === 'running' ? 'running' : 'completed',
             is_risk: false,
         };
@@ -241,12 +294,12 @@ export const SingleActionIndicator = memo(function SingleActionIndicator({
 
     return (
         <div className="flex items-center gap-2.5 text-[14px] text-zinc-400 select-none py-1 animate-fade-in">
-            {/* Gray Icon for all tools */}
+            {/* Gray Icon for all tools, or integration brand icon */}
             <div className="shrink-0 flex items-center justify-center text-zinc-400">
                 {isRisk ? (
                     <Ban className="size-4 text-red-400 shrink-0" />
-                ) : kind === 'github' ? (
-                    <GithubIcon className="size-4 text-zinc-400 shrink-0" />
+                ) : kind === 'gmail' || kind === 'google-drive' || kind === 'linear' || kind === 'slack' || kind === 'supabase' || kind === 'github' ? (
+                    <McpBrandIcon id={kind} className="size-4" />
                 ) : kind === 'server' ? (
                     <Server className="size-4 text-zinc-400 shrink-0" />
                 ) : kind === 'browser' ? (
@@ -307,8 +360,8 @@ export const ActionMarkRow = memo(function ActionMarkRow({
                 <div className="shrink-0 flex items-center justify-center text-zinc-400">
                     {isRisk ? (
                         <Ban className="size-4 text-red-500 shrink-0" />
-                    ) : mark.kind === 'github' ? (
-                        <GithubIcon className="size-4 text-zinc-400 shrink-0" />
+                    ) : mark.kind === 'gmail' || mark.kind === 'google-drive' || mark.kind === 'linear' || mark.kind === 'slack' || mark.kind === 'supabase' || mark.kind === 'github' ? (
+                        <McpBrandIcon id={mark.kind} className="size-4" />
                     ) : mark.kind === 'server' ? (
                         <Server className="size-4 text-zinc-400 shrink-0" />
                     ) : mark.kind === 'browser' ? (

@@ -259,9 +259,43 @@ function isTransientNetworkError(error: unknown): boolean {
 
 function eventText(event: TursoSessionEvent): string {
     const payload = event.payload || {};
+    const extractString = (val: unknown): string | null => {
+        if (typeof val === 'string' && val.trim()) return val;
+        if (val && typeof val === 'object') {
+            const obj = val as Record<string, unknown>;
+            if (typeof obj.output === 'string' && obj.output.trim()) return obj.output;
+            if (typeof obj.result === 'string' && obj.result.trim()) return obj.result;
+            if (typeof obj.content === 'string' && obj.content.trim()) return obj.content;
+            if (typeof obj.message === 'string' && obj.message.trim()) return obj.message;
+            if (typeof obj.text === 'string' && obj.text.trim()) return obj.text;
+        }
+        return null;
+    };
+
     const preferred =
-        payload.reply ?? payload.error ?? payload.delta ?? payload.content ?? payload.text ?? payload.message ?? event.detail ?? '';
-    return typeof preferred === 'string' ? preferred : JSON.stringify(preferred);
+        extractString(payload.reply) ??
+        extractString(payload.output) ??
+        extractString(payload.result) ??
+        extractString(payload.delta) ??
+        extractString(payload.content) ??
+        extractString(payload.text) ??
+        extractString(payload.message) ??
+        extractString(payload.error) ??
+        extractString(event.detail) ??
+        extractString(event.title);
+
+    if (preferred !== null) return preferred;
+
+    const raw = payload.reply ?? payload.output ?? payload.result ?? payload.error ?? payload.delta ?? payload.content ?? payload.text ?? payload.message ?? event.detail ?? '';
+    if (typeof raw === 'string') return raw;
+    if (raw && typeof raw === 'object') {
+        try {
+            return JSON.stringify(raw);
+        } catch {
+            return '';
+        }
+    }
+    return '';
 }
 
 const QUESTION_TYPES = new Set<AgentQuestionType>([
@@ -1108,7 +1142,7 @@ export async function pollTursoAgentSession(options: {
                     if (!latestError && (ev.event_type === 'error' || ev.event_type === 'error_log' || (ev.payload && (ev.payload as any).error))) {
                         latestError = txt || String((ev.payload as any)?.error || '');
                     }
-                    if (!latestReply && (ev.event_type === 'done' || ev.event_type === 'assistant_message')) {
+                    if (!latestReply && (ev.event_type === 'done' || ev.event_type === 'assistant_message' || ev.event_type === 'message_snapshot' || ev.event_type === 'tool_call_result' || ev.event_type === 'tool_call_finished')) {
                         latestReply = txt;
                     }
                 }
