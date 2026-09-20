@@ -1959,17 +1959,21 @@ function parseErrorsFromOutput(output: string, source: string): ParsedError[] {
 // ============================================================
 
 export async function handleCreateFile(
-    args: { path: string; content: string },
+    args: any,
     ctx: ToolContext
 ): Promise<string> {
-    const { path, content } = args;
+    const rawPath = args?.path ?? args?.filepath ?? args?.file ?? args?.filename;
+    const rawContent = args?.content ?? args?.contents ?? args?.code;
 
-    if (!path || typeof path !== 'string') {
+    if (!rawPath || typeof rawPath !== 'string') {
         return 'Error: Invalid file path';
     }
-    if (content === undefined || content === null) {
-        return `Error: Invalid file content for ${path}`;
+    if (rawContent === undefined || rawContent === null) {
+        return `Error: Invalid file content for ${rawPath}`;
     }
+
+    const path = rawPath.replace(/^\/+/, '');
+    const content = typeof rawContent === 'string' ? rawContent : String(rawContent);
 
     try {
         ctx.setSelectedFile(path);
@@ -1990,9 +1994,20 @@ export async function handleCreateFile(
 }
 
 export async function handleEditFile(
-    args: { path: string; oldContent: string; newContent: string }
+    args: any
 ): Promise<string> {
-    const { path, oldContent, newContent } = args;
+    const rawPath = args?.path ?? args?.filepath ?? args?.file ?? args?.filename;
+    const oldContent = args?.oldContent ?? args?.old_content ?? args?.original;
+    const newContent = args?.newContent ?? args?.new_content ?? args?.replacement ?? args?.updated;
+
+    if (!rawPath || typeof rawPath !== 'string') {
+        return 'Error: editFile requires a valid path';
+    }
+    if (oldContent === undefined || oldContent === null || newContent === undefined || newContent === null) {
+        return `Error: editFile requires oldContent and newContent for ${rawPath}`;
+    }
+
+    const path = rawPath.replace(/^\/+/, '');
 
     try {
         const currentContent = await readFileResilient(path);
@@ -2290,17 +2305,23 @@ export async function handleSearchInFiles(args: { query: string; filePattern?: s
 }
 
 export async function handleWriteFile(
-    args: { path: string; content: string; startLine?: number; endLine?: number },
+    args: any,
     ctx: ToolContext,
 ): Promise<string> {
-    const { path, content, startLine, endLine } = args;
+    const rawPath = args?.path ?? args?.filepath ?? args?.file ?? args?.filename;
+    const rawContent = args?.content ?? args?.contents ?? args?.code;
+    const startLine = typeof args?.startLine === 'number' ? args.startLine : typeof args?.start_line === 'number' ? args.start_line : undefined;
+    const endLine = typeof args?.endLine === 'number' ? args.endLine : typeof args?.end_line === 'number' ? args.end_line : undefined;
 
-    if (!path || typeof path !== 'string') {
+    if (!rawPath || typeof rawPath !== 'string') {
         return 'Error: write_file requires a valid path';
     }
-    if (content === undefined || content === null) {
-        return `Error: write_file requires content for ${path}`;
+    if (rawContent === undefined || rawContent === null) {
+        return `Error: write_file requires content for ${rawPath}`;
     }
+
+    const path = rawPath.replace(/^\/+/, '');
+    const content = typeof rawContent === 'string' ? rawContent : String(rawContent);
 
     try {
         ctx.setSelectedFile(path);
@@ -2834,7 +2855,16 @@ async function _executeToolInternal(
     argsString: string,
     ctx: ToolContext
 ): Promise<string> {
-    const toolName = name === 'Grep' ? 'grep' : name === 'writeFile' ? 'write_file' : name;
+    const rawLower = (name || '').toLowerCase().trim();
+    let toolName = name;
+    if (rawLower === 'grep') toolName = 'grep';
+    else if (rawLower === 'writefile' || rawLower === 'write_file') toolName = 'write_file';
+    else if (rawLower === 'createfile' || rawLower === 'create_file') toolName = 'createFile';
+    else if (rawLower === 'editfile' || rawLower === 'edit_file') toolName = 'editFile';
+    else if (rawLower === 'readfile' || rawLower === 'read_file') toolName = 'readFile';
+    else if (rawLower === 'deletefile' || rawLower === 'delete_file') toolName = 'deleteFile';
+    else if (rawLower === 'renamefile' || rawLower === 'rename_file') toolName = 'renameFile';
+    else if (rawLower === 'listfiles' || rawLower === 'list_files') toolName = 'listFiles';
 
     const argsList = parseToolArguments(argsString);
 

@@ -177,6 +177,15 @@ export function BrandLogo({ brand, size = 28, className = "" }: { brand: string;
     )
   }
 
+  // NVIDIA / NIM (svgl.app green eye/circuit)
+  if (key.includes("nvidia") || key.includes("nim")) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} fill="#76B900" className={className} style={{ display: "inline-block", verticalAlign: "middle" }}>
+        <path d="M9.756 16.488a5.534 5.534 0 0 1-1.04-.1 3.513 3.513 0 0 1-2.28-1.748 3.518 3.518 0 0 1-.397-2.678 3.504 3.504 0 0 1 1.764-2.296 5.545 5.545 0 0 1 2.94-.652c.983 0 1.93.245 2.766.716l2.12-2.12A8.528 8.528 0 0 0 9.756 6c-3.13 0-5.918 1.636-7.447 4.14A8.524 8.524 0 0 0 .97 14.86c1.53 2.504 4.317 4.14 7.446 4.14 1.83 0 3.52-.56 4.922-1.52l-2.094-2.094a5.526 5.526 0 0 1-1.488.102zm7.14-8.868A11.517 11.517 0 0 0 9.756 3C4.368 3 .001 7.368.001 12.756c0 5.389 4.367 9.756 9.755 9.756 4.673 0 8.57-3.29 9.516-7.669H16.14a6.544 6.544 0 0 1-6.384 4.669c-3.615 0-6.556-2.94-6.556-6.756 0-3.815 2.941-6.756 6.556-6.756 1.81 0 3.45.735 4.64 1.924l2.49-2.49zM24 12.756C24 5.71 18.29 0 11.244 0c-3.22 0-6.17 1.19-8.42 3.153l2.12 2.12C6.54 3.82 8.76 2.99 11.244 2.99 16.634 2.99 21 7.357 21 12.756c0 5.39-4.366 9.756-9.756 9.756-2.484 0-4.704-.83-6.299-2.283l-2.12 2.12C5.074 24.31 8.024 25.5 11.244 25.5 18.29 25.5 24 19.8 24 12.756z" />
+      </svg>
+    )
+  }
+
   return <Sparkles className={`w-5 h-5 text-zinc-400 ${className}`} />
 }
 
@@ -221,6 +230,32 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     rank: 3,
   },
   {
+    id: "meta/llama-3.3-70b-instruct",
+    name: "Llama 3.3 70B (NVIDIA NIM)",
+    provider: "nim",
+    providerDisplay: "NVIDIA NIM",
+    input_cost: 0.70,
+    output_cost: 0.90,
+    swe_score: 65.5,
+    context_window: 131072,
+    description: "High-throughput frontier open-weights model hosted on NVIDIA NIM with smart rate-limit retry",
+    is_active: false,
+    rank: 4,
+  },
+  {
+    id: "nvidia/nemotron-4-340b-instruct",
+    name: "Nemotron 4 340B (NVIDIA NIM)",
+    provider: "nim",
+    providerDisplay: "NVIDIA NIM",
+    input_cost: 1.50,
+    output_cost: 2.50,
+    swe_score: 63.8,
+    context_window: 131072,
+    description: "NVIDIA flagship generative AI model for complex synthesis, code architecture, and tooling",
+    is_active: false,
+    rank: 5,
+  },
+  {
     id: "openrouter:free",
     name: "OpenRouter Free",
     provider: "openrouter",
@@ -231,7 +266,7 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     context_window: 262144,
     description: "Auto-routed across all discovered free OpenRouter models with zero latency fallback",
     is_active: false,
-    rank: 4,
+    rank: 6,
   },
   {
     id: "gemini-2.5-flash-lite",
@@ -244,7 +279,7 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     context_window: 1000000,
     description: "Ultra-efficient lightweight model for high-frequency tool loops",
     is_active: false,
-    rank: 5,
+    rank: 7,
   },
   {
     id: "gemini-2.5-computer-use",
@@ -257,7 +292,7 @@ export const GEMINI_ENTERPRISE_MODELS: OmniModelItem[] = [
     context_window: 1000000,
     description: "Autonomous GUI navigation, screen understanding, and tool execution",
     is_active: false,
-    rank: 6,
+    rank: 8,
   },
 ]
 
@@ -609,6 +644,7 @@ export function SycordOmniRouterModal({
                     className="w-full rounded-xl border border-[#2e2e34] bg-[#24242a] px-3 py-2 text-xs text-white outline-none"
                   >
                     <option value="vertex">Google Vertex AI / Gemini</option>
+                    <option value="nim">NVIDIA NIM (Llama 3.3, Nemotron)</option>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="openai">OpenAI (GPT-4o, o3)</option>
                     <option value="deepseek">DeepSeek</option>

@@ -30,11 +30,16 @@
 //   MiniMax:
 //     MINIMAX_API_KEY                                  → API key (required)
 //     MINIMAX_MODEL                                    → model (default MiniMax-M3)
+//
+//   NVIDIA NIM:
+//     NVIDIA_NIM_API_KEY (or NIM_API_KEY)              → API key (required)
+//     NVIDIA_NIM_MODEL                                 → model (default meta/llama-3.3-70b-instruct)
 
 import { isConfigured, streamOpenAICompatible } from "@/lib/glovix-gemini"
 import { isDeepSeekConfigured, streamDeepSeekCompatible } from "@/lib/glovix-deepseek"
 import { isGlmConfigured, streamGlmCompatible } from "@/lib/glovix-glm"
 import { isMiniMaxConfigured, streamMiniMaxCompatible } from "@/lib/glovix-minimax"
+import { isNimConfigured, streamNimCompatible, isNimModelId } from "@/lib/glovix-nim"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { checkRateLimit } from "@/lib/security/rate-limit"
@@ -58,6 +63,10 @@ function isMiniMaxModel(model: string | undefined): boolean {
   if (!model) return false
   const id = model.toLowerCase()
   return id.startsWith("minimax") || id.startsWith("minimax/")
+}
+
+function isNimModel(model: string | undefined): boolean {
+  return isNimModelId(model)
 }
 
 export async function POST(req: Request) {
@@ -164,12 +173,35 @@ export async function POST(req: Request) {
     })
   }
 
+  // Route to NVIDIA NIM for nim/*, nvidia/*, meta/llama-3*, etc.
+  if (isNimModel(model)) {
+    const customKey = typeof body?.nim_api_key === "string" ? body.nim_api_key : typeof body?.api_key === "string" ? body.api_key : undefined
+    if (!isNimConfigured() && !customKey) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "NVIDIA NIM is not configured. Please provide your NVIDIA NIM API key via NVIDIA_NIM_API_KEY or Omni Router settings.",
+        }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      )
+    }
+    return streamNimCompatible({
+      messages,
+      tools: body?.tools,
+      temperature: typeof body?.temperature === "number" ? body.temperature : undefined,
+      maxOutputTokens: typeof body?.max_tokens === "number" ? body.max_tokens : undefined,
+      model: model || undefined,
+      apiKeyOverride: customKey,
+      signal: req.signal,
+    })
+  }
+
   // Default: Gemini on Vertex AI.
   if (!isConfigured()) {
     return new Response(
       JSON.stringify({
         error:
-          "No AI provider is configured. Set DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
+          "No AI provider is configured. Set NVIDIA_NIM_API_KEY, DEEPSEEK_API_KEY, ZAI_API_KEY, MINIMAX_API_KEY, or GOOGLE_VERTEX_PROJECT / GOOGLE_AIAGENT_API for Gemini.",
       }),
       { status: 503, headers: { "Content-Type": "application/json" } },
     )

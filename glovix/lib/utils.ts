@@ -57,38 +57,33 @@ export function parseToolArguments(argsString: string): any[] {
         return argsList;
     }
 
-    // 3. Fallback: Regex extraction for common patterns (createFile)
-    // This is a last resort for badly formatted JSON (e.g. unescaped newlines)
-    // Match the structure {"path": "...", "content": "..."} roughly
-
-    // This regex approach is tricky for multiple files because we need to pair them up.
-    // A better regex might be to find the whole object block roughly.
-    // Let's try to match the structure {"path": "...", "content": "..."} roughly
-
-    const objectRegex = /\{\s*"path"\s*:\s*"([^"]+)"\s*,\s*"content"\s*:\s*"([\s\S]*?)"\s*\}/g;
+    // 3. Fallback: Regex extraction for common patterns (createFile / write_file)
+    // Match structure {"path": "...", "content": "..."} or reversed {"content": "...", "path": "..."}
+    const pathContentRegex = /\{\s*"(?:path|filepath|file|filename)"\s*:\s*"([^"]+)"\s*,\s*"(?:content|contents|code)"\s*:\s*"([\s\S]*?)"\s*\}/g;
     let match;
-    while ((match = objectRegex.exec(cleanArgs)) !== null) {
+    while ((match = pathContentRegex.exec(cleanArgs)) !== null) {
         try {
             argsList.push({
                 path: match[1],
-                content: match[2].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+                content: match[2].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
             });
         } catch (e) {
             // ignore
         }
     }
 
-    // If the simple regex didn't work (maybe keys are reversed or extra spaces), try individual matches
-    // But individual matches are dangerous if order isn't guaranteed. 
-    // Let's stick to the brace counter as primary. 
-    // If brace counter failed, it means the JSON structure is broken (e.g. unescaped chars).
-
-    // Let's try a more permissive regex for createFile specifically if we still have nothing
     if (argsList.length === 0) {
-        // Try to find "path": "..." and "content": "..." in close proximity
-        // This is hard to do reliably with regex for multiple files.
-        // Let's rely on the user's report that "one file works".
-        // If we have nothing, return empty array.
+        const contentPathRegex = /\{\s*"(?:content|contents|code)"\s*:\s*"([\s\S]*?)"\s*,\s*"(?:path|filepath|file|filename)"\s*:\s*"([^"]+)"\s*\}/g;
+        while ((match = contentPathRegex.exec(cleanArgs)) !== null) {
+            try {
+                argsList.push({
+                    path: match[2],
+                    content: match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+                });
+            } catch (e) {
+                // ignore
+            }
+        }
     }
 
     return argsList;
