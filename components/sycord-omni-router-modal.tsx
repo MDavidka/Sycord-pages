@@ -406,7 +406,7 @@ export function SycordOmniRouterModal({
     e.preventDefault()
     setAddingProvider(true)
     try {
-      const res = await fetch("/api/admin/ai/models", {
+      const res = await fetch("/api/ai/handshake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

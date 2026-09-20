@@ -140,22 +140,30 @@ export function AiOmniManager() {
   const handleSaveGlobalProvider = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await fetch("/api/admin/ai/models", {
+      const payload = {
+        providers: [
+          {
+            provider: globalProvider,
+            model: globalModel,
+            api_key: globalApiKey,
+            base_url: globalBaseUrl,
+            gcp_project: globalGcpProject,
+            gcp_location: globalGcpLocation,
+          },
+        ],
+      }
+      let res = await fetch("/api/ai/handshake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          providers: [
-            {
-              provider: globalProvider,
-              model: globalModel,
-              api_key: globalApiKey,
-              base_url: globalBaseUrl,
-              gcp_project: globalGcpProject,
-              gcp_location: globalGcpLocation,
-            },
-          ],
-        }),
+        body: JSON.stringify(payload),
       })
+      if (res.status === 403 || res.status === 404) {
+        res = await fetch("/api/admin/ai/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      }
       const data = await res.json()
       if (data.ok) {
         toast.success(`Global provider ${globalProvider.toUpperCase()} saved & synced!`)
@@ -172,11 +180,18 @@ export function AiOmniManager() {
     if (!bulkJson.trim()) return toast.error("Please enter valid JSON")
     try {
       const parsed = JSON.parse(bulkJson)
-      const res = await fetch("/api/admin/ai/models", {
+      let res = await fetch("/api/ai/handshake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed),
       })
+      if (res.status === 403 || res.status === 404) {
+        res = await fetch("/api/admin/ai/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed),
+        })
+      }
       const data = await res.json()
       if (data.ok) {
         toast.success(data.message || "Models catalog updated & synced to VM!")
