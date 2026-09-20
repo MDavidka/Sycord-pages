@@ -34,21 +34,15 @@ function getValidProjectUrl(project: any): string | null {
 
 function CardSkeleton() {
   return (
-    <div className="rounded-[18px] sm:rounded-[20px] p-5 flex flex-col justify-between min-h-[148px] bg-[#18181b]/80 border border-[#27272a]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3.5 flex-1 min-w-0">
-          <Skeleton className="h-12 w-12 rounded-[14px] shrink-0 bg-zinc-800" />
-          <div className="space-y-2 flex-1 min-w-0">
-            <Skeleton className="h-4 w-28 bg-zinc-800" />
-            <Skeleton className="h-3 w-20 bg-zinc-800" />
-          </div>
+    <div className="rounded-xl p-4 sm:p-4.5 flex items-center justify-between bg-zinc-900/40 border border-zinc-800/80 shadow-xs">
+      <div className="flex items-center gap-3.5 flex-1 min-w-0">
+        <Skeleton className="h-10 w-10 sm:h-11 sm:w-11 rounded-lg shrink-0 bg-zinc-800/80" />
+        <div className="space-y-1.5 flex-1 min-w-0">
+          <Skeleton className="h-4 w-28 bg-zinc-800/80" />
+          <Skeleton className="h-3 w-36 bg-zinc-800/60" />
         </div>
-        <Skeleton className="h-8 w-8 rounded-lg shrink-0 bg-zinc-800" />
       </div>
-      <div className="pt-3.5 border-t border-[#27272a]/70 flex items-center justify-between">
-        <Skeleton className="h-3 w-24 bg-zinc-800" />
-        <Skeleton className="h-3 w-16 bg-zinc-800" />
-      </div>
+      <Skeleton className="h-8 w-8 rounded-md shrink-0 bg-zinc-800/60 ml-2" />
     </div>
   )
 }
@@ -141,10 +135,10 @@ function DashboardContent() {
       <div className="min-h-screen md:ml-16 px-4 pt-6 pb-20 md:pb-6">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="h-9 w-28 rounded-xl" />
+            <Skeleton className="h-6 w-28 bg-zinc-800/80" />
+            <Skeleton className="h-9 w-28 rounded-lg bg-zinc-800/80" />
           </div>
-          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-lg bg-zinc-800/60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {[1, 2, 3].map(i => <CardSkeleton key={i} />)}
           </div>
@@ -257,16 +251,16 @@ function DashboardContent() {
               {/* Search Bar & Counter */}
               <div className="flex gap-2.5 items-center">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-600" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search projects..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#17181b] border border-[#262830] text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-[#3b3e45] focus:outline-none focus:ring-2 focus:ring-primary/15 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                    className="h-10 w-full pl-9 pr-4 rounded-lg bg-zinc-900/50 border border-zinc-800/80 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600/30 transition-all shadow-xs"
                   />
                 </div>
-                <div className="px-3.5 py-2.5 border border-[#262830] rounded-xl bg-[#17181b] text-sm font-medium text-zinc-500 tabular-nums whitespace-nowrap shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                <div className="h-10 px-3.5 border border-zinc-800/80 rounded-lg bg-zinc-900/50 text-xs font-mono font-medium text-zinc-400 flex items-center justify-center shrink-0 tabular-nums shadow-xs">
                   {ownedCount}/{MAX_FREE_PROJECTS}
                 </div>
               </div>
@@ -295,27 +289,28 @@ function DashboardContent() {
                   ))}
                 </div>
               ) : projects.length === 0 ? (
-                <div className="border border-dashed border-[#27272a] rounded-[22px] p-12 text-center bg-[#18181b]/30">
+                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
                   <div className="max-w-sm mx-auto">
-                    <h3 className="text-base font-semibold mb-2 text-zinc-100">No projects yet</h3>
-                    <p className="text-sm text-muted-foreground mb-5">
+                    <h3 className="text-sm font-semibold mb-1.5 text-zinc-200">No projects yet</h3>
+                    <p className="text-xs text-zinc-500 mb-4">
                       Create your first project and get your site live in minutes.
                     </p>
                     <Button
                       onClick={() => router.push("/dashboard/create")}
-                      className="rounded-xl gap-1.5"
+                      size="sm"
+                      className="rounded-lg gap-1.5 text-xs"
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-3.5 w-3.5" />
                       Create First Project
                     </Button>
                   </div>
                 </div>
               ) : q && filtered.length === 0 ? (
-                <div className="border border-dashed border-[#27272a] rounded-[22px] p-12 text-center bg-[#18181b]/30">
+                <div className="border border-dashed border-zinc-800 rounded-xl p-10 text-center bg-zinc-900/20">
                   <div className="max-w-sm mx-auto">
-                    <Search className="h-5 w-5 text-muted-foreground mx-auto mb-3" />
-                    <h3 className="text-base font-semibold mb-1 text-zinc-100">No results</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <Search className="h-5 w-5 text-muted-foreground mx-auto mb-2.5 opacity-60" />
+                    <h3 className="text-sm font-semibold mb-1 text-zinc-200">No results</h3>
+                    <p className="text-xs text-zinc-500">
                       No project matches &quot;{searchQuery}&quot;.
                     </p>
                   </div>
@@ -327,18 +322,18 @@ function DashboardContent() {
                     <button
                       type="button"
                       onClick={() => router.push("/dashboard/create")}
-                      className="group relative flex flex-col items-center justify-center min-h-[148px] p-5 rounded-[18px] sm:rounded-[20px] border border-dashed border-[#27272a] hover:border-zinc-500 bg-[#18181b]/30 hover:bg-[#18181b]/70 transition-all duration-200 text-center cursor-pointer select-none"
+                      className="group relative flex flex-col items-center justify-center min-h-[108px] sm:min-h-[116px] p-4 sm:p-5 rounded-xl border border-dashed border-zinc-800/90 hover:border-zinc-600 bg-zinc-900/20 hover:bg-zinc-900/50 transition-all duration-200 text-center cursor-pointer select-none"
                     >
-                      <div className="h-12 w-12 rounded-[14px] bg-[#222226] border border-[#2f2f35] flex items-center justify-center mb-2.5 group-hover:border-zinc-400 group-hover:scale-105 transition-all shadow-inner">
-                        <Plus className="h-5 w-5 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
+                      <div className="h-9 w-9 rounded-lg bg-zinc-950 border border-zinc-800/80 flex items-center justify-center mb-1.5 group-hover:border-zinc-600 group-hover:scale-105 transition-all shadow-xs">
+                        <Plus className="h-4 w-4 text-zinc-400 group-hover:text-zinc-100 transition-colors" />
                       </div>
-                      <h3 className="text-sm font-semibold text-zinc-200 group-hover:text-white transition-colors">
+                      <h3 className="text-xs sm:text-sm font-medium text-zinc-300 group-hover:text-zinc-100 transition-colors">
                         New Project
                       </h3>
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
                         Create a new site in a few clicks
                       </p>
-                      <span className="mt-2 text-[10px] text-zinc-500/70 font-mono">
+                      <span className="mt-1.5 text-[10px] text-zinc-500/80 font-mono">
                         {ownedCount}/{MAX_FREE_PROJECTS} used
                       </span>
                     </button>
@@ -418,10 +413,10 @@ export default function DashboardPage() {
       <div className="min-h-screen md:ml-16 px-4 pt-6">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="h-9 w-28 rounded-xl" />
+            <Skeleton className="h-6 w-28 bg-zinc-800/80" />
+            <Skeleton className="h-9 w-28 rounded-lg bg-zinc-800/80" />
           </div>
-          <Skeleton className="h-11 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-lg bg-zinc-800/60" />
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {[1,2,3].map(i=><CardSkeleton key={i}/>)}
           </div>
