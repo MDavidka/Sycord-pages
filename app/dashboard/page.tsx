@@ -5,7 +5,7 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder } from "lucide-react"
+import { Settings, Plus, LogOut, User, TriangleAlert, Search, LayoutTemplate, CreditCard, Trash2, Folder, Shield, Megaphone } from "lucide-react"
 import { useState, useEffect, Suspense, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -86,14 +86,18 @@ function DashboardContent() {
     }
   }, [searchParams, router])
 
+  const [announcements, setAnnouncements] = useState<any[]>([])
+
   useEffect(() => {
     if (status !== "authenticated") return
     Promise.all([
       fetch("/api/projects", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
       fetch("/api/user/status", { cache: "no-store" }).then(r => r.ok ? r.json() : null),
-    ]).then(([projectsData, statusData]) => {
+      fetch("/api/announcements", { cache: "no-store" }).then(r => r.ok ? r.json() : { announcements: [] }),
+    ]).then(([projectsData, statusData, annData]) => {
       setProjects(projectsData)
       if (statusData) setUserStatus(statusData)
+      if (annData?.announcements) setAnnouncements(annData.announcements)
     }).catch(console.error).finally(() => setIsLoading(false))
   }, [status])
 
@@ -202,7 +206,15 @@ function DashboardContent() {
                 <DropdownMenuItem><User className="mr-2 h-4 w-4" /><span>Profile</span></DropdownMenuItem>
                 <DropdownMenuItem onClick={() => router.push("/subscriptions")}><CreditCard className="mr-2 h-4 w-4" /><span>Plans</span></DropdownMenuItem>
                 <DropdownMenuItem><Settings className="mr-2 h-4 w-4" /><span>Settings</span></DropdownMenuItem>
-                {session?.user?.email === "dmarton336@gmail.com" && (<><DropdownMenuSeparator /><DropdownMenuItem onClick={() => router.push("/admin")}><Settings className="mr-2 h-4 w-4" /><span className="text-primary font-semibold">Admin Panel</span></DropdownMenuItem></>)}
+                {session?.user?.email === "dmarton336@gmail.com" && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push("/admin")}>
+                      <Shield className="mr-2 h-4 w-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-semibold">Moderator View</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" /><span>Sign out</span>
@@ -212,8 +224,32 @@ function DashboardContent() {
           </div>
         </header>
 
-        <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6">
-          <div className="flex items-center justify-between mb-5">
+        <main className="max-w-6xl mx-auto px-4 py-5 pb-20 md:pb-6 space-y-5">
+          {announcements.length > 0 && (
+            <div className="space-y-2">
+              {announcements.map((ann) => (
+                <div
+                  key={ann.id || ann._id}
+                  className={cn(
+                    "flex items-start gap-3 p-3.5 rounded-xl border text-sm",
+                    ann.type === "warning" || ann.type === "maintenance"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                      : ann.type === "important"
+                      ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                      : "bg-blue-500/10 border-blue-500/30 text-blue-200"
+                  )}
+                >
+                  <Megaphone className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-xs tracking-wide uppercase opacity-80">{ann.title}</p>
+                    <p className="text-xs text-foreground/90 mt-0.5">{ann.message}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
             <h1 className="text-base font-semibold text-foreground">Projects</h1>
             <Button
               onClick={() => router.push("/dashboard/create")}
