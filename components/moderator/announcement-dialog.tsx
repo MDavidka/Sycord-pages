@@ -73,32 +73,32 @@ export function AnnouncementDialog({
       <DialogContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] sm:max-w-[460px]">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
-            <Megaphone className="w-4 h-4 text-emerald-400" />
+            <Megaphone className="w-4 h-4 text-muted-foreground" />
             New Server Announcement
           </DialogTitle>
-          <DialogDescription className="text-xs text-[#A7AAB0]">
+          <DialogDescription className="text-xs text-muted-foreground">
             Broadcast a platform-wide announcement to all active users on their dashboard.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3.5 py-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[#A7AAB0]">Title</label>
+            <label className="text-xs font-medium text-muted-foreground">Title</label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Scheduled Maintenance Notice"
-              className="bg-[#242528] border-[#2A2C30] text-[#E5E7EB] h-9 text-xs focus-visible:ring-1 focus-visible:ring-zinc-400"
+              className="h-9 text-xs"
               required
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[#A7AAB0]">Severity / Type</label>
+            <label className="text-xs font-medium text-muted-foreground">Severity / Type</label>
             <select
               value={type}
               onChange={(e: any) => setType(e.target.value)}
-              className="w-full bg-[#242528] border border-[#2A2C30] text-[#E5E7EB] h-9 rounded-md px-3 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400"
+              className="w-full bg-input/30 border border-input text-foreground h-9 rounded-md px-3 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
             >
               <option value="info">Info (Standard)</option>
               <option value="maintenance">Maintenance (Scheduled Downtime)</option>
@@ -108,13 +108,13 @@ export function AnnouncementDialog({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-[#A7AAB0]">Message</label>
+            <label className="text-xs font-medium text-muted-foreground">Message</label>
             <Textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Details about the update, ETA, or changes..."
               rows={4}
-              className="bg-[#242528] border-[#2A2C30] text-[#E5E7EB] text-xs resize-none focus-visible:ring-1 focus-visible:ring-zinc-400"
+              className="text-xs resize-none"
               required
             />
           </div>
@@ -125,14 +125,15 @@ export function AnnouncementDialog({
               variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={loading}
-              className="h-8 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528]"
+              size="sm"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading || !title.trim() || !message.trim()}
-              className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+              variant="default"
+              size="sm"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Publish Announcement

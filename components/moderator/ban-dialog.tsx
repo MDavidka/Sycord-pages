@@ -72,13 +72,13 @@ export function BanDialog({
         <DialogHeader>
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
             {isBanning ? (
-              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <AlertTriangle className="w-4 h-4 text-muted-foreground" />
             ) : (
-              <UserCheck className="w-4 h-4 text-emerald-400" />
+              <UserCheck className="w-4 h-4 text-muted-foreground" />
             )}
             {isBanning ? "Ban User Account" : "Unban User Account"}
           </DialogTitle>
-          <DialogDescription className="text-xs text-[#A7AAB0]">
+          <DialogDescription className="text-xs text-muted-foreground">
             {isBanning
               ? `Are you sure you want to ban ${user?.email}? The user will immediately be signed out and prevented from logging in.`
               : `Restore account access for ${user?.email}?`}
@@ -87,13 +87,13 @@ export function BanDialog({
 
         {isBanning && (
           <div className="space-y-1.5 py-2">
-            <label className="text-xs font-medium text-[#A7AAB0]">Ban Reason / Policy Violation</label>
+            <label className="text-xs font-medium text-muted-foreground">Ban Reason / Policy Violation</label>
             <Textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Repeated Terms of Service violation, scraping, malicious automation..."
               rows={3}
-              className="bg-[#242528] border-[#2A2C30] text-[#E5E7EB] text-xs resize-none focus-visible:ring-1 focus-visible:ring-zinc-400"
+              className="text-xs resize-none"
             />
           </div>
         )}
@@ -104,7 +104,7 @@ export function BanDialog({
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="h-8 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528]"
+            size="sm"
           >
             Cancel
           </Button>
@@ -112,11 +112,8 @@ export function BanDialog({
             type="button"
             onClick={handleBanToggle}
             disabled={loading}
-            className={
-              isBanning
-                ? "h-8 text-xs bg-red-600 hover:bg-red-500 text-white gap-1.5"
-                : "h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
-            }
+            variant={isBanning ? "destructive" : "default"}
+            size="sm"
           >
             {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             {isBanning ? <Ban className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}

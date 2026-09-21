@@ -30,9 +30,7 @@ export function MetricCard({
           <p className="text-2xl font-bold tracking-tight text-[#E5E7EB]">{value}</p>
           <p className="text-[11px] text-[#777B82] font-normal">{changeText}</p>
         </div>
-        <div className="p-2 rounded-lg bg-[#242528] border border-[#2A2C30]/50 shrink-0">
-          <Icon className={cn("w-4 h-4", iconColor)} />
-        </div>
+        <Icon className={cn("w-4 h-4 shrink-0 mt-0.5 text-muted-foreground", iconColor)} />
       </CardContent>
     </Card>
   )

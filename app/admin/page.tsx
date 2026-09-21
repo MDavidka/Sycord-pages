@@ -57,9 +57,29 @@ import {
   MenubarItem,
   MenubarSeparator,
 } from "@/components/ui/menubar"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandList,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command"
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { MoreHorizontal, Check, ChevronsUpDown } from "lucide-react"
 
 import { MetricCard } from "@/components/moderator/metric-card"
 import { CreditDialog } from "@/components/moderator/credit-dialog"
@@ -120,6 +140,13 @@ export default function ModeratorPage() {
   })
   const [usageLoading, setUsageLoading] = useState(false)
   const [usagePeriod, setUsagePeriod] = useState("7d")
+  const [periodComboboxOpen, setPeriodComboboxOpen] = useState(false)
+
+  const PERIOD_OPTIONS = [
+    { value: "today", label: "Today" },
+    { value: "7d", label: "Last 7 Days" },
+    { value: "30d", label: "Last 30 Days" },
+  ]
 
   // Servers monitoring state
   const [serverMonitoring, setServerMonitoring] = useState<{
@@ -344,35 +371,31 @@ export default function ModeratorPage() {
       {/* Mobile Top Navbar with Sycord Icon & Menu trigger */}
       <div className="md:hidden flex items-center justify-between h-14 px-4 bg-[#1c1c1e] border-b border-[#2A2C30] shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#242528] border border-[#2A2C30] p-1 flex items-center justify-center shrink-0">
-            <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain" />
-          </div>
+          <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-[#E5E7EB] leading-none">Sycord</span>
-              <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-medium">
+              <span className="text-xs font-semibold text-foreground leading-none">Sycord</span>
+              <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
                 Moderator
               </Badge>
             </div>
-            <p className="text-[10px] text-[#777B82] leading-none mt-1">Control Console</p>
+            <p className="text-[10px] text-muted-foreground leading-none mt-1">Control Console</p>
           </div>
         </div>
 
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-[#E5E7EB] hover:bg-[#242528]">
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-foreground hover:bg-[#242528]">
               <Menu className="w-5 h-5" />
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="bg-[#1c1c1e] border-r border-[#2A2C30] text-[#E5E7EB] p-0 w-72 flex flex-col">
             <SheetHeader className="h-14 px-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#242528] border border-[#2A2C30] p-1 flex items-center justify-center shrink-0">
-                  <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain" />
-                </div>
+                <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
                 <div>
-                  <SheetTitle className="text-xs font-semibold text-[#E5E7EB] leading-none text-left">Sycord Mod</SheetTitle>
-                  <p className="text-[10px] text-[#777B82] leading-none mt-1 text-left">Moderator View</p>
+                  <SheetTitle className="text-xs font-semibold text-foreground leading-none text-left">Sycord Mod</SheetTitle>
+                  <p className="text-[10px] text-muted-foreground leading-none mt-1 text-left">Moderator View</p>
                 </div>
               </div>
             </SheetHeader>
@@ -398,11 +421,11 @@ export default function ModeratorPage() {
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors select-none text-left",
                       isActive
-                        ? "bg-[#242528] text-white border border-[#2A2C30]"
-                        : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                        ? "bg-[#242528] text-foreground border border-[#2A2C30]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
                     )}
                   >
-                    <Icon className="w-4 h-4 shrink-0 text-zinc-400" />
+                    <Icon className="w-4 h-4 shrink-0 text-muted-foreground" />
                     <span>{item.label}</span>
                   </button>
                 )
@@ -413,7 +436,7 @@ export default function ModeratorPage() {
               <Button
                 variant="ghost"
                 onClick={() => router.push("/dashboard")}
-                className="w-full justify-start h-8 px-2.5 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-2"
+                className="w-full justify-start h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-[#242528] gap-2"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Exit to Dashboard</span>
@@ -427,20 +450,18 @@ export default function ModeratorPage() {
       <aside className="hidden md:flex w-60 bg-[#1c1c1e] border-r border-[#2A2C30] flex-col shrink-0">
         <div className="h-14 px-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#242528] border border-[#2A2C30] p-1 flex items-center justify-center shrink-0">
-              <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain" />
-            </div>
+            <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain shrink-0" />
             <div>
               <div className="flex items-center gap-1.5">
-                <p className="text-xs font-semibold text-[#E5E7EB] leading-none">Sycord</p>
-                <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-medium">
+                <p className="text-xs font-semibold text-foreground leading-none">Sycord</p>
+                <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
                   Mod
                 </Badge>
               </div>
-              <p className="text-[10px] text-[#777B82] leading-none mt-1">Moderator View</p>
+              <p className="text-[10px] text-muted-foreground leading-none mt-1">Moderator View</p>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-[#2A2C30] text-[#A7AAB0]">
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-[#2A2C30] text-muted-foreground">
             v1.0
           </Badge>
         </div>
@@ -452,11 +473,11 @@ export default function ModeratorPage() {
             className={cn(
               "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
               activeTab === "general"
-                ? "bg-[#242528] text-white border border-[#2A2C30]"
-                : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
+                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
             )}
           >
-            <LayoutDashboard className="w-4 h-4 shrink-0 text-zinc-400" />
+            <LayoutDashboard className="w-4 h-4 shrink-0 text-muted-foreground" />
             <span>General</span>
           </button>
 
@@ -465,11 +486,11 @@ export default function ModeratorPage() {
             className={cn(
               "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
               activeTab === "users"
-                ? "bg-[#242528] text-white border border-[#2A2C30]"
-                : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
+                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
             )}
           >
-            <Users className="w-4 h-4 shrink-0 text-zinc-400" />
+            <Users className="w-4 h-4 shrink-0 text-muted-foreground" />
             <span>Users</span>
           </button>
 
@@ -478,11 +499,11 @@ export default function ModeratorPage() {
             className={cn(
               "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
               activeTab === "providers"
-                ? "bg-[#242528] text-white border border-[#2A2C30]"
-                : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
+                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
             )}
           >
-            <Cpu className="w-4 h-4 shrink-0 text-zinc-400" />
+            <Cpu className="w-4 h-4 shrink-0 text-muted-foreground" />
             <span>Providers & Usage</span>
           </button>
 
@@ -491,11 +512,11 @@ export default function ModeratorPage() {
             className={cn(
               "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
               activeTab === "servers"
-                ? "bg-[#242528] text-white border border-[#2A2C30]"
-                : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
+                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
             )}
           >
-            <Server className="w-4 h-4 shrink-0 text-zinc-400" />
+            <Server className="w-4 h-4 shrink-0 text-muted-foreground" />
             <span>Servers</span>
           </button>
 
@@ -504,11 +525,11 @@ export default function ModeratorPage() {
             className={cn(
               "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors select-none text-left",
               activeTab === "tickets"
-                ? "bg-[#242528] text-white border border-[#2A2C30]"
-                : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                ? "bg-[#242528] text-foreground border border-[#2A2C30]"
+                : "text-muted-foreground hover:text-foreground hover:bg-[#202124]"
             )}
           >
-            <LifeBuoy className="w-4 h-4 shrink-0 text-zinc-400" />
+            <LifeBuoy className="w-4 h-4 shrink-0 text-muted-foreground" />
             <span>Tickets & Announcements</span>
           </button>
         </nav>
@@ -518,14 +539,14 @@ export default function ModeratorPage() {
           <Button
             variant="ghost"
             onClick={() => router.push("/dashboard")}
-            className="w-full justify-start h-8 px-2.5 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-2"
+            className="w-full justify-start h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-[#242528] gap-2"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             <span>Exit to Dashboard</span>
           </Button>
-          <div className="flex items-center justify-between px-2 pt-1 text-[11px] text-[#777B82]">
+          <div className="flex items-center justify-between px-2 pt-1 text-[11px] text-muted-foreground">
             <span className="truncate">{session?.user?.email}</span>
-            <button onClick={() => signOut({ callbackUrl: "/" })} className="hover:text-red-400 transition-colors">
+            <button onClick={() => signOut({ callbackUrl: "/" })} className="hover:text-destructive transition-colors">
               <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -538,78 +559,78 @@ export default function ModeratorPage() {
         <div className="flex items-center justify-between bg-[#1c1c1e] border border-[#2A2C30] rounded-xl px-3 py-1.5 shadow-sm">
           <Menubar className="bg-transparent border-0 h-auto p-0 gap-1 text-xs">
             <MenubarMenu>
-              <MenubarTrigger className="text-xs px-2.5 py-1 text-[#A7AAB0] hover:text-white hover:bg-[#242528] rounded-md cursor-pointer data-[state=open]:bg-[#242528] data-[state=open]:text-white flex items-center gap-1.5">
-                <Menu className="w-3.5 h-3.5 text-zinc-400" />
+              <MenubarTrigger className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md cursor-pointer data-[state=open]:bg-accent data-[state=open]:text-foreground flex items-center gap-1.5">
+                <Menu className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>Navigate</span>
               </MenubarTrigger>
-              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs">
-                <MenubarItem onClick={() => setActiveTab("general")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <LayoutDashboard className="w-3.5 h-3.5 text-zinc-400" />
+              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-foreground text-xs">
+                <MenubarItem onClick={() => setActiveTab("general")} className="gap-2 cursor-pointer">
+                  <LayoutDashboard className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>General Overview</span>
                 </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("users")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Users className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => setActiveTab("users")} className="gap-2 cursor-pointer">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>User Management</span>
                 </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("providers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Cpu className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => setActiveTab("providers")} className="gap-2 cursor-pointer">
+                  <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Providers & Token Usage</span>
                 </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Server className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 cursor-pointer">
+                  <Server className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Infrastructure & Servers</span>
                 </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("tickets")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <LifeBuoy className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => setActiveTab("tickets")} className="gap-2 cursor-pointer">
+                  <LifeBuoy className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Tickets & Announcements</span>
                 </MenubarItem>
                 <MenubarSeparator className="bg-[#2A2C30]" />
-                <MenubarItem onClick={() => router.push("/dashboard")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => router.push("/dashboard")} className="gap-2 cursor-pointer">
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Return to Dashboard</span>
                 </MenubarItem>
               </MenubarContent>
             </MenubarMenu>
 
             <MenubarMenu>
-              <MenubarTrigger className="text-xs px-2.5 py-1 text-[#A7AAB0] hover:text-white hover:bg-[#242528] rounded-md cursor-pointer data-[state=open]:bg-[#242528] data-[state=open]:text-white flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-zinc-400" />
+              <MenubarTrigger className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md cursor-pointer data-[state=open]:bg-accent data-[state=open]:text-foreground flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>Actions</span>
               </MenubarTrigger>
-              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs">
-                <MenubarItem onClick={() => setAnnouncementDialogOpen(true)} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Megaphone className="w-3.5 h-3.5 text-emerald-400" />
+              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-foreground text-xs">
+                <MenubarItem onClick={() => setAnnouncementDialogOpen(true)} className="gap-2 cursor-pointer">
+                  <Megaphone className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Broadcast Announcement</span>
                 </MenubarItem>
-                <MenubarItem onClick={() => { setActiveTab("users"); fetchUsers() }} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Search className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => { setActiveTab("users"); fetchUsers() }} className="gap-2 cursor-pointer">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Lookup User</span>
                 </MenubarItem>
                 <MenubarSeparator className="bg-[#2A2C30]" />
-                <MenubarItem onClick={fetchOverview} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={fetchOverview} className="gap-2 cursor-pointer">
+                  <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Refresh Metrics</span>
                 </MenubarItem>
               </MenubarContent>
             </MenubarMenu>
 
             <MenubarMenu>
-              <MenubarTrigger className="text-xs px-2.5 py-1 text-[#A7AAB0] hover:text-white hover:bg-[#242528] rounded-md cursor-pointer data-[state=open]:bg-[#242528] data-[state=open]:text-white flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-zinc-400" />
+              <MenubarTrigger className="text-xs px-2.5 py-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md cursor-pointer data-[state=open]:bg-accent data-[state=open]:text-foreground flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-muted-foreground" />
                 <span>System</span>
               </MenubarTrigger>
-              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs">
-                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Server className="w-3.5 h-3.5 text-emerald-400" />
+              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-foreground text-xs">
+                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 cursor-pointer">
+                  <Server className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>View All Server Nodes</span>
                 </MenubarItem>
-                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <Database className="w-3.5 h-3.5 text-blue-400" />
+                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 cursor-pointer">
+                  <Database className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Database Cluster (Germany)</span>
                 </MenubarItem>
                 <MenubarSeparator className="bg-[#2A2C30]" />
-                <MenubarItem onClick={() => { setActiveTab("tickets"); fetchAuditLogs() }} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
-                  <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                <MenubarItem onClick={() => { setActiveTab("tickets"); fetchAuditLogs() }} className="gap-2 cursor-pointer">
+                  <FileText className="w-3.5 h-3.5 text-muted-foreground" />
                   <span>Moderation Audit Trail</span>
                 </MenubarItem>
               </MenubarContent>
@@ -617,8 +638,7 @@ export default function ModeratorPage() {
           </Menubar>
 
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-[#777B82]">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
               All systems nominal
             </span>
             <Button
@@ -632,7 +652,7 @@ export default function ModeratorPage() {
                 if (activeTab === "tickets") { fetchTickets(); fetchAnnouncements(); fetchAuditLogs() }
                 toast.success("Moderator data refreshed")
               }}
-              className="h-7 px-2 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-1"
+              className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
             >
               <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
               <span className="hidden sm:inline">Refresh</span>
@@ -941,70 +961,76 @@ export default function ModeratorPage() {
                             </Badge>
                           </td>
                           <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Add credits */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setTargetUser(u)
-                                  setCreditActionType("add")
-                                  setCreditDialogOpen(true)
-                                }}
-                                title="Add credits"
-                                className="h-7 w-7 p-0 border-[#2A2C30] text-emerald-400 hover:bg-emerald-950/30"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </Button>
-
-                              {/* Remove credits */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setTargetUser(u)
-                                  setCreditActionType("remove")
-                                  setCreditDialogOpen(true)
-                                }}
-                                title="Remove credits"
-                                className="h-7 w-7 p-0 border-[#2A2C30] text-zinc-400 hover:bg-[#242528]"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </Button>
-
-                              {/* Warn user */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setTargetUser(u)
-                                  setWarnDialogOpen(true)
-                                }}
-                                title="Send warning"
-                                className="h-7 w-7 p-0 border-[#2A2C30] text-amber-400 hover:bg-amber-950/30"
-                              >
-                                <AlertTriangle className="w-3 h-3" />
-                              </Button>
-
-                              {/* Ban / Unban */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setTargetUser(u)
-                                  setBanDialogOpen(true)
-                                }}
-                                title={u.isBlocked ? "Unban user" : "Ban user"}
-                                className={cn(
-                                  "h-7 w-7 p-0 border-[#2A2C30]",
-                                  u.isBlocked
-                                    ? "text-emerald-400 hover:bg-emerald-950/30"
-                                    : "text-red-400 hover:bg-red-950/30"
-                                )}
-                              >
-                                {u.isBlocked ? <UserCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
-                              </Button>
-                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-[#A7AAB0] hover:text-white hover:bg-[#242528]"
+                                >
+                                  <span className="sr-only">Open menu</span>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-44 bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB]">
+                                <DropdownMenuLabel className="text-[11px] text-[#777B82]">User Actions</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setTargetUser(u)
+                                    setCreditActionType("add")
+                                    setCreditDialogOpen(true)
+                                  }}
+                                  className="text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2"
+                                >
+                                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>Add Credits</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setTargetUser(u)
+                                    setCreditActionType("remove")
+                                    setCreditDialogOpen(true)
+                                  }}
+                                  className="text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2"
+                                >
+                                  <Minus className="w-3.5 h-3.5 text-zinc-400" />
+                                  <span>Remove Credits</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-[#2A2C30]" />
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setTargetUser(u)
+                                    setWarnDialogOpen(true)
+                                  }}
+                                  className="text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2 text-amber-400 focus:text-amber-300"
+                                >
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>Warn User</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setTargetUser(u)
+                                    setBanDialogOpen(true)
+                                  }}
+                                  className={cn(
+                                    "text-xs cursor-pointer hover:bg-[#242528] flex items-center gap-2",
+                                    u.isBlocked ? "text-emerald-400 focus:text-emerald-300" : "text-red-400 focus:text-red-300"
+                                  )}
+                                >
+                                  {u.isBlocked ? (
+                                    <>
+                                      <UserCheck className="w-3.5 h-3.5" />
+                                      <span>Unban User</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Ban className="w-3.5 h-3.5" />
+                                      <span>Ban User</span>
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </td>
                         </tr>
                       ))
@@ -1029,18 +1055,48 @@ export default function ModeratorPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <select
-                  value={usagePeriod}
-                  onChange={(e) => {
-                    setUsagePeriod(e.target.value)
-                    fetchUsage(e.target.value)
-                  }}
-                  className="bg-[#1c1c1e] border border-[#2A2C30] text-[#E5E7EB] h-8 rounded-lg px-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400"
-                >
-                  <option value="today">Today</option>
-                  <option value="7d">Last 7 Days</option>
-                  <option value="30d">Last 30 Days</option>
-                </select>
+                <Popover open={periodComboboxOpen} onOpenChange={setPeriodComboboxOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={periodComboboxOpen}
+                      className="h-8 w-36 justify-between bg-[#1c1c1e] border-[#2A2C30] text-xs text-[#E5E7EB] hover:bg-[#242528] hover:text-white"
+                    >
+                      {PERIOD_OPTIONS.find((p) => p.value === usagePeriod)?.label || "Select period"}
+                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-36 p-0 bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB]">
+                    <Command className="bg-[#1c1c1e] text-[#E5E7EB]">
+                      <CommandList>
+                        <CommandGroup>
+                          {PERIOD_OPTIONS.map((period) => (
+                            <CommandItem
+                              key={period.value}
+                              value={period.value}
+                              onSelect={(currentValue) => {
+                                setUsagePeriod(currentValue)
+                                setPeriodComboboxOpen(false)
+                                fetchUsage(currentValue)
+                              }}
+                              className="text-xs cursor-pointer hover:bg-[#242528] flex items-center justify-between"
+                            >
+                              <span>{period.label}</span>
+                              <Check
+                                className={cn(
+                                  "h-3.5 w-3.5",
+                                  usagePeriod === period.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+
                 <Button
                   size="sm"
                   variant="ghost"

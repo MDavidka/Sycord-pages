@@ -72,22 +72,22 @@ export function WarnDialog({
       <DialogContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
+            <AlertTriangle className="w-4 h-4 text-muted-foreground" />
             Send Warning
           </DialogTitle>
-          <DialogDescription className="text-xs text-[#A7AAB0]">
-            Issue a formal moderation warning to <span className="font-medium text-[#E5E7EB]">{user?.email}</span>. This will be recorded in the moderation history.
+          <DialogDescription className="text-xs text-muted-foreground">
+            Issue a formal moderation warning to <span className="font-medium text-foreground">{user?.email}</span>. This will be recorded in the moderation history.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1.5 py-2">
-          <label className="text-xs font-medium text-[#A7AAB0]">Warning Reason</label>
+          <label className="text-xs font-medium text-muted-foreground">Warning Reason</label>
           <Textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Explain why this warning is being issued..."
             rows={3}
-            className="bg-[#242528] border-[#2A2C30] text-[#E5E7EB] text-xs resize-none focus-visible:ring-1 focus-visible:ring-zinc-400"
+            className="text-xs resize-none"
           />
         </div>
 
@@ -97,7 +97,7 @@ export function WarnDialog({
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="h-8 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528]"
+            size="sm"
           >
             Cancel
           </Button>
@@ -105,7 +105,8 @@ export function WarnDialog({
             type="button"
             onClick={handleSendWarning}
             disabled={loading || !reason.trim()}
-            className="h-8 text-xs bg-amber-600 hover:bg-amber-500 text-white gap-1.5"
+            variant="default"
+            size="sm"
           >
             {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             <Send className="w-3.5 h-3.5" />
