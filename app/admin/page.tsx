@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import Image from "next/image"
 import { useSession, signOut } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import {
@@ -38,12 +39,25 @@ import {
   ArrowUpRight,
   FileText,
   UserCheck,
+  Menu,
+  X,
+  SlidersHorizontal,
+  Sliders,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Menubar,
+  MenubarMenu,
+  MenubarTrigger,
+  MenubarContent,
+  MenubarItem,
+  MenubarSeparator,
+} from "@/components/ui/menubar"
+import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -323,18 +337,107 @@ export default function ModeratorPage() {
     }
   }
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-[#181818] text-[#E5E7EB] flex flex-col md:flex-row antialiased font-sans">
-      {/* Primary Moderator Navigation Sidebar */}
-      <aside className="w-full md:w-60 bg-[#1c1c1e] border-b md:border-b-0 md:border-r border-[#2A2C30] flex flex-col shrink-0">
+      {/* Mobile Top Navbar with Sycord Icon & Menu trigger */}
+      <div className="md:hidden flex items-center justify-between h-14 px-4 bg-[#1c1c1e] border-b border-[#2A2C30] shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#242528] border border-[#2A2C30] p-1 flex items-center justify-center shrink-0">
+            <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-[#E5E7EB] leading-none">Sycord</span>
+              <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-medium">
+                Moderator
+              </Badge>
+            </div>
+            <p className="text-[10px] text-[#777B82] leading-none mt-1">Control Console</p>
+          </div>
+        </div>
+
+        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0 text-[#E5E7EB] hover:bg-[#242528]">
+              <Menu className="w-5 h-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="bg-[#1c1c1e] border-r border-[#2A2C30] text-[#E5E7EB] p-0 w-72 flex flex-col">
+            <SheetHeader className="h-14 px-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#242528] border border-[#2A2C30] p-1 flex items-center justify-center shrink-0">
+                  <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain" />
+                </div>
+                <div>
+                  <SheetTitle className="text-xs font-semibold text-[#E5E7EB] leading-none text-left">Sycord Mod</SheetTitle>
+                  <p className="text-[10px] text-[#777B82] leading-none mt-1 text-left">Moderator View</p>
+                </div>
+              </div>
+            </SheetHeader>
+
+            {/* Mobile Nav Links */}
+            <div className="p-3 space-y-1.5 flex-1 overflow-y-auto">
+              {[
+                { id: "general", label: "General", icon: LayoutDashboard },
+                { id: "users", label: "Users", icon: Users },
+                { id: "providers", label: "Providers & Usage", icon: Cpu },
+                { id: "servers", label: "Servers", icon: Server },
+                { id: "tickets", label: "Tickets & Announcements", icon: LifeBuoy },
+              ].map((item) => {
+                const Icon = item.icon
+                const isActive = activeTab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id as ModeratorTab)
+                      setMobileMenuOpen(false)
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-colors select-none text-left",
+                      isActive
+                        ? "bg-[#242528] text-white border border-[#2A2C30]"
+                        : "text-[#A7AAB0] hover:text-[#E5E7EB] hover:bg-[#202124]"
+                    )}
+                  >
+                    <Icon className="w-4 h-4 shrink-0 text-zinc-400" />
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="p-3 border-t border-[#2A2C30] space-y-2">
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/dashboard")}
+                className="w-full justify-start h-8 px-2.5 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-2"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Exit to Dashboard</span>
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Primary Moderator Navigation Sidebar (Desktop) */}
+      <aside className="hidden md:flex w-60 bg-[#1c1c1e] border-r border-[#2A2C30] flex-col shrink-0">
         <div className="h-14 px-4 border-b border-[#2A2C30] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-              <Shield className="w-4 h-4 text-emerald-400" />
+            <div className="w-8 h-8 rounded-lg bg-[#242528] border border-[#2A2C30] p-1 flex items-center justify-center shrink-0">
+              <Image src="/logo.png" alt="Sycord Logo" width={22} height={22} className="rounded object-contain" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-[#E5E7EB] leading-none">Moderator View</p>
-              <p className="text-[10px] text-[#777B82] leading-none mt-1">Sycord Control Console</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-semibold text-[#E5E7EB] leading-none">Sycord</p>
+                <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-medium">
+                  Mod
+                </Badge>
+              </div>
+              <p className="text-[10px] text-[#777B82] leading-none mt-1">Moderator View</p>
             </div>
           </div>
           <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-[#2A2C30] text-[#A7AAB0]">
@@ -430,7 +533,112 @@ export default function ModeratorPage() {
       </aside>
 
       {/* Main Moderator View Surface */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-6">
+      <main className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-5">
+        {/* Openable Top Menubar with fast controls & tools */}
+        <div className="flex items-center justify-between bg-[#1c1c1e] border border-[#2A2C30] rounded-xl px-3 py-1.5 shadow-sm">
+          <Menubar className="bg-transparent border-0 h-auto p-0 gap-1 text-xs">
+            <MenubarMenu>
+              <MenubarTrigger className="text-xs px-2.5 py-1 text-[#A7AAB0] hover:text-white hover:bg-[#242528] rounded-md cursor-pointer data-[state=open]:bg-[#242528] data-[state=open]:text-white flex items-center gap-1.5">
+                <Menu className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Navigate</span>
+              </MenubarTrigger>
+              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs">
+                <MenubarItem onClick={() => setActiveTab("general")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <LayoutDashboard className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>General Overview</span>
+                </MenubarItem>
+                <MenubarItem onClick={() => setActiveTab("users")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Users className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>User Management</span>
+                </MenubarItem>
+                <MenubarItem onClick={() => setActiveTab("providers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Cpu className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Providers & Token Usage</span>
+                </MenubarItem>
+                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Server className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Infrastructure & Servers</span>
+                </MenubarItem>
+                <MenubarItem onClick={() => setActiveTab("tickets")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <LifeBuoy className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Tickets & Announcements</span>
+                </MenubarItem>
+                <MenubarSeparator className="bg-[#2A2C30]" />
+                <MenubarItem onClick={() => router.push("/dashboard")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Return to Dashboard</span>
+                </MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+
+            <MenubarMenu>
+              <MenubarTrigger className="text-xs px-2.5 py-1 text-[#A7AAB0] hover:text-white hover:bg-[#242528] rounded-md cursor-pointer data-[state=open]:bg-[#242528] data-[state=open]:text-white flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-zinc-400" />
+                <span>Actions</span>
+              </MenubarTrigger>
+              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs">
+                <MenubarItem onClick={() => setAnnouncementDialogOpen(true)} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Megaphone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Broadcast Announcement</span>
+                </MenubarItem>
+                <MenubarItem onClick={() => { setActiveTab("users"); fetchUsers() }} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Search className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Lookup User</span>
+                </MenubarItem>
+                <MenubarSeparator className="bg-[#2A2C30]" />
+                <MenubarItem onClick={fetchOverview} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Refresh Metrics</span>
+                </MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+
+            <MenubarMenu>
+              <MenubarTrigger className="text-xs px-2.5 py-1 text-[#A7AAB0] hover:text-white hover:bg-[#242528] rounded-md cursor-pointer data-[state=open]:bg-[#242528] data-[state=open]:text-white flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-zinc-400" />
+                <span>System</span>
+              </MenubarTrigger>
+              <MenubarContent className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] text-xs">
+                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Server className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>View All Server Nodes</span>
+                </MenubarItem>
+                <MenubarItem onClick={() => setActiveTab("servers")} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <Database className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Database Cluster (Germany)</span>
+                </MenubarItem>
+                <MenubarSeparator className="bg-[#2A2C30]" />
+                <MenubarItem onClick={() => { setActiveTab("tickets"); fetchAuditLogs() }} className="gap-2 focus:bg-[#242528] focus:text-white cursor-pointer">
+                  <FileText className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Moderation Audit Trail</span>
+                </MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+          </Menubar>
+
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-[#777B82]">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              All systems nominal
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                fetchOverview()
+                if (activeTab === "users") fetchUsers(userSearch)
+                if (activeTab === "providers") fetchUsage()
+                if (activeTab === "servers") fetchServerMonitoring()
+                if (activeTab === "tickets") { fetchTickets(); fetchAnnouncements(); fetchAuditLogs() }
+                toast.success("Moderator data refreshed")
+              }}
+              className="h-7 px-2 text-xs text-[#A7AAB0] hover:text-white hover:bg-[#242528] gap-1"
+            >
+              <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+          </div>
+        </div>
         {/* =========================================================================
             TAB 1: GENERAL (DASHBOARD OVERVIEW)
            ========================================================================= */}

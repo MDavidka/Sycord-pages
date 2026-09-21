@@ -859,5 +859,5 @@ if (process.env.NODE_ENV === "development") {
   torsoPromise = createTorsoClient();
 }
 
-export { TorsoDatabase, TorsoCollection, TorsoQuery };
+export { TorsoDatabase, TorsoCollection, TorsoQuery, getSqlClient, ensureCollectionTable, tableNameForCollection };
 export default torsoPromise;
