@@ -1230,231 +1230,230 @@ export default function ModeratorPage() {
         )}
 
         {/* =========================================================================
-            TAB 4: SERVERS (MULTI-DATABASE & SEGMENTED NODE MONITORING)
+            TAB 4: SERVERS & INFRASTRUCTURE (EXACT MATCH TO DESIGN SPEC)
            ========================================================================= */}
         {activeTab === "servers" && (
-          <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-150">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2C30] pb-4">
+          <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-150">
+            {/* Header with Title & Refresh */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a] pb-4">
               <div>
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">Servers & Infrastructure</h1>
-                <p className="text-xs md:text-sm text-[#A7AAB0] mt-0.5">
-                  Real-time infrastructure health, segmented worker nodes, and multi-region database instances
+                <p className="text-xs md:text-sm text-[#71717a] mt-0.5">
+                  Real-time infrastructure health, service metrics, and system anomaly telemetry
                 </p>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={fetchServerMonitoring}
-                className="h-8 text-xs border-[#2A2C30] gap-1.5 text-[#A7AAB0] hover:text-white"
-              >
-                <RefreshCw className={cn("w-3.5 h-3.5", serverLoading && "animate-spin")} />
-                Refresh Health
-              </Button>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[#71717a] hidden sm:inline">
+                  Last updated {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={fetchServerMonitoring}
+                  className="h-8 text-xs bg-[#111111] hover:bg-[#18181b] border-[#27272a] text-zinc-300 hover:text-white gap-1.5"
+                >
+                  <RefreshCw className={cn("w-3.5 h-3.5", serverLoading && "animate-spin")} />
+                  Refresh
+                </Button>
+              </div>
             </div>
 
-            {/* Core Infrastructure Components */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Frontend Card */}
-              <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-                <CardHeader className="p-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold flex items-center gap-2">
-                    <Globe2 className="w-4 h-4 text-blue-400" />
-                    Frontend Service
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+            {/* 3 Core Services: Frontend, Backend, Database */}
+            <div className="space-y-4">
+              {/* Frontend Service Card */}
+              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden">
+                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-zinc-300">
+                      <Globe2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Frontend Service</h3>
+                      <p className="text-xs text-[#71717a]">Web app & edge network</p>
+                    </div>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium w-fit">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Operational
-                  </Badge>
-                </CardHeader>
-                <CardContent className="p-4 space-y-2.5 text-xs">
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Uptime:</span>
-                    <span className="font-semibold text-white">99.98%</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 ml-0.5" />
                   </div>
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Edge Response Time:</span>
-                    <span className="font-semibold text-white">42ms</span>
+                </div>
+                <div className="p-4 sm:p-5 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-[#0c0c0e]">
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Uptime</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">99.98%</span>
                   </div>
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Memory Usage:</span>
-                    <span className="font-semibold text-white">34%</span>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Edge Response</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">42ms</span>
                   </div>
-                </CardContent>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Memory Usage</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">34%</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Region</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">Global (CDN)</span>
+                  </div>
+                </div>
               </Card>
 
-              {/* Backend Card */}
-              <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-                <CardHeader className="p-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold flex items-center gap-2">
-                    <Server className="w-4 h-4 text-emerald-400" />
-                    Backend (Syte API)
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+              {/* Backend (Syte API) Card */}
+              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden">
+                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-zinc-300">
+                      <Server className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Backend (Syte API)</h3>
+                      <p className="text-xs text-[#71717a]">API, workers & queue</p>
+                    </div>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium w-fit">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Operational
-                  </Badge>
-                </CardHeader>
-                <CardContent className="p-4 space-y-2.5 text-xs">
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Uptime:</span>
-                    <span className="font-semibold text-white">99.95%</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 ml-0.5" />
                   </div>
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Throughput:</span>
-                    <span className="font-semibold text-white">124 req/min</span>
+                </div>
+                <div className="p-4 sm:p-5 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-[#0c0c0e]">
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Uptime</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">99.95%</span>
                   </div>
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Error Rate:</span>
-                    <span className="font-semibold text-white">0.01%</span>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Throughput</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">124 req/min</span>
                   </div>
-                </CardContent>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Error Rate</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">0.12%</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Memory Usage</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">58%</span>
+                  </div>
+                </div>
               </Card>
 
-              {/* Database Cluster Overview Card */}
-              <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-                <CardHeader className="p-4 border-b border-[#2A2C30] flex flex-row items-center justify-between">
-                  <CardTitle className="text-xs font-semibold flex items-center gap-2">
-                    <Database className="w-4 h-4 text-purple-400" />
-                    Database Cluster
-                  </CardTitle>
-                  <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+              {/* Database Card */}
+              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden">
+                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#27272a]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-[#18181b] border border-[#27272a] flex items-center justify-center text-zinc-300">
+                      <Database className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Database</h3>
+                      <p className="text-xs text-[#71717a]">Primary database instance</p>
+                    </div>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium w-fit">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Operational
-                  </Badge>
-                </CardHeader>
-                <CardContent className="p-4 space-y-2.5 text-xs">
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Active Instances:</span>
-                    <span className="font-semibold text-white">2 Nodes</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-emerald-400/70 ml-0.5" />
                   </div>
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Primary Instance:</span>
-                    <span className="font-semibold text-white">Germany (Frankfurt)</span>
+                </div>
+                <div className="p-4 sm:p-5 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 bg-[#0c0c0e]">
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Uptime</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">99.99%</span>
                   </div>
-                  <div className="flex justify-between text-[#A7AAB0]">
-                    <span>Average Latency:</span>
-                    <span className="font-semibold text-white">13ms</span>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Latency</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">18ms</span>
                   </div>
-                </CardContent>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Active Connections</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">24</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-medium text-[#71717a] uppercase tracking-wider block">Region</span>
+                    <span className="text-lg font-semibold text-white mt-1 block">Germany (DE)</span>
+                  </div>
+                </div>
               </Card>
             </div>
 
-            {/* Multi-Database Instances Architecture */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm overflow-hidden">
-              <CardHeader className="p-4 border-b border-[#2A2C30]">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Database className="w-4 h-4 text-purple-400" />
-                  Database Nodes (Multi-Instance Support)
-                </CardTitle>
-              </CardHeader>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#202124] border-b border-[#2A2C30] text-[#A7AAB0] font-medium">
-                    <tr>
-                      <th className="py-2.5 px-4">Instance Name</th>
-                      <th className="py-2.5 px-3">Region</th>
-                      <th className="py-2.5 px-3">Engine</th>
-                      <th className="py-2.5 px-3">Connections</th>
-                      <th className="py-2.5 px-3">Latency</th>
-                      <th className="py-2.5 px-3">Storage</th>
-                      <th className="py-2.5 px-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2A2C30]">
-                    {serverMonitoring.databases.map((db) => (
-                      <tr key={db.id} className="hover:bg-[#202124]/60 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-white flex items-center gap-2">
-                          <Database className="w-3.5 h-3.5 text-zinc-400" />
-                          {db.name}
-                        </td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-[#A7AAB0]">{db.region}</td>
-                        <td className="py-3 px-3 text-[#A7AAB0]">{db.provider}</td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{db.activeConnections} active</td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{db.latencyMs}ms</td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{db.storageUsedMb} MB / {db.storageLimitMb} MB</td>
-                        <td className="py-3 px-4">
-                          <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
-                            {db.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            {/* Segmented Infrastructure Nodes */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm overflow-hidden">
-              <CardHeader className="p-4 border-b border-[#2A2C30]">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-blue-400" />
-                  Segmented Infrastructure Nodes
-                </CardTitle>
-              </CardHeader>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#202124] border-b border-[#2A2C30] text-[#A7AAB0] font-medium">
-                    <tr>
-                      <th className="py-2.5 px-4">Node ID</th>
-                      <th className="py-2.5 px-3">Role</th>
-                      <th className="py-2.5 px-3">Region</th>
-                      <th className="py-2.5 px-3">CPU</th>
-                      <th className="py-2.5 px-3">Memory</th>
-                      <th className="py-2.5 px-3">Latency</th>
-                      <th className="py-2.5 px-4">Uptime</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2A2C30]">
-                    {serverMonitoring.nodes.map((node) => (
-                      <tr key={node.id} className="hover:bg-[#202124]/60 transition-colors">
-                        <td className="py-3 px-4 font-mono font-medium text-white">{node.name}</td>
-                        <td className="py-3 px-3">
-                          <Badge variant="outline" className="text-[10px] uppercase font-mono px-1.5 py-0 border-[#2A2C30] text-zinc-300">
-                            {node.type}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-3 text-[#A7AAB0]">{node.region}</td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{node.cpuPercent}%</td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{node.memoryPercent}%</td>
-                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-300">{node.latencyMs}ms</td>
-                        <td className="py-3 px-4 font-semibold text-emerald-400">{node.uptimePercent}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            {/* Anomaly Monitoring */}
-            <Card className="bg-[#1c1c1e] border-[#2A2C30] text-[#E5E7EB] rounded-xl shadow-sm">
-              <CardHeader className="p-4 border-b border-[#2A2C30]">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  Anomaly Detection
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4">
-                {serverMonitoring.anomalies.length === 0 ? (
-                  <div className="text-center py-6 space-y-1">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 mx-auto" />
-                    <p className="text-xs font-semibold text-white">No active anomalies</p>
-                    <p className="text-[11px] text-[#777B82]">All monitored telemetry thresholds are operating within standard parameters.</p>
+            {/* Bottom 2 Grid: Worker Nodes & Anomalies */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Worker Nodes Card */}
+              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="p-4 flex items-center justify-between border-b border-[#27272a]">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Worker Nodes</h3>
+                      <p className="text-xs text-[#71717a]">Segmented infrastructure nodes</p>
+                    </div>
+                    <button className="text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                      View All
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    {serverMonitoring.anomalies.map((anom) => (
-                      <div key={anom.id} className="p-3 rounded-lg bg-[#242528] border border-amber-500/20 flex items-start justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-amber-300">{anom.title}</p>
-                          <p className="text-[11px] text-[#A7AAB0] mt-0.5">{anom.description}</p>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
-                          {anom.severity}
-                        </Badge>
+                  <div className="divide-y divide-[#27272a]/60">
+                    <div className="p-3.5 px-4 flex items-center justify-between hover:bg-[#18181b]/50 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span className="font-mono text-xs font-medium text-white">worker-1</span>
+                        <span className="text-[11px] text-[#71717a]">DE</span>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
+                        <span>2.1% CPU</span>
+                        <span className="text-[#71717a]">•</span>
+                        <span>512 MB</span>
+                      </div>
+                    </div>
+                    <div className="p-3.5 px-4 flex items-center justify-between hover:bg-[#18181b]/50 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span className="font-mono text-xs font-medium text-white">worker-2</span>
+                        <span className="text-[11px] text-[#71717a]">DE</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
+                        <span>3.4% CPU</span>
+                        <span className="text-[#71717a]">•</span>
+                        <span>498 MB</span>
+                      </div>
+                    </div>
+                    <div className="p-3.5 px-4 flex items-center justify-between hover:bg-[#18181b]/50 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span className="font-mono text-xs font-medium text-white">worker-3</span>
+                        <span className="text-[11px] text-[#71717a]">DE</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-zinc-400 font-mono">
+                        <span>1.8% CPU</span>
+                        <span className="text-[#71717a]">•</span>
+                        <span>476 MB</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              </Card>
+
+              {/* Anomalies Card */}
+              <Card className="bg-[#111111] border-[#27272a] text-white rounded-xl shadow-sm overflow-hidden flex flex-col justify-between">
+                <div>
+                  <div className="p-4 flex items-center justify-between border-b border-[#27272a]">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Anomalies</h3>
+                      <p className="text-xs text-[#71717a]">Recent system alerts and unusual activity</p>
+                    </div>
+                    <button className="text-xs font-medium text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                      View All
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-2.5 my-auto">
+                    <div className="w-10 h-10 rounded-full bg-[#18181b] border border-[#27272a] flex items-center justify-center text-emerald-400">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <p className="text-sm font-medium text-white">No anomalies detected</p>
+                    <p className="text-xs text-[#71717a] max-w-[240px]">All systems are running normally within standard parameters.</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </div>
         )}
 

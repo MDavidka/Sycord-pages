@@ -25,12 +25,23 @@ interface UpdateOptions {
   arrayFilters?: Record<string, unknown>[];
 }
 
-const RAW_TORSO_URL = (process.env.TORSO_URL || "").trim();
-const TORSO_URL = normalizeTorsoUrl(RAW_TORSO_URL);
-const TORSO_TOKEN = process.env.TORSO_TOKEN || process.env.TURSO_AUTH_TOKEN || "";
+function getTorsoUrl(): string {
+  const raw = (
+    process.env.TORSO_URL ||
+    process.env.TURSO_DATABASE_URL ||
+    process.env.TURSO_URL ||
+    ""
+  ).trim();
+  return normalizeTorsoUrl(raw);
+}
 
-if (!TORSO_URL || !TORSO_TOKEN) {
-  console.warn("[torso] Warning: TORSO_URL or TORSO_TOKEN is not set. Database operations will fail.");
+function getTorsoToken(): string {
+  return (
+    process.env.TORSO_TOKEN ||
+    process.env.TURSO_AUTH_TOKEN ||
+    process.env.TURSO_TOKEN ||
+    ""
+  ).trim();
 }
 
 function normalizeTorsoUrl(raw: string): string {
@@ -402,14 +413,17 @@ let sqlClient: Client | null = null;
 const ensuredTables = new Set<string>();
 
 function getSqlClient(): Client {
-  if (!TORSO_URL) {
-    throw new Error("Torso is not configured. Set TORSO_URL.");
+  const url = getTorsoUrl();
+  const token = getTorsoToken();
+
+  if (!url) {
+    throw new Error("Torso is not configured. Set TORSO_URL or TURSO_DATABASE_URL.");
   }
 
   if (!sqlClient) {
     sqlClient = createClient({
-      url: TORSO_URL,
-      authToken: TORSO_TOKEN || undefined,
+      url,
+      authToken: token || undefined,
     });
   }
 
@@ -495,21 +509,25 @@ async function loadCollectionDocs(
     sql += ` WHERE ${clauses.join(" AND ")}`;
   }
 
-  if (canUseSqlSort(options?.sortField)) {
+  const useSqlSort = canUseSqlSort(options?.sortField);
+  if (useSqlSort) {
     args.push(`$.${options!.sortField!}`);
     sql += ` ORDER BY json_extract(doc, ?) ${options?.sortOrder === -1 ? "DESC" : "ASC"}`;
   }
 
-  if (typeof options?.limit === "number" && options.limit >= 0) {
-    sql += " LIMIT ?";
-    args.push(options.limit);
-  } else if (typeof options?.skip === "number" && options.skip > 0) {
-    sql += " LIMIT -1";
-  }
+  // Only apply SQL-level LIMIT/OFFSET if we don't have JS-level filter/sort steps pending
+  if (useSqlFilter && (useSqlSort || !options?.sortField)) {
+    if (typeof options?.limit === "number" && options.limit >= 0) {
+      sql += " LIMIT ?";
+      args.push(options.limit);
+    } else if (typeof options?.skip === "number" && options.skip > 0) {
+      sql += " LIMIT -1";
+    }
 
-  if (typeof options?.skip === "number" && options.skip > 0) {
-    sql += " OFFSET ?";
-    args.push(options.skip);
+    if (typeof options?.skip === "number" && options.skip > 0) {
+      sql += " OFFSET ?";
+      args.push(options.skip);
+    }
   }
 
   const result = await client.execute({ sql, args });
@@ -605,6 +623,10 @@ class TorsoQuery<T = any> {
 
   async toArray(): Promise<T[]> {
     try {
+      const useSqlFilter = canUseSqlFilter(this.filter);
+      const useSqlSort = canUseSqlSort(this.sortField);
+      const isFullSql = useSqlFilter && (useSqlSort || !this.sortField);
+
       let docs = await loadCollectionDocs(this.collectionName, {
         filter: this.filter,
         sortField: this.sortField,
@@ -613,9 +635,11 @@ class TorsoQuery<T = any> {
         skip: this.skipValue,
       });
 
-      docs = docs.filter((doc) => matchFilter(doc, this.filter));
+      if (!useSqlFilter) {
+        docs = docs.filter((doc) => matchFilter(doc, this.filter));
+      }
 
-      if (!canUseSqlSort(this.sortField) && this.sortField) {
+      if (!useSqlSort && this.sortField) {
         const field = this.sortField;
         const order = this.sortOrder;
         docs.sort((a, b) => {
@@ -630,25 +654,14 @@ class TorsoQuery<T = any> {
         });
       }
 
-      if (!(typeof this.limitValue === "number" && this.limitValue >= 0) && this.skipValue && this.skipValue > 0) {
-        docs = docs.slice(this.skipValue);
-      }
-      if (!(typeof this.skipValue === "number" && this.skipValue > 0) && typeof this.limitValue === "number" && this.limitValue >= 0) {
-        docs = docs.slice(0, this.limitValue);
-      }
-      if (
-        !(canUseSqlSort(this.sortField) || canUseSqlFilter(this.filter)) &&
-        typeof this.skipValue === "number" &&
-        this.skipValue > 0
-      ) {
-        docs = docs.slice(this.skipValue);
-      }
-      if (
-        !(canUseSqlSort(this.sortField) || canUseSqlFilter(this.filter)) &&
-        typeof this.limitValue === "number" &&
-        this.limitValue >= 0
-      ) {
-        docs = docs.slice(0, this.limitValue);
+      // If not fully resolved via SQL, apply JS skip & limit
+      if (!isFullSql) {
+        if (typeof this.skipValue === "number" && this.skipValue > 0) {
+          docs = docs.slice(this.skipValue);
+        }
+        if (typeof this.limitValue === "number" && this.limitValue >= 0) {
+          docs = docs.slice(0, this.limitValue);
+        }
       }
 
       return docs.map((doc) => applyProjection(doc, this.projection, this.filter) as T);
