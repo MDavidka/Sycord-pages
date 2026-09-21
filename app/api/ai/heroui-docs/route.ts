@@ -1,3 +1,6 @@
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import { checkRateLimit } from "@/lib/security/rate-limit"
 // HeroUI React documentation endpoint for Syra.
 //
 // Syra calls this endpoint via the `heroUiDocs` tool to retrieve live,
@@ -239,7 +242,17 @@ Extends Select with filtering. Props: inputValue, onInputChange, items (array), 
 Usage: <Autocomplete label="Search"><AutocompleteItem key="a">Apple</AutocompleteItem></Autocomplete>`,
 }
 
+
 export async function POST(req: Request) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  const rate = checkRateLimit(`ai-heroui-docs:${session.user.id}`, { limit: 30, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return Response.json({ error: "Too many requests" }, { status: 429 })
+  }
+
   let body: any
   try {
     body = await req.json()
