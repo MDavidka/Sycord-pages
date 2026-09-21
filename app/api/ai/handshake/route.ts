@@ -1,3 +1,4 @@
+import { checkRateLimit } from "@/lib/security/rate-limit"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
@@ -20,10 +21,15 @@ export async function GET() {
   return NextResponse.json(result.data)
 }
 
+
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  }
+  const rate = checkRateLimit(`ai-handshake:${session.user.id}`, { limit: 10, windowMs: 60_000 })
+  if (!rate.allowed) {
+    return NextResponse.json({ ok: false, error: "Too many requests" }, { status: 429 })
   }
 
   try {
